@@ -10,6 +10,8 @@ items:
       when: false
     - name: YDB Monitoring
       href: embedded_monitoring/ydb_monitoring.md
+    - name: Hive web-viewer
+      href: embedded_monitoring/hive.md
     - name: Connections overview
       href: embedded_monitoring/interconnect_overview.md
       # when: false
@@ -17,3 +19,29 @@ items:
       href: embedded_monitoring/logs.md
     - name: Charts
       href: embedded_monitoring/charts.md
+  - name: Maintaining a cluster's disk subsystem
+    items:
+    - name: Overview
+      href: manual/index.md
+    - name: How to stay within the failure model
+      href: manual/failure_model.md
+    - name: Disk load balancing
+      href: manual/balancing_load.md
+    - name: Methods to free up space on physical devices
+      href: manual/disk_end_space.md
+    - name: Cluster extension
+      href: manual/cluster_expansion.md
+    - name: Adding storage groups
+      href: manual/adding_storage_groups.md
+    - name: Safe restart and shutdown of nodes
+      href: manual/node_restarting.md
+    - name: Enabling/disabling SelfHeal
+      href: manual/selfheal.md
+    - name: Enabling/disabling Scrubbing
+      href: manual/scrubbing.md
+    - name: Moving VDisks
+      href: manual/moving_vdisks.md
+    - name: Updating configurations via CMS
+      href: manual/cms.md
+    - name: Updating configuration of the actor system
+      href: manual/change_actorsystem_configs.md

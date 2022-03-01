@@ -1,5 +1,5 @@
+## Informal rules
 
-## Неформальные правила
+1. `DRY`. If you have to copy and paste some content, most likely you are doing something wrong.
+1. `../../../...` If you have to add relative references that point to many levels up, most likely you are doing something wrong.
 
-1. `DRY`. Если вам приходится копипастить контент -- скорее всего вы делаете что-то неправильно
-1. `../../../...` Если вам приходится делать относительные ссылки с выходом на много уровней вверх -- скорее всего вы делаете что-то неправильно.

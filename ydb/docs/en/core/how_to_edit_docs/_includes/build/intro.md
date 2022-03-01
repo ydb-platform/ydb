@@ -1,2 +1,2 @@
-# Сборка документации
+# Building documentation
 

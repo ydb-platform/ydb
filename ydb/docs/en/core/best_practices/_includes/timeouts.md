@@ -28,7 +28,7 @@ Timeout usage example:
 
   ```python
   from kikimr.public.sdk.python import client as ydb
-
+  
   def execute_in_tx(session, query):
     settings = ydb.BaseRequestSettings()
     settings = settings.with_timeout(0.5)  # transport timeout
@@ -46,13 +46,13 @@ Timeout usage example:
 - C++
 
   ```cpp
-  #include <kikimr/public/sdk/cpp/client/ydb.h>
-  #include <kikimr/public/sdk/cpp/client/ydb_table.h>
-  #include <kikimr/public/sdk/cpp/client/ydb_value.h>
-
+  #include <ydb/public/sdk/cpp/client/ydb.h>
+  #include <ydb/public/sdk/cpp/client/ydb_table.h>
+  #include <ydb/public/sdk/cpp/client/ydb_value.h>
+  
   using namespace NYdb;
   using namespace NYdb::NTable;
-
+  
   TAsyncStatus ExecuteInTx(TSession& session, TString query, TParams params) {
     return session.ExecuteDataQuery(
         query
@@ -74,7 +74,7 @@ Timeout usage example:
       "a.yandex-team.ru/kikimr/public/sdk/go/ydb"
       "a.yandex-team.ru/kikimr/public/sdk/go/ydb/table"
   )
-
+  
   func executeInTx(ctx context.Context, s *table.Session, query string) {
       newCtx, close := context.WithTimeout(ctx, time.Millisecond*300)         // client and by default operation timeout
       newCtx2 := ydb.WithOperationTimeout(newCtx, time.Millisecond*400)       // operation timeout override
@@ -86,3 +86,4 @@ Timeout usage example:
   ```
 
 {% endlist %}
+

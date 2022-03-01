@@ -77,7 +77,6 @@ http://<endpoint>:8765/monitoring/node/<node-id>/
 Information about the node is presented in the following sections:
 
 * **Pools**: CPU utilization broken down by the internal stream pools, with roughly the following pool functions:
-
   * **System**: The tasks of critical system components.
   * **User**: User tasks, queries executed by tablets.
   * **Batch**: Long-running background tasks.
@@ -87,14 +86,12 @@ Information about the node is presented in the following sections:
   High pool utilization might degrade performance and increase the system response time.
 
 * **Common info**: Basic information about the node:
-
   * **Version**: The {{ ydb-short-name }} version.
   * **Uptime**: The node uptime.
   * **DC**: The availability zone where the node resides.
   * **Rack**: The ID of the rack where the node resides.
 
 * **Load average**: Average host CPU utilization for different time intervals:
-
   * 1 minute.
   * 5 minutes.
   * 15 minutes.
@@ -111,14 +108,14 @@ For each group, the following information is provided:
 
 * The ID of the storage group.
 * The performance indicator of the group.
-* The number of vdisks in the group.
+* The number of VDisks in the group.
 * The data storage topology.
 
-Each storage group can also be expanded into a list of vdisks, with the following information provided for each vdisk:
+Each storage group can also be expanded into a list of VDisks, with the following information provided for each VDisk:
 
-* The ID of the vdisk.
-* The unique (within the node) ID of the block store volume where the vdisk resides.
-* The ID of the node where the vdisk resides.
+* VDiskID.
+* The unique (within the node) PDiskID where the VDisk resides.
+* The ID of the node where the VDisk resides.
 * Free/available space on the block store volume.
 * The path used to access the block store volume.
 
@@ -152,7 +149,6 @@ In the `Tenant Info` section, you can see the following information:
 * **Pools**: The total CPU utilization by the tenant nodes broken down by internal stream pools (for more information about pools, see the [tenant page](#tenant_page)).
 
 * **Metrics**: Data about tablet utilization for this tenant:
-
   * **Memory**: The RAM utilized by tablets.
   * **CPU**: CPU utilized by tablets.
   * **Storage**: The amount of data stored by tablets.
@@ -165,7 +161,7 @@ In the `Tenant Info` section, you can see the following information:
 The tenant page also includes the following tabs:
 
 * **HealthCheck**: The report regarding cluster issues, if any.
-* **Storage**: The [list of storage groups](#tenant_storage_page) that includes information about which vdisks reside on which nodes and devices.
+* **Storage**: The [list of storage groups](#tenant_storage_page) that includes information about which VDisks reside on which nodes and block store volumes.
 * **Compute**: The [list of nodes](#tenant_compute_page), which includes the nodes and tablets running on them.
 * **Schema**: The [tenant's schema](#tenant_scheme) that lets you view tables, execute YQL queries, view a list of the slowest queries and the most loaded shards.
 * **Network**: The [health of the cluster network](#tenant_network).
@@ -227,3 +223,4 @@ The indicator colors have the following meaning:
 * **Red**: There are critical problems, the component is down (or runs with limitations).
 
 If a component includes other components, then in the absence of its own issues, the state is determined by aggregating the states of its parts.
+

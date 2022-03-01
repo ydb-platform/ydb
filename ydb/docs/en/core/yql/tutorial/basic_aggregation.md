@@ -19,7 +19,7 @@ SELECT
 FROM episodes
 
 GROUP BY
-    series_id,       -- The query result will follow the listed order of columns.
+    series_id,       -- The query result will follow the listed order of columns
     season_id        -- Multiple columns are separated by a comma.
                      -- Other columns can be listed after a SELECT only if
                      -- they are passed to an aggregate function.
@@ -30,3 +30,4 @@ ORDER BY
 
 COMMIT;
 ```
+

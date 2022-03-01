@@ -2,20 +2,19 @@
 title: "Yandex Database. FAQ"
 description: "What is Yandex Database? For what tasks is it worth using Yandex Database, and for which virtual machines with databases? What part of the management and maintenance of databases does Yandex Database take on? Answers to these and other questions in this article."
 ---
-
-# General questions about {{ ydb-name }}
+# General questions about {{ ydb-short-name }}
 
 #### What is {{ ydb-short-name }}? {#what-is-ydb}
 
-{{ ydb-short-name }} is a distributed fault-tolerant SQL DBMS. YDB provides high availability and scalability while simultaneously ensuring strict consistency and ACID transaction support. Queries are made using an SQL dialect (YQL).
+{{ ydb-short-name }} is a distributed fault-tolerant SQL DBMS. {{ ydb-short-name }}  provides high availability and scalability while simultaneously ensuring strict consistency and ACID transaction support. Queries are made using an SQL dialect (YQL).
 
 {{ ydb-short-name }} is a fully managed database. DB instances are created through the {{ ydb-short-name }} database management service.
 
 #### What features does {{ ydb-short-name }} provide? {#ydb-features}
 
-{{ ydb-short-name }} provides high availability and data security through synchronous replication in three availability zones. {{ ydb-short-name }} also ensures even load distribution across available hardware resources. This means you don't need to order resources, Yandex Database automatically provisions and releases resources based on the user load.
+{{ ydb-short-name }} provides high availability and data security through synchronous replication in three availability zones. {{ ydb-short-name }} also ensures even load distribution across available hardware resources. This means you don't need to order resources, {{ ydb-short-name }} automatically provisions and releases resources based on the user load.
 
-#### What consistency model does YDB use? {#ydb-consistency}
+#### What consistency model does {{ ydb-short-name }} use? {#ydb-consistency}
 
 To read data, {{ ydb-short-name }} uses a model of strict data consistency.
 

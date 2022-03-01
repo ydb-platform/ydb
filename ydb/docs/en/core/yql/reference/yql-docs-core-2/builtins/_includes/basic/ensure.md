@@ -17,7 +17,8 @@ Arguments:
 To check the conditions based on the final calculation result, it's convenient to combine Ensure with [DISCARD SELECT](../../../syntax/discard.md).
 
 **Examples**
-``` yql
+
+```yql
 SELECT Ensure(
     value,
     value < 100,
@@ -25,7 +26,7 @@ SELECT Ensure(
 ) AS value FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT EnsureType(
     value,
     TypeOf(other_value),
@@ -33,10 +34,11 @@ SELECT EnsureType(
 ) AS value FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT EnsureConvertibleTo(
     value,
     Double?,
     "expected value to be numeric"
 ) AS value FROM my_table;
 ```
+

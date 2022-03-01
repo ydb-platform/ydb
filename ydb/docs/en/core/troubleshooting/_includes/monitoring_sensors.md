@@ -1,10 +1,10 @@
-## {{ ydb-full-name }} {#ydb}
+## {{ ydb-short-name }} {#ydb}
 
 ### Resource usage metrics {#resources}
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
-| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. The service data includes the data of the primary and [secondary indexes](https://cloud.yandex.ru/docs/ydb/oss/public/develop/concepts/secondary_indexes). |
+| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. The service data includes the data of the primary and [secondary indexes](https://cloud.yandex.com/en/docs/ydb/oss/public/develop/concepts/secondary_indexes). |
 | `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | A limit on the size of user and service data that a database can store in distributed network storage. |
 
 ### API metrics {#api}
@@ -16,9 +16,9 @@
 | `api.grpc.request.inflight_count`<br/>`IGAUGE`, pieces | The number of requests that a database is simultaneously handling in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
 | `api.grpc.request.inflight_bytes`<br/>`IGAUGE`, bytes | The size of requests that a database is simultaneously handling in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
 | `api.grpc.response.bytes`<br/>`RATE`, bytes | The size of responses sent by the database in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
-| `api.grpc.response.count`<br/>`RATE`, pieces | The number of responses sent by the database in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`.<br/>- _status_: The  query execution status. To learn more about statuses, see [Error handling](https://cloud.yandex.ru/docs/ydb/oss/public/reference/ydb-sdk/error_handling). |
+| `api.grpc.response.count`<br/>`RATE`, pieces | The number of responses sent by the database in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`.<br/>- _status_: The query execution status. To learn more about statuses, see [Error handling](https://cloud.yandex.com/en/docs/ydb/oss/public/reference/ydb-sdk/error_handling). |
 | `api.grpc.response.dropped_count`<br/>`RATE`, pieces | The number of responses dropped at the transport (gRPC) layer due to an error.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
-| `api.grpc.response.issues`<br/>`RATE`, pieces | The number of errors of a certain type, which occurred when executing queries during a certain period of time.<br/>Labels:<br/>- _issue_type_: The type of error, the only value is `optimistic_locks_invalidation`. For more information about locks invalidation, see [Transactions and queries to {{ ydb-short-name }}](https://cloud.yandex.ru/docs/ydb/oss/public/develop/concepts/transactions). |
+| `api.grpc.response.issues`<br/>`RATE`, pieces | The number of errors of a certain type, which occurred when executing queries during a certain period of time.<br/>Labels:<br/>- _issue_type_: The type of error, the only value is `optimistic_locks_invalidation`. For more information about locks invalidation, see [Transactions and queries to {{ ydb-short-name }}](https://cloud.yandex.com/en/docs/ydb/oss/public/develop/concepts/transactions). |
 
 ### Session metrics {#sessions}
 
@@ -86,3 +86,4 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `table.query.compilation.cache_evictions`<br/>`RATE`, pieces | The number of queries evicted from the cache of [prepared queries](../oss/public/reference/ydb-sdk/#param-prepared-queries) in a certain period of time. |
 | `table.query.compilation.cache_size_bytes`<br/>`IGAUGE`, bytes | The size of the cache of [prepared queries](../oss/public/reference/ydb-sdk/#param-prepared-queries). |
 | `table.query.compilation.cached_query_count`<br/>`IGAUGE`, pieces | The size of the cache of [prepared queries](../oss/public/reference/ydb-sdk/#param-prepared-queries). |
+

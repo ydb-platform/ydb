@@ -1,11 +1,11 @@
-title: Yandex Database
+title: YDB
 description:
   - >-
-    <i>Yandex Database</i> (YDB) is a fault-tolerant Distributed SQL DBMS. YDB provides high availability, horizontal scalability, strict consistency, and ACID transaction support. Queries are made using an SQL dialect (<a href="yql/reference/overview">YQL</a>).
+    <i>YDB</i> is a fault-tolerant distributed SQL DBMS. YDB provides high availability, horizontal scalability, strict consistency, and ACID transaction support. Queries are made using an SQL dialect (<a href="yql/reference/overview">YQL</a>).
 nav:
-  title: Yandex Database
+  title: YDB
 meta:
-  title: Yandex Database
+  title: YDB
 links:
   - title: Getting started
     description: Creating a database, connecting to it, setting up access permissions, and performing basic operations with it

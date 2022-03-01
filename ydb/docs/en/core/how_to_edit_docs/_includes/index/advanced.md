@@ -1,3 +1,4 @@
-## Статьи для продвинутых читателей
+## Articles for advanced readers
 
-- [Создание кастомизированной документации](../customize.md)
+- [Creating customized documentation](../customize.md)
+

@@ -35,3 +35,4 @@ Table structure:
 Restrictions:
 
 * Cumulative fields (RowReads, RowUpdates, and so on) store the accumulated values since the last start of the tablet serving the partition
+

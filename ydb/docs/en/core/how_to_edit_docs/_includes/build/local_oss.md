@@ -1,34 +1,36 @@
-## Локальная сборка OpenSource-инструментами
+## Local build with OpenSource tools
 
-Сборка документации осуществляется утилитой [YFM-Docs](https://github.com/yandex-cloud/yfm-docs).
+The documentation is built using the [YFM-Docs](https://github.com/yandex-cloud/yfm-docs) utility.
 
-Порядок установки YFM-Docs описан на [вводной странице документации по этой утилите](https://ydocs.tech/ru/tools/docs/).
+Learn how to install YFM-Docs on the [introductory page of the utility documentation](https://ydocs.tech/tools/docs/).
 
-Для сборки OpenSource документации YDB нужно выполнить команду:
+To build the {{ ydb-short-name }} OpenSource documentation, run the command:
 
-``` bash
+```bash
 $ yfm -i <source_dir> -o <output_dir> --allowHTML
 ```
 
-Где: 
-- `source_dir` - директория, куда склонировано содержимое [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
-- `output_dir` - директория, куда будет выполнена генерация HTML-файлов
+Where:
 
-Сборка занимает несколько секунд, и не должна выводить сообщений об ошибках в лог (stdout).
+- `source_dir` is the directory where the contents of [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs) is cloned.
+- `output_dir` is the output directory for HTML files.
 
-В качестве `source_dir` можно задавать `.` (точку), если команда yfm вызывается непосредственно из каталога `source_dir`, например:
+Building the documentation takes a few seconds and there should be no errors logged to the stdout log.
 
-``` bash
+You can specify `.` (a dot) as `source_dir` if the yfm command is called directly from `source_dir`. For example:
+
+```bash
 docs $ yfm -i . -o ~/docs/ydboss --allowHTML
 ```
 
-Для просмотра собранной локально документации можно открыть каталог из браузера, или воспользоваться простым web-сервером, встроенным в Python:
+To view the documentation built locally, you can open the directory from your browser or use a simple web server built into Python:
 
-``` bash
+```bash
 python3 -m http.server 8888 -d ~/docs/ydboss
 ```
 
-При запущенном таким образом сервере собранная локально документация доступна по ссылкам:
-- [http://localhost:8888/ru](http://localhost:8888/ru) - на русском языке
-- [http://localhost:8888/en](http://localhost:8888/en) - на английском языке
+With the server run in this way, the locally built documentation is available at the links:
+
+- [http://localhost:8888/ru](http://localhost:8888/ru) (in Russian)
+- [http://localhost:8888/en](http://localhost:8888/en) (in English)
 

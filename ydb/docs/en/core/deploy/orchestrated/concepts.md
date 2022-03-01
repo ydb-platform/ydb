@@ -1,6 +1,6 @@
 # Overview
 
-Deploying {{ ydb-name }} in {{ k8s }} is a simple and easy way to install {{ ydb-name }}. With {{ k8s }}, you can use a universal approach to managing your application in any cloud provider. This guide provides instructions on how to deploy {{ ydb-short-name }} in [{{ managed-k8s-full-name}}](yc_managed_kubernetes.md) and [AWS EKS](aws_eks.md).
+Deploying {{ ydb-short-name }} in {{ k8s }} is a simple and easy way to install {{ ydb-short-name }}. With {{ k8s }}, you can use a universal approach to managing your application in any cloud provider. This guide provides instructions on how to deploy {{ ydb-short-name }} in [{{ managed-k8s-full-name}}](yc_managed_kubernetes.md) and [AWS EKS](aws_eks.md).
 
 {{ ydb-short-name }} is delivered as a Helm chart that is a package with templates of {{ k8s }} structures. You can deploy charts in the following environment:
 
@@ -11,7 +11,7 @@ Deploying {{ ydb-name }} in {{ k8s }} is a simple and easy way to install {{ ydb
 
 For more information about Helm, see the [documentation](https://helm.sh/ru/docs/).
 
-A Helm chart installs a controller in the {{ k8s }} cluster. It implements the logic required for deploying {{ ydb-name }} components. The controller is based on the [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) pattern.
+A Helm chart installs a controller in the {{ k8s }} cluster. It implements the logic required for deploying {{ ydb-short-name }} components. The controller is based on the [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) pattern.
 
 {{ydb-short-name}} consists of two components:
 

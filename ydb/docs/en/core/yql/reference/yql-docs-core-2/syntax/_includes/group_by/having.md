@@ -4,10 +4,11 @@ Filtering a `SELECT` based on the calculation results of [aggregate functions](.
 
 **Example**
 
-``` yql
+```yql
 SELECT
     key
 FROM my_table
 GROUP BY key
 HAVING COUNT(value) > 100;
 ```
+

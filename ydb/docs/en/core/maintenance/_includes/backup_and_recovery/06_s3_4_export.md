@@ -2,7 +2,7 @@
 
 The commands given in the examples below are based on the assumption that access key data is saved to the `~/.aws/credentials` file.
 
-Running the operation for exporting data from the `$YDB_DB_PATH/backup/episodes`, `$YDB_DB_PATH/backup/seasons`, and `$YDB_DB_PATH/backup/series` tables in the YDB `$YDB_DB_PATH` database to files prefixed with `20200601/` in the `testdbbackups` bucket in {{ objstorage-name }}.
+Running the operation for exporting data from the `$YDB_DB_PATH/backup/episodes`, `$YDB_DB_PATH/backup/seasons`, and `$YDB_DB_PATH/backup/series` tables in the {{ ydb-short-name }} `$YDB_DB_PATH` database to files prefixed with `20200601/` in the `testdbbackups` bucket in {{ objstorage-name }}.
 
 ```
 {{ ydb-cli }} -e $YDB_ENDPOINT -d $YDB_DB_PATH export s3 --s3-endpoint {{ s3-storage-host }}  --bucket testdbbackups\
@@ -52,7 +52,7 @@ aws --endpoint-url=https://{{ s3-storage-host }} s3 ls testdbbackups/20200601/
 
 {% note info %}
 
-To back up all tables in the YDB directory, specify the path to the directory as the source.
+To back up all tables in the {{ ydb-short-name }} directory, specify the path to the directory as the source.
 
 ```
 {{ ydb-cli }} -e $YDB_ENDPOINT -d $YDB_DB_PATH export s3 \

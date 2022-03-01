@@ -29,7 +29,7 @@ Even if the list of parameters in the subquery template definition is empty, whe
 
 {% if feature_mapreduce %}
 In some cases, instead of `DEFINE SUBQUERY` it's more convenient to use an equivalent [lambda function](../expressions.md#lambda).
-In this case, the lambda function must accept, as the first argument, the special object called `world` that passes dependencies to make certain PRAGMA or COMMIT statements visible at the query template's point of use. Make also sure to pass this object as the first argument along with the other arguments (if any) to other query templates, if you use them in your lambda function.
+In this case, the lambda function must accept, as the first argument, the special object called `world` that passes dependencies to make certain PRAGMA or COMMIT statements visible at the query template's point of use. Also, make sure to pass this object as the first argument along with the other arguments (if any) to other query templates, if you use them in your lambda function.
 The return value of the lambda function must have the structure list type (output table) or a list of variants over a tuple of structures (multiple output tables). In the latter case, the following unpacking is usually used at the query template's point of use:
 
 ```yql
@@ -177,5 +177,26 @@ END DEFINE;
 
 $s = SubqueryExtendFor([1,2,3],$sub);
 PROCESS $s();
+```
+
+## Adding sorting to the SubqueryOrderBy template or indicating the presence of this SubqueryAssumeOrderBy
+
+The functions take the following arguments:
+
+* A subquery template without parameters.
+* A list of pairs (string indicating the column name and Boolean value: True for sorting in ascending order or False for sorting in descending order).
+
+And they build a new query template without parameters where sorting is performed or a comment on the use of sorting is added to the result. To use the resulting query template, call the `PROCESS` function, since, when using a `SELECT`, sorting is ignored.
+
+**Examples:**
+
+```yql
+DEFINE SUBQUERY $sub() as
+   SELECT * FROM (VALUES (1,'c'), (1,'a'), (3,'b')) AS a(x,y);
+end define;
+
+$sub2 = SubqueryOrderBy($sub, [('x',false), ('y',true)]);
+
+PROCESS $sub2();
 ```
 

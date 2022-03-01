@@ -12,6 +12,7 @@ In the DateTime module, the main internal representation format is `Resource<TM>
 * TimezoneId (16 bits).
 * DayOfYear (9 bits): Day since the beginning of the year.
 * WeekOfYear (6 bits): Week since the beginning of the year, January 1 is always in week 1.
+* WeekOfYearIso8601 (6 bits): Week of the year according to ISO 8601 (the first week is the one that includes January 4).
 * DayOfWeek (3 bits): Day of the week.
 
 If the timezone is not GMT, the components store the local time for the relevant timezone.
@@ -69,6 +70,7 @@ Extracting a component from an internal representation.
 * ```DateTime::GetMonth(Resource<TM>{Flags:AutoMap}) -> Uint8```
 * ```DateTime::GetMonthName(Resource<TM>{Flags:AutoMap}) -> String```
 * ```DateTime::GetWeekOfYear(Resource<TM>{Flags:AutoMap}) -> Uint8```
+* ```DateTime::GetWeekOfYearIso8601(Resource<TM>{Flags:AutoMap}) -> Uint8```
 * ```DateTime::GetDayOfMonth(Resource<TM>{Flags:AutoMap}) -> Uint8```
 * ```DateTime::GetDayOfWeek(Resource<TM>{Flags:AutoMap}) -> Uint8```
 * ```DateTime::GetDayOfWeekName(Resource<TM>{Flags:AutoMap}) -> String```
@@ -117,7 +119,7 @@ SELECT
     DateTime::MakeTzTimestamp(DateTime::Update($tm, "Europe/Moscow" as Timezone)); -- 2019-01-01T01:02:03.456789,Europe/Moscow
 ```
 
-## From... {#from}}
+## From... {#from}
 
 Getting a Timestamp from the number of seconds/milliseconds/microseconds since the UTC epoch. When the Timestamp limits are exceeded, NULL is returned.
 
@@ -226,8 +228,7 @@ SELECT
 
 ## Shift... {#shift}
 
-Add/subtract the specified number of units to the component in the internal representation and update the other fields.
-
+Add/subtract the specified number of units to/from the component in the internal representation and update the other fields.
 Returns either an updated copy or NULL, if an update produces an invalid date or other inconsistencies.
 
 **List of functions**

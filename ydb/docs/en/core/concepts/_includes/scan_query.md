@@ -1,4 +1,4 @@
-# Scan Queries in Yandex Database
+# Scan queries in {{ ydb-short-name }}
 
 *Scan Queries* is a separate data access interface designed primarily for performing analytical ad hoc queries on a DB.
 
@@ -53,3 +53,4 @@ class TTableClient {
 ```
 
 {% endif %}
+

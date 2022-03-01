@@ -7,3 +7,4 @@ Saving the structure of the `backup` directory in the `$YDB_DB_PATH` database to
 ```
 
 For each directory in the database, a file system directory is created. For each table, a directory is created in the file system to place the structure description file in. Table data is saved to one or more `CSV` files, one file line per table row.
+

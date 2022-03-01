@@ -1,56 +1,59 @@
-# Создание кастомизированной документации по YDB
+# Creating customized documentation for {{ ydb-short-name }}
 
-Содержимое подкаталога `core` подключается в разные окружения сборки документации как библиотека, для создания кастомизированной документации. 
+The contents of the `core` subdirectory are linked to various documentation build environments as a library for creating customized documentation.
 
-Подкаталог `overlay` предназначен для кастомизирующего контента, и для OpenSource сборки является техническим, так как OpenSource сборка не содержит кастомизаций ядра.
+The `overlay` subdirectory is designed for customizing content and is technical for an OpenSource build, since the OpenSource build does not contain core customizations.
 
-### Прокси-статьи
+### Proxy articles
 
-Файл со статьей в `core` никогда не содержит контента непосредственно, а только одну или несколько инструкций include блоков этого контента, размещенных в подкаталоге `_includes`. В результате, замена этого файла в `overlay` не приводит к необходимости копирования контента, но позволяет сделать следующие виды его адаптации:
-- Добавить дополнительный контент в начало или нонец статьи
-- Вставить дополнительный контент между директивами include
-- Убрать из сборки часть контента исходной статьи, удалив соответствующую директиву include
+A file with an article in `core` never contains content directly, it only contains one or more instructions of include blocks of this content stored in the `_includes` subdirectory. As a result, replacing this file in `overlay` does not lead to the need to copy the content, but lets you make the following types of its adaptation:
 
-Инструкции по оформлению статей в core и overlay приведены в [Руководстве по созданию контента - Статьи](content.md#articles).
+- Add additional content to the beginning or end of an article.
+- Insert additional content between include directives.
+- Remove some of the content of the original article from the build by removing the corresponding include directive.
 
-### TOC (Table of Contents) - содержание
+Instructions for placing articles in core and overlay are given in the [Content creation guide - Articles](content.md#articles).
 
-TOC в документации YDB собирается из множества файлов, размещенных в директориях со статьями, которые иерархически включаются друг в друга директивой include. В результате, каждый из этих файлов может быть переопределен по-отдельности в адаптированной документации.
+### TOC (Table of Contents)
 
-Как и для статей, для файлов TOC применяется подход с прокси, со следующей реализацией:
+The TOC in the {{ ydb-short-name }} documentation is built from a set of files placed in directories with articles that are hierarchically included in each other by the include directive. As a result, each of these files can be redefined separately in the adapted documentation.
 
-1. Файл с пунктами меню для core называется `toc_i.yaml`. Он никогда не переопределяется в `overlay`.
-2. Рядом с файлом `toc_i.yaml` в core находится файл `toc_p.yaml`, содержащий ссылку на `toc_i.yaml`, и предназначенный для переопределения в `overlay`.
-3. Включание TOC других разделов делается ссылкой на файл `toc_p.yaml`.
-4. Если в некоторой директории не требуется корректировать содержимое TOC, то никакие файлы toc* в `overlay` не создаются, что приводит к использованию toc_p --> toc_i из core при сборке.
-5. Если в некоторой директории требуется скорректировать содержимое toc, то в `overlay` создается файл `toc_p.yaml`, в контент которого включается существовавший в core `- include: { mode: link, path: toc_i.yaml }`, а выше или ниже -- дополнительные пункты для адаптированной сборки.
+As with articles, a proxy approach is used for TOC files as follows:
 
-Хорошей практикой является исключение из toc_i.yaml пункта "Озбор", и включения его непосредственно в toc_p.yaml. Данная статья обязана быть первой в каждом подменю, и всегда имеет одно имя статьи (index.md). Включение отдельным пунктом в toc_p позволяет добавить новые статьи в адаптированной документации перед статьями из core, но с сохранением "Озбор" на первом месте:
+1. A file with menu items for core is named `toc_i.yaml`. It is never redefined in `overlay`.
+1. Next to the `toc_i.yaml` file in core, there is a file named `toc_p.yaml`. It contains a link to `toc_i.yaml` and is designed to be redefined in `overlay`.
+1. Other sections are included in the TOC via a link to the `toc_p.yaml` file.
+1. If there is no need to adjust the contents of the TOC in a certain directory, no toc* files are created in `overlay`. This results in using toc_p --> toc_i from core in the build.
+1. If the contents of the TOC need to be adjusted in a certain directory, a file named `toc_p.yaml` is created in `overlay` with the `- include: { mode: link, path: toc_i.yaml }` from core added to its content and additional items for the adapted build added above or below.
 
-toc_p.yaml в некотором корпоративном overlay:
-``` yaml
+It is a good practice to exclude the "Overview" item from toc_i.yaml and include it directly in toc_p.yaml. This article must be the first in each submenu and always has the same article name (index.md). Including a separate item in toc_p lets you add new articles to the adapted documentation before the articles from core, but keeping the "Overview" in the first place:
+
+toc_p.yaml in some corporate overlay:
+
+```yaml
 items:
-- name: Обзор
+- name: Overview
   href: index.md
-- name: Роли сотруников
+- name: Employee roles
   href: corp_roles.md
 - include: { mode: link, path: toc_i.yaml }
-- name: Корпоративная авторизация
+- name: Corporate authorization
   href: corp_auth.md
 ```
 
-Как и для статей, в core может быть заготовлено несколько файлов toc_i*.yaml, включаемых в toc_p отдельными include.
+As with articles, core may have several toc_i*.yaml files included in toc_p with separate includes.
 
-В корневом каталоге также есть пара файлов toc_i и toc_p, представляющих верхний уровень оглавления.
+There are also a couple of toc_i and toc_p files in the root directory, representing the top level of the table of contents.
 
-Так как включение файлов производится ссылками на них из родительского toc, то имя файла на самом деле технически может быть любым, и описанное выше -- только соглашение о наименованиях. Но есть один запрет:
+Since the inclusion of files is implemented through references to them from the parent toc, a file name may actually be technically anything and the above is only a naming convention. However, there is one restriction:
 
 {% note warning %}
 
-Имя файла с TOC не может быть `toc.yaml`, так как инструмент сборки ищет файлы с такими именами по всем подкаталогам, и пытается их сам добавить в TOC. Этом вариант добавления в документации YDB не используется, любое включение всегда явное директивой include из другого TOC.
+A TOC file name may not be `toc.yaml`, since the build tool searches for files with this name across all subdirectories and tries to add them to the TOC on its own. This include option is not used in the YDB documentation, any inclusion is always explicit by the include directive from another TOC.
 
 {% endnote %}
 
-Единственное исключение -- это начальный `toc.yaml`, который размещается в корне сборки документации, и всегда содержит команду копирования содержимого core и перехода к обработке TOC в core: `include: { mode: merge, path: core/toc_m.yaml }`.
+The only exception is the initial `toc.yaml` that is placed in the documentation build root and always contains the command to copy the core content and proceed to TOC handling in core: `include: { mode: merge, path: core/toc_m.yaml }`.
 
-Инструкции по оформлению TOC в core и overlay приведены в [Руководстве по созданию контента - TOC](content.md#toc).
+Instructions for making a TOC in core and overlay are given in the [Content creation guide - TOC](content.md#toc).
+

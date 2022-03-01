@@ -6,7 +6,7 @@ When executing a query to the serverless database, an indicator is calculated th
 
 Because serverless database resources are indefinitely large, the maximum consumption of RUs over a period of time can also be any value, leading to surprisingly high charges. For example, this can happen as a result of an error in the code causing an infinite loop of queries.
 
-With the cloud deployment of YDB, there is a limit on the total number of RUs per second at the level of cloud quotas. But this limit is technical and large enough that the potential invoice amount can still be significantly higher than expected. You can only increase this parameter by contacting technical support.
+With the cloud deployment of {{ ydb-short-name }}, there is a limit on the total number of RUs per second at the level of cloud quotas. But this limit is technical and large enough that the potential invoice amount can still be significantly higher than expected. You can only increase this parameter by contacting technical support.
 
 The **Throttling limit** on a serverless database allows you to set the maximum consumption rate of RUs per second. Considering a 5-minute accumulation of unused RUs, even with small limits (10 RU/s by default when creating a database), you can successfully perform various development and testing tasks and run applications with a small load. At the same time, the amount of possible charges will be limited to an upper limit of 2572000 seconds per month (30 days) multiplied by the price per 1 million RUs. Based on the pricing policy as of the date of this documentation (₽13.36), the maximum possible amount of charges per month is about ₽340.
 
@@ -39,3 +39,4 @@ The **Maximum amount of data** limit for a serverless database limits the amount
 You can change the **Maximum amount of data** limit interactively at any time, both via the graphical console and the CLI and raise or reduce it without limitations. This allows you to quickly adjust it as needed.
 
 We don't recommend setting the **Maximum amount of data** limit below the current actual amount because in this state, all data modification operations, including DELETE, become unavailable. You will only be able to reduce the amount of data with the DROP TABLE or DROP INDEX commands. If the limit is accidentally set below the actual volume, we recommend returning it to the operating value exceeding the actual volume with some redundancy.
+

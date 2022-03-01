@@ -1,10 +1,10 @@
 # App in C# (.NET)
 
-This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples), that is available as part of the [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples), that uses the [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
 
 {% include [addition.md](auxilary/addition.md) %}
 
-{% include [init.md](steps/01_init.md) %}
+{% include [steps/01_init.md](steps/01_init.md) %}
 
 App code snippet for driver initialization:
 
@@ -34,7 +34,7 @@ App code snippet for creating a session:
 using var tableClient = new TableClient(driver, new TableClientConfig());
 ```
 
-{% include [create_table.md](steps/02_create_table.md) %}
+{% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
 To create tables, use the `session.ExecuteSchemeQuery` method with a DDL (Data Definition Language) YQL query.
 
@@ -73,9 +73,40 @@ var response = await tableClient.SessionExec(async session =>
 response.Status.EnsureSuccess();
 ```
 
+{% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
+
+Code snippet for inserting and updating data:
+
+```c#
+var response = await tableClient.SessionExec(async session =>
+{
+    var query = @"
+        DECLARE $id AS Uint64;
+        DECLARE $title AS Utf8;
+        DECLARE $release_date AS Date;
+
+        UPSERT INTO series (series_id, title, release_date) VALUES
+            ($id, $title, $release_date);
+    ";
+
+    return await session.ExecuteDataQuery(
+        query: query,
+        txControl: TxControl.BeginSerializableRW().Commit(),
+        parameters: new Dictionary<string, YdbValue>
+            {
+                { "$id", YdbValue.MakeUint64(1) },
+                { "$title", YdbValue.MakeUtf8("NewTitle") },
+                { "$release_date", YdbValue.MakeDate(DateTime.UtcNow) }
+            }
+    );
+});
+
+response.Status.EnsureSuccess();
+```
+
 {% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
 
-{% include [query_processing.md](steps/03_query_processing.md) %}
+{% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 To execute YQL queries, use the `Session.executeDataQuery()` method. The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxControl` class. In the code snippet below, a transaction with the `SerializableRW` mode and an automatic commit after executing the request is used. The values of the request parameters are passed in the form of a dictionary name-value in the `parameters` argument.
 
@@ -108,7 +139,7 @@ var queryResponse = (ExecuteDataQueryResponse)response;
 var resultSet = queryResponse.Result.ResultSets[0];
 ```
 
-{% include [results_processing.md](steps/04_results_processing.md) %}
+{% include [steps/05_results_processing.md](steps/05_results_processing.md) %}
 
 The result of query execution (resultset) consists of an organized set of rows. Example of processing the query execution result:
 
@@ -120,37 +151,6 @@ foreach (var row in resultSet.Rows)
         $"title: {(string?)row["title"]}, " +
         $"release_date: {(DateTime?)row["release_date"]}");
 }
-```
-
-{% include [write_queries.md](steps/05_write_queries.md) %}
-
-Code snippet for inserting and updating data:
-
-```c#
-var response = await tableClient.SessionExec(async session =>
-{
-    var query = @"
-        DECLARE $id AS Uint64;
-        DECLARE $title AS Utf8;
-        DECLARE $release_date AS Date;
-
-        UPSERT INTO series (series_id, title, release_date) VALUES
-            ($id, $title, $release_date);
-    ";
-
-    return await session.ExecuteDataQuery(
-        query: query,
-        txControl: TxControl.BeginSerializableRW().Commit(),
-        parameters: new Dictionary<string, YdbValue>
-            {
-                { "$id", YdbValue.MakeUint64(1) },
-                { "$title", YdbValue.MakeUtf8("NewTitle") },
-                { "$release_date", YdbValue.MakeDate(DateTime.UtcNow) }
-            }
-    );
-});
-
-response.Status.EnsureSuccess();
 ```
 
 {% include [scan_query.md](steps/08_scan_query.md) %}
@@ -184,4 +184,3 @@ public void executeScanQuery()
 }
 ```
 
-{% include [error_handling.md](steps/50_error_handling.md) %}

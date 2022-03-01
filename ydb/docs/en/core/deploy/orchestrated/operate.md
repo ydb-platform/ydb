@@ -1,4 +1,4 @@
-# Using {{ ydb-name }} in {{ k8s }}
+# Using {{ ydb-short-name }} in {{ k8s }}
 
 ## Monitoring
 

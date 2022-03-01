@@ -1,13 +1,13 @@
 # Database limits
 
-This section describes the parameters of limits set in YDB.
+This section describes the parameters of limits set in {{ ydb-short-name }}.
 
 ## Schema object limits
 
 The table below shows the limits that apply to schema objects: tables, databases, and columns. The_Object_ column specifies the type of schema object that the limit applies to.
 The _Error type_ column shows the status that the query ends with if an error occurs. For more information about statuses, see [Error handling in the API](../../reference/ydb-sdk/error_handling.md).
 
-| Objects | Limit | Value | Explanation | Internal<br>name | Error<br>type |
+| Object | Limit | Value | Explanation | Internal<br>name | Error<br>type |
 | :--- | :--- | :--- | :--- | :---: | :---: |
 | Database | Maximum path depth | 32 | Maximum number of nested path elements (directories, tables) | MaxDepth | SCHEME_ERROR |
 | Database | Maximum number of paths (schema objects) | 200,000 | Maximum number of path elements (directories, tables) in the database | MaxPaths | GENERIC_ERROR |
@@ -38,6 +38,7 @@ The table below lists the limits that apply to query execution. The _Call_ colum
 | :--- | :--- | :--- | :--- | :---: |
 | Maximum number of rows in query results | 1000 | ExecuteDataQuery | Complete results of some queries executed using the `ExecuteDataQuery` method may contain more rows than allowed. In this case, the maximum allowed number of rows will be returned in response to the query and the result will have the `truncated` flag | SUCCESS |
 | Maximum query result size | 50 MB | ExecuteDataQuery | Complete results of some queries may exceed the set limit. In this case, the query fails and no data is returned | PRECONDITION_FAILED |
-| Maximum number of sessions per cluster node | 1000 | CreateSession | Using the library for working with YDB, an application can create sessions within a connection. Sessions are linked to a node. You can create a limited number of sessions with a single node | OVERLOADED |
+| Maximum number of sessions per cluster node | 1000 | CreateSession | Using the library for working with {{ ydb-short-name }}, an application can create sessions within a connection. Sessions are linked to a node. You can create a limited number of sessions with a single node | OVERLOADED |
 | Maximum query text length | 10 KB | ExecuteDataQuery | Limit on the length of YQL query text | BAD_REQUEST |
 | Maximum size of parameter values | 50 MB | ExecuteDataQuery | Limit on the total size of parameters passed when executing a previously prepared query | BAD_REQUEST |
+

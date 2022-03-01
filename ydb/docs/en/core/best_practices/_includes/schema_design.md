@@ -13,12 +13,12 @@ General recommendations for choosing a primary key:
 
 You should carefully choose a primary key and avoid situations where a small part of the database is under much heavier load than the rest of the database.
 
-For example, since all tables in {{ ydb-short-name }} are sorted by ascending primary key, writes in a data table with a monotonically increasing primary key cause new data to be written to the end of the table. As YDB splits table data into partitions based on key ranges, inserts are always processed by the same server that is responsible for the "last" partition. Concentrating the load on a single server results in slow data uploading and inefficient use of a distributed system.
+For example, since all tables in {{ ydb-short-name }} are sorted by ascending primary key, writes in a data table with a monotonically increasing primary key cause new data to be written to the end of the table. As {{ ydb-short-name }} splits table data into partitions based on key ranges, inserts are always processed by the same server that is responsible for the "last" partition. Concentrating the load on a single server results in slow data uploading and inefficient use of a distributed system.
 As an example, let's take logging of user events to a table with the ```( timestamp, userid, userevent, PRIMARY KEY (timestamp, userid) )``` schema.
 
 ```timestamp``` monotonically increases, and as a result, all records are written to the end of the table and the "last" partition, which is responsible for this range of keys, serves all records in the table. This leads to lower writing performance.
 
-YDB supports automatic partition splitting when the threshold size is reached (usually about 2 GB). However, in our case, after splitting, a new partition starts taking all the write load and the situation repeats.
+{{ ydb-short-name }} supports automatic partition splitting when the threshold size is reached (usually about 2 GB). However, in our case, after splitting, a new partition starts taking all the write load and the situation repeats.
 
 ## Techniques that let you evenly distribute load across table partitions {#balance-shard-load}
 
@@ -31,10 +31,10 @@ Writing data to a table with the ```( timestamp, userid, userevent, PRIMARY KEY 
 Let's take a table with the ```( timestamp, userid, userevent, PRIMARY KEY (userid, timestamp) )``` schema. As the entire primary key or its first component, you can use a hash of the source key. For example:
 
 ```
-( HASH(timestamp, userid), timestamp, userid, userevent, PRIMARY KEY (HASH(timestamp, userid), userid, timestamp) )
+( HASH(timestamp, userid), timestamp, userid, userevent, PRIMARY KEY (HASH(userid), userid, timestamp) )
 ```
 
-If you select the hashing function correctly, the rows are distributed evenly enough throughout the key space, which results in an even load on the system. In this case, if the ```userid, timestamp``` fields are present in the key after ```HASH(timestamp, userid)```, this preserves data locality and sorting by time for a specific user.
+If you select the hashing function correctly, the rows are distributed evenly enough throughout the key space, which results in an even load on the system. In this case, if the ```userid, timestamp``` fields are present in the key after ```HASH(userid)```, this preserves data locality and sorting by time for a specific user.
 
 ### Reducing the number of partitions affected by a single query {#decrease-shards}
 
@@ -47,3 +47,4 @@ In {{ ydb-short-name }}, all columns, including key ones, may contain a NULL val
 ## Row size limit {#limit-string}
 
 To achieve high performance, we don't recommend writing rows larger than 8 MB and key columns larger than 2 KB to the DB.
+

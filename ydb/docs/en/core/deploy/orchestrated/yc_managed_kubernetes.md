@@ -1,12 +1,12 @@
-# Deploying {{ ydb-name }} in {{ managed-k8s-name }}
+# Deploying {{ ydb-short-name }} in {{ managed-k8s-name }}
 
-To create a [{{ ydb-name }}](https://cloud.yandex.ru/docs/ydb/) cluster using [{{ k8s }}](https://kubernetes.io/), follow these steps.
+To create a [{{ ydb-short-name }}](https://cloud.yandex.com/en/docs/ydb/) cluster using [{{ k8s }}](https://kubernetes.io/), follow these steps.
 
 ## Before you start {#before-begin}
 
 1. Create a {{ k8s }} cluster.
 
-    You can use an existing {{ k8s }} cluster or [create](https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-create) a new one.
+    You can use an existing {{ k8s }} cluster or [create](https://cloud.yandex.com/en/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-create) a new one.
 
     {% note warning %}
 
@@ -16,7 +16,7 @@ To create a [{{ ydb-name }}](https://cloud.yandex.ru/docs/ydb/) cluster using [{
 
 1. Install the {{ k8s }} CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl).
 
-1. [Define](https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials) a kubectl configuration.
+1. [Define](https://cloud.yandex.com/en/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials) a kubectl configuration.
 
 1. Install the {{ k8s }} [Helm 3](https://helm.sh/docs/intro/install/) package manager.
 

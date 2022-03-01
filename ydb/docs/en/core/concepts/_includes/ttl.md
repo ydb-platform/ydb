@@ -63,7 +63,7 @@ Currently, you can manage TTL settings using:
 
 * [YQL](../../yql/reference/index.md)
 * [Console client {{ ydb-short-name }}]{% if audience != "external" %}(https://cloud.yandex.com/en-ru/docs/ydb/quickstart/yql-api/ydb-cli){% else %}(../../quickstart/yql-api/ydb-cli.md){% endif %}.
-* {{ ydb-short-name }} {% if oss %}C++ and{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md)
+* {{ ydb-short-name }} {% if oss %}C++ and{% endif %} Python [SDK](../../reference/ydb-sdk/index.md)
 
 {% note info %}
 
@@ -241,3 +241,4 @@ The current TTL settings can be obtained from the table description:
   ```
 
 {% endlist %}
+

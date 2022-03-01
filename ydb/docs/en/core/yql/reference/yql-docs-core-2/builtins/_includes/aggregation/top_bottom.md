@@ -1,6 +1,6 @@
 ## TOP and BOTTOM {#top-bottom}
 
-Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of elements.
+Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
 
 **Examples**
 

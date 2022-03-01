@@ -9,7 +9,8 @@ Arguments:
 * Variant type
 
 **Example**
-``` yql
+
+```yql
 $var_type = Variant<foo: Int32, bar: Bool>;
 
 SELECT
@@ -25,7 +26,8 @@ Arguments:
 * A string with the field name
 
 **Example**
-``` yql
+
+```yql
 SELECT
    AsVariant(6, "foo") as VariantValue
 ```

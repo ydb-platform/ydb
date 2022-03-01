@@ -8,7 +8,8 @@ Arguments:
 * Enumeration type
 
 **Example**
-``` yql
+
+```yql
 $enum_type = Enum<Foo, Bar>;
 SELECT
    Enum("Foo", $enum_type) as Enum1Value,
@@ -19,10 +20,12 @@ SELECT
 
 Arguments:
 
-* A string with the name of an enumeration element
+* A string with the name of an enumeration item
 
 **Example**
-``` yql
+
+```yql
 SELECT
    AsEnum("Foo");
 ```
+

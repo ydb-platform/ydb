@@ -1,4 +1,4 @@
-# Синтаксис SELECT
+# SELECT syntax
 
 <!-- File split by includable blocks as part of YQL docs preparation for YQL/YDB opensource -->
 
@@ -6,11 +6,7 @@
 
 {% include [x](_includes/select/from.md) %}
 
-{% if feature_secondary_index %}
-
-  {% include [x](_includes/select/secondary_index.md) %}
-
-{% endif %}
+{% include [x](_includes/select/secondary_index.md) %}
 
 {% include [x](_includes/select/with.md) %}
 
@@ -51,3 +47,4 @@
 {% include [x](_includes/select/temporary_table.md) %}
 
 {% include [x](_includes/select/from_as_table.md) %}
+

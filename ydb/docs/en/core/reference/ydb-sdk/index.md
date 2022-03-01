@@ -1,3 +1,3 @@
-{% include [intro.md](_includes/index/intro.md) %}
+{% include [index.md](_includes/index.md) %}
 
-{% include [examples.md](_includes/index/examples.md) %}
+

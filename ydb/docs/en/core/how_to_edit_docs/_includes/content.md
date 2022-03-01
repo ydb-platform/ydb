@@ -1,311 +1,324 @@
-# Руководство по созданию контента
+# Content creation guide
 
-## Введение {#intro}
+## Introduction {#intro}
 
-Исходный код документации создается в формате [Markdown](https://ru.wikipedia.org/wiki/Markdown), с расширениями [YFM (Yandex Flavoured Markdown)](https://ydocs.tech/ru/). Эффективным способом быстро изучить эти форматы является знакомство с исходным кодом имеющейся документации YDB.
+The source code of the documentation is created in [Markdown](https://en.wikipedia.org/wiki/Markdown) format with [YFM (Yandex Flavoured Markdown)](https://ydocs.tech/) extensions. An effective way to quickly learn these formats is to study the source code of the available {{ ydb-short-name }} documentation.
 
-Кроме описанных здесь формальных правил, всегда действует неявное дополнение: если на какую-то тему правило формально не описано, необходимо посмотреть как уже сделано ранее в других местах документации, и сделать по аналогии.
+In addition to the formal rules described here, always keep in mind the following: if a rule is not formally described for some topic, you should look at how this has been done elsewhere in the documentation and do it by analogy.
 
-Также нужно помнить о том, что из любых правил бывают исключения, и их невозможно описать все.
+Also remember that there are exceptions to any rules and it is impossible to describe them all.
 
-## Ядро и кастомизация документации
+## Documentation core and customization
 
-OpenSource документация по YDB поддерживает создание на её базе кастомизированных документаций для enterprise-окружений где эксплуатируется YDB, или для облачных провайдеров, предоставляющих сервис YDB в своих экосистемах.
+The OpenSource {{ ydb-short-name }} documentation lets you create customized documentation based on it for enterprise environments using {{ ydb-short-name }} or for cloud providers that provide the {{ ydb-short-name }} service in their ecosystems.
 
-При добавлении контента вам придется в первую очередь выбрать куда его добавлять: в OpenSource ядро, или в какую-либо кастомизацию. Общая рекомендация - добавлять контент в OpenSource блок таким образом, чтобы он мог читаться в разных контекстах без необходимости его специфичной адаптации. Только когда это сделать не удается, или размещение в OpenSource ядре какого-то контента явно запрещено (например, ссылок на ресурсы интранет в enterprise-контексте), можно переходить к добавлению контента в исходный код кастомизации документации.
+When adding content, you should first choose where to add it: to the OpenSource core or to some customization. The general recommendation is to add content to the OpenSource block in such a way that it can be read in different contexts without the need for its specific adaptation. Only when this can't be done or the placement of some content in the OpenSource core is explicitly prohibited (for example, links to intranet resources in an enterprise context), you can proceed to adding content to the source code of the documentation customization.
 
 {% include [custom_extension.md](content/custom_extension.md) %}
 
-В тех разделах, где требования отличаются для базового контента и кастомизации, приведены две соответствующих закладки:
+In the sections where the requirements differ for basic content and customization, there are two corresponding bookmarks:
 
-- **Core**: ядро любой документации -- базовый контент
-- **Overlay**: накладываемый поверх ядра контент, адаптирующий его к кастомной сборке
+- **Core**: The core of any documentation, the basic content.
+- **Overlay**: Content that is overlaid on top of the core and adapting it to a custom build.
 
-Весь контент OpenSource сборки входит в состав ядра, и при его сборке применяется нулевая кастомизация, поэтому при его изменениях вам потребуется только закладка "Core".
+All the content of the OpenSource build is part of the core, and zero customization is applied when building it, so when you change it, you'll only need the "Core" bookmark.
 
-## Директории {#placement}
+## Directories {#placement}
 
-Базовая структура директорий исходного кода основывается на тематике контента, а не типе файлов или их технической роли при сборке. Технические файлы и директории размещаются внутри тематических.
+The basic structure of the source code directories is based on the subject of the content and not on the type of files or their technical role during the build. Technical files and directories are placed inside the subject ones.
 
-### Статья "Обзор" {#index}
+### "Overview" article {#index}
 
-Каждая тематическиая директория обязана содержать статью "Обзор" с именем файла `index.md`. В статье "Обзор":
+Each subject directory must contain the "Overview" article with the `index.md` filename. The "Overview" article:
 
-- Описывается о чем рассказывают статьи в данной директории
-- Может даваться перечень ссылок на все или отдельные наиболее важные статьи
-- Может даваться перечень ссылок "Смотрите также" на связанные другие статьи или разделы
+- Describes what the articles in this directory tell about.
+- Optionally, provides a list of links to all or some of the most important articles.
+- Optionally, provides a set of "See also" links to other related articles and sections.
 
-Наличие статьи "Обзор" позволяет ссылаться на директорию в целом, а не на конкретную статью, а также без потери ссылочной целостности преобразовывать статьи в директории.
+The presence of the "Overview" article lets you refer to the entire directory rather than a specific article and convert articles into directories without losing the referential integrity.
 
-## Статьи {#articles}
+## Articles {#articles}
 
 {% list tabs %}
 
 - Core
 
-  Любая статья в базовой OpenSource документации создается в расчете на то, что она может быть расширена или скорректирована в кастомизированной документации, создаваемой на её основе. При этом, доработки базовой документации должны применяться в кастомизированной без ручного merge изменений контента, иначе ведение множества производных документаций становится очень трудозатратной задачей, а контроль полноты ручных адаптаций становится невозможным.
+  Any article in the basic OpenSource documentation is created with a view to extend or adjust it in the customized documentation created on its basis. At the same time, improvements to the basic documentation should be applied in a customized version with no manual merge of content changes, otherwise maintaining a lot of derived documentation versions becomes a very labor-intensive task and monitoring the completeness of manual adaptations becomes impossible.
 
-  Для достижения этой цели существующими инструментами файл со статьей внутри тематического каталога не содержит непосредственно контента, и предназначен для переопределения при кастомизации документации. Контент находится в одном нескольких файлах с блоками контента, включаемых в файл статьи директивами include.
+  To achieve this goal using the existing tools, a file with an article inside a subject directory does not directly contain any content and is designed to be redefined when customizing the documentation. The content is located in one or more files with content blocks included in the article file through include directives.
 
-  Вставляемые в статью блоки контента находятся в технической директории `_includes`, вложенной непосредственно в тематическую директорию. 
+  The content blocks inserted into the article are located in a technical directory named `_includes` and nested directly in the subject directory.
 
-  **Статья из одного блока**
+  **A single-block article**
 
-  В простейшем случае статья состоит из одного блока, вставляемого директивой `{% include ...%}`:
+  In the simplest case, an article consists of a single block inserted by the `{% include ...%}` directive:
 
   `article1.md`:
-  ``` md
 
+  ```md
+  
   {% include [article1.md](_includes/article1.md) %}
-
   ```
 
-  В директории `_includes` создается  файл с контентом, одноименный с файлом статьи:
+  In the `_includes` directory, a content file with the same name as the article file is created:
 
   `_includes/article1.md`:
-  ``` md
-  # Статья
-  Текст статьи.
+
+  ```md
+  # Article
+  Article text.
   ```
 
-  **Статья из нескольких блоков**
+  **A multi-block article**
 
-  Статья из одного блока позволяет при кастомизации документации добавить произвольный контент перед или после контента из базовой OpenSource документации. Этого может оказаться недостаточно, и тогда контент может быть разделен на большее количество блоков, позволяя при кастомизации документации как вставить произвольный контент между ними, так и исключить неприменимые блоки.
+  A single-block article lets you add arbitrary content before or after the content from the basic OpenSource documentation when customizing the documentation. This may not be enough, in which case the content can be divided into more blocks, letting you insert arbitrary content between them and exclude non-applicable blocks when customizing the documentation.
 
-  В этом случае, под статью создается одноименная директория внутри `_includes`. Например, если мы находимся внутри тематического каталога `subject1`, и хотим сделать статью `article1` из двух блоков, то должны сделать три файла со следующим содержимым:
+  In this case, a directory with the same name is created for the article inside `_includes`. For example, if you're inside the subject directory `subject1` and want to create an article named `article1` with two blocks, you should create three files with the following contents:
 
   `subject1/article1.md`:
-  ``` markdown
 
+  ```markdown
+  
   {% include [definition.md](_includes/article1/definition.md) %}
-
+  
   {% include [examples.md](_includes/article1/examples.md) %}
-
   ```
 
   `subject1/_includes/article1/definition.md`:
-  ``` md
-  # Статья документации
-  ## Определение {#definition}
-  Статья документации -- это набор контента, раскрывающий определенную тему, интересную целевой аудитории.
+
+  ```md
+  # Documentation article
+  ## Definition {#definition}
+  A documentation article is a set of content that reveals a specific topic that is interesting to the target audience.
   ```
 
   `subject1/_includes/article1/examples.md`:
-  ``` md
-  ## Примеры {#examples}
-  - Кошки не похожи на людей. Кошки -- это кошки.
-  - Куст -- это совокупность веток, торчащих из одного места.
+
+  ```md
+  ## Examples {#examples}
+  - Cats aren't like people. Cats are cats.
+  - A bush is a collection of branches sticking out of one place.
   ```
 
 - Overlay
 
-  В кастомизации документации можно добавлять статьи, тематические каталоги, а также переопределять содержимое статей из `core`, размещая файл со статьей по тому же относительному пути внутри `overlay`, что он размещен внутри `core`.
+  When customizing the documentation, you can add articles and subject directories and redefine the content of articles from `core`, placing the article file at the same relative path inside `overlay` as it is placed inside `core`.
 
-  При переопределении можно:
+  When redefining the content, you can:
 
-  - Добавить дополнительный контент в начало или конец статьи
+  - Add additional content to the beginning or end of an article.
 
     `subject1/article1.md`:
-    ``` md
 
+    ```md
+    
     {% include [article1](_includes/article1.md) %}
-
-    В дополнение к базовым способам авторизации, в нашей компании применяется авторизация на основе нанотрубок.
+    
+    In addition to the basic authorization methods, our company uses nanotube-based authorization.
     ```
 
-  - Вставить дополнительный контент между директивами include
+  - Insert additional content between include directives.
 
     `subject1/article1.md`:
-    ``` markdown
 
+    ```markdown
+    
     {% include [definition.md](_includes/article1/definition.md) %}
-
-    В нашей компании объем данных в БД ограничен 150ZB.
-
+    
+    In our company, the amount of DB data is limited to 150ZB.
+    
     {% include [examples.md](_includes/article1/examples.md) %}
-
-    Пример 2:
+    
+    Example 2:
     The quick brown fox jumps over the lazy dog.
     ```
 
-  - Убрать из сборки часть контента исходной статьи, удалив соответствующую директиву include
+  - Remove some of the content of the original article from the build by removing the corresponding include directive.
 
     `subject1/article1.md`:
-    ``` markdown
 
+    ```markdown
+    
     {% include [definition.md](_includes/article1/definition.md) %}
-
-    В нашей компании объем данных в БД ограничен 150ZB.
-
-    Пример:
+    
+    In our company, the amount of DB data is limited to 150ZB.
+    
+    Example:
     The quick brown fox jumps over the lazy dog.
     ```
 
-  При наличии множество блоков, и значительного количества добавляемого контента, может оказаться полезным его оформление также в виде блоков include, в созданной внутри тематической директории overlay поддиректории _includes. В этом случае, файл со статьей сохранит понятную структуру, охватываемую взглядом.
+  If there are multiple blocks and a significant amount of content to add, it may be useful to design it in the form of include blocks as well, in the _includes subdirectory created inside the overlay subject directory. In this case, the article file will retain a clear and visible structure.
 
-  Технически переопределенная статья может содержать полностью свой контент, вообще не включая что-либо из базовой документации. Однако, скорее всего это означает, что необходимо сделать рефакторинг контента в базовой документации с тем, чтобы он мог эффективно переопределяться, а не заменяться.
+  Technically, a redefined article may contain its entire content, without including anything from the basic documentation at all. However, most likely this means that it is necessary to refactor the content in the basic documentation so that it can be effectively redefined rather than replaced.
 
 {% endlist %}
 
-### Особенности использования директивы include {#include-hints}
+### Specifics of using the include directive {#include-hints}
 
-- Содержимое `_includes` не публикуется, поэтому на него бесполезно и запрещено ссылаться, оно может быть только included в cтатьи директивой `{% include ... %}`. К сожалению, при локальной сборке содержимое _includes остается доступным и работает, и ошибка проявляется только при развертывании документации на ферме.
-- Вокруг директивы `{% include ... %}` необходимо оставлять пустые строки, иначе она не будет исполнена при сборке.
-- В квадратных скобках нужно писать имя файла, чтобы было на что кликать при просмотре в default viewer github (который не понимает что такое include), и чтобы один include в нём визуально отличался от другого.
-- После `{%` в начале и перед `%}` в конце обязателен пробел, иначе include не будет исполнен при сборке.
+- The `_includes` contents are not published, so it is useless and forbidden to refer to them, it can only be included in articles by the `{% include ... %}` directive. Unfortunately, when building documentation locally, the contents of _includes remain available and operational, and the error only occurs when deploying the documentation on the farm.
+- Make sure to leave empty lines around the `{% include ... %}` directive, otherwise, it won't be executed during the build.
+- Write a file name in square brackets so that there is something to click on when viewing it in the default viewer on github (which does not understand what include is), and so that one include in it visually differs from the other.
+- After `{%` at the beginning and before `%}`, a space is required at the end, otherwise the include won't be executed during the build.
 
-### Другие применения include {#include-reuse}
+### Other use cases for include {#include-reuse}
 
-Директива `{% include ... %}` может технически применяться не только в целях поддержки создания производных документаций, но и просто для переиспользования контента в нескольких статьях. Однако, такое применение является нежелательным, так как появление одинакового контента в разных статьях запутывает пользователя, а редактирование included контента без понимания контекста, в котором он приводится, может легко приводить к потере смысла.
+The `{% include ... %}` directive can technically be used both to support the creation of derivative documentation versions and just to reuse content in several articles. However, this is undesirable, since the appearance of the same content in different articles confuses the user, and editing the included content without understanding the context it is given in can easily lead to loss of meaning.
 
-Допустимым и хорошим вариантом применения переиспользуемого контента является предоставление одной и той же информации в разных вариантах группировки в пределах одного контекста. Например, раздел FAQ содержит как статьи по темам, так и статью "Все вопросы по всем темам". Аналогично информация по ценам может приводиться как в специализированных статьях по каким-то тарифицируемым функциям, там и в общей статье прайс-листа.
+An acceptable and good way to use the reused content is to provide the same information in different grouping options within the same context. For example, the FAQ section contains both articles on certain topics and the "All questions on all topics" article. Similarly, information about prices can be given both in specialized articles on some chargeable functions and in the general article of the price list.
 
-## Оглавление {#toc}
+## Table of contents {#toc}
 
-Каждая статья должна быть упомянута в файле оглавления (TOC - Table Of Contents), иначе она не будет опубликована. Оглавление является основным инструментом начала навигации по документации, и размещается в левой части страниц сайта документации.
+Each article must be mentioned in the Table Of Contents (TOC) file, otherwise it won't be published. The table of contents is the main tool for starting navigation through the documentation and is placed on the left of the documentation website pages.
 
 {% list tabs %}
 
 - Core
 
-  Внутри каждой тематической директории находятся два файла TOC:
+  There are two TOC files inside each subject directory:
 
-  1. `toc_i.yaml`: содержит перечень статей для включения в оглавление, находящихся непосредственно в данной директории, за исключением особой обязательной статьи "Обзор", которая должна обязательно присутствовать в любом подразделе TOC:
+  1. `toc_i.yaml`: Contains a list of articles to be included in the table of contents and located directly in this directory, with the exception of a special "Overview" article that is mandatory and must be present in any subsection of the TOC:
 
-      ``` yaml
+      ```yaml
       items:
-      - name: Статья 1
+      - name: Article 1
         href: article1.md
-      - name: Статья 2
+      - name: Article 2
         href: article2.md
       ...
       ```
-  2. `toc_p.yaml`: содержит фиксированный контент, включающий статью "Обзор" и ссылку на `toc_i.yaml`:
 
-      ``` yaml
+  1. `toc_p.yaml`: Contains fixed content including the "Overview" article and a link to `toc_i.yaml`:
+
+      ```yaml
       items:
-      - name: Обзор
+      - name: Overview
         href: index.md
       - include: { mode: link, path: toc_i.yaml }
       ```
 
-  Если у директории существуют дочерние директории, то в `toc_i.yaml` родительской директории явно указываются относительные ссылки на их `toc_p.yaml`:
+  If a directory has child directories, then the `toc_i.yaml` of the parent directory explicitly specifies relative references to their `toc_p.yaml`:
 
-  ``` yaml
+  ```yaml
   ...
-  - name: Подтема 1
+  - name: Subtopic 1
     include: { mode: link, path: subject1/toc_p.yaml }
   ...
   ```
 
-  Непосредственно в директории `core` находится файл с корневым оглавлением `toc_p.yaml`, содержащий включение оглавлений `toc_p.yaml` из всех тематических директорий.
+  In the `core` directory proper, there is a file with the root table of contents named `toc_p.yaml`, including `toc_p.yaml` tables of contents from all subject directories.
 
 - Overlay
 
-  Если в кастомизированной документации не требуется изменения состава оглавления в некоторой тематической директории относительно базовой документации, то никаких файлов toc в `overlay` не создается. В сборку попадет файл toc из базовой документации.
+  If the customized documentation does not require changing the contents of the TOC in some subject directory as compared to the basic documentation, no toc files are created in `overlay`. The toc file from the basic documentation will be included in the build.
 
-  При необходимости скорректировать состав статей в overlay включается файл `toc_p.yaml`, изначально скопированный из `core`, в котором можно добавить статьи или подразделы в начало или конец перечня статей из базовой документации:
+  If you need to adjust the list of articles, the `toc_p.yaml` file is included in overlay, which is originally copied from `core`, and you can add articles or subsections to the beginning or end of the list of articles from the basic documentation there:
 
-  ``` yaml
+  ```yaml
   items:
-  # Включение статьи "обзор" в начало перечня
-  - name: Обзор
+  # Adding the "Overview" article at the beginning of the list
+  - name: Overview
     href: index.md
-  # Включение дополнительных пунктов перед пунктами из базовой документации
-  - name: Статья кастомизации 1 
+  # Adding additional items before the items from the basic documentation
+  - name: Customization article 1 
     href: cust_article1.md
-  # Включение пунктов TOC базовой документации
+  # Including TOC items from the basic documentation
   - include: { mode: link, path: toc_i.yaml }
-  # Включение дополнительных пунктов после пунктов из базовой документации
-  - name: Дополнительный подраздел
+  # Adding additional items after the items from the basic documentation
+  - name: Additional subsection
     include: { mode: link, path: cust_subdir/toc_p.yaml }
-  - name: Статья кастомизации 2
+  - name: Customization article 2
     href: cust_article2.md
   ```
 
 {% endlist %}
 
+## Article section headings and anchors {#headers-and-anchors}
 
-## Заголовки разделов статей и якоря {#headers-and-anchors}
+Each article should contain a first-level heading at the beginning that is marked with a single `#`. This heading is contained in the first content block.
 
-Каждая статья должна в начале содержать заголовок первого уровня, обозначаемый одним символом `#`. Этот заголовок содержится в первом блоке контента.
+Next level headings can be placed in different content blocks technically in an arbitrary way. However, it makes sense to place them at the beginning of the blocks. Keep in mind that building an article results in a single HTML page with headings.
 
-Заголовки следующих уровней могут быть технически произвольным образом размещены в разных блоках контента, однако имеет размещать заголовки в начале блоков. Необходимо помнить, что в результате сборки статьи получится одна HTML-страница с заголовками.
+Each heading of the second and further level is provided with an anchor that can be used in links like `host:path/article#anchor`. When you click on this link, the browser scrolls the contents of the page to the desired location. An anchor is set in a heading as follows:
 
-Каждый заголовок второго и более уровня снабжается якорем (anchor), который может быть использован в ссылках вида `host:path/article#anchor`. При проходе по такой ссылке браузер прокрутит содержимое страницы до нужного места. Якоря задается в заголовке следующим образом:
-
-``` md
-## Заголовок {#anchor}
+```md
+## Heading {#anchor}
 ```
 
-Допускается указание нескольких якорей, однако такое применение должно иметь под собой веские основания вроде сохранения совместимости с ранее существовавшими якорями при рефакторинге контента, например при объединении разделов:
+It is allowed to specify several anchors, but you should have a good reason for that, such as maintaining the compatibility with previous anchors when refactoring the content, for example, when merging sections:
 
-``` md
-## Заголовок объединенного раздела по теме X и Y {#X} {#Y} {#XY}
+```md
+## Heading of a merged section on topic X and Y {#X} {#Y} {#XY}
 ```
 
-Указание якорей является расширением синтаксиса YFM по отношению к Markdown, поэтому общедоступные инструменты отображения Markdown (вроде preview в IDE) их не понимают.
+Specifying anchors is an extension of the YFM syntax in relation to Markdown, so publicly available Markdown display tools (like preview in an IDE) do not understand them.
 
-## Ссылки {#links}
+## Links {#links}
 
-Ссылки в тексте статей на другие статьи являются основным средством направления пользователя на другие темы, ассоциативно связанные с читаемым в данный момент контентом, подобно указателям на дороге. В идеале, разработчик документации должен понимать, каким образом пользователь доберется до нужной информации. Если некоторая статья никак не привязана ссылками к другим темам, а только размещена где-то в оглавлении в разделе "Прочее", то пользователь может никогда до неё не дойти, а мы будем регулярно отвечать на запросы в поддержку "так это же все описано вот тут, почему вы не читаете документацию"?
+Links in the text of an article to other articles are the main way to guide the user to other topics that are associated with the content they're reading just like traffic signs. Ideally, a documentation developer should understand how the user will get to the desired information. If some article is not linked to other topics in any way and is only posted somewhere in the table of contents in the "Other" section, the user may never reach it, and we'll keep responding to support requests saying "it's all described here, why don't you read the documentation?".
 
-Никто и никогда не читает документацию как художественное произведение с начала до конца, пользователи всегда приходят для решения какой-то проблемы, они должны это решение найти, и ссылки между статьями являются основным инструментом навигации после того, как пользователь начал чтение, выбрав статью в TOC.
+No one ever reads documentation as a work of art from beginning to end, users always read it to fix an issue, they have to find information about how to fix it, and links between articles are the main navigation tool once the user has started reading an article by selecting it in the TOC.
 
-Ссылки бывают двух видов:
-1. На исходный код документации. Это всегда относительные ссылки на какой-то .md файл. При этом, чем больше в такой ссылке переходов "на уровень выше" или входов во вложенные директории, тем больше вероятность что документация плохо структурирована. В идеале, ссылки не должны выходить более чем на уровень вверх или на одну директорию вниз по иерархии:
-   ``` md
-   Для поддержания работоспособности котенка его [нужно кормить](../feeding/index.md).
+There are two types of links:
+
+1. To the source code of the documentation. These are always relative links to some .md file. The more transitions "to a level up" or entries to nested directories this link has, the more likely it is that the documentation is poorly structured. Ideally, links should not navigate more than one level up or one directory down the hierarchy:
+
+   ```md
+   To keep a kitten active, you [need to feed it](../feeding/index.md).
    ```
-2. На внешние по отношению к документации ресурсы. Это fully-qualified URLs, в которых никогда не добавляется index:
-   ``` md
-   Хорошие корма для котов можно найти в [магазине Pushok](http://www.pushok.ru/catalog).
+1. To resources external to the documentation. These are fully-qualified URLs in which no index is ever added:
+
+   ```md
+   You can find a good choice of cat food at the [Pushok store](http://www.pushok.ru/catalog).
    ```
 
-Текст внутри квадратных скобок, отображаемый при рендеринге документации, должен быть достаточно длинным, чтобы в него можно было легко попасть мышью или пальцем при клике.
+Text inside the square brackets displayed when rendering documentation should be long enough to be easily clicked on with a mouse or tapped with a finger.
 
-Существуют ситуации, ктогда URL ресурса имеет самостоятельную ценность, и должен быть отображен в документации, например, в случае публикации ссылок на репозиторий в github. В таких случаях его необходимо дублировать как внутри квадратных скобок, так и внутри обычных, так как YFM, в отличае от стандартного Markdown, не распознает автоматом URL в тексте:
+There are situations when the URL of a resource has its own value and should be displayed in the documentation, for example, when publishing links to a repository on Github. In this case, it must be duplicated inside both square and regular brackets, since YFM, unlike standard Markdown, does not automatically recognize URLs in text:
 
-``` md
-Github репозиторий YDB: [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
+```md
+ {{ ydb-short-name }} repository on Github: [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
 ```
 
-## Картинки {#pictures}
+## Images {#pictures}
 
-Картинки являются частью контента определенной статьи, и размещаются в технической поддиректории `_assets` в тематической директории, где размещена статья. Вставка картинки в текст статьи осуществляется ссылкой, перед которой указан восклицательный знак `!`:
+Images are part of an article's content and placed in the `_assets` technical subdirectory of the subject directory where the article is posted. Images are inserted in the article text using a link preceded by an exclamation mark `!`:
 
-``` md
+```md
 ![Text](../_assets/file.png)
 ```
 
-Указываемый в квадратных скобках текст показывается в браузере пока не загружена сама картинка. Он может повторять имя файла из ссылки без расширения. 
+The text specified in square brackets is displayed in the browser until the image itself is loaded. It can repeat the file name from the link with no extension.
 
-Желательные форматы для изображений:
-- Диаграммы: [.SVG](https://ru.wikipedia.org/wiki/SVG)
-- Скриншоты: [.PNG](https://ru.wikipedia.org/wiki/PNG)
+Desirable image formats:
 
-Так как картинка является частью какой-то статьи, то размещение картинки без статьи невозможно. Если текста статьи пока нет, то необходимо определить тематический каталог размещения и имя файла будущей статьи, в тексте указать только ссылку на картинку (не забыть про то что [текст статьи размещается в подкаталоге `_includes`](#articles)!), и не включать саму статью в TOC до тех пор, пока он не будет готова к публикации.
+- Charts: [.SVG](https://en.wikipedia.org/wiki/SVG)
+- Screenshots: [.PNG](https://en.wikipedia.org/wiki/Portable_Network_Graphics)
 
-Дополнительно при вставке картинки могут быть указаны:
-- Hint для отображения при наведении мышью: `![Text](path/file "Hint")`. Пользоваться не рекомендуется, так как многие устройства сегодня не имеют курсора мыши.
-- Размер изображения: `![Text](path/file =XSIZExYSIZE)`. Рекомендуется пользоваться в варианте указания XSIZE для картинок в формате SVG, чтобы они были растянуты корректно по ширине экрана документации, независимо от того с каким разрешением были сохранены: `![Diagram1](../_assets/diagram1.svg =800x)`. При указании таким образом только размера по X размер по Y подбирается автоматически с сохранением пропорций.
+Since an image is part of an article, it is impossible to post the image without this article. If there is no text of the article yet, determine the subject directory for its placement and the file name of the future article and only specify a link to the image in the text (keep in mind that the [text of the article is placed in the `_includes` subdirectory](#articles)!), and do not include the article itself in the TOC until it is ready for publication.
 
-## Обратная совместимость {#compatibility}
+When inserting images, you can also specify:
 
-Развитие документации не должно приводить к тому, что у её пользователей перестанут работать сохраненные ссылки: как закладки в браузерах, так и зафиксированные на множестве неподконтрольных разработчикам документации ресурах вроде wiki-страниц.
+- A hint to be shown when hovering over an image: `![Text](path/file "Hint")`. We don't recommend using it, since lots of modern devices have no mouse pointer.
+- Image size: `![Text](path/file =XSIZExYSIZE)`. We recommend that you use it when specifying the XSIZE for SVG images so that they are expanded properly by the width of the documentation screen, regardless of the resolution they were saved with: `![Diagram1](../_assets/diagram1.svg =800x)`. If you only specify the X-size in this way, the Y-size is selected automatically with the proportions maintained.
 
-Это означает, что переименовывать статьи, или переносить по директориям в общем случае нельзя.
+## Backward compatibility {#compatibility}
 
-Если необходимо статью преобразовать в набор статей в пределах новой директории, то для сохранения совместимсти данная директория должна получить то же имя, что раньше было у статьи, а внутри должна появиться статья `index.md`. В результате, по старой ссылке на статью пользователи начнут попадать на страницу "Обзор" новосозданной директории.
+The development of documentation should not lead to a situation when users encounter saved links that are broken: both in browser tabs and those fixed in a variety of resources that are not controlled by the documentation developers, such as wiki pages.
 
-Если без переноса никак не обойтись, то можно применить следующий механизм:
+This means that you generally can't rename articles or move them across directories.
 
-1. По старому месту расположения публикуется статья с контентом "Данная статья больше не существует, новое место размещения <здесь>, обновите ссылку", или вариации на тему этого контента. Главная задача -- чтобы при проходе по старой ссылке пользователь не получил HTTP 404 Not found, а смог понять куда оно переместилось, на что разбилось, или что вообще правда удалено и почему.
-2. В TOC в старом месте расположения указывается ссылка на эту статью с включенным флагом `hidden`:
-   ``` yaml
+If you need to convert an article into a set of articles within a new directory, to maintain the compatibility, this directory should be named as the original article and an `index.md` article should appear inside. As a result, following the old link to the article, users will get to the "Overview" page of the newly created directory.
+
+If you cannot but move an article, do the following:
+
+1. At the previous location, publish an article saying "This article no longer exists, a new location is <here>, please update the link" or something like that. The main thing is to ensure that, when following the old link, the user does not receive the HTTP 404 Not found error and can understand where it has been moved, what it has been broken into, or that it has been actually deleted and why.
+1. At the old location of the article in the TOC, give a link to it with the `hidden` flag enabled:
+
+   ```yaml
    - name: Deprecated article
      href: old_article.md
      hidden: true
    ```
-В результате, данная статья не будет перечислена где-либо в TOC, но будет доступна при проходе по прямой ссылке, если она осталась где-то сохранена.
+
+As a result, this article won't be listed anywhere in the TOC, but will be available when following a direct link provided that you keep it somewhere.
 

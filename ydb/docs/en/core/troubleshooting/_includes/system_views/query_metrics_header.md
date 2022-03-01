@@ -40,3 +40,4 @@ Restrictions:
 * The table contains the history for the last 6 hours.
 * Within the interval, information is provided for no more than 256 different queries.
 * Statistics may be incomplete if the database is under heavy load.
+

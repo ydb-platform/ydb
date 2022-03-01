@@ -1,1 +1,1 @@
-{% include [intro.md](_includes/discovery-list/intro.md) %}
+{% include [discovery-list.md](_includes/discovery-list.md) %}

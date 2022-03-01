@@ -1,6 +1,6 @@
 ## PERCENTILE and MEDIAN {#percentile-median}
 
-Calculating percentiles using the amortized version of the  [TDigest](https://github.com/tdunning/t-digest) algorithm. `MEDIAN`: An alias for `PERCENTILE(N, 0.5)`.
+Calculating percentiles using the amortized version of the [TDigest](https://github.com/tdunning/t-digest) algorithm. `MEDIAN`: An alias for `PERCENTILE(N, 0.5)`.
 
 {% note info "Restriction" %}
 

@@ -1,0 +1,13 @@
+items:
+- name: Overview
+  href: index.md
+- name: Authentication
+  include: { mode: link, path: auth/toc_p.yaml }
+- name: Balancing
+  include: { mode: link, path: balancing/toc_p.yaml }
+- name: Running repeat queries
+  href: retry/index.md
+- name: Troubleshooting
+  include: { mode: link, path: debug/toc_p.yaml }
+- name: Setting the session pool size
+  href: session_pool_limit/index.md

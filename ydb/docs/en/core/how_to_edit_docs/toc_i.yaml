@@ -1,13 +1,11 @@
 items:
-- name: Руководство по созданию контента
+- name: Content creation guide
   href: content.md
-- name: Структура тематических каталогов
+- name: Structure of subject directories
   href: subjects.md
-- name: Сборка документации
+- name: Building documentation
   href: build.md
-- name: Как участвовать в разработке документации
+- name: How to participate in the development of documentation
   href: contribute.md
-- name: Создание кастомизированной документации
+- name: Creating customized documentation
   href: customize.md
-
-  

@@ -1,7 +1,4 @@
 ## Parameterized queries {#param-queries}
 
-{% note warning %}
+Querying data using parameters. This query execution option is preferable, as it allows the server to reuse the query execution plan for subsequent calls and protects against vulnerabilities like [SQL Injection](https://en.wikipedia.org/wiki/SQL_injection).
 
-We strongly recommend that you use only parameterized queries. This lets your database prepare for parsing and optimization of multiple queries that differ only in parameter values just once.
-
-{% endnote %}

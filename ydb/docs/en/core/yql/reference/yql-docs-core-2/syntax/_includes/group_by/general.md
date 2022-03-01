@@ -3,6 +3,7 @@
 Group the `SELECT` results by the values of the specified columns or expressions. `GROUP BY` is often combined with [aggregate functions](../../../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) to perform calculations in each group.
 
 **Syntax**
+
 ```sql
 SELECT                             -- In SELECT, you can use:
     column1,                       -- key columns specified in GROUP BY
@@ -14,8 +15,8 @@ SELECT                             -- In SELECT, you can use:
 FROM table
 GROUP BY
     column1, column2, ...,
-    <expr> AS key_n           -- When grouping by expression, you can set a name for it using AS,
-                              -- and use it in SELECT
+    <expr> AS key_n                -- When grouping by expression, you can set a name for it using AS,
+                                   -- and use it in SELECT
 ```
 
 The query in the format `SELECT * FROM table GROUP BY k1, k2, ...` returns all columns listed in GROUP BY, i.e., is equivalent to `SELECT DISTINCT k1, k2, ... FROM table`.
@@ -57,8 +58,9 @@ GROUP BY
   subkey as sk,
 ```
 
-{% note warning %}
+{% note warning "Attention" %}
 
 Specifying a name for a column or expression in `GROUP BY .. AS foo` it is an extension on top of YQL. Such a name becomes visible in `WHERE` despite the fact that filtering by `WHERE` is executed [before](../../select.md#selectexec) the grouping. For example, if the `T` table includes two columns, `foo` and `bar`, then the query `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` would actually filter data by the `bar` column from the source table.
 
 {% endnote %}
+

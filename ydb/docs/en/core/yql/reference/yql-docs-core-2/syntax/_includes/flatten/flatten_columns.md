@@ -17,3 +17,4 @@ FROM (
         false AS z)
 ) FLATTEN COLUMNS;
 ```
+

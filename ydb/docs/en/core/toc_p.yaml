@@ -1,29 +1,4 @@
-title: Yandex Database
+title: YDB
 href: index.yaml
 items:
-# Header
-- name: Contents
-  href: index.yaml
-- name: Getting started
-  items:
-  - name: Overview
-    href: getting_started/index.md
-  - include: { mode: link, path: getting_started/toc_i.yaml }
-
-# Main
-# - { name: Step-by-step instructions,                  include: { mode: link, path: solutions/toc_i.yaml },       when: audience == "external" }
-- { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }
-- { name: Step-by-step instructions,                    include: { mode: link, path: operations/toc_p.yaml } }
-
-- { name: Recommendations,                            include: { mode: link, path: best_practices/toc_p.yaml } }
-- { name: Maintenance,                            include: { mode: link, path: maintenance/toc_p.yaml } }
-- { name: Diagnostics,                             include: { mode: link, path: troubleshooting/toc_p.yaml } }
-
-# References  
-- { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
-- { name: Working with the YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
-- { name: Working with the YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
-
-# Footer
-- { name: Questions and answers,                        include: { mode: link, path: faq/toc_p.yaml } }
-
+- include: { mode: link, path: toc_i.yaml }

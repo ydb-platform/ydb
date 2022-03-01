@@ -1,4 +1,4 @@
-  Top 10 queries for the last 6 hours by the total number of rows updated per minute
+Top 10 queries for the last 6 hours by the total number of rows updated per minute
 
   ```sql
   SELECT
@@ -25,3 +25,4 @@
   ORDER BY IntervalEnd DESC, SumReadBytes DESC
   LIMIT 100
   ```
+

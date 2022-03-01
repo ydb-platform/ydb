@@ -95,9 +95,30 @@ private void describeTables() {
 }
 ```
 
+{% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
+
+Code snippet for inserting and updating data:
+
+```java
+private void upsertSimple() {
+    String query = String.format(
+        "PRAGMA TablePathPrefix(\"%s\");\n" +
+        "\n" +
+        "UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES\n" +
+        "(2, 6, 1, \"TBD\");",
+        database);
+
+    TxControl txControl = TxControl.serializableRw().setCommitTx(true);
+
+    execute(session -> session.executeDataQuery(query, txControl)
+        .join()
+        .toStatus());
+}
+```
+
 {% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
 
-{% include [query_processing.md](steps/03_query_processing.md) %}
+{% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 To execute YQL queries, use the `Session.executeDataQuery()` method.
 The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxControl` class.
@@ -127,17 +148,9 @@ private void selectSimple() {
 }
 ```
 
-{% include [results_processing.md](steps/04_results_processing.md) %}
+As a result of executing the query, an object of the `DataQueryResult` class is generated. It may contain several sets obtained using the `getResultSet( <index> )` method. Since there was only one `SELECT` statement in the query, the result contains only one selection indexed as `0`.
 
-When the query is executed, `result.getResultSet(0)` is returned.
-The code snippet below shows the output of query results using the `TablePrinter` helper class.
-
-```java
-System.out.println("\n--[ SelectSimple ]--");
-new TablePrinter(result.getResultSet(0)).print();
-```
-
-The given code snippet outputs the following text to the console at startup:
+It is output with semigraphics formatting using the `TablePrinter` helper class. The given code snippet outputs the following text to the console at startup:
 
 ```bash
 --[ SelectSimple ]--
@@ -148,28 +161,7 @@ The given code snippet outputs the following text to the console at startup:
 +-----------+------------------+--------------------+
 ```
 
-{% include [write_queries.md](steps/05_write_queries.md) %}
-
-Code snippet for inserting and updating data:
-
-```java
-private void upsertSimple() {
-    String query = String.format(
-        "PRAGMA TablePathPrefix(\"%s\");\n" +
-        "\n" +
-        "UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES\n" +
-        "(2, 6, 1, \"TBD\");",
-        database);
-
-    TxControl txControl = TxControl.serializableRw().setCommitTx(true);
-
-    execute(session -> session.executeDataQuery(query, txControl)
-        .join()
-        .toStatus());
-}
-```
-
-{% include [write_queries.md](steps/05_write_queries.md) %}
+{% include [param_queries.md](steps/06_param_queries.md) %}
 
 The code snippet below shows the use of parameterized queries and the `Params` class to generate parameters and pass them to the `executeDataQuery` method.
 
@@ -436,4 +428,3 @@ private Status explicitTcl(Session session) {
 }
 ```
 
-{% include [error_handling.md](steps/50_error_handling.md) %}

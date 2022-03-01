@@ -2,3 +2,5 @@ items:
 - name: Overview
   href: index.md
 - include: { mode: link, path: toc_i.yaml }
+- name: How to update the documentation
+  include: { mode: link, path: ../how_to_edit_docs/toc_p.yaml }

@@ -1,15 +1,20 @@
-# Using the YDB Docker container
+# Using the {{ ydb-short-name }} Docker container
 
-For debugging or testing, you can run a {{ ydb-full-name }} instance in a Docker container. Docker containers use the current {{ ydb-short-name }} build version, but the build revision may differ.
+For debugging or testing, you can run the YDB [Docker](https://docs.docker.com/get-docker/) container.
 
-In local launch mode, you can only interact with a database using the {{ ydb-short-name }} API. The API is available at the `grpcs://localhost:2135` endpoint. The database name is `/local`. To work with your database, you can use the {{ ydb-short-name }} command-line client ([YDB CLI](../../../reference/ydb-cli/index.md)) built into the Docker image.
+As a result of completing the instructions below, you'll get a local YDB database that can be accessed using the following:
 
-{{ ydb-full-name }} in a Docker container accepts incoming TLS-encrypted connections. Certificates are generated automatically. To use certificates, you need to mount the `/ydb_cert`  directory on the host system of a Docker container.
+{% list tabs %}
 
-To save the database state locally, mount the `/ydb_data` directory on the host system of a Docker container.
+- gRPC
+  - [Endpoint ](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
+  - [Database location](../../../concepts/connect.md#database): `/local`
+  - [Authentication](../../../concepts/connect.md#auth-modes): Anonymous (without authentication)
 
-{% note warning %}
+- gRPCs/TLS
+  - [Endpoint ](../../../concepts/connect.md#endpoint): `grpcs://localhost:2135`
+  - [Database location](../../../concepts/connect.md#database): `/local`
+  - [Authentication](../../../concepts/connect.md#auth-modes): Anonymous (without authentication)
 
-When a local database is running, some tasks may require a significant portion of the host system resources.
+{% endlist %}
 
-{% endnote %}

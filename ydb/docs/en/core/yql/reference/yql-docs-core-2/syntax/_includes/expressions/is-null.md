@@ -4,7 +4,8 @@ Matching an empty value (`NULL`). Since `NULL` is a special value [equal to noth
 
 **Examples**
 
-``` yql
+```yql
 SELECT key FROM my_table
 WHERE value IS NOT NULL;
 ```
+

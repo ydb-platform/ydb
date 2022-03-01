@@ -1,6 +1,6 @@
-## Основные статьи
+## Main articles
 
-- [Руководство по созданию контента](../../content.md) - как нужно технически офрормять статьи
-- [Структура тематических каталогов](../../subjects.md) - где нужно размещать тот или иной контент
-- [Сборка документации](../../build.md) - как собирать документацию
+- [Content creation guide](../../content.md): Describes how to create articles in technical terms.
+- [Structure of subject directories](../../subjects.md): Describes where to place certain content.
+- [Building documentation](../../build.md): Describes how to build documentation.
 

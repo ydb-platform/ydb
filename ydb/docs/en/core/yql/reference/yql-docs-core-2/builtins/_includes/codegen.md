@@ -17,7 +17,7 @@ In the text representation, S-expressions have the following format:
 
 * Atom: ```'"foo"```. The apostrophe character (') denotes quoting of the next line that is usually enclosed in quotation marks.
 * List: ```'("foo" "bar")```. The apostrophe character (') denotes that there will be no function call in parentheses.
-* Calling the built-in function: ```(foo "bar")```. The first element inside the brackets is the mandatory name of the function followed by the function arguments.
+* Calling the built-in function: ```(foo "bar")```. The first item inside the brackets is the mandatory name of the function followed by the function arguments.
 * Declaring a lambda function: ```(lambda '(x y) (+ x y))```. The `lambda` keyword is followed by a list of argument names and then by the body of the lambda function.
 * The lambda function argument is ```x```. Unlike an atom, a string without an apostrophe character (') references a name in the current scope. When declaring a lambda function, the names of arguments are added to the body's visibility scope, and, if needed, the name is hidden from the global scope.
 * The ```world```.
@@ -33,7 +33,8 @@ To learn more about code generation, see a [separate introductory article](../..
 Serializing the code as [S-expressions](/docs/s_expressions). The code must not contain free arguments of functions, hence, to serialize the lambda function code, you must pass it completely, avoiding passing individual expressions that might contain lambda function arguments.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatCode(AtomCode("foo"));
 -- (
 -- (return '"foo")
@@ -45,7 +46,8 @@ SELECT FormatCode(AtomCode("foo"));
 Build a code node with the `world` type.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatCode(WorldCode());
 -- (
 -- (return world)
@@ -57,7 +59,8 @@ SELECT FormatCode(WorldCode());
 Build a code node with the `atom`  type from a string passed to the argument.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatCode(AtomCode("foo"));
 -- (
 -- (return '"foo")
@@ -69,7 +72,8 @@ SELECT FormatCode(AtomCode("foo"));
 Build a code node with the `list` type from a set of nodes or lists of code nodes passed to arguments. In this case, lists of arguments are built in as separately listed code nodes.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatCode(ListCode(
     AtomCode("foo"),
     AtomCode("bar")));
@@ -90,7 +94,8 @@ SELECT FormatCode(ListCode(AsList(
 Build a code node with the `built-in function call` from a string with the function name and a set of nodes or lists of code nodes passed to arguments. In this case, lists of arguments are built in as separately listed code nodes.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatCode(FuncCode(
     "Baz",
     AtomCode("foo"),
@@ -117,7 +122,8 @@ You can build a code node with the `lambda function declaration` type from:
 * The number of arguments and a [lambda function](../../syntax/expressions.md#lambda) with one argument. In this case, a list of nodes of the `argument`type will be passed as an argument to this lambda function.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatCode(LambdaCode(($x, $y) -> {
     RETURN FuncCode("+", $x, $y);
 }));
@@ -138,7 +144,8 @@ SELECT FormatCode(LambdaCode(2, ($args) -> {
 Substituting the code node passed in the argument, into the main program code.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT EvaluateCode(FuncCode("Int32", AtomCode("1"))); -- 1
 
 $lambda = EvaluateCode(LambdaCode(($x, $y) -> {
@@ -152,7 +159,8 @@ SELECT $lambda(1, 2); -- 3
 Substituting the code node representing the result of evaluating an expression passed in the argument, into the main program.
 
 **Examples:**
-``` yql
+
+```yql
 $add3 = EvaluateCode(LambdaCode(($x) -> {
     RETURN FuncCode("+", $x, ReprCode(1 + 2));
 }));
@@ -164,7 +172,8 @@ SELECT $add3(1); -- 4
 Substituting into the main program the code node that represents an expression or a [lambda function](../../syntax/expressions.md#lambda) passed in the argument. If free arguments of lambda functions were found during the substitution, they are calculated and substituted into the code as in the [ReprCode](#reprcode) function.
 
 **Examples:**
-``` yql
+
+```yql
 $lambda = ($x, $y) -> { RETURN $x + $y };
 $makeClosure = ($y) -> {
     RETURN EvaluateCode(LambdaCode(($x) -> {
@@ -175,3 +184,4 @@ $makeClosure = ($y) -> {
 $closure = $makeClosure(2);
 SELECT $closure(1); -- 3
 ```
+

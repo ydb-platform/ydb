@@ -1,10 +1,31 @@
 # common internal + external "Getting started" items
 items:
+- name: Creating a database
+  href: create_db.md
+- include: { mode: link, path: _includes/index/toc_network.yaml }
+- name: Authentication
+  href: auth.md
+- name: YDB command line interface (CLI)
+  href: cli.md
+- name: YQL query language
+  href: yql.md
+- name: YDB SDK
+  href: sdk.md
 - name: Self-deployment
   items:
   - name: Docker
     href: ydb_docker.md
+  - name: Starting a local cluster
+    href: ydb_local.md
+    # when: audience == "tech"
+  - name: Creating a cluster configuration
+    include: { mode: link, path: ../deploy/configuration/toc_i.yaml }
+    # when: audience == "tech"
   - name: Kubernetes
-    include: { mode: link, path: ../deploy/orchestrated/toc_i.yaml }
+    include: { mode: link, path: ../deploy/orchestrated/toc_p.yaml }
+  - name: Manual
+    include: { mode: link, path: ../deploy/manual/toc_p.yaml }
+  - name: Production checklist
+    href: ../deploy/production_checklist.md
 - name: Useful links
   href: useful_links.md

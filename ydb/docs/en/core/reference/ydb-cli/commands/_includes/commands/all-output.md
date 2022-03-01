@@ -85,14 +85,14 @@ Options:
   --ca-file PATH        Path to a file containing the PEM encoding of the server root certificates for tls connections.
                         If this parameter is empty, the default roots will be used.
   --iam-token-file PATH IAM token file. Note: IAM tokens expire in 12 hours.
-                          For more info go to: cloud.yandex.ru/docs/iam/concepts/authorization/iam-token
+                          For more info go to: cloud.yandex.com/en/docs/iam/concepts/authorization/iam-token
                           Token search order:
                             1. This option
                             2. Profile specified with --profile option
                             3. "IAM_TOKEN" environment variable
                             4. Active configuration profile
   --yc-token-file PATH  YC token file. It should contain OAuth token of a Yandex Passport user to get IAM token with.
-                          For more info go to: cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token
+                          For more info go to: cloud.yandex.com/en/docs/iam/concepts/authorization/oauth-token
                           Token search order:
                             1. This option
                             2. Profile specified with --profile option
@@ -100,14 +100,14 @@ Options:
                             4. Active configuration profile
   --use-metadata-credentials
                         Use metadata service on a virtual machine to get credentials
-                          For more info go to: cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm
+                          For more info go to: cloud.yandex.com/en/docs/compute/operations/vm-connect/auth-inside-vm
                           Definition priority:
                             1. This option
                             2. Profile specified with --profile option
                             3. "USE_METADATA_CREDENTIALS" environment variable
                             4. Active configuration profile (default: 0)
   --sa-key-file PATH    Service account key file
-                          For more info go to: cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa
+                          For more info go to: cloud.yandex.com/en/docs/iam/operations/iam-token/create-for-sa
                           Definition priority:
                             1. This option
                             2. Profile specified with --profile option

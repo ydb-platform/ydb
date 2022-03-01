@@ -1,16 +1,17 @@
 ## StaticMap
 
-Transforms a structure or tuple by applying a lambda function to each element.
+Transforms a structure or tuple by applying a lambda function to each item.
 
 Arguments:
 
 * Structure or tuple.
-* Lambda for processing elements.
+* Lambda for processing items.
 
-Result: a structure or tuple with the same number and naming of elements as in the first argument, and with element data types determined by lambda results.
+Result: a structure or tuple with the same number and naming of items as in the first argument, and with item data types determined by lambda results.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT *
 FROM (
     SELECT

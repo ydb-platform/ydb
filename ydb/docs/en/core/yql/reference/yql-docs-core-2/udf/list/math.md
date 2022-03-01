@@ -94,7 +94,6 @@ SELECT Math::Remainder(2.1, 2); -- 0.1
 * ```Math::Ldexp(Double{Flags:AutoMap}, Int32{Flags:AutoMap}) -> Double```
 * ```Math::Round(Double{Flags:AutoMap}, [Int32?]) -> Double```: The second argument indicates the power of 10 to which we round (it's negative for decimal digits and positive for rounding to tens, thousands, or millions); the default value is 0
 
-
 **Examples**
 
 ```sql
@@ -125,8 +124,6 @@ These functions behave similarly to the built-in % operator in the case of non-n
 
 * Math::Mod preserves the sign of the second argument (the denominator).
 * Math::Rem preserves the sign of the first argument (the numerator).
-
-
 Functions return null if the divisor is zero.
 
 **Examples**

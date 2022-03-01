@@ -81,18 +81,15 @@ Matches the regular expression with a **part of the string** (arbitrary substrin
 ## Match {#match}
 
 Matches **the whole string** against the regular expression.
-
 To get a result similar to `Grep`  (where substring matching is included), enclose the regular expression in `.*`. For example, use `.*foo.*` instead of `foo`.
 
 ## MultiGrep/MultiMatch {#multigrep}
 
 Pire lets you match against multiple regular expressions in a single pass through the text and get a separate response for each match.
-
 Use the MultiGrep/MultiMatch functions to optimize the query execution speed. Be sure to do it carefully, since the size of the state machine used for matching grows exponentially with the number of regular expressions:
 
 * If you want to match a string against any of the listed expressions (the results are joined with "or"), it would be much more efficient to combine the query parts in a single regular expression with `|` and match it using regular Grep or Match.
 * Pire has a limit on the size of the state machine (YQL uses the default value set in the library). If you exceed the limit, the error is raised at the start of the query: `Failed to glue up regexes, probably the finite state machine appeared to be too large`.
-
 When you call MultiGrep/MultiMatch, regular expressions are passed one per line using [multiline string literals](../../syntax/expressions.md#multiline-string-literals):
 
 **Examples**
@@ -115,7 +112,6 @@ SELECT
 ## Capture {#capture}
 
 If a string matches the specified regular expression, it returns a substring that matches the group enclosed in parentheses in the regular expression.
-
 Capture is non-greedy: the shortest possible substring is returned.
 
 {% note alert %}

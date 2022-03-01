@@ -14,7 +14,8 @@ For field names in the structure literal, you can use an expression that can be 
 For nested lists, use [AsList](#aslist), for nested dictionaries, use [AsDict](#asdict), for nested sets, use [AsSet](#asset), for nested tuples, use [AsTuple](#astuple), for nested structures, use [AsStruct](#asstruct).
 
 **Examples**
-``` yql
+
+```yql
 $name = "computed " || "member name";
 SELECT
   (1, 2, "3") AS `tuple`,
@@ -32,3 +33,4 @@ SELECT
   } AS `dict`,
   {1, 2, 3} AS `set`
 ```
+

@@ -5,10 +5,12 @@
 The arguments that follow are optional and work same as [RANDOM](#random).
 
 **Examples**
-``` yql
+
+```yql
 SELECT CurrentTzDate("Europe/Moscow");
 ```
-``` yql
+
+```yql
 SELECT CurrentTzTimestamp("Europe/Moscow", TableRow()) FROM my_table;
 ```
 
@@ -24,7 +26,8 @@ Arguments:
 Result type: `TzDate`/`TzDatetime`/`TzTimestamp`, depending on the input data type.
 
 **Examples**
-``` yql
+
+```yql
 SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
 ```
 
@@ -34,11 +37,13 @@ Removing the time zone data and converting the value to date/time in UTC.
 
 Arguments:
 
-1. Date: the  type is `TzDate`/`TzDatetime`/`TzTimestamp`.
+1. Date: the type is `TzDate`/`TzDatetime`/`TzTimestamp`.
 
 Result type: `Date`/`Datetime`/`Timestamp`, depending on the input data type.
 
 **Examples**
-``` yql
+
+```yql
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 ```
+

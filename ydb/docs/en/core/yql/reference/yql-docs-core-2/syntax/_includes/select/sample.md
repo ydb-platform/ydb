@@ -22,20 +22,21 @@ In the `BERNOULLI`  mode, if the `REPEATABLE` keyword is added, the seed is mixe
 
 **Examples:**
 
-``` yql
+```yql
 SELECT *
 FROM my_table
 TABLESAMPLE BERNOULLI(1.0) REPEATABLE(123); -- one percent of the table
 ```
 
-``` yql
+```yql
 SELECT *
 FROM my_table
 TABLESAMPLE SYSTEM(1.0); -- about one percent of the table
 ```
 
-``` yql
+```yql
 SELECT *
 FROM my_table
 SAMPLE 1.0 / 3; -- one-third of the table
 ```
+

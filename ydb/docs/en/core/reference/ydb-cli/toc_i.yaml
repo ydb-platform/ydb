@@ -1,41 +1,55 @@
 items:
-  - name: Overview
-    href: index.md
-  - name: Profile management
+  - name: Install
+    href: install.md
+  - name: Structure of YDB CLI commands
+    href: commands.md
+  - name: Service commands
+    href: commands/service.md
+  - name: Connecting to and authenticating with a database
+    href: connect.md
+  - name: Global parameters
+    href: commands/global-options.md
+  - name: Working with the DB schema
     items:
-      - name: Getting profile information
-        href: profile/list-and-get.md
-      - name: Activating a profile
-        href: profile/activate.md
-      - name: Deleting a profile
-        href: profile/delete.md
-  - name: Commands
+    - name: List of objects
+      href: commands/scheme-ls.md
+    - name: Information about the object
+      href: commands/scheme-describe.md
+    - name: Directories
+      href: commands/dir.md
+    - name: Renaming tables
+      href: commands/tools/rename.md
+  - name: Operations with data
     items:
-      - name: Overview
-        href: commands/index.md
-      - name: Structure and description of YDB CLI commands
-        href: commands/commands.md
-      - name: Global parameters
-        href: commands/global-options.md
-      - name: Listing objects
-        href: commands/scheme-ls.md
-      - name: Getting information about schema objects
-        href: commands/scheme-describe.md
-      - name: Getting a list of DB endpoints
-        href: commands/discovery-list.md
-      - name: Making a DB query
-        href: commands/query.md
-      - name: Streaming table reads
-        href: commands/readtable.md
-      - name: Working with secondary indexes
-        href: commands/operations-index.md
-      - name: Working with directories
-        href: commands/scheme-mkdir.md
-      - name: Scan queries
-        href: commands/scan-query.md
-      - name: Utilities
-        items:
-        # - name: Copy tables
-        #   href: commands/tools/copy.md
-        - name: Renaming tables
-          href: commands/tools/rename.md
+    - name: Making a DB query
+      href: commands/query.md
+    - name: Query execution plan
+      href: commands/explain-plan.md
+    - name: Streaming table reads
+      href: commands/readtable.md
+    - name: Working with secondary indexes
+      href: commands/index-ops.md
+    - name: Scan queries
+      href: commands/scan-query.md
+#  - name: Utilities
+#    items:
+    # - name: Copy tables
+    #   href: commands/tools/copy.md
+    # - name: Making backup
+    #   href: commands/tools/dump.md
+    # - name: Restore backup
+    #   href: commands/tools/restore.md
+  - name: Managing profiles
+    include: { mode: link, path: profile/toc_p.yaml }
+  - name: Information services
+    items:
+    - name: List of endpoints
+      href: commands/discovery-list.md
+    - name: Authentication
+      href: commands/discovery-whoami.md
+  - name: Load testing
+    items:
+    - name: Overview
+      href: commands/workload/index.md
+    - name: Stock load
+      href: commands/workload/stock.md

@@ -27,7 +27,7 @@ Use FOLDER with attributes containing large values with caution (`schema` could 
 
 **Examples:**
 
-``` yql
+```yql
 USE hahn;
 
 $table_paths = (
@@ -41,3 +41,4 @@ $table_paths = (
 
 SELECT COUNT(*) FROM EACH($table_paths);
 ```
+

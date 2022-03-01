@@ -1,33 +1,34 @@
-# Структура тематических каталогов документации YDB
+# Structure of {{ ydb-short-name }} documentation subject directories
 
-## Введение {#intro}
+## Introduction {#intro}
 
-Статьи документации размещаются в иерархической структуре тематических директорий. Тематическая директория объединяет набор статей на определенную общую тематику.
+Documentation articles are arranged in a hierarchical structure of subject directories. A subject directory combines a set of articles on a certain general topic.
 
-Описание тематики включает в себя:
-1. Целевую аудиторию, то есть для кого написана статья. Аудитория определяется ролью потенциального читателя при работе с YDB, со следующими тремя базовыми аудиториями: 
-   - Разработчик приложений на YDB
-   - Администратор YDB
-   - Разработчик/контрибьютор YDB
-2. Назначение -- задачу или проблему читателя, решение которой описывается в контенте.
+A topic description includes:
 
-В основном, структура директорий напрямую отражается на структуре оглавления документации. Типовыми исключениями являются:
-- Промежуточные стадии создания документации. Новая директория формируется сразу, для сохранения ссылочной целостности в дальнейшем, но её контент еще недостаточен для того, чтобы быть оформленным отдельным подменю в оглавлении. В этом случае статьи могут быть временно включены в существующие подменю.
-- Исторически сложившиеся директории, перенос которых нежелателен из-за потери ссылочной целостности.
+1. The target audience of the article. The audience depends on the role of a potential reader when working with {{ ydb-short-name }}, with the following three basic audiences:
+   - Developer of applications for {{ ydb-short-name }}
+   - {{ ydb-short-name }} administrator
+   - {{ ydb-short-name }} developer/contributor
+1. Purpose: The reader's task or problem the solution of which is described in the content.
 
-## Структура 1-го уровня
+Basically, the directory structure directly affects the structure of the documentation table of contents. Typical exceptions are:
 
-На 1-м уровне размещены следующие тематические директории:
+- Intermediate stages of documentation creation. A new directory is created immediately to preserve the referential integrity in the future, but its content is still insufficient to be designed as a separate submenu in the table of contents. In this case, articles can be temporarily included in existing submenus.
+- Historically established directories whose transfer is undesirable due to the loss of referential integrity.
 
-| Имя | Аудитория | Назначение |
-| --- | ----------| ---------- |
-| getting_started | Все | Предоставить быстрые решения типовых задач, которые возникают при начале работы с новой БД: что это, как поставить, как соединиться, как выполнить простейшие операции с данными, куда дальше по каким вопросам ходить в документации |
-| concepts | Разработчик приложений | Ознакомить с основными структурными компонентами YDB, с которыми придется иметь дело при разработке приложений под YDB. Дать понимание роли каждого такого компонента при решении задач разработки приложений. Предоставить расширенную информацию по вариантам конфигурации компонентов, доступных разработчик приложений. |
-| reference, yql | Разработчик приложений | Справочник для ежедневного использования по инструментам доступа к функциям YDB: CLI, YQL, SDK |
-| best_practices | Разработчик приложений | Типовые подходы к решению основных задач, возникающих при разработке приложений |
-| maintenance | Разработчик приложений | Как обслуживать свои базы данных YDB на администрируемом кем-то большом кластере, или при самостоятельном развертывании небольших БД для разработки: резервные копии, мониторинг, логи |
-| troubleshooting | ? | Инструменты локализации причин проблем |
-| how_to_edit_docs | Разработчики YDB | Как дорабатывать документацию по YDB |
-| faq | Все | Вопросы и ответы |
+## Level 1 structure
 
+The following subject directories are placed on level 1:
+
+| Name | Audience | Purpose |
+| --- | ---------- | ---------- |
+| getting_started | All | Provide quick solutions to standard problems that arise when starting to work with a new database: what is it, how to install it, how to connect, how to perform elementary operations with data, where to go further in the documentation and on what issues. |
+| concepts | Application developer | Describe the main structural components of {{ ydb-short-name }} that one will deal with when developing applications for {{ ydb-short-name }}. Provide an insight into the role of each of these components in developing applications. Provide detailed information about component configuration options available to application developers. |
+| reference, yql | Application developer | A reference guide for daily use on tools for accessing {{ ydb-short-name }} functions: CLI, YQL, and SDK |
+| best_practices | Application developer | Common approaches to addressing the main challenges that arise when developing applications |
+| maintenance | Application developer | How to maintain your {{ ydb-short-name }} databases deployed on a large cluster administered by someone, or when independently deploying small databases for development: backups, monitoring, logs, and more. |
+| troubleshooting | ? | Tools for identifying the cause of issues |
+| how_to_edit_docs | Developers {{ ydb-short-name }} | How to update the {{ ydb-short-name }} documentation |
+| faq | All | Questions and answers |
 

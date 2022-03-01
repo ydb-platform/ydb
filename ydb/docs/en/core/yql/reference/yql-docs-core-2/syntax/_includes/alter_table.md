@@ -45,7 +45,23 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
 {% endif %}
-{% if concept_table %}
+{% if feature_map_tables %}
+
+## Renaming a table {#rename}
+
+```sql
+ALTER TABLE old_table_name RENAME TO new_table_name;
+```
+
+If a table with a new name exists, an error is returned. The possibility of transactional table substitution under load is supported by ad-hoc CLI and SDK methods.
+
+If a YQL query contains multiple `ALTER TABLE ... RENAME TO ...` commands,  each of them will be executed in autocommit mode as a separate transaction. From the external process viewpoint, the tables will be renamed sequentially one by one. To rename multiple tables within a single transaction, use ad-hoc methods available in the CLI and SDK.
+
+Renaming can be used to move a table from one directory inside the database to another, for example:
+
+```sql
+ALTER TABLE `table1` RENAME TO `/backup/table1`;
+```
 
 ## Changing column groups {#column-family}
 

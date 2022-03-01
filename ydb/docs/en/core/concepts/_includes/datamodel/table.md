@@ -1,6 +1,6 @@
 ## Table {#table}
 
-A table in YDB is a [relational table](https://en.wikipedia.org/wiki/Table_(database)) that contains a set of related data consisting of rows and columns. Each row is a set of cells designed to store values of certain types according to the data schema. The data schema defines the names and types of table columns. An example of a data schema is shown below.
+A table in {{ ydb-short-name }} is a [relational table](https://en.wikipedia.org/wiki/Table_(database)) that contains a set of related data consisting of rows and columns. Each row is a set of cells designed to store values of certain types according to the data schema. The data schema defines the names and types of table columns. An example of a data schema is shown below.
 
 ![Datamodel_of_a_relational_table](../../_assets/datamodel_rtable.png)
 
@@ -8,38 +8,90 @@ A table in YDB is a [relational table](https://en.wikipedia.org/wiki/Table_(data
 
 Figure 1 shows the schema of a ```Series``` table with four columns, named ```SeriesId```, ```ReleaseDate```, ```SeriesInfo```, and ```Title```, with the ```Uint64?``` data type for the first two columns and ```String?``` for the others. The ```SeriesId``` column is declared the primary key.
 
-YDB uses [YQL]{% if audience != "external" %}(https://yql.yandex-team.ru/docs/ydb/types/){% else %}(../../datatypes.md){% endif %} data types. {% if audience != "external" %} [Simple YQL data types](https://yql.yandex-team.ru/docs/ydb/types/primitive/) {% else %} [Simple YQL data types](../../../yql/reference/types/primitive.md) {% endif %} can be used as column types. All columns may contain a special NULL value to indicate a missing value.
+{{ ydb-short-name }} uses [YQL]{% if audience != "external" %}(https://yql.yandex-team.ru/docs/ydb/types/){% else %}(../../datatypes.md){% endif %} data types. {% if audience != "external" %} [Simple YQL data types](https://yql.yandex-team.ru/docs/ydb/types/primitive/) {% else %} [Simple YQL data types](../../../yql/reference/types/primitive.md) {% endif %} can be used as column types. All columns may contain a special NULL value to indicate a missing value.
 
-YDB tables always have one or more columns that make up the key ([primary key](https://en.wikipedia.org/wiki/Unique_key)). Each table row has a unique key value, so there can be no more than one row per key value. A YDB table is always ordered by key. This means that you can efficiently make point reads by key and range-based queries by key or key prefix (actually using an index). In the example above, the key columns are highlighted in gray and marked with a special sign. Tables consisting only of key columns are supported. However, you can't create tables without a primary key.
+{{ ydb-short-name }} tables always have one or more columns that make up the key ([primary key](https://en.wikipedia.org/wiki/Unique_key)). Each table row has a unique key value, so there can be no more than one row per key value. {{ ydb-short-name }} tables are always ordered by key. This means that you can efficiently make point reads by key and range-based queries by key or key prefix (actually using an index). In the example above, the key columns are highlighted in gray and marked with a special sign. Tables consisting only of key columns are supported. However, you can't create tables without a primary key.
 
 Often, when you design a table schema, you already have a set of fields, which can naturally serve as the primary key. Be careful when selecting the key to avoid hotspots.
-For example, if you insert data into a table with a monotonically increasing key, you write the data to the end of the table. However, since YDB splits table data by key range, your inserts are always processed by the same server, so you lose the main benefits of a distributed database.
+For example, if you insert data into a table with a monotonically increasing key, you write the data to the end of the table. But since {{ ydb-short-name }} splits table data by key range, your inserts are always processed by the same server, so you lose the main benefits of a distributed database.
 To distribute the load evenly across different servers and avoid hotspots when working with large tables, we recommend hashing the natural key and using the hash as the first component of the primary key, as well as changing the order of the primary key components.
 
 ### Partitioning tables {#partitioning}
 
 A database table can be sharded by primary key value ranges. Each shard of the table is responsible for a specific range of primary keys. Key ranges served by different shards do not overlap. Different table shards can be served by different distributed database servers (including ones in different locations). They can also move independently between servers to enable rebalancing or ensure shard operability if servers or network equipment goes offline.
 
-If there is not a lot of data, the table may consist of a single shard. As the amount of data served by the shard grows, YDB automatically splits the shard into two shards. The data is split by the median value of the primary key, depending on the amount of data: as soon as the shard exceeds the set data volume, it is split in two.
+If there is not a lot of data or load, the table may consist of a single shard. As the amount of data served by the shard or the load on the shard grows, {{ ydb-short-name }} automatically splits this shard into two shards. The data is split by the median value of the primary key if the shard size exceeds the threshold. If partitioning by load is used, the shard first collects a sample of the requested keys (that can be read, written, and deleted) and, based on this sample, selects a key for partitioning to evenly distribute the load across new shards. So in the case of load-based partitioning, the size of new shards may significantly vary.
 
-The shard split threshold and automatic splitting can be configured (enabled/disabled) individually for each database table.
+The size-based shard split threshold and automatic splitting can be configured (enabled/disabled) individually for each database table.
 
-In addition to automatically splitting shards, you can create an empty table with a predefined number of shards. You can manually set the exact shard key split range or evenly split into a predefined number of shards. In this case, ranges are created based on the first component of the primary key. You can set even splitting for tables that have an integer as the first component of the primary key.
+In addition to automatically splitting shards, you can create an empty table with a predefined number of shards. You can manually set the exact shard key split range or evenly split into a predefined number of shards. In this case, ranges are created based on the first component of the primary key. You can set even splitting for tables that have a Uint64 or Uint32 integer as the first component of the primary key.
+
+Partitioning parameters refer to the table itself and not to secondary indexes built on its data. Each index is served by its own set of shards and decisions to split or merge its partitions are made independently based on the default settings. These settings may become available to users in the future like the settings of the main table.
+
+A split or merge operation usually takes about 500 milliseconds. During this time, the data involved in the operation becomes temporarily unavailable for reads and writes. Special wrapper methods in the {{ ydb-short-name }} SDK make automatic retries when receiving information saying that the shard is being split or merged, without raising it to the application level. Please note that if the system is overloaded for some reason (for example, due to a general shortage of CPU or insufficient DB disk throughput), split and merge operations may take longer.
 
 The following table partitioning parameters are defined in the data schema:
 
-| Parameter name | Description | Type | Acceptable values | Update possibility | Reset capability |
-| ------------- | --------- | --- | ------------------- | --------------------- | ------------------ |
-| ```AUTO_PARTITIONING_BY_SIZE``` | Automatic partitioning by partition size | Enum | ```ENABLED```, ```DISABLED``` | Yes | No |
-| ```AUTO_PARTITIONING_PARTITION_SIZE_MB``` | Preferred size of each partition, in MB | Uint64 | Natural numbers | Yes | No |
-| ```AUTO_PARTITIONING_MIN_PARTITIONS_COUNT``` | The minimum number of partitions before automatic partition merging stops | Uint64 | Natural numbers | Yes | No |
-| ```AUTO_PARTITIONING_MAX_PARTITIONS_COUNT``` | The maximum number of partitions before automatic partitioning stops | Uint64 | Natural numbers | Yes | No |
-| ```UNIFORM_PARTITIONS``` | The number of partitions for uniform initial table partitioning. The type of the primary key's first column must be Uint64 or Uint32 | Uint64 | Natural numbers | No | No |
-| ```PARTITION_AT_KEYS``` | Boundary values of keys for initial table partitioning. It's a list of boundary values separated by commas and surrounded with brackets. Each boundary value can be either a set of values of key columns (also separated by commas and surrounded with brackets) or a single value if only the values of the first key column are specified. Examples: ```(100, 1000)```, ```((100, "abc"), (1000, "cde"))``` | Expression |  | No | No |
+#### AUTO_PARTITIONING_BY_SIZE
+
+* Type: Enum (`ENABLED`, `DISABLED`)
+* Default value: `ENABLED`
+
+Automatic partitioning by partition size. If the size of a partition exceeds the value specified by the [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](#auto_partitioning_partition_size_mb) parameter, it is enqueued for splitting. If the total size of two or more adjacent partitions is less than 50% of the [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](#auto_partitioning_partition_size_mb) parameter value, they are enqueued for merging.
+
+#### AUTO_PARTITIONING_BY_LOAD
+
+* Type: Enum (`ENABLED`, `DISABLED`)
+* Default value: `DISABLED`
+
+Automatic partitioning by load. If a shard consumes more than 50% of the CPU for a few dozens of seconds, it is enqueued for splitting. If the total load on two or more adjacent shards uses less than 35% of a single CPU core within an hour, they are enqueued for merging.
+
+Performing split or merge operations uses the CPU and takes time. Therefore, when dealing with varying load, in addition to enabling this mode, we recommend that you set the [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) parameter to a value other than 1 so that a decrease in the load does not lead to a decrease in the number of partitions below the required one and there is no need to split them again when the load increases.
+
+When choosing the minimum number of partitions, it makes sense to consider that one table partition can only be hosted on one server and use no more than 1 CPU core for data update operations. Hence, you can set the minimum number of partitions for a table on which a high load is expected to at least the number of nodes (servers) or, preferably, to the number of CPU cores allocated to the database.
+
+#### AUTO_PARTITIONING_PARTITION_SIZE_MB
+
+* Type: Uint64
+* Default value: 2000 MB ( 2GB )
+
+The partition size threshold in MB. If exceeded, a shard is split. Valid when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
+
+#### AUTO_PARTITIONING_MIN_PARTITIONS_COUNT
+
+* Type: Uint64
+* Default value: 1
+
+Partitions are only merged if their actual number exceeds the value specified by this parameter. When using automatic partitioning by load, we recommend that you set this parameter to a value other than 1, so that periodic load drops don't lead to a decrease in the number of partitions below the required one.
+
+#### AUTO_PARTITIONING_MAX_PARTITIONS_COUNT
+
+* Type: Uint64
+* Default value: 50
+
+Partitions are only split if their number doesn't exceed the value specified by this parameter. With any automatic partitioning mode enabled, we recommend that you set a meaningful value for this parameter and monitor when the actual number of partitions approaches this value, otherwise splitting of partitions will sooner or later stop under an increase in data or load, which will lead to a failure.
+
+#### UNIFORM_PARTITIONS
+
+* Type: Uint64
+* Default value: Not applicable
+
+The number of partitions for uniform initial table partitioning. The type of the primary key's first column must be Uint64 or Uint32. A created table is immediately divided into the specified number of partitions.
+
+When automatic partitioning is enabled, make sure to set the correct [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) parameter value so that all partitions are not merged into one immediately after creating the table.
+
+#### PARTITION_AT_KEYS
+
+* Type: Expression
+* Default value: Not applicable
+
+Boundary values of keys for initial table partitioning. It's a list of boundary values separated by commas and surrounded with brackets. Each boundary value can be either a set of values of key columns (also separated by commas and surrounded with brackets) or a single value if only the values of the first key column are specified. Examples: ```(100, 1000)```, ```((100, "abc"), (1000, "cde"))```.
+
+When automatic partitioning is enabled, make sure to set the correct [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) parameter value so that all partitions are not merged into one immediately after creating the table.
 
 ### Reading data from replicas {#read_only_replicas}
 
-When making queries in YDB, the actual execution of a query to each shard is performed at a single point serving the distributed transaction protocol. By storing data in shared storage, you can run one or more shard followers without allocating additional space in the storage: the data is already stored in replicated format and you can serve more than one reader (but the writer is still strictly one at every moment).
+When making queries in {{ ydb-short-name }}, the actual execution of a query to each shard is performed at a single point serving the distributed transaction protocol. By storing data in shared storage, you can run one or more shard followers without allocating additional space in the storage: the data is already stored in replicated format and you can serve more than one reader (but the writer is still strictly one at every moment).
 
 Reading data from followers allows you:
 
@@ -56,19 +108,30 @@ You can enable running read replicas for each shard of the table in the table da
 
 The internal state of each of the followers is restored exactly and fully consistently from the leader state.
 
-Besides the data status in storage, followers also receive a stream of updates from the leader. Updates are sent in real time, immediately after the commit to the log. However, they are sent asynchronously, resulting in some delay (usually no more than dozens of milliseconds, but sometimes longer in the event of cluster connectivity issues) in applying updates to followers relative to their commit on the leader. Therefore, reading data from followers is only supported in the [transaction mode](../transactions.md#modes) `StaleReadOnly()`.
+Besides the data status in storage, followers also receive a stream of updates from the leader. Updates are sent in real time, immediately after the commit to the log. However, they are sent asynchronously, resulting in some delay (usually no more than dozens of milliseconds, but sometimes longer in the event of cluster connectivity issues) in applying updates to followers relative to their commit on the leader. Therefore, reading data from followers is only supported in the [transaction mode](../transactions#modes) `StaleReadOnly()`.
 
 If there are multiple followers, their delay from the leader may vary: although each follower of each of the shards retains internal consistency, artifacts may be observed between different shards. Please allow for this in your application code. For that same reason, it's currently impossible to perform cross-shard transactions from followers.
 
 ### Deleting expired data (TTL) {#ttl}
 
-YDB enables an automatic background delete of expired data. The table data schema may have a column with a Datetime or Timestamp value defined. Its value for all rows will be compared with the current time in the background. Rows for which the current time becomes greater than the column value, factoring in the specified delay, will be deleted.
+{{ ydb-short-name }} enables an automatic background delete of expired data. The table data schema may have a column with a Datetime or Timestamp value defined. Its value for all rows will be compared with the current time in the background. Rows for which the current time becomes greater than the column value, factoring in the specified delay, will be deleted.
 
 | Parameter name | Type | Acceptable values | Update possibility | Reset capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
 | ```TTL``` | Expression | ```Interval("<literal>") ON <column>``` | Yes | Yes |
 
 For more information about deleting expired data, see [Time to Live (TTL)](../../../concepts/ttl.md)
+
+### Renaming a table {#rename}
+
+{{ ydb-short-name }} lets you rename an existing table, move it to another directory of the same database, or replace one table with another, deleting the data in the replaced table. Only the metadata of the table is changed by operations (for example, its path and name). The table data is neither moved nor overwritten.
+
+Operations are performed in isolation, the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#termination-statuses).
+
+The speed of renaming is determined by the type of data transactions currently running against the table and doesn't depend on the table size.
+
+- [Renaming a table in YQL](../../../yql/reference/syntax/alter_table.md#rename)
+- [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
 ### Bloom filter {#bloom-filter}
 

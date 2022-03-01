@@ -1,6 +1,6 @@
 # App in C++
 
-This page contains a detailed description of the code of a [test app](https://a.yandex-team.ru/arc/trunk/arcadia/kikimr/public/sdk/cpp/examples/basic_example) that is available as part of the {{ ydb-short-name }} [C++ SDK](https://a.yandex-team.ru/arc/trunk/arcadia/kikimr/public/sdk/cpp).
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/basic_example) that is available as part of the {{ ydb-short-name }} [C++ SDK](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp).
 
 {% include [init.md](steps/01_init.md) %}
 
@@ -21,7 +21,7 @@ App code snippet for creating a client:
     TClient client(driver);
 ```
 
-{% include [create_table.md](steps/02_create_table.md) %}
+{% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
 To create tables, use the `CreateTable` method:
 
@@ -71,9 +71,28 @@ Column, name: series_info, type: Utf8?
 Column, name: release_date, type: Uint64?
 ```
 
+{% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
+
+Code snippet for inserting and updating data:
+
+```c++
+//! Shows basic usage of mutating operations.
+static TStatus UpsertSimpleTransaction(TSession session, const TString& path) {
+    auto query = Sprintf(R"(
+        PRAGMA TablePathPrefix("%s");
+
+        UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
+            (2, 6, 1, "TBD");
+    )", path.c_str());
+
+    return session.ExecuteDataQuery(query,
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+}
+```
+
 {% include [pragmatablepathprefix.md](auxilary/pragmatablepathprefix.md) %}
 
-{% include [query_processing.md](steps/03_query_processing.md) %}
+{% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 To execute YQL queries, use the `ExecuteDataQuery` method.
 The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TTxControl` class.
@@ -111,7 +130,7 @@ static TStatus SelectSimpleTransaction(TSession session, const TString& path,
 }
 ```
 
-{% include [results_processing.md](steps/04_results_processing.md) %}
+{% include [steps/05_results_processing.md](steps/05_results_processing.md) %}
 
 The `TResultSetParser` class is used for processing query results.
 The code snippet below shows how to process query results using the `parser` object:
@@ -132,25 +151,6 @@ The given code snippet outputs the following text to the console at startup:
 ```bash
 > SelectSimple:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
-```
-
-{% include [write_queries.md](steps/05_write_queries.md) %}
-
-Code snippet for inserting and updating data:
-
-```c++
-//! Shows basic usage of mutating operations.
-static TStatus UpsertSimpleTransaction(TSession session, const TString& path) {
-    auto query = Sprintf(R"(
-        PRAGMA TablePathPrefix("%s");
-
-        UPSERT INTO episodes (series_id, season_id, episode_id, title) VALUES
-            (2, 6, 1, "TBD");
-    )", path.c_str());
-
-    return session.ExecuteDataQuery(query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
-}
 ```
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
@@ -429,4 +429,3 @@ static TStatus ExplicitTclTransaction(TSession session, const TString& path, con
 }
 ```
 
-{% include [error_handling.md](steps/50_error_handling.md) %}

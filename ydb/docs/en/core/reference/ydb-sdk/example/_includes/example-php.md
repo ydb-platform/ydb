@@ -18,7 +18,6 @@ $config = [
 ];
 
 $ydb = new Ydb($config);
-
 ```
 
 App code snippet for creating a session:
@@ -31,4 +30,3 @@ $table = $ydb->table();
 $session = $table->session();
 ```
 
-{% include [error_handling.md](steps/50_error_handling.md) %}

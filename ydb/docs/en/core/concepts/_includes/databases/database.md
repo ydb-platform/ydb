@@ -1,8 +1,8 @@
 ## Database {#database}
 
-_A {{ ydb-short-name }} database ({{ ydb-short-name }} DB)_ is an isolated consistent set of data that is accessed via {{ ydb-full-name }}.
+_A {{ ydb-short-name }} database ({{ ydb-short-name }} DB)_ is an isolated consistent set of data that is accessed via {{ ydb-short-name }}.
 
-{{ ydb-full-name }}:
+{{ ydb-short-name }}:
 
 * Accepts network connections from clients and processes their queries to update and read data.
 * Authenticates and authorizes clients.
@@ -13,3 +13,4 @@ _A {{ ydb-short-name }} database ({{ ydb-short-name }} DB)_ is an isolated consi
 * Generates metrics that can be used to monitor the DB performance.
 
 Resources for the {{ ydb-short-name }} database (CPU, RAM, nodes, and disk space) are allocated within a {{ ydb-short-name }} cluster.
+

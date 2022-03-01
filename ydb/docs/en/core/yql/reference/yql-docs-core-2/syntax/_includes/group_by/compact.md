@@ -5,7 +5,8 @@ Improves aggregation efficiency if the query author knows in advance that none o
 Unlike the usual GROUP BY, the Map-side combiner stage and additional Reduce are disabled for each field with [DISTINCT](#distinct) aggregation.
 
 **Example:**
-``` yql
+
+```yql
 SELECT
   key,
   COUNT (DISTINCT value) AS count -- top 3 keys by the number of unique values
@@ -14,3 +15,4 @@ GROUP COMPACT BY key
 ORDER BY count DESC
 LIMIT 3;
 ```
+

@@ -1,37 +1,24 @@
-## Make a query to the database {#request}
+## Making queries {#request}
 
-Make a query to the {{ ydb-short-name }} database in a Docker container:
+Install the YDB CLI and execute queries as described in [YDB CLI - Getting started](../../cli.md), using the endpoint and database location specified at the beginning of this article. For example:
 
 ```bash
-ydb \
-  -e grpcs://localhost:2135 \
-  --ca-file $(pwd)/ydb_certs/ca.pem \
-  -d /local table query execute -q 'select 1;'
+ydb -e grpc://localhost:2136 -d /local scheme ls
 ```
 
-Where:
+To ensure a connection using TLS is successful, add the name of the file with the certificate to the connection parameters. The query in the example below should be executed from the same working directory that you used to start the container:
 
-* `-e`: Database endpoint.
-* `--ca-file`: Path to the TLS certificate.
-* `-d`: DB name and query parameters.
-
-Output:
-
-```text
-┌─────────┐
-| column0 |
-├─────────┤
-| 1       |
-└─────────┘
+```bash
+ydb -e grpcs://localhost:2135 --ca-file ydb_certs/ca.pem -d /local scheme ls
 ```
 
 A precompiled version of the [YDB CLI](../../../reference/ydb-cli/index.md) is also available within the image:
 
 ```bash
-sudo docker exec <CONTAINER-ID> /ydb -e localhost:2135 -d /local table query execute -q 'select 1;'
-┌─────────┐
-| column0 |
-├─────────┤
-| 1       |
-└─────────┘
+docker exec <container_id> /ydb -e localhost:2136 -d /local scheme ls
 ```
+
+, where
+
+`<container_id>`: The container ID output when you [start](#start) it.
+

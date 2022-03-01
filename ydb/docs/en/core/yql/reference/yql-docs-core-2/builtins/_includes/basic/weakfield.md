@@ -7,9 +7,11 @@ Syntax: `WeakField([<table>.]<field>, <type>[, <default_value>])`.
 The default value is used only if the column is missing in the data schema. To use the default value in any case, use [COALESCE](#coalesce).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT
     WeakField(my_column, String, "no value"),
     WeakField(my_table.other_column, Int64)
 FROM my_table;
 ```
+

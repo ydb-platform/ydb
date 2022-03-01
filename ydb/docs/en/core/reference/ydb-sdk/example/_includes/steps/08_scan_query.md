@@ -1,3 +1,4 @@
 ## Scan queries {#scan-query}
 
-The result of executing a [scan query](../../../../../concepts/scan_query.md) is a data stream. Below is an example of processing the query execution result.
+Making a [scan query](../../../../../concepts/scan_query.md) that results in a data stream. Streaming lets you read an unlimited number of rows and amount of data.
+

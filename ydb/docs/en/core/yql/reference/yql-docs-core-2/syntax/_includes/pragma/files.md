@@ -27,12 +27,13 @@ Attach a set of files to the query by URL. Works similarly to adding multiple fi
 | One or two arguments: the file name and an optional URL | — | Static |
 
 Treat the specified attached file as a library from which you can do [IMPORT](../../export_import.md). The syntax type for the library is determined from the file extension:
+
 * `.sql`: For the YQL dialect of SQL <span style="color: green;">(recommended)</span>.
 * `.yql`: For [s-expressions](/docs/s_expressions).
 
 Example with a file attached to the query:
 
-``` yql
+```yql
 PRAGMA library("a.sql");
 IMPORT a SYMBOLS $x;
 SELECT $x;
@@ -40,10 +41,20 @@ SELECT $x;
 
 If the URL is specified, the library is downloaded from the URL rather than from the pre-attached file as in the following example:
 
-``` yql
-PRAGMA library("a.sql","https://paste.company-team.ru/5618566/text");
+```yql
+PRAGMA library("a.sql","https://paste.yandex-team.ru/5618566/text");
+IMPORT a SYMBOLS $x;
+SELECT $x;
+```
+
+In this case, you can use text parameter value substitution in the URL:
+
+```yql
+DECLARE $_ver AS STRING; -- "5618566"
+PRAGMA library("a.sql","https://paste.yandex-team.ru/{$_ver}/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
 
 {% endif %}
+

@@ -1,6 +1,6 @@
 # Listing objects
 
-To get a listing of objects, use the `scheme ls <Path>`. If you don't specify the path, a listing of the DB root will be output:
+To get a listing of objects, use the `scheme ls <Path>` subcommand. If you don't specify the path, a listing of the DB root will be output:
 
 ```bash
 {{ ydb-cli }} scheme ls

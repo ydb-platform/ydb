@@ -1,6 +1,6 @@
-# Deploying {{ ydb-name }} in AWS EKS
+# Deploying {{ ydb-short-name }} in AWS EKS
 
-To create a [{{ ydb-name }}](https://cloud.yandex.ru/docs/ydb/) cluster using [{{ k8s }}](https://kubernetes.io/), follow these steps.
+To create a [{{ ydb-short-name }}](https://cloud.yandex.com/en/docs/ydb/) cluster using [{{ k8s }}](https://kubernetes.io/), follow these steps.
 
 ## Before you start {#before-begin}
 

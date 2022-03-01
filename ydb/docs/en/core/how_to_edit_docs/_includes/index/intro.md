@@ -1,5 +1,6 @@
-# Как редактировать документацию
+# How to edit the documentation
 
-## Введение
+## Introduction
 
-В репозитории [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs) размещен публично доступный исходный код документации по YDB на русском и английском языках. На его основании собирается и публикуется документация по OpenSource версии YDB на сайте [http://ydb.tech](http://ydb.tech), а также он используется для создания кастомизированной документации по YDB для enterprise-окружений и облачных сервисов.
+The [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs) repository contains the open source code of the {{ ydb-short-name }} documentation in Russian and English. Based on it, an OpenSource version of the {{ ydb-short-name }} documentation is built and published at [http://ydb.tech](http://ydb.tech). It is also used to create customized {{ ydb-short-name }} documentation versions for enterprise environments and cloud services.
+

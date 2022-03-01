@@ -7,7 +7,8 @@ Lets you pass potentially empty values to functions that can't handle them by th
 A short format using the low-priority `??` operator is available (lower than the Boolean operations). You can use the `NVL` alias.
 
 **Examples**
-``` yql
+
+```yql
 SELECT COALESCE(
   maybe_empty_column,
   "it's empty!"
@@ -28,3 +29,4 @@ SELECT NVL(
 ```
 
 <span style="color: gray;">(all three examples above are equivalent)</span>
+

@@ -18,25 +18,26 @@ If you use the `SCHEMA` hint, then with the table functions [EACH](#each), [RANG
 
 **Examples:**
 
-``` yql
+```yql
 SELECT key FROM my_table WITH INFER_SCHEMA;
 ```
 
-``` yql
+```yql
 $s = (SELECT COUNT(*) FROM my_table WITH XLOCK);
 
 INSERT INTO my_table WITH TRUNCATE
 SELECT EvaluateExpr($s) AS a;
 ```
 
-``` yql
+```yql
 SELECT key, value FROM my_table WITH SCHEMA Struct<key:String, value:Int32>;
 ```
 
-``` yql
+```yql
 SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 ```
 
-``` yql
+```yql
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
 ```
+

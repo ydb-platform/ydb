@@ -1,20 +1,20 @@
-## Pull a {{ ydb-short-name }} Docker image {#install}
+## Installation {#install}
 
-Pull the current public version of the Docker image:
+Upload the current public version of the Docker image:
 
 ```bash
-docker pull cr.yandex/yc/yandex-docker-local-ydb:latest
+docker pull {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```
 
 Make sure the Docker image has been pulled:
 
 ```bash
-docker image list
+docker image list | grep {{ ydb_local_docker_image }}
 ```
 
 Output:
 
 ```bash
-REPOSITORY                             TAG       IMAGE ID       CREATED        SIZE
-cr.yandex/yc/yandex-docker-local-ydb   latest    b73c5c1441af   2 months ago   793MB
+{{ ydb_local_docker_image }}           {{ ydb_local_docker_image_tag }}   b73c5c1441af   2 months ago   793MB
 ```
+

@@ -39,12 +39,12 @@ SELECT
     True OR NULL,        -- Just(True) (works the same way as True OR <unknown value of type Bool>)
     False AND NULL,      -- Just(False)
     True AND NULL,       -- NULL   (to be more precise, Nothing<Bool?> – <unknown value of type Bool>)
-    NULL OR NOT NULL,    -- NULL   (all NULLs are considered "different")
+    NULL OR NOT NULL,    -- NULL (all NULLs are considered "different")
     1 + NULL,            -- NULL   (Nothing<Int32?>) - the result of adding 1 together with
-                         --         an unknown Int value)
-    1 == NULL,           -- NULL   (the result of comparing 1 with an unknown Int value)
-    (1, NULL) == (1, 2), -- NULL   (composite elements are compared by component comparison
-                         --         using `AND')
+                         -- an unknown Int value)
+    1 == NULL,           -- NULL (the result of comparing 1 with an unknown Int value)
+    (1, NULL) == (1, 2), -- NULL (composite elements are compared by component comparison
+                         -- using `AND')
     (2, NULL) == (1, 3), -- Just(False) (the expression is equivalent to 2 == 1 AND NULL == 3)
 ```
 

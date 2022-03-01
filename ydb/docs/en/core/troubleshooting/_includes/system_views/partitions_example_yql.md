@@ -1,4 +1,5 @@
-  Top 5 of most loaded partitions among all DB tables
+Top 5 of most loaded partitions among all DB tables
+
   ```sql
   SELECT
       Path,
@@ -10,6 +11,7 @@
   ```
 
   List of DB tables with in-flight sizes and loads
+
   ```sql
   SELECT
       Path,
@@ -20,3 +22,4 @@
   FROM `/cluster/path/to/database/.sys/partition_stats`
   GROUP BY Path
   ```
+

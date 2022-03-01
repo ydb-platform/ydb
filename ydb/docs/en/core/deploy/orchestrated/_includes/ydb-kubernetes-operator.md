@@ -1,8 +1,8 @@
 # Installing a cluster
 
-## Install the {{ ydb-name }} controller in the {#install-ydb-controller} cluster
+## Install the {{ ydb-short-name }} controller in the {#install-ydb-controller} cluster
 
-Install {{ ydb-name }} in the standard configuration:
+Install {{ ydb-short-name }} in the standard configuration:
 
 {% list tabs %}
 
@@ -29,7 +29,7 @@ Install {{ ydb-name }} in the standard configuration:
 
 {% endlist %}
 
-## Create a {{ ydb-name }} cluster {#create-cluster}
+## Create a {{ ydb-short-name }} cluster {#create-cluster}
 
 Apply the manifest for creating a {{ ydb-short-name }} cluster:
 
@@ -139,7 +139,7 @@ Apply the manifest for creating a database:
 
 ## Test the controller {#test-ydb}
 
-Test how {{ ydb-name }} works:
+Test how {{ ydb-short-name }} works:
 
 {% list tabs %}
 
@@ -195,7 +195,7 @@ Test how {{ ydb-name }} works:
       └─────────┘
       ```
 
-      Learn more about {{ ydb-short-name }} CLI commands in the [documentation](https://cloud.yandex.ru/docs/ydb/oss/public/reference/ydb-cli/commands/).
+      Learn more about {{ ydb-short-name }} CLI commands in the [documentation](https://cloud.yandex.com/en/docs/ydb/oss/public/reference/ydb-cli/commands/).
 
 {% endlist %}
 
@@ -220,7 +220,7 @@ If you no longer need the created resources, delete them:
       kubectl delete pvc -l app.kubernetes.io/name=ydb
       ```
 
-  1. To remove the {{ ydb-name }} controller from the {{ k8s }} cluster, delete the release created by Helm:
+  1. To remove the {{ ydb-short-name }} controller from the {{ k8s }} cluster, delete the release created by Helm:
 
       ```bash
       helm delete ydb-operator

@@ -34,8 +34,8 @@ WHERE series_id IN (1,2)        -- IN defines the set of values in the WHERE cla
                                 -- IN or NOT IN may lead to undesirable outcomes.
 AND season_id = 1
 GROUP BY
-    CASE                        -- CASE evaluates a list of conditions
-                                -- and returns one of multiple possible resulting
+    CASE                        -- CASE evaluates a list of conditions and
+                                -- returns one of multiple possible resulting
                                 -- expressions. CASE can be used in any
                                 -- statement or with any clause
                                 -- that supports a given statement. For example, you can use CASE in
@@ -52,3 +52,4 @@ GROUP BY
 
 COMMIT;
 ```
+

@@ -5,11 +5,12 @@ The Docker container root includes a file with the license agreement (`LICENSE`)
 Read the license agreement:
 
 ```bash
-sudo docker run --rm -it --entrypoint cat cr.yandex/yc/yandex-docker-local-ydb LICENSE
+docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} LICENSE
 ```
 
 View all the included components and their licenses:
 
 ```bash
-sudo docker run --rm -it --entrypoint cat cr.yandex/yc/yandex-docker-local-ydb THIRD_PARTY_LICENSES
+docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LICENSES
 ```
+

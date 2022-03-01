@@ -42,11 +42,9 @@ Explicit casting using [CAST](../../syntax/expressions.md#cast):
 | **Timestamp** | No | Yes | Yes | Yes | Yes | No |
 | **Interval** | No | Yes | Yes | Yes | Yes | No |
 
-<sup>1</sup> `True` is converted to `1`, `False` is converted to `0`.
-
+<sup>1</sup> `True` is converted to `1` and `False` to `0`.
 <sup>2</sup> Any value other than `0` is converted to `True`, `0` is converted to `False`.
-
-<sup>3</sup> his is possible only in the case of a non-negative value.
+<sup>3</sup> Possible only in the case of a non-negative value.
 <sup>4</sup> Using the built-in function [Yson::ConvertTo](../../udf/list/yson.md#ysonconvertto).
 
 ### Converting to date and time data types

@@ -9,7 +9,8 @@ Serializing a type {% if feature_codegen %} or a handle type{% endif %} to a hum
 Building a type from a string with description. [Documentation for its format](../../types/type_string.md).
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
 ```
 
@@ -18,10 +19,12 @@ SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
 Getting the type of value passed to the argument.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(TypeOf("foo"));  -- String
 ```
-``` yql
+
+```yql
 SELECT FormatType(TypeOf(AsTuple(1, 1u))); -- Tuple<Int32,Uint32>
 ```
 
@@ -32,7 +35,8 @@ Returns an instance of the specified type that can only be used to get the type 
 If this instance remains in the computation graph by the end of optimization, the operation fails.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(TypeOf(
     InstanceOf(ParseType("Int32")) +
     InstanceOf(ParseType("Double"))
@@ -44,7 +48,8 @@ SELECT FormatType(TypeOf(
 Returns a type for [primitive data types](../../types/primitive.md) based on type name.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(DataType("Bool")); -- Bool
 SELECT FormatType(DataType("Decimal","5","1")); -- Decimal(5,1)
 ```
@@ -54,7 +59,8 @@ SELECT FormatType(DataType("Decimal","5","1")); -- Decimal(5,1)
 Adds the option to assign `NULL` to the passed type.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
 ```
 
@@ -63,7 +69,8 @@ SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
 Builds a list type or stream type based on the passed element type.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
 ```
 
@@ -72,7 +79,8 @@ SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
 Builds a dictionary type based on the passed key types (first argument) and value types (second argument).
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(DictType(
     DataType("String"),
     DataType("Double")
@@ -84,7 +92,8 @@ SELECT FormatType(DictType(
 Builds the tuple type from the passed element types.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(TupleType(
     DataType("String"),
     DataType("Double"),
@@ -97,7 +106,8 @@ SELECT FormatType(TupleType(
 Builds the structure type based on the passed element types. The standard syntax of named arguments is used to specify the element names.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(StructType(
     DataType("Bool") AS MyBool,
     ListType(DataType("String")) AS StringList
@@ -109,7 +119,8 @@ SELECT FormatType(StructType(
 Returns the type of a variant based on the underlying type (structure or tuple).
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(VariantType(
   ParseType("Struct<foo:Int32,bar:Double>")
 )); -- Variant<'bar':Double,'foo':Int32>
@@ -120,7 +131,8 @@ SELECT FormatType(VariantType(
 Returns the type of the [resource](../../types/special.md) based on the passed string label.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(ResourceType("Foo")); -- Resource<'Foo'>
 ```
 
@@ -133,7 +145,8 @@ Constructs the type of the called value using the following arguments:
 3. All the next arguments of CallableType are treated as types of arguments of the callable value, but with a shift for two required arguments (for example, the third argument of the CallableType describes the type of the first argument in the callable value).
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(CallableType(
   1, -- optional args count
   DataType("Double"), -- result type
@@ -142,34 +155,38 @@ SELECT FormatType(CallableType(
 )); -- Callable<(String,[Int64?])->Double>
 ```
 
-## GenericType, UnitType and VoidType {#generictype}
+## GenericType, UnitType, and VoidType {#generictype}
 
 Return the same-name [special data types](../../types/special.md). They have no arguments because they are not parameterized.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(VoidType()); -- Void
 ```
 
 ## OptionalItemType, ListItemType and StreamItemType {#optionalitemtype}
 
-{% if feature_codegen %} If a type is passed to these functions, then they {% else %}Do{% endif %} the action reverse to [OptionalType](#optionaltype), [ListType](#listtype), and [StreamType](#streamtype): return the element type based on its container type.
+{% if feature_codegen %} If a type is passed to these functions, then they perform {% else %}Perform{% endif %} the action reverse to [OptionalType](#optionaltype), [ListType](#listtype), and [StreamType](#streamtype): return the item type based on its container type.
 {% if feature_codegen %}
-If a type handle is passed to these functions, then they do the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#listtypehandle), and [StreamTypeHandle](#streamtypehandle):  they return the handle of the element type based on the type handle of its container.
-{% endif %}
+If a type handle is passed to these functions, then they perform the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#listtypehandle), and [StreamTypeHandle](#streamtypehandle):  they return the handle of the element type based on the type handle of its container. {% endif %}
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(ListItemType(
   ParseType("List<Int32>")
 )); -- Int32
 ```
+
 {% if feature_codegen %}
-``` yql
+
+```yql
 SELECT FormatType(ListItemType(
   ParseTypeHandle("List<Int32>")
 )); -- Int32
 ```
+
 {% endif %}
 
 ## DictKeyType and DictPayloadType {#dictkeytype}
@@ -177,7 +194,8 @@ SELECT FormatType(ListItemType(
 Returns the type of the key or value based on the dictionary type.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(DictKeyType(
   ParseType("Dict<Int32,String>")
 )); -- Int32
@@ -188,7 +206,8 @@ SELECT FormatType(DictKeyType(
 Returns the tuple's element type based on the tuple type and the element index (index starts from zero).
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(TupleElementType(
   ParseType("Tuple<Int32,Double>"), "1"
 )); -- Double
@@ -199,7 +218,8 @@ SELECT FormatType(TupleElementType(
 Returns the type of the structure element based on the structure type and element name.
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(StructMemberType(
   ParseType("Struct<foo:Int32,bar:Double>"), "foo"
 )); -- Int32
@@ -210,7 +230,8 @@ SELECT FormatType(StructMemberType(
 `CallableResultType` returns the result type based on the type of the called value. `CallableArgumentType` returns the argument type based on the called value type and its index (index starts from zero).
 
 **Examples**
-``` yql
+
+```yql
 $callable_type = ParseType("(String,Bool)->Double");
 
 SELECT FormatType(CallableResultType(
@@ -223,13 +244,13 @@ FormatType(CallableArgumentType(
 
 ## VariantUnderlyingType {#variantunderlyingtype}
 
-{% if feature_codegen %}If a type is passed to this function, then it {% else %}Does{% endif %} an action reverse to [VariantType](#varianttype): it returns the underlying type based on the variant type.
+{% if feature_codegen %}If a type is passed to this function, then it {% else %}Performs{% endif %} an action reverse to [VariantType](#varianttype): it returns the underlying type based on the variant type.
 {% if feature_codegen %}
-If a type handle is passed to this function, it does the action reverse to[VariantTypeHandle](#varianttypehandle): returns the handle of the underlying type based on the handle of the variant type.
-{% endif %}
+If a type handle is passed to this function, it performs the action reverse to [VariantTypeHandle](#varianttypehandle): returns the handle of the underlying type based on the handle of the variant type. {% endif %}
 
 **Examples**
-``` yql
+
+```yql
 SELECT FormatType(VariantUnderlyingType(
   ParseType("Variant<foo:Int32,bar:Double>")
 )), -- Struct<'bar':Double,'foo':Int32>
@@ -237,8 +258,10 @@ FormatType(VariantUnderlyingType(
   ParseType("Variant<Int32,Double>")
 )); -- Tuple<Int32,Double>
 ```
+
 {% if feature_codegen %}
-``` yql
+
+```yql
 SELECT FormatType(VariantUnderlyingType(
   ParseTypeHandle("Variant<foo:Int32,bar:Double>")
 )), -- Struct<'bar':Double,'foo':Int32>
@@ -246,9 +269,11 @@ FormatType(VariantUnderlyingType(
   ParseTypeHandle("Variant<Int32,Double>")
 )); -- Tuple<Int32,Double>
 ```
+
 {% endif %}
 
 {% if feature_codegen %}
+
 # Functions for data types during calculations
 
 To work with data types during calculations, use handle types: these are [resources](../../types/special.md) that contain an opaque type definition. After constructing the type handle, you can revert to the regular type using the [EvaluateType](#evaluatetype) function. For debug purposes, you can convert a handle type to a string using the [FormatType](#formattype) function.
@@ -258,15 +283,18 @@ To work with data types during calculations, use handle types: these are [resour
 Getting a type handle from the type passed to the argument.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(TypeHandle(TypeOf("foo")));  -- String
 ```
+
 ## EvaluateType
 
 Getting the type from the type handle passed to the argument. The function is evaluated before the start of the main calculation, as well as [EvaluateExpr](../basic.md#evaluate_expr_atom).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(EvaluateType(TypeHandle(TypeOf("foo"))));  -- String
 ```
 
@@ -275,7 +303,8 @@ SELECT FormatType(EvaluateType(TypeHandle(TypeOf("foo"))));  -- String
 Building a type handle from a string with description. [Documentation for its format](../../types/type_string.md).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(ParseTypeHandle("List<Int32>"));  -- List<int32>
 ```
 
@@ -284,7 +313,8 @@ SELECT FormatType(ParseTypeHandle("List<Int32>"));  -- List<int32>
 Getting the top-level type name from the type handle passed to the argument.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT TypeKind(TypeHandle(TypeOf("foo")));  -- Data
 SELECT TypeKind(ParseTypeHandle("List<Int32>"));  -- List
 ```
@@ -294,7 +324,8 @@ SELECT TypeKind(ParseTypeHandle("List<Int32>"));  -- List
 Getting the name and parameters for a [primitive data type](../../types/primitive.md) from the primitive type handle passed to the argument. Reverse function: [DataTypeHandle](#datatypehandle).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT DataTypeComponents(TypeHandle(TypeOf("foo")));  -- ["String"]
 SELECT DataTypeComponents(ParseTypeHandle("Decimal(4,1)"));  -- ["Decimal", "4", "1"]
 ```
@@ -304,7 +335,8 @@ SELECT DataTypeComponents(ParseTypeHandle("Decimal(4,1)"));  -- ["Decimal", "4",
 Constructing a handle for a [primitive data type](../../types/primitive.md) from its name and parameters passed to the argument as a list. Reverse function: [DataTypeComponents](#datatypecomponents).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(DataTypeHandle(
     AsList("String")
 )); -- String
@@ -319,7 +351,8 @@ SELECT FormatType(DataTypeHandle(
 Adds the option to assign `NULL` to the passed type handle.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(OptionalTypeHandle(
     TypeHandle(DataType("Bool"))
 )); -- Bool?
@@ -330,7 +363,8 @@ SELECT FormatType(OptionalTypeHandle(
 Builds a list type handle or stream type handle based on the passed element type handle.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(ListTypeHandle(
     TypeHandle(DataType("Bool"))
 )); -- List<Bool>
@@ -341,7 +375,8 @@ SELECT FormatType(ListTypeHandle(
 Constructs a handle for an empty list or dictionary.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(EmptyListTypeHandle()); -- EmptyList
 ```
 
@@ -350,7 +385,8 @@ SELECT FormatType(EmptyListTypeHandle()); -- EmptyList
 Getting a list of element type handles from the tuple type handle passed to the argument. Inverse function: [TupleTypeHandle](#tupletypehandle).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT ListMap(
    TupleTypeComponents(
        ParseTypeHandle("Tuple<Int32, String>")
@@ -366,7 +402,8 @@ SELECT ListMap(
 Building a tuple type handle from handles of element types passed as a list to the argument. Inverse function: [TupleTypeComponents](#tupletypecomponents).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(
     TupleTypeHandle(
         AsList(
@@ -382,7 +419,8 @@ SELECT FormatType(
 Getting a list of element type handles and their names from the structure type handle passed to the argument. Inverse function: [StructTypeHandle](#structtypehandle).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT ListMap(
     StructTypeComponents(
         ParseTypeHandle("Struct<a:Int32, b:String>")
@@ -401,7 +439,8 @@ SELECT ListMap(
 Building a structure type handle from handles of element types and names passed as a list to the argument. Inverse function: [StructTypeComponents](#structtypecomponents).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(
     StructTypeHandle(
         AsList(
@@ -417,7 +456,8 @@ SELECT FormatType(
 Getting a key-type handle and a value-type handle from the dictionary-type handle passed to the argument. Inverse function: [DictTypeHandle](#dicttypehandle).
 
 **Examples:**
-``` yql
+
+```yql
 $d = DictTypeComponents(ParseTypeHandle("Dict<Int32,String>"));
 
 SELECT
@@ -430,7 +470,8 @@ SELECT
 Building a dictionary-type handle from a key-type handle and a value-type handle passed to arguments. Inverse function: [DictTypeComponents](#dicttypecomponents).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(
     DictTypeHandle(
         ParseTypeHandle("Int32"),
@@ -444,7 +485,8 @@ SELECT FormatType(
 Getting the tag from the resource type handle passed to the argument. Inverse function: [ResourceTypeHandle](#resourcetypehandle).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT ResourceTypeTag(ParseTypeHandle("Resource<foo>")); -- foo
 ```
 
@@ -453,7 +495,8 @@ SELECT ResourceTypeTag(ParseTypeHandle("Resource<foo>")); -- foo
 Building a resource-type handle from the tag value passed to the argument. Inverse function: [ResourceTypeTag](#resourcetypetag).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(ResourceTypeHandle("foo")); -- Resource<'foo'>
 ```
 
@@ -462,7 +505,8 @@ SELECT FormatType(ResourceTypeHandle("foo")); -- Resource<'foo'>
 Getting the tag and the basic type from the decorated type handle passed to the argument. Inverse function: [TaggedTypeHandle](#taggedtypehandle).
 
 **Examples:**
-``` yql
+
+```yql
 $t = TaggedTypeComponents(ParseTypeHandle("Tagged<Int32,foo>"));
 
 SELECT FormatType($t.Base), $t.Tag; -- Int32, foo
@@ -473,7 +517,8 @@ SELECT FormatType($t.Base), $t.Tag; -- Int32, foo
 Constructing a decorated type handle based on the base type handle and the tag name passed in arguments. Inverse function: [TaggedTypeComponents](#taggedtypecomponents).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(TaggedTypeHandle(
     ParseTypeHandle("Int32"), "foo"
 )); -- Tagged<Int32, 'foo'>
@@ -484,7 +529,8 @@ SELECT FormatType(TaggedTypeHandle(
 Building a variant-type handle from the handle of the underlying type passed to the argument. Inverse function: [VariantUnderlyingType](#variantunderlyingtype).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(VariantTypeHandle(
     ParseTypeHandle("Tuple<Int32, String>")
 )); -- Variant<Int32, String>
@@ -495,7 +541,8 @@ SELECT FormatType(VariantTypeHandle(
 Constructing a handle for Void and Null types, respectively.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(VoidTypeHandle()); -- Void
 SELECT FormatType(NullTypeHandle()); -- Null
 ```
@@ -505,7 +552,8 @@ SELECT FormatType(NullTypeHandle()); -- Null
 Getting the handle description for the type of callable value passed to the argument. Inverse function: [CallableTypeHandle](#callabletypehandle).
 
 **Examples:**
-``` yql
+
+```yql
 $formatArgument = ($x) -> {
     return AsStruct(
         FormatType($x.Type) as Type,
@@ -553,7 +601,8 @@ Constructing the type handle of the called value using the following arguments:
 Inverse function: [CallableTypeComponents](#callabletypecomponents).
 
 **Examples:**
-``` yql
+
+```yql
 SELECT FormatType(
     CallableTypeHandle(
         ParseTypeHandle("String"),
@@ -571,9 +620,11 @@ SELECT FormatType(
 Getting the number of arguments in a lambda function.
 
 **Examples:**
-``` yql
+
+```yql
 SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 ; -- 2
 ```
 
 {% endif %}
+

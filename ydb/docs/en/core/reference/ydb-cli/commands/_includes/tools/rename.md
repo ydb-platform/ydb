@@ -1,11 +1,11 @@
 # Renaming a table
 
-Using the `tools rename` subcommand, you can rename one or more tables at the same time, move a table to a different directory within the same database, or replace one table with another within the same transaction.
+Using the `tools rename` subcommand, you can [rename](../../../../../concepts/datamodel.md#rename) one or more tables at the same time, move a table to another directory within the same database, replace one table with another one within the same transaction.
 
 General command format:
 
 ```bash
-ydb [global options...] tools rename [options...]
+{{ ydb-cli }} [global options...] tools rename [options...]
 ```
 
 * `global options`: [Global parameters](../../../commands/global-options.md).
@@ -14,147 +14,58 @@ ydb [global options...] tools rename [options...]
 View a description of the command to rename a table:
 
 ```bash
-ydb tools rename --help
+{{ ydb-cli }} tools rename --help
 ```
 
 ## Subcommand parameters {#options}
 
+A single run of the `tools rename` command executes a single rename transaction that may include one or more operations to rename different tables.
+
 | Parameter name | Parameter description |
 | --- | --- |
+| `--item <property>=<value>,...` | Description of the rename operation. Can be specified multiple times if multiple rename operations need to be executed within a single transaction.</br></br>Required properties:</br><ul><li>`source`, `src`, and `s`: Path to the source table.</li><li>`destination`, `dst`, and `d`: Path to the destination table. If the destination path contains folders, they must be [created in advance](../../dir.md#mkdir).</li></ul>Advanced properties:</br><ul> <li>`replace`, `force`: Overwrite the destination table. If `True`, the destination table is overwritten with its data deleted. `False`: If the destination table exists, an error is returned and the entire rename transaction is canceled. Default value: `False`.</li></ul> |
 | `--timeout <value>` | Operation timeout, ms. |
-| `--item <value>=<value>,...` | Operation parameters. Possible values:<br/><ul><li>`destination`, `dst`, or `d`: Required parameter, the path to the destination table. If the destination path contains directories, they must be created in advance.</li> <li>`source`, `src`, or `s`: Required parameter, the path of the source table.</li><li>`replace`, `force`: Optional parameter. If the value is `True`, the destination table must exist and will be overwritten. `False`: The destination table must not exist. Default value: `False`.</li></ul> |
+
+When including multiple rename operations in a single `tools rename` call, they're executed in the specified order, but within a single transaction. This lets you rotate the table under load without data loss: the first operation is renaming the working table to the backup one and the second is renaming the new table to the working one.
 
 ## Examples {#examples}
 
-### Renaming a table {#rename}
+- Renaming a single table:
 
-The database contains a `new-project` directory with tables such as `main_table`, `second_table`, and `third_table`.
+  ```bash
+  {{ ydb-cli }} tools rename --item src=old_name,dst=new_name
+  ```
 
-Rename the tables:
+- Renaming multiple tables within a single transaction:
 
-```bash
-{{ ydb-cli }} tools rename \
-  --item source=new-project/main_table,destination=new-project/episodes \
-  --item source=new-project/second_table,destination=new-project/seasons \
-  --item source=new-project/third_table,destination=new-project/series
-```
+  ```bash
+  {{ ydb-cli }} tools rename \
+    --item source=new-project/main_table,destination=new-project/episodes \
+    --item source=new-project/second_table,destination=new-project/seasons \
+    --item source=new-project/third_table,destination=new-project/series
+  ```
 
-Get a listing of objects:
+- Moving tables to a different directory:
 
-```bash
-ydb scheme ls new-project
-```
+  ```bash
+  {{ ydb-cli }} tools rename \
+    --item source=new-project/main_table,destination=cinema/main_table \
+    --item source=new-project/second_table,destination=cinema/second_table \
+    --item source=new-project/third_table,destination=cinema/third_table
+  ```
 
-Result:
+- Replacing a table
 
-```text
-episodes  seasons  series
-```
+  ```bash
+  {{ ydb-cli }} tools rename \
+    --item replace=True,source=pre-prod-project/main_table,destination=prod-project/main_table
+  ```
 
-### Moving tables {#move}
+- Rotating a table
 
-The database contains a `new-project` directory with tables such as `main_table`, `second_table`, and `third_table`.
-
-Create a directory:
-
-```bash
-{{ ydb-cli }} scheme mkdir cinema
-```
-
-Rename the tables and move them to the created directory:
-
-```bash
-{{ ydb-cli }} tools rename \
-  --item source=new-project/main_table,destination=cinema/episodes \
-  --item source=new-project/second_table,destination=cinema/seasons \
-  --item source=new-project/third_table,destination=cinema/series
-```
-
-Get a listing of objects in the created directory:
-
-```bash
-ydb scheme ls cinema
-```
-
-Result:
-
-```text
-episodes  seasons  series
-```
-
-### Replacing a table {#replace}
-
-The database contains a `prod-project` directory with tables such as `main_table` and `other_table`, and a `pre-prod-project` directory with tables such as `main_table` and `other_table`.
-
-Replace the `main_table` in the `prod-project` directory with the same-name table from the `pre-prod-project` directory:
-
-```bash
-{{ ydb-cli }} tools rename \
-  --item replace=True,source=pre-prod-project/main_table,destination=prod-project/main_table
-```
-
-Get a listing of `prod-project` directory objects:
-
-```bash
-ydb scheme ls prod-project
-```
-
-Result:
-
-```text
-main_table  other_table
-```
-
-Get a listing of `pre-prod-project` directory objects:
-
-```bash
-ydb scheme ls pre-prod-project
-```
-
-Result:
-
-```text
-other_table
-```
-
-The `pre-prod-project` directory no longer contains the `main_table`.
-
-### Replacing a table without deleting it {#switch}
-
-The database contains a `prod-project` directory with tables such as `main_table` and `other_table`, and a `pre-prod-project` directory with tables such as `main_table` and `other_table`.
-
-Move the `prod-project/main_table` to the `prod-project/main_table.backup` and the `pre-prod-project/main_table` to the `prod-project/main_table`:
-
-```bash
-
-{{ ydb-cli }} tools rename \
-  --item source=prod-project/main_table,destination=prod-project/main_table.backup \
-  --item source=pre-prod-project/main_table,destination=prod-project/main_table
-```
-
-Get a listing of `prod-project` directory objects:
-
-```bash
-ydb scheme ls prod-project
-```
-
-Result:
-
-```text
-main_table  other_table main_table.backup
-```
-
-Get a listing of `pre-prod-project` directory objects:
-
-```bash
-ydb scheme ls pre-prod-project
-```
-
-Result:
-
-```text
-other_table
-```
-
-The `pre-prod-project` directory no longer contains the `main_table`.
+  ```bash
+  {{ ydb-cli }} tools rename \
+    --item source=prod-project/main_table,destination=prod-project/main_table.backup \
+    --item source=pre-prod-project/main_table,destination=prod-project/main_table
+  ```
 

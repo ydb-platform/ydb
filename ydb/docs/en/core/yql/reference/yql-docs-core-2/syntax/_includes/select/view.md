@@ -15,8 +15,9 @@ If the meta attributes of the table specify an automatic UDF call to convert raw
 
 **Examples:**
 
-``` yql
+```yql
 USE some_cluster;
 SELECT *
 FROM my_table VIEW my_view;
 ```
+

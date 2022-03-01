@@ -14,8 +14,8 @@ SELECT
 
 FROM episodes
 WHERE
-   series_id = 1      -- List of conditions to build the result.
-   AND season_id > 1  -- Logical AND is used for complex conditions.
+   series_id = 1      -- List of conditions to build the result
+   AND season_id > 1  -- Logical AND is used for complex conditions
 
 ORDER BY              -- Sorting the results.
    series_id,         -- ORDER BY sorts the values by one or multiple
@@ -28,3 +28,4 @@ LIMIT 3               -- LIMIT N after ORDER BY means
 
 COMMIT;
 ```
+

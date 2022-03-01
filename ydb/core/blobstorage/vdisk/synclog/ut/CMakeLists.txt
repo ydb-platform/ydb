@@ -1,0 +1,53 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-blobstorage-vdisk-synclog-ut)
+target_include_directories(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog
+)
+target_link_libraries(ydb-core-blobstorage-vdisk-synclog-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  blobstorage-vdisk-synclog
+  library-cpp-getopt
+  library-cpp-svnversion
+  cpp-testing-unittest
+  ydb-core-base
+  ydb-core-blobstorage
+)
+target_sources(ydb-core-blobstorage-vdisk-synclog-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/codecs_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-blobstorage-vdisk-synclog-ut
+  COMMAND
+  ydb-core-blobstorage-vdisk-synclog-ut
+)
+target_link_flags(ydb-core-blobstorage-vdisk-synclog-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-core-blobstorage-vdisk-synclog-ut)

@@ -14,6 +14,7 @@ target_compile_options(with_offset_ranges_mode_ut PRIVATE
 target_link_libraries(with_offset_ranges_mode_ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-testing-gmock_in_unittest
@@ -41,13 +42,8 @@ target_link_flags(with_offset_ranges_mode_ut
   -ldl
   -lrt
   -Wl,--no-as-needed
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -Wl,--gdb-index
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

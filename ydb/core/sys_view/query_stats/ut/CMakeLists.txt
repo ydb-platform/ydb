@@ -1,0 +1,47 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-sys_view-query_stats-ut)
+target_compile_options(ydb-core-sys_view-query_stats-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-sys_view-query_stats-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats
+)
+target_link_libraries(ydb-core-sys_view-query_stats-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  core-sys_view-query_stats
+  cpp-testing-unittest
+  ydb-core-testlib
+)
+target_sources(ydb-core-sys_view-query_stats-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-sys_view-query_stats-ut
+  COMMAND
+  ydb-core-sys_view-query_stats-ut
+)
+target_link_flags(ydb-core-sys_view-query_stats-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-core-sys_view-query_stats-ut)

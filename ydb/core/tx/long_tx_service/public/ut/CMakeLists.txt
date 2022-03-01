@@ -17,6 +17,7 @@ target_include_directories(ydb-core-tx-long_tx_service-public-ut PRIVATE
 target_link_libraries(ydb-core-tx-long_tx_service-public-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   tx-long_tx_service-public
@@ -36,13 +37,8 @@ target_link_flags(ydb-core-tx-long_tx_service-public-ut
   -ldl
   -lrt
   -Wl,--no-as-needed
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -Wl,--gdb-index
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

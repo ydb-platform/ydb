@@ -14,6 +14,7 @@ target_include_directories(ydb-public-sdk-cpp-client-impl-ydb_endpoints-ut PRIVA
 target_link_libraries(ydb-public-sdk-cpp-client-impl-ydb_endpoints-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   client-impl-ydb_endpoints
@@ -33,10 +34,7 @@ target_link_flags(ydb-public-sdk-cpp-client-impl-ydb_endpoints-ut
   -lrt
   -Wl,--no-as-needed
   -fPIC
-  -Wl,--gdb-index
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

@@ -1,0 +1,43 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-library-yql-public-decimal-ut)
+target_include_directories(ydb-library-yql-public-decimal-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal
+)
+target_link_libraries(ydb-library-yql-public-decimal-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  yql-public-decimal
+)
+target_sources(ydb-library-yql-public-decimal-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_decimal_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_wide_int_ut.cpp
+)
+add_test(
+  NAME
+  ydb-library-yql-public-decimal-ut
+  COMMAND
+  ydb-library-yql-public-decimal-ut
+)
+target_link_flags(ydb-library-yql-public-decimal-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-library-yql-public-decimal-ut)

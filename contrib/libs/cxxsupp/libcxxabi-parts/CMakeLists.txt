@@ -8,6 +8,9 @@
 
 
 add_library(libs-cxxsupp-libcxxabi-parts)
+target_compile_options(libs-cxxsupp-libcxxabi-parts PUBLIC
+  -nostdinc++
+)
 target_compile_options(libs-cxxsupp-libcxxabi-parts PRIVATE
   -D_LIBCXXABI_BUILDING_LIBRARY
 )

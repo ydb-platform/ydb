@@ -11,6 +11,7 @@ add_executable(protoc)
 target_link_libraries(protoc PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lfalloc
   library-cpp-cpuid_check
   contrib-libs-protoc
 )
@@ -23,10 +24,7 @@ target_link_flags(protoc
   -lrt
   -Wl,--no-as-needed
   -fPIC
-  -Wl,--gdb-index
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

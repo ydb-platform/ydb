@@ -11,6 +11,7 @@ add_library(libs-cxxsupp-libcxx)
 target_compile_options(libs-cxxsupp-libcxx PUBLIC
   -nostdinc++
   -DLIBCXX_BUILDING_LIBCXXRT
+  -D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES
 )
 target_compile_options(libs-cxxsupp-libcxx PRIVATE
   -D_LIBCPP_BUILDING_LIBRARY

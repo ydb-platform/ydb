@@ -11,6 +11,7 @@ add_executable(ttl)
 target_link_libraries(ttl PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lfalloc
   library-cpp-cpuid_check
   library-cpp-getopt
   cpp-client-ydb_table
@@ -24,13 +25,8 @@ target_link_flags(ttl
   -ldl
   -lrt
   -Wl,--no-as-needed
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -Wl,--gdb-index
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

@@ -33,22 +33,6 @@ configure_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp/Cpp.stg
 )
-set(
-  GRAMMAR_MULTILINE_COMMENT_CORE
-  MULTILINE_COMMENT | .
-)
-set(
-  GRAMMAR_STRING_CORE_DOUBLE
-  ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
-)
-set(
-  GRAMMAR_STRING_CORE_SINGLE
-  ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/SQLv1.g.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1.g
-)
 run_antlr(
   OUTPUT
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.cpp

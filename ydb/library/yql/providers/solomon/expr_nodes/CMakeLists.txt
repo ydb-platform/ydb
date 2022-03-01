@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+find_package(Python3 REQUIRED)
 
 add_library(providers-solomon-expr_nodes)
 target_link_libraries(providers-solomon-expr_nodes PUBLIC
@@ -28,9 +29,10 @@ add_custom_command(
   DEPENDS
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.json
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/gen
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
   COMMAND
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/gen
+  Python3::Interpreter
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.json
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.gen.h

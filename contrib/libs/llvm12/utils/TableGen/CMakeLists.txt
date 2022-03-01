@@ -13,6 +13,7 @@ target_include_directories(llvm-tblgen PRIVATE
 )
 target_link_libraries(llvm-tblgen PUBLIC
   contrib-libs-cxxsupp
+  library-cpp-lfalloc
   contrib-libs-llvm12
   llvm12-lib-Demangle
   llvm12-lib-Support
@@ -79,10 +80,7 @@ target_link_flags(llvm-tblgen
   -lrt
   -Wl,--no-as-needed
   -fPIC
-  -Wl,--gdb-index
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

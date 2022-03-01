@@ -1,0 +1,60 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-blobstorage-dsproxy-ut)
+target_compile_options(ydb-core-blobstorage-dsproxy-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(ydb-core-blobstorage-dsproxy-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  cpp-actors-core
+  library-cpp-getopt
+  library-cpp-svnversion
+  ydb-core-base
+  core-blobstorage-base
+  core-blobstorage-dsproxy
+  core-blobstorage-groupinfo
+  blobstorage-ut_vdisk-lib
+  blobstorage-vdisk-common
+  blobstorage-vdisk-query
+  ydb-core-testlib
+  core-testlib-actors
+  core-testlib-basics
+)
+target_sources(ydb-core-blobstorage-dsproxy-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_put_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_quorum_tracker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_sequence_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_patch_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_counters_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_fault_tolerance_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/ut/dsproxy_get_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-blobstorage-dsproxy-ut
+  COMMAND
+  ydb-core-blobstorage-dsproxy-ut
+)
+target_link_flags(ydb-core-blobstorage-dsproxy-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-core-blobstorage-dsproxy-ut)

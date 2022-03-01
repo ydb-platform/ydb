@@ -14,6 +14,7 @@ target_include_directories(ydb-core-grpc_services-validation-ut PRIVATE
 target_link_libraries(ydb-core-grpc_services-validation-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-testing-unittest
@@ -34,10 +35,7 @@ target_link_flags(ydb-core-grpc_services-validation-ut
   -lrt
   -Wl,--no-as-needed
   -fPIC
-  -Wl,--gdb-index
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

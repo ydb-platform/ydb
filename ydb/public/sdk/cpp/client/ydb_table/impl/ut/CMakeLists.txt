@@ -14,6 +14,7 @@ target_include_directories(ydb-public-sdk-cpp-client-ydb_table-impl-ut PRIVATE
 target_link_libraries(ydb-public-sdk-cpp-client-ydb_table-impl-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   client-ydb_table-impl
@@ -33,13 +34,8 @@ target_link_flags(ydb-public-sdk-cpp-client-ydb_table-impl-ut
   -ldl
   -lrt
   -Wl,--no-as-needed
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -Wl,--gdb-index
-  -Wl,-rpath,$ORIGIN
   -fPIC
-  -fuse-ld=$(LLD_ROOT-sbr:2283360772)/ld
-  -Wl,--no-rosegment
   -lpthread
   -lrt
   -ldl

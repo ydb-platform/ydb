@@ -94,7 +94,7 @@ TString ResolveUDFNameByCompression(std::string_view input) {
         return "Brotli";
     }
     if (input == "bzip2"sv) {
-        return "Bzip2";
+        return "BZip2";
     }
     if (input == "xz"sv) {
         return "Xz";

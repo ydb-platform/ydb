@@ -28,11 +28,9 @@ NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr coun
         ->GetSubgroup("Topic", realTopic);
 }
 
-NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters,
-                                                     const TString& subsystem)
+NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters)
 {
-    return counters->GetSubgroup("counters", "pqproxy")
-        ->GetSubgroup("subsystem", subsystem);
+    return counters->GetSubgroup("counters", "datastreams");
 }
 
 TVector<TLabelsInfo> GetLabels(const TString& topic)

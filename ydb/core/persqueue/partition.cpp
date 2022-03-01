@@ -450,6 +450,17 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
     }
 }
 
+namespace {
+    TString getStreamName(const TActorContext &ctx, const TString& topicPath, const TString& dbPath) {
+        const bool itsFirstClassCitizen = true;
+        auto converterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
+            itsFirstClassCitizen, AppData(ctx)->PQConfig.GetRoot()
+        );
+        auto converter = converterFactory->MakeTopicNameConverter(topicPath, "", dbPath);
+        return converter->GetClientsideName();
+    }
+}
+
 TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
                        const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
                        const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
@@ -475,7 +486,8 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , CloudId(config.GetYcCloudId())
     , DbId(config.GetYdbDatabaseId())
     , FolderId(config.GetYcFolderId())
-    , UsersInfoStorage(DCId, TabletID, TopicName, Partition, counters, Config, CloudId, DbId, FolderId)
+    , UsersInfoStorage(DCId, TabletID, TopicName, Partition, counters, Config, CloudId, DbId, FolderId,
+                       getStreamName(ctx, TopicPath, Config.GetYdbDatabasePath()))
     , ReadingTimestamp(false)
     , SetOffsetCookie(0)
     , Cookie(0)
@@ -510,11 +522,9 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
         ManageWriteTimestampEstimate = LocalDC;
     }
 
-
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
 
     CalcTopicWriteQuotaParams();
-
 
     Counters.Populate(counters);
 }
@@ -717,7 +727,6 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
 
 void TPartition::Bootstrap(const TActorContext& ctx)
 {
-
     UsersInfoStorage.Init(Tablet, SelfId());
 
     Y_VERIFY(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
@@ -770,7 +779,7 @@ void TPartition::Bootstrap(const TActorContext& ctx)
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     auto counters = AppData(ctx)->Counters;
-    auto labels = NKikimr::NPQ::GetLabels(TopicName);
+    const auto labels = NKikimr::NPQ::GetLabels(TopicName);
     const TString suffix = LocalDC ? "Original" : "Mirrored";
 
     WriteBufferIsFullCounter.SetCounter(
@@ -779,38 +788,33 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
             {"Partition", ToString<ui32>(Partition)}},
             {"sensor", "BufferFullTime" + suffix, true});
 
+    auto subGroup = GetServiceCounters(counters, "pqproxy|writeTimeLag");
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        GetServiceCounters(counters, "pqproxy|writeTimeLag"), GetLabels(TopicName),
-            {{"sensor", "TimeLags" + suffix}}, "Interval",
-            TVector<std::pair<ui64, TString>>{
-                {100, "100ms"}, {200, "200ms"}, {500, "500ms"}, {1000, "1000ms"},
-                {2000, "2000ms"}, {5000, "5000ms"}, {10'000, "10000ms"}, {30'000, "30000ms"},
-                {60'000, "60000ms"}, {180'000,"180000ms"}, {9'999'999, "999999ms"}}, true));
+        subGroup, labels, {{"sensor", "TimeLags" + suffix}}, "Interval",
+        TVector<std::pair<ui64, TString>>{
+            {100, "100ms"}, {200, "200ms"}, {500, "500ms"}, {1000, "1000ms"},
+            {2000, "2000ms"}, {5000, "5000ms"}, {10'000, "10000ms"}, {30'000, "30000ms"},
+            {60'000, "60000ms"}, {180'000,"180000ms"}, {9'999'999, "999999ms"}}, true));
 
 
+    subGroup = GetServiceCounters(counters, "pqproxy|writeInfo");
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        GetServiceCounters(counters, "pqproxy|writeInfo"), GetLabels(TopicName),
-            {{"sensor", "MessageSize" + suffix}}, "Size",
-            TVector<std::pair<ui64, TString>>{
-                {1024, "1kb"}, {5120, "5kb"}, {10240, "10kb"},
-                {20'480, "20kb"}, {51'200, "50kb"}, {102'400, "100kb"}, {204'800, "200kb"},
-                {524'288, "512kb"},{1'048'576, "1024kb"}, {2'097'152,"2048kb"}, {5'242'880, "5120kb"},
-                {10'485'760, "10240kb"}, {67'108'864, "65536kb"}, {999'999'999, "99999999kb"}}, true));
+        subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
+        TVector<std::pair<ui64, TString>>{
+            {1024, "1kb"}, {5120, "5kb"}, {10240, "10kb"},
+            {20'480, "20kb"}, {51'200, "50kb"}, {102'400, "100kb"}, {204'800, "200kb"},
+            {524'288, "512kb"},{1'048'576, "1024kb"}, {2'097'152,"2048kb"}, {5'242'880, "5120kb"},
+            {10'485'760, "10240kb"}, {67'108'864, "65536kb"}, {999'999'999, "99999999kb"}}, true));
 
-    BytesWritten = NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
-                                               GetLabels(TopicName), {}, {"BytesWritten" + suffix}, true);
-    BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
-                                                           GetLabels(TopicName), {}, {"UncompressedBytesWritten" + suffix}, true);
-
-    BytesWrittenComp = NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
-                                                   GetLabels(TopicName), {}, {"CompactedBytesWritten" + suffix}, true);
-
-    MsgsWritten = NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
-                                              GetLabels(TopicName), {}, {"MessagesWritten" + suffix}, true);
+    subGroup = GetServiceCounters(counters, "pqproxy|writeSession");
+    BytesWritten = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"BytesWritten" + suffix}, true);
+    BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"UncompressedBytesWritten" + suffix}, true);
+    BytesWrittenComp = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"CompactedBytesWritten" + suffix}, true);
+    MsgsWritten = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"MessagesWritten" + suffix}, true);
 
     TVector<NPQ::TLabelsInfo> aggr = {{{{"Account", NPersQueue::GetAccount(TopicName)}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
-    auto subGroup = GetServiceCounters(counters, "pqproxy|SLI");
+    subGroup = GetServiceCounters(counters, "pqproxy|SLI");
     WriteLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, aggr, "Write", border,
                                                           {100, 200, 500, 1000, 1500, 2000,
                                                            5000, 10'000, 30'000, 99'999'999});
@@ -819,7 +823,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     if (IsQuotingEnabled() && !TopicWriteQuotaResourcePath.empty()) {
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
-                GetServiceCounters(counters, "pqproxy|topicWriteQuotaWait"), GetLabels(TopicName),
+                GetServiceCounters(counters, "pqproxy|topicWriteQuotaWait"), labels,
                     {{"sensor", "TopicWriteQuotaWait" + suffix}}, "Interval",
                         TVector<std::pair<ui64, TString>>{
                             {0, "0ms"}, {1, "1ms"}, {5, "5ms"}, {10, "10ms"},
@@ -830,7 +834,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(GetServiceCounters(counters, "pqproxy|partitionWriteQuotaWait"),
-            GetLabels(TopicName), {{"sensor", "PartitionWriteQuotaWait" + suffix}}, "Interval",
+            labels, {{"sensor", "PartitionWriteQuotaWait" + suffix}}, "Interval",
                 TVector<std::pair<ui64, TString>>{
                     {0, "0ms"}, {1, "1ms"}, {5, "5ms"}, {10, "10ms"},
                     {20, "20ms"}, {50, "50ms"}, {100, "100ms"}, {500, "500ms"},
@@ -839,18 +843,22 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 }
 
 void TPartition::SetupStreamCounters(const TActorContext& ctx) {
+    const auto topicName = getStreamName(ctx, TopicPath, Config.GetYdbDatabasePath());
+    const auto labels = NKikimr::NPQ::GetLabelsForStream(topicName, CloudId, DbId, FolderId);
     auto counters = AppData(ctx)->Counters;
-    auto labels = NKikimr::NPQ::GetLabelsForStream(TopicName, CloudId, DbId, FolderId);
 
     WriteBufferIsFullCounter.SetCounter(
-        GetCountersForStream(counters, "writingTime"),
-        {{"host", DCId},
-         {"partition", ToString<ui32>(Partition)},
-         {"stream", TopicName}},
+        GetCountersForStream(counters),
+        {{"database", DbId},
+         {"cloud", CloudId},
+         {"folder", FolderId},
+         {"stream", topicName},
+         {"host", DCId},
+         {"shard", ToString<ui32>(Partition)}},
         {"name", "stream.internal_write.buffer_brimmed_duration_ms", true});
 
     InputTimeLag = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NKikimr::NPQ::GetCountersForStream(counters, "writeTimeLag"), labels,
+        NKikimr::NPQ::GetCountersForStream(counters), labels,
                     {{"name", "stream.internal_write.time_lags_milliseconds"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {100, "100"}, {200, "200"}, {500, "500"},
@@ -859,7 +867,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {180'000,"180000"}, {9'999'999, "999999"}}, true));
 
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
-        NKikimr::NPQ::GetCountersForStream(counters, "writeInfo"), labels,
+        NKikimr::NPQ::GetCountersForStream(counters), labels,
                     {{"name", "stream.internal_write.record_size_bytes"}}, "bin",
                     TVector<std::pair<ui64, TString>>{
                         {1024, "1024"}, {5120, "5120"}, {10'240, "10240"},
@@ -869,22 +877,22 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                         {67'108'864, "67108864"}, {999'999'999, "99999999"}}, true));
 
     BytesWritten = NKikimr::NPQ::TMultiCounter(
-        NKikimr::NPQ::GetCountersForStream(counters, "writeSession"), labels, {},
+        NKikimr::NPQ::GetCountersForStream(counters), labels, {},
                     {"stream.internal_write.bytes_per_second",
                      "stream.incoming_bytes_per_second"} , true, "name");
     MsgsWritten = NKikimr::NPQ::TMultiCounter(
-        NKikimr::NPQ::GetCountersForStream(counters, "writeSession"), labels, {},
+        NKikimr::NPQ::GetCountersForStream(counters), labels, {},
                     {"stream.internal_write.records_per_second",
                      "stream.incoming_records_per_second"}, true, "name");
 
     BytesWrittenUncompressed = NKikimr::NPQ::TMultiCounter(
-        NKikimr::NPQ::GetCountersForStream(counters, "writeSession"), labels, {},
+        NKikimr::NPQ::GetCountersForStream(counters), labels, {},
                     {"stream.internal_write.uncompressed_bytes_per_second"}, true, "name");
     BytesWrittenComp = NKikimr::NPQ::TMultiCounter(
-        NKikimr::NPQ::GetCountersForStream(counters, "writeSession"), labels, {},
+        NKikimr::NPQ::GetCountersForStream(counters), labels, {},
                     {"stream.internal_write.compacted_bytes_per_second"}, true, "name");
 
-    TVector<NPQ::TLabelsInfo> aggr = {{{{"Account", NPersQueue::GetAccount(TopicName)}}, {"total"}}};
+    TVector<NPQ::TLabelsInfo> aggr = {{{{"Account", NPersQueue::GetAccount(topicName)}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
     auto subGroup = GetServiceCounters(counters, "pqproxy|SLI");
     WriteLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, aggr, "Write", border,
@@ -895,7 +903,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     if (IsQuotingEnabled() && !TopicWriteQuotaResourcePath.empty()) {
         TopicWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
             new NKikimr::NPQ::TPercentileCounter(
-                GetCountersForStream(counters, "topicWriteQuotaWait"), labels,
+                NKikimr::NPQ::GetCountersForStream(counters), labels,
                             {{"name", "stream.internal_write.topic_write_quota_wait_milliseconds"}}, "bin",
                             TVector<std::pair<ui64, TString>>{
                                 {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
@@ -906,7 +914,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
     PartitionWriteQuotaWaitCounter = THolder<NKikimr::NPQ::TPercentileCounter>(
         new NKikimr::NPQ::TPercentileCounter(
-            GetCountersForStream(counters, "partitionWriteQuotaWait"), labels,
+            NKikimr::NPQ::GetCountersForStream(counters), labels,
                         {{"name", "stream.internal_write.partition_write_quota_wait_milliseconds"}}, "bin",
                         TVector<std::pair<ui64, TString>>{
                             {0, "0"}, {1, "1"}, {5, "5"}, {10, "10"},
@@ -2851,7 +2859,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 1, "",
                                                                user, 0, MAX_BLOB_PART_SIZE * 2, 0, 0, "",
-                                                               userInfo.DoExternalRead);
+                                                               false);
     ctx.Send(ctx.SelfID, event.Release());
     Counters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_MISS].Increment(1);
 }

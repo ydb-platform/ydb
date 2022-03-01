@@ -704,6 +704,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         }
 
         TopicName = Config.GetTopicName();
+        TopicPath = Config.GetTopicPath();
         LocalDC = Config.GetLocalDC();
 
         KeySchema.clear();

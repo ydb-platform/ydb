@@ -8,8 +8,7 @@ namespace NPQ {
 NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters,
                                             const TString& subsystem,
                                             const TString& topic);
-NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters,
-                                                     const TString& subsystem);
+NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters);
 
 struct TLabelsInfo {
     TVector<std::pair<TString,TString>> Labels;

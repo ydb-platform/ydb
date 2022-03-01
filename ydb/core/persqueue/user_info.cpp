@@ -37,7 +37,8 @@ TUsersInfoStorage::TUsersInfoStorage(
     const NKikimrPQ::TPQTabletConfig& config,
     const TString& cloudId,
     const TString& dbId,
-    const TString& folderId
+    const TString& folderId,
+    const TString& streamName
 )
     : DCId(std::move(dcId))
     , TabletId(tabletId)
@@ -47,6 +48,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , CloudId(cloudId)
     , DbId(dbId)
     , FolderId(folderId)
+    , StreamName(streamName)
 {
     Counters.Populate(counters);
 }
@@ -162,8 +164,9 @@ TUserInfo& TUsersInfoStorage::Create(
     auto result = UsersInfo.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(user),
-        std::forward_as_tuple(ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicName, Partition, session,
-        gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, FolderId, burst, speed)
+        std::forward_as_tuple(ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important,
+                              TopicName, Partition, session, gen, step, offset, readOffsetRewindSum, DCId,
+                              readFromTimestamp, CloudId, DbId, FolderId, burst, speed, StreamName)
     );
     Y_VERIFY(result.second);
     return result.first->second;

@@ -10,6 +10,7 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -41,30 +42,6 @@ namespace NKikimr::NPersQueueTests {
     using namespace NNetClassifier;
     using namespace NYdb::NPersQueue;
     using namespace NPersQueue;
-
-    NJson::TJsonValue GetCountersNewSchemeCache(ui16 port, const TString& counters, const TString& subsystem, const TString& topicPath) {
-        TString escapedPath = "%2F" + JoinStrings(SplitString(topicPath, "/"), "%2F");
-        TString query = TStringBuilder() << "/counters/counters=" << counters
-                                         << "/subsystem=" << subsystem
-                                         << "/Topic=" << escapedPath << "/json";
-
-        Cerr << "Will execute query " << query << Endl;
-        TNetworkAddress addr("localhost", port);
-        TSocket s(addr);
-
-        SendMinimalHttpRequest(s, "localhost", query);
-        TSocketInput si(s);
-        THttpInput input(&si);
-        Cerr << input.ReadAll() << Endl;
-        unsigned httpCode = ParseHttpRetCode(input.FirstLine());
-        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
-
-        NJson::TJsonValue value;
-        UNIT_ASSERT(NJson::ReadJsonTree(&input, &value));
-
-        Cerr << "counters: " << value.GetStringRobust() << "\n";
-        return value;
-    }
 
     Y_UNIT_TEST_SUITE(TPersQueueNewSchemeCacheTest) {
 
@@ -122,7 +99,8 @@ namespace NKikimr::NPersQueueTests {
             auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
 
             {
-                auto res = persQueueClient->AddReadRule("/Root/account2/topic2", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
+                auto res = persQueueClient->AddReadRule("/Root/account2/topic2",
+                    TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
                 res.Wait();
                 UNIT_ASSERT(res.GetValue().IsSuccess());
             }
@@ -161,7 +139,171 @@ namespace NKikimr::NPersQueueTests {
             testReadFromTopic("account2/topic2");
         }
 
-    }
+        Y_UNIT_TEST(TestWriteStat1stClass) {
+            auto testWriteStat1stClass = [](const TString& consumerName) {
+                TTestServer server(false);
+                server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+                server.StartServer();
+                server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE});
+
+                const TString topicName{"account2/topic2"};
+                const TString fullTopicName{"/Root/account2/topic2"};
+                const TString folderId{"somefolder"};
+                const TString cloudId{"somecloud"};
+                const TString databaseId{"root"};
+                UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+                                         server.AnnoyingClient->AlterUserAttributes("/", "Root",
+                                                                                    {{"folder_id", folderId},
+                                                                                     {"cloud_id", cloudId},
+                                                                                     {"database_id", databaseId}}));
+
+                server.AnnoyingClient->SetNoConfigMode();
+                server.AnnoyingClient->FullInit();
+                server.AnnoyingClient->InitUserRegistry();
+                server.AnnoyingClient->MkDir("/Root", "account2");
+                server.AnnoyingClient->CreateTopicNoLegacy(fullTopicName, 5);
+
+                NYdb::TDriverConfig driverCfg;
+
+                driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+
+                const auto monPort = TPortManager().GetPort();
+                auto Counters = server.CleverServer->GetGRpcServerRootCounters();
+                NActors::TMon Monitoring({monPort, "localhost", 3, "root", "localhost", {}, {}, {}});
+                Monitoring.RegisterCountersPage("counters", "Counters", Counters);
+                Monitoring.Start();
+
+                auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
+                auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
+
+                {
+                    auto res = persQueueClient->AddReadRule(fullTopicName,
+                        TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName(consumerName)));
+                    res.Wait();
+                    UNIT_ASSERT(res.GetValue().IsSuccess());
+                }
+
+                WaitACLModification();
+
+                auto checkCounters =
+                    [cloudId, folderId, databaseId](auto monPort,
+                                                    const std::set<std::string>& canonicalSensorNames,
+                                                    const TString& stream, const TString& consumer,
+                                                    const TString& host, const TString& shard) {
+                        auto counters = GetCounters1stClass(monPort, "datastreams", cloudId, databaseId,
+                                                            folderId, stream, consumer, host, shard);
+                        const auto sensors = counters["sensors"].GetArray();
+                        std::set<std::string> sensorNames;
+                        std::transform(sensors.begin(), sensors.end(),
+                                       std::inserter(sensorNames, sensorNames.begin()),
+                                       [](auto& el) {
+                                           return el["labels"]["name"].GetString();
+                                       });
+                        auto equal = sensorNames == canonicalSensorNames;
+                        UNIT_ASSERT(equal);
+                    };
+
+                {
+                    auto writer = CreateSimpleWriter(*ydbDriver, fullTopicName, "123", 1);
+                    for (int i = 0; i < 4; ++i) {
+                        bool res = writer->Write(TString(10, 'a'));
+                        UNIT_ASSERT(res);
+                    }
+
+                    NYdb::NPersQueue::TReadSessionSettings settings;
+                    settings.ConsumerName(consumerName).AppendTopics(topicName);
+                    auto reader = CreateReader(*ydbDriver, settings);
+
+                    auto msg = GetNextMessageSkipAssignment(reader);
+                    UNIT_ASSERT(msg);
+
+                    checkCounters(monPort,
+                                  {
+                                      "stream.internal_read.commits_per_second",
+                                      "stream.internal_read.partitions_errors_per_second",
+                                      "stream.internal_read.partitions_locked",
+                                      "stream.internal_read.partitions_locked_per_second",
+                                      "stream.internal_read.partitions_released_per_second",
+                                      "stream.internal_read.partitions_to_be_locked",
+                                      "stream.internal_read.partitions_to_be_released",
+                                      "stream.internal_read.waits_for_data",
+                                      "stream.internal_write.bytes_proceeding",
+                                      "stream.internal_write.bytes_proceeding_total",
+                                      "stream.internal_write.errors_per_second",
+                                      "stream.internal_write.sessions_active",
+                                      "stream.internal_write.sessions_created_per_second",
+                                  },
+                                  topicName, "", "", ""
+                                  );
+
+                    checkCounters(monPort,
+                                  {
+                                      "stream.internal_read.commits_per_second",
+                                      "stream.internal_read.partitions_errors_per_second",
+                                      "stream.internal_read.partitions_locked",
+                                      "stream.internal_read.partitions_locked_per_second",
+                                      "stream.internal_read.partitions_released_per_second",
+                                      "stream.internal_read.partitions_to_be_locked",
+                                      "stream.internal_read.partitions_to_be_released",
+                                      "stream.internal_read.waits_for_data",
+                                  },
+                                  topicName, consumerName, "", ""
+                                  );
+
+                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                                  {
+                                      "stream.internal_read.time_lags_milliseconds",
+                                      "stream.incoming_bytes_per_second",
+                                      "stream.incoming_records_per_second",
+                                      "stream.internal_write.bytes_per_second",
+                                      "stream.internal_write.compacted_bytes_per_second",
+                                      "stream.internal_write.partition_write_quota_wait_milliseconds",
+                                      "stream.internal_write.record_size_bytes",
+                                      "stream.internal_write.records_per_second",
+                                      "stream.internal_write.time_lags_milliseconds",
+                                      "stream.internal_write.uncompressed_bytes_per_second",
+                                      "stream.await_operating_milliseconds",
+                                      "stream.internal_write.buffer_brimmed_duration_ms",
+                                      "stream.internal_read.bytes_per_second",
+                                      "stream.internal_read.records_per_second",
+                                      "stream.outgoing_bytes_per_second",
+                                      "stream.outgoing_records_per_second",
+                                  },
+                                  topicName, "", "", ""
+                                  );
+
+                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                                  {
+                                      "stream.internal_read.time_lags_milliseconds",
+                                      "stream.await_operating_milliseconds",
+                                      "stream.internal_read.bytes_per_second",
+                                      "stream.internal_read.records_per_second",
+                                      "stream.outgoing_bytes_per_second",
+                                      "stream.outgoing_records_per_second",
+                                  },
+                                  topicName, consumerName, "", ""
+                                  );
+
+                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                                  {
+                                      "stream.await_operating_milliseconds"
+                                  },
+                                  topicName, consumerName, "1", ""
+                                  );
+
+                    checkCounters(server.CleverServer->GetRuntime()->GetMonPort(),
+                                  {
+                                      "stream.internal_write.buffer_brimmed_duration_ms"
+                                  },
+                                  topicName, "", "1", ""
+                                  );
+                }
+            };
+
+            testWriteStat1stClass("user1");
+            testWriteStat1stClass("some@random@consumer");
+        }
+    } // Y_UNIT_TEST_SUITE(TPersQueueNewSchemeCacheTest)
 
 
     Y_UNIT_TEST_SUITE(TPersqueueDataPlaneTestSuite) {
@@ -186,7 +328,7 @@ namespace NKikimr::NPersQueueTests {
                 auto writer = server.PersQueueClient->CreateSimpleBlockingWriteSession(TWriteSessionSettings()
                                                                     .Path(topic).MessageGroupId("my_group_1")
                                                                     .ClusterDiscoveryMode(EClusterDiscoveryMode::Off)
-                                                                    .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
+                                                                    .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()));
                 Cerr << "InitSeqNO " << writer->GetInitSeqNo() << "\n";
                 writer->Write("somedata", 1);
                 writer->Close();
@@ -194,7 +336,7 @@ namespace NKikimr::NPersQueueTests {
             {
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName("non_existing")
                                                                         .AppendTopics(topic).DisableClusterDiscovery(true)
-                                                                        .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
+                                                                        .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()));
 
 
                 auto future = reader->WaitEvent();
@@ -211,7 +353,7 @@ namespace NKikimr::NPersQueueTests {
             {
                 auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName(consumer)
                                                                         .AppendTopics(topic).DisableClusterDiscovery(true)
-                                                                        .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
+                                                                        .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy()));
 
 
                 auto future = reader->WaitEvent();

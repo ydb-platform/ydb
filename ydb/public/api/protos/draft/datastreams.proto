@@ -110,7 +110,7 @@ message StreamDescription {
 // Represents range of possible sequence numbers for the shard
 message SequenceNumberRange {
     string starting_sequence_number = 1;
-    string ending_sequence_number = 2;
+    string ending_sequence_number = 2 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
 }
 
 // Represents shard details

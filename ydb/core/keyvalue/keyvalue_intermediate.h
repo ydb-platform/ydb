@@ -113,6 +113,7 @@ struct TIntermediate {
     TDeque<TGetStatus> GetStatuses;
     TMaybe<TTrimLeakedBlobs> TrimLeakedBlobs;
     TMaybe<TSetExecutorFastLogPolicy> SetExecutorFastLogPolicy;
+    std::deque<std::pair<TLogoBlobID, bool>> RefCountsIncr;
 
     TStackVec<TCmd, 1> Commands;
     TStackVec<ui32, 1> WriteIndices;

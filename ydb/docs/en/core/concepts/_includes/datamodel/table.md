@@ -8,7 +8,7 @@ A table in {{ ydb-short-name }} is a [relational table](https://en.wikipedia.org
 
 Figure 1 shows the schema of a ```Series``` table with four columns, named ```SeriesId```, ```ReleaseDate```, ```SeriesInfo```, and ```Title```, with the ```Uint64?``` data type for the first two columns and ```String?``` for the others. The ```SeriesId``` column is declared the primary key.
 
-{{ ydb-short-name }} uses [YQL]{% if audience != "external" %}(https://yql.yandex-team.ru/docs/ydb/types/){% else %}(../../datatypes.md){% endif %} data types. {% if audience != "external" %} [Simple YQL data types](https://yql.yandex-team.ru/docs/ydb/types/primitive/) {% else %} [Simple YQL data types](../../../yql/reference/types/primitive.md) {% endif %} can be used as column types. All columns may contain a special NULL value to indicate a missing value.
+{{ ydb-short-name }} uses [YQL](../../datatypes.md) data types. [Simple YQL data types](../../../yql/reference/types/primitive.md) can be used as column types. All columns may contain a special NULL value to indicate a missing value.
 
 {{ ydb-short-name }} tables always have one or more columns that make up the key ([primary key](https://en.wikipedia.org/wiki/Unique_key)). Each table row has a unique key value, so there can be no more than one row per key value. {{ ydb-short-name }} tables are always ordered by key. This means that you can efficiently make point reads by key and range-based queries by key or key prefix (actually using an index). In the example above, the key columns are highlighted in gray and marked with a special sign. Tables consisting only of key columns are supported. However, you can't create tables without a primary key.
 

@@ -1,5 +1,5 @@
 ---
-title: "Yandex Database (YDB) backups"
+title: "YDB backups"
 description: "This section describes supported methods for creating YDB database backups and restoring data from previously created backups. YDB lets you use the following destinations to create backups: CSV files on the file system and AWS S3-compatible storage."
 ---
 # Backups

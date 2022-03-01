@@ -1,6 +1,6 @@
 ## Checklist for deploying your product environment
 
-This section provides recommendations for deploying {{ ydb-full-name }} in product environments.
+This section provides recommendations for deploying YDB in product environments.
 
 ## Topology
 

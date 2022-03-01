@@ -54,6 +54,7 @@ public:
             driver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(privateApiConfig.GetTaskServiceEndpoint())
+                .EnableSsl(privateApiConfig.GetSecureTaskService())
                 .Database(privateApiConfig.GetTaskServiceDatabase() ? privateApiConfig.GetTaskServiceDatabase(): TMaybe<TString>()),
             clientCounters)
     { }

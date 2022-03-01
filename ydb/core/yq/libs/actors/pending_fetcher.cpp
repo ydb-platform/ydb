@@ -162,6 +162,7 @@ public:
             YqSharedResources->YdbDriver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
+                .EnableSsl(PrivateApiConfig.GetSecureTaskService())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             ClientCounters)
     {

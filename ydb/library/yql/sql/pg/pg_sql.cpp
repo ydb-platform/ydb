@@ -993,7 +993,6 @@ public:
             !typeName->setof &&
             !typeName->pct_type &&
             ListLength(typeName->typmods) == 0 &&
-            ListLength(typeName->arrayBounds) == 0 &&
             (ListLength(typeName->names) == 2 &&
                 NodeTag(ListNodeNth(typeName->names, 0)) == T_String &&
                 !StrCompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
@@ -1003,7 +1002,8 @@ public:
         if (NodeTag(arg) == T_A_Const &&
             (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String ||
             NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) &&
-            supportedTypeName) {
+            supportedTypeName &&
+            ListLength(typeName->arrayBounds) == 0) {
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
                 auto str = StrVal(CAST_NODE(A_Const, arg)->val);
@@ -1046,7 +1046,12 @@ public:
                 return nullptr;
             }
 
-            return L(A("PgCast"), QA(TString(targetType)), input);
+            auto finalType = TString(targetType);
+            if (ListLength(typeName->arrayBounds) && !finalType.StartsWith('_')) {
+                finalType = "_" + finalType;
+            }
+
+            return L(A("PgCast"), QA(finalType), input);
         }
 
         AddError("Unsupported form of type cast");

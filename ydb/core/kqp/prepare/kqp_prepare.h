@@ -91,7 +91,7 @@ struct TKqlTransformContext : TThrRefBase {
     NKikimrKqp::TPreparedKql* PreparingKql = nullptr;
     const NKikimrKqp::TPreparedKql* PreparedKql;
     NKqpProto::TKqpStatsQuery QueryStats;
-    const NKqpProto::TKqpPhyQuery* PhysicalQuery;
+    std::shared_ptr<const NKqpProto::TKqpPhyQuery> PhysicalQuery;
 
     TVector<TSimpleSharedPtr<NKikimrMiniKQL::TResult>> MkqlResults;
     TVector<NKikimrMiniKQL::TResult> PhysicalQueryResults;

@@ -56,7 +56,7 @@ private:
     TStatus Execute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx);
     TStatus Rollback();
 
-    bool AddDeferredEffect(const NKqpProto::TKqpPhyTx& tx);
+    bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx);
 
     void PreserveParams(const NKqpProto::TKqpPhyTx& tx, TParamValueMap& paramsMap);
 

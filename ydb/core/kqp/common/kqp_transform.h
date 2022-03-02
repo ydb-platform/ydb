@@ -82,14 +82,14 @@ using TParamValueMap = THashMap<TString, NKikimrMiniKQL::TParams>;
 
 struct TDeferredEffect {
     NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase> Node;
-    NKqpProto::TKqpPhyTx PhysicalTx;
+    std::shared_ptr<const NKqpProto::TKqpPhyTx> PhysicalTx;
     TParamValueMap Params;
 
     explicit TDeferredEffect(const NYql::NNodes::TExprBase& node)
         : Node(node) {}
 
-    explicit TDeferredEffect(const NKqpProto::TKqpPhyTx& physicalTx)
-        : PhysicalTx(physicalTx) {}
+    explicit TDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx)
+        : PhysicalTx(std::move(physicalTx)) {}
 };
 
 class TKqpTransactionContext;
@@ -128,12 +128,12 @@ private:
     }
 
     [[nodiscard]]
-    bool Add(const NKqpProto::TKqpPhyTx& physicalTx, TParamValueMap&& params) {
+    bool Add(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TParamValueMap&& params) {
         if (Engine.has_value() && *Engine != TKqpTransactionInfo::EEngine::NewEngine) {
             return false;
         }
         Engine.emplace(TKqpTransactionInfo::EEngine::NewEngine);
-        DeferredEffects.emplace_back(physicalTx);
+        DeferredEffects.emplace_back(std::move(physicalTx));
         DeferredEffects.back().Params = std::move(params);
         return true;
     }
@@ -174,8 +174,8 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(const NKqpProto::TKqpPhyTx& physicalTx, TParamValueMap&& params) {
-        return DeferredEffects.Add(physicalTx, std::move(params));
+    bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TParamValueMap&& params) {
+        return DeferredEffects.Add(std::move(physicalTx), std::move(params));
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {

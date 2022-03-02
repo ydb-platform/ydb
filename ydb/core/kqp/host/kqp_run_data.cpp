@@ -53,8 +53,9 @@ protected:
 
             for (const auto& effect : txState.DeferredEffects) {
                 YQL_ENSURE(!effect.Node);
-                YQL_ENSURE(effect.PhysicalTx.GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
-                request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
+                YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
+                // TODO pass shared_ptr
+                request.Transactions.emplace_back(*effect.PhysicalTx, GetParamsRefMap(effect.Params));
             }
 
             if (!txState.DeferredEffects.Empty()) {

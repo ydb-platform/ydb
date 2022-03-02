@@ -656,30 +656,30 @@ public:
         output = input;
 
         if (!AsyncResult) {
-            const auto& query = *QueryCtx->PreparedQuery;
+            auto& query = QueryCtx->PreparedQuery;
             YQL_ENSURE(QueryCtx->Type != EKikimrQueryType::Unspecified);
 
-            if (query.GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1) {
+            if (query->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1) {
                 if (CurrentKqlIndex) {
                     return TStatus::Ok;
                 }
 
-                const auto& phyQuery = query.GetPhysicalQuery();
+                std::shared_ptr<const NKqpProto::TKqpPhyQuery> phyQuery(query, &query->GetPhysicalQuery());
 
                 if (QueryCtx->Type == EKikimrQueryType::Scan) {
-                    AsyncResult = KqpRunner->ExecutePreparedScanQuery(Cluster, input.Get(), phyQuery, ctx,
-                        ExecuteCtx->ReplyTarget);
+                    AsyncResult = KqpRunner->ExecutePreparedScanQuery(Cluster, input.Get(), std::move(phyQuery),
+                        ctx, ExecuteCtx->ReplyTarget);
                 } else {
                     YQL_ENSURE(QueryCtx->Type == EKikimrQueryType::Dml);
-                    AsyncResult = KqpRunner->ExecutePreparedQueryNewEngine(Cluster, input.Get(), phyQuery, ctx,
-                        ExecuteCtx->Settings);
+                    AsyncResult = KqpRunner->ExecutePreparedQueryNewEngine(Cluster, input.Get(), std::move(phyQuery),
+                        ctx, ExecuteCtx->Settings);
                 }
             } else {
-                if (CurrentKqlIndex >= query.KqlsSize()) {
+                if (CurrentKqlIndex >= query->KqlsSize()) {
                     return TStatus::Ok;
                 }
 
-                const auto& kql = query.GetKqls(CurrentKqlIndex);
+                const auto& kql = query->GetKqls(CurrentKqlIndex);
 
                 YQL_ENSURE(QueryCtx->Type == EKikimrQueryType::Dml);
                 YQL_ENSURE(!kql.GetSettings().GetNewEngine());

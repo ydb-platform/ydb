@@ -312,11 +312,11 @@ public:
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePreparedQueryNewEngine(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx,
+        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx,
         const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
         YQL_ENSURE(cluster == Cluster);
-        YQL_ENSURE(phyQuery.GetType() == NKqpProto::TKqpPhyQuery::TYPE_DATA);
+        YQL_ENSURE(phyQuery->GetType() == NKqpProto::TKqpPhyQuery::TYPE_DATA);
 
         if (!Config->HasAllowKqpNewEngine()) {
             ctx.AddError(TIssue(TPosition(), "NewEngine execution is not allowed on this cluster."));
@@ -324,17 +324,17 @@ public:
                 ctx.IssueManager.GetIssues()));
         }
 
-        return ExecutePhysicalDataQuery(world, phyQuery, ctx, settings);
+        return ExecutePhysicalDataQuery(world, std::move(phyQuery), ctx, settings);
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx,
+        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx,
         const NActors::TActorId& target) override
     {
         YQL_ENSURE(cluster == Cluster);
-        YQL_ENSURE(phyQuery.GetType() == NKqpProto::TKqpPhyQuery::TYPE_SCAN);
+        YQL_ENSURE(phyQuery->GetType() == NKqpProto::TKqpPhyQuery::TYPE_SCAN);
 
-        return ExecutePhysicalScanQuery(world, phyQuery, ctx, target);
+        return ExecutePhysicalScanQuery(world, std::move(phyQuery), ctx, target);
     }
 
 private:
@@ -567,13 +567,13 @@ private:
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePhysicalDataQuery(const TExprNode::TPtr& world,
-        const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx,
+        std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx,
         const IKikimrQueryExecutor::TExecuteSettings& settings)
     {
         PhysicalRunQueryTransformer->Rewind();
 
         TransformCtx->Reset();
-        TransformCtx->PhysicalQuery = &phyQuery;
+        TransformCtx->PhysicalQuery = phyQuery;
 
         YQL_ENSURE(TxState->Tx().EffectiveIsolationLevel);
         YQL_ENSURE(TransformCtx->Settings.GetIsolationLevel() == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
@@ -583,19 +583,19 @@ private:
         TransformCtx->Settings.SetRollbackTx(settings.RollbackTx);
 
         bool strictDml = MergeFlagValue(Config->StrictDml.Get(Cluster), settings.StrictDml);
-        if (!ApplyTableOperations(phyQuery, strictDml, ctx)) {
+        if (!ApplyTableOperations(*phyQuery, strictDml, ctx)) {
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
         return MakeIntrusive<TPhysicalAsyncRunResult>(world, ctx, *PhysicalRunQueryTransformer, *TransformCtx);
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePhysicalScanQuery(const TExprNode::TPtr& world,
-        const NKqpProto::TKqpPhyQuery& phyQuery, TExprContext& ctx, const NActors::TActorId& target)
+        std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery, TExprContext& ctx, const NActors::TActorId& target)
     {
         ScanRunQueryTransformer->Rewind();
 
         TransformCtx->Reset();
-        TransformCtx->PhysicalQuery = &phyQuery;
+        TransformCtx->PhysicalQuery = phyQuery;
         TransformCtx->ReplyTarget = target;
 
         Y_ASSERT(!TxState->Tx().GetSnapshot().IsValid());

@@ -17,12 +17,12 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoTransform(TExpr
     YQL_ENSURE(TMaybeNode<TCoWorld>(input));
     YQL_ENSURE(TransformCtx->PhysicalQuery);
 
-    const auto& query = *TransformCtx->PhysicalQuery;
+    std::shared_ptr<const NKqpProto::TKqpPhyQuery> query = TransformCtx->PhysicalQuery;
 
     TStatus status = TStatus::Ok;
 
     auto& txState = TxState->Tx();
-    const ui64 txsCount = query.TransactionsSize();
+    const ui64 txsCount = query->TransactionsSize();
 
     if (settings.GetRollbackTx()) {
         if (ExecuteFlags.HasFlags(TKqpExecuteFlag::Rollback)) {
@@ -43,9 +43,9 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoTransform(TExpr
                 status = Execute(nullptr, /* commit */ true, ctx);
             }
         } else {
-            const auto& tx = query.GetTransactions(CurrentTxIndex);
+            std::shared_ptr<const NKqpProto::TKqpPhyTx> tx(query, &query->GetTransactions(CurrentTxIndex));
 
-            if (tx.GetHasEffects()) {
+            if (tx->GetHasEffects()) {
                 if (!AddDeferredEffect(tx)) {
                     ctx.AddError(YqlIssue({}, TIssuesIds::KIKIMR_BAD_REQUEST,
                         "Failed to mix queries with old- and new- engines"));
@@ -63,12 +63,12 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoTransform(TExpr
                 // last transaction and no effects (RO-query)
                 commit = true;
             }
-            status = Execute(&tx, commit, ctx);
+            status = Execute(tx.get(), commit, ctx);
         }
     }
 
     if (status == TStatus::Ok) {
-        for (const auto& resultBinding : query.GetResultBindings()) {
+        for (const auto& resultBinding : query->GetResultBindings()) {
             YQL_ENSURE(resultBinding.GetTypeCase() == NKqpProto::TKqpPhyResultBinding::kTxResultBinding);
             auto& txResultBinding = resultBinding.GetTxResultBinding();
             auto txIndex = txResultBinding.GetTxIndex();
@@ -171,11 +171,11 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Rollback() {
     return DoRollback();
 }
 
-bool TKqpExecutePhysicalTransformerBase::AddDeferredEffect(const NKqpProto::TKqpPhyTx& tx) {
+bool TKqpExecutePhysicalTransformerBase::AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx) {
     TParamValueMap params;
-    PreserveParams(tx, params);
+    PreserveParams(*tx, params);
 
-    return TxState->Tx().AddDeferredEffect(tx, std::move(params));
+    return TxState->Tx().AddDeferredEffect(std::move(tx), std::move(params));
 }
 
 NDq::TMkqlValueRef TKqpExecutePhysicalTransformerBase::GetParamValue(

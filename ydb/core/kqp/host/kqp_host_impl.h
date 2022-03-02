@@ -262,12 +262,12 @@ public:
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
     virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedQueryNewEngine(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, NYql::TExprContext& ctx,
-        const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
+        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery,
+        NYql::TExprContext& ctx, const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;
 
     virtual TIntrusivePtr<TAsyncQueryResult> ExecutePreparedScanQuery(const TString& cluster,
-        const NYql::TExprNode::TPtr& world, const NKqpProto::TKqpPhyQuery& phyQuery, NYql::TExprContext& ctx,
-        const NActors::TActorId& target) = 0;
+        const NYql::TExprNode::TPtr& world, std::shared_ptr<const NKqpProto::TKqpPhyQuery>&& phyQuery,
+        NYql::TExprContext& ctx, const NActors::TActorId& target) = 0;
 };
 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,

@@ -692,6 +692,39 @@ public:
                 }
             }
         }
+
+        auto opts = Y();
+        if (Table.Options) {
+            if (!Table.Options->Init(ctx, src)) {
+                return false;
+            }
+            opts = Table.Options;
+        }
+
+        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
+
+        THashSet<TString> columnFamilyNames;
+
+        if (Params.ColumnFamilies) {
+            auto columnFamilies = Y();
+            for (const auto& family : Params.ColumnFamilies) {
+                if (!columnFamilyNames.insert(family.Name.Name).second) {
+                    ctx.Error(family.Name.Pos) << "Family " << family.Name.Name << " specified more than once";
+                    return false;
+                }
+                auto familyDesc = Y();
+                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name))));
+                if (family.Data) {
+                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data)));
+                }
+                if (family.Compression) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
+                }
+                columnFamilies = L(columnFamilies, Q(familyDesc));
+            }
+            opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
+        }
+
         auto columns = Y();
         for (auto& col : Params.Columns) {
             auto columnDesc = Y();
@@ -704,21 +737,16 @@ public:
             if (col.Families) {
                 auto familiesDesc = Y();
                 for (const auto& family : col.Families) {
+                    if (columnFamilyNames.find(family.Name) == columnFamilyNames.end()) {
+                        ctx.Error(family.Pos) << "Unknown family " << family.Name;
+                        return false;
+                    }
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
                 }
                 columnDesc = L(columnDesc, Q(familiesDesc));
             }
             columns = L(columns, Q(columnDesc));
         }
-
-        auto opts = Y();
-        if (Table.Options) {
-            if (!Table.Options->Init(ctx, src)) {
-                return false;
-            }
-            opts = Table.Options;
-        }
-        opts = L(opts, Q(Y(Q("mode"), Q("create"))));
         opts = L(opts, Q(Y(Q("columns"), Q(columns))));
 
         if (Table.Service == RtmrProviderName) {
@@ -769,22 +797,6 @@ public:
         for (const auto& cf : Params.Changefeeds) {
             const auto& desc = CreateChangefeedDesc(cf, *this);
             opts = L(opts, Q(Y(Q("changefeed"), Q(desc))));
-        }
-
-        if (Params.ColumnFamilies) {
-            auto columnFamilies = Y();
-            for (const auto& family : Params.ColumnFamilies) {
-                auto familyDesc = Y();
-                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name))));
-                if (family.Data) {
-                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data)));
-                }
-                if (family.Compression) {
-                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
-                }
-                columnFamilies = L(columnFamilies, Q(familyDesc));
-            }
-            opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
         }
 
         if (Params.TableSettings.IsSet()) {

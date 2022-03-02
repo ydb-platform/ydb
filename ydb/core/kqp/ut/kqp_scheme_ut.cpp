@@ -2151,6 +2151,77 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(FamilyColumnTest) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableFamiliesTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                FAMILY Uint32,
+                PRIMARY KEY (Key)
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
+        UNIT_ASSERT_C(describeResult.IsSuccess(), result.GetIssues().ToString());
+        const auto tableDesc = session.DescribeTable(tableName).GetValueSync().GetTableDescription();
+        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
+        TTableColumn& familyColumn = columns[2];
+        UNIT_ASSERT_EQUAL(familyColumn.Name, "FAMILY");
+        TTypeParser parser(familyColumn.Type);
+        auto optionalKind = parser.GetKind();
+        UNIT_ASSERT_EQUAL(optionalKind, TTypeParser::ETypeKind::Optional);
+        parser.OpenOptional();
+        auto kind = parser.GetKind();
+        UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Primitive);
+        auto primitive = parser.GetPrimitive();
+        UNIT_ASSERT_EQUAL(primitive, EPrimitiveType::Uint32);
+
+        const auto& columnFamilies = tableDesc.GetColumnFamilies();
+        UNIT_ASSERT_VALUES_EQUAL(columnFamilies.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(columnFamilies[0].GetName(), "default");
+    }
+
+    Y_UNIT_TEST(UnknownFamilyTest) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableFamiliesTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                PRIMARY KEY (Key)
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(TwoSimilarFamiliesTest) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableFamiliesTest";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (),
+                FAMILY Family1 ()
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

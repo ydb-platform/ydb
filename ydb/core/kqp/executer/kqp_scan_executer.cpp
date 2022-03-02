@@ -53,16 +53,16 @@ public:
         YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
         YQL_ENSURE(Request.Snapshot.IsValid());
 
-        size_t resultsSize = Request.Transactions[0].Body.ResultsSize();
+        size_t resultsSize = Request.Transactions[0].Body->ResultsSize();
         YQL_ENSURE(resultsSize != 0);
 
-        bool streamResult = Request.Transactions[0].Body.GetResults(0).GetIsStream();
+        bool streamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
 
         if (streamResult) {
             YQL_ENSURE(resultsSize == 1);
         } else {
             for (size_t i = 1; i < resultsSize; ++i) {
-                YQL_ENSURE(Request.Transactions[0].Body.GetResults(i).GetIsStream() == streamResult);
+                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == streamResult);
             }
         }
     }
@@ -723,8 +723,8 @@ private:
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, &funcRegistry);
 
         auto& tx = Request.Transactions[0];
-        for (ui32 stageIdx = 0; stageIdx < tx.Body.StagesSize(); ++stageIdx) {
-            auto& stage = tx.Body.GetStages(stageIdx);
+        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+            auto& stage = tx.Body->GetStages(stageIdx);
             auto& stageInfo = TasksGraph.GetStageInfo(TStageId(0, stageIdx));
 
             LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
@@ -746,8 +746,8 @@ private:
             BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
         }
 
-        BuildKqpExecuterResults(tx.Body, Results);
-        BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, 0);
+        BuildKqpExecuterResults(*tx.Body, Results);
+        BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, 0);
 
         TIssue validateIssue;
         if (!ValidateTasks(TasksGraph, EExecType::Scan, AppData()->EnableKqpSpilling, validateIssue)) {
@@ -953,7 +953,7 @@ private:
 
             if (Request.StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
                 const auto& tx = Request.Transactions[0].Body;
-                auto planWithStats = AddExecStatsToTxPlan(tx.GetPlan(), response.GetResult().GetStats());
+                auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
                 response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
             }
         }

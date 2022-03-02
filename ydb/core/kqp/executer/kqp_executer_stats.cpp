@@ -46,7 +46,7 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStat
     auto& task = tasksGraph.GetTask(taskStats.GetTaskId());
     auto& stageId = task.StageId;
     auto& stageInfo = tasksGraph.GetStageInfo(stageId);
-    auto& stageProto = stageInfo.Meta.Tx.Body.GetStages(stageId.StageId);
+    auto& stageProto = stageInfo.Meta.Tx.Body->GetStages(stageId.StageId);
 
 
     for (auto& stage : *execStats.MutableStages()) {

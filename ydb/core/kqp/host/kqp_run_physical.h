@@ -40,7 +40,7 @@ public:
     void Rewind() override;
 
 protected:
-    virtual TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx) = 0;
+    virtual TStatus DoExecute(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit, NYql::TExprContext& ctx) = 0;
     virtual TStatus DoRollback() = 0;
 
     virtual bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, NYql::TExprContext& ctx, bool commit) = 0;
@@ -51,7 +51,7 @@ protected:
     void ClearTx();
 
 private:
-    TStatus Execute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx);
+    TStatus Execute(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit, NYql::TExprContext& ctx);
     TStatus Rollback();
 
     bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx);

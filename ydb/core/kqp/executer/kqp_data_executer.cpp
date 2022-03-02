@@ -1259,8 +1259,8 @@ private:
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
 
-            for (ui32 stageIdx = 0; stageIdx < tx.Body.StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body.GetStages(stageIdx);
+            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+                auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
@@ -1297,8 +1297,8 @@ private:
                 BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, /* enableSpilling */ false);
             }
 
-            BuildKqpExecuterResults(tx.Body, Results);
-            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
+            BuildKqpExecuterResults(*tx.Body, Results);
+            BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, txIdx);
         }
 
         TIssue validateIssue;
@@ -1644,7 +1644,7 @@ private:
             if (Request.StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                     const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx.GetPlan(), response.GetResult().GetStats());
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
                     response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
                 }
             }

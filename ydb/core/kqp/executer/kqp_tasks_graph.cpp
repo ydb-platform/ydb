@@ -38,8 +38,8 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
     for (size_t txIdx = 0; txIdx < txs.size(); ++txIdx) {
         auto& tx = txs[txIdx];
 
-        for (ui32 stageIdx = 0; stageIdx < tx.Body.StagesSize(); ++stageIdx) {
-            const auto& stage = tx.Body.GetStages(stageIdx);
+        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+            const auto& stage = tx.Body->GetStages(stageIdx);
             NYql::NDq::TStageId stageId(txIdx, stageIdx);
 
             TStageInfoMeta meta(tx);
@@ -295,9 +295,9 @@ bool IsCrossShardChannel(TKqpTasksGraph& tasksGraph, const TChannel& channel) {
 
 const NKqpProto::TKqpPhyStage& GetStage(const TStageInfo& stageInfo) {
     auto& txBody = stageInfo.Meta.Tx.Body;
-    YQL_ENSURE(stageInfo.Id.StageId < txBody.StagesSize());
+    YQL_ENSURE(stageInfo.Id.StageId < txBody->StagesSize());
 
-    return txBody.GetStages(stageInfo.Id.StageId);
+    return txBody->GetStages(stageInfo.Id.StageId);
 }
 
 void TShardKeyRanges::AddPoint(TSerializedCellVec&& point) {

@@ -152,7 +152,7 @@ protected:
 
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
-                LOG_D("Executing physical tx, type: " << (ui32) tx.Body.GetType() << ", stages: " << tx.Body.StagesSize());
+                LOG_D("Executing physical tx, type: " << (ui32) tx.Body->GetType() << ", stages: " << tx.Body->StagesSize());
             }
         }
 

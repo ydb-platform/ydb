@@ -60,11 +60,11 @@ public:
     };
 
     struct TPhysicalTxData : private TMoveOnly {
-        const NKqpProto::TKqpPhyTx& Body;
+        std::shared_ptr<const NKqpProto::TKqpPhyTx> Body;
         TKqpParamsMap Params;
 
-        TPhysicalTxData(const NKqpProto::TKqpPhyTx& body, TKqpParamsMap&& params)
-            : Body(body)
+        TPhysicalTxData(std::shared_ptr<const NKqpProto::TKqpPhyTx> body, TKqpParamsMap&& params)
+            : Body(std::move(body))
             , Params(std::move(params)) {}
     };
 

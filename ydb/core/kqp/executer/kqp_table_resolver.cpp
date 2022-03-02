@@ -224,7 +224,7 @@ private:
     // TODO: Get rid of ResolveTables & TableKeys, get table information from phy tx proto.
     void ResolveTables() {
         for (auto& tx : Transactions) {
-            for (auto& stage : tx.Body.GetStages()) {
+            for (auto& stage : tx.Body->GetStages()) {
                 for (auto& op : stage.GetTableOps()) {
                     auto& table = TableKeys.GetOrAddTable(MakeTableId(op.GetTable()), op.GetTable().GetPath());
                     for (auto& column : op.GetColumns()) {

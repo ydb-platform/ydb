@@ -18,12 +18,12 @@ public:
         : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {}
 
 protected:
-    TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext&) final {
+    TStatus DoExecute(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit, NYql::TExprContext&) final {
         YQL_ENSURE(tx);
         YQL_ENSURE(!commit);
 
         IKqpGateway::TExecPhysicalRequest request;
-        request.Transactions.emplace_back(*tx, PrepareParameters(*tx));
+        request.Transactions.emplace_back(tx, PrepareParameters(*tx));
 
         request.RlPath = TransformCtx->QueryCtx->RlPath;
         request.Timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();

@@ -137,11 +137,11 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     if (request.Locks.empty()) {
         bool literal = true;
         for (const auto& tx : request.Transactions) {
-            if (tx.Body.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
+            if (tx.Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
                 literal = false;
                 break;
             }
-            for (const auto& stage : tx.Body.GetStages()) {
+            for (const auto& stage : tx.Body->GetStages()) {
                 if (stage.InputsSize() != 0) {
                     literal = false;  // allow only independent stages
                     break;
@@ -159,12 +159,12 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     TMaybe<NKqpProto::TKqpPhyTx::EType> txsType;
     for (auto& tx : request.Transactions) {
         if (txsType) {
-            YQL_ENSURE(*txsType == tx.Body.GetType(), "Mixed physical tx types in executer.");
+            YQL_ENSURE(*txsType == tx.Body->GetType(), "Mixed physical tx types in executer.");
             YQL_ENSURE(*txsType == NKqpProto::TKqpPhyTx::TYPE_DATA, "Cannot execute multiple non-data physical txs.");
         } else {
-            txsType = tx.Body.GetType();
+            txsType = tx.Body->GetType();
 
-            switch (tx.Body.GetType()) {
+            switch (tx.Body->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
                     data = true;
@@ -175,7 +175,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                     break;
 
                 default:
-                    YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)tx.Body.GetType());
+                    YQL_ENSURE(false, "Unsupported physical tx type: " << (ui32)tx.Body->GetType());
             }
         }
     }

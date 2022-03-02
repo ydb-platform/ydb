@@ -43,12 +43,12 @@ public:
         auto& query = *TransformCtx->QueryCtx->PreparingQuery->MutablePhysicalQuery();
         TxResults.resize(query.TransactionsSize());
         while (CurrentTxIndex < query.TransactionsSize()) {
-            const auto& tx = query.GetTransactions(CurrentTxIndex);
-            auto params = PrepareParameters(tx);
+            auto tx = std::make_shared<NKqpProto::TKqpPhyTx>(query.GetTransactions(CurrentTxIndex));
+            auto params = PrepareParameters(*tx);
 
-            if (pure(tx) && params) {
+            if (pure(*tx) && params) {
                 IKqpGateway::TExecPhysicalRequest request;
-                request.Transactions.emplace_back(tx, std::move(*params));
+                request.Transactions.emplace_back(std::move(tx), std::move(*params));
 
                 ExecuteFuture = Gateway->ExecutePure(std::move(request), {});
 

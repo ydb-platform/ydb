@@ -65,7 +65,7 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoTransform(TExpr
                 // last transaction and no effects (RO-query)
                 commit = true;
             }
-            status = Execute(tx.get(), commit, ctx);
+            status = Execute(std::move(tx), commit, ctx);
         }
     }
 
@@ -148,8 +148,8 @@ void TKqpExecutePhysicalTransformerBase::Rewind() {
     TransformState->TxResults.clear();
 }
 
-IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Execute(const NKqpProto::TKqpPhyTx* tx, bool commit,
-    NYql::TExprContext& ctx)
+IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Execute(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx,
+        bool commit, NYql::TExprContext& ctx)
 {
     ExecuteFlags = TKqpExecuteFlags();
 
@@ -163,7 +163,7 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Execute(const NKq
         ExecuteFlags |= TKqpExecuteFlag::Commit;
     }
 
-    return DoExecute(tx, commit, ctx);
+    return DoExecute(std::move(tx), commit, ctx);
 }
 
 IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::Rollback() {

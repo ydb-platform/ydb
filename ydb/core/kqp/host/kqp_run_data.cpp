@@ -17,7 +17,7 @@ public:
         : TKqpExecutePhysicalTransformerBase(gateway, cluster, txState, transformCtx) {}
 
 protected:
-    TStatus DoExecute(const NKqpProto::TKqpPhyTx* tx, bool commit, NYql::TExprContext& ctx) final {
+    TStatus DoExecute(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit, NYql::TExprContext& ctx) final {
         auto& txState = TxState->Tx();
         auto request = PrepareRequest();
 
@@ -40,7 +40,7 @@ protected:
                     YQL_ENSURE(false, "Unexpected physical tx type in data query: " << (ui32)tx->GetType());
             }
 
-            request.Transactions.emplace_back(*tx, PrepareParameters(*tx));
+            request.Transactions.emplace_back(tx, PrepareParameters(*tx));
         } else {
             YQL_ENSURE(commit);
             if (txState.DeferredEffects.Empty() && !txState.Locks.HasLocks()) {
@@ -54,8 +54,7 @@ protected:
             for (const auto& effect : txState.DeferredEffects) {
                 YQL_ENSURE(!effect.Node);
                 YQL_ENSURE(effect.PhysicalTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_DATA);
-                // TODO pass shared_ptr
-                request.Transactions.emplace_back(*effect.PhysicalTx, GetParamsRefMap(effect.Params));
+                request.Transactions.emplace_back(effect.PhysicalTx, GetParamsRefMap(effect.Params));
             }
 
             if (!txState.DeferredEffects.Empty()) {

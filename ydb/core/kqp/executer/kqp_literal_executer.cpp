@@ -129,8 +129,8 @@ private:
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
 
-            for (ui32 stageIdx = 0; stageIdx < tx.Body.StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body.GetStages(stageIdx);
+            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+                auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
                 LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
 
@@ -140,8 +140,8 @@ private:
                 TasksGraph.AddTask(stageInfo);
             }
 
-            BuildKqpExecuterResults(tx.Body, Results);
-            BuildKqpTaskGraphResultChannels(TasksGraph, tx.Body, txIdx);
+            BuildKqpExecuterResults(*tx.Body, Results);
+            BuildKqpTaskGraphResultChannels(TasksGraph, *tx.Body, txIdx);
         }
 
         if (TerminateIfTimeout()) {
@@ -310,7 +310,7 @@ private:
             if (Y_UNLIKELY(Request.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                     const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx.GetPlan(), response.GetResult().GetStats());
+                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
                     response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
                 }
             }

@@ -1632,11 +1632,11 @@ public:
 
         auto containOnlyPureStages = [](const auto& request) {
             for (const auto& tx : request.Transactions) {
-                if (tx.Body.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
+                if (tx.Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
                     return false;
                 }
 
-                for (const auto& stage : tx.Body.GetStages()) {
+                for (const auto& stage : tx.Body->GetStages()) {
                     if (stage.InputsSize() != 0) {
                         return false;
                     }

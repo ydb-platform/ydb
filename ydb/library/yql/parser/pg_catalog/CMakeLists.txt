@@ -24,36 +24,36 @@ target_link_libraries(yql-parser-pg_catalog.global PUBLIC
   library-cpp-resource
 )
 target_sources(yql-parser-pg_catalog.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/9bfc0ed24fcfb8e096ec43a8430d7185.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/03528211297024b3dbd6ad7bd8089f55.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/4bdffcfe6e5c28b12f6f249d751c6cc5.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/13089390d5c6426a6f6417928fe4445c.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/99bdd9e510834dd355c2457fcccc53d5.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f1a4bc0ed0162412cffb7ad89af053b9.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/1ecd65c896f36a3990d870644a6da9c8.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/46b25697572e7e60703079b71cd18295.cpp
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/9bfc0ed24fcfb8e096ec43a8430d7185.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/99bdd9e510834dd355c2457fcccc53d5.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/pg_operator.dat
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_operator.dat
   KEYS
   pg_operator.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/03528211297024b3dbd6ad7bd8089f55.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f1a4bc0ed0162412cffb7ad89af053b9.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/pg_proc.dat
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_proc.dat
   KEYS
   pg_proc.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/4bdffcfe6e5c28b12f6f249d751c6cc5.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/1ecd65c896f36a3990d870644a6da9c8.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/pg_type.dat
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_type.dat
   KEYS
   pg_type.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/13089390d5c6426a6f6417928fe4445c.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/46b25697572e7e60703079b71cd18295.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/pg_cast.dat
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_cast.dat
   KEYS
   pg_cast.dat
 )

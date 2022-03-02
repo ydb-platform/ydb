@@ -4,9 +4,9 @@ LIBRARY(postgres)
 
 OWNER(g:cpp-contrib)
 
-VERSION(13.5)
+VERSION(13.6)
 
-ORIGINAL_SOURCE(mirror://postgresql/source/v13.5/postgresql-13.5.tar.bz2)
+ORIGINAL_SOURCE(mirror://postgresql/source/v13.6/postgresql-13.6.tar.bz2)
 
 LICENSE(
     Apache-2.0 AND

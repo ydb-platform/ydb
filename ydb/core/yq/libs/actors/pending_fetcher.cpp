@@ -269,14 +269,20 @@ private:
         Client
             .GetTask(std::move(request))
             .Subscribe([actorSystem, selfId](const NThreading::TFuture<TGetTaskResult>& future) {
-                const auto& wrappedResult = future.GetValue();
-                if (wrappedResult.IsResultSet()) {
+                try {
+                    const auto& wrappedResult = future.GetValue();
+                    if (wrappedResult.IsResultSet()) {
+                        actorSystem->Send(selfId, new TEvPrivate::TEvGetTaskInternalResponse(
+                            wrappedResult.IsSuccess(), wrappedResult.GetIssues(), wrappedResult.GetResult())
+                        );
+                    } else {
+                        actorSystem->Send(selfId, new TEvPrivate::TEvGetTaskInternalResponse(
+                            false, TIssues{{TIssue{"grpc private api result is not set for get task call"}}}, Yq::Private::GetTaskResult{})
+                        );
+                    }
+                } catch (...) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvGetTaskInternalResponse(
-                        wrappedResult.IsSuccess(), wrappedResult.GetIssues(), wrappedResult.GetResult())
-                    );
-                } else {
-                    actorSystem->Send(selfId, new TEvPrivate::TEvGetTaskInternalResponse(
-                        false, TIssues{{TIssue{"grpc private api result is not set for get task call"}}}, Yq::Private::GetTaskResult{})
+                        false, TIssues{{TIssue{CurrentExceptionMessage()}}}, Yq::Private::GetTaskResult{})
                     );
                 }
             });

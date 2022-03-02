@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
+#include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NKikimr {
@@ -283,6 +284,9 @@ private:
     NYql::NLog::EComponent Component;
     NYql::NLog::ELevel Level;
 };
+
+TMaybe<NYql::NDq::TMkqlValueRef> GetParamValue(bool ensure, NYql::TKikimrQueryContext& queryCtx,
+    const TVector<TVector<NKikimrMiniKQL::TResult>>& txResults, const NKqpProto::TKqpPhyParamBinding& paramBinding);
 
 } // namespace NKqp
 } // namespace NKikimr

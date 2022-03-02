@@ -19,7 +19,7 @@ void WriteKqlPlan(NJsonWriter::TBuf& writer, const NYql::TExprNode::TPtr& query)
  * table accesses is stored in top-level TKqpPhyQuery.QueryPlan.
  */
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query,
-    THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& cluster,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& cluster,
     const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config);
 
 /*

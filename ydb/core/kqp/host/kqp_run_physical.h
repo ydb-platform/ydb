@@ -46,8 +46,6 @@ protected:
     virtual bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, NYql::TExprContext& ctx, bool commit) = 0;
 
 protected:
-    NYql::NDq::TMkqlValueRef GetParamValue(const NKqpProto::TKqpPhyParamBinding& paramBinding);
-
     TKqpParamsMap PrepareParameters(const NKqpProto::TKqpPhyTx& tx);
 
     void ClearTx();

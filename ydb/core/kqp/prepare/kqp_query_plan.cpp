@@ -53,7 +53,7 @@ struct TSerializerCtx {
     TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
         const TKikimrConfiguration::TPtr config,
-        THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> pureTxResults)
+        TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults)
         : ExprCtx(exprCtx)
         , Cluster(cluster)
         , TablesData(tablesData)
@@ -73,7 +73,7 @@ struct TSerializerCtx {
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
     const TKikimrConfiguration::TPtr Config;
-    THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> PureTxResults;
+    TVector<TVector<NKikimrMiniKQL::TResult>> PureTxResults;
 };
 
 TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
@@ -456,7 +456,7 @@ private:
     }
 
     TMaybe<TValue> GetResult(ui32 txId, ui32 resId) const {
-        if (SerializerCtx.PureTxResults.contains(txId) && resId < SerializerCtx.PureTxResults[txId].size()) {
+        if (txId < SerializerCtx.PureTxResults.size() && resId < SerializerCtx.PureTxResults[txId].size()) {
             auto result = TValue::Create(SerializerCtx.PureTxResults[txId][resId]);
             Y_ENSURE(result.HaveValue());
             return TMaybe<TValue>(result);
@@ -1377,7 +1377,7 @@ void WriteKqlPlan(NJsonWriter::TBuf& writer, const TExprNode::TPtr& query) {
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
-    THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& cluster,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& cluster,
     const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config)
 {
     TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, std::move(pureTxResults));
@@ -1409,7 +1409,7 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
         NJsonWriter::TBuf txWriter;
         txWriter.SetIndentSpaces(2);
         TxPlanSerializer txPlanSerializer(serializerCtx, txId, tx);
-        if (!serializerCtx.PureTxResults.contains(txId)) {
+        if (serializerCtx.PureTxResults.at(txId).empty()) {
             txPlanSerializer.Serialize();
             txPlanSerializer.WriteToJson(txWriter);
             txProto.SetPlan(txWriter.Str());

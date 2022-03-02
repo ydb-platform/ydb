@@ -1,5 +1,7 @@
 #include "kqp_run_physical.h"
 
+#include <ydb/core/kqp/common/kqp_transform.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -178,88 +180,11 @@ bool TKqpExecutePhysicalTransformerBase::AddDeferredEffect(std::shared_ptr<const
     return TxState->Tx().AddDeferredEffect(std::move(tx), std::move(params));
 }
 
-NDq::TMkqlValueRef TKqpExecutePhysicalTransformerBase::GetParamValue(
-    const NKqpProto::TKqpPhyParamBinding& paramBinding)
-{
-    switch (paramBinding.GetTypeCase()) {
-        case NKqpProto::TKqpPhyParamBinding::kExternalBinding: {
-            auto clientParam = TransformCtx->QueryCtx->Parameters.FindPtr(paramBinding.GetName());
-            YQL_ENSURE(clientParam, "Parameter not found: " << paramBinding.GetName());
-            return NDq::TMkqlValueRef(*clientParam);
-        }
-        case NKqpProto::TKqpPhyParamBinding::kTxResultBinding: {
-            auto& txResultBinding = paramBinding.GetTxResultBinding();
-            auto txIndex = txResultBinding.GetTxIndex();
-            auto resultIndex = txResultBinding.GetResultIndex();
-
-            auto& txResults = TransformState->TxResults;
-            YQL_ENSURE(txIndex < txResults.size());
-            YQL_ENSURE(resultIndex < txResults[txIndex].size());
-            return NDq::TMkqlValueRef(txResults[txIndex][resultIndex]);
-        }
-        case NKqpProto::TKqpPhyParamBinding::kInternalBinding: {
-            auto& internalBinding = paramBinding.GetInternalBinding();
-            auto& param = TransformCtx->QueryCtx->Parameters[paramBinding.GetName()];
-
-            switch (internalBinding.GetType()) {
-                case NKqpProto::TKqpPhyInternalBinding::PARAM_NOW:
-                    param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id);
-                    param.MutableValue()->SetUint64(TransformCtx->QueryCtx->GetCachedNow());
-                    break;
-                case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATE: {
-                    param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDate>::Id);
-                    ui64 date = TransformCtx->QueryCtx->GetCachedDate();
-                    YQL_ENSURE(date <= Max<ui32>());
-                    param.MutableValue()->SetUint32(static_cast<ui32>(date));
-                    break;
-                }
-                case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATETIME: {
-                    param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDatetime>::Id);
-                    ui64 datetime = TransformCtx->QueryCtx->GetCachedDatetime();
-                    YQL_ENSURE(datetime <= Max<ui32>());
-                    param.MutableValue()->SetUint32(static_cast<ui32>(datetime));
-                    break;
-                }
-                case NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_TIMESTAMP:
-                    param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TTimestamp>::Id);
-                    param.MutableValue()->SetUint64(TransformCtx->QueryCtx->GetCachedTimestamp());
-                    break;
-                case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_NUMBER:
-                    param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id);
-                    param.MutableValue()->SetUint64(TransformCtx->QueryCtx->GetCachedRandom<ui64>());
-                    break;
-                case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM:
-                    param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<double>::Id);
-                    param.MutableValue()->SetDouble(TransformCtx->QueryCtx->GetCachedRandom<double>());
-                    break;
-                case NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_UUID: {
-                    param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TUuid>::Id);
-                    auto uuid = TransformCtx->QueryCtx->GetCachedRandom<TGUID>();
-                    param.MutableValue()->SetBytes(uuid.dw, sizeof(TGUID));
-                    break;
-                }
-                default:
-                    YQL_ENSURE(false, "Unexpected internal parameter type: " << (ui32)internalBinding.GetType());
-            }
-
-            return NDq::TMkqlValueRef(param);
-        }
-        default:
-            YQL_ENSURE(false, "Unexpected parameter binding type: " << (ui32)paramBinding.GetTypeCase());
-    }
-}
-
 TKqpParamsMap TKqpExecutePhysicalTransformerBase::PrepareParameters(const NKqpProto::TKqpPhyTx& tx) {
     TKqpParamsMap paramsMap(TransformState);
     for (const auto& paramBinding : tx.GetParamBindings()) {
-        auto it = paramsMap.Values.emplace(paramBinding.GetName(), GetParamValue(paramBinding));
+        auto it = paramsMap.Values.emplace(paramBinding.GetName(),
+                *GetParamValue(/*ensure*/ true, *TransformCtx->QueryCtx, TransformState->TxResults, paramBinding));
         YQL_ENSURE(it.second);
     }
 
@@ -268,7 +193,8 @@ TKqpParamsMap TKqpExecutePhysicalTransformerBase::PrepareParameters(const NKqpPr
 
 void TKqpExecutePhysicalTransformerBase::PreserveParams(const NKqpProto::TKqpPhyTx& tx, TParamValueMap& paramsMap) {
     for (const auto& paramBinding : tx.GetParamBindings()) {
-        auto paramValueRef = GetParamValue(paramBinding);
+        auto paramValueRef = *GetParamValue(/*ensure*/ true, *TransformCtx->QueryCtx, TransformState->TxResults,
+                paramBinding);
 
         NKikimrMiniKQL::TParams param;
         param.MutableType()->CopyFrom(paramValueRef.GetType());

@@ -583,7 +583,9 @@ public:
                             bool shouldFallback = status != Ydb::StatusIds::CANCELLED
                                                && status != Ydb::StatusIds::ABORTED
                                                && status != Ydb::StatusIds::OVERLOADED
-                                               && status != Ydb::StatusIds::PRECONDITION_FAILED;
+                                               && status != Ydb::StatusIds::PRECONDITION_FAILED
+                                               && status != Ydb::StatusIds::UNAVAILABLE
+                                               && status != Ydb::StatusIds::UNDETERMINED;
                             if (shouldFallback) {
                                 QueryState->ForceNewEngineState = {};
                                 QueryState->NewEngineCompatibleQuery = false;

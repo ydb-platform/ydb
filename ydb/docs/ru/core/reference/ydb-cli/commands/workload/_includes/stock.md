@@ -82,6 +82,11 @@ CREATE TABLE `orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY
 `--threads <значение>` | `-t <значение>` | Количество параллельных потоков, создающих нагрузку. Значение по умолчанию: 10.
 `--quiet` | - | Выводит только итоговый результат теста.
 `--print-timestamp` | - | Печатать время вместе со статистикой каждого временного окна.
+`--client-timeout` | - | [Транспортный таймаут в миллисекундах](../../../../../best_practices/timeouts.md).
+`--operation-timeout` | - | [Таймаут на операцию в миллисекундах](../../../../../best_practices/timeouts.md).
+`--cancel-after` | - | [Таймаут отмены операции в миллисекундах](../../../../../best_practices/timeouts.md).
+`--window` | - | Длительность окна сбора статистики в секундах. Значение по умолчанию: 1.
+
 
 ## Нагрузка getCustomerHistory {#getCustomerHistory}
 

@@ -69,42 +69,42 @@ namespace Model
 
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline const Aws::Vector<Event>& GetEvents() const{ return m_events; }
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline bool EventsHasBeenSet() const { return m_eventsHasBeenSet; }
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline void SetEvents(const Aws::Vector<Event>& value) { m_eventsHasBeenSet = true; m_events = value; }
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline void SetEvents(Aws::Vector<Event>&& value) { m_eventsHasBeenSet = true; m_events = std::move(value); }
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline QueueConfigurationDeprecated& WithEvents(const Aws::Vector<Event>& value) { SetEvents(value); return *this;}
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline QueueConfigurationDeprecated& WithEvents(Aws::Vector<Event>&& value) { SetEvents(std::move(value)); return *this;}
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline QueueConfigurationDeprecated& AddEvents(const Event& value) { m_eventsHasBeenSet = true; m_events.push_back(value); return *this; }
 
     /**
-     * <p>A collection of bucket events for which to send notifications</p>
+     * <p>A collection of bucket events for which to send notifications.</p>
      */
     inline QueueConfigurationDeprecated& AddEvents(Event&& value) { m_eventsHasBeenSet = true; m_events.push_back(std::move(value)); return *this; }
 

@@ -217,40 +217,40 @@ namespace Model
 
 
     /**
-     * <p>Sets the maximum number of keys returned in the response. By default the API
-     * returns up to 1,000 key names. The response might contain fewer keys but will
-     * never contain more. If additional keys satisfy the search criteria, but were not
-     * returned because max-keys was exceeded, the response contains
+     * <p>Sets the maximum number of keys returned in the response. By default the
+     * action returns up to 1,000 key names. The response might contain fewer keys but
+     * will never contain more. If additional keys satisfy the search criteria, but
+     * were not returned because max-keys was exceeded, the response contains
      * &lt;isTruncated&gt;true&lt;/isTruncated&gt;. To return the additional keys, see
      * key-marker and version-id-marker.</p>
      */
     inline int GetMaxKeys() const{ return m_maxKeys; }
 
     /**
-     * <p>Sets the maximum number of keys returned in the response. By default the API
-     * returns up to 1,000 key names. The response might contain fewer keys but will
-     * never contain more. If additional keys satisfy the search criteria, but were not
-     * returned because max-keys was exceeded, the response contains
+     * <p>Sets the maximum number of keys returned in the response. By default the
+     * action returns up to 1,000 key names. The response might contain fewer keys but
+     * will never contain more. If additional keys satisfy the search criteria, but
+     * were not returned because max-keys was exceeded, the response contains
      * &lt;isTruncated&gt;true&lt;/isTruncated&gt;. To return the additional keys, see
      * key-marker and version-id-marker.</p>
      */
     inline bool MaxKeysHasBeenSet() const { return m_maxKeysHasBeenSet; }
 
     /**
-     * <p>Sets the maximum number of keys returned in the response. By default the API
-     * returns up to 1,000 key names. The response might contain fewer keys but will
-     * never contain more. If additional keys satisfy the search criteria, but were not
-     * returned because max-keys was exceeded, the response contains
+     * <p>Sets the maximum number of keys returned in the response. By default the
+     * action returns up to 1,000 key names. The response might contain fewer keys but
+     * will never contain more. If additional keys satisfy the search criteria, but
+     * were not returned because max-keys was exceeded, the response contains
      * &lt;isTruncated&gt;true&lt;/isTruncated&gt;. To return the additional keys, see
      * key-marker and version-id-marker.</p>
      */
     inline void SetMaxKeys(int value) { m_maxKeysHasBeenSet = true; m_maxKeys = value; }
 
     /**
-     * <p>Sets the maximum number of keys returned in the response. By default the API
-     * returns up to 1,000 key names. The response might contain fewer keys but will
-     * never contain more. If additional keys satisfy the search criteria, but were not
-     * returned because max-keys was exceeded, the response contains
+     * <p>Sets the maximum number of keys returned in the response. By default the
+     * action returns up to 1,000 key names. The response might contain fewer keys but
+     * will never contain more. If additional keys satisfy the search criteria, but
+     * were not returned because max-keys was exceeded, the response contains
      * &lt;isTruncated&gt;true&lt;/isTruncated&gt;. To return the additional keys, see
      * key-marker and version-id-marker.</p>
      */
@@ -372,56 +372,56 @@ namespace Model
 
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline const Aws::String& GetExpectedBucketOwner() const{ return m_expectedBucketOwner; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline bool ExpectedBucketOwnerHasBeenSet() const { return m_expectedBucketOwnerHasBeenSet; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const Aws::String& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = value; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(Aws::String&& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = std::move(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const char* value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner.assign(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline ListObjectVersionsRequest& WithExpectedBucketOwner(const Aws::String& value) { SetExpectedBucketOwner(value); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline ListObjectVersionsRequest& WithExpectedBucketOwner(Aws::String&& value) { SetExpectedBucketOwner(std::move(value)); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */

@@ -86,9 +86,9 @@ namespace Model
 
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -96,9 +96,9 @@ namespace Model
     inline const Aws::String& GetContentMD5() const{ return m_contentMD5; }
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -106,9 +106,9 @@ namespace Model
     inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; }
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -116,9 +116,9 @@ namespace Model
     inline void SetContentMD5(const Aws::String& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = value; }
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -126,9 +126,9 @@ namespace Model
     inline void SetContentMD5(Aws::String&& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = std::move(value); }
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -136,9 +136,9 @@ namespace Model
     inline void SetContentMD5(const char* value) { m_contentMD5HasBeenSet = true; m_contentMD5.assign(value); }
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -146,9 +146,9 @@ namespace Model
     inline PutBucketRequestPaymentRequest& WithContentMD5(const Aws::String& value) { SetContentMD5(value); return *this;}
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -156,9 +156,9 @@ namespace Model
     inline PutBucketRequestPaymentRequest& WithContentMD5(Aws::String&& value) { SetContentMD5(std::move(value)); return *this;}
 
     /**
-     * <p>&gt;The base64-encoded 128-bit MD5 digest of the data. You must use this
-     * header as a message integrity check to verify that the request body was not
-     * corrupted in transit. For more information, see <a
+     * <p>The base64-encoded 128-bit MD5 digest of the data. You must use this header
+     * as a message integrity check to verify that the request body was not corrupted
+     * in transit. For more information, see <a
      * href="http://www.ietf.org/rfc/rfc1864.txt">RFC 1864</a>.</p> <p>For requests
      * made using the AWS Command Line Interface (CLI) or AWS SDKs, this field is
      * calculated automatically.</p>
@@ -198,56 +198,56 @@ namespace Model
 
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline const Aws::String& GetExpectedBucketOwner() const{ return m_expectedBucketOwner; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline bool ExpectedBucketOwnerHasBeenSet() const { return m_expectedBucketOwnerHasBeenSet; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const Aws::String& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = value; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(Aws::String&& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = std::move(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const char* value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner.assign(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline PutBucketRequestPaymentRequest& WithExpectedBucketOwner(const Aws::String& value) { SetExpectedBucketOwner(value); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline PutBucketRequestPaymentRequest& WithExpectedBucketOwner(Aws::String&& value) { SetExpectedBucketOwner(std::move(value)); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */

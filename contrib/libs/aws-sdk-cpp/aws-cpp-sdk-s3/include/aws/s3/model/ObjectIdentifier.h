@@ -39,42 +39,74 @@ namespace Model
 
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline const Aws::String& GetKey() const{ return m_key; }
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline void SetKey(Aws::String&& value) { m_keyHasBeenSet = true; m_key = std::move(value); }
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline void SetKey(const char* value) { m_keyHasBeenSet = true; m_key.assign(value); }
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline ObjectIdentifier& WithKey(const Aws::String& value) { SetKey(value); return *this;}
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline ObjectIdentifier& WithKey(Aws::String&& value) { SetKey(std::move(value)); return *this;}
 
     /**
-     * <p>Key name of the object to delete.</p>
+     * <p>Key name of the object.</p>  <p>Replacement must be made for
+     * object keys containing special characters (such as carriage returns) when using
+     * XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline ObjectIdentifier& WithKey(const char* value) { SetKey(value); return *this;}
 

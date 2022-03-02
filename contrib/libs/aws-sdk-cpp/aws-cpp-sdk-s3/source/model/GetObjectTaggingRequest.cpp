@@ -21,6 +21,8 @@ GetObjectTaggingRequest::GetObjectTaggingRequest() :
     m_keyHasBeenSet(false),
     m_versionIdHasBeenSet(false),
     m_expectedBucketOwnerHasBeenSet(false),
+    m_requestPayer(RequestPayer::NOT_SET),
+    m_requestPayerHasBeenSet(false),
     m_customizedAccessLogTagHasBeenSet(false)
 {
 }
@@ -68,6 +70,11 @@ Aws::Http::HeaderValueCollection GetObjectTaggingRequest::GetRequestSpecificHead
     ss << m_expectedBucketOwner;
     headers.emplace("x-amz-expected-bucket-owner",  ss.str());
     ss.str("");
+  }
+
+  if(m_requestPayerHasBeenSet)
+  {
+    headers.emplace("x-amz-request-payer", RequestPayerMapper::GetNameForRequestPayer(m_requestPayer));
   }
 
   return headers;

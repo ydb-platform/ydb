@@ -20,6 +20,13 @@ namespace Aws
 
     namespace S3
     {
+        namespace ARNService
+        {
+            static const char S3[] = "s3";
+            static const char S3_OUTPOSTS[] = "s3-outposts";
+            static const char S3_OBJECT_LAMBDA[] = "s3-object-lambda";
+        }
+
         namespace ARNResourceType
         {
             static const char ACCESSPOINT[] = "accesspoint";

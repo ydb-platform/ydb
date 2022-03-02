@@ -65,6 +65,11 @@ namespace Aws
             Aws::Utils::Crypto::SetMD5Factory(options.cryptoOptions.md5Factory_create_fn());
         }
 
+        if(options.cryptoOptions.sha1Factory_create_fn)
+        {
+            Aws::Utils::Crypto::SetSha1Factory(options.cryptoOptions.sha1Factory_create_fn());
+        }
+
         if(options.cryptoOptions.sha256Factory_create_fn)
         {
             Aws::Utils::Crypto::SetSha256Factory(options.cryptoOptions.sha256Factory_create_fn());

@@ -47,7 +47,7 @@ class _DictSAXHandler(object):
                  postprocessor=None,
                  dict_constructor=OrderedDict,
                  strip_whitespace=True,
-                 namespace_separator=':',
+                 namespace_separator='|',
                  namespaces=None,
                  force_list=None):
         self.path = []
@@ -185,7 +185,7 @@ class _DictSAXHandler(object):
 
 
 def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
-          namespace_separator=':', disable_entities=True, **kwargs):
+          namespace_separator='|', disable_entities=True, **kwargs):
     """Parse the given XML input and convert it into a dictionary.
 
     `xml_input` can either be a `string` or a file-like object.
@@ -328,7 +328,7 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
     return handler.item
 
 
-def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
+def _process_namespace(name, namespaces, ns_sep='|', attr_prefix='@'):
     if not namespaces:
         return name
     try:
@@ -339,7 +339,7 @@ def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
         ns_res = namespaces.get(ns.strip(attr_prefix))
         name = '{}{}{}{}'.format(
             attr_prefix if ns.startswith(attr_prefix) else '',
-            ns_res, ns_sep, name) if ns_res else name
+            ns_res, ':', name) if ns_res else name
     return name
 
 
@@ -351,7 +351,7 @@ def _emit(key, value, content_handler,
           pretty=False,
           newl='\n',
           indent='\t',
-          namespace_separator=':',
+          namespace_separator='|',
           namespaces=None,
           full_document=True):
     key = _process_namespace(key, namespaces, namespace_separator, attr_prefix)

@@ -225,8 +225,8 @@ Aws::Http::HeaderValueCollection CreateMultipartUploadRequest::GetRequestSpecifi
 
   if(m_bucketKeyEnabledHasBeenSet)
   {
-    ss << m_bucketKeyEnabled;
-    headers.emplace("x-amz-server-side-encryption-bucket-key-enabled",  ss.str());
+    ss << std::boolalpha << m_bucketKeyEnabled;
+    headers.emplace("x-amz-server-side-encryption-bucket-key-enabled", ss.str());
     ss.str("");
   }
 
@@ -249,7 +249,7 @@ Aws::Http::HeaderValueCollection CreateMultipartUploadRequest::GetRequestSpecifi
 
   if(m_objectLockRetainUntilDateHasBeenSet)
   {
-    headers.emplace("x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(DateFormat::RFC822));
+    headers.emplace("x-amz-object-lock-retain-until-date", m_objectLockRetainUntilDate.ToGmtString(DateFormat::ISO_8601));
   }
 
   if(m_objectLockLegalHoldStatusHasBeenSet)

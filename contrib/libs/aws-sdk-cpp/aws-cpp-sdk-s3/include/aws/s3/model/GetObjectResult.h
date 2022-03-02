@@ -169,70 +169,70 @@ namespace Model
 
 
     /**
-     * <p>Provides information about object restoration operation and expiration time
-     * of the restored object copy.</p>
+     * <p>Provides information about object restoration action and expiration time of
+     * the restored object copy.</p>
      */
     inline const Aws::String& GetRestore() const{ return m_restore; }
 
     /**
-     * <p>Provides information about object restoration operation and expiration time
-     * of the restored object copy.</p>
+     * <p>Provides information about object restoration action and expiration time of
+     * the restored object copy.</p>
      */
     inline void SetRestore(const Aws::String& value) { m_restore = value; }
 
     /**
-     * <p>Provides information about object restoration operation and expiration time
-     * of the restored object copy.</p>
+     * <p>Provides information about object restoration action and expiration time of
+     * the restored object copy.</p>
      */
     inline void SetRestore(Aws::String&& value) { m_restore = std::move(value); }
 
     /**
-     * <p>Provides information about object restoration operation and expiration time
-     * of the restored object copy.</p>
+     * <p>Provides information about object restoration action and expiration time of
+     * the restored object copy.</p>
      */
     inline void SetRestore(const char* value) { m_restore.assign(value); }
 
     /**
-     * <p>Provides information about object restoration operation and expiration time
-     * of the restored object copy.</p>
+     * <p>Provides information about object restoration action and expiration time of
+     * the restored object copy.</p>
      */
     inline GetObjectResult& WithRestore(const Aws::String& value) { SetRestore(value); return *this;}
 
     /**
-     * <p>Provides information about object restoration operation and expiration time
-     * of the restored object copy.</p>
+     * <p>Provides information about object restoration action and expiration time of
+     * the restored object copy.</p>
      */
     inline GetObjectResult& WithRestore(Aws::String&& value) { SetRestore(std::move(value)); return *this;}
 
     /**
-     * <p>Provides information about object restoration operation and expiration time
-     * of the restored object copy.</p>
+     * <p>Provides information about object restoration action and expiration time of
+     * the restored object copy.</p>
      */
     inline GetObjectResult& WithRestore(const char* value) { SetRestore(value); return *this;}
 
 
     /**
-     * <p>Last modified date of the object</p>
+     * <p>Creation date of the object.</p>
      */
     inline const Aws::Utils::DateTime& GetLastModified() const{ return m_lastModified; }
 
     /**
-     * <p>Last modified date of the object</p>
+     * <p>Creation date of the object.</p>
      */
     inline void SetLastModified(const Aws::Utils::DateTime& value) { m_lastModified = value; }
 
     /**
-     * <p>Last modified date of the object</p>
+     * <p>Creation date of the object.</p>
      */
     inline void SetLastModified(Aws::Utils::DateTime&& value) { m_lastModified = std::move(value); }
 
     /**
-     * <p>Last modified date of the object</p>
+     * <p>Creation date of the object.</p>
      */
     inline GetObjectResult& WithLastModified(const Aws::Utils::DateTime& value) { SetLastModified(value); return *this;}
 
     /**
-     * <p>Last modified date of the object</p>
+     * <p>Creation date of the object.</p>
      */
     inline GetObjectResult& WithLastModified(Aws::Utils::DateTime&& value) { SetLastModified(std::move(value)); return *this;}
 

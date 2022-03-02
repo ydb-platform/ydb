@@ -50,8 +50,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
@@ -61,8 +60,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
 
@@ -72,8 +70,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
@@ -83,8 +80,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
@@ -94,8 +90,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
@@ -105,8 +100,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline PutBucketEncryptionRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
@@ -116,8 +110,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline PutBucketEncryptionRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
@@ -127,8 +120,7 @@ namespace Model
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
      * <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
-     * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
-     * Developer Guide</i>.</p>
+     * S3 Default Bucket Encryption</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline PutBucketEncryptionRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
@@ -210,56 +202,56 @@ namespace Model
 
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline const Aws::String& GetExpectedBucketOwner() const{ return m_expectedBucketOwner; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline bool ExpectedBucketOwnerHasBeenSet() const { return m_expectedBucketOwnerHasBeenSet; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const Aws::String& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = value; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(Aws::String&& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = std::move(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const char* value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner.assign(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline PutBucketEncryptionRequest& WithExpectedBucketOwner(const Aws::String& value) { SetExpectedBucketOwner(value); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline PutBucketEncryptionRequest& WithExpectedBucketOwner(Aws::String&& value) { SetExpectedBucketOwner(std::move(value)); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */

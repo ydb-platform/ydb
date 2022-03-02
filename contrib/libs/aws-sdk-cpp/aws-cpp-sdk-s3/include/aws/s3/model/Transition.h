@@ -27,8 +27,8 @@ namespace Model
    * <p>Specifies when an object transitions to a specified storage class. For more
    * information about Amazon S3 lifecycle configuration rules, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/lifecycle-transition-general-considerations.html">Transitioning
-   * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon Simple Storage Service
-   * Developer Guide</i>.</p><p><h3>See Also:</h3>   <a
+   * Objects Using Amazon S3 Lifecycle</a> in the <i>Amazon S3 User
+   * Guide</i>.</p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Transition">AWS API
    * Reference</a></p>
    */

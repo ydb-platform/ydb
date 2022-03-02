@@ -10,7 +10,7 @@
 
 using namespace Aws::Utils::Crypto;
 
-Sha256::Sha256() : 
+Sha256::Sha256() :
     m_hashImpl(CreateSha256Implementation())
 {
 }

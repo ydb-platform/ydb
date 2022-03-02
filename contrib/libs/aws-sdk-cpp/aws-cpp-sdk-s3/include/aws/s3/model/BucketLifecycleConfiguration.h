@@ -27,8 +27,8 @@ namespace Model
    * <p>Specifies the lifecycle configuration for objects in an Amazon S3 bucket. For
    * more information, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html">Object
-   * Lifecycle Management</a> in the <i>Amazon Simple Storage Service Developer
-   * Guide</i>.</p><p><h3>See Also:</h3>   <a
+   * Lifecycle Management</a> in the <i>Amazon S3 User Guide</i>.</p><p><h3>See
+   * Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/BucketLifecycleConfiguration">AWS
    * API Reference</a></p>
    */

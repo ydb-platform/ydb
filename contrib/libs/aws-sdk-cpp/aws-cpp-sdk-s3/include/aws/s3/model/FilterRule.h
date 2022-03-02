@@ -44,8 +44,7 @@ namespace Model
      * the filtering rule applies. The maximum length is 1,024 characters. Overlapping
      * prefixes and suffixes are not supported. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring
-     * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * Event Notifications</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline const FilterRuleName& GetName() const{ return m_name; }
 
@@ -54,8 +53,7 @@ namespace Model
      * the filtering rule applies. The maximum length is 1,024 characters. Overlapping
      * prefixes and suffixes are not supported. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring
-     * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * Event Notifications</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline bool NameHasBeenSet() const { return m_nameHasBeenSet; }
 
@@ -64,8 +62,7 @@ namespace Model
      * the filtering rule applies. The maximum length is 1,024 characters. Overlapping
      * prefixes and suffixes are not supported. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring
-     * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * Event Notifications</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetName(const FilterRuleName& value) { m_nameHasBeenSet = true; m_name = value; }
 
@@ -74,8 +71,7 @@ namespace Model
      * the filtering rule applies. The maximum length is 1,024 characters. Overlapping
      * prefixes and suffixes are not supported. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring
-     * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * Event Notifications</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetName(FilterRuleName&& value) { m_nameHasBeenSet = true; m_name = std::move(value); }
 
@@ -84,8 +80,7 @@ namespace Model
      * the filtering rule applies. The maximum length is 1,024 characters. Overlapping
      * prefixes and suffixes are not supported. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring
-     * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * Event Notifications</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline FilterRule& WithName(const FilterRuleName& value) { SetName(value); return *this;}
 
@@ -94,8 +89,7 @@ namespace Model
      * the filtering rule applies. The maximum length is 1,024 characters. Overlapping
      * prefixes and suffixes are not supported. For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring
-     * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * Event Notifications</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline FilterRule& WithName(FilterRuleName&& value) { SetName(std::move(value)); return *this;}
 

@@ -132,11 +132,13 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_extension_type_lists.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_key_share.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_psk_key_exchange_modes.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_quic_transport_params.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_alpn.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_certificate_status.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_key_share.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_max_fragment_length.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_psk.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_renegotiation_info.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_sct_list.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/tls/extensions/s2n_server_server_name.c

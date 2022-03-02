@@ -1,0 +1,162 @@
+From b9f4e5f91e1821dbffe3db27c1dd6b6e76f4cbec Mon Sep 17 00:00:00 2001
+From: Sebastian Pipping <sebastian@pipping.org>
+Date: Sun, 27 Feb 2022 02:07:55 +0100
+Subject: [PATCH] Switch namespace separator from colon to pipe
+
+---
+ README.md               | 12 ++++++------
+ tests/test_dicttoxml.py | 10 +++++-----
+ tests/test_xmltodict.py | 16 ++++++++--------
+ xmltodict.py            | 10 +++++-----
+ 4 files changed, 24 insertions(+), 24 deletions(-)
+
+diff --git a/README.md b/README.md
+index ab63401..9309837 100644
+--- contrib/python/xmltodict/README.md
++++ contrib/python/xmltodict/README.md
+@@ -48,10 +48,10 @@ By default, `xmltodict` does no XML namespace processing (it just treats namespa
+ ... </root>
+ ... """
+ >>> xmltodict.parse(xml, process_namespaces=True) == {
+-...     'http://defaultns.com/:root': {
+-...         'http://defaultns.com/:x': '1',
+-...         'http://a.com/:y': '2',
+-...         'http://b.com/:z': '3',
++...     'http://defaultns.com/|root': {
++...         'http://defaultns.com/|x': '1',
++...         'http://a.com/|y': '2',
++...         'http://b.com/|z': '3',
+ ...     }
+ ... }
+ True
+@@ -67,8 +67,8 @@ It also lets you collapse certain namespaces to shorthand prefixes, or skip them
+ >>> xmltodict.parse(xml, process_namespaces=True, namespaces=namespaces) == {
+ ...     'root': {
+ ...         'x': '1',
+-...         'ns_a:y': '2',
+-...         'http://b.com/:z': '3',
++...         'ns_a|y': '2',
++...         'http://b.com/|z': '3',
+ ...     },
+ ... }
+ True
+diff --git a/tests/test_dicttoxml.py b/tests/test_dicttoxml.py
+index 7fc2171..dd74989 100644
+--- contrib/python/xmltodict/tests/test_dicttoxml.py
++++ contrib/python/xmltodict/tests/test_dicttoxml.py
+@@ -178,18 +178,18 @@ def test_short_empty_elements(self):
+ 
+     def test_namespace_support(self):
+         obj = OrderedDict((
+-            ('http://defaultns.com/:root', OrderedDict((
++            ('http://defaultns.com/|root', OrderedDict((
+                 ('@xmlns', OrderedDict((
+                     ('', 'http://defaultns.com/'),
+                     ('a', 'http://a.com/'),
+                     ('b', 'http://b.com/'),
+                 ))),
+-                ('http://defaultns.com/:x', OrderedDict((
+-                    ('@http://a.com/:attr', 'val'),
++                ('http://defaultns.com/|x', OrderedDict((
++                    ('@http://a.com/|attr', 'val'),
+                     ('#text', '1'),
+                 ))),
+-                ('http://a.com/:y', '2'),
+-                ('http://b.com/:z', '3'),
++                ('http://a.com/|y', '2'),
++                ('http://b.com/|z', '3'),
+             ))),
+         ))
+         ns = {
+diff --git a/tests/test_xmltodict.py b/tests/test_xmltodict.py
+index 0455d96..762768a 100644
+--- contrib/python/xmltodict/tests/test_xmltodict.py
++++ contrib/python/xmltodict/tests/test_xmltodict.py
+@@ -190,18 +190,18 @@ def test_namespace_support(self):
+         </root>
+         """
+         d = {
+-            'http://defaultns.com/:root': {
+-                'http://defaultns.com/:x': {
++            'http://defaultns.com/|root': {
++                'http://defaultns.com/|x': {
+                     '@xmlns': {
+                         '': 'http://defaultns.com/',
+                         'a': 'http://a.com/',
+                         'b': 'http://b.com/',
+                     },
+-                    '@http://a.com/:attr': 'val',
++                    '@http://a.com/|attr': 'val',
+                     '#text': '1',
+                 },
+-                'http://a.com/:y': '2',
+-                'http://b.com/:z': '3',
++                'http://a.com/|y': '2',
++                'http://b.com/|z': '3',
+             }
+         }
+         res = parse(xml, process_namespaces=True)
+@@ -229,11 +229,11 @@ def test_namespace_collapse(self):
+                         'a': 'http://a.com/',
+                         'b': 'http://b.com/',
+                     },
+-                    '@ns_a:attr': 'val',
++                    '@ns_a|attr': 'val',
+                     '#text': '1',
+                 },
+-                'ns_a:y': '2',
+-                'http://b.com/:z': '3',
++                'ns_a|y': '2',
++                'http://b.com/|z': '3',
+             },
+         }
+         res = parse(xml, process_namespaces=True, namespaces=namespaces)
+diff --git a/xmltodict.py b/xmltodict.py
+index a070961..b7577e1 100755
+--- contrib/python/xmltodict/xmltodict.py
++++ contrib/python/xmltodict/xmltodict.py
+@@ -48,7 +48,7 @@ def __init__(self,
+                  postprocessor=None,
+                  dict_constructor=OrderedDict,
+                  strip_whitespace=True,
+-                 namespace_separator=':',
++                 namespace_separator='|',
+                  namespaces=None,
+                  force_list=None,
+                  comment_key='#comment'):
+@@ -196,7 +196,7 @@ def _should_force_list(self, key, value):
+ 
+ 
+ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
+-          namespace_separator=':', disable_entities=True, **kwargs):
++          namespace_separator='|', disable_entities=True, **kwargs):
+     """Parse the given XML input and convert it into a dictionary.
+ 
+     `xml_input` can either be a `string`, a file-like object, or a generator of strings.
+@@ -375,7 +375,7 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
+     return handler.item
+ 
+ 
+-def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
++def _process_namespace(name, namespaces, ns_sep='|', attr_prefix='@'):
+     if not namespaces:
+         return name
+     try:
+@@ -386,7 +386,7 @@ def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
+         ns_res = namespaces.get(ns.strip(attr_prefix))
+         name = '{}{}{}{}'.format(
+             attr_prefix if ns.startswith(attr_prefix) else '',
+-            ns_res, ns_sep, name) if ns_res else name
++            ns_res, ':', name) if ns_res else name
+     return name
+ 
+ 
+@@ -398,7 +398,7 @@ def _emit(key, value, content_handler,
+           pretty=False,
+           newl='\n',
+           indent='\t',
+-          namespace_separator=':',
++          namespace_separator='|',
+           namespaces=None,
+           full_document=True,
+           expand_iter=None):

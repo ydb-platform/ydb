@@ -29,6 +29,7 @@
 #include "tls/s2n_tls13.h"
 #include "utils/s2n_safety.h"
 #include "tls/s2n_psk.h"
+#include "pq-crypto/s2n_pq.h"
 
 /*************************
  * S2n Record Algorithms *
@@ -809,11 +810,9 @@ static struct s2n_cipher_suite *s2n_all_cipher_suites[] = {
     &s2n_ecdhe_rsa_with_chacha20_poly1305_sha256,   /* 0xCC,0xA8 */
     &s2n_ecdhe_ecdsa_with_chacha20_poly1305_sha256, /* 0xCC,0xA9 */
     &s2n_dhe_rsa_with_chacha20_poly1305_sha256,     /* 0xCC,0xAA */
-#if !defined(S2N_NO_PQ)
     &s2n_ecdhe_bike_rsa_with_aes_256_gcm_sha384,    /* 0xFF,0x04 */
     &s2n_ecdhe_sike_rsa_with_aes_256_gcm_sha384,    /* 0xFF,0x08 */
     &s2n_ecdhe_kyber_rsa_with_aes_256_gcm_sha384,   /* 0xFF,0x0C */
-#endif
 };
 
 /* All supported ciphers. Exposed for integration testing. */
@@ -859,11 +858,9 @@ static struct s2n_cipher_suite *s2n_all_tls12_cipher_suites[] = {
     &s2n_ecdhe_rsa_with_chacha20_poly1305_sha256,   /* 0xCC,0xA8 */
     &s2n_ecdhe_ecdsa_with_chacha20_poly1305_sha256, /* 0xCC,0xA9 */
     &s2n_dhe_rsa_with_chacha20_poly1305_sha256,     /* 0xCC,0xAA */
-#if !defined(S2N_NO_PQ)
     &s2n_ecdhe_bike_rsa_with_aes_256_gcm_sha384,    /* 0xFF,0x04 */
     &s2n_ecdhe_sike_rsa_with_aes_256_gcm_sha384,    /* 0xFF,0x08 */
     &s2n_ecdhe_kyber_rsa_with_aes_256_gcm_sha384,   /* 0xFF,0x0C */
-#endif
 };
 
 const struct s2n_cipher_preferences cipher_preferences_test_all_tls12 = {
@@ -1019,6 +1016,12 @@ int s2n_cipher_suites_init(void)
             }
         }
 
+        /* Mark PQ cipher suites as unavailable if PQ is disabled */
+        if (s2n_kex_includes(cur_suite->key_exchange_alg, &s2n_kem) && !s2n_pq_is_enabled()) {
+            cur_suite->available = 0;
+            cur_suite->record_alg = NULL;
+        }
+
         /* Initialize SSLv3 cipher suite if SSLv3 utilizes a different record algorithm */
         if (cur_suite->sslv3_record_alg && cur_suite->sslv3_record_alg->cipher->is_available()) {
             struct s2n_blob cur_suite_mem = { .data = (uint8_t *) cur_suite, .size = sizeof(struct s2n_cipher_suite) };
@@ -1102,6 +1105,15 @@ int s2n_set_cipher_as_client(struct s2n_connection *conn, uint8_t wire[S2N_TLS_C
     /* See if the cipher is one we support */
     cipher_suite = s2n_cipher_suite_from_wire(wire);
     ENSURE_POSIX(cipher_suite != NULL, S2N_ERR_CIPHER_NOT_SUPPORTED);
+
+    /* From RFC section: https://tools.ietf.org/html/rfc8446#section-4.2.11:
+     * Client MUST verify that the server selected a cipher suite indicating a Hash
+     * associated with the chosen PSK if it exists. 
+     * */
+    if (conn->psk_params.chosen_psk) {
+        ENSURE_POSIX(cipher_suite->prf_alg == conn->psk_params.chosen_psk->hmac_alg,
+                     S2N_ERR_CIPHER_NOT_SUPPORTED);
+    }
 
     /* Verify cipher suite sent in server hello is the same as sent in hello retry */
     if (s2n_is_hello_retry_handshake(conn) && !s2n_is_hello_retry_message(conn)) {
@@ -1210,24 +1222,25 @@ static int s2n_set_cipher_as_server(struct s2n_connection *conn, uint8_t *wire, 
             /* TLS 1.3 does not include key exchange in cipher suites */
             if (match->minimum_required_tls_version < S2N_TLS13) {
                 /* If the kex is not supported continue to the next candidate */
-                if (!s2n_kex_supported(match, conn)) {
+                bool kex_supported = false;
+                GUARD_AS_POSIX(s2n_kex_supported(match, conn, &kex_supported));
+                if (!kex_supported) {
                     continue;
                 }
 
                 /* If the kex is not configured correctly continue to the next candidate */
-                if (s2n_configure_kex(match, conn)) {
+                if (s2n_result_is_error(s2n_configure_kex(match, conn))) {
                     continue;
                 }
             }
 
-            /* For TLS1.3 when PSKs are present, the server must consider the hash algorithm associated with the chosen PSK
-             * when choosing a cipher suite. Server MUST reject any cipher suite without a matching hash algorithm and 
-             * continue to the next candidate. 
-             * */     
-            if (conn->actual_protocol_version >= S2N_TLS13 && conn->psk_params.chosen_psk != NULL) {
-                s2n_hmac_algorithm chosen_psk_hmac_alg = { 0 };
-                GUARD(s2n_hash_hmac_alg(conn->psk_params.chosen_psk->hash_alg, &chosen_psk_hmac_alg));
-                if (match->prf_alg != chosen_psk_hmac_alg) {
+            /**
+             *= https://tools.ietf.org/rfc/rfc8446#section-4.2.11
+             *# The server MUST ensure that it selects a compatible PSK
+             *# (if any) and cipher suite.
+             **/
+            if (conn->psk_params.chosen_psk != NULL) {
+                if (match->prf_alg != conn->psk_params.chosen_psk->hmac_alg) {
                     continue;
                 }
             }

@@ -88,7 +88,7 @@ namespace Model
      * <code>true</code> causes Amazon S3 to use an S3 Bucket Key. By default, S3
      * Bucket Key is not enabled.</p> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3
-     * Bucket Keys</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>
+     * Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline bool GetBucketKeyEnabled() const{ return m_bucketKeyEnabled; }
 
@@ -99,7 +99,7 @@ namespace Model
      * <code>true</code> causes Amazon S3 to use an S3 Bucket Key. By default, S3
      * Bucket Key is not enabled.</p> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3
-     * Bucket Keys</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>
+     * Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline bool BucketKeyEnabledHasBeenSet() const { return m_bucketKeyEnabledHasBeenSet; }
 
@@ -110,7 +110,7 @@ namespace Model
      * <code>true</code> causes Amazon S3 to use an S3 Bucket Key. By default, S3
      * Bucket Key is not enabled.</p> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3
-     * Bucket Keys</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>
+     * Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucketKeyEnabled(bool value) { m_bucketKeyEnabledHasBeenSet = true; m_bucketKeyEnabled = value; }
 
@@ -121,7 +121,7 @@ namespace Model
      * <code>true</code> causes Amazon S3 to use an S3 Bucket Key. By default, S3
      * Bucket Key is not enabled.</p> <p>For more information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-key.html">Amazon S3
-     * Bucket Keys</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>
+     * Bucket Keys</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline ServerSideEncryptionRule& WithBucketKeyEnabled(bool value) { SetBucketKeyEnabled(value); return *this;}
 

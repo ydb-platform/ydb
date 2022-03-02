@@ -17,7 +17,7 @@ target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   -DAWS_IO_USE_IMPORT_EXPORT
   -DAWS_SDK_VERSION_MAJOR=1
   -DAWS_SDK_VERSION_MINOR=8
-  -DAWS_SDK_VERSION_PATCH=113
+  -DAWS_SDK_VERSION_PATCH=186
   -DAWS_USE_EPOLL
   -DCURL_HAS_H2
   -DCURL_HAS_TLS_PROXY
@@ -63,6 +63,7 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/AWSAuthSignerProvider.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/AWSCredentialsProvider.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/AWSCredentialsProviderChain.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/SSOCredentialsProvider.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/auth/STSCredentialsProvider.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AWSClient.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/client/AWSErrorMarshaller.cpp
@@ -117,6 +118,7 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/EncryptionMaterials.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/KeyWrapAlgorithm.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/MD5.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/Sha1.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/Sha256.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/Sha256HMAC.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/crypto/factory/Factories.cpp

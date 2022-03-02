@@ -89,7 +89,10 @@ namespace Aws
             std::streamsize ConcurrentStreamBuf::showmanyc()
             {
                 std::unique_lock<std::mutex> lock(m_lock);
-                AWS_LOGSTREAM_TRACE(TAG, "stream how many character? " << m_backbuf.size());
+                if (!m_backbuf.empty())
+                {
+                    AWS_LOGSTREAM_TRACE(TAG, "Stream characters in buffer: " << m_backbuf.size());
+                }
                 return m_backbuf.size();
             }
 

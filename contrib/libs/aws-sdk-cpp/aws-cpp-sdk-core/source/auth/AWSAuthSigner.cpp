@@ -417,7 +417,7 @@ bool AWSAuthV4Signer::ServiceRequireUnsignedPayload(const Aws::String& serviceNa
     // However, other services (for example RDS) implement the specification as outlined here:
     // https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
     // which states that body-less requests should use the empty-string SHA256 hash.
-    return "s3" == serviceName;
+    return "s3" == serviceName || "s3-object-lambda" == serviceName;
 }
 
 Aws::String AWSAuthV4Signer::GenerateSignature(const AWSCredentials& credentials, const Aws::String& stringToSign,

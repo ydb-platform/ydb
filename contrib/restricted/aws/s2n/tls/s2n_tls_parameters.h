@@ -106,12 +106,22 @@
 #define TLS_EXTENSION_RENEGOTIATION_INFO   65281
 
 /* TLS 1.3 extensions from https://tools.ietf.org/html/rfc8446#section-4.2 */
-#define TLS_EXTENSION_SUPPORTED_VERSIONS   43
-#define TLS_EXTENSION_COOKIE               44
-#define TLS_EXTENSION_KEY_SHARE            51
+#define TLS_EXTENSION_SUPPORTED_VERSIONS     43
+#define TLS_EXTENSION_COOKIE                 44
+#define TLS_EXTENSION_PSK_KEY_EXCHANGE_MODES 45
+#define TLS_EXTENSION_KEY_SHARE              51
 
-/* QUIC-TLS extension from https://tools.ietf.org/html/draft-ietf-quic-tls-29#section-8.2 */
-#define TLS_QUIC_TRANSPORT_PARAMETERS      65535
+/* TLS 1.3 pre-shared key exchange modes from https://tools.ietf.org/html/rfc8446#section-4.2.9 */
+#define TLS_PSK_KE_MODE     0
+#define TLS_PSK_DHE_KE_MODE 1
+
+/**
+ *= https://tools.ietf.org/id/draft-ietf-quic-tls-32.txt#8.2
+ *#   enum {
+ *#      quic_transport_parameters(0xffa5), (65535)
+ *#   } ExtensionType;
+ */
+#define TLS_QUIC_TRANSPORT_PARAMETERS      0xffa5
 
 /* TLS Signature Algorithms - RFC 5246 7.4.1.4.1 */
 /* https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-16 */

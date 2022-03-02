@@ -41,87 +41,87 @@ namespace Model
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline const Aws::String& GetETag() const{ return m_eTag; }
 
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline bool ETagHasBeenSet() const { return m_eTagHasBeenSet; }
 
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline void SetETag(const Aws::String& value) { m_eTagHasBeenSet = true; m_eTag = value; }
 
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline void SetETag(Aws::String&& value) { m_eTagHasBeenSet = true; m_eTag = std::move(value); }
 
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline void SetETag(const char* value) { m_eTagHasBeenSet = true; m_eTag.assign(value); }
 
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline CopyObjectResultDetails& WithETag(const Aws::String& value) { SetETag(value); return *this;}
 
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline CopyObjectResultDetails& WithETag(Aws::String&& value) { SetETag(std::move(value)); return *this;}
 
     /**
      * <p>Returns the ETag of the new object. The ETag reflects only changes to the
      * contents of an object, not its metadata. The source and destination ETag is
-     * identical for a successfully copied object.</p>
+     * identical for a successfully copied non-multipart object.</p>
      */
     inline CopyObjectResultDetails& WithETag(const char* value) { SetETag(value); return *this;}
 
 
     /**
-     * <p>Returns the date that the object was last modified.</p>
+     * <p>Creation date of the object.</p>
      */
     inline const Aws::Utils::DateTime& GetLastModified() const{ return m_lastModified; }
 
     /**
-     * <p>Returns the date that the object was last modified.</p>
+     * <p>Creation date of the object.</p>
      */
     inline bool LastModifiedHasBeenSet() const { return m_lastModifiedHasBeenSet; }
 
     /**
-     * <p>Returns the date that the object was last modified.</p>
+     * <p>Creation date of the object.</p>
      */
     inline void SetLastModified(const Aws::Utils::DateTime& value) { m_lastModifiedHasBeenSet = true; m_lastModified = value; }
 
     /**
-     * <p>Returns the date that the object was last modified.</p>
+     * <p>Creation date of the object.</p>
      */
     inline void SetLastModified(Aws::Utils::DateTime&& value) { m_lastModifiedHasBeenSet = true; m_lastModified = std::move(value); }
 
     /**
-     * <p>Returns the date that the object was last modified.</p>
+     * <p>Creation date of the object.</p>
      */
     inline CopyObjectResultDetails& WithLastModified(const Aws::Utils::DateTime& value) { SetLastModified(value); return *this;}
 
     /**
-     * <p>Returns the date that the object was last modified.</p>
+     * <p>Creation date of the object.</p>
      */
     inline CopyObjectResultDetails& WithLastModified(Aws::Utils::DateTime&& value) { SetLastModified(std::move(value)); return *this;}
 

@@ -44,6 +44,10 @@ namespace Aws
              */
             AWS_CORE_API std::shared_ptr<Hash> CreateMD5Implementation();
             /**
+             * Create a Sha1 Hash provider
+             */
+            AWS_CORE_API std::shared_ptr<Hash> CreateSha1Implementation();
+            /**
              * Create a Sha256 Hash provider
              */
             AWS_CORE_API std::shared_ptr<Hash> CreateSha256Implementation();
@@ -113,6 +117,10 @@ namespace Aws
              * Set the global factory for MD5 Hash providers
              */
             AWS_CORE_API void SetMD5Factory(const std::shared_ptr<HashFactory>& factory);
+            /**
+             * Set the global factory for Sha1 Hash providers
+             */
+            AWS_CORE_API void SetSha1Factory(const std::shared_ptr<HashFactory>& factory);
             /**
              * Set the global factory for Sha256 Hash providers
              */

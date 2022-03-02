@@ -67,6 +67,10 @@ namespace Aws
         static const char ACCESS_KEY_ID_KEY[]                = "aws_access_key_id";
         static const char SECRET_KEY_KEY[]                   = "aws_secret_access_key";
         static const char SESSION_TOKEN_KEY[]                = "aws_session_token";
+        static const char SSO_START_URL_KEY[]                = "sso_start_url";
+        static const char SSO_REGION_KEY[]                   = "sso_region";
+        static const char SSO_ACCOUNT_ID_KEY[]               = "sso_account_id";
+        static const char SSO_ROLE_NAME_KEY[]                = "sso_role_name";
         static const char ROLE_ARN_KEY[]                     = "role_arn";
         static const char EXTERNAL_ID_KEY[]                  = "external_id";
         static const char CREDENTIAL_PROCESS_COMMAND[]       = "credential_process";
@@ -182,6 +186,33 @@ namespace Aws
                         }
 
                         profile.SetCredentials(Aws::Auth::AWSCredentials(accessKey, secretKey, sessionToken));
+                    }
+
+                    auto ssoStartUrlIter = m_profileKeyValuePairs.find(SSO_START_URL_KEY);
+                    auto ssoRegionIter = m_profileKeyValuePairs.find(SSO_REGION_KEY);
+                    auto ssoRoleNameIter = m_profileKeyValuePairs.find(SSO_ROLE_NAME_KEY);
+                    auto ssoAccountIdIter = m_profileKeyValuePairs.find(SSO_ACCOUNT_ID_KEY);
+                    if (ssoStartUrlIter != m_profileKeyValuePairs.end()
+                        || ssoRegionIter != m_profileKeyValuePairs.end()
+                        || ssoRoleNameIter != m_profileKeyValuePairs.end()
+                        || ssoAccountIdIter != m_profileKeyValuePairs.end())
+                    {
+                        if (ssoStartUrlIter != m_profileKeyValuePairs.end()
+                            && ssoRegionIter != m_profileKeyValuePairs.end()
+                            && ssoRoleNameIter != m_profileKeyValuePairs.end()
+                            && ssoAccountIdIter != m_profileKeyValuePairs.end())
+                        {
+                            AWS_LOGSTREAM_DEBUG(PARSER_TAG, "found sso_start_url " << ssoStartUrlIter->second);
+                            profile.SetSsoStartUrl(ssoStartUrlIter->second);
+                            AWS_LOGSTREAM_DEBUG(PARSER_TAG, "found sso_region " << ssoRegionIter->second);
+                            profile.SetSsoRegion(ssoRegionIter->second);
+                            AWS_LOGSTREAM_DEBUG(PARSER_TAG, "found sso_account_id " << ssoAccountIdIter->second);
+                            profile.SetSsoAccountId(ssoAccountIdIter->second);
+                            AWS_LOGSTREAM_DEBUG(PARSER_TAG, "found sso_role_name " << ssoRoleNameIter->second);
+                            profile.SetSsoRoleName(ssoRoleNameIter->second);
+                        } else {
+                            AWS_LOGSTREAM_ERROR(PARSER_TAG, "invalid configuration for sso profile " << profile.GetName());
+                        }
                     }
 
                     auto assumeRoleArnIter = m_profileKeyValuePairs.find(ROLE_ARN_KEY);

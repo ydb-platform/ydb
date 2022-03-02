@@ -70,6 +70,18 @@ namespace Aws
 
             };
 
+            class Sha1OpenSSLImpl : public Hash
+            {
+            public:
+
+                Sha1OpenSSLImpl() {}
+                virtual ~Sha1OpenSSLImpl() = default;
+
+                virtual HashResult Calculate(const Aws::String& str) override;
+
+                virtual HashResult Calculate(Aws::IStream& stream) override;
+            };
+
             class Sha256OpenSSLImpl : public Hash
             {
             public:

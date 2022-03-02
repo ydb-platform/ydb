@@ -365,93 +365,93 @@ namespace Model
 
 
     /**
-     * <p>All of the keys rolled up in a common prefix count as a single return when
-     * calculating the number of returns. </p> <p>A response can contain CommonPrefixes
-     * only if you specify a delimiter.</p> <p>CommonPrefixes contains all (if there
-     * are any) keys between Prefix and the next occurrence of the string specified by
-     * the delimiter.</p> <p> CommonPrefixes lists keys that act like subdirectories in
-     * the directory specified by Prefix.</p> <p>For example, if the prefix is notes/
-     * and the delimiter is a slash (/) as in notes/summer/july, the common prefix is
-     * notes/summer/. All of the keys that roll up into a common prefix count as a
-     * single return when calculating the number of returns.</p>
+     * <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single
+     * return when calculating the number of returns. </p> <p>A response can contain
+     * CommonPrefixes only if you specify a delimiter.</p> <p>CommonPrefixes contains
+     * all (if there are any) keys between Prefix and the next occurrence of the string
+     * specified by the delimiter.</p> <p> CommonPrefixes lists keys that act like
+     * subdirectories in the directory specified by Prefix.</p> <p>For example, if the
+     * prefix is notes/ and the delimiter is a slash (/) as in notes/summer/july, the
+     * common prefix is notes/summer/. All of the keys that roll up into a common
+     * prefix count as a single return when calculating the number of returns.</p>
      */
     inline const Aws::Vector<CommonPrefix>& GetCommonPrefixes() const{ return m_commonPrefixes; }
 
     /**
-     * <p>All of the keys rolled up in a common prefix count as a single return when
-     * calculating the number of returns. </p> <p>A response can contain CommonPrefixes
-     * only if you specify a delimiter.</p> <p>CommonPrefixes contains all (if there
-     * are any) keys between Prefix and the next occurrence of the string specified by
-     * the delimiter.</p> <p> CommonPrefixes lists keys that act like subdirectories in
-     * the directory specified by Prefix.</p> <p>For example, if the prefix is notes/
-     * and the delimiter is a slash (/) as in notes/summer/july, the common prefix is
-     * notes/summer/. All of the keys that roll up into a common prefix count as a
-     * single return when calculating the number of returns.</p>
+     * <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single
+     * return when calculating the number of returns. </p> <p>A response can contain
+     * CommonPrefixes only if you specify a delimiter.</p> <p>CommonPrefixes contains
+     * all (if there are any) keys between Prefix and the next occurrence of the string
+     * specified by the delimiter.</p> <p> CommonPrefixes lists keys that act like
+     * subdirectories in the directory specified by Prefix.</p> <p>For example, if the
+     * prefix is notes/ and the delimiter is a slash (/) as in notes/summer/july, the
+     * common prefix is notes/summer/. All of the keys that roll up into a common
+     * prefix count as a single return when calculating the number of returns.</p>
      */
     inline void SetCommonPrefixes(const Aws::Vector<CommonPrefix>& value) { m_commonPrefixes = value; }
 
     /**
-     * <p>All of the keys rolled up in a common prefix count as a single return when
-     * calculating the number of returns. </p> <p>A response can contain CommonPrefixes
-     * only if you specify a delimiter.</p> <p>CommonPrefixes contains all (if there
-     * are any) keys between Prefix and the next occurrence of the string specified by
-     * the delimiter.</p> <p> CommonPrefixes lists keys that act like subdirectories in
-     * the directory specified by Prefix.</p> <p>For example, if the prefix is notes/
-     * and the delimiter is a slash (/) as in notes/summer/july, the common prefix is
-     * notes/summer/. All of the keys that roll up into a common prefix count as a
-     * single return when calculating the number of returns.</p>
+     * <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single
+     * return when calculating the number of returns. </p> <p>A response can contain
+     * CommonPrefixes only if you specify a delimiter.</p> <p>CommonPrefixes contains
+     * all (if there are any) keys between Prefix and the next occurrence of the string
+     * specified by the delimiter.</p> <p> CommonPrefixes lists keys that act like
+     * subdirectories in the directory specified by Prefix.</p> <p>For example, if the
+     * prefix is notes/ and the delimiter is a slash (/) as in notes/summer/july, the
+     * common prefix is notes/summer/. All of the keys that roll up into a common
+     * prefix count as a single return when calculating the number of returns.</p>
      */
     inline void SetCommonPrefixes(Aws::Vector<CommonPrefix>&& value) { m_commonPrefixes = std::move(value); }
 
     /**
-     * <p>All of the keys rolled up in a common prefix count as a single return when
-     * calculating the number of returns. </p> <p>A response can contain CommonPrefixes
-     * only if you specify a delimiter.</p> <p>CommonPrefixes contains all (if there
-     * are any) keys between Prefix and the next occurrence of the string specified by
-     * the delimiter.</p> <p> CommonPrefixes lists keys that act like subdirectories in
-     * the directory specified by Prefix.</p> <p>For example, if the prefix is notes/
-     * and the delimiter is a slash (/) as in notes/summer/july, the common prefix is
-     * notes/summer/. All of the keys that roll up into a common prefix count as a
-     * single return when calculating the number of returns.</p>
+     * <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single
+     * return when calculating the number of returns. </p> <p>A response can contain
+     * CommonPrefixes only if you specify a delimiter.</p> <p>CommonPrefixes contains
+     * all (if there are any) keys between Prefix and the next occurrence of the string
+     * specified by the delimiter.</p> <p> CommonPrefixes lists keys that act like
+     * subdirectories in the directory specified by Prefix.</p> <p>For example, if the
+     * prefix is notes/ and the delimiter is a slash (/) as in notes/summer/july, the
+     * common prefix is notes/summer/. All of the keys that roll up into a common
+     * prefix count as a single return when calculating the number of returns.</p>
      */
     inline ListObjectsResult& WithCommonPrefixes(const Aws::Vector<CommonPrefix>& value) { SetCommonPrefixes(value); return *this;}
 
     /**
-     * <p>All of the keys rolled up in a common prefix count as a single return when
-     * calculating the number of returns. </p> <p>A response can contain CommonPrefixes
-     * only if you specify a delimiter.</p> <p>CommonPrefixes contains all (if there
-     * are any) keys between Prefix and the next occurrence of the string specified by
-     * the delimiter.</p> <p> CommonPrefixes lists keys that act like subdirectories in
-     * the directory specified by Prefix.</p> <p>For example, if the prefix is notes/
-     * and the delimiter is a slash (/) as in notes/summer/july, the common prefix is
-     * notes/summer/. All of the keys that roll up into a common prefix count as a
-     * single return when calculating the number of returns.</p>
+     * <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single
+     * return when calculating the number of returns. </p> <p>A response can contain
+     * CommonPrefixes only if you specify a delimiter.</p> <p>CommonPrefixes contains
+     * all (if there are any) keys between Prefix and the next occurrence of the string
+     * specified by the delimiter.</p> <p> CommonPrefixes lists keys that act like
+     * subdirectories in the directory specified by Prefix.</p> <p>For example, if the
+     * prefix is notes/ and the delimiter is a slash (/) as in notes/summer/july, the
+     * common prefix is notes/summer/. All of the keys that roll up into a common
+     * prefix count as a single return when calculating the number of returns.</p>
      */
     inline ListObjectsResult& WithCommonPrefixes(Aws::Vector<CommonPrefix>&& value) { SetCommonPrefixes(std::move(value)); return *this;}
 
     /**
-     * <p>All of the keys rolled up in a common prefix count as a single return when
-     * calculating the number of returns. </p> <p>A response can contain CommonPrefixes
-     * only if you specify a delimiter.</p> <p>CommonPrefixes contains all (if there
-     * are any) keys between Prefix and the next occurrence of the string specified by
-     * the delimiter.</p> <p> CommonPrefixes lists keys that act like subdirectories in
-     * the directory specified by Prefix.</p> <p>For example, if the prefix is notes/
-     * and the delimiter is a slash (/) as in notes/summer/july, the common prefix is
-     * notes/summer/. All of the keys that roll up into a common prefix count as a
-     * single return when calculating the number of returns.</p>
+     * <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single
+     * return when calculating the number of returns. </p> <p>A response can contain
+     * CommonPrefixes only if you specify a delimiter.</p> <p>CommonPrefixes contains
+     * all (if there are any) keys between Prefix and the next occurrence of the string
+     * specified by the delimiter.</p> <p> CommonPrefixes lists keys that act like
+     * subdirectories in the directory specified by Prefix.</p> <p>For example, if the
+     * prefix is notes/ and the delimiter is a slash (/) as in notes/summer/july, the
+     * common prefix is notes/summer/. All of the keys that roll up into a common
+     * prefix count as a single return when calculating the number of returns.</p>
      */
     inline ListObjectsResult& AddCommonPrefixes(const CommonPrefix& value) { m_commonPrefixes.push_back(value); return *this; }
 
     /**
-     * <p>All of the keys rolled up in a common prefix count as a single return when
-     * calculating the number of returns. </p> <p>A response can contain CommonPrefixes
-     * only if you specify a delimiter.</p> <p>CommonPrefixes contains all (if there
-     * are any) keys between Prefix and the next occurrence of the string specified by
-     * the delimiter.</p> <p> CommonPrefixes lists keys that act like subdirectories in
-     * the directory specified by Prefix.</p> <p>For example, if the prefix is notes/
-     * and the delimiter is a slash (/) as in notes/summer/july, the common prefix is
-     * notes/summer/. All of the keys that roll up into a common prefix count as a
-     * single return when calculating the number of returns.</p>
+     * <p>All of the keys (up to 1,000) rolled up in a common prefix count as a single
+     * return when calculating the number of returns. </p> <p>A response can contain
+     * CommonPrefixes only if you specify a delimiter.</p> <p>CommonPrefixes contains
+     * all (if there are any) keys between Prefix and the next occurrence of the string
+     * specified by the delimiter.</p> <p> CommonPrefixes lists keys that act like
+     * subdirectories in the directory specified by Prefix.</p> <p>For example, if the
+     * prefix is notes/ and the delimiter is a slash (/) as in notes/summer/july, the
+     * common prefix is notes/summer/. All of the keys that roll up into a common
+     * prefix count as a single return when calculating the number of returns.</p>
      */
     inline ListObjectsResult& AddCommonPrefixes(CommonPrefix&& value) { m_commonPrefixes.push_back(std::move(value)); return *this; }
 

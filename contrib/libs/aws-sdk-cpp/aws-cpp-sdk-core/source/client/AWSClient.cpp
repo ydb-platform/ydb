@@ -137,7 +137,7 @@ void AWSClient::SetServiceClientName(const Aws::String& name)
     if (!m_customizedUserAgent)
     {
         Aws::StringStream ss;
-        ss << "aws-sdk-cpp/" << Version::GetVersionString() << "/" << m_serviceName << "/" <<  Aws::OSVersionInfo::ComputeOSVersionString()
+        ss << "aws-sdk-cpp/" << Version::GetVersionString() << " " <<  Aws::OSVersionInfo::ComputeOSVersionString()
             << " " << Version::GetCompilerVersionString();
         m_userAgent = ss.str();
     }
@@ -626,7 +626,7 @@ void AWSClient::AddContentBodyToRequest(const std::shared_ptr<Aws::Http::HttpReq
     }
 
     //Add transfer-encoding:chunked to header
-    if (body && isChunked)
+    if (body && isChunked && !httpRequest->HasHeader(Http::CONTENT_LENGTH_HEADER))
     {
         httpRequest->SetTransferEncoding(CHUNKED_VALUE);
     }

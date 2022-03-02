@@ -116,8 +116,8 @@ Aws::Http::HeaderValueCollection CreateBucketRequest::GetRequestSpecificHeaders(
 
   if(m_objectLockEnabledForBucketHasBeenSet)
   {
-    ss << m_objectLockEnabledForBucket;
-    headers.emplace("x-amz-bucket-object-lock-enabled",  ss.str());
+    ss << std::boolalpha << m_objectLockEnabledForBucket;
+    headers.emplace("x-amz-bucket-object-lock-enabled", ss.str());
     ss.str("");
   }
 

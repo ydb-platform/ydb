@@ -112,6 +112,7 @@
 #include <aws/s3/model/SelectObjectContentRequest.h>
 #include <aws/s3/model/UploadPartRequest.h>
 #include <aws/s3/model/UploadPartCopyRequest.h>
+#include <aws/s3/model/WriteGetObjectResponseRequest.h>
 
 using namespace Aws;
 using namespace Aws::Auth;
@@ -178,6 +179,7 @@ void S3Client::init(const ClientConfiguration& config)
       m_useCustomEndpoint = true;
       OverrideEndpoint(config.endpointOverride);
   }
+  m_enableHostPrefixInjection = config.enableHostPrefixInjection;
 }
 
 void S3Client::OverrideEndpoint(const Aws::String& endpoint)
@@ -3829,6 +3831,62 @@ void S3Client::UploadPartCopyAsyncHelper(const UploadPartCopyRequest& request, c
   handler(this, request, UploadPartCopy(request), context);
 }
 
+WriteGetObjectResponseOutcome S3Client::WriteGetObjectResponse(const WriteGetObjectResponseRequest& request) const
+{
+  if (!request.RequestRouteHasBeenSet())
+  {
+    AWS_LOGSTREAM_ERROR("WriteGetObjectResponse", "Required field: RequestRoute, is not set");
+    return WriteGetObjectResponseOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::MISSING_PARAMETER, "MISSING_PARAMETER", "Missing required field [RequestRoute]", false));
+  }
+  if (!request.RequestTokenHasBeenSet())
+  {
+    AWS_LOGSTREAM_ERROR("WriteGetObjectResponse", "Required field: RequestToken, is not set");
+    return WriteGetObjectResponseOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::MISSING_PARAMETER, "MISSING_PARAMETER", "Missing required field [RequestToken]", false));
+  }
+  ComputeEndpointOutcome computeEndpointOutcome = ComputeEndpointStringWithServiceName("s3-object-lambda");
+  if (!computeEndpointOutcome.IsSuccess())
+  {
+    return WriteGetObjectResponseOutcome(computeEndpointOutcome.GetError());
+  }
+  Aws::Http::URI uri = computeEndpointOutcome.GetResult().endpoint;
+  if (m_enableHostPrefixInjection)
+  {
+    if (request.GetRequestRoute().empty())
+    {
+      AWS_LOGSTREAM_ERROR("WriteGetObjectResponse", "HostPrefix required field: RequestRoute, is empty");
+      return WriteGetObjectResponseOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::INVALID_PARAMETER_VALUE, "INVALID_PARAMETER", "Host prefix field is empty", false));
+    }
+    uri.SetAuthority("" + request.GetRequestRoute() + "." + uri.GetAuthority());
+    if (!Aws::Utils::IsValidHost(uri.GetAuthority()))
+    {
+      AWS_LOGSTREAM_ERROR("WriteGetObjectResponse", "Invalid DNS host: " << uri.GetAuthority());
+      return WriteGetObjectResponseOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::INVALID_PARAMETER_VALUE, "INVALID_PARAMETER", "Host is invalid", false));
+    }
+  }
+  Aws::StringStream ss;
+  ss << "/WriteGetObjectResponse";
+  uri.SetPath(uri.GetPath() + ss.str());
+  return WriteGetObjectResponseOutcome(MakeRequest(uri, request, Aws::Http::HttpMethod::HTTP_POST, Aws::Auth::SIGV4_SIGNER, computeEndpointOutcome.GetResult().signerRegion.c_str() /*signerRegionOverride*/, computeEndpointOutcome.GetResult().signerServiceName.c_str() /*signerServiceNameOverride*/));
+}
+
+WriteGetObjectResponseOutcomeCallable S3Client::WriteGetObjectResponseCallable(const WriteGetObjectResponseRequest& request) const
+{
+  auto task = Aws::MakeShared< std::packaged_task< WriteGetObjectResponseOutcome() > >(ALLOCATION_TAG, [this, request](){ return this->WriteGetObjectResponse(request); } );
+  auto packagedFunction = [task]() { (*task)(); };
+  m_executor->Submit(packagedFunction);
+  return task->get_future();
+}
+
+void S3Client::WriteGetObjectResponseAsync(const WriteGetObjectResponseRequest& request, const WriteGetObjectResponseResponseReceivedHandler& handler, const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) const
+{
+  m_executor->Submit( [this, request, handler, context](){ this->WriteGetObjectResponseAsyncHelper( request, handler, context ); } );
+}
+
+void S3Client::WriteGetObjectResponseAsyncHelper(const WriteGetObjectResponseRequest& request, const WriteGetObjectResponseResponseReceivedHandler& handler, const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) const
+{
+  handler(this, request, WriteGetObjectResponse(request), context);
+}
+
 
 
 #include<aws/core/platform/Environment.h>
@@ -4013,6 +4071,12 @@ Aws::String S3Client::GeneratePresignedUrlWithSSEC(const Aws::String& bucket, co
 
 ComputeEndpointOutcome S3Client::ComputeEndpointString(const Aws::String& bucketOrArn) const
 {
+    if (m_useDualStack && m_useCustomEndpoint)
+    {
+        return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
+            "Dual-stack endpoint is incompatible with a custom endpoint override.", false));
+    }
+
     Aws::StringStream ss;
     ss << m_scheme << "://";
     Aws::String bucket = bucketOrArn;
@@ -4021,12 +4085,6 @@ ComputeEndpointOutcome S3Client::ComputeEndpointString(const Aws::String& bucket
 
     if (arn)
     {
-        if (m_useCustomEndpoint)
-        {
-            return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
-                "Custom endpoint is not compatible with Access Point ARN or Outposts ARN in Bucket field.", false));
-        }
-
         if (!m_useVirtualAddressing)
         {
             return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
@@ -4039,9 +4097,19 @@ ComputeEndpointOutcome S3Client::ComputeEndpointString(const Aws::String& bucket
             return ComputeEndpointOutcome(s3ArnOutcome.GetError());
         }
         signerRegion = m_useArnRegion ? arn.GetRegion() : signerRegion;
-        if (arn.GetResourceType() == ARNResourceType::ACCESSPOINT)
+        if (arn.GetService() == ARNService::S3_OBJECT_LAMBDA)
         {
-            ss << S3Endpoint::ForAccessPointArn(arn, m_useArnRegion ? "" : m_region, m_useDualStack);
+            if (m_useDualStack)
+            {
+                return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
+                    "S3 Object Lambda Access Point ARNs do not support dualstack right now.", false));
+            }
+            ss << S3Endpoint::ForObjectLambdaAccessPointArn(arn, m_useArnRegion ? "" : m_region, m_useDualStack, m_useCustomEndpoint ? m_baseUri : "");
+            return ComputeEndpointOutcome(ComputeEndpointResult(ss.str(), signerRegion, ARNService::S3_OBJECT_LAMBDA));
+        }
+        else if (arn.GetResourceType() == ARNResourceType::ACCESSPOINT)
+        {
+            ss << S3Endpoint::ForAccessPointArn(arn, m_useArnRegion ? "" : m_region, m_useDualStack, m_useCustomEndpoint ? m_baseUri : "");
             return ComputeEndpointOutcome(ComputeEndpointResult(ss.str(), signerRegion, SERVICE_NAME));
         }
         else if (arn.GetResourceType() == ARNResourceType::OUTPOST)
@@ -4051,7 +4119,7 @@ ComputeEndpointOutcome S3Client::ComputeEndpointString(const Aws::String& bucket
                 return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
                     "Outposts Access Points do not support dualstack right now.", false));
             }
-            ss << S3Endpoint::ForOutpostsArn(arn, m_useArnRegion ? "" : m_region);
+            ss << S3Endpoint::ForOutpostsArn(arn, m_useArnRegion ? "" : m_region, m_useDualStack, m_useCustomEndpoint ? m_baseUri : "");
             return ComputeEndpointOutcome(ComputeEndpointResult(ss.str(), signerRegion, "s3-outposts"));
         }
     }
@@ -4074,9 +4142,49 @@ ComputeEndpointOutcome S3Client::ComputeEndpointString(const Aws::String& bucket
 
 ComputeEndpointOutcome S3Client::ComputeEndpointString() const
 {
+    if (m_useDualStack && m_useCustomEndpoint)
+    {
+        return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
+            "Dual-stack endpoint is incompatible with a custom endpoint override.", false));
+    }
     Aws::StringStream ss;
     ss << m_scheme << "://" << m_baseUri;
     return ComputeEndpointOutcome(ComputeEndpointResult(ss.str(), Aws::Region::ComputeSignerRegion(m_region), SERVICE_NAME));
+}
+
+ComputeEndpointOutcome S3Client::ComputeEndpointStringWithServiceName(const Aws::String& serviceNameOverride) const
+{
+    if (serviceNameOverride.empty())
+    {
+        return ComputeEndpointString();
+    }
+
+    if (m_useDualStack && m_useCustomEndpoint)
+    {
+        return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
+            "Dual-stack endpoint is incompatible with a custom endpoint override.", false));
+    }
+
+    Aws::StringStream ss;
+    ss << m_scheme << "://";
+    if (m_useCustomEndpoint)
+    {
+        ss << m_baseUri;
+        return ComputeEndpointOutcome(ComputeEndpointResult(ss.str(), Aws::Region::ComputeSignerRegion(m_region), serviceNameOverride));
+    }
+    else
+    {
+        if (m_useDualStack)
+        {
+            return ComputeEndpointOutcome(Aws::Client::AWSError<S3Errors>(S3Errors::VALIDATION, "VALIDATION",
+            "S3 Object Lambda endpoints do not support dualstack right now.", false));
+        }
+        else
+        {
+            ss << S3Endpoint::ForRegion(m_region, m_useDualStack, true, serviceNameOverride);
+            return ComputeEndpointOutcome(ComputeEndpointResult(ss.str(), Aws::Region::ComputeSignerRegion(m_region), serviceNameOverride));
+        }
+    }
 }
 
 bool S3Client::MultipartUploadSupported() const

@@ -20,3 +20,5 @@
 #include "stuffer/s2n_stuffer.h"
 
 extern const s2n_extension_type s2n_client_psk_extension;
+
+bool s2n_client_psk_should_send(struct s2n_connection *conn);

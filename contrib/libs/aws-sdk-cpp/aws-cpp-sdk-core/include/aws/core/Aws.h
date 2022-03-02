@@ -97,6 +97,10 @@ namespace Aws
          */
         std::function<std::shared_ptr<Aws::Utils::Crypto::HashFactory>()> md5Factory_create_fn;
         /**
+        * If set, this closure will be used to create and install the factory.
+        */
+        std::function<std::shared_ptr<Aws::Utils::Crypto::HashFactory>()> sha1Factory_create_fn;
+        /**
          * If set, this closure will be used to create and install the factory.
          */
         std::function<std::shared_ptr<Aws::Utils::Crypto::HashFactory>()> sha256Factory_create_fn;

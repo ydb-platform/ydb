@@ -9,6 +9,7 @@
 #include <aws/core/utils/base64/Base64.h>
 #include <aws/core/utils/crypto/Sha256.h>
 #include <aws/core/utils/crypto/Sha256HMAC.h>
+#include <aws/core/utils/crypto/Sha1.h>
 #include <aws/core/utils/crypto/MD5.h>
 #include <aws/core/utils/Outcome.h>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
@@ -207,6 +208,18 @@ ByteBuffer HashingUtils::HexDecode(const Aws::String& str)
     }
 
     return hexBuffer;
+}
+
+ByteBuffer HashingUtils::CalculateSHA1(const Aws::String& str)
+{
+    Sha1 hash;
+    return hash.Calculate(str).GetResult();
+}
+
+ByteBuffer HashingUtils::CalculateSHA1(Aws::IOStream& stream)
+{
+    Sha1 hash;
+    return hash.Calculate(stream).GetResult();
 }
 
 ByteBuffer HashingUtils::CalculateMD5(const Aws::String& str)

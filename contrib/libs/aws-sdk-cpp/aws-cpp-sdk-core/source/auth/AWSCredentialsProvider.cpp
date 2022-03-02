@@ -383,7 +383,7 @@ void ProcessCredentialsProvider::Reload()
     const Aws::String &command = profile.GetCredentialProcess();
     if (command.empty())
     {
-        AWS_LOGSTREAM_ERROR(PROCESS_LOG_TAG, "Failed to find credential process's profile: " << m_profileToUse);
+        AWS_LOGSTREAM_INFO(PROCESS_LOG_TAG, "Failed to find credential process's profile: " << m_profileToUse);
         return;
     }
     m_credentials = GetCredentialsFromProcess(command);

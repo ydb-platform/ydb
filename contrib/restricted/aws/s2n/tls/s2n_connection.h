@@ -307,6 +307,8 @@ struct s2n_connection {
     uint8_t ticket_ext_data[S2N_TICKET_SIZE_IN_BYTES];
     struct s2n_stuffer client_ticket_to_decrypt;
 
+    uint8_t resumption_master_secret[S2N_TLS13_SECRET_MAX_LEN];
+
     /* application protocols overridden */
     struct s2n_blob application_protocols_overridden;
 
@@ -323,6 +325,12 @@ struct s2n_connection {
      * Setting and manipulating this value requires security_policy to be configured prior.
      * */
     uint8_t preferred_key_shares;
+
+    /* Flags to prevent users from calling methods recursively.
+     * This can be an easy mistake to make when implementing send/receive callbacks.
+     */
+    bool send_in_use;
+    bool recv_in_use;
 };
 
 int s2n_connection_is_managed_corked(const struct s2n_connection *s2n_connection);

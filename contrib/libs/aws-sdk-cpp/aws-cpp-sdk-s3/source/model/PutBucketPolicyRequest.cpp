@@ -62,8 +62,8 @@ Aws::Http::HeaderValueCollection PutBucketPolicyRequest::GetRequestSpecificHeade
 
   if(m_confirmRemoveSelfBucketAccessHasBeenSet)
   {
-    ss << m_confirmRemoveSelfBucketAccess;
-    headers.emplace("x-amz-confirm-remove-self-bucket-access",  ss.str());
+    ss << std::boolalpha << m_confirmRemoveSelfBucketAccess;
+    headers.emplace("x-amz-confirm-remove-self-bucket-access", ss.str());
     ss.str("");
   }
 

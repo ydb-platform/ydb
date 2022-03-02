@@ -21,6 +21,7 @@ namespace Model
 {
 
 CORSRule::CORSRule() : 
+    m_iDHasBeenSet(false),
     m_allowedHeadersHasBeenSet(false),
     m_allowedMethodsHasBeenSet(false),
     m_allowedOriginsHasBeenSet(false),
@@ -31,6 +32,7 @@ CORSRule::CORSRule() :
 }
 
 CORSRule::CORSRule(const XmlNode& xmlNode) : 
+    m_iDHasBeenSet(false),
     m_allowedHeadersHasBeenSet(false),
     m_allowedMethodsHasBeenSet(false),
     m_allowedOriginsHasBeenSet(false),
@@ -47,6 +49,12 @@ CORSRule& CORSRule::operator =(const XmlNode& xmlNode)
 
   if(!resultNode.IsNull())
   {
+    XmlNode iDNode = resultNode.FirstChild("ID");
+    if(!iDNode.IsNull())
+    {
+      m_iD = Aws::Utils::Xml::DecodeEscapedXmlText(iDNode.GetText());
+      m_iDHasBeenSet = true;
+    }
     XmlNode allowedHeadersNode = resultNode.FirstChild("AllowedHeader");
     if(!allowedHeadersNode.IsNull())
     {
@@ -109,6 +117,12 @@ CORSRule& CORSRule::operator =(const XmlNode& xmlNode)
 void CORSRule::AddToNode(XmlNode& parentNode) const
 {
   Aws::StringStream ss;
+  if(m_iDHasBeenSet)
+  {
+   XmlNode iDNode = parentNode.CreateChildElement("ID");
+   iDNode.SetText(m_iD);
+  }
+
   if(m_allowedHeadersHasBeenSet)
   {
    for(const auto& item : m_allowedHeaders)

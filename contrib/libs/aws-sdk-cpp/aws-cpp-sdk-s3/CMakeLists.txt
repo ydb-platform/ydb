@@ -16,7 +16,7 @@ target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   -DAWS_IO_USE_IMPORT_EXPORT
   -DAWS_SDK_VERSION_MAJOR=1
   -DAWS_SDK_VERSION_MINOR=8
-  -DAWS_SDK_VERSION_PATCH=113
+  -DAWS_SDK_VERSION_PATCH=186
   -DAWS_USE_EPOLL
   -DENABLE_CURL_CLIENT
   -DENABLE_OPENSSL_ENCRYPTION
@@ -385,4 +385,5 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/UploadPartResult.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/VersioningConfiguration.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/WebsiteConfiguration.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/source/model/WriteGetObjectResponseRequest.cpp
 )

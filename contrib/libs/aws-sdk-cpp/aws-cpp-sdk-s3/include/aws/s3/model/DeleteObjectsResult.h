@@ -95,44 +95,44 @@ namespace Model
 
 
     /**
-     * <p>Container for a failed delete operation that describes the object that Amazon
-     * S3 attempted to delete and the error it encountered.</p>
+     * <p>Container for a failed delete action that describes the object that Amazon S3
+     * attempted to delete and the error it encountered.</p>
      */
     inline const Aws::Vector<Error>& GetErrors() const{ return m_errors; }
 
     /**
-     * <p>Container for a failed delete operation that describes the object that Amazon
-     * S3 attempted to delete and the error it encountered.</p>
+     * <p>Container for a failed delete action that describes the object that Amazon S3
+     * attempted to delete and the error it encountered.</p>
      */
     inline void SetErrors(const Aws::Vector<Error>& value) { m_errors = value; }
 
     /**
-     * <p>Container for a failed delete operation that describes the object that Amazon
-     * S3 attempted to delete and the error it encountered.</p>
+     * <p>Container for a failed delete action that describes the object that Amazon S3
+     * attempted to delete and the error it encountered.</p>
      */
     inline void SetErrors(Aws::Vector<Error>&& value) { m_errors = std::move(value); }
 
     /**
-     * <p>Container for a failed delete operation that describes the object that Amazon
-     * S3 attempted to delete and the error it encountered.</p>
+     * <p>Container for a failed delete action that describes the object that Amazon S3
+     * attempted to delete and the error it encountered.</p>
      */
     inline DeleteObjectsResult& WithErrors(const Aws::Vector<Error>& value) { SetErrors(value); return *this;}
 
     /**
-     * <p>Container for a failed delete operation that describes the object that Amazon
-     * S3 attempted to delete and the error it encountered.</p>
+     * <p>Container for a failed delete action that describes the object that Amazon S3
+     * attempted to delete and the error it encountered.</p>
      */
     inline DeleteObjectsResult& WithErrors(Aws::Vector<Error>&& value) { SetErrors(std::move(value)); return *this;}
 
     /**
-     * <p>Container for a failed delete operation that describes the object that Amazon
-     * S3 attempted to delete and the error it encountered.</p>
+     * <p>Container for a failed delete action that describes the object that Amazon S3
+     * attempted to delete and the error it encountered.</p>
      */
     inline DeleteObjectsResult& AddErrors(const Error& value) { m_errors.push_back(value); return *this; }
 
     /**
-     * <p>Container for a failed delete operation that describes the object that Amazon
-     * S3 attempted to delete and the error it encountered.</p>
+     * <p>Container for a failed delete action that describes the object that Amazon S3
+     * attempted to delete and the error it encountered.</p>
      */
     inline DeleteObjectsResult& AddErrors(Error&& value) { m_errors.push_back(std::move(value)); return *this; }
 

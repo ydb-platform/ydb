@@ -36,6 +36,14 @@ namespace Aws
             inline void SetRoleArn(const Aws::String& value) { m_roleArn = value; }
             inline const Aws::String& GetExternalId() const { return m_externalId; }
             inline void SetExternalId(const Aws::String& value) { m_externalId = value; }
+            inline const Aws::String& GetSsoStartUrl() const { return m_ssoStartUrl; }
+            inline void SetSsoStartUrl(const Aws::String& value) { m_ssoStartUrl = value; }
+            inline const Aws::String& GetSsoRegion() const { return m_ssoRegion; }
+            inline void SetSsoRegion(const Aws::String& value) { m_ssoRegion = value; }
+            inline const Aws::String& GetSsoAccountId() const { return m_ssoAccountId; }
+            inline void SetSsoAccountId(const Aws::String& value) { m_ssoAccountId = value; }
+            inline const Aws::String& GetSsoRoleName() const { return m_ssoRoleName; }
+            inline void SetSsoRoleName(const Aws::String& value) { m_ssoRoleName = value; }
             inline const Aws::String& GetSourceProfile() const { return m_sourceProfile; }
             inline void SetSourceProfile(const Aws::String& value ) { m_sourceProfile = value; }
             inline const Aws::String& GetCredentialProcess() const { return m_credentialProcess; }
@@ -56,6 +64,10 @@ namespace Aws
             Aws::String m_externalId;
             Aws::String m_sourceProfile;
             Aws::String m_credentialProcess;
+            Aws::String m_ssoStartUrl;
+            Aws::String m_ssoRegion;
+            Aws::String m_ssoAccountId;
+            Aws::String m_ssoRoleName;
             Aws::Map<Aws::String, Aws::String> m_allKeyValPairs;
         };
 
@@ -156,7 +168,6 @@ namespace Aws
 
         protected:
             virtual bool LoadInternal() override;
-
         private:
             std::shared_ptr<Aws::Internal::EC2MetadataClient> m_ec2metadataClient;
         };

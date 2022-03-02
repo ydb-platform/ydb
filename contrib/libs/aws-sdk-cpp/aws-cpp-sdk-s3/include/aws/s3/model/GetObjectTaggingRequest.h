@@ -7,6 +7,7 @@
 #include <aws/s3/S3_EXPORTS.h>
 #include <aws/s3/S3Request.h>
 #include <aws/core/utils/memory/stl/AWSString.h>
+#include <aws/s3/model/RequestPayer.h>
 #include <aws/core/utils/memory/stl/AWSMap.h>
 #include <utility>
 
@@ -43,185 +44,177 @@ namespace Model
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline GetObjectTaggingRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline GetObjectTaggingRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
     /**
      * <p>The bucket name containing the object for which to get the tagging
-     * information. </p> <p>When using this API with an access point, you must direct
-     * requests to the access point hostname. The access point hostname takes the form
+     * information. </p> <p>When using this action with an access point, you must
+     * direct requests to the access point hostname. The access point hostname takes
+     * the form
      * <i>AccessPointName</i>-<i>AccountId</i>.s3-accesspoint.<i>Region</i>.amazonaws.com.
-     * When using this operation with an access point through the AWS SDKs, you provide
+     * When using this action with an access point through the AWS SDKs, you provide
      * the access point ARN in place of the bucket name. For more information about
      * access point ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-access-points.html">Using
-     * Access Points</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p> <p>When using this API with Amazon S3 on Outposts, you must
-     * direct requests to the S3 on Outposts hostname. The S3 on Outposts hostname
-     * takes the form
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-access-points.html">Using
+     * Access Points</a> in the <i>Amazon S3 User Guide</i>.</p> <p>When using this
+     * action with Amazon S3 on Outposts, you must direct requests to the S3 on
+     * Outposts hostname. The S3 on Outposts hostname takes the form
      * <i>AccessPointName</i>-<i>AccountId</i>.<i>outpostID</i>.s3-outposts.<i>Region</i>.amazonaws.com.
-     * When using this operation using S3 on Outposts through the AWS SDKs, you provide
+     * When using this action using S3 on Outposts through the AWS SDKs, you provide
      * the Outposts bucket ARN in place of the bucket name. For more information about
      * S3 on Outposts ARNs, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
-     * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
-     * Guide</i>.</p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/S3onOutposts.html">Using
+     * S3 on Outposts</a> in the <i>Amazon S3 User Guide</i>.</p>
      */
     inline GetObjectTaggingRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
@@ -309,60 +302,79 @@ namespace Model
 
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline const Aws::String& GetExpectedBucketOwner() const{ return m_expectedBucketOwner; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline bool ExpectedBucketOwnerHasBeenSet() const { return m_expectedBucketOwnerHasBeenSet; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const Aws::String& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = value; }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(Aws::String&& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = std::move(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline void SetExpectedBucketOwner(const char* value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner.assign(value); }
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline GetObjectTaggingRequest& WithExpectedBucketOwner(const Aws::String& value) { SetExpectedBucketOwner(value); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline GetObjectTaggingRequest& WithExpectedBucketOwner(Aws::String&& value) { SetExpectedBucketOwner(std::move(value)); return *this;}
 
     /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
+     * <p>The account ID of the expected bucket owner. If the bucket is owned by a
      * different account, the request will fail with an HTTP <code>403 (Access
      * Denied)</code> error.</p>
      */
     inline GetObjectTaggingRequest& WithExpectedBucketOwner(const char* value) { SetExpectedBucketOwner(value); return *this;}
+
+
+    
+    inline const RequestPayer& GetRequestPayer() const{ return m_requestPayer; }
+
+    
+    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; }
+
+    
+    inline void SetRequestPayer(const RequestPayer& value) { m_requestPayerHasBeenSet = true; m_requestPayer = value; }
+
+    
+    inline void SetRequestPayer(RequestPayer&& value) { m_requestPayerHasBeenSet = true; m_requestPayer = std::move(value); }
+
+    
+    inline GetObjectTaggingRequest& WithRequestPayer(const RequestPayer& value) { SetRequestPayer(value); return *this;}
+
+    
+    inline GetObjectTaggingRequest& WithRequestPayer(RequestPayer&& value) { SetRequestPayer(std::move(value)); return *this;}
 
 
     
@@ -417,6 +429,9 @@ namespace Model
 
     Aws::String m_expectedBucketOwner;
     bool m_expectedBucketOwnerHasBeenSet;
+
+    RequestPayer m_requestPayer;
+    bool m_requestPayerHasBeenSet;
 
     Aws::Map<Aws::String, Aws::String> m_customizedAccessLogTag;
     bool m_customizedAccessLogTagHasBeenSet;

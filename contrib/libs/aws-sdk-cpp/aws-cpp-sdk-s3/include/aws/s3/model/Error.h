@@ -127,7 +127,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -233,7 +233,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -402,7 +402,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>
@@ -487,7 +487,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -593,7 +593,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -762,7 +762,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>
@@ -847,7 +847,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -953,7 +953,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -1122,7 +1122,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>
@@ -1207,7 +1207,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -1313,7 +1313,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -1482,7 +1482,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>
@@ -1567,7 +1567,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -1673,7 +1673,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -1842,7 +1842,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>
@@ -1927,7 +1927,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -2033,7 +2033,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -2202,7 +2202,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>
@@ -2287,7 +2287,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -2393,7 +2393,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -2562,7 +2562,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>
@@ -2647,7 +2647,7 @@ namespace Model
      * Access Denied</p> </li> <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> <li>
      * <ul> <li> <p> <i>Code:</i> AccountProblem</p> </li> <li> <p> <i>Description:</i>
-     * There is a problem with your AWS account that prevents the operation from
+     * There is a problem with your AWS account that prevents the action from
      * completing successfully. Contact AWS Support for further assistance.</p> </li>
      * <li> <p> <i>HTTP Status Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault
      * Code Prefix:</i> Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
@@ -2753,7 +2753,7 @@ namespace Model
      * to Select a Region for Your Buckets</a>. </p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 400 Bad Request</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i>
-     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The operation is not
+     * InvalidObjectState</p> </li> <li> <p> <i>Description:</i> The action is not
      * valid for the current state of the object.</p> </li> <li> <p> <i>HTTP Status
      * Code:</i> 403 Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i>
      * Client</p> </li> </ul> </li> <li> <ul> <li> <p> <i>Code:</i> InvalidPart</p>
@@ -2922,7 +2922,7 @@ namespace Model
      * https://aws.amazon.com/s3</p> </li> <li> <p> <i>HTTP Status Code:</i> 403
      * Forbidden</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> OperationAborted</p> </li> <li> <p>
-     * <i>Description:</i> A conflicting conditional operation is currently in progress
+     * <i>Description:</i> A conflicting conditional action is currently in progress
      * against this resource. Try again.</p> </li> <li> <p> <i>HTTP Status Code:</i>
      * 409 Conflict</p> </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li>
      * </ul> </li> <li> <ul> <li> <p> <i>Code:</i> PermanentRedirect</p> </li> <li> <p>

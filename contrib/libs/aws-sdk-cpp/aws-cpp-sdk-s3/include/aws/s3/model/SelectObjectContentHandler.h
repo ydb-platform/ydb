@@ -41,7 +41,7 @@ namespace Model
 
     public:
         SelectObjectContentHandler();
-        SelectObjectContentHandler& operator=(const SelectObjectContentHandler& handler) = default;
+        SelectObjectContentHandler& operator=(const SelectObjectContentHandler&) = default;
 
         virtual void OnEvent() override;
 

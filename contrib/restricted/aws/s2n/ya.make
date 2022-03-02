@@ -7,9 +7,9 @@ OWNER(
     g:cpp-contrib
 )
 
-VERSION(0.10.23)
+VERSION(0.10.26)
 
-ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v0.10.23.tar.gz)
+ORIGINAL_SOURCE(https://github.com/aws/s2n-tls/archive/v0.10.26.tar.gz)
 
 LICENSE(
     Apache-2.0 AND
@@ -162,11 +162,13 @@ SRCS(
     tls/extensions/s2n_extension_type.c
     tls/extensions/s2n_extension_type_lists.c
     tls/extensions/s2n_key_share.c
+    tls/extensions/s2n_psk_key_exchange_modes.c
     tls/extensions/s2n_quic_transport_params.c
     tls/extensions/s2n_server_alpn.c
     tls/extensions/s2n_server_certificate_status.c
     tls/extensions/s2n_server_key_share.c
     tls/extensions/s2n_server_max_fragment_length.c
+    tls/extensions/s2n_server_psk.c
     tls/extensions/s2n_server_renegotiation_info.c
     tls/extensions/s2n_server_sct_list.c
     tls/extensions/s2n_server_server_name.c

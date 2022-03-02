@@ -56,8 +56,8 @@ namespace Aws
                 m_errorType(errorType), m_responseCode(Aws::Http::HttpResponseCode::REQUEST_NOT_MADE),
                 m_isRetryable(isRetryable), m_errorPayloadType(ErrorPayloadType::NOT_SET) {}
 
-            AWSError(AWSError&& rhs) = default;
-            AWSError(const AWSError& rhs) = default;
+            AWSError(AWSError&&) = default;
+            AWSError(const AWSError&) = default;
 
             template<typename OTHER_ERROR_TYPE>
             AWSError(AWSError<OTHER_ERROR_TYPE>&& rhs) :

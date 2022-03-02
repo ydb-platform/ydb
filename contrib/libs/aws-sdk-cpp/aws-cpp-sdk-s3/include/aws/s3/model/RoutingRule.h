@@ -27,8 +27,8 @@ namespace Model
    * <p>Specifies the redirect behavior and when a redirect is applied. For more
    * information about routing rules, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/how-to-page-redirect.html#advanced-conditional-redirects">Configuring
-   * advanced conditional redirects</a> in the <i>Amazon Simple Storage Service
-   * Developer Guide</i>.</p><p><h3>See Also:</h3>   <a
+   * advanced conditional redirects</a> in the <i>Amazon S3 User
+   * Guide</i>.</p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RoutingRule">AWS API
    * Reference</a></p>
    */

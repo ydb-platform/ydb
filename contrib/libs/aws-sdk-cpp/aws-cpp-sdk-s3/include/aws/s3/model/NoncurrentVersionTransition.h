@@ -51,7 +51,7 @@ namespace Model
      * calculations, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html#non-current-days-calculations">How
      * Amazon S3 Calculates How Long an Object Has Been Noncurrent</a> in the <i>Amazon
-     * Simple Storage Service Developer Guide</i>.</p>
+     * S3 User Guide</i>.</p>
      */
     inline int GetNoncurrentDays() const{ return m_noncurrentDays; }
 
@@ -61,7 +61,7 @@ namespace Model
      * calculations, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html#non-current-days-calculations">How
      * Amazon S3 Calculates How Long an Object Has Been Noncurrent</a> in the <i>Amazon
-     * Simple Storage Service Developer Guide</i>.</p>
+     * S3 User Guide</i>.</p>
      */
     inline bool NoncurrentDaysHasBeenSet() const { return m_noncurrentDaysHasBeenSet; }
 
@@ -71,7 +71,7 @@ namespace Model
      * calculations, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html#non-current-days-calculations">How
      * Amazon S3 Calculates How Long an Object Has Been Noncurrent</a> in the <i>Amazon
-     * Simple Storage Service Developer Guide</i>.</p>
+     * S3 User Guide</i>.</p>
      */
     inline void SetNoncurrentDays(int value) { m_noncurrentDaysHasBeenSet = true; m_noncurrentDays = value; }
 
@@ -81,7 +81,7 @@ namespace Model
      * calculations, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html#non-current-days-calculations">How
      * Amazon S3 Calculates How Long an Object Has Been Noncurrent</a> in the <i>Amazon
-     * Simple Storage Service Developer Guide</i>.</p>
+     * S3 User Guide</i>.</p>
      */
     inline NoncurrentVersionTransition& WithNoncurrentDays(int value) { SetNoncurrentDays(value); return *this;}
 

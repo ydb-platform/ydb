@@ -39,7 +39,7 @@ CFLAGS(
     -DAWS_IO_USE_IMPORT_EXPORT
     -DAWS_SDK_VERSION_MAJOR=1
     -DAWS_SDK_VERSION_MINOR=8
-    -DAWS_SDK_VERSION_PATCH=113
+    -DAWS_SDK_VERSION_PATCH=186
     -DAWS_USE_EPOLL
     -DCURL_HAS_H2
     -DCURL_HAS_TLS_PROXY
@@ -73,6 +73,7 @@ SRCS(
     source/auth/AWSAuthSignerProvider.cpp
     source/auth/AWSCredentialsProvider.cpp
     source/auth/AWSCredentialsProviderChain.cpp
+    source/auth/SSOCredentialsProvider.cpp
     source/auth/STSCredentialsProvider.cpp
     source/client/AWSClient.cpp
     source/client/AWSErrorMarshaller.cpp
@@ -127,6 +128,7 @@ SRCS(
     source/utils/crypto/EncryptionMaterials.cpp
     source/utils/crypto/KeyWrapAlgorithm.cpp
     source/utils/crypto/MD5.cpp
+    source/utils/crypto/Sha1.cpp
     source/utils/crypto/Sha256.cpp
     source/utils/crypto/Sha256HMAC.cpp
     source/utils/crypto/factory/Factories.cpp

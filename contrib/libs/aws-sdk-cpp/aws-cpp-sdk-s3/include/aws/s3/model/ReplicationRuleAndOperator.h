@@ -30,8 +30,8 @@ namespace Model
    * more than one filter. </p> <p>For example:</p> <ul> <li> <p>If you specify both
    * a <code>Prefix</code> and a <code>Tag</code> filter, wrap these filters in an
    * <code>And</code> tag. </p> </li> <li> <p>If you specify a filter based on
-   * multiple tags, wrap the <code>Tag</code> elements in an <code>And</code> tag</p>
-   * </li> </ul><p><h3>See Also:</h3>   <a
+   * multiple tags, wrap the <code>Tag</code> elements in an <code>And</code>
+   * tag.</p> </li> </ul><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ReplicationRuleAndOperator">AWS
    * API Reference</a></p>
    */

@@ -10,6 +10,7 @@
 #include <aws/core/Region.h>
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/http/HttpTypes.h>
+#include <aws/core/utils/Array.h>
 #include <memory>
 
 namespace Aws
@@ -164,6 +165,10 @@ namespace Aws
             * Used to set CURLOPT_PROXY_KEYPASSWD in libcurl. Example: password1
             */
             Aws::String proxySSLKeyPassword;
+            /**
+            * Calls to hosts in this vector will not use proxy configuration
+            */
+            Aws::Utils::Array<Aws::String> nonProxyHosts;
             /**
             * Threading Executor implementation. Default uses std::thread::detach()
             */

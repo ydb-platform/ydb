@@ -60,6 +60,7 @@ private:
     Aws::String m_proxySSLKeyType;
     Aws::String m_proxyKeyPasswd;
     unsigned m_proxyPort;
+    Aws::String m_nonProxyHosts;
     bool m_verifySSL;
     Aws::String m_caPath;
     Aws::String m_caFile;

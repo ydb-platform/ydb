@@ -132,22 +132,58 @@ namespace Model
     inline LifecycleRule& WithID(const char* value) { SetID(value); return *this;}
 
 
-    
+    /**
+     * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
+     * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
+     * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
+     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * element.</p>
+     */
     inline const LifecycleRuleFilter& GetFilter() const{ return m_filter; }
 
-    
+    /**
+     * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
+     * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
+     * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
+     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * element.</p>
+     */
     inline bool FilterHasBeenSet() const { return m_filterHasBeenSet; }
 
-    
+    /**
+     * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
+     * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
+     * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
+     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * element.</p>
+     */
     inline void SetFilter(const LifecycleRuleFilter& value) { m_filterHasBeenSet = true; m_filter = value; }
 
-    
+    /**
+     * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
+     * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
+     * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
+     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * element.</p>
+     */
     inline void SetFilter(LifecycleRuleFilter&& value) { m_filterHasBeenSet = true; m_filter = std::move(value); }
 
-    
+    /**
+     * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
+     * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
+     * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
+     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * element.</p>
+     */
     inline LifecycleRule& WithFilter(const LifecycleRuleFilter& value) { SetFilter(value); return *this;}
 
-    
+    /**
+     * <p>The <code>Filter</code> is used to identify objects that a Lifecycle Rule
+     * applies to. A <code>Filter</code> must have exactly one of <code>Prefix</code>,
+     * <code>Tag</code>, or <code>And</code> specified. <code>Filter</code> is required
+     * if the <code>LifecycleRule</code> does not containt a <code>Prefix</code>
+     * element.</p>
+     */
     inline LifecycleRule& WithFilter(LifecycleRuleFilter&& value) { SetFilter(std::move(value)); return *this;}
 
 

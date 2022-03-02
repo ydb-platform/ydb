@@ -122,7 +122,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline const Aws::String& GetKeyPrefixEquals() const{ return m_keyPrefixEquals; }
 
@@ -134,7 +138,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline bool KeyPrefixEqualsHasBeenSet() const { return m_keyPrefixEqualsHasBeenSet; }
 
@@ -146,7 +154,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline void SetKeyPrefixEquals(const Aws::String& value) { m_keyPrefixEqualsHasBeenSet = true; m_keyPrefixEquals = value; }
 
@@ -158,7 +170,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline void SetKeyPrefixEquals(Aws::String&& value) { m_keyPrefixEqualsHasBeenSet = true; m_keyPrefixEquals = std::move(value); }
 
@@ -170,7 +186,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline void SetKeyPrefixEquals(const char* value) { m_keyPrefixEqualsHasBeenSet = true; m_keyPrefixEquals.assign(value); }
 
@@ -182,7 +202,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline Condition& WithKeyPrefixEquals(const Aws::String& value) { SetKeyPrefixEquals(value); return *this;}
 
@@ -194,7 +218,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline Condition& WithKeyPrefixEquals(Aws::String&& value) { SetKeyPrefixEquals(std::move(value)); return *this;}
 
@@ -206,7 +234,11 @@ namespace Model
      * all objects in the <code>docs/</code> folder. Required when the parent element
      * <code>Condition</code> is specified and sibling
      * <code>HttpErrorCodeReturnedEquals</code> is not specified. If both conditions
-     * are specified, both must be true for the redirect to be applied.</p>
+     * are specified, both must be true for the redirect to be applied.</p> 
+     * <p>Replacement must be made for object keys containing special characters (such
+     * as carriage returns) when using XML requests. For more information, see <a
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html#object-key-xml-related-constraints">
+     * XML related object key constraints</a>.</p> 
      */
     inline Condition& WithKeyPrefixEquals(const char* value) { SetKeyPrefixEquals(value); return *this;}
 

@@ -2,9 +2,9 @@
 
 OWNER(orivej shindo g:cpp-contrib)
 
-VERSION(1.8.113)
+VERSION(1.8.186)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-sdk-cpp/archive/1.8.113.tar.gz)
+ORIGINAL_SOURCE(https://github.com/aws/aws-sdk-cpp/archive/1.8.186.tar.gz)
 
 RECURSE(
     aws-cpp-sdk-core

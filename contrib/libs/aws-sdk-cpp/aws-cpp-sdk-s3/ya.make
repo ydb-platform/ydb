@@ -35,7 +35,7 @@ CFLAGS(
     -DAWS_IO_USE_IMPORT_EXPORT
     -DAWS_SDK_VERSION_MAJOR=1
     -DAWS_SDK_VERSION_MINOR=8
-    -DAWS_SDK_VERSION_PATCH=113
+    -DAWS_SDK_VERSION_PATCH=186
     -DAWS_USE_EPOLL
     -DENABLE_CURL_CLIENT
     -DENABLE_OPENSSL_ENCRYPTION
@@ -392,6 +392,7 @@ SRCS(
     source/model/UploadPartResult.cpp
     source/model/VersioningConfiguration.cpp
     source/model/WebsiteConfiguration.cpp
+    source/model/WriteGetObjectResponseRequest.cpp
 )
 
 END()

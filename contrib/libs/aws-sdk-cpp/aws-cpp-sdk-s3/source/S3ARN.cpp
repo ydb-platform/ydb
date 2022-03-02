@@ -61,10 +61,10 @@ namespace Aws
                 ss << "Invalid partition in ARN: " << this->GetPartition() << ". Valid options: aws, aws-cn, and etc.";
             }
             // Validation on service.
-            else if (this->GetService() != "s3"  && this->GetService() != "s3-outposts")
+            else if (this->GetService() != ARNService::S3 && this->GetService() != ARNService::S3_OUTPOSTS && this->GetService() != ARNService::S3_OBJECT_LAMBDA)
             {
                 ss.str("");
-                ss << "Invalid service in ARN: " << this->GetService() << ". Valid options: s3, s3-outposts";
+                ss << "Invalid service in ARN: " << this->GetService() << ". Valid options: " << ARNService::S3 << ", " << ARNService::S3_OUTPOSTS << ", " << ARNService::S3_OBJECT_LAMBDA << ".";
                 errorMessage = ss.str();
             }
             // Validation on region.
@@ -86,7 +86,7 @@ namespace Aws
                 ss << "Invalid account ID in ARN: " << this->GetAccountId() << ". Account ID should be a RFC 3986 Host label.";
                 errorMessage = ss.str();
             }
-            // Validation on Access Point ARN:
+            // Validation on Access Point ARN and Object Lambda Access Point ARN:
             else if (this->GetResourceType() == ARNResourceType::ACCESSPOINT)
             {
                 if (!Utils::IsValidDnsLabel(this->GetResourceId()))
@@ -144,11 +144,11 @@ namespace Aws
                     success = true;
                 }
             }
-            // Neither Access Point ARN nor Outposts ARN.
+            // ARN with unknown resource type.
             else
             {
                 ss.str("");
-                ss << "Invalid resource type in ARN: " << this->GetResourceType() << ". Valid options: " << ARNResourceType::ACCESSPOINT << ", " << ARNResourceType::OUTPOST;
+                ss << "Invalid resource type in ARN: " << this->GetResourceType() << ". Valid options: " << ARNResourceType::ACCESSPOINT << ", " << ARNResourceType::OUTPOST << ".";
                 errorMessage = ss.str();
             }
 

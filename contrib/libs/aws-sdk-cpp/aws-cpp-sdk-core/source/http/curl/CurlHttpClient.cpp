@@ -142,8 +142,9 @@ struct CurlWriteCallbackContext
 
 struct CurlReadCallbackContext
 {
-    CurlReadCallbackContext(const CurlHttpClient* client, HttpRequest* request, Aws::Utils::RateLimits::RateLimiterInterface* limiter) :
+    CurlReadCallbackContext(const CurlHttpClient* client, CURL* curlHandle, HttpRequest* request, Aws::Utils::RateLimits::RateLimiterInterface* limiter) :
         m_client(client),
+        m_curlHandle(curlHandle),
         m_rateLimiter(limiter),
         m_request(request)
     {}
@@ -236,10 +237,10 @@ static size_t ReadBody(char* ptr, size_t size, size_t nmemb, void* userdata)
     {
         if (request->IsEventStreamRequest())
         {
-            // Waiting for next available character to read.
-            // Without peek(), readsome() will keep reading 0 byte from the stream.
-            ioStream->peek();
-            ioStream->readsome(ptr, amountToRead);
+            if (ioStream->readsome(ptr, amountToRead) == 0 && !ioStream->eof())
+            {
+                return CURL_READFUNC_PAUSE;
+            }
         }
         else
         {
@@ -303,6 +304,33 @@ static size_t SeekBody(void* userdata, curl_off_t offset, int origin)
     }
 
     return CURL_SEEKFUNC_OK;
+}
+#if LIBCURL_VERSION_NUM >= 0x072000 // 7.32.0
+static int CurlProgressCallback(void *userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+#else
+static int CurlProgressCallback(void *userdata, double, double, double, double)
+#endif
+{
+    CurlReadCallbackContext* context = reinterpret_cast<CurlReadCallbackContext*>(userdata);
+
+    const std::shared_ptr<Aws::IOStream>& ioStream = context->m_request->GetContentBody();
+    if (ioStream->eof())
+    {
+        curl_easy_pause(context->m_curlHandle, CURLPAUSE_CONT);
+        return 0;
+    }
+    char output[1];
+    if (ioStream->readsome(output, 1) > 0)
+    {
+        ioStream->unget();
+        if (!ioStream->good())
+        {
+            AWS_LOGSTREAM_WARN(CURL_HTTP_CLIENT_TAG, "Input stream failed to perform unget().");
+        }
+        curl_easy_pause(context->m_curlHandle, CURLPAUSE_CONT);
+    }
+
+    return 0;
 }
 
 void SetOptCodeForHttpMethod(CURL* requestHandle, const std::shared_ptr<HttpRequest>& request)
@@ -456,6 +484,16 @@ CurlHttpClient::CurlHttpClient(const ClientConfiguration& clientConfig) :
     {
         m_allowRedirects = true;
     }
+    if(clientConfig.nonProxyHosts.GetLength() > 0)
+    {
+        Aws::StringStream ss;
+        ss << clientConfig.nonProxyHosts.GetItem(0);
+        for (auto i=1u; i < clientConfig.nonProxyHosts.GetLength(); i++)
+        {
+            ss << "," << clientConfig.nonProxyHosts.GetItem(i);
+        }
+        m_nonProxyHosts = ss.str();
+    }
 }
 
 
@@ -521,7 +559,7 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
         }
 
         CurlWriteCallbackContext writeContext(this, request.get(), response.get(), readLimiter);
-        CurlReadCallbackContext readContext(this, request.get(), writeLimiter);
+        CurlReadCallbackContext readContext(this, connectionHandle, request.get(), writeLimiter);
 
         SetOptCodeForHttpMethod(connectionHandle, request);
 
@@ -595,6 +633,7 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
                 curl_easy_setopt(connectionHandle, CURLOPT_PROXYUSERNAME, m_proxyUserName.c_str());
                 curl_easy_setopt(connectionHandle, CURLOPT_PROXYPASSWORD, m_proxyPassword.c_str());
             }
+            curl_easy_setopt(connectionHandle, CURLOPT_NOPROXY, m_nonProxyHosts.c_str());
 #ifdef CURL_HAS_TLS_PROXY
             if (!m_proxySSLCertPath.empty())
             {
@@ -629,6 +668,17 @@ std::shared_ptr<HttpResponse> CurlHttpClient::MakeRequest(const std::shared_ptr<
             curl_easy_setopt(connectionHandle, CURLOPT_READDATA, &readContext);
             curl_easy_setopt(connectionHandle, CURLOPT_SEEKFUNCTION, SeekBody);
             curl_easy_setopt(connectionHandle, CURLOPT_SEEKDATA, &readContext);
+            if (request->IsEventStreamRequest())
+            {
+                curl_easy_setopt(connectionHandle, CURLOPT_NOPROGRESS, 0L);
+#if LIBCURL_VERSION_NUM >= 0x072000 // 7.32.0
+                curl_easy_setopt(connectionHandle, CURLOPT_XFERINFOFUNCTION, CurlProgressCallback);
+                curl_easy_setopt(connectionHandle, CURLOPT_XFERINFODATA, &readContext);
+#else
+                curl_easy_setopt(connectionHandle, CURLOPT_PROGRESSFUNCTION, CurlProgressCallback);
+                curl_easy_setopt(connectionHandle, CURLOPT_PROGRESSDATA, &readContext);
+#endif
+            }
         }
 
         OverrideOptionsOnConnectionHandle(connectionHandle);

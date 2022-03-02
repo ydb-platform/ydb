@@ -5,8 +5,8 @@
 
 #pragma once
 #include <aws/s3/S3_EXPORTS.h>
-#include <aws/core/utils/memory/stl/AWSVector.h>
 #include <aws/core/utils/memory/stl/AWSString.h>
+#include <aws/core/utils/memory/stl/AWSVector.h>
 #include <utility>
 
 namespace Aws
@@ -37,6 +37,55 @@ namespace Model
     CORSRule& operator=(const Aws::Utils::Xml::XmlNode& xmlNode);
 
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
+
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline const Aws::String& GetID() const{ return m_iD; }
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline bool IDHasBeenSet() const { return m_iDHasBeenSet; }
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline void SetID(const Aws::String& value) { m_iDHasBeenSet = true; m_iD = value; }
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline void SetID(Aws::String&& value) { m_iDHasBeenSet = true; m_iD = std::move(value); }
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline void SetID(const char* value) { m_iDHasBeenSet = true; m_iD.assign(value); }
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline CORSRule& WithID(const Aws::String& value) { SetID(value); return *this;}
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline CORSRule& WithID(Aws::String&& value) { SetID(std::move(value)); return *this;}
+
+    /**
+     * <p>Unique identifier for the rule. The value cannot be longer than 255
+     * characters.</p>
+     */
+    inline CORSRule& WithID(const char* value) { SetID(value); return *this;}
 
 
     /**
@@ -320,6 +369,9 @@ namespace Model
     inline CORSRule& WithMaxAgeSeconds(int value) { SetMaxAgeSeconds(value); return *this;}
 
   private:
+
+    Aws::String m_iD;
+    bool m_iDHasBeenSet;
 
     Aws::Vector<Aws::String> m_allowedHeaders;
     bool m_allowedHeadersHasBeenSet;

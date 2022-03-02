@@ -85,8 +85,8 @@ Aws::Http::HeaderValueCollection DeleteObjectsRequest::GetRequestSpecificHeaders
 
   if(m_bypassGovernanceRetentionHasBeenSet)
   {
-    ss << m_bypassGovernanceRetention;
-    headers.emplace("x-amz-bypass-governance-retention",  ss.str());
+    ss << std::boolalpha << m_bypassGovernanceRetention;
+    headers.emplace("x-amz-bypass-governance-retention", ss.str());
     ss.str("");
   }
 

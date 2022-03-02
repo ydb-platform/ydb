@@ -1294,6 +1294,39 @@
             ]
         },
         {
+            "Name": "TCoFrameBound",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Setting", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Bound", "Type": "TExprBase", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TCoWinOnBase",
+            "VarArgBase": "TExprBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 0, "Name": "FrameSpec", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoWinOnRows",
+            "Base": "TCoWinOnBase",
+            "Match": {"Type": "Callable", "Name": "WinOnRows"}
+        },
+        {
+            "Name": "TCoWinOnRange",
+            "Base": "TCoWinOnBase",
+            "Match": {"Type": "Callable", "Name": "WinOnRange"}
+        },
+        {
+            "Name": "TCoWinOnGroups",
+            "Base": "TCoWinOnBase",
+            "Match": {"Type": "Callable", "Name": "WinOnGroups"}
+        },
+        {
             "Name": "TCoCalcOverWindowBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},

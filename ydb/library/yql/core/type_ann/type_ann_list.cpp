@@ -518,12 +518,7 @@ namespace {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            bool frameCanBeEmpty = false;
-            {
-                TWindowFrameSettings frameSettings;
-                YQL_ENSURE(ParseWindowFrameSettings(*winOn, frameSettings, ctx));
-                frameCanBeEmpty = !frameSettings.NeverEmpty;
-            }
+            bool frameCanBeEmpty = !TWindowFrameSettings::Parse(*winOn, ctx).IsNonEmpty();
 
             for (auto iterFunc = winOn->Children().begin() + 1; iterFunc != winOn->Children().end(); ++iterFunc) {
                 auto func = *iterFunc;
@@ -4970,8 +4965,7 @@ namespace {
             }
         }
 
-        TWindowFrameSettings frameSettings;
-        if (!ParseWindowFrameSettings(*input, frameSettings, ctx.Expr)) {
+        if (!TWindowFrameSettings::TryParse(*input, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

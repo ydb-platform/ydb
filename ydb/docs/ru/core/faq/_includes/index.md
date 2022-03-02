@@ -6,6 +6,3 @@
 {% endif %}
 * [YQL](../yql.md)
 * [Ошибки](../errors.md)
-
-
-

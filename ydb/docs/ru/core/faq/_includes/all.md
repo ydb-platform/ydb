@@ -5,6 +5,7 @@
 {% include notitle [common.md](../common.md) %}
 
 {% if oss %}
+
 ## SDK {#SDK}
 
 {% include notitle [sdk.md](../sdk.md) %}
@@ -18,4 +19,3 @@
 ## Ошибки {#errors}
 
 {% include notitle [errors.md](../errors.md) %}
-

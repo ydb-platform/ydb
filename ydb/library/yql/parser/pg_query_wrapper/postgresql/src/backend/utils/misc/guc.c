@@ -929,29 +929,14 @@ static const unit_conversion time_unit_conversion_table[] =
 
 /******** option records follow ********/
 
-static struct config_bool ConfigureNamesBool[] =
-{
-};
 
 
-static struct config_int ConfigureNamesInt[] =
-{
-};
 
 
-static struct config_real ConfigureNamesReal[] =
-{
-};
 
 
-static struct config_string ConfigureNamesString[] =
-{
-};
 
 
-static struct config_enum ConfigureNamesEnum[] =
-{
-};
 
 /******** end of options list ********/
 

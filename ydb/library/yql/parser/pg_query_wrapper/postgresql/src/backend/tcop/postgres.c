@@ -33,7 +33,7 @@
 #endif
 
 #ifndef HAVE_GETRUSAGE
-#error #include "rusagestub.h"
+#include "rusagestub.h"
 #endif
 
 #include "access/parallel.h"

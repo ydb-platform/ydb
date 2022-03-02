@@ -93,8 +93,8 @@ typedef enum
 } IpcMemoryState;
 
 
-__thread unsigned long UsedShmemSegID = 0;
-__thread void	   *UsedShmemSegAddr = NULL;
+unsigned long UsedShmemSegID = 0;
+void	   *UsedShmemSegAddr = NULL;
 
 static __thread Size AnonymousShmemSize;
 static __thread void *AnonymousShmem = NULL;

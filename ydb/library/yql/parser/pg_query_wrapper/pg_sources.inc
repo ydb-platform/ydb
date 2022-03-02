@@ -394,8 +394,6 @@ SRCS(
     postgresql/src/backend/partitioning/partdesc.c
     postgresql/src/backend/partitioning/partprune.c
     postgresql/src/backend/port/atomics.c
-    postgresql/src/backend/port/posix_sema.c
-    postgresql/src/backend/port/sysv_shmem.c
     postgresql/src/backend/postmaster/autovacuum.c
     postgresql/src/backend/postmaster/bgworker.c
     postgresql/src/backend/postmaster/bgwriter.c

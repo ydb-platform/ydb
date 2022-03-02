@@ -1287,13 +1287,8 @@ extern long long strtoll(const char *str, char **endptr, int base);
 extern unsigned long long strtoull(const char *str, char **endptr, int base);
 #endif
 
-/* no special DLL markers on most ports */
-#ifndef PGDLLIMPORT
 #define PGDLLIMPORT
-#endif
-#ifndef PGDLLEXPORT
 #define PGDLLEXPORT
-#endif
 
 /*
  * The following is used as the arg list for signal handlers.  Any ports

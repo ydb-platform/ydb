@@ -11,6 +11,7 @@ all_funcs_with_statics = defaultdict(list)
 thread_funcs = []
 define_for_yylval = None
 skip_func = False
+erase_func = False
 split_def = False
 def_type = None
 def_var = None
@@ -43,6 +44,7 @@ def fix_line(line, all_lines, pos):
         return line.replace("static","static __thread")
 
     global skip_func
+    global erase_func
     if line.startswith("build_guc_variables(void)"):
        skip_func = True
        return line
@@ -63,10 +65,13 @@ def fix_line(line, all_lines, pos):
 
     if skip_func:
        if line.startswith("{"):
-          return line
+          return None if erase_func else line
        if not line.startswith("}"):
           return None
        skip_func=False
+       if erase_func:
+          erase_func=False
+          return None
 
     if ignore_func:
        if line.startswith("{"):
@@ -113,7 +118,8 @@ def fix_line(line, all_lines, pos):
 
     if "ConfigureNames" in line and line.strip().endswith("[] ="):
        skip_func = True
-       return line
+       erase_func = True
+       return None
 
     if line.startswith("#") or line.startswith(" ") or line.startswith("\t"):
         return line
@@ -231,7 +237,7 @@ def make_sources_list():
        with open("pg_sources.inc","w") as fdst:
           fdst.write("SRCS(\n")
           for line in fsrc:
-             if "    src/" in line:
+             if line.startswith("    src/"):
                  #print(line.strip())
                  if "/help_config.c" in line: continue
                  fdst.write("    postgresql/" + line.strip() + "\n")
@@ -265,6 +271,9 @@ def get_vars():
     all_vars.add("yytext")
     all_vars.add("yy_flex_debug")
     all_vars.add("yylineno")
+
+    all_vars.remove("UsedShmemSegID")
+    all_vars.remove("UsedShmemSegAddr")
 
     with open("vars.txt","w") as f:
         for a in sorted(all_vars):

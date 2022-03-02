@@ -23,7 +23,7 @@
  * Note: Some CYGWIN includes might #define WIN32.
  */
 #if defined(WIN32) && !defined(__CYGWIN__)
-#error #include "port/win32_port.h"
+#include "port/win32_port.h"
 #endif
 
 /* socket has a different definition on WIN32 */

@@ -19,7 +19,7 @@
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
 #else
-#error #include "rusagestub.h"
+#include "rusagestub.h"
 #endif
 
 

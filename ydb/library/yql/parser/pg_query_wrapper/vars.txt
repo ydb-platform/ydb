@@ -491,8 +491,6 @@ Unix_socket_group
 Unix_socket_permissions
 UsableBytesInSegment
 UseSemiNewlineNewline
-UsedShmemSegAddr
-UsedShmemSegID
 Utf8ToServerConvProc
 VacuumActiveNWorkers
 VacuumCostActive

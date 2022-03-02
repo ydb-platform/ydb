@@ -62,12 +62,12 @@ typedef enum
 }			PGShmemType;
 
 #ifndef WIN32
-extern __thread unsigned long UsedShmemSegID;
+extern unsigned long UsedShmemSegID;
 #else
-extern __thread HANDLE UsedShmemSegID;
+extern HANDLE UsedShmemSegID;
 extern void *ShmemProtectiveRegion;
 #endif
-extern __thread void *UsedShmemSegAddr;
+extern void *UsedShmemSegAddr;
 
 #if !defined(WIN32) && !defined(EXEC_BACKEND)
 #define DEFAULT_SHARED_MEMORY_TYPE SHMEM_TYPE_MMAP

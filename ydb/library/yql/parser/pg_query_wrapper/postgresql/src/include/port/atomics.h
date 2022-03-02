@@ -94,7 +94,7 @@
 #if (defined(__GNUC__) || defined(__INTEL_COMPILER)) && !(defined(__IBMC__) || defined(__IBMCPP__))
 #include "port/atomics/generic-gcc.h"
 #elif defined(_MSC_VER)
-#error #include "port/atomics/generic-msvc.h"
+#include "port/atomics/generic-msvc.h"
 #elif defined(__hpux) && defined(__ia64) && !defined(__GNUC__)
 #error #include "port/atomics/generic-acc.h"
 #elif defined(__SUNPRO_C) && !defined(__GNUC__)

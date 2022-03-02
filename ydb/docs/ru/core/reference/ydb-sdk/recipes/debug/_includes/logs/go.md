@@ -109,4 +109,4 @@
 
 {% include [overlay](go_appendix.md) %}
 
-* Реализовать собственный пакет логгирования на основе пакета трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace`
+* Реализовать собственный пакет логирования на основе пакета трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace`

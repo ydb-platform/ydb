@@ -40,7 +40,7 @@ sudo usermod -aG disk ydb
 
 {% note alert %}
 
-Будьте внимательны! Следующая операция удалят все разделы на указанных дисках!
+Будьте внимательны! Следующая операция удалит все разделы на указанных дисках!
 Убедитесь, что вы указали диски, на которых нет других данных!
 
 {% endnote %}
@@ -87,7 +87,7 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
 
 - Незащищенный режим
 
-  В данном режиме трафик между нодами кластера а также между клиентом и кластером использует нешифрованное соединение. Используйте данный режим для тестовых задач.
+  В данном режиме трафик между нодами кластера, а также между клиентом и кластером использует нешифрованное соединение. Используйте данный режим для тестовых задач.
   
   {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
@@ -251,13 +251,13 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
 {% endlist %}
 
 ## Протестируйте работу с созданной базой {# try-first-db}
-1. Установите YDB CLI как описано в статье [Установка YDB CLI](../../reference/ydb-cli/install.md)
+1. Установите YDB CLI, как описано в статье [Установка YDB CLI](../../reference/ydb-cli/install.md)
 2. Создайте тестовую таблицу `test_table`:
 ```bash
 ydb -e grpc://<node1.domain>:2136 -d /Root/testdb scripting yql \
 --script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
 ```
-Где node.domain - FQDN сервера, на котором запущены динамическая нода, обслуживающие базу `/Root/testdb`
+Где node.domain - FQDN сервера, на котором запущены динамические ноды, обслуживающие базу `/Root/testdb`
 
 
 

@@ -212,6 +212,8 @@ private:
         YQL_LOG(DEBUG) << " " << SelfId() << " ExportStats " << (taskId ? ToString(taskId) : "Summary");
         TString name;
         std::map<TString, TString> labels;
+        static const TString SourceLabel = "Source";
+        static const TString SinkLabel = "Sink";
         for (const auto& [k, v] : stat.Get()) {
             labels.clear();
             if (auto group = GroupForExport(stat, k, taskId, name, labels)) {
@@ -225,10 +227,15 @@ private:
                         publicCounterName = "query.cpu_usage_us";
                         isDeriv = true;
                     } else if (name == "Bytes") {
-                        if (labels.find("Source") != labels.end()) publicCounterName = "query.input_bytes";
-                        else if (labels.find("Sink") != labels.end()) publicCounterName = "query.output_bytes";
+                        if (labels.count(SourceLabel)) publicCounterName = "query.input_bytes";
+                        else if (labels.count(SinkLabel)) publicCounterName = "query.output_bytes";
+                        isDeriv = true;
+                    } else if (name == "RowsIn") {
+                        if (labels.count(SourceLabel)) publicCounterName = "query.source_input_messages";
+                        else if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_messages"; // RowsIn == RowsOut for Sinks
                         isDeriv = true;
                     }
+
                     if (publicCounterName) {
                         *ServiceCounters.PublicCounters->GetNamedCounter("name", publicCounterName, isDeriv) = v.Count;
                     }

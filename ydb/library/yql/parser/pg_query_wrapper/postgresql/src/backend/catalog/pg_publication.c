@@ -3,7 +3,7 @@
  * pg_publication.c
  *		publication C API manipulation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -68,7 +68,7 @@ check_publication_add_relation(Relation targetrel)
 				 errdetail("System tables cannot be added to publications.")));
 
 	/* UNLOGGED and TEMP relations cannot be part of publication. */
-	if (targetrel->rd_rel->relpersistence != RELPERSISTENCE_PERMANENT)
+	if (!RelationIsPermanent(targetrel))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("table \"%s\" cannot be replicated",
@@ -103,6 +103,45 @@ is_publishable_class(Oid relid, Form_pg_class reltuple)
 		!IsCatalogRelationOid(relid) &&
 		reltuple->relpersistence == RELPERSISTENCE_PERMANENT &&
 		relid >= FirstNormalObjectId;
+}
+
+/*
+ * Filter out the partitions whose parent tables were also specified in
+ * the publication.
+ */
+static List *
+filter_partitions(List *relids)
+{
+	List	   *result = NIL;
+	ListCell   *lc;
+	ListCell   *lc2;
+
+	foreach(lc, relids)
+	{
+		bool		skip = false;
+		List	   *ancestors = NIL;
+		Oid			relid = lfirst_oid(lc);
+
+		if (get_rel_relispartition(relid))
+			ancestors = get_partition_ancestors(relid);
+
+		foreach(lc2, ancestors)
+		{
+			Oid			ancestor = lfirst_oid(lc2);
+
+			/* Check if the parent table exists in the published table list. */
+			if (list_member_oid(relids, ancestor))
+			{
+				skip = true;
+				break;
+			}
+		}
+
+		if (!skip)
+			result = lappend_oid(result, relid);
+	}
+
+	return result;
 }
 
 /*
@@ -557,10 +596,23 @@ pg_get_publication_tables(PG_FUNCTION_ARGS)
 		if (publication->alltables)
 			tables = GetAllTablesPublicationRelations(publication->pubviaroot);
 		else
+		{
 			tables = GetPublicationRelations(publication->oid,
 											 publication->pubviaroot ?
 											 PUBLICATION_PART_ROOT :
 											 PUBLICATION_PART_LEAF);
+
+			/*
+			 * If the publication publishes partition changes via their
+			 * respective root partitioned tables, we must exclude partitions
+			 * in favor of including the root partitioned tables. Otherwise,
+			 * the function could return both the child and parent tables
+			 * which could cause data of the child table to be
+			 * double-published on the subscriber side.
+			 */
+			if (publication->pubviaroot)
+				tables = filter_partitions(tables);
+		}
 		funcctx->user_fctx = (void *) tables;
 
 		MemoryContextSwitchTo(oldcontext);

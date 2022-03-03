@@ -23,7 +23,7 @@
  * aggregate function over all rows in the current row's window frame.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -2446,11 +2446,6 @@ ExecInitWindowAgg(WindowAgg *node, EState *estate, int eflags)
 		perfuncstate->wfuncstate = wfuncstate;
 		perfuncstate->wfunc = wfunc;
 		perfuncstate->numArguments = list_length(wfuncstate->args);
-
-		fmgr_info_cxt(wfunc->winfnoid, &perfuncstate->flinfo,
-					  econtext->ecxt_per_query_memory);
-		fmgr_info_set_expr((Node *) wfunc, &perfuncstate->flinfo);
-
 		perfuncstate->winCollation = wfunc->inputcollid;
 
 		get_typlenbyval(wfunc->wintype,
@@ -2479,6 +2474,11 @@ ExecInitWindowAgg(WindowAgg *node, EState *estate, int eflags)
 			winobj->argstates = wfuncstate->args;
 			winobj->localmem = NULL;
 			perfuncstate->winobj = winobj;
+
+			/* It's a real window function, so set up to call it. */
+			fmgr_info_cxt(wfunc->winfnoid, &perfuncstate->flinfo,
+						  econtext->ecxt_per_query_memory);
+			fmgr_info_set_expr((Node *) wfunc, &perfuncstate->flinfo);
 		}
 	}
 

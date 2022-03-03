@@ -4,7 +4,7 @@
  *	  prototypes for restrictinfo.c.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/restrictinfo.h
@@ -18,10 +18,11 @@
 
 
 /* Convenience macro for the common case of a valid-everywhere qual */
-#define make_simple_restrictinfo(clause)  \
-	make_restrictinfo(clause, true, false, false, 0, NULL, NULL, NULL)
+#define make_simple_restrictinfo(root, clause)  \
+	make_restrictinfo(root, clause, true, false, false, 0, NULL, NULL, NULL)
 
-extern RestrictInfo *make_restrictinfo(Expr *clause,
+extern RestrictInfo *make_restrictinfo(PlannerInfo *root,
+									   Expr *clause,
 									   bool is_pushed_down,
 									   bool outerjoin_delayed,
 									   bool pseudoconstant,
@@ -29,15 +30,6 @@ extern RestrictInfo *make_restrictinfo(Expr *clause,
 									   Relids required_relids,
 									   Relids outer_relids,
 									   Relids nullable_relids);
-extern RestrictInfo *make_restrictinfo_new(PlannerInfo *root,
-										   Expr *clause,
-										   bool is_pushed_down,
-										   bool outerjoin_delayed,
-										   bool pseudoconstant,
-										   Index security_level,
-										   Relids required_relids,
-										   Relids outer_relids,
-										   Relids nullable_relids);
 extern RestrictInfo *commute_restrictinfo(RestrictInfo *rinfo, Oid comm_op);
 extern bool restriction_is_or_clause(RestrictInfo *restrictinfo);
 extern bool restriction_is_securely_promotable(RestrictInfo *restrictinfo,

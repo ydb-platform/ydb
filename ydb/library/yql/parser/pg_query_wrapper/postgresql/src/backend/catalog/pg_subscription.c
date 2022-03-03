@@ -3,7 +3,7 @@
  * pg_subscription.c
  *		replication subscriptions
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -29,6 +29,7 @@
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/fmgroids.h"
+#include "utils/lsyscache.h"
 #include "utils/pg_lsn.h"
 #include "utils/rel.h"
 #include "utils/syscache.h"
@@ -65,6 +66,8 @@ GetSubscription(Oid subid, bool missing_ok)
 	sub->name = pstrdup(NameStr(subform->subname));
 	sub->owner = subform->subowner;
 	sub->enabled = subform->subenabled;
+	sub->binary = subform->subbinary;
+	sub->stream = subform->substream;
 
 	/* Get conninfo */
 	datum = SysCacheGetAttr(SUBSCRIPTIONOID,
@@ -326,18 +329,21 @@ UpdateSubscriptionRelState(Oid subid, Oid relid, char state,
 /*
  * Get state of subscription table.
  *
- * Returns SUBREL_STATE_UNKNOWN when not found and missing_ok is true.
+ * Returns SUBREL_STATE_UNKNOWN when the table is not in the subscription.
  */
 char
-GetSubscriptionRelState(Oid subid, Oid relid, XLogRecPtr *sublsn,
-						bool missing_ok)
+GetSubscriptionRelState(Oid subid, Oid relid, XLogRecPtr *sublsn)
 {
-	Relation	rel;
 	HeapTuple	tup;
 	char		substate;
 	bool		isnull;
 	Datum		d;
+	Relation	rel;
 
+	/*
+	 * This is to avoid the race condition with AlterSubscription which tries
+	 * to remove this relstate.
+	 */
 	rel = table_open(SubscriptionRelRelationId, AccessShareLock);
 
 	/* Try finding the mapping. */
@@ -347,22 +353,15 @@ GetSubscriptionRelState(Oid subid, Oid relid, XLogRecPtr *sublsn,
 
 	if (!HeapTupleIsValid(tup))
 	{
-		if (missing_ok)
-		{
-			table_close(rel, AccessShareLock);
-			*sublsn = InvalidXLogRecPtr;
-			return SUBREL_STATE_UNKNOWN;
-		}
-
-		elog(ERROR, "subscription table %u in subscription %u does not exist",
-			 relid, subid);
+		table_close(rel, AccessShareLock);
+		*sublsn = InvalidXLogRecPtr;
+		return SUBREL_STATE_UNKNOWN;
 	}
 
 	/* Get the state. */
-	d = SysCacheGetAttr(SUBSCRIPTIONRELMAP, tup,
-						Anum_pg_subscription_rel_srsubstate, &isnull);
-	Assert(!isnull);
-	substate = DatumGetChar(d);
+	substate = ((Form_pg_subscription_rel) GETSTRUCT(tup))->srsubstate;
+
+	/* Get the LSN */
 	d = SysCacheGetAttr(SUBSCRIPTIONRELMAP, tup,
 						Anum_pg_subscription_rel_srsublsn, &isnull);
 	if (isnull)
@@ -372,6 +371,7 @@ GetSubscriptionRelState(Oid subid, Oid relid, XLogRecPtr *sublsn,
 
 	/* Cleanup */
 	ReleaseSysCache(tup);
+
 	table_close(rel, AccessShareLock);
 
 	return substate;
@@ -414,6 +414,35 @@ RemoveSubscriptionRel(Oid subid, Oid relid)
 	scan = table_beginscan_catalog(rel, nkeys, skey);
 	while (HeapTupleIsValid(tup = heap_getnext(scan, ForwardScanDirection)))
 	{
+		Form_pg_subscription_rel subrel;
+
+		subrel = (Form_pg_subscription_rel) GETSTRUCT(tup);
+
+		/*
+		 * We don't allow to drop the relation mapping when the table
+		 * synchronization is in progress unless the caller updates the
+		 * corresponding subscription as well. This is to ensure that we don't
+		 * leave tablesync slots or origins in the system when the
+		 * corresponding table is dropped.
+		 */
+		if (!OidIsValid(subid) && subrel->srsubstate != SUBREL_STATE_READY)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("could not drop relation mapping for subscription \"%s\"",
+							get_subscription_name(subrel->srsubid, false)),
+					 errdetail("Table synchronization for relation \"%s\" is in progress and is in state \"%c\".",
+							   get_rel_name(relid), subrel->srsubstate),
+
+			/*
+			 * translator: first %s is a SQL ALTER command and second %s is a
+			 * SQL DROP command
+			 */
+					 errhint("Use %s to enable subscription if not already enabled or use %s to drop the subscription.",
+							 "ALTER SUBSCRIPTION ... ENABLE",
+							 "DROP SUBSCRIPTION ...")));
+		}
+
 		CatalogTupleDelete(rel, &tup->t_self);
 	}
 	table_endscan(scan);
@@ -433,19 +462,18 @@ GetSubscriptionRelations(Oid subid)
 	List	   *res = NIL;
 	Relation	rel;
 	HeapTuple	tup;
-	int			nkeys = 0;
-	ScanKeyData skey[2];
+	ScanKeyData skey[1];
 	SysScanDesc scan;
 
 	rel = table_open(SubscriptionRelRelationId, AccessShareLock);
 
-	ScanKeyInit(&skey[nkeys++],
+	ScanKeyInit(&skey[0],
 				Anum_pg_subscription_rel_srsubid,
 				BTEqualStrategyNumber, F_OIDEQ,
 				ObjectIdGetDatum(subid));
 
 	scan = systable_beginscan(rel, InvalidOid, false,
-							  NULL, nkeys, skey);
+							  NULL, 1, skey);
 
 	while (HeapTupleIsValid(tup = systable_getnext(scan)))
 	{

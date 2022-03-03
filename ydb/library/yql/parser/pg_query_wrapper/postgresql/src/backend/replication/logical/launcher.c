@@ -2,7 +2,7 @@
  * launcher.c
  *	   PostgreSQL logical replication worker launcher process
  *
- * Copyright (c) 2016-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2016-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/logical/launcher.c
@@ -67,26 +67,6 @@ typedef struct LogicalRepCtxStruct
 
 __thread LogicalRepCtxStruct *LogicalRepCtx;
 
-typedef struct LogicalRepWorkerId
-{
-	Oid			subid;
-	Oid			relid;
-} LogicalRepWorkerId;
-
-typedef struct StopWorkersData
-{
-	int			nestDepth;		/* Sub-transaction nest level */
-	List	   *workers;		/* List of LogicalRepWorkerId */
-	struct StopWorkersData *parent; /* This need not be an immediate
-									 * subtransaction parent */
-} StopWorkersData;
-
-/*
- * Stack of StopWorkersData elements. Each stack element contains the workers
- * to be stopped for that subtransaction.
- */
-static __thread StopWorkersData *on_commit_stop_workers = NULL;
-
 static void ApplyLauncherWakeup(void);
 static void logicalrep_launcher_onexit(int code, Datum arg);
 static void logicalrep_worker_onexit(int code, Datum arg);
@@ -122,6 +102,10 @@ get_subscription_list(void)
 	 * the secondary effect that it sets RecentGlobalXmin.  (This is critical
 	 * for anything that reads heap pages, because HOT may decide to prune
 	 * them even if the process doesn't attempt to modify any tuples.)
+	 *
+	 * FIXME: This comment is inaccurate / the code buggy. A snapshot that is
+	 * not pushed/active does not reliably prevent HOT pruning (->xmin could
+	 * e.g. be cleared when cache invalidations are processed).
 	 */
 	StartTransactionCommand();
 	(void) GetTransactionSnapshot();
@@ -292,8 +276,8 @@ logicalrep_worker_launch(Oid dbid, Oid subid, const char *subname, Oid userid,
 	TimestampTz now;
 
 	ereport(DEBUG1,
-			(errmsg("starting logical replication worker for subscription \"%s\"",
-					subname)));
+			(errmsg_internal("starting logical replication worker for subscription \"%s\"",
+							 subname)));
 
 	/* Report this after the initial starting message for consistency. */
 	if (max_replication_slots == 0)
@@ -543,51 +527,6 @@ logicalrep_worker_stop(Oid subid, Oid relid)
 }
 
 /*
- * Request worker for specified sub/rel to be stopped on commit.
- */
-void
-logicalrep_worker_stop_at_commit(Oid subid, Oid relid)
-{
-	int			nestDepth = GetCurrentTransactionNestLevel();
-	LogicalRepWorkerId *wid;
-	MemoryContext oldctx;
-
-	/* Make sure we store the info in context that survives until commit. */
-	oldctx = MemoryContextSwitchTo(TopTransactionContext);
-
-	/* Check that previous transactions were properly cleaned up. */
-	Assert(on_commit_stop_workers == NULL ||
-		   nestDepth >= on_commit_stop_workers->nestDepth);
-
-	/*
-	 * Push a new stack element if we don't already have one for the current
-	 * nestDepth.
-	 */
-	if (on_commit_stop_workers == NULL ||
-		nestDepth > on_commit_stop_workers->nestDepth)
-	{
-		StopWorkersData *newdata = palloc(sizeof(StopWorkersData));
-
-		newdata->nestDepth = nestDepth;
-		newdata->workers = NIL;
-		newdata->parent = on_commit_stop_workers;
-		on_commit_stop_workers = newdata;
-	}
-
-	/*
-	 * Finally add a new worker into the worker list of the current
-	 * subtransaction.
-	 */
-	wid = palloc(sizeof(LogicalRepWorkerId));
-	wid->subid = subid;
-	wid->relid = relid;
-	on_commit_stop_workers->workers =
-		lappend(on_commit_stop_workers->workers, wid);
-
-	MemoryContextSwitchTo(oldctx);
-}
-
-/*
  * Wake up (using latch) any logical replication worker for specified sub/rel.
  */
 void
@@ -816,106 +755,18 @@ ApplyLauncherShmemInit(void)
 }
 
 /*
- * Check whether current transaction has manipulated logical replication
- * workers.
- */
-bool
-XactManipulatesLogicalReplicationWorkers(void)
-{
-	return (on_commit_stop_workers != NULL);
-}
-
-/*
  * Wakeup the launcher on commit if requested.
  */
 void
 AtEOXact_ApplyLauncher(bool isCommit)
 {
-
-	Assert(on_commit_stop_workers == NULL ||
-		   (on_commit_stop_workers->nestDepth == 1 &&
-			on_commit_stop_workers->parent == NULL));
-
 	if (isCommit)
 	{
-		ListCell   *lc;
-
-		if (on_commit_stop_workers != NULL)
-		{
-			List	   *workers = on_commit_stop_workers->workers;
-
-			foreach(lc, workers)
-			{
-				LogicalRepWorkerId *wid = lfirst(lc);
-
-				logicalrep_worker_stop(wid->subid, wid->relid);
-			}
-		}
-
 		if (on_commit_launcher_wakeup)
 			ApplyLauncherWakeup();
 	}
 
-	/*
-	 * No need to pfree on_commit_stop_workers.  It was allocated in
-	 * transaction memory context, which is going to be cleaned soon.
-	 */
-	on_commit_stop_workers = NULL;
 	on_commit_launcher_wakeup = false;
-}
-
-/*
- * On commit, merge the current on_commit_stop_workers list into the
- * immediate parent, if present.
- * On rollback, discard the current on_commit_stop_workers list.
- * Pop out the stack.
- */
-void
-AtEOSubXact_ApplyLauncher(bool isCommit, int nestDepth)
-{
-	StopWorkersData *parent;
-
-	/* Exit immediately if there's no work to do at this level. */
-	if (on_commit_stop_workers == NULL ||
-		on_commit_stop_workers->nestDepth < nestDepth)
-		return;
-
-	Assert(on_commit_stop_workers->nestDepth == nestDepth);
-
-	parent = on_commit_stop_workers->parent;
-
-	if (isCommit)
-	{
-		/*
-		 * If the upper stack element is not an immediate parent
-		 * subtransaction, just decrement the notional nesting depth without
-		 * doing any real work.  Else, we need to merge the current workers
-		 * list into the parent.
-		 */
-		if (!parent || parent->nestDepth < nestDepth - 1)
-		{
-			on_commit_stop_workers->nestDepth--;
-			return;
-		}
-
-		parent->workers =
-			list_concat(parent->workers, on_commit_stop_workers->workers);
-	}
-	else
-	{
-		/*
-		 * Abandon everything that was done at this nesting level.  Explicitly
-		 * free memory to avoid a transaction-lifespan leak.
-		 */
-		list_free_deep(on_commit_stop_workers->workers);
-	}
-
-	/*
-	 * We have taken care of the current subtransaction workers list for both
-	 * abort or commit. So we are ready to pop the stack.
-	 */
-	pfree(on_commit_stop_workers);
-	on_commit_stop_workers = parent;
 }
 
 /*
@@ -948,7 +799,7 @@ ApplyLauncherMain(Datum main_arg)
 	TimestampTz last_start_time = 0;
 
 	ereport(DEBUG1,
-			(errmsg("logical replication launcher started")));
+			(errmsg_internal("logical replication launcher started")));
 
 	before_shmem_exit(logicalrep_launcher_onexit, (Datum) 0);
 

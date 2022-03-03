@@ -646,7 +646,7 @@ static const YY_CHAR yy_ec[256] =
         1,    1,    1,    1,    1,    1,    1,    1,    2,    3,
         1,    1,    2,    1,    1,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
-        1,    2,    1,    4,    5,    1,    1,    1,    1,    6,
+        1,    2,    1,    1,    4,    1,    1,    1,    5,    6,
         7,    1,    1,    8,    9,    1,    1,    9,    9,    9,
         9,    9,    9,    9,    9,    9,    9,    1,    1,    1,
        10,    1,    1,    1,    9,    9,   11,   12,   13,   14,
@@ -684,9 +684,9 @@ static const YY_CHAR yy_meta[43] =
 
 static const flex_int16_t yy_base[131] =
     {   0,
-        0,  143,  147,  149,  149,  149,  142,  149,  149,  149,
-        0,  149,  127,   25,  129,  111,   11,   16,  115,  109,
-       17,  107,  110,  105,   16,    0,  133,  149,    0,  117,
+        0,  145,  148,  150,  150,  150,  142,  150,  150,  150,
+        0,  150,  128,   25,  130,  112,   11,   16,  116,  110,
+       17,  108,  111,  106,   16,    0,  133,  132,    0,  117,
       115,  118,  121,   93,   98,  100,   96,  101,  102,   19,
         0,   99,   85,  101,  100,   92,   91,    0,  109,    0,
       103,    0,   87,   79,   85,   78,   91,   82,   27,   85,
@@ -697,7 +697,7 @@ static const flex_int16_t yy_base[131] =
 
         0,   53,   42,    0,   51,   55,    0,   53,    0,    0,
        53,   38,   39,   39,   44,    0,   40,   38,   42,   44,
-        0,   28,   35,   31,   30,    0,  149,   57,   52,   60
+        0,   28,   35,   31,   30,    0,  150,   57,   52,   60
     } ;
 
 static const flex_int16_t yy_def[131] =
@@ -718,9 +718,9 @@ static const flex_int16_t yy_def[131] =
       129,  129,  129,  129,  129,  129,    0,  127,  127,  127
     } ;
 
-static const flex_int16_t yy_nxt[192] =
+static const flex_int16_t yy_nxt[193] =
     {   0,
-        4,    5,    6,    7,    4,    8,    9,   10,   11,   12,
+        4,    5,    6,    4,    7,    8,    9,   10,   11,   12,
        11,   11,   11,   13,   11,   11,   14,   15,   11,   11,
        11,   16,   11,   17,   18,   19,   11,   11,   11,   20,
        11,   11,   21,   11,   11,   22,   23,   24,   25,   11,
@@ -734,17 +734,17 @@ static const flex_int16_t yy_nxt[192] =
        88,   87,   86,   85,   84,   83,   82,   81,   80,   79,
        78,   77,   74,   73,   72,   71,   70,   69,   68,   67,
        66,   65,   64,   63,   62,   61,   58,   57,   56,   55,
-       54,   53,   52,   51,   50,   49,   28,   45,   44,   43,
-       40,   39,   34,   33,   30,   28,  127,   26,    3,  127,
+       54,   53,   52,   51,   50,   49,   27,   28,   45,   44,
+       43,   40,   39,   34,   33,   30,   28,  127,   26,    3,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
-      127
+      127,  127
 
     } ;
 
-static const flex_int16_t yy_chk[192] =
+static const flex_int16_t yy_chk[193] =
     {   0,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
         1,    1,    1,    1,    1,    1,    1,    1,    1,    1,
@@ -760,13 +760,13 @@ static const flex_int16_t yy_chk[192] =
        72,   71,   70,   69,   67,   66,   65,   64,   63,   62,
        61,   60,   58,   57,   56,   55,   54,   53,   51,   49,
        47,   46,   45,   44,   43,   42,   39,   38,   37,   36,
-       35,   34,   33,   32,   31,   30,   27,   24,   23,   22,
-       20,   19,   16,   15,   13,    7,    3,    2,  127,  127,
+       35,   34,   33,   32,   31,   30,   28,   27,   24,   23,
+       22,   20,   19,   16,   15,   13,    7,    3,    2,  127,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
       127,  127,  127,  127,  127,  127,  127,  127,  127,  127,
-      127
+      127,  127
 
     } ;
 
@@ -791,7 +791,7 @@ __thread char *yytext;
  * bootscanner.l
  *	  a lexical scanner for the bootstrap parser
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -802,25 +802,8 @@ __thread char *yytext;
  */
 #include "postgres.h"
 
-#include "access/attnum.h"
-#include "access/htup.h"
-#include "access/itup.h"
-#include "access/tupdesc.h"
 #include "bootstrap/bootstrap.h"
-#include "catalog/pg_am.h"
-#include "catalog/pg_attribute.h"
-#include "catalog/pg_class.h"
-#include "nodes/nodes.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
-#include "nodes/primnodes.h"
-#include "parser/scansup.h"
-#include "rewrite/prs2lock.h"
-#include "storage/block.h"
-#include "storage/fd.h"
-#include "storage/itemptr.h"
-#include "storage/off.h"
-#include "utils/rel.h"
+#include "utils/guc.h"
 
 /* Not needed now that this file is compiled as part of bootparse. */
 /* #include "bootparse.h" */
@@ -840,7 +823,7 @@ fprintf_to_ereport(const char *fmt, const char *msg)
 
 static __thread int	yyline = 1;			/* line number for error reporting */
 
-#line 844 "bootscanner.c"
+#line 827 "bootscanner.c"
 #define YY_NO_INPUT 1
 /*
  * Keyword tokens return the keyword text (as a constant string) in yylval.kw,
@@ -853,7 +836,7 @@ static __thread int	yyline = 1;			/* line number for error reporting */
  *
  * String tokens return a palloc'd string in yylval.str.
  */
-#line 857 "bootscanner.c"
+#line 840 "bootscanner.c"
 
 #define INITIAL 0
 
@@ -1071,10 +1054,10 @@ YY_DECL
 		}
 
 	{
-#line 83 "bootscanner.l"
+#line 66 "bootscanner.l"
 
 
-#line 1078 "bootscanner.c"
+#line 1061 "bootscanner.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1130,173 +1113,171 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 85 "bootscanner.l"
+#line 68 "bootscanner.l"
 { yylval.kw = "open"; return OPEN; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 87 "bootscanner.l"
+#line 70 "bootscanner.l"
 { yylval.kw = "close"; return XCLOSE; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 89 "bootscanner.l"
+#line 72 "bootscanner.l"
 { yylval.kw = "create"; return XCREATE; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 91 "bootscanner.l"
+#line 74 "bootscanner.l"
 { yylval.kw = "OID"; return OBJ_ID; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 92 "bootscanner.l"
+#line 75 "bootscanner.l"
 { yylval.kw = "bootstrap"; return XBOOTSTRAP; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 93 "bootscanner.l"
+#line 76 "bootscanner.l"
 { yylval.kw = "shared_relation"; return XSHARED_RELATION; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 94 "bootscanner.l"
+#line 77 "bootscanner.l"
 { yylval.kw = "rowtype_oid"; return XROWTYPE_OID; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 96 "bootscanner.l"
+#line 79 "bootscanner.l"
 { yylval.kw = "insert"; return INSERT_TUPLE; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 98 "bootscanner.l"
+#line 81 "bootscanner.l"
 { return NULLVAL; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 100 "bootscanner.l"
+#line 83 "bootscanner.l"
 { return COMMA; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 101 "bootscanner.l"
+#line 84 "bootscanner.l"
 { return EQUALS; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 102 "bootscanner.l"
+#line 85 "bootscanner.l"
 { return LPAREN; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 103 "bootscanner.l"
+#line 86 "bootscanner.l"
 { return RPAREN; }
 	YY_BREAK
 case 14:
 /* rule 14 can match eol */
 YY_RULE_SETUP
-#line 105 "bootscanner.l"
+#line 88 "bootscanner.l"
 { yyline++; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 106 "bootscanner.l"
+#line 89 "bootscanner.l"
 ;
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 108 "bootscanner.l"
+#line 91 "bootscanner.l"
 ;		/* drop everything after "#" for comments */
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 110 "bootscanner.l"
+#line 93 "bootscanner.l"
 { yylval.kw = "declare"; return XDECLARE; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 111 "bootscanner.l"
+#line 94 "bootscanner.l"
 { yylval.kw = "build"; return XBUILD; }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 112 "bootscanner.l"
+#line 95 "bootscanner.l"
 { yylval.kw = "indices"; return INDICES; }
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 113 "bootscanner.l"
+#line 96 "bootscanner.l"
 { yylval.kw = "unique"; return UNIQUE; }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 114 "bootscanner.l"
+#line 97 "bootscanner.l"
 { yylval.kw = "index"; return INDEX; }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 115 "bootscanner.l"
+#line 98 "bootscanner.l"
 { yylval.kw = "on"; return ON; }
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 116 "bootscanner.l"
+#line 99 "bootscanner.l"
 { yylval.kw = "using"; return USING; }
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 117 "bootscanner.l"
+#line 100 "bootscanner.l"
 { yylval.kw = "toast"; return XTOAST; }
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 118 "bootscanner.l"
+#line 101 "bootscanner.l"
 { yylval.kw = "FORCE"; return XFORCE; }
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 119 "bootscanner.l"
+#line 102 "bootscanner.l"
 { yylval.kw = "NOT"; return XNOT; }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 120 "bootscanner.l"
+#line 103 "bootscanner.l"
 { yylval.kw = "NULL"; return XNULL; }
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 122 "bootscanner.l"
+#line 105 "bootscanner.l"
 {
-					yylval.str = scanstr(yytext);
+					yylval.str = pstrdup(yytext);
 					return ID;
 				}
 	YY_BREAK
 case 29:
 /* rule 29 can match eol */
 YY_RULE_SETUP
-#line 126 "bootscanner.l"
+#line 109 "bootscanner.l"
 {
-					/* leading and trailing quotes are not passed to scanstr */
-					yytext[strlen(yytext) - 1] = '\0';
-					yylval.str = scanstr(yytext+1);
-					yytext[strlen(yytext)] = '"';	/* restore yytext */
+					/* strip quotes and escapes */
+					yylval.str = DeescapeQuotedString(yytext);
 					return ID;
 				}
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 134 "bootscanner.l"
+#line 115 "bootscanner.l"
 {
 					elog(ERROR, "syntax error at line %d: unexpected character \"%s\"", yyline, yytext);
 				}
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 138 "bootscanner.l"
+#line 119 "bootscanner.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1300 "bootscanner.c"
+#line 1281 "bootscanner.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2268,7 +2249,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 138 "bootscanner.l"
+#line 119 "bootscanner.l"
 
 
 /* LCOV_EXCL_STOP */

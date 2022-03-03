@@ -3,7 +3,7 @@
  * tableamapi.c
  *		Support routines for API for Postgres table access methods
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/table/tableamapi.c
@@ -66,7 +66,7 @@ GetTableAmRoutine(Oid amhandler)
 	Assert(routine->tuple_tid_valid != NULL);
 	Assert(routine->tuple_get_latest_tid != NULL);
 	Assert(routine->tuple_satisfies_snapshot != NULL);
-	Assert(routine->compute_xid_horizon_for_tuples != NULL);
+	Assert(routine->index_delete_tuples != NULL);
 
 	Assert(routine->tuple_insert != NULL);
 

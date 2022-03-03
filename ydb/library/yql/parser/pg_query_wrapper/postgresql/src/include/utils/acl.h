@@ -4,7 +4,7 @@
  *	  Definition of (and support for) access control list data structures.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/acl.h
@@ -230,12 +230,17 @@ extern void ExecuteGrantStmt(GrantStmt *stmt);
 extern void ExecAlterDefaultPrivilegesStmt(ParseState *pstate, AlterDefaultPrivilegesStmt *stmt);
 
 extern void RemoveRoleFromObjectACL(Oid roleid, Oid classid, Oid objid);
-extern void RemoveDefaultACLById(Oid defaclOid);
 
 extern AclMode pg_attribute_aclmask(Oid table_oid, AttrNumber attnum,
 									Oid roleid, AclMode mask, AclMaskHow how);
+extern AclMode pg_attribute_aclmask_ext(Oid table_oid, AttrNumber attnum,
+										Oid roleid, AclMode mask,
+										AclMaskHow how, bool *is_missing);
 extern AclMode pg_class_aclmask(Oid table_oid, Oid roleid,
 								AclMode mask, AclMaskHow how);
+extern AclMode pg_class_aclmask_ext(Oid table_oid, Oid roleid,
+									AclMode mask, AclMaskHow how,
+									bool *is_missing);
 extern AclMode pg_database_aclmask(Oid db_oid, Oid roleid,
 								   AclMode mask, AclMaskHow how);
 extern AclMode pg_proc_aclmask(Oid proc_oid, Oid roleid,
@@ -257,9 +262,14 @@ extern AclMode pg_type_aclmask(Oid type_oid, Oid roleid,
 
 extern AclResult pg_attribute_aclcheck(Oid table_oid, AttrNumber attnum,
 									   Oid roleid, AclMode mode);
+extern AclResult pg_attribute_aclcheck_ext(Oid table_oid, AttrNumber attnum,
+										   Oid roleid, AclMode mode,
+										   bool *is_missing);
 extern AclResult pg_attribute_aclcheck_all(Oid table_oid, Oid roleid,
 										   AclMode mode, AclMaskHow how);
 extern AclResult pg_class_aclcheck(Oid table_oid, Oid roleid, AclMode mode);
+extern AclResult pg_class_aclcheck_ext(Oid table_oid, Oid roleid,
+									   AclMode mode, bool *is_missing);
 extern AclResult pg_database_aclcheck(Oid db_oid, Oid roleid, AclMode mode);
 extern AclResult pg_proc_aclcheck(Oid proc_oid, Oid roleid, AclMode mode);
 extern AclResult pg_language_aclcheck(Oid lang_oid, Oid roleid, AclMode mode);

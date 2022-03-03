@@ -21,7 +21,7 @@
  * The fields are separated by tabs. Lines beginning with # are comments, and
  * are ignored. Empty lines are also ignored.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/timeline.c
@@ -402,7 +402,7 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 			 "%s%u\t%X/%X\t%s\n",
 			 (srcfd < 0) ? "" : "\n",
 			 parentTLI,
-			 (uint32) (switchpoint >> 32), (uint32) (switchpoint),
+			 LSN_FORMAT_ARGS(switchpoint),
 			 reason);
 
 	nbytes = strlen(buffer);

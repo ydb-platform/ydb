@@ -8,7 +8,7 @@
  *	  interrupted, unlike LWLock waits.  Condition variables are safe
  *	  to use within dynamic shared memory segments.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/storage/lmgr/condition_variable.c
@@ -29,9 +29,6 @@
 
 /* Initially, we are not prepared to sleep on any condition variable. */
 static __thread ConditionVariable *cv_sleep_target = NULL;
-
-/* Reusable WaitEventSet. */
-static __thread WaitEventSet *cv_wait_event_set = NULL;
 
 /*
  * Initialize a condition variable.
@@ -61,23 +58,6 @@ void
 ConditionVariablePrepareToSleep(ConditionVariable *cv)
 {
 	int			pgprocno = MyProc->pgprocno;
-
-	/*
-	 * If first time through in this process, create a WaitEventSet, which
-	 * we'll reuse for all condition variable sleeps.
-	 */
-	if (cv_wait_event_set == NULL)
-	{
-		WaitEventSet *new_event_set;
-
-		new_event_set = CreateWaitEventSet(TopMemoryContext, 2);
-		AddWaitEventToSet(new_event_set, WL_LATCH_SET, PGINVALID_SOCKET,
-						  MyLatch, NULL);
-		AddWaitEventToSet(new_event_set, WL_EXIT_ON_PM_DEATH, PGINVALID_SOCKET,
-						  NULL, NULL);
-		/* Don't set cv_wait_event_set until we have a correct WES. */
-		cv_wait_event_set = new_event_set;
-	}
 
 	/*
 	 * If some other sleep is already prepared, cancel it; this is necessary
@@ -135,6 +115,7 @@ ConditionVariableTimedSleep(ConditionVariable *cv, long timeout,
 	long		cur_timeout = -1;
 	instr_time	start_time;
 	instr_time	cur_time;
+	int			wait_events;
 
 	/*
 	 * If the caller didn't prepare to sleep explicitly, then do so now and
@@ -166,24 +147,23 @@ ConditionVariableTimedSleep(ConditionVariable *cv, long timeout,
 		INSTR_TIME_SET_CURRENT(start_time);
 		Assert(timeout >= 0 && timeout <= INT_MAX);
 		cur_timeout = timeout;
+		wait_events = WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH;
 	}
+	else
+		wait_events = WL_LATCH_SET | WL_EXIT_ON_PM_DEATH;
 
 	while (true)
 	{
-		WaitEvent	event;
 		bool		done = false;
 
 		/*
 		 * Wait for latch to be set.  (If we're awakened for some other
 		 * reason, the code below will cope anyway.)
 		 */
-		(void) WaitEventSetWait(cv_wait_event_set, cur_timeout, &event, 1,
-								wait_event_info);
+		(void) WaitLatch(MyLatch, wait_events, cur_timeout, wait_event_info);
 
 		/* Reset latch before examining the state of the wait list. */
 		ResetLatch(MyLatch);
-
-		CHECK_FOR_INTERRUPTS();
 
 		/*
 		 * If this process has been taken out of the wait list, then we know
@@ -207,6 +187,15 @@ ConditionVariableTimedSleep(ConditionVariable *cv, long timeout,
 			proclist_push_tail(&cv->wakeup, MyProc->pgprocno, cvWaitLink);
 		}
 		SpinLockRelease(&cv->mutex);
+
+		/*
+		 * Check for interrupts, and return spuriously if that caused the
+		 * current sleep target to change (meaning that interrupt handler code
+		 * waited for a different condition variable).
+		 */
+		CHECK_FOR_INTERRUPTS();
+		if (cv != cv_sleep_target)
+			done = true;
 
 		/* We were signaled, so return */
 		if (done)

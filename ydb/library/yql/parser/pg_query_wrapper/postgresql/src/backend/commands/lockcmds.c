@@ -3,7 +3,7 @@
  * lockcmds.c
  *	  LOCK command support code
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -266,7 +266,7 @@ LockViewRecurse(Oid reloid, LOCKMODE lockmode, bool nowait,
 
 	LockViewRecurse_walker((Node *) viewquery, &context);
 
-	(void) list_delete_last(context.ancestor_views);
+	context.ancestor_views = list_delete_last(context.ancestor_views);
 
 	table_close(view, NoLock);
 }

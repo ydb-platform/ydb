@@ -7,7 +7,7 @@
  * detection and resolution algorithms.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -544,7 +544,6 @@ FindLockCycleRecurseMember(PGPROC *checkProc,
 {
 	PGPROC	   *proc;
 	LOCK	   *lock = checkProc->waitLock;
-	PGXACT	   *pgxact;
 	PROCLOCK   *proclock;
 	SHM_QUEUE  *procLocks;
 	LockMethod	lockMethodTable;
@@ -582,7 +581,6 @@ FindLockCycleRecurseMember(PGPROC *checkProc,
 		PGPROC	   *leader;
 
 		proc = proclock->tag.myProc;
-		pgxact = &ProcGlobal->allPgXact[proc->pgprocno];
 		leader = proc->lockGroupLeader == NULL ? proc : proc->lockGroupLeader;
 
 		/* A proc never blocks itself or any other lock group member */
@@ -620,17 +618,17 @@ FindLockCycleRecurseMember(PGPROC *checkProc,
 					 * that an autovacuum won't be canceled with less than
 					 * deadlock_timeout grace period.
 					 *
-					 * Note we read vacuumFlags without any locking.  This is
+					 * Note we read statusFlags without any locking.  This is
 					 * OK only for checking the PROC_IS_AUTOVACUUM flag,
 					 * because that flag is set at process start and never
 					 * reset.  There is logic elsewhere to avoid canceling an
 					 * autovacuum that is working to prevent XID wraparound
-					 * problems (which needs to read a different vacuumFlag
+					 * problems (which needs to read a different statusFlags
 					 * bit), but we don't do that here to avoid grabbing
 					 * ProcArrayLock.
 					 */
 					if (checkProc == MyProc &&
-						pgxact->vacuumFlags & PROC_IS_AUTOVACUUM)
+						proc->statusFlags & PROC_IS_AUTOVACUUM)
 						blocking_autovacuum_proc = proc;
 
 					/* We're done looking at this proclock */

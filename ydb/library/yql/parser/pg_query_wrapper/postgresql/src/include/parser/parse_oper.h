@@ -4,7 +4,7 @@
  *		handle operator things for parser
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_oper.h
@@ -31,8 +31,6 @@ extern Oid	LookupOperWithArgs(ObjectWithArgs *oper, bool noError);
 /* NB: the selected operator may require coercion of the input types! */
 extern Operator oper(ParseState *pstate, List *op, Oid arg1, Oid arg2,
 					 bool noError, int location);
-extern Operator right_oper(ParseState *pstate, List *op, Oid arg,
-						   bool noError, int location);
 extern Operator left_oper(ParseState *pstate, List *op, Oid arg,
 						  bool noError, int location);
 

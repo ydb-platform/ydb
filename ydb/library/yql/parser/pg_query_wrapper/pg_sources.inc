@@ -1,7 +1,9 @@
 SRCS(
     postgresql/src/backend/access/brin/brin.c
+    postgresql/src/backend/access/brin/brin_bloom.c
     postgresql/src/backend/access/brin/brin_inclusion.c
     postgresql/src/backend/access/brin/brin_minmax.c
+    postgresql/src/backend/access/brin/brin_minmax_multi.c
     postgresql/src/backend/access/brin/brin_pageops.c
     postgresql/src/backend/access/brin/brin_revmap.c
     postgresql/src/backend/access/brin/brin_tuple.c
@@ -18,6 +20,8 @@ SRCS(
     postgresql/src/backend/access/common/reloptions.c
     postgresql/src/backend/access/common/scankey.c
     postgresql/src/backend/access/common/session.c
+    postgresql/src/backend/access/common/syncscan.c
+    postgresql/src/backend/access/common/toast_compression.c
     postgresql/src/backend/access/common/toast_internals.c
     postgresql/src/backend/access/common/tupconvert.c
     postgresql/src/backend/access/common/tupdesc.c
@@ -64,7 +68,6 @@ SRCS(
     postgresql/src/backend/access/heap/hio.c
     postgresql/src/backend/access/heap/pruneheap.c
     postgresql/src/backend/access/heap/rewriteheap.c
-    postgresql/src/backend/access/heap/syncscan.c
     postgresql/src/backend/access/heap/vacuumlazy.c
     postgresql/src/backend/access/heap/visibilitymap.c
     postgresql/src/backend/access/index/amapi.c
@@ -184,6 +187,9 @@ SRCS(
     postgresql/src/backend/commands/constraint.c
     postgresql/src/backend/commands/conversioncmds.c
     postgresql/src/backend/commands/copy.c
+    postgresql/src/backend/commands/copyfrom.c
+    postgresql/src/backend/commands/copyfromparse.c
+    postgresql/src/backend/commands/copyto.c
     postgresql/src/backend/commands/createas.c
     postgresql/src/backend/commands/dbcommands.c
     postgresql/src/backend/commands/define.c
@@ -219,6 +225,7 @@ SRCS(
     postgresql/src/backend/commands/variable.c
     postgresql/src/backend/commands/view.c
     postgresql/src/backend/executor/execAmi.c
+    postgresql/src/backend/executor/execAsync.c
     postgresql/src/backend/executor/execCurrent.c
     postgresql/src/backend/executor/execExpr.c
     postgresql/src/backend/executor/execExprInterp.c
@@ -257,6 +264,7 @@ SRCS(
     postgresql/src/backend/executor/nodeLimit.c
     postgresql/src/backend/executor/nodeLockRows.c
     postgresql/src/backend/executor/nodeMaterial.c
+    postgresql/src/backend/executor/nodeMemoize.c
     postgresql/src/backend/executor/nodeMergeAppend.c
     postgresql/src/backend/executor/nodeMergejoin.c
     postgresql/src/backend/executor/nodeModifyTable.c
@@ -272,6 +280,7 @@ SRCS(
     postgresql/src/backend/executor/nodeSubplan.c
     postgresql/src/backend/executor/nodeSubqueryscan.c
     postgresql/src/backend/executor/nodeTableFuncscan.c
+    postgresql/src/backend/executor/nodeTidrangescan.c
     postgresql/src/backend/executor/nodeTidscan.c
     postgresql/src/backend/executor/nodeUnique.c
     postgresql/src/backend/executor/nodeValuesscan.c
@@ -352,6 +361,7 @@ SRCS(
     postgresql/src/backend/optimizer/plan/planner.c
     postgresql/src/backend/optimizer/plan/setrefs.c
     postgresql/src/backend/optimizer/plan/subselect.c
+    postgresql/src/backend/optimizer/prep/prepagg.c
     postgresql/src/backend/optimizer/prep/prepjointree.c
     postgresql/src/backend/optimizer/prep/prepqual.c
     postgresql/src/backend/optimizer/prep/preptlist.c
@@ -438,6 +448,7 @@ SRCS(
     postgresql/src/backend/rewrite/rewriteHandler.c
     postgresql/src/backend/rewrite/rewriteManip.c
     postgresql/src/backend/rewrite/rewriteRemove.c
+    postgresql/src/backend/rewrite/rewriteSearchCycle.c
     postgresql/src/backend/rewrite/rewriteSupport.c
     postgresql/src/backend/rewrite/rowsecurity.c
     postgresql/src/backend/statistics/dependencies.c
@@ -512,6 +523,9 @@ SRCS(
     postgresql/src/backend/tsearch/ts_utils.c
     postgresql/src/backend/tsearch/wparser.c
     postgresql/src/backend/tsearch/wparser_def.c
+    postgresql/src/backend/utils/activity/backend_progress.c
+    postgresql/src/backend/utils/activity/backend_status.c
+    postgresql/src/backend/utils/activity/wait_event.c
     postgresql/src/backend/utils/adt/acl.c
     postgresql/src/backend/utils/adt/amutils.c
     postgresql/src/backend/utils/adt/array_expanded.c
@@ -519,12 +533,13 @@ SRCS(
     postgresql/src/backend/utils/adt/array_typanalyze.c
     postgresql/src/backend/utils/adt/array_userfuncs.c
     postgresql/src/backend/utils/adt/arrayfuncs.c
+    postgresql/src/backend/utils/adt/arraysubs.c
     postgresql/src/backend/utils/adt/arrayutils.c
     postgresql/src/backend/utils/adt/ascii.c
     postgresql/src/backend/utils/adt/bool.c
     postgresql/src/backend/utils/adt/cash.c
     postgresql/src/backend/utils/adt/char.c
-    postgresql/src/backend/utils/adt/cryptohashes.c
+    postgresql/src/backend/utils/adt/cryptohashfuncs.c
     postgresql/src/backend/utils/adt/date.c
     postgresql/src/backend/utils/adt/datetime.c
     postgresql/src/backend/utils/adt/datum.c
@@ -550,6 +565,7 @@ SRCS(
     postgresql/src/backend/utils/adt/jsonb_gin.c
     postgresql/src/backend/utils/adt/jsonb_op.c
     postgresql/src/backend/utils/adt/jsonb_util.c
+    postgresql/src/backend/utils/adt/jsonbsubs.c
     postgresql/src/backend/utils/adt/jsonfuncs.c
     postgresql/src/backend/utils/adt/jsonpath.c
     postgresql/src/backend/utils/adt/jsonpath_exec.c
@@ -559,7 +575,10 @@ SRCS(
     postgresql/src/backend/utils/adt/lockfuncs.c
     postgresql/src/backend/utils/adt/mac.c
     postgresql/src/backend/utils/adt/mac8.c
+    postgresql/src/backend/utils/adt/mcxtfuncs.c
     postgresql/src/backend/utils/adt/misc.c
+    postgresql/src/backend/utils/adt/multirangetypes.c
+    postgresql/src/backend/utils/adt/multirangetypes_selfuncs.c
     postgresql/src/backend/utils/adt/name.c
     postgresql/src/backend/utils/adt/network.c
     postgresql/src/backend/utils/adt/network_gist.c
@@ -648,6 +667,7 @@ SRCS(
     postgresql/src/backend/utils/misc/pg_rusage.c
     postgresql/src/backend/utils/misc/ps_status.c
     postgresql/src/backend/utils/misc/queryenvironment.c
+    postgresql/src/backend/utils/misc/queryjumble.c
     postgresql/src/backend/utils/misc/rls.c
     postgresql/src/backend/utils/misc/sampling.c
     postgresql/src/backend/utils/misc/superuser.c
@@ -674,18 +694,22 @@ SRCS(
     postgresql/src/common/checksum_helper.c
     postgresql/src/common/config_info.c
     postgresql/src/common/controldata_utils.c
+    postgresql/src/common/cryptohash_openssl.c
     postgresql/src/common/d2s.c
     postgresql/src/common/encnames.c
     postgresql/src/common/exec.c
     postgresql/src/common/f2s.c
     postgresql/src/common/file_perm.c
+    postgresql/src/common/file_utils.c
     postgresql/src/common/hashfn.c
+    postgresql/src/common/hmac_openssl.c
     postgresql/src/common/ip.c
     postgresql/src/common/jsonapi.c
     postgresql/src/common/keywords.c
     postgresql/src/common/kwlookup.c
     postgresql/src/common/link-canary.c
-    postgresql/src/common/md5.c
+    postgresql/src/common/md5_common.c
+    postgresql/src/common/pg_get_line.c
     postgresql/src/common/pg_lzcompress.c
     postgresql/src/common/pgfnames.c
     postgresql/src/common/protocol_openssl.c
@@ -694,13 +718,13 @@ SRCS(
     postgresql/src/common/rmtree.c
     postgresql/src/common/saslprep.c
     postgresql/src/common/scram-common.c
-    postgresql/src/common/sha2_openssl.c
     postgresql/src/common/string.c
     postgresql/src/common/stringinfo.c
     postgresql/src/common/unicode_norm.c
     postgresql/src/common/username.c
     postgresql/src/common/wait_error.c
     postgresql/src/common/wchar.c
+    postgresql/src/port/bsearch_arg.c
     postgresql/src/port/chklocale.c
     postgresql/src/port/erand48.c
     postgresql/src/port/fls.c
@@ -723,7 +747,6 @@ SRCS(
     postgresql/src/port/qsort_arg.c
     postgresql/src/port/quotes.c
     postgresql/src/port/snprintf.c
-    postgresql/src/port/sprompt.c
     postgresql/src/port/strerror.c
     postgresql/src/port/tar.c
     postgresql/src/port/thread.c

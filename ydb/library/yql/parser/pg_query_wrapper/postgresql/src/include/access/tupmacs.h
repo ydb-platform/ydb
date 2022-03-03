@@ -4,7 +4,7 @@
  *	  Tuple macros used by both index tuples and heap tuples.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/tupmacs.h
@@ -139,8 +139,8 @@
  *	* we need to estimate alignment padding cost abstractly, ie without
  *	  reference to a real tuple.  We must assume the worst case that
  *	  all varlenas are aligned.
- *	* within arrays, we unconditionally align varlenas (XXX this should be
- *	  revisited, probably).
+ *	* within arrays and multiranges, we unconditionally align varlenas (XXX this
+ *	  should be revisited, probably).
  *
  * The attalign cases are tested in what is hopefully something like their
  * frequency of occurrence.

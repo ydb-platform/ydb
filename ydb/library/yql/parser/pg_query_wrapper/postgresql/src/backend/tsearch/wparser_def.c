@@ -3,7 +3,7 @@
  * wparser_def.c
  *		Default text search parser
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -324,12 +324,6 @@ TParserInit(char *str, int len)
 	prs->state->state = TPS_Base;
 
 #ifdef WPARSER_TRACE
-
-	/*
-	 * Use of %.*s here is a bit risky since it can misbehave if the data is
-	 * not in what libc thinks is the prevailing encoding.  However, since
-	 * this is just a debugging aid, we choose to live with that.
-	 */
 	fprintf(stderr, "parsing \"%.*s\"\n", len, str);
 #endif
 
@@ -366,7 +360,6 @@ TParserCopyInit(const TParser *orig)
 	prs->state->state = TPS_Base;
 
 #ifdef WPARSER_TRACE
-	/* See note above about %.*s */
 	fprintf(stderr, "parsing copy of \"%.*s\"\n", prs->lenstr, prs->str);
 #endif
 

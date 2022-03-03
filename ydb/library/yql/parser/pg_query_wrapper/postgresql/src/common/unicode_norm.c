@@ -5,7 +5,7 @@
  * This implements Unicode normalization, per the documentation at
  * https://www.unicode.org/reports/tr15/.
  *
- * Portions Copyright (c) 2017-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2017-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/common/unicode_norm.c
@@ -19,9 +19,12 @@
 #endif
 
 #include "common/unicode_norm.h"
-#include "common/unicode_norm_table.h"
 #ifndef FRONTEND
+#include "common/unicode_norm_hashfunc.h"
 #include "common/unicode_normprops_table.h"
+#include "port/pg_bswap.h"
+#else
+#include "common/unicode_norm_table.h"
 #endif
 
 #ifndef FRONTEND
@@ -43,6 +46,7 @@
 #define NCOUNT		VCOUNT * TCOUNT
 #define SCOUNT		LCOUNT * NCOUNT
 
+#ifdef FRONTEND
 /* comparison routine for bsearch() of decomposition lookup table. */
 static int
 conv_compare(const void *p1, const void *p2)
@@ -55,17 +59,68 @@ conv_compare(const void *p1, const void *p2)
 	return (v1 > v2) ? 1 : ((v1 == v2) ? 0 : -1);
 }
 
+#endif
+
 /*
+ * get_code_entry
+ *
  * Get the entry corresponding to code in the decomposition lookup table.
+ * The backend version of this code uses a perfect hash function for the
+ * lookup, while the frontend version uses a binary search.
  */
-static pg_unicode_decomposition *
+static const pg_unicode_decomposition *
 get_code_entry(pg_wchar code)
 {
+#ifndef FRONTEND
+	int			h;
+	uint32		hashkey;
+	pg_unicode_decompinfo decompinfo = UnicodeDecompInfo;
+
+	/*
+	 * Compute the hash function. The hash key is the codepoint with the bytes
+	 * in network order.
+	 */
+	hashkey = pg_hton32(code);
+	h = decompinfo.hash(&hashkey);
+
+	/* An out-of-range result implies no match */
+	if (h < 0 || h >= decompinfo.num_decomps)
+		return NULL;
+
+	/*
+	 * Since it's a perfect hash, we need only match to the specific codepoint
+	 * it identifies.
+	 */
+	if (code != decompinfo.decomps[h].codepoint)
+		return NULL;
+
+	/* Success! */
+	return &decompinfo.decomps[h];
+#else
 	return bsearch(&(code),
 				   UnicodeDecompMain,
 				   lengthof(UnicodeDecompMain),
 				   sizeof(pg_unicode_decomposition),
 				   conv_compare);
+#endif
+}
+
+/*
+ * Get the combining class of the given codepoint.
+ */
+static uint8
+get_canonical_class(pg_wchar code)
+{
+	const pg_unicode_decomposition *entry = get_code_entry(code);
+
+	/*
+	 * If no entries are found, the character used is either an Hangul
+	 * character or a character with a class of 0 and no decompositions.
+	 */
+	if (!entry)
+		return 0;
+	else
+		return entry->comb_class;
 }
 
 /*
@@ -76,7 +131,7 @@ get_code_entry(pg_wchar code)
  * is only valid until next call to this function!
  */
 static const pg_wchar *
-get_code_decomposition(pg_unicode_decomposition *entry, int *dec_size)
+get_code_decomposition(const pg_unicode_decomposition *entry, int *dec_size)
 {
 	static __thread pg_wchar x;
 
@@ -103,7 +158,7 @@ get_code_decomposition(pg_unicode_decomposition *entry, int *dec_size)
 static int
 get_decomposed_size(pg_wchar code, bool compat)
 {
-	pg_unicode_decomposition *entry;
+	const pg_unicode_decomposition *entry;
 	int			size = 0;
 	int			i;
 	const uint32 *decomp;
@@ -190,17 +245,51 @@ recompose_code(uint32 start, uint32 code, uint32 *result)
 	}
 	else
 	{
-		int			i;
+		const pg_unicode_decomposition *entry;
 
 		/*
 		 * Do an inverse lookup of the decomposition tables to see if anything
 		 * matches. The comparison just needs to be a perfect match on the
 		 * sub-table of size two, because the start character has already been
-		 * recomposed partially.
+		 * recomposed partially.  This lookup uses a perfect hash function for
+		 * the backend code.
 		 */
+#ifndef FRONTEND
+
+		int			h,
+					inv_lookup_index;
+		uint64		hashkey;
+		pg_unicode_recompinfo recompinfo = UnicodeRecompInfo;
+
+		/*
+		 * Compute the hash function. The hash key is formed by concatenating
+		 * bytes of the two codepoints in network order. See also
+		 * src/common/unicode/generate-unicode_norm_table.pl.
+		 */
+		hashkey = pg_hton64(((uint64) start << 32) | (uint64) code);
+		h = recompinfo.hash(&hashkey);
+
+		/* An out-of-range result implies no match */
+		if (h < 0 || h >= recompinfo.num_recomps)
+			return false;
+
+		inv_lookup_index = recompinfo.inverse_lookup[h];
+		entry = &UnicodeDecompMain[inv_lookup_index];
+
+		if (start == UnicodeDecomp_codepoints[entry->dec_index] &&
+			code == UnicodeDecomp_codepoints[entry->dec_index + 1])
+		{
+			*result = entry->codepoint;
+			return true;
+		}
+
+#else
+
+		int			i;
+
 		for (i = 0; i < lengthof(UnicodeDecompMain); i++)
 		{
-			const pg_unicode_decomposition *entry = &UnicodeDecompMain[i];
+			entry = &UnicodeDecompMain[i];
 
 			if (DECOMPOSITION_SIZE(entry) != 2)
 				continue;
@@ -215,6 +304,7 @@ recompose_code(uint32 start, uint32 code, uint32 *result)
 				return true;
 			}
 		}
+#endif							/* !FRONTEND */
 	}
 
 	return false;
@@ -230,7 +320,7 @@ recompose_code(uint32 start, uint32 code, uint32 *result)
 static void
 decompose_code(pg_wchar code, bool compat, pg_wchar **result, int *current)
 {
-	pg_unicode_decomposition *entry;
+	const pg_unicode_decomposition *entry;
 	int			i;
 	const uint32 *decomp;
 	int			dec_size;
@@ -349,6 +439,10 @@ unicode_normalize(UnicodeNormalizationForm form, const pg_wchar *input)
 	decomp_chars[decomp_size] = '\0';
 	Assert(decomp_size == current_size);
 
+	/* Leave if there is nothing to decompose */
+	if (decomp_size == 0)
+		return decomp_chars;
+
 	/*
 	 * Now apply canonical ordering.
 	 */
@@ -357,16 +451,8 @@ unicode_normalize(UnicodeNormalizationForm form, const pg_wchar *input)
 		pg_wchar	prev = decomp_chars[count - 1];
 		pg_wchar	next = decomp_chars[count];
 		pg_wchar	tmp;
-		pg_unicode_decomposition *prevEntry = get_code_entry(prev);
-		pg_unicode_decomposition *nextEntry = get_code_entry(next);
-
-		/*
-		 * If no entries are found, the character used is either an Hangul
-		 * character or a character with a class of 0 and no decompositions,
-		 * so move to next result.
-		 */
-		if (prevEntry == NULL || nextEntry == NULL)
-			continue;
+		const uint8 prevClass = get_canonical_class(prev);
+		const uint8 nextClass = get_canonical_class(next);
 
 		/*
 		 * Per Unicode (https://www.unicode.org/reports/tr15/tr15-18.html)
@@ -376,10 +462,10 @@ unicode_normalize(UnicodeNormalizationForm form, const pg_wchar *input)
 		 * combining class for the second, and the second is not a starter.  A
 		 * character is a starter if its combining class is 0.
 		 */
-		if (nextEntry->comb_class == 0x0 || prevEntry->comb_class == 0x0)
+		if (prevClass == 0 || nextClass == 0)
 			continue;
 
-		if (prevEntry->comb_class <= nextEntry->comb_class)
+		if (prevClass <= nextClass)
 			continue;
 
 		/* exchange can happen */
@@ -416,8 +502,7 @@ unicode_normalize(UnicodeNormalizationForm form, const pg_wchar *input)
 	for (count = 1; count < decomp_size; count++)
 	{
 		pg_wchar	ch = decomp_chars[count];
-		pg_unicode_decomposition *ch_entry = get_code_entry(ch);
-		int			ch_class = (ch_entry == NULL) ? 0 : ch_entry->comb_class;
+		int			ch_class = get_canonical_class(ch);
 		pg_wchar	composite;
 
 		if (last_class < ch_class &&
@@ -454,26 +539,32 @@ unicode_normalize(UnicodeNormalizationForm form, const pg_wchar *input)
 /* We only need this in the backend. */
 #ifndef FRONTEND
 
-static uint8
-get_canonical_class(pg_wchar ch)
+static const pg_unicode_normprops *
+qc_hash_lookup(pg_wchar ch, const pg_unicode_norminfo *norminfo)
 {
-	pg_unicode_decomposition *entry = get_code_entry(ch);
+	int			h;
+	uint32		hashkey;
 
-	if (!entry)
-		return 0;
-	else
-		return entry->comb_class;
-}
+	/*
+	 * Compute the hash function. The hash key is the codepoint with the bytes
+	 * in network order.
+	 */
+	hashkey = pg_hton32(ch);
+	h = norminfo->hash(&hashkey);
 
-static int
-qc_compare(const void *p1, const void *p2)
-{
-	uint32		v1,
-				v2;
+	/* An out-of-range result implies no match */
+	if (h < 0 || h >= norminfo->num_normprops)
+		return NULL;
 
-	v1 = ((const pg_unicode_normprops *) p1)->codepoint;
-	v2 = ((const pg_unicode_normprops *) p2)->codepoint;
-	return (v1 - v2);
+	/*
+	 * Since it's a perfect hash, we need only match to the specific codepoint
+	 * it identifies.
+	 */
+	if (ch != norminfo->normprops[h].codepoint)
+		return NULL;
+
+	/* Success! */
+	return &norminfo->normprops[h];
 }
 
 /*
@@ -482,26 +573,15 @@ qc_compare(const void *p1, const void *p2)
 static UnicodeNormalizationQC
 qc_is_allowed(UnicodeNormalizationForm form, pg_wchar ch)
 {
-	pg_unicode_normprops key;
-	pg_unicode_normprops *found = NULL;
-
-	key.codepoint = ch;
+	const pg_unicode_normprops *found = NULL;
 
 	switch (form)
 	{
 		case UNICODE_NFC:
-			found = bsearch(&key,
-							UnicodeNormProps_NFC_QC,
-							lengthof(UnicodeNormProps_NFC_QC),
-							sizeof(pg_unicode_normprops),
-							qc_compare);
+			found = qc_hash_lookup(ch, &UnicodeNormInfo_NFC_QC);
 			break;
 		case UNICODE_NFKC:
-			found = bsearch(&key,
-							UnicodeNormProps_NFKC_QC,
-							lengthof(UnicodeNormProps_NFKC_QC),
-							sizeof(pg_unicode_normprops),
-							qc_compare);
+			found = qc_hash_lookup(ch, &UnicodeNormInfo_NFKC_QC);
 			break;
 		default:
 			Assert(false);

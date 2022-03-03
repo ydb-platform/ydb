@@ -4,7 +4,7 @@
  *	  implementation of k-d tree over points for SP-GiST
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -209,10 +209,12 @@ spg_kd_inner_consistent(PG_FUNCTION_ARGS)
 				}
 				break;
 			case RTBelowStrategyNumber:
+			case RTOldBelowStrategyNumber:
 				if ((in->level % 2) == 0 && FPlt(query->y, coord))
 					which &= (1 << 1);
 				break;
 			case RTAboveStrategyNumber:
+			case RTOldAboveStrategyNumber:
 				if ((in->level % 2) == 0 && FPgt(query->y, coord))
 					which &= (1 << 2);
 				break;

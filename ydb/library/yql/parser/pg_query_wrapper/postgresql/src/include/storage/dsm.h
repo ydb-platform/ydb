@@ -3,7 +3,7 @@
  * dsm.h
  *	  manage dynamic shared memory segments
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/dsm.h
@@ -28,6 +28,9 @@ extern void dsm_cleanup_using_control_segment(dsm_handle old_control_handle);
 extern void dsm_postmaster_startup(struct PGShmemHeader *);
 extern void dsm_backend_shutdown(void);
 extern void dsm_detach_all(void);
+
+extern size_t dsm_estimate_size(void);
+extern void dsm_shmem_init(void);
 
 #ifdef EXEC_BACKEND
 extern void dsm_set_control_handle(dsm_handle h);

@@ -20,7 +20,7 @@
  *
  * Code originally contributed by Adriaan Joubert.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -36,6 +36,7 @@
 #include "libpq/pqformat.h"
 #include "nodes/nodeFuncs.h"
 #include "nodes/supportnodes.h"
+#include "port/pg_bitutils.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/varbit.h"
@@ -230,8 +231,8 @@ bit_in(PG_FUNCTION_ARGS)
 			else if (*sp != '0')
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-						 errmsg("\"%c\" is not a valid binary digit",
-								*sp)));
+						 errmsg("\"%.*s\" is not a valid binary digit",
+								pg_mblen(sp), sp)));
 
 			x >>= 1;
 			if (x == 0)
@@ -255,8 +256,8 @@ bit_in(PG_FUNCTION_ARGS)
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-						 errmsg("\"%c\" is not a valid hexadecimal digit",
-								*sp)));
+						 errmsg("\"%.*s\" is not a valid hexadecimal digit",
+								pg_mblen(sp), sp)));
 
 			if (bc)
 			{
@@ -531,8 +532,8 @@ varbit_in(PG_FUNCTION_ARGS)
 			else if (*sp != '0')
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-						 errmsg("\"%c\" is not a valid binary digit",
-								*sp)));
+						 errmsg("\"%.*s\" is not a valid binary digit",
+								pg_mblen(sp), sp)));
 
 			x >>= 1;
 			if (x == 0)
@@ -556,8 +557,8 @@ varbit_in(PG_FUNCTION_ARGS)
 			else
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-						 errmsg("\"%c\" is not a valid hexadecimal digit",
-								*sp)));
+						 errmsg("\"%.*s\" is not a valid hexadecimal digit",
+								pg_mblen(sp), sp)));
 
 			if (bc)
 			{
@@ -1199,6 +1200,19 @@ bit_overlay(VarBit *t1, VarBit *t2, int sp, int sl)
 	result = bit_catenate(result, s2);
 
 	return result;
+}
+
+/*
+ * bit_count
+ *
+ * Returns the number of bits set in a bit string.
+ */
+Datum
+bit_bit_count(PG_FUNCTION_ARGS)
+{
+	VarBit	   *arg = PG_GETARG_VARBIT_P(0);
+
+	PG_RETURN_INT64(pg_popcount((char *) VARBITS(arg), VARBITBYTES(arg)));
 }
 
 /*

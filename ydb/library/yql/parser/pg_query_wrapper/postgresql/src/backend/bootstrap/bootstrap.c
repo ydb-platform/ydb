@@ -4,7 +4,7 @@
  *	  routines to support running postgres in 'bootstrap' mode
  *	bootstrap mode is used to create the initial template database
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -21,6 +21,7 @@
 #include "access/heapam.h"
 #include "access/htup_details.h"
 #include "access/tableam.h"
+#include "access/toast_compression.h"
 #include "access/xact.h"
 #include "access/xlog_internal.h"
 #include "bootstrap/bootstrap.h"
@@ -53,14 +54,12 @@
 __thread uint32		bootstrap_data_checksum_version = 0;	/* No checksum */
 
 
-#define ALLOC(t, c) \
-	((t *) MemoryContextAllocZero(TopMemoryContext, (unsigned)(c) * sizeof(t)))
-
 static void CheckerModeMain(void);
 static void BootstrapModeMain(void);
 static void bootstrap_signals(void);
 static void ShutdownAuxiliaryProcess(int code, Datum arg);
 static Form_pg_attribute AllocateAttribute(void);
+static void populate_typ_list(void);
 static Oid	gettype(char *type);
 static void cleanup(void);
 
@@ -135,7 +134,7 @@ static const struct typinfo TypInfo[] = {
 	F_XIDIN, F_XIDOUT},
 	{"cid", CIDOID, 0, 4, true, TYPALIGN_INT, TYPSTORAGE_PLAIN, InvalidOid,
 	F_CIDIN, F_CIDOUT},
-	{"pg_node_tree", PGNODETREEOID, 0, -1, false, TYPALIGN_INT, TYPSTORAGE_EXTENDED, DEFAULT_COLLATION_OID,
+	{"pg_node_tree", PG_NODE_TREEOID, 0, -1, false, TYPALIGN_INT, TYPSTORAGE_EXTENDED, DEFAULT_COLLATION_OID,
 	F_PG_NODE_TREE_IN, F_PG_NODE_TREE_OUT},
 	{"int2vector", INT2VECTOROID, INT2OID, -1, false, TYPALIGN_INT, TYPSTORAGE_PLAIN, InvalidOid,
 	F_INT2VECTORIN, F_INT2VECTOROUT},
@@ -161,7 +160,7 @@ struct typmap
 	FormData_pg_type am_typ;
 };
 
-static __thread struct typmap **Typ = NULL;
+static __thread List *Typ = NIL;			/* List of struct typmap* */
 static __thread struct typmap *Ap = NULL;
 
 static __thread Datum values[MAXATTR];	/* current row's attribute values */
@@ -319,6 +318,9 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		case StartupProcess:
 			MyBackendType = B_STARTUP;
 			break;
+		case ArchiverProcess:
+			MyBackendType = B_ARCHIVER;
+			break;
 		case BgWriterProcess:
 			MyBackendType = B_BG_WRITER;
 			break;
@@ -405,8 +407,11 @@ AuxiliaryProcessMain(int argc, char *argv[])
 		 */
 		CreateAuxProcessResourceOwner();
 
-		/* Initialize backend status information */
+		/* Initialize statistics reporting */
 		pgstat_initialize();
+
+		/* Initialize backend status information */
+		pgstat_beinit();
 		pgstat_bestart();
 
 		/* register a before-shutdown callback for LWLock cleanup */
@@ -439,30 +444,29 @@ AuxiliaryProcessMain(int argc, char *argv[])
 			proc_exit(1);		/* should never return */
 
 		case StartupProcess:
-			/* don't set signals, startup process has its own agenda */
 			StartupProcessMain();
-			proc_exit(1);		/* should never return */
+			proc_exit(1);
+
+		case ArchiverProcess:
+			PgArchiverMain();
+			proc_exit(1);
 
 		case BgWriterProcess:
-			/* don't set signals, bgwriter has its own agenda */
 			BackgroundWriterMain();
-			proc_exit(1);		/* should never return */
+			proc_exit(1);
 
 		case CheckpointerProcess:
-			/* don't set signals, checkpointer has its own agenda */
 			CheckpointerMain();
-			proc_exit(1);		/* should never return */
+			proc_exit(1);
 
 		case WalWriterProcess:
-			/* don't set signals, walwriter has its own agenda */
 			InitXLOGAccess();
 			WalWriterMain();
-			proc_exit(1);		/* should never return */
+			proc_exit(1);
 
 		case WalReceiverProcess:
-			/* don't set signals, walreceiver has its own agenda */
 			WalReceiverMain();
-			proc_exit(1);		/* should never return */
+			proc_exit(1);
 
 		default:
 			elog(PANIC, "unrecognized process type: %d", (int) MyAuxProcType);
@@ -583,46 +587,24 @@ ShutdownAuxiliaryProcess(int code, Datum arg)
 
 /* ----------------
  *		boot_openrel
+ *
+ * Execute BKI OPEN command.
  * ----------------
  */
 void
 boot_openrel(char *relname)
 {
 	int			i;
-	struct typmap **app;
-	Relation	rel;
-	TableScanDesc scan;
-	HeapTuple	tup;
 
 	if (strlen(relname) >= NAMEDATALEN)
 		relname[NAMEDATALEN - 1] = '\0';
 
-	if (Typ == NULL)
-	{
-		/* We can now load the pg_type data */
-		rel = table_open(TypeRelationId, NoLock);
-		scan = table_beginscan_catalog(rel, 0, NULL);
-		i = 0;
-		while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
-			++i;
-		table_endscan(scan);
-		app = Typ = ALLOC(struct typmap *, i + 1);
-		while (i-- > 0)
-			*app++ = ALLOC(struct typmap, 1);
-		*app = NULL;
-		scan = table_beginscan_catalog(rel, 0, NULL);
-		app = Typ;
-		while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
-		{
-			(*app)->am_oid = ((Form_pg_type) GETSTRUCT(tup))->oid;
-			memcpy((char *) &(*app)->am_typ,
-				   (char *) GETSTRUCT(tup),
-				   sizeof((*app)->am_typ));
-			app++;
-		}
-		table_endscan(scan);
-		table_close(rel, NoLock);
-	}
+	/*
+	 * pg_type must be filled before any OPEN command is executed, hence we
+	 * can now populate Typ if we haven't yet.
+	 */
+	if (Typ == NIL)
+		populate_typ_list();
 
 	if (boot_reldesc != NULL)
 		closerel(NULL);
@@ -712,13 +694,14 @@ DefineAttr(char *name, char *type, int attnum, int nullness)
 
 	typeoid = gettype(type);
 
-	if (Typ != NULL)
+	if (Typ != NIL)
 	{
 		attrtypes[attnum]->atttypid = Ap->am_oid;
 		attrtypes[attnum]->attlen = Ap->am_typ.typlen;
 		attrtypes[attnum]->attbyval = Ap->am_typ.typbyval;
-		attrtypes[attnum]->attstorage = Ap->am_typ.typstorage;
 		attrtypes[attnum]->attalign = Ap->am_typ.typalign;
+		attrtypes[attnum]->attstorage = Ap->am_typ.typstorage;
+		attrtypes[attnum]->attcompression = InvalidCompressionMethod;
 		attrtypes[attnum]->attcollation = Ap->am_typ.typcollation;
 		/* if an array type, assume 1-dimensional attribute */
 		if (Ap->am_typ.typelem != InvalidOid && Ap->am_typ.typlen < 0)
@@ -731,8 +714,9 @@ DefineAttr(char *name, char *type, int attnum, int nullness)
 		attrtypes[attnum]->atttypid = TypInfo[typeoid].oid;
 		attrtypes[attnum]->attlen = TypInfo[typeoid].len;
 		attrtypes[attnum]->attbyval = TypInfo[typeoid].byval;
-		attrtypes[attnum]->attstorage = TypInfo[typeoid].storage;
 		attrtypes[attnum]->attalign = TypInfo[typeoid].align;
+		attrtypes[attnum]->attstorage = TypInfo[typeoid].storage;
+		attrtypes[attnum]->attcompression = InvalidCompressionMethod;
 		attrtypes[attnum]->attcollation = TypInfo[typeoid].collation;
 		/* if an array type, assume 1-dimensional attribute */
 		if (TypInfo[typeoid].elem != InvalidOid &&
@@ -770,25 +754,18 @@ DefineAttr(char *name, char *type, int attnum, int nullness)
 
 		/*
 		 * Mark as "not null" if type is fixed-width and prior columns are
-		 * too.  This corresponds to case where column can be accessed
-		 * directly via C struct declaration.
-		 *
-		 * oidvector and int2vector are also treated as not-nullable, even
-		 * though they are no longer fixed-width.
+		 * likewise fixed-width and not-null.  This corresponds to case where
+		 * column can be accessed directly via C struct declaration.
 		 */
-#define MARKNOTNULL(att) \
-		((att)->attlen > 0 || \
-		 (att)->atttypid == OIDVECTOROID || \
-		 (att)->atttypid == INT2VECTOROID)
-
-		if (MARKNOTNULL(attrtypes[attnum]))
+		if (attrtypes[attnum]->attlen > 0)
 		{
 			int			i;
 
 			/* check earlier attributes */
 			for (i = 0; i < attnum; i++)
 			{
-				if (!attrtypes[i]->attnotnull)
+				if (attrtypes[i]->attlen <= 0 ||
+					!attrtypes[i]->attnotnull)
 					break;
 			}
 			if (i == attnum)
@@ -897,65 +874,105 @@ cleanup(void)
 }
 
 /* ----------------
+ *		populate_typ_list
+ *
+ * Load the Typ list by reading pg_type.
+ * ----------------
+ */
+static void
+populate_typ_list(void)
+{
+	Relation	rel;
+	TableScanDesc scan;
+	HeapTuple	tup;
+	MemoryContext old;
+
+	Assert(Typ == NIL);
+
+	rel = table_open(TypeRelationId, NoLock);
+	scan = table_beginscan_catalog(rel, 0, NULL);
+	old = MemoryContextSwitchTo(TopMemoryContext);
+	while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
+	{
+		Form_pg_type typForm = (Form_pg_type) GETSTRUCT(tup);
+		struct typmap *newtyp;
+
+		newtyp = (struct typmap *) palloc(sizeof(struct typmap));
+		Typ = lappend(Typ, newtyp);
+
+		newtyp->am_oid = typForm->oid;
+		memcpy(&newtyp->am_typ, typForm, sizeof(newtyp->am_typ));
+	}
+	MemoryContextSwitchTo(old);
+	table_endscan(scan);
+	table_close(rel, NoLock);
+}
+
+/* ----------------
  *		gettype
  *
  * NB: this is really ugly; it will return an integer index into TypInfo[],
  * and not an OID at all, until the first reference to a type not known in
- * TypInfo[].  At that point it will read and cache pg_type in the Typ array,
+ * TypInfo[].  At that point it will read and cache pg_type in Typ,
  * and subsequently return a real OID (and set the global pointer Ap to
  * point at the found row in Typ).  So caller must check whether Typ is
- * still NULL to determine what the return value is!
+ * still NIL to determine what the return value is!
  * ----------------
  */
 static Oid
 gettype(char *type)
 {
-	int			i;
-	Relation	rel;
-	TableScanDesc scan;
-	HeapTuple	tup;
-	struct typmap **app;
-
-	if (Typ != NULL)
+	if (Typ != NIL)
 	{
-		for (app = Typ; *app != NULL; app++)
+		ListCell   *lc;
+
+		foreach(lc, Typ)
 		{
-			if (strncmp(NameStr((*app)->am_typ.typname), type, NAMEDATALEN) == 0)
+			struct typmap *app = lfirst(lc);
+
+			if (strncmp(NameStr(app->am_typ.typname), type, NAMEDATALEN) == 0)
 			{
-				Ap = *app;
-				return (*app)->am_oid;
+				Ap = app;
+				return app->am_oid;
+			}
+		}
+
+		/*
+		 * The type wasn't known; reload the pg_type contents and check again
+		 * to handle composite types, added since last populating the list.
+		 */
+
+		list_free_deep(Typ);
+		Typ = NIL;
+		populate_typ_list();
+
+		/*
+		 * Calling gettype would result in infinite recursion for types
+		 * missing in pg_type, so just repeat the lookup.
+		 */
+		foreach(lc, Typ)
+		{
+			struct typmap *app = lfirst(lc);
+
+			if (strncmp(NameStr(app->am_typ.typname), type, NAMEDATALEN) == 0)
+			{
+				Ap = app;
+				return app->am_oid;
 			}
 		}
 	}
 	else
 	{
+		int			i;
+
 		for (i = 0; i < n_types; i++)
 		{
 			if (strncmp(type, TypInfo[i].name, NAMEDATALEN) == 0)
 				return i;
 		}
+		/* Not in TypInfo, so we'd better be able to read pg_type now */
 		elog(DEBUG4, "external type: %s", type);
-		rel = table_open(TypeRelationId, NoLock);
-		scan = table_beginscan_catalog(rel, 0, NULL);
-		i = 0;
-		while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
-			++i;
-		table_endscan(scan);
-		app = Typ = ALLOC(struct typmap *, i + 1);
-		while (i-- > 0)
-			*app++ = ALLOC(struct typmap, 1);
-		*app = NULL;
-		scan = table_beginscan_catalog(rel, 0, NULL);
-		app = Typ;
-		while ((tup = heap_getnext(scan, ForwardScanDirection)) != NULL)
-		{
-			(*app)->am_oid = ((Form_pg_type) GETSTRUCT(tup))->oid;
-			memmove((char *) &(*app++)->am_typ,
-					(char *) GETSTRUCT(tup),
-					sizeof((*app)->am_typ));
-		}
-		table_endscan(scan);
-		table_close(rel, NoLock);
+		populate_typ_list();
 		return gettype(type);
 	}
 	elog(ERROR, "unrecognized type \"%s\"", type);
@@ -983,17 +1000,20 @@ boot_get_type_io_data(Oid typid,
 					  Oid *typinput,
 					  Oid *typoutput)
 {
-	if (Typ != NULL)
+	if (Typ != NIL)
 	{
 		/* We have the boot-time contents of pg_type, so use it */
-		struct typmap **app;
-		struct typmap *ap;
+		struct typmap *ap = NULL;
+		ListCell   *lc;
 
-		app = Typ;
-		while (*app && (*app)->am_oid != typid)
-			++app;
-		ap = *app;
-		if (ap == NULL)
+		foreach(lc, Typ)
+		{
+			ap = lfirst(lc);
+			if (ap->am_oid == typid)
+				break;
+		}
+
+		if (!ap || ap->am_oid != typid)
 			elog(ERROR, "type OID %u not found in Typ list", typid);
 
 		*typlen = ap->am_typ.typlen;

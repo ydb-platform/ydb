@@ -7,7 +7,7 @@
  * equivalent but might have columns in a different order or different sets of
  * dropped columns.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -236,7 +236,7 @@ execute_attr_map_slot(AttrMap *attrMap,
 Bitmapset *
 execute_attr_map_cols(AttrMap *attrMap, Bitmapset *in_cols)
 {
-	Bitmapset *out_cols;
+	Bitmapset  *out_cols;
 	int			out_attnum;
 
 	/* fast path for the common trivial case */
@@ -248,7 +248,7 @@ execute_attr_map_cols(AttrMap *attrMap, Bitmapset *in_cols)
 	 */
 	out_cols = NULL;
 
-	for (out_attnum = FirstLowInvalidHeapAttributeNumber + 1;
+	for (out_attnum = FirstLowInvalidHeapAttributeNumber;
 		 out_attnum <= attrMap->maplen;
 		 out_attnum++)
 	{

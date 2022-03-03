@@ -4,7 +4,7 @@
  *	  definition of the "type" system catalog (pg_type)
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_type.h
@@ -41,10 +41,10 @@ CATALOG(pg_type,1247,TypeRelationId) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71,TypeRelati
 	NameData	typname;
 
 	/* OID of namespace containing this type */
-	Oid			typnamespace BKI_DEFAULT(PGNSP);
+	Oid			typnamespace BKI_DEFAULT(pg_catalog) BKI_LOOKUP(pg_namespace);
 
 	/* type owner */
-	Oid			typowner BKI_DEFAULT(PGUID);
+	Oid			typowner BKI_DEFAULT(POSTGRES) BKI_LOOKUP(pg_authid);
 
 	/*
 	 * For a fixed-size type, typlen is the number of bytes we use to
@@ -98,26 +98,32 @@ CATALOG(pg_type,1247,TypeRelationId) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71,TypeRelati
 	char		typdelim BKI_DEFAULT(',');
 
 	/* associated pg_class OID if a composite type, else 0 */
-	Oid			typrelid BKI_DEFAULT(0) BKI_ARRAY_DEFAULT(0) BKI_LOOKUP(pg_class);
+	Oid			typrelid BKI_DEFAULT(0) BKI_ARRAY_DEFAULT(0) BKI_LOOKUP_OPT(pg_class);
 
 	/*
-	 * If typelem is not 0 then it identifies another row in pg_type. The
-	 * current type can then be subscripted like an array yielding values of
-	 * type typelem. A non-zero typelem does not guarantee this type to be a
-	 * "real" array type; some ordinary fixed-length types can also be
-	 * subscripted (e.g., name, point). Variable-length types can *not* be
-	 * turned into pseudo-arrays like that. Hence, the way to determine
-	 * whether a type is a "true" array type is if:
-	 *
-	 * typelem != 0 and typlen == -1.
+	 * Type-specific subscripting handler.  If typsubscript is 0, it means
+	 * that this type doesn't support subscripting.  Note that various parts
+	 * of the system deem types to be "true" array types only if their
+	 * typsubscript is array_subscript_handler.
 	 */
-	Oid			typelem BKI_DEFAULT(0) BKI_LOOKUP(pg_type);
+	regproc		typsubscript BKI_DEFAULT(-) BKI_ARRAY_DEFAULT(array_subscript_handler) BKI_LOOKUP_OPT(pg_proc);
+
+	/*
+	 * If typelem is not 0 then it identifies another row in pg_type, defining
+	 * the type yielded by subscripting.  This should be 0 if typsubscript is
+	 * 0.  However, it can be 0 when typsubscript isn't 0, if the handler
+	 * doesn't need typelem to determine the subscripting result type.  Note
+	 * that a typelem dependency is considered to imply physical containment
+	 * of the element type in this type; so DDL changes on the element type
+	 * might be restricted by the presence of this type.
+	 */
+	Oid			typelem BKI_DEFAULT(0) BKI_LOOKUP_OPT(pg_type);
 
 	/*
 	 * If there is a "true" array type having this type as element type,
 	 * typarray links to it.  Zero if no associated "true" array type.
 	 */
-	Oid			typarray BKI_DEFAULT(0) BKI_ARRAY_DEFAULT(0) BKI_LOOKUP(pg_type);
+	Oid			typarray BKI_DEFAULT(0) BKI_ARRAY_DEFAULT(0) BKI_LOOKUP_OPT(pg_type);
 
 	/*
 	 * I/O conversion procedures for the datatype.
@@ -128,19 +134,19 @@ CATALOG(pg_type,1247,TypeRelationId) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71,TypeRelati
 	regproc		typoutput BKI_ARRAY_DEFAULT(array_out) BKI_LOOKUP(pg_proc);
 
 	/* binary format (optional) */
-	regproc		typreceive BKI_ARRAY_DEFAULT(array_recv) BKI_LOOKUP(pg_proc);
-	regproc		typsend BKI_ARRAY_DEFAULT(array_send) BKI_LOOKUP(pg_proc);
+	regproc		typreceive BKI_ARRAY_DEFAULT(array_recv) BKI_LOOKUP_OPT(pg_proc);
+	regproc		typsend BKI_ARRAY_DEFAULT(array_send) BKI_LOOKUP_OPT(pg_proc);
 
 	/*
 	 * I/O functions for optional type modifiers.
 	 */
-	regproc		typmodin BKI_DEFAULT(-) BKI_LOOKUP(pg_proc);
-	regproc		typmodout BKI_DEFAULT(-) BKI_LOOKUP(pg_proc);
+	regproc		typmodin BKI_DEFAULT(-) BKI_LOOKUP_OPT(pg_proc);
+	regproc		typmodout BKI_DEFAULT(-) BKI_LOOKUP_OPT(pg_proc);
 
 	/*
 	 * Custom ANALYZE procedure for the datatype (0 selects the default).
 	 */
-	regproc		typanalyze BKI_DEFAULT(-) BKI_ARRAY_DEFAULT(array_typanalyze) BKI_LOOKUP(pg_proc);
+	regproc		typanalyze BKI_DEFAULT(-) BKI_ARRAY_DEFAULT(array_typanalyze) BKI_LOOKUP_OPT(pg_proc);
 
 	/* ----------------
 	 * typalign is the alignment required when storing a value of this
@@ -199,7 +205,7 @@ CATALOG(pg_type,1247,TypeRelationId) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71,TypeRelati
 	 * Domains use typbasetype to show the base (or domain) type that the
 	 * domain is based on.  Zero if the type is not a domain.
 	 */
-	Oid			typbasetype BKI_DEFAULT(0);
+	Oid			typbasetype BKI_DEFAULT(0) BKI_LOOKUP_OPT(pg_type);
 
 	/*
 	 * Domains use typtypmod to record the typmod to be applied to their base
@@ -219,7 +225,7 @@ CATALOG(pg_type,1247,TypeRelationId) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71,TypeRelati
 	 * DEFAULT_COLLATION_OID) for collatable base types, possibly some other
 	 * OID for domains over collatable types
 	 */
-	Oid			typcollation BKI_DEFAULT(0) BKI_LOOKUP(pg_collation);
+	Oid			typcollation BKI_DEFAULT(0) BKI_LOOKUP_OPT(pg_collation);
 
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 
@@ -254,6 +260,13 @@ CATALOG(pg_type,1247,TypeRelationId) BKI_BOOTSTRAP BKI_ROWTYPE_OID(71,TypeRelati
  */
 typedef FormData_pg_type *Form_pg_type;
 
+DECLARE_TOAST(pg_type, 4171, 4172);
+
+DECLARE_UNIQUE_INDEX_PKEY(pg_type_oid_index, 2703, on pg_type using btree(oid oid_ops));
+#define TypeOidIndexId	2703
+DECLARE_UNIQUE_INDEX(pg_type_typname_nsp_index, 2704, on pg_type using btree(typname name_ops, typnamespace oid_ops));
+#define TypeNameNspIndexId	2704
+
 #ifdef EXPOSE_TO_CLIENT_CODE
 
 /*
@@ -263,6 +276,7 @@ typedef FormData_pg_type *Form_pg_type;
 #define  TYPTYPE_COMPOSITE	'c' /* composite (e.g., table's rowtype) */
 #define  TYPTYPE_DOMAIN		'd' /* domain over another type */
 #define  TYPTYPE_ENUM		'e' /* enumerated type */
+#define  TYPTYPE_MULTIRANGE	'm' /* multirange type */
 #define  TYPTYPE_PSEUDO		'p' /* pseudo-type */
 #define  TYPTYPE_RANGE		'r' /* range type */
 
@@ -304,13 +318,27 @@ typedef FormData_pg_type *Form_pg_type;
 	 (typid) == ANYARRAYOID || \
 	 (typid) == ANYNONARRAYOID || \
 	 (typid) == ANYENUMOID || \
-	 (typid) == ANYRANGEOID)
+	 (typid) == ANYRANGEOID || \
+	 (typid) == ANYMULTIRANGEOID)
 
 #define IsPolymorphicTypeFamily2(typid)  \
 	((typid) == ANYCOMPATIBLEOID || \
 	 (typid) == ANYCOMPATIBLEARRAYOID || \
 	 (typid) == ANYCOMPATIBLENONARRAYOID || \
-	 (typid) == ANYCOMPATIBLERANGEOID)
+	 (typid) == ANYCOMPATIBLERANGEOID || \
+	 (typid) == ANYCOMPATIBLEMULTIRANGEOID)
+
+/* Is this a "true" array type?  (Requires fmgroids.h) */
+#define IsTrueArrayType(typeForm)  \
+	(OidIsValid((typeForm)->typelem) && \
+	 (typeForm)->typsubscript == F_ARRAY_SUBSCRIPT_HANDLER)
+
+/*
+ * Backwards compatibility for ancient random spellings of pg_type OID macros.
+ * Don't use these names in new code.
+ */
+#define CASHOID	MONEYOID
+#define LSNOID	PG_LSNOID
 
 #endif							/* EXPOSE_TO_CLIENT_CODE */
 
@@ -337,6 +365,7 @@ extern ObjectAddress TypeCreate(Oid newTypeOid,
 								Oid typmodinProcedure,
 								Oid typmodoutProcedure,
 								Oid analyzeProcedure,
+								Oid subscriptProcedure,
 								Oid elementType,
 								bool isImplicitArray,
 								Oid arrayType,
@@ -369,5 +398,8 @@ extern char *makeArrayTypeName(const char *typeName, Oid typeNamespace);
 
 extern bool moveArrayTypeName(Oid typeOid, const char *typeName,
 							  Oid typeNamespace);
+
+extern char *makeMultirangeTypeName(const char *rangeTypeName,
+									Oid typeNamespace);
 
 #endif							/* PG_TYPE_H */

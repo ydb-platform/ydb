@@ -26,6 +26,7 @@ to_add_const = set([
     "escape_string_warning",
     "standard_conforming_strings",
     "gistBufferingOptValues",
+    "StdRdOptIndexCleanupValues",
     "boolRelOpts",
     "intRelOpts",
     "realRelOpts",
@@ -280,6 +281,8 @@ def get_vars():
 
     all_vars.remove("UsedShmemSegID")
     all_vars.remove("UsedShmemSegAddr")
+    all_vars.remove("local_my_wait_event_info")
+    all_vars.remove("my_wait_event_info")
 
     with open("vars.txt","w") as f:
         for a in sorted(all_vars):

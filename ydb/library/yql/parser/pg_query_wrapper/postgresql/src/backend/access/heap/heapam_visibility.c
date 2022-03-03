@@ -11,12 +11,12 @@
  * shared buffer content lock on the buffer containing the tuple.
  *
  * NOTE: When using a non-MVCC snapshot, we must check
- * TransactionIdIsInProgress (which looks in the PGXACT array)
+ * TransactionIdIsInProgress (which looks in the PGPROC array)
  * before TransactionIdDidCommit/TransactionIdDidAbort (which look in
  * pg_xact).  Otherwise we have a race condition: we might decide that a
  * just-committed transaction crashed, because none of the tests succeed.
  * xact.c is careful to record commit/abort in pg_xact before it unsets
- * MyPgXact->xid in the PGXACT array.  That fixes that problem, but it
+ * MyProc->xid in the PGPROC array.  That fixes that problem, but it
  * also means there is a window where TransactionIdIsInProgress and
  * TransactionIdDidCommit will both return true.  If we check only
  * TransactionIdDidCommit, we could consider a tuple committed when a
@@ -52,7 +52,7 @@
  *	 HeapTupleSatisfiesAny()
  *		  all tuples are visible
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -607,8 +607,7 @@ HeapTupleSatisfiesUpdate(HeapTuple htup, CommandId curcid,
 	{
 		if (HEAP_XMAX_IS_LOCKED_ONLY(tuple->t_infomask))
 			return TM_Ok;
-		if (!ItemPointerEquals(&htup->t_self, &tuple->t_ctid) ||
-			HeapTupleHeaderIndicatesMovedPartitions(tuple))
+		if (!ItemPointerEquals(&htup->t_self, &tuple->t_ctid))
 			return TM_Updated;	/* updated by other */
 		else
 			return TM_Deleted;	/* deleted by other */
@@ -653,8 +652,7 @@ HeapTupleSatisfiesUpdate(HeapTuple htup, CommandId curcid,
 
 		if (TransactionIdDidCommit(xmax))
 		{
-			if (!ItemPointerEquals(&htup->t_self, &tuple->t_ctid) ||
-				HeapTupleHeaderIndicatesMovedPartitions(tuple))
+			if (!ItemPointerEquals(&htup->t_self, &tuple->t_ctid))
 				return TM_Updated;
 			else
 				return TM_Deleted;
@@ -714,8 +712,7 @@ HeapTupleSatisfiesUpdate(HeapTuple htup, CommandId curcid,
 
 	SetHintBits(tuple, buffer, HEAP_XMAX_COMMITTED,
 				HeapTupleHeaderGetRawXmax(tuple));
-	if (!ItemPointerEquals(&htup->t_self, &tuple->t_ctid) ||
-		HeapTupleHeaderIndicatesMovedPartitions(tuple))
+	if (!ItemPointerEquals(&htup->t_self, &tuple->t_ctid))
 		return TM_Updated;		/* updated by other */
 	else
 		return TM_Deleted;		/* deleted by other */
@@ -956,7 +953,7 @@ HeapTupleSatisfiesDirty(HeapTuple htup, Snapshot snapshot,
  * coding where we tried to set the hint bits as soon as possible, we instead
  * did TransactionIdIsInProgress in each call --- to no avail, as long as the
  * inserting/deleting transaction was still running --- which was more cycles
- * and more contention on the PGXACT array.
+ * and more contention on ProcArrayLock.
  */
 static bool
 HeapTupleSatisfiesMVCC(HeapTuple htup, Snapshot snapshot,
@@ -1154,19 +1151,56 @@ HeapTupleSatisfiesMVCC(HeapTuple htup, Snapshot snapshot,
  *	we mainly want to know is if a tuple is potentially visible to *any*
  *	running transaction.  If so, it can't be removed yet by VACUUM.
  *
- * OldestXmin is a cutoff XID (obtained from GetOldestXmin()).  Tuples
- * deleted by XIDs >= OldestXmin are deemed "recently dead"; they might
- * still be visible to some open transaction, so we can't remove them,
- * even if we see that the deleting transaction has committed.
+ * OldestXmin is a cutoff XID (obtained from
+ * GetOldestNonRemovableTransactionId()).  Tuples deleted by XIDs >=
+ * OldestXmin are deemed "recently dead"; they might still be visible to some
+ * open transaction, so we can't remove them, even if we see that the deleting
+ * transaction has committed.
  */
 HTSV_Result
 HeapTupleSatisfiesVacuum(HeapTuple htup, TransactionId OldestXmin,
 						 Buffer buffer)
 {
+	TransactionId dead_after = InvalidTransactionId;
+	HTSV_Result res;
+
+	res = HeapTupleSatisfiesVacuumHorizon(htup, buffer, &dead_after);
+
+	if (res == HEAPTUPLE_RECENTLY_DEAD)
+	{
+		Assert(TransactionIdIsValid(dead_after));
+
+		if (TransactionIdPrecedes(dead_after, OldestXmin))
+			res = HEAPTUPLE_DEAD;
+	}
+	else
+		Assert(!TransactionIdIsValid(dead_after));
+
+	return res;
+}
+
+/*
+ * Work horse for HeapTupleSatisfiesVacuum and similar routines.
+ *
+ * In contrast to HeapTupleSatisfiesVacuum this routine, when encountering a
+ * tuple that could still be visible to some backend, stores the xid that
+ * needs to be compared with the horizon in *dead_after, and returns
+ * HEAPTUPLE_RECENTLY_DEAD. The caller then can perform the comparison with
+ * the horizon.  This is e.g. useful when comparing with different horizons.
+ *
+ * Note: HEAPTUPLE_DEAD can still be returned here, e.g. if the inserting
+ * transaction aborted.
+ */
+HTSV_Result
+HeapTupleSatisfiesVacuumHorizon(HeapTuple htup, Buffer buffer, TransactionId *dead_after)
+{
 	HeapTupleHeader tuple = htup->t_data;
 
 	Assert(ItemPointerIsValid(&htup->t_self));
 	Assert(htup->t_tableOid != InvalidOid);
+	Assert(dead_after != NULL);
+
+	*dead_after = InvalidTransactionId;
 
 	/*
 	 * Has inserting transaction committed?
@@ -1323,17 +1357,15 @@ HeapTupleSatisfiesVacuum(HeapTuple htup, TransactionId OldestXmin,
 		else if (TransactionIdDidCommit(xmax))
 		{
 			/*
-			 * The multixact might still be running due to lockers.  If the
-			 * updater is below the xid horizon, we have to return DEAD
-			 * regardless -- otherwise we could end up with a tuple where the
-			 * updater has to be removed due to the horizon, but is not pruned
-			 * away.  It's not a problem to prune that tuple, because any
-			 * remaining lockers will also be present in newer tuple versions.
+			 * The multixact might still be running due to lockers.  Need to
+			 * allow for pruning if below the xid horizon regardless --
+			 * otherwise we could end up with a tuple where the updater has to
+			 * be removed due to the horizon, but is not pruned away.  It's
+			 * not a problem to prune that tuple, because any remaining
+			 * lockers will also be present in newer tuple versions.
 			 */
-			if (!TransactionIdPrecedes(xmax, OldestXmin))
-				return HEAPTUPLE_RECENTLY_DEAD;
-
-			return HEAPTUPLE_DEAD;
+			*dead_after = xmax;
+			return HEAPTUPLE_RECENTLY_DEAD;
 		}
 		else if (!MultiXactIdIsRunning(HeapTupleHeaderGetRawXmax(tuple), false))
 		{
@@ -1372,14 +1404,11 @@ HeapTupleSatisfiesVacuum(HeapTuple htup, TransactionId OldestXmin,
 	}
 
 	/*
-	 * Deleter committed, but perhaps it was recent enough that some open
-	 * transactions could still see the tuple.
+	 * Deleter committed, allow caller to check if it was recent enough that
+	 * some open transactions could still see the tuple.
 	 */
-	if (!TransactionIdPrecedes(HeapTupleHeaderGetRawXmax(tuple), OldestXmin))
-		return HEAPTUPLE_RECENTLY_DEAD;
-
-	/* Otherwise, it's dead and removable */
-	return HEAPTUPLE_DEAD;
+	*dead_after = HeapTupleHeaderGetRawXmax(tuple);
+	return HEAPTUPLE_RECENTLY_DEAD;
 }
 
 
@@ -1393,14 +1422,28 @@ HeapTupleSatisfiesVacuum(HeapTuple htup, TransactionId OldestXmin,
  *
  *	This is an interface to HeapTupleSatisfiesVacuum that's callable via
  *	HeapTupleSatisfiesSnapshot, so it can be used through a Snapshot.
- *	snapshot->xmin must have been set up with the xmin horizon to use.
+ *	snapshot->vistest must have been set up with the horizon to use.
  */
 static bool
 HeapTupleSatisfiesNonVacuumable(HeapTuple htup, Snapshot snapshot,
 								Buffer buffer)
 {
-	return HeapTupleSatisfiesVacuum(htup, snapshot->xmin, buffer)
-		!= HEAPTUPLE_DEAD;
+	TransactionId dead_after = InvalidTransactionId;
+	HTSV_Result res;
+
+	res = HeapTupleSatisfiesVacuumHorizon(htup, buffer, &dead_after);
+
+	if (res == HEAPTUPLE_RECENTLY_DEAD)
+	{
+		Assert(TransactionIdIsValid(dead_after));
+
+		if (GlobalVisTestIsRemovableXid(snapshot->vistest, dead_after))
+			res = HEAPTUPLE_DEAD;
+	}
+	else
+		Assert(!TransactionIdIsValid(dead_after));
+
+	return res != HEAPTUPLE_DEAD;
 }
 
 
@@ -1413,12 +1456,12 @@ HeapTupleSatisfiesNonVacuumable(HeapTuple htup, Snapshot snapshot,
  *	HeapTupleSatisfiesMVCC) and, therefore, any hint bits that can be set
  *	should already be set.  We assume that if no hint bits are set, the xmin
  *	or xmax transaction is still running.  This is therefore faster than
- *	HeapTupleSatisfiesVacuum, because we don't consult PGXACT nor CLOG.
+ *	HeapTupleSatisfiesVacuum, because we consult neither procarray nor CLOG.
  *	It's okay to return false when in doubt, but we must return true only
  *	if the tuple is removable.
  */
 bool
-HeapTupleIsSurelyDead(HeapTuple htup, TransactionId OldestXmin)
+HeapTupleIsSurelyDead(HeapTuple htup, GlobalVisState *vistest)
 {
 	HeapTupleHeader tuple = htup->t_data;
 
@@ -1459,7 +1502,8 @@ HeapTupleIsSurelyDead(HeapTuple htup, TransactionId OldestXmin)
 		return false;
 
 	/* Deleter committed, so tuple is dead if the XID is old enough. */
-	return TransactionIdPrecedes(HeapTupleHeaderGetRawXmax(tuple), OldestXmin);
+	return GlobalVisTestIsRemovableXid(vistest,
+									   HeapTupleHeaderGetRawXmax(tuple));
 }
 
 /*
@@ -1564,15 +1608,32 @@ HeapTupleSatisfiesHistoricMVCC(HeapTuple htup, Snapshot snapshot,
 
 		/*
 		 * another transaction might have (tried to) delete this tuple or
-		 * cmin/cmax was stored in a combocid. So we need to lookup the actual
-		 * values externally.
+		 * cmin/cmax was stored in a combo CID. So we need to lookup the
+		 * actual values externally.
 		 */
 		resolved = ResolveCminCmaxDuringDecoding(HistoricSnapshotGetTupleCids(), snapshot,
 												 htup, buffer,
 												 &cmin, &cmax);
 
+		/*
+		 * If we haven't resolved the combo CID to cmin/cmax, that means we
+		 * have not decoded the combo CID yet. That means the cmin is
+		 * definitely in the future, and we're not supposed to see the tuple
+		 * yet.
+		 *
+		 * XXX This only applies to decoding of in-progress transactions. In
+		 * regular logical decoding we only execute this code at commit time,
+		 * at which point we should have seen all relevant combo CIDs. So
+		 * ideally, we should error out in this case but in practice, this
+		 * won't happen. If we are too worried about this then we can add an
+		 * elog inside ResolveCminCmaxDuringDecoding.
+		 *
+		 * XXX For the streaming case, we can track the largest combo CID
+		 * assigned, and error out based on this (when unable to resolve combo
+		 * CID below that observed maximum value).
+		 */
 		if (!resolved)
-			elog(ERROR, "could not resolve cmin/cmax of catalog tuple");
+			return false;
 
 		Assert(cmin != InvalidCommandId);
 
@@ -1642,10 +1703,25 @@ HeapTupleSatisfiesHistoricMVCC(HeapTuple htup, Snapshot snapshot,
 												 htup, buffer,
 												 &cmin, &cmax);
 
-		if (!resolved)
-			elog(ERROR, "could not resolve combocid to cmax");
-
-		Assert(cmax != InvalidCommandId);
+		/*
+		 * If we haven't resolved the combo CID to cmin/cmax, that means we
+		 * have not decoded the combo CID yet. That means the cmax is
+		 * definitely in the future, and we're still supposed to see the
+		 * tuple.
+		 *
+		 * XXX This only applies to decoding of in-progress transactions. In
+		 * regular logical decoding we only execute this code at commit time,
+		 * at which point we should have seen all relevant combo CIDs. So
+		 * ideally, we should error out in this case but in practice, this
+		 * won't happen. If we are too worried about this then we can add an
+		 * elog inside ResolveCminCmaxDuringDecoding.
+		 *
+		 * XXX For the streaming case, we can track the largest combo CID
+		 * assigned, and error out based on this (when unable to resolve combo
+		 * CID below that observed maximum value).
+		 */
+		if (!resolved || cmax == InvalidCommandId)
+			return true;
 
 		if (cmax >= snapshot->curcid)
 			return true;		/* deleted after scan started */

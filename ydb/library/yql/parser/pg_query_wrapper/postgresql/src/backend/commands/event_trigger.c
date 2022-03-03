@@ -3,7 +3,7 @@
  * event_trigger.c
  *	  PostgreSQL EVENT TRIGGER support code.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -177,7 +177,7 @@ CreateEventTrigger(CreateEventTrigStmt *stmt)
 	/* Find and validate the trigger function. */
 	funcoid = LookupFuncName(stmt->funcname, 0, NULL, false);
 	funcrettype = get_func_rettype(funcoid);
-	if (funcrettype != EVTTRIGGEROID)
+	if (funcrettype != EVENT_TRIGGEROID)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
 				 errmsg("function %s must return type %s",
@@ -353,28 +353,6 @@ filter_list_to_array(List *filterlist)
 
 	return PointerGetDatum(construct_array(data, l, TEXTOID,
 										   -1, false, TYPALIGN_INT));
-}
-
-/*
- * Guts of event trigger deletion.
- */
-void
-RemoveEventTriggerById(Oid trigOid)
-{
-	Relation	tgrel;
-	HeapTuple	tup;
-
-	tgrel = table_open(EventTriggerRelationId, RowExclusiveLock);
-
-	tup = SearchSysCache1(EVENTTRIGGEROID, ObjectIdGetDatum(trigOid));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for event trigger %u", trigOid);
-
-	CatalogTupleDelete(tgrel, &tup->t_self);
-
-	ReleaseSysCache(tup);
-
-	table_close(tgrel, RowExclusiveLock);
 }
 
 /*
@@ -1289,10 +1267,11 @@ EventTriggerSQLDropAddObject(const ObjectAddress *object, bool original, bool no
 
 	/* object identity, objname and objargs */
 	obj->objidentity =
-		getObjectIdentityParts(&obj->address, &obj->addrnames, &obj->addrargs);
+		getObjectIdentityParts(&obj->address, &obj->addrnames, &obj->addrargs,
+							   false);
 
 	/* object type */
-	obj->objecttype = getObjectTypeDescription(&obj->address);
+	obj->objecttype = getObjectTypeDescription(&obj->address, false);
 
 	slist_push_head(&(currentEventTriggerState->SQLDropList), &obj->next);
 
@@ -1957,8 +1936,19 @@ pg_event_trigger_ddl_commands(PG_FUNCTION_ARGS)
 					else if (cmd->type == SCT_AlterTSConfig)
 						addr = cmd->d.atscfg.address;
 
-					type = getObjectTypeDescription(&addr);
-					identity = getObjectIdentity(&addr);
+					/*
+					 * If an object was dropped in the same command we may end
+					 * up in a situation where we generated a message but can
+					 * no longer look for the object information, so skip it
+					 * rather than failing.  This can happen for example with
+					 * some subcommand combinations of ALTER TABLE.
+					 */
+					identity = getObjectIdentity(&addr, true);
+					if (identity == NULL)
+						continue;
+
+					/* The type can never be NULL. */
+					type = getObjectTypeDescription(&addr, true);
 
 					/*
 					 * Obtain schema name, if any ("pg_temp" if a temp

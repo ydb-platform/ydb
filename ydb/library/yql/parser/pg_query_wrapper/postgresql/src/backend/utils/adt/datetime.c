@@ -3,7 +3,7 @@
  * datetime.c
  *	  Support functions for date/time types.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -339,35 +339,80 @@ j2day(int date)
 /*
  * GetCurrentDateTime()
  *
- * Get the transaction start time ("now()") broken down as a struct pg_tm.
+ * Get the transaction start time ("now()") broken down as a struct pg_tm,
+ * converted according to the session timezone setting.
+ *
+ * This is just a convenience wrapper for GetCurrentTimeUsec, to cover the
+ * case where caller doesn't need either fractional seconds or tz offset.
  */
 void
 GetCurrentDateTime(struct pg_tm *tm)
 {
-	int			tz;
 	fsec_t		fsec;
 
-	timestamp2tm(GetCurrentTransactionStartTimestamp(), &tz, tm, &fsec,
-				 NULL, NULL);
-	/* Note: don't pass NULL tzp to timestamp2tm; affects behavior */
+	GetCurrentTimeUsec(tm, &fsec, NULL);
 }
 
 /*
  * GetCurrentTimeUsec()
  *
  * Get the transaction start time ("now()") broken down as a struct pg_tm,
- * including fractional seconds and timezone offset.
+ * including fractional seconds and timezone offset.  The time is converted
+ * according to the session timezone setting.
+ *
+ * Callers may pass tzp = NULL if they don't need the offset, but this does
+ * not affect the conversion behavior (unlike timestamp2tm()).
+ *
+ * Internally, we cache the result, since this could be called many times
+ * in a transaction, within which now() doesn't change.
  */
 void
 GetCurrentTimeUsec(struct pg_tm *tm, fsec_t *fsec, int *tzp)
 {
-	int			tz;
+	TimestampTz cur_ts = GetCurrentTransactionStartTimestamp();
 
-	timestamp2tm(GetCurrentTransactionStartTimestamp(), &tz, tm, fsec,
-				 NULL, NULL);
-	/* Note: don't pass NULL tzp to timestamp2tm; affects behavior */
+	/*
+	 * The cache key must include both current time and current timezone.  By
+	 * representing the timezone by just a pointer, we're assuming that
+	 * distinct timezone settings could never have the same pointer value.
+	 * This is true by virtue of the hashtable used inside pg_tzset();
+	 * however, it might need another look if we ever allow entries in that
+	 * hash to be recycled.
+	 */
+	static __thread TimestampTz cache_ts = 0;
+	static __thread pg_tz *cache_timezone = NULL;
+	static __thread struct pg_tm cache_tm;
+	static __thread fsec_t cache_fsec;
+	static __thread int	cache_tz;
+
+	if (cur_ts != cache_ts || session_timezone != cache_timezone)
+	{
+		/*
+		 * Make sure cache is marked invalid in case of error after partial
+		 * update within timestamp2tm.
+		 */
+		cache_timezone = NULL;
+
+		/*
+		 * Perform the computation, storing results into cache.  We do not
+		 * really expect any error here, since current time surely ought to be
+		 * within range, but check just for sanity's sake.
+		 */
+		if (timestamp2tm(cur_ts, &cache_tz, &cache_tm, &cache_fsec,
+						 NULL, session_timezone) != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+					 errmsg("timestamp out of range")));
+
+		/* OK, so mark the cache valid. */
+		cache_ts = cur_ts;
+		cache_timezone = session_timezone;
+	}
+
+	*tm = cache_tm;
+	*fsec = cache_fsec;
 	if (tzp != NULL)
-		*tzp = tz;
+		*tzp = cache_tz;
 }
 
 
@@ -4013,7 +4058,8 @@ EncodeDateTime(struct pg_tm *tm, fsec_t fsec, bool print_tz, int tz, const char 
 
 			/*
 			 * Note: the uses of %.*s in this function would be risky if the
-			 * timezone names ever contain non-ASCII characters.  However, all
+			 * timezone names ever contain non-ASCII characters, since we are
+			 * not being careful to do encoding-aware clipping.  However, all
 			 * TZ abbreviations in the IANA database are plain ASCII.
 			 */
 			if (print_tz)
@@ -4368,6 +4414,7 @@ EncodeInterval(struct pg_tm *tm, fsec_t fsec, int style, char *str)
 				else if (is_before)
 					*cp++ = '-';
 				cp = AppendSeconds(cp, sec, fsec, MAX_INTERVAL_PRECISION, false);
+				/* We output "ago", not negatives, so use abs(). */
 				sprintf(cp, " sec%s",
 						(abs(sec) != 1 || fsec != 0) ? "s" : "");
 				is_zero = false;

@@ -3,7 +3,7 @@
  * brin_validate.c
  *	  Opclass validator for BRIN.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -97,8 +97,8 @@ brinvalidate(Oid opclassoid)
 				break;
 			case BRIN_PROCNUM_CONSISTENT:
 				ok = check_amproc_signature(procform->amproc, BOOLOID, true,
-											3, 3, INTERNALOID, INTERNALOID,
-											INTERNALOID);
+											3, 4, INTERNALOID, INTERNALOID,
+											INTERNALOID, INT4OID);
 				break;
 			case BRIN_PROCNUM_UNION:
 				ok = check_amproc_signature(procform->amproc, BOOLOID, true,

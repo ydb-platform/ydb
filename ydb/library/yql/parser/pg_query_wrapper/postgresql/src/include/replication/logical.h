@@ -2,7 +2,7 @@
  * logical.h
  *	   PostgreSQL logical decoding coordination
  *
- * Copyright (c) 2012-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2021, PostgreSQL Global Development Group
  *
  *-------------------------------------------------------------------------
  */
@@ -80,6 +80,16 @@ typedef struct LogicalDecodingContext
 	void	   *output_writer_private;
 
 	/*
+	 * Does the output plugin support streaming, and is it enabled?
+	 */
+	bool		streaming;
+
+	/*
+	 * Does the output plugin support two-phase decoding, and is it enabled?
+	 */
+	bool		twophase;
+
+	/*
 	 * State for writing output.
 	 */
 	bool		accept_writes;
@@ -91,7 +101,7 @@ typedef struct LogicalDecodingContext
 
 extern void CheckLogicalDecodingRequirements(void);
 
-extern LogicalDecodingContext *CreateInitDecodingContext(char *plugin,
+extern LogicalDecodingContext *CreateInitDecodingContext(const char *plugin,
 														 List *output_plugin_options,
 														 bool need_full_snapshot,
 														 XLogRecPtr restart_lsn,
@@ -115,6 +125,10 @@ extern void LogicalIncreaseRestartDecodingForSlot(XLogRecPtr current_lsn,
 												  XLogRecPtr restart_lsn);
 extern void LogicalConfirmReceivedLocation(XLogRecPtr lsn);
 
+extern bool filter_prepare_cb_wrapper(LogicalDecodingContext *ctx,
+									  TransactionId xid, const char *gid);
 extern bool filter_by_origin_cb_wrapper(LogicalDecodingContext *ctx, RepOriginId origin_id);
+extern void ResetLogicalStreamingState(void);
+extern void UpdateDecodingStats(LogicalDecodingContext *ctx);
 
 #endif

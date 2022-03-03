@@ -2,7 +2,7 @@
  * bgworker.c
  *		POSTGRES pluggable background workers implementation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/postmaster/bgworker.c
@@ -252,10 +252,10 @@ BackgroundWorkerStateChange(bool allow_new_workers)
 	 */
 	if (max_worker_processes != BackgroundWorkerData->total_slots)
 	{
-		elog(LOG,
-			 "inconsistent background worker state (max_worker_processes=%d, total_slots=%d",
-			 max_worker_processes,
-			 BackgroundWorkerData->total_slots);
+		ereport(LOG,
+				(errmsg("inconsistent background worker state (max_worker_processes=%d, total_slots=%d)",
+						max_worker_processes,
+						BackgroundWorkerData->total_slots)));
 		return;
 	}
 
@@ -389,7 +389,7 @@ BackgroundWorkerStateChange(bool allow_new_workers)
 		rw->rw_worker.bgw_notify_pid = slot->worker.bgw_notify_pid;
 		if (!PostmasterMarkPIDForWorkerNotify(rw->rw_worker.bgw_notify_pid))
 		{
-			elog(DEBUG1, "worker notification PID %lu is not valid",
+			elog(DEBUG1, "worker notification PID %ld is not valid",
 				 (long) rw->rw_worker.bgw_notify_pid);
 			rw->rw_worker.bgw_notify_pid = 0;
 		}
@@ -404,8 +404,8 @@ BackgroundWorkerStateChange(bool allow_new_workers)
 
 		/* Log it! */
 		ereport(DEBUG1,
-				(errmsg("registering background worker \"%s\"",
-						rw->rw_worker.bgw_name)));
+				(errmsg_internal("registering background worker \"%s\"",
+								 rw->rw_worker.bgw_name)));
 
 		slist_push_head(&BackgroundWorkerList, &rw->rw_lnode);
 	}
@@ -445,8 +445,8 @@ ForgetBackgroundWorker(slist_mutable_iter *cur)
 	slot->in_use = false;
 
 	ereport(DEBUG1,
-			(errmsg("unregistering background worker \"%s\"",
-					rw->rw_worker.bgw_name)));
+			(errmsg_internal("unregistering background worker \"%s\"",
+							 rw->rw_worker.bgw_name)));
 
 	slist_delete_current(cur);
 	free(rw);
@@ -725,22 +725,6 @@ bgworker_die(SIGNAL_ARGS)
 }
 
 /*
- * Standard SIGUSR1 handler for unconnected workers
- *
- * Here, we want to make sure an unconnected worker will at least heed
- * latch activity.
- */
-static void
-bgworker_sigusr1_handler(SIGNAL_ARGS)
-{
-	int			save_errno = errno;
-
-	latch_sigusr1_handler();
-
-	errno = save_errno;
-}
-
-/*
  * Start a new background worker
  *
  * This is the main entry point for background worker, to be called from
@@ -770,6 +754,7 @@ StartBackgroundWorker(void)
 	 */
 	if ((worker->bgw_flags & BGWORKER_SHMEM_ACCESS) == 0)
 	{
+		ShutdownLatchSupport();
 		dsm_detach_all();
 		PGSharedMemoryDetach();
 	}
@@ -797,13 +782,13 @@ StartBackgroundWorker(void)
 	else
 	{
 		pqsignal(SIGINT, SIG_IGN);
-		pqsignal(SIGUSR1, bgworker_sigusr1_handler);
+		pqsignal(SIGUSR1, SIG_IGN);
 		pqsignal(SIGFPE, SIG_IGN);
 	}
 	pqsignal(SIGTERM, bgworker_die);
+	/* SIGQUIT handler was already set up by InitPostmasterChild */
 	pqsignal(SIGHUP, SIG_IGN);
 
-	pqsignal(SIGQUIT, SignalHandlerForCrashExit);
 	InitializeTimeouts();		/* establishes SIGALRM handler */
 
 	pqsignal(SIGPIPE, SIG_IGN);
@@ -908,7 +893,7 @@ RegisterBackgroundWorker(BackgroundWorker *worker)
 
 	if (!IsUnderPostmaster)
 		ereport(DEBUG1,
-				(errmsg("registering background worker \"%s\"", worker->bgw_name)));
+				(errmsg_internal("registering background worker \"%s\"", worker->bgw_name)));
 
 	if (!process_shared_preload_libraries_in_progress &&
 		strcmp(worker->bgw_library_name, "postgres") != 0)

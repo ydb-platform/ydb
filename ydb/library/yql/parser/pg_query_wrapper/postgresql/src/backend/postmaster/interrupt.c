@@ -3,7 +3,7 @@
  * interrupt.c
  *	  Interrupt handling routines.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -92,7 +92,7 @@ SignalHandlerForCrashExit(SIGNAL_ARGS)
  * Simple signal handler for triggering a long-running background process to
  * shut down and exit.
  *
- * Typically, this handler would be used for SIGTERM, but some procesess use
+ * Typically, this handler would be used for SIGTERM, but some processes use
  * other signals. In particular, the checkpointer exits on SIGUSR2, the
  * stats collector on SIGQUIT, and the WAL writer exits on either SIGINT
  * or SIGTERM.

@@ -3,7 +3,7 @@
  * pqmq.c
  *	  Use the frontend/backend protocol for communication over a shm_mq
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	src/backend/libpq/pqmq.c
@@ -23,8 +23,8 @@
 
 static __thread shm_mq_handle *pq_mq_handle;
 static __thread bool pq_mq_busy = false;
-static __thread pid_t pq_mq_parallel_master_pid = 0;
-static __thread pid_t pq_mq_parallel_master_backend_id = InvalidBackendId;
+static __thread pid_t pq_mq_parallel_leader_pid = 0;
+static __thread pid_t pq_mq_parallel_leader_backend_id = InvalidBackendId;
 
 static void pq_cleanup_redirect_to_shm_mq(dsm_segment *seg, Datum arg);
 static void mq_comm_reset(void);
@@ -33,8 +33,6 @@ static int	mq_flush_if_writable(void);
 static bool mq_is_send_pending(void);
 static int	mq_putmessage(char msgtype, const char *s, size_t len);
 static void mq_putmessage_noblock(char msgtype, const char *s, size_t len);
-static void mq_startcopyout(void);
-static void mq_endcopyout(bool errorAbort);
 
 static const PQcommMethods PqCommMqMethods = {
 	mq_comm_reset,
@@ -42,9 +40,7 @@ static const PQcommMethods PqCommMqMethods = {
 	mq_flush_if_writable,
 	mq_is_send_pending,
 	mq_putmessage,
-	mq_putmessage_noblock,
-	mq_startcopyout,
-	mq_endcopyout
+	mq_putmessage_noblock
 };
 
 /*
@@ -73,15 +69,15 @@ pq_cleanup_redirect_to_shm_mq(dsm_segment *seg, Datum arg)
 }
 
 /*
- * Arrange to SendProcSignal() to the parallel master each time we transmit
+ * Arrange to SendProcSignal() to the parallel leader each time we transmit
  * message data via the shm_mq.
  */
 void
-pq_set_parallel_master(pid_t pid, BackendId backend_id)
+pq_set_parallel_leader(pid_t pid, BackendId backend_id)
 {
 	Assert(PqCommMethods == &PqCommMqMethods);
-	pq_mq_parallel_master_pid = pid;
-	pq_mq_parallel_master_backend_id = backend_id;
+	pq_mq_parallel_leader_pid = pid;
+	pq_mq_parallel_leader_backend_id = backend_id;
 }
 
 static void
@@ -160,10 +156,10 @@ mq_putmessage(char msgtype, const char *s, size_t len)
 	{
 		result = shm_mq_sendv(pq_mq_handle, iov, 2, true);
 
-		if (pq_mq_parallel_master_pid != 0)
-			SendProcSignal(pq_mq_parallel_master_pid,
+		if (pq_mq_parallel_leader_pid != 0)
+			SendProcSignal(pq_mq_parallel_leader_pid,
 						   PROCSIG_PARALLEL_MESSAGE,
-						   pq_mq_parallel_master_backend_id);
+						   pq_mq_parallel_leader_backend_id);
 
 		if (result != SHM_MQ_WOULD_BLOCK)
 			break;
@@ -193,18 +189,6 @@ mq_putmessage_noblock(char msgtype, const char *s, size_t len)
 	 * don't need it.
 	 */
 	elog(ERROR, "not currently supported");
-}
-
-static void
-mq_startcopyout(void)
-{
-	/* Nothing to do. */
-}
-
-static void
-mq_endcopyout(bool errorAbort)
-{
-	/* Nothing to do. */
 }
 
 /*

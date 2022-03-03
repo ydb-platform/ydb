@@ -36,7 +36,7 @@
  *
  * As ever, Windows requires its own implementation.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -112,6 +112,9 @@ const struct config_enum_entry dynamic_shared_memory_options[] = {
 
 /* Implementation selector. */
 __thread int			dynamic_shared_memory_type;
+
+/* Amount of space reserved for DSM segments in the main area. */
+__thread int			min_dynamic_shared_memory;
 
 /* Size of buffer to be used for zero-filling. */
 #define ZBUFFER_SIZE				8192

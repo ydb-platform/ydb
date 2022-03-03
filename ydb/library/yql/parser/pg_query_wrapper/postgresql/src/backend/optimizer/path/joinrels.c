@@ -3,7 +3,7 @@
  * joinrels.c
  *	  Routines to determine which relations should be joined
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -1279,7 +1279,7 @@ mark_dummy_rel(RelOptInfo *rel)
 	/* Set up the dummy path */
 	add_path(rel, (Path *) create_append_path(NULL, rel, NIL, NIL,
 											  NIL, rel->lateral_relids,
-											  0, false, NIL, -1));
+											  0, false, -1));
 
 	/* Set or update cheapest_total_path and related fields */
 	set_cheapest(rel);

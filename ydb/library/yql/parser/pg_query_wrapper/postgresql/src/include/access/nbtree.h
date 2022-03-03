@@ -4,7 +4,7 @@
  *	  header file for postgres btree access method implementation.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/nbtree.h
@@ -17,6 +17,7 @@
 #include "access/amapi.h"
 #include "access/itup.h"
 #include "access/sdir.h"
+#include "access/tableam.h"
 #include "access/xlogreader.h"
 #include "catalog/pg_am_d.h"
 #include "catalog/pg_index.h"
@@ -36,8 +37,9 @@ typedef uint16 BTCycleId;
  *
  *	In addition, we store the page's btree level (counting upwards from
  *	zero at a leaf page) as well as some flag bits indicating the page type
- *	and status.  If the page is deleted, we replace the level with the
- *	next-transaction-ID value indicating when it is safe to reclaim the page.
+ *	and status.  If the page is deleted, a BTDeletedPageData struct is stored
+ *	in the page's tuple area, while a standard BTPageOpaqueData struct is
+ *	stored in the page special area.
  *
  *	We also store a "vacuum cycle ID".  When a page is split while VACUUM is
  *	processing the index, a nonzero value associated with the VACUUM run is
@@ -51,17 +53,17 @@ typedef uint16 BTCycleId;
  *
  *	NOTE: the BTP_LEAF flag bit is redundant since level==0 could be tested
  *	instead.
+ *
+ *	NOTE: the btpo_level field used to be a union type in order to allow
+ *	deleted pages to store a 32-bit safexid in the same field.  We now store
+ *	64-bit/full safexid values using BTDeletedPageData instead.
  */
 
 typedef struct BTPageOpaqueData
 {
 	BlockNumber btpo_prev;		/* left sibling, or P_NONE if leftmost */
 	BlockNumber btpo_next;		/* right sibling, or P_NONE if rightmost */
-	union
-	{
-		uint32		level;		/* tree level --- zero for leaf pages */
-		TransactionId xact;		/* next transaction ID, if deleted */
-	}			btpo;
+	uint32		btpo_level;		/* tree level --- zero for leaf pages */
 	uint16		btpo_flags;		/* flag bits, see below */
 	BTCycleId	btpo_cycleid;	/* vacuum cycle ID of latest split */
 } BTPageOpaqueData;
@@ -75,8 +77,9 @@ typedef BTPageOpaqueData *BTPageOpaque;
 #define BTP_META		(1 << 3)	/* meta-page */
 #define BTP_HALF_DEAD	(1 << 4)	/* empty, but still in tree */
 #define BTP_SPLIT_END	(1 << 5)	/* rightmost page of split group */
-#define BTP_HAS_GARBAGE (1 << 6)	/* page has LP_DEAD tuples */
+#define BTP_HAS_GARBAGE (1 << 6)	/* page has LP_DEAD tuples (deprecated) */
 #define BTP_INCOMPLETE_SPLIT (1 << 7)	/* right sibling's downlink is missing */
+#define BTP_HAS_FULLXID	(1 << 8)	/* contains BTDeletedPageData */
 
 /*
  * The max allowed value of a cycle ID is a bit less than 64K.  This is
@@ -104,10 +107,12 @@ typedef struct BTMetaPageData
 	BlockNumber btm_fastroot;	/* current "fast" root location */
 	uint32		btm_fastlevel;	/* tree level of the "fast" root page */
 	/* remaining fields only valid when btm_version >= BTREE_NOVAC_VERSION */
-	TransactionId btm_oldest_btpo_xact; /* oldest btpo_xact among all deleted
-										 * pages */
-	float8		btm_last_cleanup_num_heap_tuples;	/* number of heap tuples
-													 * during last cleanup */
+
+	/* number of deleted, non-recyclable pages during last cleanup */
+	uint32		btm_last_cleanup_num_delpages;
+	/* number of heap tuples during last cleanup (deprecated) */
+	float8		btm_last_cleanup_num_heap_tuples;
+
 	bool		btm_allequalimage;	/* are all columns "equalimage"? */
 } BTMetaPageData;
 
@@ -168,7 +173,7 @@ typedef struct BTMetaPageData
 /*
  * MaxTIDsPerBTreePage is an upper bound on the number of heap TIDs tuples
  * that may be stored on a btree leaf page.  It is used to size the
- * per-page temporary buffers used by index scans.
+ * per-page temporary buffers.
  *
  * Note: we don't bother considering per-tuple overheads here to keep
  * things simple (value is based on how many elements a single array of
@@ -219,6 +224,126 @@ typedef struct BTMetaPageData
 #define P_IGNORE(opaque)		(((opaque)->btpo_flags & (BTP_DELETED|BTP_HALF_DEAD)) != 0)
 #define P_HAS_GARBAGE(opaque)	(((opaque)->btpo_flags & BTP_HAS_GARBAGE) != 0)
 #define P_INCOMPLETE_SPLIT(opaque)	(((opaque)->btpo_flags & BTP_INCOMPLETE_SPLIT) != 0)
+#define P_HAS_FULLXID(opaque)	(((opaque)->btpo_flags & BTP_HAS_FULLXID) != 0)
+
+/*
+ * BTDeletedPageData is the page contents of a deleted page
+ */
+typedef struct BTDeletedPageData
+{
+	FullTransactionId safexid;	/* See BTPageIsRecyclable() */
+} BTDeletedPageData;
+
+static inline void
+BTPageSetDeleted(Page page, FullTransactionId safexid)
+{
+	BTPageOpaque opaque;
+	PageHeader	header;
+	BTDeletedPageData *contents;
+
+	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	header = ((PageHeader) page);
+
+	opaque->btpo_flags &= ~BTP_HALF_DEAD;
+	opaque->btpo_flags |= BTP_DELETED | BTP_HAS_FULLXID;
+	header->pd_lower = MAXALIGN(SizeOfPageHeaderData) +
+		sizeof(BTDeletedPageData);
+	header->pd_upper = header->pd_special;
+
+	/* Set safexid in deleted page */
+	contents = ((BTDeletedPageData *) PageGetContents(page));
+	contents->safexid = safexid;
+}
+
+static inline FullTransactionId
+BTPageGetDeleteXid(Page page)
+{
+	BTPageOpaque opaque;
+	BTDeletedPageData *contents;
+
+	/* We only expect to be called with a deleted page */
+	Assert(!PageIsNew(page));
+	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	Assert(P_ISDELETED(opaque));
+
+	/* pg_upgrade'd deleted page -- must be safe to delete now */
+	if (!P_HAS_FULLXID(opaque))
+		return FirstNormalFullTransactionId;
+
+	/* Get safexid from deleted page */
+	contents = ((BTDeletedPageData *) PageGetContents(page));
+	return contents->safexid;
+}
+
+/*
+ * Is an existing page recyclable?
+ *
+ * This exists to centralize the policy on which deleted pages are now safe to
+ * re-use.  However, _bt_pendingfsm_finalize() duplicates some of the same
+ * logic because it doesn't work directly with pages -- keep the two in sync.
+ *
+ * Note: PageIsNew() pages are always safe to recycle, but we can't deal with
+ * them here (caller is responsible for that case themselves).  Caller might
+ * well need special handling for new pages anyway.
+ */
+static inline bool
+BTPageIsRecyclable(Page page)
+{
+	BTPageOpaque opaque;
+
+	Assert(!PageIsNew(page));
+
+	/* Recycling okay iff page is deleted and safexid is old enough */
+	opaque = (BTPageOpaque) PageGetSpecialPointer(page);
+	if (P_ISDELETED(opaque))
+	{
+		/*
+		 * The page was deleted, but when? If it was just deleted, a scan
+		 * might have seen the downlink to it, and will read the page later.
+		 * As long as that can happen, we must keep the deleted page around as
+		 * a tombstone.
+		 *
+		 * For that check if the deletion XID could still be visible to
+		 * anyone. If not, then no scan that's still in progress could have
+		 * seen its downlink, and we can recycle it.
+		 *
+		 * XXX: If we had the heap relation we could be more aggressive about
+		 * recycling deleted pages in non-catalog relations.  For now we just
+		 * pass NULL.  That is at least simple and consistent.
+		 */
+		return GlobalVisCheckRemovableFullXid(NULL, BTPageGetDeleteXid(page));
+	}
+
+	return false;
+}
+
+/*
+ * BTVacState and BTPendingFSM are private nbtree.c state used during VACUUM.
+ * They are exported for use by page deletion related code in nbtpage.c.
+ */
+typedef struct BTPendingFSM
+{
+	BlockNumber target;			/* Page deleted by current VACUUM */
+	FullTransactionId safexid;	/* Page's BTDeletedPageData.safexid */
+} BTPendingFSM;
+
+typedef struct BTVacState
+{
+	IndexVacuumInfo *info;
+	IndexBulkDeleteResult *stats;
+	IndexBulkDeleteCallback callback;
+	void	   *callback_state;
+	BTCycleId	cycleid;
+	MemoryContext pagedelcontext;
+
+	/*
+	 * _bt_pendingfsm_finalize() state
+	 */
+	int			bufsize;		/* pendingpages space (in # elements) */
+	int			maxbufsize;		/* max bufsize that respects work_mem */
+	BTPendingFSM *pendingpages; /* One entry per newly deleted page */
+	int			npendingpages;	/* current # valid pendingpages */
+} BTVacState;
 
 /*
  *	Lehman and Yao's algorithm requires a ``high key'' on every non-rightmost
@@ -766,8 +891,9 @@ typedef struct BTDedupStateData
 typedef BTDedupStateData *BTDedupState;
 
 /*
- * BTVacuumPostingData is state that represents how to VACUUM a posting list
- * tuple when some (though not all) of its TIDs are to be deleted.
+ * BTVacuumPostingData is state that represents how to VACUUM (or delete) a
+ * posting list tuple when some (though not all) of its TIDs are to be
+ * deleted.
  *
  * Convention is that itup field is the original posting list tuple on input,
  * and palloc()'d final tuple used to overwrite existing tuple on output.
@@ -960,8 +1086,7 @@ typedef struct BTOptions
 {
 	int32		varlena_header_;	/* varlena header (do not touch directly!) */
 	int			fillfactor;		/* page fill factor in percent (0..100) */
-	/* fraction of newly inserted tuples prior to trigger index cleanup */
-	float8		vacuum_cleanup_index_scale_factor;
+	float8		vacuum_cleanup_index_scale_factor;	/* deprecated */
 	bool		deduplicate_items;	/* Try to deduplicate items? */
 } BTOptions;
 
@@ -996,6 +1121,7 @@ extern void btbuildempty(Relation index);
 extern bool btinsert(Relation rel, Datum *values, bool *isnull,
 					 ItemPointer ht_ctid, Relation heapRel,
 					 IndexUniqueCheck checkUnique,
+					 bool indexUnchanged,
 					 struct IndexInfo *indexInfo);
 extern IndexScanDesc btbeginscan(Relation rel, int nkeys, int norderbys);
 extern Size btestimateparallelscan(void);
@@ -1027,9 +1153,11 @@ extern void _bt_parallel_advance_array_keys(IndexScanDesc scan);
 /*
  * prototypes for functions in nbtdedup.c
  */
-extern void _bt_dedup_one_page(Relation rel, Buffer buf, Relation heapRel,
-							   IndexTuple newitem, Size newitemsz,
-							   bool checkingunique);
+extern void _bt_dedup_pass(Relation rel, Buffer buf, Relation heapRel,
+						   IndexTuple newitem, Size newitemsz,
+						   bool bottomupdedup);
+extern bool _bt_bottomupdel_pass(Relation rel, Buffer buf, Relation heapRel,
+								 Size newitemsz);
 extern void _bt_dedup_start_pending(BTDedupState state, IndexTuple base,
 									OffsetNumber baseoff);
 extern bool _bt_dedup_save_htid(BTDedupState state, IndexTuple itup);
@@ -1044,7 +1172,8 @@ extern IndexTuple _bt_swap_posting(IndexTuple newitem, IndexTuple oposting,
  * prototypes for functions in nbtinsert.c
  */
 extern bool _bt_doinsert(Relation rel, IndexTuple itup,
-						 IndexUniqueCheck checkUnique, Relation heapRel);
+						 IndexUniqueCheck checkUnique, bool indexUnchanged,
+						 Relation heapRel);
 extern void _bt_finish_split(Relation rel, Buffer lbuf, BTStack stack);
 extern Buffer _bt_getstackbuf(Relation rel, BTStack stack, BlockNumber child);
 
@@ -1060,8 +1189,8 @@ extern OffsetNumber _bt_findsplitloc(Relation rel, Page origpage,
  */
 extern void _bt_initmetapage(Page page, BlockNumber rootbknum, uint32 level,
 							 bool allequalimage);
-extern void _bt_update_meta_cleanup_info(Relation rel,
-										 TransactionId oldestBtpoXact, float8 numHeapTuples);
+extern bool _bt_vacuum_needs_cleanup(Relation rel);
+extern void _bt_set_cleanup_info(Relation rel, BlockNumber num_delpages);
 extern void _bt_upgrademetapage(Page page);
 extern Buffer _bt_getroot(Relation rel, int access);
 extern Buffer _bt_gettrueroot(Relation rel);
@@ -1073,16 +1202,21 @@ extern Buffer _bt_getbuf(Relation rel, BlockNumber blkno, int access);
 extern Buffer _bt_relandgetbuf(Relation rel, Buffer obuf,
 							   BlockNumber blkno, int access);
 extern void _bt_relbuf(Relation rel, Buffer buf);
+extern void _bt_lockbuf(Relation rel, Buffer buf, int access);
+extern void _bt_unlockbuf(Relation rel, Buffer buf);
+extern bool _bt_conditionallockbuf(Relation rel, Buffer buf);
+extern void _bt_upgradelockbufcleanup(Relation rel, Buffer buf);
 extern void _bt_pageinit(Page page, Size size);
-extern bool _bt_page_recyclable(Page page);
 extern void _bt_delitems_vacuum(Relation rel, Buffer buf,
 								OffsetNumber *deletable, int ndeletable,
 								BTVacuumPosting *updatable, int nupdatable);
-extern void _bt_delitems_delete(Relation rel, Buffer buf,
-								OffsetNumber *deletable, int ndeletable,
-								Relation heapRel);
-extern uint32 _bt_pagedel(Relation rel, Buffer leafbuf,
-						  TransactionId *oldestBtpoXact);
+extern void _bt_delitems_delete_check(Relation rel, Buffer buf,
+									  Relation heapRel,
+									  TM_IndexDeleteOp *delstate);
+extern void _bt_pagedel(Relation rel, Buffer leafbuf, BTVacState *vstate);
+extern void _bt_pendingfsm_init(Relation rel, BTVacState *vstate,
+								bool cleanuponly);
+extern void _bt_pendingfsm_finalize(Relation rel, BTVacState *vstate);
 
 /*
  * prototypes for functions in nbtsearch.c
@@ -1137,6 +1271,10 @@ extern bool _bt_allequalimage(Relation rel, bool debugmessage);
  * prototypes for functions in nbtvalidate.c
  */
 extern bool btvalidate(Oid opclassoid);
+extern void btadjustmembers(Oid opfamilyoid,
+							Oid opclassoid,
+							List *operators,
+							List *functions);
 
 /*
  * prototypes for functions in nbtsort.c

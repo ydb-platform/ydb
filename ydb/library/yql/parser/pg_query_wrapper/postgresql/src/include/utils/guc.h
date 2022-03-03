@@ -4,7 +4,7 @@
  * External declarations pertaining to backend/utils/misc/guc.c and
  * backend/utils/misc/guc-file.l
  *
- * Copyright (c) 2000-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2021, PostgreSQL Global Development Group
  * Written by Peter Eisentraut <peter_e@gmx.net>.
  *
  * src/include/utils/guc.h
@@ -90,13 +90,12 @@ typedef enum
  * dividing line between "interactive" and "non-interactive" sources for
  * error reporting purposes.
  *
- * PGC_S_TEST is used when testing values to be used later ("doit" will always
- * be false, so this never gets stored as the actual source of any value).
- * For example, ALTER DATABASE/ROLE tests proposed per-database or per-user
- * defaults this way, and CREATE FUNCTION tests proposed function SET clauses
- * this way.  This is an interactive case, but it needs its own source value
- * because some assign hooks need to make different validity checks in this
- * case.  In particular, references to nonexistent database objects generally
+ * PGC_S_TEST is used when testing values to be used later.  For example,
+ * ALTER DATABASE/ROLE tests proposed per-database or per-user defaults this
+ * way, and CREATE FUNCTION tests proposed function SET clauses this way.
+ * This is an interactive case, but it needs its own source value because
+ * some assign hooks need to make different validity checks in this case.
+ * In particular, references to nonexistent database objects generally
  * shouldn't throw hard errors in this case, at most NOTICEs, since the
  * objects might exist by the time the setting is used for real.
  *
@@ -155,6 +154,7 @@ extern bool ParseConfigDirectory(const char *includedir,
 								 ConfigVariable **head_p,
 								 ConfigVariable **tail_p);
 extern void FreeConfigVariables(ConfigVariable *list);
+extern char *DeescapeQuotedString(const char *s);
 
 /*
  * The possible values of an enum variable are specified by an array of
@@ -362,6 +362,7 @@ extern void AtStart_GUC(void);
 extern int	NewGUCNestLevel(void);
 extern void AtEOXact_GUC(bool isCommit, int nestLevel);
 extern void BeginReportingGUCOptions(void);
+extern void ReportChangedGUCOptions(void);
 extern void ParseLongOption(const char *string, char **name, char **value);
 extern bool parse_int(const char *value, int *result, int flags,
 					  const char **hintmsg);

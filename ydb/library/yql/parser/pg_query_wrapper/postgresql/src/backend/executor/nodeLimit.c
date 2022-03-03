@@ -3,7 +3,7 @@
  * nodeLimit.c
  *	  Routines to handle limiting of query results where appropriate
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -105,7 +105,7 @@ ExecLimit(PlanState *pstate)
 				}
 
 				/*
-				 * Tuple at limit is needed for comparation in subsequent
+				 * Tuple at limit is needed for comparison in subsequent
 				 * execution to detect ties.
 				 */
 				if (node->limitOption == LIMIT_OPTION_WITH_TIES &&

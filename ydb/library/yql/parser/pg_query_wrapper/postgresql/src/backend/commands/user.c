@@ -3,7 +3,7 @@
  * user.c
  *	  Commands for manipulating roles (formerly called users).
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/commands/user.c
@@ -43,7 +43,7 @@ __thread Oid			binary_upgrade_next_pg_authid_oid = InvalidOid;
 
 
 /* GUC parameter */
-__thread int			Password_encryption = PASSWORD_TYPE_MD5;
+__thread int			Password_encryption = PASSWORD_TYPE_SCRAM_SHA_256;
 
 /* Hook to check passwords in CreateRole() and AlterRole() */
 __thread check_password_hook_type check_password_hook = NULL;
@@ -305,7 +305,7 @@ CreateRole(ParseState *pstate, CreateRoleStmt *stmt)
 		if (!superuser())
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("must be superuser to change bypassrls attribute")));
+					 errmsg("must be superuser to create bypassrls users")));
 	}
 	else
 	{
@@ -719,14 +719,14 @@ AlterRole(AlterRoleStmt *stmt)
 		if (!superuser())
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("must be superuser to alter superusers")));
+					 errmsg("must be superuser to alter superuser roles or change superuser attribute")));
 	}
 	else if (authform->rolreplication || isreplication >= 0)
 	{
 		if (!superuser())
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("must be superuser to alter replication users")));
+					 errmsg("must be superuser to alter replication roles or change replication attribute")));
 	}
 	else if (bypassrls >= 0)
 	{
@@ -1497,6 +1497,18 @@ AddRoleMems(const char *rolename, Oid roleid,
 	}
 
 	/*
+	 * The charter of pg_database_owner is to have exactly one, implicit,
+	 * situation-dependent member.  There's no technical need for this
+	 * restriction.  (One could lift it and take the further step of making
+	 * pg_database_ownercheck() equivalent to has_privs_of_role(roleid,
+	 * ROLE_PG_DATABASE_OWNER), in which case explicit, situation-independent
+	 * members could act as the owner of any database.)
+	 */
+	if (roleid == ROLE_PG_DATABASE_OWNER)
+		ereport(ERROR,
+				errmsg("role \"%s\" cannot have explicit members", rolename));
+
+	/*
 	 * The role membership grantor of record has little significance at
 	 * present.  Nonetheless, inasmuch as users might look to it for a crude
 	 * audit trail, let only superusers impute the grant to a third party.
@@ -1523,6 +1535,30 @@ AddRoleMems(const char *rolename, Oid roleid,
 		Datum		new_record[Natts_pg_auth_members];
 		bool		new_record_nulls[Natts_pg_auth_members];
 		bool		new_record_repl[Natts_pg_auth_members];
+
+		/*
+		 * pg_database_owner is never a role member.  Lifting this restriction
+		 * would require a policy decision about membership loops.  One could
+		 * prevent loops, which would include making "ALTER DATABASE x OWNER
+		 * TO proposed_datdba" fail if is_member_of_role(pg_database_owner,
+		 * proposed_datdba).  Hence, gaining a membership could reduce what a
+		 * role could do.  Alternately, one could allow these memberships to
+		 * complete loops.  A role could then have actual WITH ADMIN OPTION on
+		 * itself, prompting a decision about is_admin_of_role() treatment of
+		 * the case.
+		 *
+		 * Lifting this restriction also has policy implications for ownership
+		 * of shared objects (databases and tablespaces).  We allow such
+		 * ownership, but we might find cause to ban it in the future.
+		 * Designing such a ban would more troublesome if the design had to
+		 * address pg_database_owner being a member of role FOO that owns a
+		 * shared object.  (The effect of such ownership is that any owner of
+		 * another database can act as the owner of affected shared objects.)
+		 */
+		if (memberid == ROLE_PG_DATABASE_OWNER)
+			ereport(ERROR,
+					errmsg("role \"%s\" cannot be a member of any role",
+						   get_rolespec_name(memberRole)));
 
 		/*
 		 * Refuse creation of membership loops, including the trivial case

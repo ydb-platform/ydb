@@ -3,7 +3,7 @@
  * tsrank.c
  *		rank tsvector by tsquery
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -857,8 +857,7 @@ calc_rank_cd(const float4 *arrdata, TSVector txt, TSQuery query, int method)
 	double		Wdoc = 0.0;
 	double		invws[lengthof(weights)];
 	double		SumDist = 0.0,
-				PrevExtPos = 0.0,
-				CurExtPos = 0.0;
+				PrevExtPos = 0.0;
 	int			NExtent = 0;
 	QueryRepresentation qr;
 
@@ -889,6 +888,7 @@ calc_rank_cd(const float4 *arrdata, TSVector txt, TSQuery query, int method)
 	{
 		double		Cpos = 0.0;
 		double		InvSum = 0.0;
+		double		CurExtPos;
 		int			nNoise;
 		DocRepresentation *ptr = ext.begin;
 

@@ -3,7 +3,7 @@
  * float.h
  *	  Definitions for the built-in floating-point types
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -222,12 +222,12 @@ float4_div(const float4 val1, const float4 val2)
 {
 	float4		result;
 
-	if (unlikely(val2 == 0.0f))
+	if (unlikely(val2 == 0.0f) && !isnan(val1))
 		float_zero_divide_error();
 	result = val1 / val2;
-	if (unlikely(isinf(result)) && !isinf(val1) && !isinf(val2))
+	if (unlikely(isinf(result)) && !isinf(val1))
 		float_overflow_error();
-	if (unlikely(result == 0.0f) && val1 != 0.0f)
+	if (unlikely(result == 0.0f) && val1 != 0.0f && !isinf(val2))
 		float_underflow_error();
 
 	return result;
@@ -238,12 +238,12 @@ float8_div(const float8 val1, const float8 val2)
 {
 	float8		result;
 
-	if (unlikely(val2 == 0.0))
+	if (unlikely(val2 == 0.0) && !isnan(val1))
 		float_zero_divide_error();
 	result = val1 / val2;
-	if (unlikely(isinf(result)) && !isinf(val1) && !isinf(val2))
+	if (unlikely(isinf(result)) && !isinf(val1))
 		float_overflow_error();
-	if (unlikely(result == 0.0) && val1 != 0.0)
+	if (unlikely(result == 0.0) && val1 != 0.0 && !isinf(val2))
 		float_underflow_error();
 
 	return result;

@@ -3,7 +3,7 @@
  * twophase.c
  *		Two-phase commit support functions.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -21,9 +21,9 @@
  *		GIDs and aborts the transaction if there already is a global
  *		transaction in prepared state with the same GID.
  *
- *		A global transaction (gxact) also has dummy PGXACT and PGPROC; this is
- *		what keeps the XID considered running by TransactionIdIsInProgress.
- *		It is also convenient as a PGPROC to hook the gxact's locks to.
+ *		A global transaction (gxact) also has dummy PGPROC; this is what keeps
+ *		the XID considered running by TransactionIdIsInProgress.  It is also
+ *		convenient as a PGPROC to hook the gxact's locks to.
  *
  *		Information to recover prepared transactions in case of crash is
  *		now stored in WAL for the common case. In some cases there will be
@@ -351,7 +351,7 @@ AtAbort_Twophase(void)
 
 /*
  * This is called after we have finished transferring state to the prepared
- * PGXACT entry.
+ * PGPROC entry.
  */
 void
 PostPrepare_Twophase(void)
@@ -447,20 +447,18 @@ MarkAsPreparingGuts(GlobalTransaction gxact, TransactionId xid, const char *gid,
 					TimestampTz prepared_at, Oid owner, Oid databaseid)
 {
 	PGPROC	   *proc;
-	PGXACT	   *pgxact;
 	int			i;
 
 	Assert(LWLockHeldByMeInMode(TwoPhaseStateLock, LW_EXCLUSIVE));
 
 	Assert(gxact != NULL);
 	proc = &ProcGlobal->allProcs[gxact->pgprocno];
-	pgxact = &ProcGlobal->allPgXact[gxact->pgprocno];
 
 	/* Initialize the PGPROC entry */
 	MemSet(proc, 0, sizeof(PGPROC));
 	proc->pgprocno = gxact->pgprocno;
 	SHMQueueElemInit(&(proc->links));
-	proc->waitStatus = STATUS_OK;
+	proc->waitStatus = PROC_WAIT_STATUS_OK;
 	if (LocalTransactionIdIsValid(MyProc->lxid))
 	{
 		/* clone VXID, for TwoPhaseGetXidByVirtualXID() to find */
@@ -474,10 +472,10 @@ MarkAsPreparingGuts(GlobalTransaction gxact, TransactionId xid, const char *gid,
 		proc->lxid = xid;
 		proc->backendId = InvalidBackendId;
 	}
-	pgxact->xid = xid;
-	pgxact->xmin = InvalidTransactionId;
+	proc->xid = xid;
+	Assert(proc->xmin == InvalidTransactionId);
 	proc->delayChkpt = false;
-	pgxact->vacuumFlags = 0;
+	proc->statusFlags = 0;
 	proc->pid = 0;
 	proc->databaseId = databaseid;
 	proc->roleId = owner;
@@ -487,11 +485,12 @@ MarkAsPreparingGuts(GlobalTransaction gxact, TransactionId xid, const char *gid,
 	proc->lwWaitMode = 0;
 	proc->waitLock = NULL;
 	proc->waitProcLock = NULL;
+	pg_atomic_init_u64(&proc->waitStart, 0);
 	for (i = 0; i < NUM_LOCK_PARTITIONS; i++)
 		SHMQueueInit(&(proc->myProcLocks[i]));
 	/* subxid data must be filled later by GXactLoadSubxactData */
-	pgxact->overflowed = false;
-	pgxact->nxids = 0;
+	proc->subxidStatus.overflowed = false;
+	proc->subxidStatus.count = 0;
 
 	gxact->prepared_at = prepared_at;
 	gxact->xid = xid;
@@ -520,19 +519,18 @@ GXactLoadSubxactData(GlobalTransaction gxact, int nsubxacts,
 					 TransactionId *children)
 {
 	PGPROC	   *proc = &ProcGlobal->allProcs[gxact->pgprocno];
-	PGXACT	   *pgxact = &ProcGlobal->allPgXact[gxact->pgprocno];
 
 	/* We need no extra lock since the GXACT isn't valid yet */
 	if (nsubxacts > PGPROC_MAX_CACHED_SUBXIDS)
 	{
-		pgxact->overflowed = true;
+		proc->subxidStatus.overflowed = true;
 		nsubxacts = PGPROC_MAX_CACHED_SUBXIDS;
 	}
 	if (nsubxacts > 0)
 	{
 		memcpy(proc->subxids.xids, children,
 			   nsubxacts * sizeof(TransactionId));
-		pgxact->nxids = nsubxacts;
+		proc->subxidStatus.count = nsubxacts;
 	}
 }
 
@@ -778,7 +776,6 @@ pg_prepared_xact(PG_FUNCTION_ARGS)
 	{
 		GlobalTransaction gxact = &status->array[status->currIdx++];
 		PGPROC	   *proc = &ProcGlobal->allProcs[gxact->pgprocno];
-		PGXACT	   *pgxact = &ProcGlobal->allPgXact[gxact->pgprocno];
 		Datum		values[5];
 		bool		nulls[5];
 		HeapTuple	tuple;
@@ -793,7 +790,7 @@ pg_prepared_xact(PG_FUNCTION_ARGS)
 		MemSet(values, 0, sizeof(values));
 		MemSet(nulls, 0, sizeof(nulls));
 
-		values[0] = TransactionIdGetDatum(pgxact->xid);
+		values[0] = TransactionIdGetDatum(proc->xid);
 		values[1] = CStringGetTextDatum(gxact->gid);
 		values[2] = TimestampTzGetDatum(gxact->prepared_at);
 		values[3] = ObjectIdGetDatum(gxact->owner);
@@ -839,9 +836,8 @@ TwoPhaseGetGXact(TransactionId xid, bool lock_held)
 	for (i = 0; i < TwoPhaseState->numPrepXacts; i++)
 	{
 		GlobalTransaction gxact = TwoPhaseState->prepXacts[i];
-		PGXACT	   *pgxact = &ProcGlobal->allPgXact[gxact->pgprocno];
 
-		if (pgxact->xid == xid)
+		if (gxact->xid == xid)
 		{
 			result = gxact;
 			break;
@@ -1044,8 +1040,7 @@ void
 StartPrepare(GlobalTransaction gxact)
 {
 	PGPROC	   *proc = &ProcGlobal->allProcs[gxact->pgprocno];
-	PGXACT	   *pgxact = &ProcGlobal->allPgXact[gxact->pgprocno];
-	TransactionId xid = pgxact->xid;
+	TransactionId xid = gxact->xid;
 	TwoPhaseFileHeader hdr;
 	TransactionId *children;
 	RelFileNode *commitrels;
@@ -1134,7 +1129,6 @@ EndPrepare(GlobalTransaction gxact)
 
 	if (replorigin)
 	{
-		Assert(replorigin_session_origin_lsn != InvalidXLogRecPtr);
 		hdr->origin_lsn = replorigin_session_origin_lsn;
 		hdr->origin_timestamp = replorigin_session_origin_timestamp;
 	}
@@ -1196,16 +1190,16 @@ EndPrepare(GlobalTransaction gxact)
 	gxact->prepare_start_lsn = ProcLastRecPtr;
 
 	/*
-	 * Mark the prepared transaction as valid.  As soon as xact.c marks
-	 * MyPgXact as not running our XID (which it will do immediately after
-	 * this function returns), others can commit/rollback the xact.
+	 * Mark the prepared transaction as valid.  As soon as xact.c marks MyProc
+	 * as not running our XID (which it will do immediately after this
+	 * function returns), others can commit/rollback the xact.
 	 *
 	 * NB: a side effect of this is to make a dummy ProcArray entry for the
-	 * prepared XID.  This must happen before we clear the XID from MyPgXact,
-	 * else there is a window where the XID is not running according to
-	 * TransactionIdIsInProgress, and onlookers would be entitled to assume
-	 * the xact crashed.  Instead we have a window where the same XID appears
-	 * twice in ProcArray, which is OK.
+	 * prepared XID.  This must happen before we clear the XID from MyProc /
+	 * ProcGlobal->xids[], else there is a window where the XID is not running
+	 * according to TransactionIdIsInProgress, and onlookers would be entitled
+	 * to assume the xact crashed.  Instead we have a window where the same
+	 * XID appears twice in ProcArray, which is OK.
 	 */
 	MarkAsPrepared(gxact, false);
 
@@ -1306,10 +1300,10 @@ ReadTwoPhaseFile(TransactionId xid, bool missing_ok)
 		stat.st_size > MaxAllocSize)
 		ereport(ERROR,
 				(errcode(ERRCODE_DATA_CORRUPTED),
-				 errmsg_plural("incorrect size of file \"%s\": %zu byte",
-							   "incorrect size of file \"%s\": %zu bytes",
-							   (Size) stat.st_size, path,
-							   (Size) stat.st_size)));
+				 errmsg_plural("incorrect size of file \"%s\": %lld byte",
+							   "incorrect size of file \"%s\": %lld bytes",
+							   (long long int) stat.st_size, path,
+							   (long long int) stat.st_size)));
 
 	crc_offset = stat.st_size - sizeof(pg_crc32c);
 	if (crc_offset != MAXALIGN(crc_offset))
@@ -1333,8 +1327,8 @@ ReadTwoPhaseFile(TransactionId xid, bool missing_ok)
 					 errmsg("could not read file \"%s\": %m", path)));
 		else
 			ereport(ERROR,
-					(errmsg("could not read file \"%s\": read %d of %zu",
-							path, r, (Size) stat.st_size)));
+					(errmsg("could not read file \"%s\": read %d of %lld",
+							path, r, (long long int) stat.st_size)));
 	}
 
 	pgstat_report_wait_end();
@@ -1414,19 +1408,25 @@ XlogReadTwoPhaseData(XLogRecPtr lsn, char **buf, int *len)
 	ThisTimeLineID = save_currtli;
 
 	if (record == NULL)
-		ereport(ERROR,
-				(errcode_for_file_access(),
-				 errmsg("could not read two-phase state from WAL at %X/%X",
-						(uint32) (lsn >> 32),
-						(uint32) lsn)));
+	{
+		if (errormsg)
+			ereport(ERROR,
+					(errcode_for_file_access(),
+					 errmsg("could not read two-phase state from WAL at %X/%X: %s",
+							LSN_FORMAT_ARGS(lsn), errormsg)));
+		else
+			ereport(ERROR,
+					(errcode_for_file_access(),
+					 errmsg("could not read two-phase state from WAL at %X/%X",
+							LSN_FORMAT_ARGS(lsn))));
+	}
 
 	if (XLogRecGetRmid(xlogreader) != RM_XACT_ID ||
 		(XLogRecGetInfo(xlogreader) & XLOG_XACT_OPMASK) != XLOG_XACT_PREPARE)
 		ereport(ERROR,
 				(errcode_for_file_access(),
 				 errmsg("expected two-phase state data is not present in WAL at %X/%X",
-						(uint32) (lsn >> 32),
-						(uint32) lsn)));
+						LSN_FORMAT_ARGS(lsn))));
 
 	if (len != NULL)
 		*len = XLogRecGetDataLen(xlogreader);
@@ -1474,7 +1474,6 @@ FinishPreparedTransaction(const char *gid, bool isCommit)
 {
 	GlobalTransaction gxact;
 	PGPROC	   *proc;
-	PGXACT	   *pgxact;
 	TransactionId xid;
 	char	   *buf;
 	char	   *bufptr;
@@ -1493,8 +1492,7 @@ FinishPreparedTransaction(const char *gid, bool isCommit)
 	 */
 	gxact = LockGXact(gid, GetUserId());
 	proc = &ProcGlobal->allProcs[gxact->pgprocno];
-	pgxact = &ProcGlobal->allPgXact[gxact->pgprocno];
-	xid = pgxact->xid;
+	xid = gxact->xid;
 
 	/*
 	 * Read and validate 2PC state data. State data will typically be stored
@@ -1796,7 +1794,7 @@ CheckPointTwoPhase(XLogRecPtr redo_horizon)
 	for (i = 0; i < TwoPhaseState->numPrepXacts; i++)
 	{
 		/*
-		 * Note that we are using gxact not pgxact so this works in recovery
+		 * Note that we are using gxact not PGPROC so this works in recovery
 		 * also
 		 */
 		GlobalTransaction gxact = TwoPhaseState->prepXacts[i];
@@ -1883,16 +1881,16 @@ restoreTwoPhaseData(void)
  *
  * Scan the shared memory entries of TwoPhaseState and determine the range
  * of valid XIDs present.  This is run during database startup, after we
- * have completed reading WAL.  ShmemVariableCache->nextFullXid has been set to
+ * have completed reading WAL.  ShmemVariableCache->nextXid has been set to
  * one more than the highest XID for which evidence exists in WAL.
  *
- * We throw away any prepared xacts with main XID beyond nextFullXid --- if any
+ * We throw away any prepared xacts with main XID beyond nextXid --- if any
  * are present, it suggests that the DBA has done a PITR recovery to an
  * earlier point in time without cleaning out pg_twophase.  We dare not
  * try to recover such prepared xacts since they likely depend on database
  * state that doesn't exist now.
  *
- * However, we will advance nextFullXid beyond any subxact XIDs belonging to
+ * However, we will advance nextXid beyond any subxact XIDs belonging to
  * valid prepared xacts.  We need to do this since subxact commit doesn't
  * write a WAL entry, and so there might be no evidence in WAL of those
  * subxact XIDs.
@@ -1902,7 +1900,7 @@ restoreTwoPhaseData(void)
  * backup should be rolled in.
  *
  * Our other responsibility is to determine and return the oldest valid XID
- * among the prepared xacts (if none, return ShmemVariableCache->nextFullXid).
+ * among the prepared xacts (if none, return ShmemVariableCache->nextXid).
  * This is needed to synchronize pg_subtrans startup properly.
  *
  * If xids_p and nxids_p are not NULL, pointer to a palloc'd array of all
@@ -1912,8 +1910,8 @@ restoreTwoPhaseData(void)
 TransactionId
 PrescanPreparedTransactions(TransactionId **xids_p, int *nxids_p)
 {
-	FullTransactionId nextFullXid = ShmemVariableCache->nextFullXid;
-	TransactionId origNextXid = XidFromFullTransactionId(nextFullXid);
+	FullTransactionId nextXid = ShmemVariableCache->nextXid;
+	TransactionId origNextXid = XidFromFullTransactionId(nextXid);
 	TransactionId result = origNextXid;
 	TransactionId *xids = NULL;
 	int			nxids = 0;
@@ -2129,7 +2127,7 @@ RecoverPreparedTransactions(void)
  *
  * If setParent is true, set up subtransaction parent linkages.
  *
- * If setNextXid is true, set ShmemVariableCache->nextFullXid to the newest
+ * If setNextXid is true, set ShmemVariableCache->nextXid to the newest
  * value scanned.
  */
 static char *
@@ -2138,8 +2136,8 @@ ProcessTwoPhaseBuffer(TransactionId xid,
 					  bool fromdisk,
 					  bool setParent, bool setNextXid)
 {
-	FullTransactionId nextFullXid = ShmemVariableCache->nextFullXid;
-	TransactionId origNextXid = XidFromFullTransactionId(nextFullXid);
+	FullTransactionId nextXid = ShmemVariableCache->nextXid;
+	TransactionId origNextXid = XidFromFullTransactionId(nextXid);
 	TransactionId *subxids;
 	char	   *buf;
 	TwoPhaseFileHeader *hdr;
@@ -2219,7 +2217,7 @@ ProcessTwoPhaseBuffer(TransactionId xid,
 
 	/*
 	 * Examine subtransaction XIDs ... they should all follow main XID, and
-	 * they may force us to advance nextFullXid.
+	 * they may force us to advance nextXid.
 	 */
 	subxids = (TransactionId *) (buf +
 								 MAXALIGN(sizeof(TwoPhaseFileHeader)) +
@@ -2230,7 +2228,7 @@ ProcessTwoPhaseBuffer(TransactionId xid,
 
 		Assert(TransactionIdFollows(subxid, xid));
 
-		/* update nextFullXid if needed */
+		/* update nextXid if needed */
 		if (setNextXid)
 			AdvanceNextFullTransactionIdPastXid(subxid);
 
@@ -2287,7 +2285,7 @@ RecordTransactionCommitPrepared(TransactionId xid,
 	recptr = XactLogCommitRecord(committs,
 								 nchildren, children, nrels, rels,
 								 ninvalmsgs, invalmsgs,
-								 initfileinval, false,
+								 initfileinval,
 								 MyXactFlags | XACT_FLAGS_ACQUIREDACCESSEXCLUSIVELOCK,
 								 xid, gid);
 
@@ -2310,7 +2308,7 @@ RecordTransactionCommitPrepared(TransactionId xid,
 
 	TransactionTreeSetCommitTsData(xid, nchildren, children,
 								   replorigin_session_origin_timestamp,
-								   replorigin_session_origin, false);
+								   replorigin_session_origin);
 
 	/*
 	 * We don't currently try to sleep before flush here ... nor is there any
@@ -2355,6 +2353,14 @@ RecordTransactionAbortPrepared(TransactionId xid,
 							   const char *gid)
 {
 	XLogRecPtr	recptr;
+	bool		replorigin;
+
+	/*
+	 * Are we using the replication origins feature?  Or, in other words, are
+	 * we replaying remote actions?
+	 */
+	replorigin = (replorigin_session_origin != InvalidRepOriginId &&
+				  replorigin_session_origin != DoNotReplicateId);
 
 	/*
 	 * Catch the scenario where we aborted partway through
@@ -2376,6 +2382,11 @@ RecordTransactionAbortPrepared(TransactionId xid,
 								nrels, rels,
 								MyXactFlags | XACT_FLAGS_ACQUIREDACCESSEXCLUSIVELOCK,
 								xid, gid);
+
+	if (replorigin)
+		/* Move LSNs forward for this replication origin */
+		replorigin_session_advance(replorigin_session_origin_lsn,
+								   XactLastRecEnd);
 
 	/* Always flush, since we're about to remove the 2PC state file */
 	XLogFlush(recptr);

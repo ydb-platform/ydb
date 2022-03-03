@@ -2,12 +2,12 @@
  *
  * progress.h
  *	  Constants used with the progress reporting facilities defined in
- *	  pgstat.h.  These are possibly interesting to extensions, so we
+ *	  backend_status.h.  These are possibly interesting to extensions, so we
  *	  expose them via this header file.  Note that if you update these
  *	  constants, you probably also need to update the views based on them
  *	  in system_views.sql.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/commands/progress.h
@@ -132,5 +132,23 @@
 #define PROGRESS_BASEBACKUP_PHASE_STREAM_BACKUP			3
 #define PROGRESS_BASEBACKUP_PHASE_WAIT_WAL_ARCHIVE		4
 #define PROGRESS_BASEBACKUP_PHASE_TRANSFER_WAL			5
+
+/* Progress parameters for PROGRESS_COPY */
+#define PROGRESS_COPY_BYTES_PROCESSED 0
+#define PROGRESS_COPY_BYTES_TOTAL 1
+#define PROGRESS_COPY_TUPLES_PROCESSED 2
+#define PROGRESS_COPY_TUPLES_EXCLUDED 3
+#define PROGRESS_COPY_COMMAND 4
+#define PROGRESS_COPY_TYPE 5
+
+/* Commands of COPY (as advertised via PROGRESS_COPY_COMMAND) */
+#define PROGRESS_COPY_COMMAND_FROM 1
+#define PROGRESS_COPY_COMMAND_TO 2
+
+/* Types of COPY commands (as advertised via PROGRESS_COPY_TYPE) */
+#define PROGRESS_COPY_TYPE_FILE 1
+#define PROGRESS_COPY_TYPE_PROGRAM 2
+#define PROGRESS_COPY_TYPE_PIPE 3
+#define PROGRESS_COPY_TYPE_CALLBACK 4
 
 #endif

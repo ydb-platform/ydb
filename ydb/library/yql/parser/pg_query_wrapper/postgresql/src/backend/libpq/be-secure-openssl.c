@@ -4,7 +4,7 @@
  *	  functions for OpenSSL support in the backend.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -248,6 +248,9 @@ be_tls_init(bool isServerStart)
 	/* disallow SSL session caching, too */
 	SSL_CTX_set_session_cache_mode(context, SSL_SESS_CACHE_OFF);
 
+	/* disallow SSL compression */
+	SSL_CTX_set_options(context, SSL_OP_NO_COMPRESSION);
+
 #ifdef SSL_OP_NO_RENEGOTIATION
 
 	/*
@@ -319,24 +322,44 @@ be_tls_init(bool isServerStart)
 	 * http://searchsecurity.techtarget.com/sDefinition/0,,sid14_gci803160,00.html
 	 *----------
 	 */
-	if (ssl_crl_file[0])
+	if (ssl_crl_file[0] || ssl_crl_dir[0])
 	{
 		X509_STORE *cvstore = SSL_CTX_get_cert_store(context);
 
 		if (cvstore)
 		{
 			/* Set the flags to check against the complete CRL chain */
-			if (X509_STORE_load_locations(cvstore, ssl_crl_file, NULL) == 1)
+			if (X509_STORE_load_locations(cvstore,
+										  ssl_crl_file[0] ? ssl_crl_file : NULL,
+										  ssl_crl_dir[0] ? ssl_crl_dir : NULL)
+				== 1)
 			{
 				X509_STORE_set_flags(cvstore,
 									 X509_V_FLAG_CRL_CHECK | X509_V_FLAG_CRL_CHECK_ALL);
 			}
-			else
+			else if (ssl_crl_dir[0] == 0)
 			{
 				ereport(isServerStart ? FATAL : LOG,
 						(errcode(ERRCODE_CONFIG_FILE_ERROR),
 						 errmsg("could not load SSL certificate revocation list file \"%s\": %s",
 								ssl_crl_file, SSLerrmessage(ERR_get_error()))));
+				goto error;
+			}
+			else if (ssl_crl_file[0] == 0)
+			{
+				ereport(isServerStart ? FATAL : LOG,
+						(errcode(ERRCODE_CONFIG_FILE_ERROR),
+						 errmsg("could not load SSL certificate revocation list directory \"%s\": %s",
+								ssl_crl_dir, SSLerrmessage(ERR_get_error()))));
+				goto error;
+			}
+			else
+			{
+				ereport(isServerStart ? FATAL : LOG,
+						(errcode(ERRCODE_CONFIG_FILE_ERROR),
+						 errmsg("could not load SSL certificate revocation list file \"%s\" or directory \"%s\": %s",
+								ssl_crl_file, ssl_crl_dir,
+								SSLerrmessage(ERR_get_error()))));
 				goto error;
 			}
 		}
@@ -395,6 +418,9 @@ be_tls_open_server(Port *port)
 				 errmsg("could not initialize SSL connection: SSL context not set up")));
 		return -1;
 	}
+
+	/* set up debugging/info callback */
+	SSL_CTX_set_info_callback(SSL_context, info_cb);
 
 	if (!(port->ssl = SSL_new(SSL_context)))
 	{
@@ -535,22 +561,26 @@ aloop:
 	/* Get client certificate, if available. */
 	port->peer = SSL_get_peer_certificate(port->ssl);
 
-	/* and extract the Common Name from it. */
+	/* and extract the Common Name and Distinguished Name from it. */
 	port->peer_cn = NULL;
+	port->peer_dn = NULL;
 	port->peer_cert_valid = false;
 	if (port->peer != NULL)
 	{
 		int			len;
+		X509_NAME  *x509name = X509_get_subject_name(port->peer);
+		char	   *peer_dn;
+		BIO		   *bio = NULL;
+		BUF_MEM    *bio_buf = NULL;
 
-		len = X509_NAME_get_text_by_NID(X509_get_subject_name(port->peer),
-										NID_commonName, NULL, 0);
+		len = X509_NAME_get_text_by_NID(x509name, NID_commonName, NULL, 0);
 		if (len != -1)
 		{
 			char	   *peer_cn;
 
 			peer_cn = MemoryContextAlloc(TopMemoryContext, len + 1);
-			r = X509_NAME_get_text_by_NID(X509_get_subject_name(port->peer),
-										  NID_commonName, peer_cn, len + 1);
+			r = X509_NAME_get_text_by_NID(x509name, NID_commonName, peer_cn,
+										  len + 1);
 			peer_cn[len] = '\0';
 			if (r != len)
 			{
@@ -574,11 +604,50 @@ aloop:
 
 			port->peer_cn = peer_cn;
 		}
+
+		bio = BIO_new(BIO_s_mem());
+		if (!bio)
+		{
+			pfree(port->peer_cn);
+			port->peer_cn = NULL;
+			return -1;
+		}
+
+		/*
+		 * RFC2253 is the closest thing to an accepted standard format for
+		 * DNs. We have documented how to produce this format from a
+		 * certificate. It uses commas instead of slashes for delimiters,
+		 * which make regular expression matching a bit easier. Also note that
+		 * it prints the Subject fields in reverse order.
+		 */
+		X509_NAME_print_ex(bio, x509name, 0, XN_FLAG_RFC2253);
+		if (BIO_get_mem_ptr(bio, &bio_buf) <= 0)
+		{
+			BIO_free(bio);
+			pfree(port->peer_cn);
+			port->peer_cn = NULL;
+			return -1;
+		}
+		peer_dn = MemoryContextAlloc(TopMemoryContext, bio_buf->length + 1);
+		memcpy(peer_dn, bio_buf->data, bio_buf->length);
+		len = bio_buf->length;
+		BIO_free(bio);
+		peer_dn[len] = '\0';
+		if (len != strlen(peer_dn))
+		{
+			ereport(COMMERROR,
+					(errcode(ERRCODE_PROTOCOL_VIOLATION),
+					 errmsg("SSL certificate's distinguished name contains embedded null")));
+			pfree(peer_dn);
+			pfree(port->peer_cn);
+			port->peer_cn = NULL;
+			return -1;
+		}
+
+		port->peer_dn = peer_dn;
+
 		port->peer_cert_valid = true;
 	}
-
-	/* set up debugging/info callback */
-	SSL_CTX_set_info_callback(SSL_context, info_cb);
 
 	return 0;
 }
@@ -604,6 +673,12 @@ be_tls_close(Port *port)
 	{
 		pfree(port->peer_cn);
 		port->peer_cn = NULL;
+	}
+
+	if (port->peer_dn)
+	{
+		pfree(port->peer_dn);
+		port->peer_dn = NULL;
 	}
 }
 
@@ -1018,39 +1093,43 @@ verify_cb(int ok, X509_STORE_CTX *ctx)
 static void
 info_cb(const SSL *ssl, int type, int args)
 {
+	const char *desc;
+
+	desc = SSL_state_string_long(ssl);
+
 	switch (type)
 	{
 		case SSL_CB_HANDSHAKE_START:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: handshake start")));
+					(errmsg_internal("SSL: handshake start: \"%s\"", desc)));
 			break;
 		case SSL_CB_HANDSHAKE_DONE:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: handshake done")));
+					(errmsg_internal("SSL: handshake done: \"%s\"", desc)));
 			break;
 		case SSL_CB_ACCEPT_LOOP:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: accept loop")));
+					(errmsg_internal("SSL: accept loop: \"%s\"", desc)));
 			break;
 		case SSL_CB_ACCEPT_EXIT:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: accept exit (%d)", args)));
+					(errmsg_internal("SSL: accept exit (%d): \"%s\"", args, desc)));
 			break;
 		case SSL_CB_CONNECT_LOOP:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: connect loop")));
+					(errmsg_internal("SSL: connect loop: \"%s\"", desc)));
 			break;
 		case SSL_CB_CONNECT_EXIT:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: connect exit (%d)", args)));
+					(errmsg_internal("SSL: connect exit (%d): \"%s\"", args, desc)));
 			break;
 		case SSL_CB_READ_ALERT:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: read alert (0x%04x)", args)));
+					(errmsg_internal("SSL: read alert (0x%04x): \"%s\"", args, desc)));
 			break;
 		case SSL_CB_WRITE_ALERT:
 			ereport(DEBUG4,
-					(errmsg_internal("SSL: write alert (0x%04x)", args)));
+					(errmsg_internal("SSL: write alert (0x%04x): \"%s\"", args, desc)));
 			break;
 	}
 }
@@ -1175,15 +1254,6 @@ be_tls_get_cipher_bits(Port *port)
 	}
 	else
 		return 0;
-}
-
-bool
-be_tls_get_compression(Port *port)
-{
-	if (port->ssl)
-		return (SSL_get_current_compression(port->ssl) != NULL);
-	else
-		return false;
 }
 
 const char *
@@ -1319,15 +1389,28 @@ X509_NAME_to_cstring(X509_NAME *name)
 	char	   *dp;
 	char	   *result;
 
+	if (membuf == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_OUT_OF_MEMORY),
+				 errmsg("could not create BIO")));
+
 	(void) BIO_set_close(membuf, BIO_CLOSE);
 	for (i = 0; i < count; i++)
 	{
 		e = X509_NAME_get_entry(name, i);
 		nid = OBJ_obj2nid(X509_NAME_ENTRY_get_object(e));
+		if (nid == NID_undef)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("could not get NID for ASN1_OBJECT object")));
 		v = X509_NAME_ENTRY_get_data(e);
 		field_name = OBJ_nid2sn(nid);
-		if (!field_name)
+		if (field_name == NULL)
 			field_name = OBJ_nid2ln(nid);
+		if (field_name == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("could not convert NID %d to an ASN1_OBJECT structure", nid)));
 		BIO_printf(membuf, "/%s=", field_name);
 		ASN1_STRING_print_ex(membuf, v,
 							 ((ASN1_STRFLGS_RFC2253 & ~ASN1_STRFLGS_ESC_MSB)
@@ -1343,7 +1426,8 @@ X509_NAME_to_cstring(X509_NAME *name)
 	result = pstrdup(dp);
 	if (dp != sp)
 		pfree(dp);
-	BIO_free(membuf);
+	if (BIO_free(membuf) != 1)
+		elog(ERROR, "could not free OpenSSL BIO structure");
 
 	return result;
 }

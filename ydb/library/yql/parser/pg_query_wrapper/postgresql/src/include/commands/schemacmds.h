@@ -4,7 +4,7 @@
  *	  prototypes for schemacmds.c.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/commands/schemacmds.h
@@ -21,8 +21,6 @@
 extern Oid	CreateSchemaCommand(CreateSchemaStmt *parsetree,
 								const char *queryString,
 								int stmt_location, int stmt_len);
-
-extern void RemoveSchemaById(Oid schemaOid);
 
 extern ObjectAddress RenameSchema(const char *oldname, const char *newname);
 extern ObjectAddress AlterSchemaOwner(const char *name, Oid newOwnerId);

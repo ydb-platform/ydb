@@ -3,7 +3,7 @@
  * nodeIncrementalSort.c
  *	  Routines to handle incremental sorting of relations.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -661,9 +661,9 @@ ExecIncrementalSort(PlanState *pstate)
 			/*
 			 * We're in full sort mode accumulating a minimum number of tuples
 			 * and not checking for prefix key equality yet, so we can't
-			 * assume the group pivot tuple will reamin the same -- unless
+			 * assume the group pivot tuple will remain the same -- unless
 			 * we're using a minimum group size of 1, in which case the pivot
-			 * is obviously still the pviot.
+			 * is obviously still the pivot.
 			 */
 			if (nTuples != minGroupSize)
 				ExecClearTuple(node->group_pivot);
@@ -1162,8 +1162,8 @@ ExecReScanIncrementalSort(IncrementalSortState *node)
 	}
 
 	/*
-	 * If chgParam of subnode is not null, theni the plan will be re-scanned
-	 * by the first ExecProcNode.
+	 * If chgParam of subnode is not null, then the plan will be re-scanned by
+	 * the first ExecProcNode.
 	 */
 	if (outerPlan->chgParam == NULL)
 		ExecReScan(outerPlan);

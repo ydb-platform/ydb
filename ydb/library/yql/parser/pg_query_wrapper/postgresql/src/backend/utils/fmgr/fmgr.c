@@ -3,7 +3,7 @@
  * fmgr.c
  *	  The Postgres function manager.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -273,7 +273,7 @@ fmgr_info_cxt_security(Oid functionId, FmgrInfo *finfo, MemoryContext mcxt,
  * If *mod == NULL and *fn != NULL, the function is implemented by a symbol in
  * the main binary.
  *
- * If *mod != NULL and *fn !=NULL the function is implemented in an extension
+ * If *mod != NULL and *fn != NULL the function is implemented in an extension
  * shared object.
  *
  * The returned module and function names are pstrdup'ed into the current
@@ -288,14 +288,11 @@ fmgr_symbol(Oid functionId, char **mod, char **fn)
 	Datum		prosrcattr;
 	Datum		probinattr;
 
-	/* Otherwise we need the pg_proc entry */
 	procedureTuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(functionId));
 	if (!HeapTupleIsValid(procedureTuple))
 		elog(ERROR, "cache lookup failed for function %u", functionId);
 	procedureStruct = (Form_pg_proc) GETSTRUCT(procedureTuple);
 
-	/*
-	 */
 	if (procedureStruct->prosecdef ||
 		!heap_attisnull(procedureTuple, Anum_pg_proc_proconfig, NULL) ||
 		FmgrHookIsNeeded(functionId))
@@ -565,7 +562,6 @@ record_C_func(HeapTuple procedureTuple,
 	{
 		HASHCTL		hash_ctl;
 
-		MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 		hash_ctl.keysize = sizeof(Oid);
 		hash_ctl.entrysize = sizeof(CFuncHashTabEntry);
 		CFuncHash = hash_create("CFuncHash",

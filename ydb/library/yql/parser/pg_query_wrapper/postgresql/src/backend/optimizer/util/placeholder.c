@@ -4,7 +4,7 @@
  *	  PlaceHolderVar and PlaceHolderInfo manipulation routines
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -22,9 +22,6 @@
 #include "optimizer/placeholder.h"
 #include "optimizer/planmain.h"
 #include "utils/lsyscache.h"
-
-/* source-code-compatibility hacks for pull_varnos() API change */
-#define pull_varnos(a,b) pull_varnos_new(a,b)
 
 /* Local functions */
 static void find_placeholders_recurse(PlannerInfo *root, Node *jtnode);

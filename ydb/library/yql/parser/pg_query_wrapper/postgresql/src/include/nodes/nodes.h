@@ -4,7 +4,7 @@
  *	  Definitions for tagged nodes.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/nodes.h
@@ -59,6 +59,7 @@ typedef enum NodeTag
 	T_BitmapIndexScan,
 	T_BitmapHeapScan,
 	T_TidScan,
+	T_TidRangeScan,
 	T_SubqueryScan,
 	T_FunctionScan,
 	T_ValuesScan,
@@ -73,6 +74,7 @@ typedef enum NodeTag
 	T_MergeJoin,
 	T_HashJoin,
 	T_Material,
+	T_Memoize,
 	T_Sort,
 	T_IncrementalSort,
 	T_Group,
@@ -116,6 +118,7 @@ typedef enum NodeTag
 	T_BitmapIndexScanState,
 	T_BitmapHeapScanState,
 	T_TidScanState,
+	T_TidRangeScanState,
 	T_SubqueryScanState,
 	T_FunctionScanState,
 	T_TableFuncScanState,
@@ -130,6 +133,7 @@ typedef enum NodeTag
 	T_MergeJoinState,
 	T_HashJoinState,
 	T_MaterialState,
+	T_MemoizeState,
 	T_SortState,
 	T_IncrementalSortState,
 	T_GroupState,
@@ -206,14 +210,12 @@ typedef enum NodeTag
 	 * Most Expr-based plan nodes do not have a corresponding expression state
 	 * node, they're fully handled within execExpr* - but sometimes the state
 	 * needs to be shared with other parts of the executor, as for example
-	 * with AggrefExprState, which nodeAgg.c has to modify.
+	 * with SubPlanState, which nodeSubplan.c has to modify.
 	 */
 	T_ExprState,
-	T_AggrefExprState,
 	T_WindowFuncExprState,
 	T_SetExprState,
 	T_SubPlanState,
-	T_AlternativeSubPlanState,
 	T_DomainConstraintState,
 
 	/*
@@ -231,6 +233,7 @@ typedef enum NodeTag
 	T_BitmapAndPath,
 	T_BitmapOrPath,
 	T_TidPath,
+	T_TidRangePath,
 	T_SubqueryScanPath,
 	T_ForeignPath,
 	T_CustomPath,
@@ -241,6 +244,7 @@ typedef enum NodeTag
 	T_MergeAppendPath,
 	T_GroupResultPath,
 	T_MaterialPath,
+	T_MemoizePath,
 	T_UniquePath,
 	T_GatherPath,
 	T_GatherMergePath,
@@ -269,6 +273,7 @@ typedef enum NodeTag
 	T_PlaceHolderVar,
 	T_SpecialJoinInfo,
 	T_AppendRelInfo,
+	T_RowIdentityVarInfo,
 	T_PlaceHolderInfo,
 	T_MinMaxAggInfo,
 	T_PlannerParamItem,
@@ -316,6 +321,8 @@ typedef enum NodeTag
 	T_DeleteStmt,
 	T_UpdateStmt,
 	T_SelectStmt,
+	T_ReturnStmt,
+	T_PLAssignStmt,
 	T_AlterTableStmt,
 	T_AlterTableCmd,
 	T_AlterDomainStmt,
@@ -452,6 +459,7 @@ typedef enum NodeTag
 	T_TypeName,
 	T_ColumnDef,
 	T_IndexElem,
+	T_StatsElem,
 	T_Constraint,
 	T_DefElem,
 	T_RangeTblEntry,
@@ -472,6 +480,8 @@ typedef enum NodeTag
 	T_WithClause,
 	T_InferClause,
 	T_OnConflictClause,
+	T_CTESearchClause,
+	T_CTECycleClause,
 	T_CommonTableExpr,
 	T_RoleSpec,
 	T_TriggerTransition,

@@ -5,7 +5,7 @@
  *	  (pg_default_acl)
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_default_acl.h
@@ -30,8 +30,10 @@
 CATALOG(pg_default_acl,826,DefaultAclRelationId)
 {
 	Oid			oid;			/* oid */
-	Oid			defaclrole;		/* OID of role owning this ACL */
-	Oid			defaclnamespace;	/* OID of namespace, or 0 for all */
+	Oid			defaclrole BKI_LOOKUP(pg_authid);	/* OID of role owning this
+													 * ACL */
+	Oid			defaclnamespace BKI_LOOKUP_OPT(pg_namespace);	/* OID of namespace, or
+																 * 0 for all */
 	char		defaclobjtype;	/* see DEFACLOBJ_xxx constants below */
 
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
@@ -46,6 +48,13 @@ CATALOG(pg_default_acl,826,DefaultAclRelationId)
  * ----------------
  */
 typedef FormData_pg_default_acl *Form_pg_default_acl;
+
+DECLARE_TOAST(pg_default_acl, 4143, 4144);
+
+DECLARE_UNIQUE_INDEX(pg_default_acl_role_nsp_obj_index, 827, on pg_default_acl using btree(defaclrole oid_ops, defaclnamespace oid_ops, defaclobjtype char_ops));
+#define DefaultAclRoleNspObjIndexId 827
+DECLARE_UNIQUE_INDEX_PKEY(pg_default_acl_oid_index, 828, on pg_default_acl using btree(oid oid_ops));
+#define DefaultAclOidIndexId	828
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 

@@ -3,7 +3,7 @@
  * amcmds.c
  *	  Routines for SQL commands that manipulate access methods.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -116,33 +116,6 @@ CreateAccessMethod(CreateAmStmt *stmt)
 }
 
 /*
- * Guts of access method deletion.
- */
-void
-RemoveAccessMethodById(Oid amOid)
-{
-	Relation	relation;
-	HeapTuple	tup;
-
-	if (!superuser())
-		ereport(ERROR,
-				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("must be superuser to drop access methods")));
-
-	relation = table_open(AccessMethodRelationId, RowExclusiveLock);
-
-	tup = SearchSysCache1(AMOID, ObjectIdGetDatum(amOid));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for access method %u", amOid);
-
-	CatalogTupleDelete(relation, &tup->t_self);
-
-	ReleaseSysCache(tup);
-
-	table_close(relation, RowExclusiveLock);
-}
-
-/*
  * get_am_type_oid
  *		Worker for various get_am_*_oid variants
  *
@@ -213,7 +186,7 @@ get_am_oid(const char *amname, bool missing_ok)
 }
 
 /*
- * get_am_name - given an access method OID name and type, look up its name.
+ * get_am_name - given an access method OID, look up its name.
  */
 char *
 get_am_name(Oid amOid)

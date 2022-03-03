@@ -4,7 +4,7 @@
  *	  POSTGRES LIBPQ buffer structure definitions.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/libpq/libpq.h
@@ -21,6 +21,15 @@
 #include "storage/latch.h"
 
 
+/*
+ * Callers of pq_getmessage() must supply a maximum expected message size.
+ * By convention, if there's not any specific reason to use another value,
+ * use PQ_SMALL_MESSAGE_LIMIT for messages that shouldn't be too long, and
+ * PQ_LARGE_MESSAGE_LIMIT for messages that can be long.
+ */
+#define PQ_SMALL_MESSAGE_LIMIT	10000
+#define PQ_LARGE_MESSAGE_LIMIT	(MaxAllocSize - 1)
+
 typedef struct
 {
 	void		(*comm_reset) (void);
@@ -29,8 +38,6 @@ typedef struct
 	bool		(*is_send_pending) (void);
 	int			(*putmessage) (char msgtype, const char *s, size_t len);
 	void		(*putmessage_noblock) (char msgtype, const char *s, size_t len);
-	void		(*startcopyout) (void);
-	void		(*endcopyout) (bool errorAbort);
 } PQcommMethods;
 
 extern __thread const PGDLLIMPORT PQcommMethods *PqCommMethods;
@@ -43,8 +50,6 @@ extern __thread const PGDLLIMPORT PQcommMethods *PqCommMethods;
 	(PqCommMethods->putmessage(msgtype, s, len))
 #define pq_putmessage_noblock(msgtype, s, len) \
 	(PqCommMethods->putmessage_noblock(msgtype, s, len))
-#define pq_startcopyout() (PqCommMethods->startcopyout())
-#define pq_endcopyout(errorAbort) (PqCommMethods->endcopyout(errorAbort))
 
 /*
  * External functions.
@@ -55,6 +60,9 @@ extern __thread const PGDLLIMPORT PQcommMethods *PqCommMethods;
  */
 extern __thread WaitEventSet *FeBeWaitSet;
 
+#define FeBeWaitSetSocketPos 0
+#define FeBeWaitSetLatchPos 1
+
 extern int	StreamServerPort(int family, const char *hostName,
 							 unsigned short portNumber, const char *unixSocketDir,
 							 pgsocket ListenSocket[], int MaxListen);
@@ -64,7 +72,6 @@ extern void TouchSocketFiles(void);
 extern void RemoveSocketFiles(void);
 extern void pq_init(void);
 extern int	pq_getbytes(char *s, size_t len);
-extern int	pq_getstring(StringInfo s);
 extern void pq_startmsgread(void);
 extern void pq_endmsgread(void);
 extern bool pq_is_reading_msg(void);
@@ -73,7 +80,8 @@ extern int	pq_getbyte(void);
 extern int	pq_peekbyte(void);
 extern int	pq_getbyte_if_available(unsigned char *c);
 extern bool pq_buffer_has_data(void);
-extern int	pq_putbytes(const char *s, size_t len);
+extern int	pq_putmessage_v2(char msgtype, const char *s, size_t len);
+extern bool pq_check_connection(void);
 
 /*
  * prototypes for functions in be-secure.c
@@ -83,6 +91,7 @@ extern __thread char *ssl_cert_file;
 extern __thread char *ssl_key_file;
 extern __thread char *ssl_ca_file;
 extern __thread char *ssl_crl_file;
+extern __thread char *ssl_crl_dir;
 extern __thread char *ssl_dh_params_file;
 extern __thread PGDLLIMPORT char *ssl_passphrase_command;
 extern __thread PGDLLIMPORT bool ssl_passphrase_command_supports_reload;

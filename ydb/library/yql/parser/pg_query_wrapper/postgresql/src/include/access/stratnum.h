@@ -4,7 +4,7 @@
  *	  POSTGRES strategy number definitions.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/stratnum.h
@@ -76,8 +76,10 @@ typedef uint16 StrategyNumber;
 #define RTSuperStrategyNumber			26	/* for inet << */
 #define RTSuperEqualStrategyNumber		27	/* for inet >>= */
 #define RTPrefixStrategyNumber			28	/* for text ^@ */
+#define RTOldBelowStrategyNumber		29	/* for old spelling of <<| */
+#define RTOldAboveStrategyNumber		30	/* for old spelling of |>> */
 
-#define RTMaxStrategyNumber				28
+#define RTMaxStrategyNumber				30
 
 
 #endif							/* STRATNUM_H */

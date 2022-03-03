@@ -3,7 +3,7 @@
  * pg_type_d.h
  *    Macro definitions for pg_type
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -33,27 +33,28 @@
 #define Anum_pg_type_typisdefined 10
 #define Anum_pg_type_typdelim 11
 #define Anum_pg_type_typrelid 12
-#define Anum_pg_type_typelem 13
-#define Anum_pg_type_typarray 14
-#define Anum_pg_type_typinput 15
-#define Anum_pg_type_typoutput 16
-#define Anum_pg_type_typreceive 17
-#define Anum_pg_type_typsend 18
-#define Anum_pg_type_typmodin 19
-#define Anum_pg_type_typmodout 20
-#define Anum_pg_type_typanalyze 21
-#define Anum_pg_type_typalign 22
-#define Anum_pg_type_typstorage 23
-#define Anum_pg_type_typnotnull 24
-#define Anum_pg_type_typbasetype 25
-#define Anum_pg_type_typtypmod 26
-#define Anum_pg_type_typndims 27
-#define Anum_pg_type_typcollation 28
-#define Anum_pg_type_typdefaultbin 29
-#define Anum_pg_type_typdefault 30
-#define Anum_pg_type_typacl 31
+#define Anum_pg_type_typsubscript 13
+#define Anum_pg_type_typelem 14
+#define Anum_pg_type_typarray 15
+#define Anum_pg_type_typinput 16
+#define Anum_pg_type_typoutput 17
+#define Anum_pg_type_typreceive 18
+#define Anum_pg_type_typsend 19
+#define Anum_pg_type_typmodin 20
+#define Anum_pg_type_typmodout 21
+#define Anum_pg_type_typanalyze 22
+#define Anum_pg_type_typalign 23
+#define Anum_pg_type_typstorage 24
+#define Anum_pg_type_typnotnull 25
+#define Anum_pg_type_typbasetype 26
+#define Anum_pg_type_typtypmod 27
+#define Anum_pg_type_typndims 28
+#define Anum_pg_type_typcollation 29
+#define Anum_pg_type_typdefaultbin 30
+#define Anum_pg_type_typdefault 31
+#define Anum_pg_type_typacl 32
 
-#define Natts_pg_type 31
+#define Natts_pg_type 32
 
 
 /*
@@ -63,6 +64,7 @@
 #define  TYPTYPE_COMPOSITE	'c' /* composite (e.g., table's rowtype) */
 #define  TYPTYPE_DOMAIN		'd' /* domain over another type */
 #define  TYPTYPE_ENUM		'e' /* enumerated type */
+#define  TYPTYPE_MULTIRANGE	'm' /* multirange type */
 #define  TYPTYPE_PSEUDO		'p' /* pseudo-type */
 #define  TYPTYPE_RANGE		'r' /* range type */
 
@@ -104,13 +106,27 @@
 	 (typid) == ANYARRAYOID || \
 	 (typid) == ANYNONARRAYOID || \
 	 (typid) == ANYENUMOID || \
-	 (typid) == ANYRANGEOID)
+	 (typid) == ANYRANGEOID || \
+	 (typid) == ANYMULTIRANGEOID)
 
 #define IsPolymorphicTypeFamily2(typid)  \
 	((typid) == ANYCOMPATIBLEOID || \
 	 (typid) == ANYCOMPATIBLEARRAYOID || \
 	 (typid) == ANYCOMPATIBLENONARRAYOID || \
-	 (typid) == ANYCOMPATIBLERANGEOID)
+	 (typid) == ANYCOMPATIBLERANGEOID || \
+	 (typid) == ANYCOMPATIBLEMULTIRANGEOID)
+
+/* Is this a "true" array type?  (Requires fmgroids.h) */
+#define IsTrueArrayType(typeForm)  \
+	(OidIsValid((typeForm)->typelem) && \
+	 (typeForm)->typsubscript == F_ARRAY_SUBSCRIPT_HANDLER)
+
+/*
+ * Backwards compatibility for ancient random spellings of pg_type OID macros.
+ * Don't use these names in new code.
+ */
+#define CASHOID	MONEYOID
+#define LSNOID	PG_LSNOID
 
 #define BOOLOID 16
 #define BYTEAOID 17
@@ -129,11 +145,11 @@
 #define OIDVECTOROID 30
 #define JSONOID 114
 #define XMLOID 142
-#define PGNODETREEOID 194
-#define PGNDISTINCTOID 3361
-#define PGDEPENDENCIESOID 3402
-#define PGMCVLISTOID 5017
-#define PGDDLCOMMANDOID 32
+#define PG_NODE_TREEOID 194
+#define PG_NDISTINCTOID 3361
+#define PG_DEPENDENCIESOID 3402
+#define PG_MCV_LISTOID 5017
+#define PG_DDL_COMMANDOID 32
 #define XID8OID 5069
 #define POINTOID 600
 #define LSEGOID 601
@@ -145,7 +161,7 @@
 #define FLOAT8OID 701
 #define UNKNOWNOID 705
 #define CIRCLEOID 718
-#define CASHOID 790
+#define MONEYOID 790
 #define MACADDROID 829
 #define INETOID 869
 #define CIDROID 650
@@ -172,7 +188,7 @@
 #define REGROLEOID 4096
 #define REGNAMESPACEOID 4089
 #define UUIDOID 2950
-#define LSNOID 3220
+#define PG_LSNOID 3220
 #define TSVECTOROID 3614
 #define GTSVECTOROID 3642
 #define TSQUERYOID 3615
@@ -188,6 +204,12 @@
 #define TSTZRANGEOID 3910
 #define DATERANGEOID 3912
 #define INT8RANGEOID 3926
+#define INT4MULTIRANGEOID 4451
+#define NUMMULTIRANGEOID 4532
+#define TSMULTIRANGEOID 4533
+#define TSTZMULTIRANGEOID 4534
+#define DATEMULTIRANGEOID 4535
+#define INT8MULTIRANGEOID 4536
 #define RECORDOID 2249
 #define RECORDARRAYOID 2287
 #define CSTRINGOID 2275
@@ -195,7 +217,7 @@
 #define ANYARRAYOID 2277
 #define VOIDOID 2278
 #define TRIGGEROID 2279
-#define EVTTRIGGEROID 3838
+#define EVENT_TRIGGEROID 3838
 #define LANGUAGE_HANDLEROID 2280
 #define INTERNALOID 2281
 #define ANYELEMENTOID 2283
@@ -210,6 +232,10 @@
 #define ANYCOMPATIBLEARRAYOID 5078
 #define ANYCOMPATIBLENONARRAYOID 5079
 #define ANYCOMPATIBLERANGEOID 5080
+#define ANYMULTIRANGEOID 4537
+#define ANYCOMPATIBLEMULTIRANGEOID 4538
+#define PG_BRIN_BLOOM_SUMMARYOID 4600
+#define PG_BRIN_MINMAX_MULTI_SUMMARYOID 4601
 #define BOOLARRAYOID 1000
 #define BYTEAARRAYOID 1001
 #define CHARARRAYOID 1002
@@ -225,6 +251,10 @@
 #define XIDARRAYOID 1011
 #define CIDARRAYOID 1012
 #define OIDVECTORARRAYOID 1013
+#define PG_TYPEARRAYOID 210
+#define PG_ATTRIBUTEARRAYOID 270
+#define PG_PROCARRAYOID 272
+#define PG_CLASSARRAYOID 273
 #define JSONARRAYOID 199
 #define XMLARRAYOID 143
 #define XID8ARRAYOID 271
@@ -280,6 +310,12 @@
 #define TSTZRANGEARRAYOID 3911
 #define DATERANGEARRAYOID 3913
 #define INT8RANGEARRAYOID 3927
+#define INT4MULTIRANGEARRAYOID 6150
+#define NUMMULTIRANGEARRAYOID 6151
+#define TSMULTIRANGEARRAYOID 6152
+#define TSTZMULTIRANGEARRAYOID 6153
+#define DATEMULTIRANGEARRAYOID 6155
+#define INT8MULTIRANGEARRAYOID 6157
 #define CSTRINGARRAYOID 1263
 
 #endif							/* PG_TYPE_D_H */

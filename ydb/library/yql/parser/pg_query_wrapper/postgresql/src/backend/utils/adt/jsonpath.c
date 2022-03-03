@@ -53,7 +53,7 @@
  * |	  |__|	|__||________________________||___________________|		   |
  * |_______________________________________________________________________|
  *
- * Copyright (c) 2019-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2019-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	src/backend/utils/adt/jsonpath.c
@@ -660,7 +660,7 @@ printJsonPathItem(StringInfo buf, JsonPathItem *v, bool inKey,
 			else if (v->content.anybounds.first == v->content.anybounds.last)
 			{
 				if (v->content.anybounds.first == PG_UINT32_MAX)
-					appendStringInfo(buf, "**{last}");
+					appendStringInfoString(buf, "**{last}");
 				else
 					appendStringInfo(buf, "**{%u}",
 									 v->content.anybounds.first);

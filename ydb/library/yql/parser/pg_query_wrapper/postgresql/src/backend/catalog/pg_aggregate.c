@@ -3,7 +3,7 @@
  * pg_aggregate.c
  *	  routines to support manipulation of the pg_aggregate relation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -105,6 +105,7 @@ AggregateCreate(const char *aggName,
 	int			i;
 	ObjectAddress myself,
 				referenced;
+	ObjectAddresses *addrs;
 	AclResult	aclresult;
 
 	/* sanity checks (caller should have caught these) */
@@ -619,8 +620,9 @@ AggregateCreate(const char *aggName,
 							 GetUserId(),	/* proowner */
 							 INTERNALlanguageId,	/* languageObjectId */
 							 InvalidOid,	/* no validator */
-							 "aggregate_dummy", /* placeholder proc */
+							 "aggregate_dummy", /* placeholder (no such proc) */
 							 NULL,	/* probin */
+							 NULL,	/* prosqlbody */
 							 PROKIND_AGGREGATE,
 							 false, /* security invoker (currently not
 									 * definable for agg) */
@@ -741,84 +743,70 @@ AggregateCreate(const char *aggName,
 	 * way.
 	 */
 
+	addrs = new_object_addresses();
+
 	/* Depends on transition function */
-	referenced.classId = ProcedureRelationId;
-	referenced.objectId = transfn;
-	referenced.objectSubId = 0;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	ObjectAddressSet(referenced, ProcedureRelationId, transfn);
+	add_exact_object_address(&referenced, addrs);
 
 	/* Depends on final function, if any */
 	if (OidIsValid(finalfn))
 	{
-		referenced.classId = ProcedureRelationId;
-		referenced.objectId = finalfn;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, ProcedureRelationId, finalfn);
+		add_exact_object_address(&referenced, addrs);
 	}
 
 	/* Depends on combine function, if any */
 	if (OidIsValid(combinefn))
 	{
-		referenced.classId = ProcedureRelationId;
-		referenced.objectId = combinefn;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, ProcedureRelationId, combinefn);
+		add_exact_object_address(&referenced, addrs);
 	}
 
 	/* Depends on serialization function, if any */
 	if (OidIsValid(serialfn))
 	{
-		referenced.classId = ProcedureRelationId;
-		referenced.objectId = serialfn;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, ProcedureRelationId, serialfn);
+		add_exact_object_address(&referenced, addrs);
 	}
 
 	/* Depends on deserialization function, if any */
 	if (OidIsValid(deserialfn))
 	{
-		referenced.classId = ProcedureRelationId;
-		referenced.objectId = deserialfn;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, ProcedureRelationId, deserialfn);
+		add_exact_object_address(&referenced, addrs);
 	}
 
 	/* Depends on forward transition function, if any */
 	if (OidIsValid(mtransfn))
 	{
-		referenced.classId = ProcedureRelationId;
-		referenced.objectId = mtransfn;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, ProcedureRelationId, mtransfn);
+		add_exact_object_address(&referenced, addrs);
 	}
 
 	/* Depends on inverse transition function, if any */
 	if (OidIsValid(minvtransfn))
 	{
-		referenced.classId = ProcedureRelationId;
-		referenced.objectId = minvtransfn;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, ProcedureRelationId, minvtransfn);
+		add_exact_object_address(&referenced, addrs);
 	}
 
 	/* Depends on final function, if any */
 	if (OidIsValid(mfinalfn))
 	{
-		referenced.classId = ProcedureRelationId;
-		referenced.objectId = mfinalfn;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, ProcedureRelationId, mfinalfn);
+		add_exact_object_address(&referenced, addrs);
 	}
 
 	/* Depends on sort operator, if any */
 	if (OidIsValid(sortop))
 	{
-		referenced.classId = OperatorRelationId;
-		referenced.objectId = sortop;
-		referenced.objectSubId = 0;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		ObjectAddressSet(referenced, OperatorRelationId, sortop);
+		add_exact_object_address(&referenced, addrs);
 	}
 
+	record_object_address_dependencies(&myself, addrs, DEPENDENCY_NORMAL);
+	free_object_addresses(addrs);
 	return myself;
 }
 
@@ -858,7 +846,7 @@ lookup_agg_function(List *fnName,
 	 * the function.
 	 */
 	fdresult = func_get_detail(fnName, NIL, NIL,
-							   nargs, input_types, false, false,
+							   nargs, input_types, false, false, false,
 							   &fnOid, rettype, &retset,
 							   &nvargs, &vatype,
 							   &true_oid_array, NULL);

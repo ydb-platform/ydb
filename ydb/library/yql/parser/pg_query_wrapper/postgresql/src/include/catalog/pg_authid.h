@@ -6,7 +6,7 @@
  *	  pg_shadow and pg_group are now publicly accessible views on pg_authid.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_authid.h
@@ -38,7 +38,7 @@ CATALOG(pg_authid,1260,AuthIdRelationId) BKI_SHARED_RELATION BKI_ROWTYPE_OID(284
 	bool		rolcreatedb;	/* allowed to create databases? */
 	bool		rolcanlogin;	/* allowed to log in as session user? */
 	bool		rolreplication; /* role used for streaming replication */
-	bool		rolbypassrls;	/* bypasses row level security? */
+	bool		rolbypassrls;	/* bypasses row-level security? */
 	int32		rolconnlimit;	/* max connections allowed (-1=no limit) */
 
 	/* remaining fields may be null; use heap_getattr to read them! */
@@ -54,5 +54,14 @@ CATALOG(pg_authid,1260,AuthIdRelationId) BKI_SHARED_RELATION BKI_ROWTYPE_OID(284
  * ----------------
  */
 typedef FormData_pg_authid *Form_pg_authid;
+
+DECLARE_TOAST(pg_authid, 4175, 4176);
+#define PgAuthidToastTable 4175
+#define PgAuthidToastIndex 4176
+
+DECLARE_UNIQUE_INDEX(pg_authid_rolname_index, 2676, on pg_authid using btree(rolname name_ops));
+#define AuthIdRolnameIndexId	2676
+DECLARE_UNIQUE_INDEX_PKEY(pg_authid_oid_index, 2677, on pg_authid using btree(oid oid_ops));
+#define AuthIdOidIndexId	2677
 
 #endif							/* PG_AUTHID_H */

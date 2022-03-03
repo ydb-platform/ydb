@@ -3,7 +3,7 @@
  * storage.c
  *	  code to create and destroy physical storage for relations
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -290,8 +290,8 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	 * Make sure smgr_targblock etc aren't pointing somewhere past new end
 	 */
 	rel->rd_smgr->smgr_targblock = InvalidBlockNumber;
-	rel->rd_smgr->smgr_fsm_nblocks = InvalidBlockNumber;
-	rel->rd_smgr->smgr_vm_nblocks = InvalidBlockNumber;
+	for (int i = 0; i <= MAX_FORKNUM; ++i)
+		rel->rd_smgr->smgr_cached_nblocks[i] = InvalidBlockNumber;
 
 	/* Prepare for truncation of MAIN fork of the relation */
 	forks[nforks] = MAIN_FORKNUM;
@@ -600,7 +600,6 @@ smgrDoPendingDeletes(bool isCommit)
 	PendingRelDelete *prev;
 	PendingRelDelete *next;
 	int			nrels = 0,
-				i = 0,
 				maxrels = 0;
 	SMgrRelation *srels = NULL;
 
@@ -651,7 +650,7 @@ smgrDoPendingDeletes(bool isCommit)
 	{
 		smgrdounlinkall(srels, nrels, false);
 
-		for (i = 0; i < nrels; i++)
+		for (int i = 0; i < nrels; i++)
 			smgrclose(srels[i]);
 
 		pfree(srels);

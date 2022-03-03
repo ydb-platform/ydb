@@ -8,6 +8,8 @@ echo -n "Checking static variables: "
 
 data=$(objdump libyql-parser-pg_query_wrapper.a -t | grep -E "\.data\.|\.bss\." | \
 grep -v -E "progname|pg_popcount32|pg_popcount64|pg_comp_crc32c|TMkqlPgAdapter|_ZN4NYqlL10GlobalInitE|BlockSig|StartupBlockSig|UnBlockSig" | \
+grep -v -E "local_my_wait_event_info|my_wait_event_info|maxSems|nextSemKey|numSems|sharedSemas|AnonymousShmem|AnonymousShmemSize" | \
+grep -v -E "UsedShmemSegAddr|UsedShmemSegID" | \
 grep -v -E "on_proc_exit_index|on_shmem_exit_index|before_shmem_exit_index")
 
 if [ ${#data} -eq 0 ]; then

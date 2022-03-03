@@ -9,7 +9,7 @@
  * contains variables.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -94,13 +94,7 @@ static Relids alias_relid_set(Query *query, Relids relids);
  * SubPlan, we only need to look at the parameters passed to the subplan.
  */
 Relids
-pull_varnos(Node *node)
-{
-	return pull_varnos_new(NULL, node);
-}
-
-Relids
-pull_varnos_new(PlannerInfo *root, Node *node)
+pull_varnos(PlannerInfo *root, Node *node)
 {
 	pull_varnos_context context;
 
@@ -126,13 +120,7 @@ pull_varnos_new(PlannerInfo *root, Node *node)
  *		Only Vars of the specified level are considered.
  */
 Relids
-pull_varnos_of_level(Node *node, int levelsup)
-{
-	return pull_varnos_of_level_new(NULL, node, levelsup);
-}
-
-Relids
-pull_varnos_of_level_new(PlannerInfo *root, Node *node, int levelsup)
+pull_varnos_of_level(PlannerInfo *root, Node *node, int levelsup)
 {
 	pull_varnos_context context;
 
@@ -213,7 +201,7 @@ pull_varnos_walker(Node *node, pull_varnos_context *context)
 			 */
 			PlaceHolderInfo *phinfo = NULL;
 
-			if (phv->phlevelsup == 0 && context->root)
+			if (phv->phlevelsup == 0)
 			{
 				ListCell   *lc;
 

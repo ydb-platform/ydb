@@ -41,18 +41,20 @@ BgWriterPID
 BgWriterStats
 BufferBlocks
 BufferDescriptors
-BufferIOLWLockArray
+BufferIOCVArray
 CFuncHash
 CacheHdr
 CacheInitialized
 CacheMemoryContext
 CatalogSnapshot
 CatalogSnapshotData
+CheckClientConnectionPending
 CheckPointCompletionTarget
 CheckPointDistanceEstimate
 CheckPointSegments
 CheckPointTimeout
 CheckPointWarning
+CheckXidAlive
 CheckpointStats
 CheckpointWriteDelay.absorb_counter
 CheckpointerPID
@@ -65,6 +67,7 @@ ClientEncoding
 CommitDelay
 CommitSiblings
 CommitTsCtlData
+ComputeXidHorizonsResultLastXmin
 ConfigFileLineno
 ConfigFileName
 ConfigReloadPending
@@ -90,7 +93,6 @@ CurrentSnapshot
 CurrentSnapshotData
 CurrentTransactionState
 CurrentUserId
-Current_last_tid
 DCHCache
 DCHCounter
 DataDir
@@ -111,7 +113,6 @@ DefaultXactIsoLevel
 DefaultXactReadOnly
 DefineRelation.validnsps
 DoingCommandRead
-DoingCopyOut
 Dynamic_library_path
 EOXactTupleDescArray
 EOXactTupleDescArrayLen
@@ -131,7 +132,6 @@ ExecutorStart_hook
 ExitOnAnyError
 ExplainOneQuery_hook
 ExportInProgress
-ExtraOptions
 FastPathLocalUseCount
 FastPathStrongRelationLocks
 FatalError
@@ -140,7 +140,6 @@ FinishedSerializableTransactions
 FirstCallSinceLastCheckpoint.ckpt_done
 FirstSnapshotSet
 FirstXactSnapshot
-FreezeLimit
 FrontendProtocol
 GUCNestLevel
 GUC_check_errcode_value
@@ -164,6 +163,11 @@ GetBackgroundWorkerTypeByPid.result
 GetConfigOption.buffer
 GetConfigOptionResetString.buffer
 GetConflictingVirtualXIDs.vxids
+GetCurrentTimeUsec.cache_fsec
+GetCurrentTimeUsec.cache_timezone
+GetCurrentTimeUsec.cache_tm
+GetCurrentTimeUsec.cache_ts
+GetCurrentTimeUsec.cache_tz
 GetLocalBufferStorage.LocalBufferContext
 GetLocalBufferStorage.cur_block
 GetLocalBufferStorage.next_buf_in_block
@@ -173,11 +177,19 @@ GetLockConflicts.vxids
 GetPgClassDescriptor.pgclassdesc
 GetPgIndexDescriptor.pgindexdesc
 GetRunningTransactionData.CurrentRunningXactsData
+GetSQLCurrentDate.cache_date
+GetSQLCurrentDate.cache_mday
+GetSQLCurrentDate.cache_mon
+GetSQLCurrentDate.cache_year
 GetStableLatestTransactionId.lxid
 GetStableLatestTransactionId.stablexid
 GetXLogBuffer.cachedPage
 GetXLogBuffer.cachedPos
 GinFuzzySearchLimit
+GlobalVisCatalogRels
+GlobalVisDataRels
+GlobalVisSharedRels
+GlobalVisTempRels
 HandleParallelMessages.hpm_context
 HaveCrashedWorker
 HbaFileName
@@ -186,6 +198,8 @@ ILHead
 IdentFileName
 IdleInTransactionSessionTimeout
 IdleInTransactionSessionTimeoutPending
+IdleSessionTimeout
+IdleSessionTimeoutPending
 IgnoreSystemIndexes
 InArchiveRecovery
 InProgressBuf
@@ -205,6 +219,7 @@ KnownAssignedXidsValid
 LWLockTrancheNames
 LWLockTrancheNamesAllocated
 LastRec
+LatchWaitSet
 ListenAddresses
 ListenSocket
 LoadedSSL
@@ -222,6 +237,7 @@ LockMethodLocalHash
 LockMethodLockHash
 LockMethodProcLockHash
 LockTimeout
+LogMemoryContextPending
 LogRepWorkerWalRcvConn
 Log_RotationAge
 Log_RotationSize
@@ -242,6 +258,7 @@ LogicalRepPartMap
 LogicalRepPartMapContext
 LogicalRepRelMap
 LogicalRepRelMapContext
+LogicalStreamingContext
 LogstreamResult
 LogwrtResult
 MXactCache
@@ -255,7 +272,6 @@ MergeAttributes.bogus_marker
 MessageContext
 MessageEncoding
 Mode
-MultiXactCutoff
 MultiXactMemberCtlData
 MultiXactOffsetCtlData
 MultiXactState
@@ -273,7 +289,6 @@ MyLockNo
 MyLockedGxact
 MyLogicalRepWorker
 MyPMChildSlot
-MyPgXact
 MyProc
 MyProcPid
 MyProcPort
@@ -306,7 +321,6 @@ OldCommittedSxact
 OldestActiveSnapshot
 OldestMemberMXactId
 OldestVisibleMXactId
-OldestXmin
 OpClassCache
 OprCacheHash
 OprProofCacheHash
@@ -318,11 +332,13 @@ PG_exception_stack
 PMSignalState
 PageSetChecksumCopy.pageCopy
 ParallelCurrentXids
-ParallelMasterBackendId
-ParallelMasterPid
+ParallelLeaderBackendId
+ParallelLeaderPid
 ParallelMessagePending
 ParallelWorkerNumber
 Password_encryption
+PgArch
+PgArchCanRestart.last_pgarch_start_time
 PgArchPID
 PgReloadTime
 PgStartTime
@@ -376,8 +392,6 @@ ReadRecPtr
 ReceiveSharedInvalidMessages.messages
 ReceiveSharedInvalidMessages.nextmsg
 ReceiveSharedInvalidMessages.nummsgs
-RecentGlobalDataXmin
-RecentGlobalXmin
 RecentXmin
 RecordCacheArray
 RecordCacheArrayLen
@@ -428,6 +442,7 @@ SessionUserIsSuperuser
 SetRoleIsActive
 SharedBufHash
 SharedFileSetInit.counter
+SharedFileSetInit.registered_cleanup
 SharedInvalidMessageCounter
 SharedInvalidMessagesArray
 ShmemBase
@@ -478,6 +493,7 @@ TopTransactionResourceOwner
 TopTransactionStateData
 Trace_notify
 TransactionAbortContext
+TransactionIdIsInProgress.other_xids
 TransactionIdIsInProgress.xids
 TransactionXmin
 Transform_null_equals
@@ -518,6 +534,7 @@ WalSndCaughtUp
 WalSndCtl
 WalSndUpdateProgress.sendTime
 WalSndWaitForWal.RecentFlushPtr
+WalStats
 WalWriterDelay
 WalWriterFlushAfter
 WalWriterPID
@@ -530,7 +547,7 @@ XLogCtl
 XLogReceiptSource
 XLogReceiptTime
 XLogSendLogical.flushPtr
-XLogWalRcvSendHSFeedback.master_has_standby_xmin
+XLogWalRcvSendHSFeedback.primary_has_standby_xmin
 XLogWalRcvSendHSFeedback.sendTime
 XLogWalRcvSendReply.flushPtr
 XLogWalRcvSendReply.sendTime
@@ -565,7 +582,6 @@ addin_request_allowed
 afterConstraints
 afterTriggers
 alarm_enabled
-allPgXact
 allProcs
 all_timeouts
 all_timeouts_initialized
@@ -607,6 +623,7 @@ autovacuum_work_mem
 avlauncher_needs_signal
 awaitedLock
 awaitedOwner
+backendStatusSnapContext
 backend_flush_after
 backend_startup_complete
 backtrace_functions
@@ -630,11 +647,12 @@ bgwriter_lru_multiplier
 binary_upgrade_next_array_pg_type_oid
 binary_upgrade_next_heap_pg_class_oid
 binary_upgrade_next_index_pg_class_oid
+binary_upgrade_next_mrng_array_pg_type_oid
+binary_upgrade_next_mrng_pg_type_oid
 binary_upgrade_next_pg_authid_oid
 binary_upgrade_next_pg_enum_oid
 binary_upgrade_next_pg_type_oid
 binary_upgrade_next_toast_pg_class_oid
-binary_upgrade_next_toast_pg_type_oid
 binary_upgrade_record_init_privs
 block_size
 blocking_autovacuum_proc
@@ -650,6 +668,7 @@ boot_yynerrs
 boot_yyout
 boot_yytext
 bootstrap_data_checksum_version
+bsysscan
 btvacinfo
 buffer_lists
 bytea_output
@@ -657,11 +676,10 @@ bytesToHex.hex
 cachedCommitLSN
 cachedFetchXid
 cachedFetchXidStatus
+cached_db_hash
 cached_expression_list
-cached_member_role
-cached_membership_roles
-cached_privs_role
-cached_privs_roles
+cached_role
+cached_roles
 catchupInterruptPending
 check_function_bodies
 check_password_hook
@@ -671,6 +689,7 @@ ckpt_active
 ckpt_cached_elapsed
 ckpt_start_recptr
 ckpt_start_time
+client_connection_check_interval
 client_encoding_string
 client_min_messages
 cluster_name
@@ -678,6 +697,7 @@ collation_cache
 comboCids
 comboHash
 commitTsShared
+compute_query_id
 connsAllowed
 constraint_exclusion
 context_freelists
@@ -708,7 +728,6 @@ cursor_tuple_fraction
 custom_options
 custom_scan_methods
 cv_sleep_target
-cv_wait_event_set
 dataExecPlaceToPageInternal.data
 data_checksums
 data_directory
@@ -718,6 +737,7 @@ datecache
 datestyle_string
 deadlockDetails
 deadlock_state
+debug_discard_caches
 debug_query_string
 default_freeze_min_age
 default_freeze_table_age
@@ -726,6 +746,8 @@ default_multixact_freeze_table_age
 default_statistics_target
 default_table_access_method
 default_tablespace
+default_toast_compression
+default_toast_compression_options
 default_with_oids
 degree_c_forty_five
 degree_c_one
@@ -746,6 +768,7 @@ dsm_control_handle
 dsm_control_impl_private
 dsm_control_mapped_size
 dsm_init_done
+dsm_main_space_begin
 dsm_segment_list
 dummy_spinlock
 dummy_ssl_passwd_cb_called
@@ -757,6 +780,7 @@ elevel
 emit_log_hook
 emode_for_corrupt_record.lastComplaint
 enableFsync
+enable_async_append
 enable_bitmapscan
 enable_bonjour
 enable_gathermerge
@@ -767,6 +791,7 @@ enable_incremental_sort
 enable_indexonlyscan
 enable_indexscan
 enable_material
+enable_memoize
 enable_mergejoin
 enable_nestloop
 enable_parallel_append
@@ -778,7 +803,6 @@ enable_seqscan
 enable_sort
 enable_tidscan
 entryExecPlaceToPage.data
-enum_blacklist
 eoxact_list
 eoxact_list_len
 eoxact_list_overflowed
@@ -794,9 +818,9 @@ exportedSnapshots
 extensible_node_methods
 external_pid_file
 extra_float_digits
-fast_promote
 file_list
 file_tail
+filesetlist
 find_rendezvous_variable.rendezvousHash
 firstDomainTypeEntry
 first_syslogger_file_time
@@ -826,7 +850,6 @@ gistGetFakeLSN.lastlsn
 globalStats
 gmtsub.gmtptr
 got_SIGHUP
-got_SIGTERM
 got_SIGUSR2
 got_STOPPING
 got_deadlock_timeout
@@ -844,17 +867,21 @@ hist_entries
 hist_start
 holdingAllLocks
 hot_standby_feedback
+huge_page_size
 huge_pages
 icu_converter
 ignore_checksum_failure
 ignore_invalid_pages
 ignore_till_sync
+in_hot_standby
 in_progress_list
 in_progress_list_len
 in_progress_list_maxlen
 in_remote_transaction
 in_restore_command
+in_streamed_transaction
 incoming_message
+int64_div_fast_to_numeric.pow10
 integer_datetimes
 internal_flush.last_reported_send_errno
 invalid_page_tab
@@ -889,7 +916,6 @@ last_assigned_kind
 last_checkpoint_time
 last_csv_file_name
 last_file_name
-last_pgarch_start_time
 last_pgstat_start_time
 last_processing
 last_reply_timestamp
@@ -902,14 +928,8 @@ last_status_len
 last_used_seq
 last_xlog_switch_time
 latestObservedXid
-lc_collate_envbuf
 lc_collate_is_c.result
-lc_ctype_envbuf
 lc_ctype_is_c.result
-lc_messages_envbuf
-lc_monetary_envbuf
-lc_numeric_envbuf
-lc_time_envbuf
 listenChannels
 litbuf
 lo_cleanup_needed
@@ -949,6 +969,7 @@ log_parameter_max_length
 log_parameter_max_length_on_error
 log_parser_stats
 log_planner_stats
+log_recovery_conflict_waits
 log_replication_commands
 log_statement
 log_statement_sample_rate
@@ -967,7 +988,6 @@ maintenance_io_concurrency
 maintenance_work_mem
 make_greater_string.suffixchar
 make_greater_string.suffixcollation
-master_image_masked
 matview_maintenance_depth
 maxAllocatedDescs
 maxCurConstraints
@@ -1004,6 +1024,7 @@ max_worker_processes
 memory_units_hint
 minRecoveryPoint
 minRecoveryPointTLI
+min_dynamic_shared_memory
 min_parallel_index_scan_size
 min_parallel_table_scan_size
 min_wal_size_mb
@@ -1058,7 +1079,6 @@ oldSnapshotControl
 old_snapshot_threshold
 oldrs
 on_commit_launcher_wakeup
-on_commit_stop_workers
 on_commits
 on_proc_exit_list
 on_shmem_exit_list
@@ -1068,7 +1088,6 @@ openLogFile
 openLogSegNo
 openlog_done
 openssl_tls_init_hook
-operator_precedence_warning
 outbuf_maxlen
 output_message
 overrideStack
@@ -1095,6 +1114,8 @@ pending_shared_updates
 pending_write_requests
 per_line_ctx
 pgBufferUsage
+pgLastSessionReportTime
+pgStatActiveTime
 pgStatAddr
 pgStatBlockReadTime
 pgStatBlockWriteTime
@@ -1102,9 +1123,11 @@ pgStatDBHash
 pgStatFunctions
 pgStatLocalContext
 pgStatRunningInCollector
+pgStatSessionEndCause
 pgStatSock
 pgStatTabHash
 pgStatTabList
+pgStatTransactionIdleTime
 pgStatXactCommit
 pgStatXactRollback
 pgStatXactStack
@@ -1131,6 +1154,7 @@ pg_strerror.errorstr_buf
 pg_strtok_ptr
 pg_xml_init_library.first_time
 pgstat_report_stat.last_report
+pgstat_send_wal.sendTime
 pgstat_stat_directory
 pgstat_stat_filename
 pgstat_stat_tmpname
@@ -1153,10 +1177,12 @@ postmaster_alive_fds
 postmaster_possibly_dead
 pq_mq_busy
 pq_mq_handle
-pq_mq_parallel_master_backend_id
-pq_mq_parallel_master_pid
+pq_mq_parallel_leader_backend_id
+pq_mq_parallel_leader_pid
 prepareGID
 prepared_queries
+prevWalUsage
+primary_image_masked
 procArray
 proc_exit_inprogress
 process_shared_preload_libraries_in_progress
@@ -1172,6 +1198,7 @@ ps_buffer_fixed_size
 ps_buffer_size
 query_getrulebyoid
 query_getviewrule
+query_id_enabled
 quote_all_identifiers
 random_page_cost
 rdatas
@@ -1204,6 +1231,8 @@ recoveryTargetTLIRequested
 recoveryTargetTime
 recoveryTargetTimeLineGoal
 recoveryTargetXid
+recovery_init_sync_method
+recovery_init_sync_method_options
 recovery_min_apply_delay
 recovery_signal_file_found
 recovery_target_lsn_string
@@ -1226,6 +1255,9 @@ relcache_callback_count
 relcache_callback_list
 relfilenode_skey
 remote_final_lsn
+remove_temp_files_after_crash
+replSlotStatHash
+repl_pushed_back_token
 replay_image_masked
 replication_active
 replication_parse_result
@@ -1245,6 +1277,7 @@ replorigin_session_origin_lsn
 replorigin_session_origin_timestamp
 replorigin_session_setup.registered_cleanup
 reply_message
+report_needed
 reporting_enabled
 restart_after_crash
 restoredFromArchive
@@ -1284,9 +1317,6 @@ scanbuflen
 scanstring
 scram_mock_salt.sha_digest
 segment_size
-selfpipe_owner_pid
-selfpipe_readfd
-selfpipe_writefd
 sendTimeLine
 sendTimeLineIsHistoric
 sendTimeLineNextTLI
@@ -1329,6 +1359,9 @@ show_tcp_keepalives_interval.nbuf
 show_tcp_user_timeout.nbuf
 show_unix_socket_permissions.buf
 shutdown_requested
+signal_due_at
+signal_fd
+signal_pending
 sin_30
 sizeComboCids
 size_guc_variables
@@ -1340,6 +1373,7 @@ speculativeInsertionToken
 spins_per_delay
 ssl_ca_file
 ssl_cert_file
+ssl_crl_dir
 ssl_crl_file
 ssl_dh_params_file
 ssl_is_server_start
@@ -1361,8 +1395,11 @@ startptr
 statrelpath
 stmtStartTimestamp
 str_time.buf
+stream_fd
+stream_xid
 streamingDoneReceiving
 streamingDoneSending
+subxact_data
 sync_cycle_ctr
 sync_method
 synchronize_seqscans
@@ -1388,6 +1425,7 @@ syslog_ident
 syslog_ident_str
 syslog_sequence_numbers
 syslog_split_messages
+table_recheck_autovac.reuse_stats
 table_states_valid
 tan_45
 tblspc_map_file
@@ -1418,11 +1456,13 @@ trace_recovery_messages
 trace_sort
 track_commit_timestamp
 track_io_timing
+track_wal_io_timing
 transInvalInfo
 tryAdvanceTail
 tuplecid_data
 tupledesc_id_counter
 twophaseExitRegistered
+uncommitted_enums
 unlistenExitRegistered
 unnamed_stmt_psrc
 unowned_relns
@@ -1435,10 +1475,11 @@ userDoption
 vac_context
 vac_strategy
 vacuum.in_vacuum
-vacuum_cleanup_index_scale_factor
 vacuum_defer_cleanup_age
+vacuum_failsafe_age
 vacuum_freeze_min_age
 vacuum_freeze_table_age
+vacuum_multixact_failsafe_age
 vacuum_multixact_freeze_min_age
 vacuum_multixact_freeze_table_age
 values
@@ -1448,7 +1489,7 @@ waitOrders
 waiting
 waiting_for_ping_response
 wake_wal_senders
-wakened
+walStats
 wal_block_size
 wal_compression
 wal_consistency_checking
@@ -1476,6 +1517,7 @@ xactStopTimestamp
 xact_is_sampled
 xact_started
 xdbuf
+xidhash
 xloginsert_cxt
 xlogreader
 xmlbinary

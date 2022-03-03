@@ -3,7 +3,7 @@
  * hio.c
  *	  POSTGRES heap access method input/output code.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -46,6 +46,15 @@ RelationPutHeapTuple(Relation relation,
 	 * token set.
 	 */
 	Assert(!token || HeapTupleHeaderIsSpeculative(tuple->t_data));
+
+	/*
+	 * Do not allow tuples with invalid combinations of hint bits to be placed
+	 * on a page.  This combination is detected as corruption by the
+	 * contrib/amcheck logic, so if you disable this assertion, make
+	 * corresponding changes there.
+	 */
+	Assert(!((tuple->t_data->t_infomask & HEAP_XMAX_COMMITTED) &&
+			 (tuple->t_data->t_infomask & HEAP_XMAX_IS_MULTI)));
 
 	/* Add the tuple to the page */
 	pageHeader = BufferGetPage(buffer);
@@ -312,10 +321,10 @@ RelationAddExtraBlocks(Relation relation, BulkInsertState bistate)
  *	BULKWRITE buffer selection strategy object to the buffer manager.
  *	Passing NULL for bistate selects the default behavior.
  *
- *	We always try to avoid filling existing pages further than the fillfactor.
- *	This is OK since this routine is not consulted when updating a tuple and
- *	keeping it on the same page, which is the scenario fillfactor is meant
- *	to reserve space for.
+ *	We don't fill existing pages further than the fillfactor, except for large
+ *	tuples in nearly-empty pages.  This is OK since this routine is not
+ *	consulted when updating a tuple and keeping it on the same page, which is
+ *	the scenario fillfactor is meant to reserve space for.
  *
  *	ereport(ERROR) is allowed here, so this routine *must* be called
  *	before any (unlogged) changes are made in buffer pool.
@@ -329,8 +338,10 @@ RelationGetBufferForTuple(Relation relation, Size len,
 	bool		use_fsm = !(options & HEAP_INSERT_SKIP_FSM);
 	Buffer		buffer = InvalidBuffer;
 	Page		page;
-	Size		pageFreeSpace = 0,
-				saveFreeSpace = 0;
+	Size		nearlyEmptyFreeSpace,
+				pageFreeSpace = 0,
+				saveFreeSpace = 0,
+				targetFreeSpace = 0;
 	BlockNumber targetBlock,
 				otherBlock;
 	bool		needLock;
@@ -353,6 +364,19 @@ RelationGetBufferForTuple(Relation relation, Size len,
 	saveFreeSpace = RelationGetTargetPageFreeSpace(relation,
 												   HEAP_DEFAULT_FILLFACTOR);
 
+	/*
+	 * Since pages without tuples can still have line pointers, we consider
+	 * pages "empty" when the unavailable space is slight.  This threshold is
+	 * somewhat arbitrary, but it should prevent most unnecessary relation
+	 * extensions while inserting large tuples into low-fillfactor tables.
+	 */
+	nearlyEmptyFreeSpace = MaxHeapTupleSize -
+		(MaxHeapTuplesPerPage / 8 * sizeof(ItemIdData));
+	if (len + saveFreeSpace > nearlyEmptyFreeSpace)
+		targetFreeSpace = Max(len, nearlyEmptyFreeSpace);
+	else
+		targetFreeSpace = len + saveFreeSpace;
+
 	if (otherBuffer != InvalidBuffer)
 		otherBlock = BufferGetBlockNumber(otherBuffer);
 	else
@@ -371,13 +395,7 @@ RelationGetBufferForTuple(Relation relation, Size len,
 	 * When use_fsm is false, we either put the tuple onto the existing target
 	 * page or extend the relation.
 	 */
-	if (len + saveFreeSpace > MaxHeapTupleSize)
-	{
-		/* can't fit, don't bother asking FSM */
-		targetBlock = InvalidBlockNumber;
-		use_fsm = false;
-	}
-	else if (bistate && bistate->current_buf != InvalidBuffer)
+	if (bistate && bistate->current_buf != InvalidBuffer)
 		targetBlock = BufferGetBlockNumber(bistate->current_buf);
 	else
 		targetBlock = RelationGetTargetBlock(relation);
@@ -388,20 +406,20 @@ RelationGetBufferForTuple(Relation relation, Size len,
 		 * We have no cached target page, so ask the FSM for an initial
 		 * target.
 		 */
-		targetBlock = GetPageWithFreeSpace(relation, len + saveFreeSpace);
+		targetBlock = GetPageWithFreeSpace(relation, targetFreeSpace);
+	}
 
-		/*
-		 * If the FSM knows nothing of the rel, try the last page before we
-		 * give up and extend.  This avoids one-tuple-per-page syndrome during
-		 * bootstrapping or in a recently-started system.
-		 */
-		if (targetBlock == InvalidBlockNumber)
-		{
-			BlockNumber nblocks = RelationGetNumberOfBlocks(relation);
+	/*
+	 * If the FSM knows nothing of the rel, try the last page before we give
+	 * up and extend.  This avoids one-tuple-per-page syndrome during
+	 * bootstrapping or in a recently-started system.
+	 */
+	if (targetBlock == InvalidBlockNumber)
+	{
+		BlockNumber nblocks = RelationGetNumberOfBlocks(relation);
 
-			if (nblocks > 0)
-				targetBlock = nblocks - 1;
-		}
+		if (nblocks > 0)
+			targetBlock = nblocks - 1;
 	}
 
 loop:
@@ -426,6 +444,14 @@ loop:
 			buffer = ReadBufferBI(relation, targetBlock, RBM_NORMAL, bistate);
 			if (PageIsAllVisible(BufferGetPage(buffer)))
 				visibilitymap_pin(relation, targetBlock, vmbuffer);
+
+			/*
+			 * If the page is empty, pin vmbuffer to set all_frozen bit later.
+			 */
+			if ((options & HEAP_INSERT_FROZEN) &&
+				(PageGetMaxOffsetNumber(BufferGetPage(buffer)) == 0))
+				visibilitymap_pin(relation, targetBlock, vmbuffer);
+
 			LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
 		}
 		else if (otherBlock == targetBlock)
@@ -504,7 +530,7 @@ loop:
 		}
 
 		pageFreeSpace = PageGetHeapFreeSpace(page);
-		if (len + saveFreeSpace <= pageFreeSpace)
+		if (targetFreeSpace <= pageFreeSpace)
 		{
 			/* use this page as future insert target, too */
 			RelationSetTargetBlock(relation, targetBlock);
@@ -537,7 +563,7 @@ loop:
 		targetBlock = RecordAndGetPageWithFreeSpace(relation,
 													targetBlock,
 													pageFreeSpace,
-													len + saveFreeSpace);
+													targetFreeSpace);
 	}
 
 	/*
@@ -569,7 +595,7 @@ loop:
 			 * Check if some other backend has extended a block for us while
 			 * we were waiting on the lock.
 			 */
-			targetBlock = GetPageWithFreeSpace(relation, len + saveFreeSpace);
+			targetBlock = GetPageWithFreeSpace(relation, targetFreeSpace);
 
 			/*
 			 * If some other waiter has already extended the relation, we
@@ -611,6 +637,15 @@ loop:
 
 	PageInit(page, BufferGetPageSize(buffer), 0);
 	MarkBufferDirty(buffer);
+
+	/*
+	 * The page is empty, pin vmbuffer to set all_frozen bit.
+	 */
+	if (options & HEAP_INSERT_FROZEN)
+	{
+		Assert(PageGetMaxOffsetNumber(BufferGetPage(buffer)) == 0);
+		visibilitymap_pin(relation, BufferGetBlockNumber(buffer), vmbuffer);
+	}
 
 	/*
 	 * Release the file-extension lock; it's now OK for someone else to extend

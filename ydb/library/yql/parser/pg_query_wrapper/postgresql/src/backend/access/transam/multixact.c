@@ -59,7 +59,7 @@
  * counter does not fall within the wraparound horizon considering the global
  * minimum value.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/multixact.c
@@ -734,6 +734,25 @@ ReadNextMultiXactId(void)
 
 	return mxid;
 }
+
+/*
+ * ReadMultiXactIdRange
+ *		Get the range of IDs that may still be referenced by a relation.
+ */
+void
+ReadMultiXactIdRange(MultiXactId *oldest, MultiXactId *next)
+{
+	LWLockAcquire(MultiXactGenLock, LW_SHARED);
+	*oldest = MultiXactState->oldestMultiXactId;
+	*next = MultiXactState->nextMXact;
+	LWLockRelease(MultiXactGenLock);
+
+	if (*oldest < FirstMultiXactId)
+		*oldest = FirstMultiXactId;
+	if (*next < FirstMultiXactId)
+		*next = FirstMultiXactId;
+}
+
 
 /*
  * MultiXactIdCreateFromMembers
@@ -1745,7 +1764,7 @@ PostPrepare_MultiXact(TransactionId xid)
 	OldestVisibleMXactId[MyBackendId] = InvalidMultiXactId;
 
 	/*
-	 * Discard the local MultiXactId cache like in AtEOX_MultiXact
+	 * Discard the local MultiXactId cache like in AtEOXact_MultiXact.
 	 */
 	MXactContext = NULL;
 	dlist_init(&MXactCache);
@@ -1775,7 +1794,7 @@ multixact_twophase_recover(TransactionId xid, uint16 info,
 
 /*
  * multixact_twophase_postcommit
- *		Similar to AtEOX_MultiXact but for COMMIT PREPARED
+ *		Similar to AtEOXact_MultiXact but for COMMIT PREPARED
  */
 void
 multixact_twophase_postcommit(TransactionId xid, uint16 info,
@@ -1834,12 +1853,14 @@ MultiXactShmemInit(void)
 	SimpleLruInit(MultiXactOffsetCtl,
 				  "MultiXactOffset", NUM_MULTIXACTOFFSET_BUFFERS, 0,
 				  MultiXactOffsetSLRULock, "pg_multixact/offsets",
-				  LWTRANCHE_MULTIXACTOFFSET_BUFFER);
+				  LWTRANCHE_MULTIXACTOFFSET_BUFFER,
+				  SYNC_HANDLER_MULTIXACT_OFFSET);
 	SlruPagePrecedesUnitTests(MultiXactOffsetCtl, MULTIXACT_OFFSETS_PER_PAGE);
 	SimpleLruInit(MultiXactMemberCtl,
 				  "MultiXactMember", NUM_MULTIXACTMEMBER_BUFFERS, 0,
 				  MultiXactMemberSLRULock, "pg_multixact/members",
-				  LWTRANCHE_MULTIXACTMEMBER_BUFFER);
+				  LWTRANCHE_MULTIXACTMEMBER_BUFFER,
+				  SYNC_HANDLER_MULTIXACT_MEMBER);
 	/* doesn't call SimpleLruTruncate() or meet criteria for unit tests */
 
 	/* Initialize our shared state struct */
@@ -2106,19 +2127,6 @@ TrimMultiXact(void)
 }
 
 /*
- * This must be called ONCE during postmaster or standalone-backend shutdown
- */
-void
-ShutdownMultiXact(void)
-{
-	/* Flush dirty MultiXact pages to disk */
-	TRACE_POSTGRESQL_MULTIXACT_CHECKPOINT_START(false);
-	SimpleLruFlush(MultiXactOffsetCtl, false);
-	SimpleLruFlush(MultiXactMemberCtl, false);
-	TRACE_POSTGRESQL_MULTIXACT_CHECKPOINT_DONE(false);
-}
-
-/*
  * Get the MultiXact data to save in a checkpoint record
  */
 void
@@ -2148,9 +2156,13 @@ CheckPointMultiXact(void)
 {
 	TRACE_POSTGRESQL_MULTIXACT_CHECKPOINT_START(true);
 
-	/* Flush dirty MultiXact pages to disk */
-	SimpleLruFlush(MultiXactOffsetCtl, true);
-	SimpleLruFlush(MultiXactMemberCtl, true);
+	/*
+	 * Write dirty MultiXact pages to disk.  This may result in sync requests
+	 * queued for later handling by ProcessSyncRequests(), as part of the
+	 * checkpoint.
+	 */
+	SimpleLruWriteAll(MultiXactOffsetCtl, true);
+	SimpleLruWriteAll(MultiXactMemberCtl, true);
 
 	TRACE_POSTGRESQL_MULTIXACT_CHECKPOINT_DONE(true);
 }
@@ -2222,28 +2234,24 @@ SetMultiXactIdLimit(MultiXactId oldest_datminmxid, Oid oldest_datoid,
 		multiWrapLimit += FirstMultiXactId;
 
 	/*
-	 * We'll refuse to continue assigning MultiXactIds once we get within 100
-	 * multi of data loss.
-	 *
-	 * Note: This differs from the magic number used in
-	 * SetTransactionIdLimit() since vacuum itself will never generate new
-	 * multis.  XXX actually it does, if it needs to freeze old multis.
+	 * We'll refuse to continue assigning MultiXactIds once we get within 3M
+	 * multi of data loss.  See SetTransactionIdLimit.
 	 */
-	multiStopLimit = multiWrapLimit - 100;
+	multiStopLimit = multiWrapLimit - 3000000;
 	if (multiStopLimit < FirstMultiXactId)
 		multiStopLimit -= FirstMultiXactId;
 
 	/*
-	 * We'll start complaining loudly when we get within 10M multis of the
-	 * stop point.   This is kind of arbitrary, but if you let your gas gauge
-	 * get down to 1% of full, would you be looking for the next gas station?
-	 * We need to be fairly liberal about this number because there are lots
-	 * of scenarios where most transactions are done by automatic clients that
-	 * won't pay attention to warnings. (No, we're not gonna make this
+	 * We'll start complaining loudly when we get within 40M multis of data
+	 * loss.  This is kind of arbitrary, but if you let your gas gauge get
+	 * down to 2% of full, would you be looking for the next gas station?  We
+	 * need to be fairly liberal about this number because there are lots of
+	 * scenarios where most transactions are done by automatic clients that
+	 * won't pay attention to warnings.  (No, we're not gonna make this
 	 * configurable.  If you know enough to configure it, you know enough to
 	 * not get in this kind of trouble in the first place.)
 	 */
-	multiWarnLimit = multiStopLimit - 10000000;
+	multiWarnLimit = multiWrapLimit - 40000000;
 	if (multiWarnLimit < FirstMultiXactId)
 		multiWarnLimit -= FirstMultiXactId;
 
@@ -2272,8 +2280,8 @@ SetMultiXactIdLimit(MultiXactId oldest_datminmxid, Oid oldest_datoid,
 
 	/* Log the info */
 	ereport(DEBUG1,
-			(errmsg("MultiXactId wrap limit is %u, limited by database with OID %u",
-					multiWrapLimit, oldest_datoid)));
+			(errmsg_internal("MultiXactId wrap limit is %u, limited by database with OID %u",
+							 multiWrapLimit, oldest_datoid)));
 
 	/*
 	 * Computing the actual limits is only possible once the data directory is
@@ -2606,8 +2614,8 @@ SetOffsetVacuumLimit(bool is_startup)
 
 		if (oldestOffsetKnown)
 			ereport(DEBUG1,
-					(errmsg("oldest MultiXactId member is at offset %u",
-							oldestOffset)));
+					(errmsg_internal("oldest MultiXactId member is at offset %u",
+									 oldestOffset)));
 		else
 			ereport(LOG,
 					(errmsg("MultiXact member wraparound protections are disabled because oldest checkpointed MultiXact %u does not exist on disk",
@@ -2635,8 +2643,8 @@ SetOffsetVacuumLimit(bool is_startup)
 					(errmsg("MultiXact member wraparound protections are now enabled")));
 
 		ereport(DEBUG1,
-				(errmsg("MultiXact member stop limit is now %u based on MultiXact %u",
-						offsetStopLimit, oldestMultiXactId)));
+				(errmsg_internal("MultiXact member stop limit is now %u based on MultiXact %u",
+								 offsetStopLimit, oldestMultiXactId)));
 	}
 	else if (prevOldestOffsetKnown)
 	{
@@ -2737,14 +2745,10 @@ find_multixact_start(MultiXactId multi, MultiXactOffset *result)
 	entryno = MultiXactIdToOffsetEntry(multi);
 
 	/*
-	 * Flush out dirty data, so PhysicalPageExists can work correctly.
-	 * SimpleLruFlush() is a pretty big hammer for that.  Alternatively we
-	 * could add an in-memory version of page exists, but find_multixact_start
-	 * is called infrequently, and it doesn't seem bad to flush buffers to
-	 * disk before truncation.
+	 * Write out dirty data, so PhysicalPageExists can work correctly.
 	 */
-	SimpleLruFlush(MultiXactOffsetCtl, true);
-	SimpleLruFlush(MultiXactMemberCtl, true);
+	SimpleLruWriteAll(MultiXactOffsetCtl, true);
+	SimpleLruWriteAll(MultiXactMemberCtl, true);
 
 	if (!SimpleLruDoesPhysicalPageExist(MultiXactOffsetCtl, pageno))
 		return false;
@@ -3282,9 +3286,9 @@ multixact_redo(XLogReaderState *record)
 								  xlrec->moff + xlrec->nmembers);
 
 		/*
-		 * Make sure nextFullXid is beyond any XID mentioned in the record.
-		 * This should be unnecessary, since any XID found here ought to have
-		 * other evidence in the XLOG, but let's be safe.
+		 * Make sure nextXid is beyond any XID mentioned in the record. This
+		 * should be unnecessary, since any XID found here ought to have other
+		 * evidence in the XLOG, but let's be safe.
 		 */
 		max_xid = XLogRecGetXid(record);
 		for (i = 0; i < xlrec->nmembers; i++)
@@ -3348,7 +3352,7 @@ pg_get_multixact_members(PG_FUNCTION_ARGS)
 		int			nmembers;
 		int			iter;
 	} mxact;
-	MultiXactId mxid = PG_GETARG_UINT32(0);
+	MultiXactId mxid = PG_GETARG_TRANSACTIONID(0);
 	mxact	   *multi;
 	FuncCallContext *funccxt;
 
@@ -3402,4 +3406,22 @@ pg_get_multixact_members(PG_FUNCTION_ARGS)
 	}
 
 	SRF_RETURN_DONE(funccxt);
+}
+
+/*
+ * Entrypoint for sync.c to sync offsets files.
+ */
+int
+multixactoffsetssyncfiletag(const FileTag *ftag, char *path)
+{
+	return SlruSyncFileTag(MultiXactOffsetCtl, ftag, path);
+}
+
+/*
+ * Entrypoint for sync.c to sync members files.
+ */
+int
+multixactmemberssyncfiletag(const FileTag *ftag, char *path)
+{
+	return SlruSyncFileTag(MultiXactMemberCtl, ftag, path);
 }

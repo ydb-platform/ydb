@@ -3,7 +3,7 @@
  * pg_depend.c
  *	  routines to support manipulation of the pg_depend relation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -59,10 +59,11 @@ recordMultipleDependencies(const ObjectAddress *depender,
 {
 	Relation	dependDesc;
 	CatalogIndexState indstate;
-	HeapTuple	tup;
-	int			i;
-	bool		nulls[Natts_pg_depend];
-	Datum		values[Natts_pg_depend];
+	TupleTableSlot **slot;
+	int			i,
+				max_slots,
+				slot_init_count,
+				slot_stored_count;
 
 	if (nreferenced <= 0)
 		return;					/* nothing to do */
@@ -76,11 +77,21 @@ recordMultipleDependencies(const ObjectAddress *depender,
 
 	dependDesc = table_open(DependRelationId, RowExclusiveLock);
 
+	/*
+	 * Allocate the slots to use, but delay costly initialization until we
+	 * know that they will be used.
+	 */
+	max_slots = Min(nreferenced,
+					MAX_CATALOG_MULTI_INSERT_BYTES / sizeof(FormData_pg_depend));
+	slot = palloc(sizeof(TupleTableSlot *) * max_slots);
+
 	/* Don't open indexes unless we need to make an update */
 	indstate = NULL;
 
-	memset(nulls, false, sizeof(nulls));
-
+	/* number of slots currently storing tuples */
+	slot_stored_count = 0;
+	/* number of slots currently initialized */
+	slot_init_count = 0;
 	for (i = 0; i < nreferenced; i++, referenced++)
 	{
 		/*
@@ -88,38 +99,69 @@ recordMultipleDependencies(const ObjectAddress *depender,
 		 * need to record dependencies on it.  This saves lots of space in
 		 * pg_depend, so it's worth the time taken to check.
 		 */
-		if (!isObjectPinned(referenced, dependDesc))
+		if (isObjectPinned(referenced, dependDesc))
+			continue;
+
+		if (slot_init_count < max_slots)
 		{
-			/*
-			 * Record the Dependency.  Note we don't bother to check for
-			 * duplicate dependencies; there's no harm in them.
-			 */
-			values[Anum_pg_depend_classid - 1] = ObjectIdGetDatum(depender->classId);
-			values[Anum_pg_depend_objid - 1] = ObjectIdGetDatum(depender->objectId);
-			values[Anum_pg_depend_objsubid - 1] = Int32GetDatum(depender->objectSubId);
+			slot[slot_stored_count] = MakeSingleTupleTableSlot(RelationGetDescr(dependDesc),
+															   &TTSOpsHeapTuple);
+			slot_init_count++;
+		}
 
-			values[Anum_pg_depend_refclassid - 1] = ObjectIdGetDatum(referenced->classId);
-			values[Anum_pg_depend_refobjid - 1] = ObjectIdGetDatum(referenced->objectId);
-			values[Anum_pg_depend_refobjsubid - 1] = Int32GetDatum(referenced->objectSubId);
+		ExecClearTuple(slot[slot_stored_count]);
 
-			values[Anum_pg_depend_deptype - 1] = CharGetDatum((char) behavior);
+		/*
+		 * Record the dependency.  Note we don't bother to check for duplicate
+		 * dependencies; there's no harm in them.
+		 */
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_refclassid - 1] = ObjectIdGetDatum(referenced->classId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_refobjid - 1] = ObjectIdGetDatum(referenced->objectId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_refobjsubid - 1] = Int32GetDatum(referenced->objectSubId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_deptype - 1] = CharGetDatum((char) behavior);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_classid - 1] = ObjectIdGetDatum(depender->classId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_objid - 1] = ObjectIdGetDatum(depender->objectId);
+		slot[slot_stored_count]->tts_values[Anum_pg_depend_objsubid - 1] = Int32GetDatum(depender->objectSubId);
 
-			tup = heap_form_tuple(dependDesc->rd_att, values, nulls);
+		memset(slot[slot_stored_count]->tts_isnull, false,
+			   slot[slot_stored_count]->tts_tupleDescriptor->natts * sizeof(bool));
 
+		ExecStoreVirtualTuple(slot[slot_stored_count]);
+		slot_stored_count++;
+
+		/* If slots are full, insert a batch of tuples */
+		if (slot_stored_count == max_slots)
+		{
 			/* fetch index info only when we know we need it */
 			if (indstate == NULL)
 				indstate = CatalogOpenIndexes(dependDesc);
 
-			CatalogTupleInsertWithInfo(dependDesc, tup, indstate);
-
-			heap_freetuple(tup);
+			CatalogTuplesMultiInsertWithInfo(dependDesc, slot, slot_stored_count,
+											 indstate);
+			slot_stored_count = 0;
 		}
+	}
+
+	/* Insert any tuples left in the buffer */
+	if (slot_stored_count > 0)
+	{
+		/* fetch index info only when we know we need it */
+		if (indstate == NULL)
+			indstate = CatalogOpenIndexes(dependDesc);
+
+		CatalogTuplesMultiInsertWithInfo(dependDesc, slot, slot_stored_count,
+										 indstate);
 	}
 
 	if (indstate != NULL)
 		CatalogCloseIndexes(indstate);
 
 	table_close(dependDesc, RowExclusiveLock);
+
+	/* Drop only the number of slots used */
+	for (i = 0; i < slot_init_count; i++)
+		ExecDropSingleTupleTableSlot(slot[i]);
+	pfree(slot);
 }
 
 /*
@@ -134,7 +176,7 @@ recordMultipleDependencies(const ObjectAddress *depender,
  * Passing false is a guarantee that the object is newly created, and so
  * could not already be a member of any extension.
  *
- * Note: isReplace = true is typically used when updating a object in
+ * Note: isReplace = true is typically used when updating an object in
  * CREATE OR REPLACE and similar commands.  The net effect is that if an
  * extension script uses such a command on a pre-existing free-standing
  * object, the object will be absorbed into the extension.  If the object
@@ -167,7 +209,7 @@ recordDependencyOnCurrentExtension(const ObjectAddress *object,
 				ereport(ERROR,
 						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						 errmsg("%s is already a member of extension \"%s\"",
-								getObjectDescription(object),
+								getObjectDescription(object, false),
 								get_extension_name(oldext))));
 			}
 		}
@@ -485,7 +527,7 @@ changeDependenciesOf(Oid classId, Oid oldObjectId,
 
 	while (HeapTupleIsValid((tup = systable_getnext(scan))))
 	{
-		Form_pg_depend depform = (Form_pg_depend) GETSTRUCT(tup);
+		Form_pg_depend depform;
 
 		/* make a modifiable copy */
 		tup = heap_copytuple(tup);
@@ -543,7 +585,7 @@ changeDependenciesOn(Oid refClassId, Oid oldRefObjectId,
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot remove dependency on %s because it is a system object",
-						getObjectDescription(&objAddr))));
+						getObjectDescription(&objAddr, false))));
 
 	/*
 	 * We can handle adding a dependency on something pinned, though, since
@@ -568,12 +610,12 @@ changeDependenciesOn(Oid refClassId, Oid oldRefObjectId,
 
 	while (HeapTupleIsValid((tup = systable_getnext(scan))))
 	{
-		Form_pg_depend depform = (Form_pg_depend) GETSTRUCT(tup);
-
 		if (newIsPinned)
 			CatalogTupleDelete(depRel, &tup->t_self);
 		else
 		{
+			Form_pg_depend depform;
+
 			/* make a modifiable copy */
 			tup = heap_copytuple(tup);
 			depform = (Form_pg_depend) GETSTRUCT(tup);
@@ -891,75 +933,6 @@ getIdentitySequence(Oid relid, AttrNumber attnum, bool missing_ok)
 	}
 
 	return linitial_oid(seqlist);
-}
-
-/*
- * get_constraint_index
- *		Given the OID of a unique, primary-key, or exclusion constraint,
- *		return the OID of the underlying index.
- *
- * Return InvalidOid if the index couldn't be found; this suggests the
- * given OID is bogus, but we leave it to caller to decide what to do.
- */
-Oid
-get_constraint_index(Oid constraintId)
-{
-	Oid			indexId = InvalidOid;
-	Relation	depRel;
-	ScanKeyData key[3];
-	SysScanDesc scan;
-	HeapTuple	tup;
-
-	/* Search the dependency table for the dependent index */
-	depRel = table_open(DependRelationId, AccessShareLock);
-
-	ScanKeyInit(&key[0],
-				Anum_pg_depend_refclassid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(ConstraintRelationId));
-	ScanKeyInit(&key[1],
-				Anum_pg_depend_refobjid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(constraintId));
-	ScanKeyInit(&key[2],
-				Anum_pg_depend_refobjsubid,
-				BTEqualStrategyNumber, F_INT4EQ,
-				Int32GetDatum(0));
-
-	scan = systable_beginscan(depRel, DependReferenceIndexId, true,
-							  NULL, 3, key);
-
-	while (HeapTupleIsValid(tup = systable_getnext(scan)))
-	{
-		Form_pg_depend deprec = (Form_pg_depend) GETSTRUCT(tup);
-
-		/*
-		 * We assume any internal dependency of an index on the constraint
-		 * must be what we are looking for.
-		 */
-		if (deprec->classid == RelationRelationId &&
-			deprec->objsubid == 0 &&
-			deprec->deptype == DEPENDENCY_INTERNAL)
-		{
-			char		relkind = get_rel_relkind(deprec->objid);
-
-			/*
-			 * This is pure paranoia; there shouldn't be any other relkinds
-			 * dependent on a constraint.
-			 */
-			if (relkind != RELKIND_INDEX &&
-				relkind != RELKIND_PARTITIONED_INDEX)
-				continue;
-
-			indexId = deprec->objid;
-			break;
-		}
-	}
-
-	systable_endscan(scan);
-	table_close(depRel, AccessShareLock);
-
-	return indexId;
 }
 
 /*

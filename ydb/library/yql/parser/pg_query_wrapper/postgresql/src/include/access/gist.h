@@ -6,7 +6,7 @@
  *	  changes should be made with care.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/gist.h
@@ -37,7 +37,8 @@
 #define GIST_DISTANCE_PROC				8
 #define GIST_FETCH_PROC					9
 #define GIST_OPTIONS_PROC				10
-#define GISTNProcs						10
+#define GIST_SORTSUPPORT_PROC			11
+#define GISTNProcs					11
 
 /*
  * Page opaque data in a GiST index page.
@@ -50,12 +51,20 @@
 #define F_HAS_GARBAGE		(1 << 4)	/* some tuples on the page are dead,
 										 * but not deleted yet */
 
+/*
+ * NSN (node sequence number) is a special-purpose LSN which is stored on each
+ * index page in GISTPageOpaqueData and updated only during page splits.  By
+ * recording the parent's LSN in GISTSearchItem.parentlsn, it is possible to
+ * detect concurrent child page splits by checking if parentlsn < child's NSN,
+ * and handle them properly.  The child page's LSN is insufficient for this
+ * purpose since it is updated for every page change.
+ */
 typedef XLogRecPtr GistNSN;
 
 /*
- * A bogus LSN / NSN value used during index build. Must be smaller than any
- * real or fake unlogged LSN, so that after an index build finishes, all the
- * splits are considered completed.
+ * A fake LSN / NSN value used during index builds. Must be smaller than any
+ * real or fake (unlogged) LSN generated after the index build completes so
+ * that all splits are considered complete.
  */
 #define GistBuildLSN	((XLogRecPtr) 1)
 
@@ -79,7 +88,7 @@ typedef GISTPageOpaqueData *GISTPageOpaque;
  * Maximum possible sizes for GiST index tuple and index key.  Calculation is
  * based on assumption that GiST page should fit at least 4 tuples.  In theory,
  * GiST index can be functional when page can fit 3 tuples.  But that seems
- * rather inefficent, so we use a bit conservative estimate.
+ * rather inefficient, so we use a bit conservative estimate.
  *
  * The maximum size of index key is true for unicolumn index.  Therefore, this
  * estimation should be used to figure out which maximum size of GiST index key

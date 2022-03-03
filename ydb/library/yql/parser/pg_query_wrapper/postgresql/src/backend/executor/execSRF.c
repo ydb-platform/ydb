@@ -7,7 +7,7 @@
  * common code for calling set-returning functions according to the
  * ReturnSetInfo API.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -353,11 +353,21 @@ ExecMakeTableFunctionResult(SetExprState *setexpr,
 			 */
 			if (rsinfo.isDone != ExprMultipleResult)
 				break;
+
+			/*
+			 * Check that set-returning functions were properly declared.
+			 * (Note: for historical reasons, we don't complain if a non-SRF
+			 * returns ExprEndResult; that's treated as returning NULL.)
+			 */
+			if (!returnsSet)
+				ereport(ERROR,
+						(errcode(ERRCODE_E_R_I_E_SRF_PROTOCOL_VIOLATED),
+						 errmsg("table-function protocol for value-per-call mode was not followed")));
 		}
 		else if (rsinfo.returnMode == SFRM_Materialize)
 		{
 			/* check we're on the same page as the function author */
-			if (!first_time || rsinfo.isDone != ExprSingleResult)
+			if (!first_time || rsinfo.isDone != ExprSingleResult || !returnsSet)
 				ereport(ERROR,
 						(errcode(ERRCODE_E_R_I_E_SRF_PROTOCOL_VIOLATED),
 						 errmsg("table-function protocol for materialize mode was not followed")));

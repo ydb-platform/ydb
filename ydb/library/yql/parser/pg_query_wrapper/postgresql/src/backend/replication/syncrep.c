@@ -63,7 +63,7 @@
  * the standbys which are considered as synchronous at that moment
  * will release waiters from the queue.
  *
- * Portions Copyright (c) 2010-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/syncrep.c
@@ -158,17 +158,28 @@ SyncRepWaitForLSN(XLogRecPtr lsn, bool commit)
 	 */
 	Assert(InterruptHoldoffCount > 0);
 
+	/*
+	 * Fast exit if user has not requested sync replication, or there are no
+	 * sync replication standby names defined.
+	 *
+	 * Since this routine gets called every commit time, it's important to
+	 * exit quickly if sync replication is not requested. So we check
+	 * WalSndCtl->sync_standbys_defined flag without the lock and exit
+	 * immediately if it's false. If it's true, we need to check it again
+	 * later while holding the lock, to check the flag and operate the sync
+	 * rep queue atomically. This is necessary to avoid the race condition
+	 * described in SyncRepUpdateSyncStandbysDefined(). On the other hand, if
+	 * it's false, the lock is not necessary because we don't touch the queue.
+	 */
+	if (!SyncRepRequested() ||
+		!((volatile WalSndCtlData *) WalSndCtl)->sync_standbys_defined)
+		return;
+
 	/* Cap the level for anything other than commit to remote flush only. */
 	if (commit)
 		mode = SyncRepWaitMode;
 	else
 		mode = Min(SyncRepWaitMode, SYNC_REP_WAIT_FLUSH);
-
-	/*
-	 * Fast exit if user has not requested sync replication.
-	 */
-	if (!SyncRepRequested())
-		return;
 
 	Assert(SHMQueueIsDetached(&(MyProc->syncRepLinks)));
 	Assert(WalSndCtl != NULL);
@@ -210,7 +221,7 @@ SyncRepWaitForLSN(XLogRecPtr lsn, bool commit)
 		new_status = (char *) palloc(len + 32 + 1);
 		memcpy(new_status, old_status, len);
 		sprintf(new_status + len, " waiting for %X/%X",
-				(uint32) (lsn >> 32), (uint32) lsn);
+				LSN_FORMAT_ARGS(lsn));
 		set_ps_display(new_status);
 		new_status[len] = '\0'; /* truncate off " waiting ..." */
 	}
@@ -413,8 +424,8 @@ SyncRepInitConfig(void)
 		SpinLockRelease(&MyWalSnd->mutex);
 
 		ereport(DEBUG1,
-				(errmsg("standby \"%s\" now has synchronous standby priority %u",
-						application_name, priority)));
+				(errmsg_internal("standby \"%s\" now has synchronous standby priority %u",
+								 application_name, priority)));
 	}
 }
 
@@ -522,9 +533,9 @@ SyncRepReleaseWaiters(void)
 	LWLockRelease(SyncRepLock);
 
 	elog(DEBUG3, "released %d procs up to write %X/%X, %d procs up to flush %X/%X, %d procs up to apply %X/%X",
-		 numwrite, (uint32) (writePtr >> 32), (uint32) writePtr,
-		 numflush, (uint32) (flushPtr >> 32), (uint32) flushPtr,
-		 numapply, (uint32) (applyPtr >> 32), (uint32) applyPtr);
+		 numwrite, LSN_FORMAT_ARGS(writePtr),
+		 numflush, LSN_FORMAT_ARGS(flushPtr),
+		 numapply, LSN_FORMAT_ARGS(applyPtr));
 }
 
 /*

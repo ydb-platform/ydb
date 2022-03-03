@@ -5,7 +5,7 @@
  *	  configuration settings (pg_db_role_setting)
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_db_role_setting.h
@@ -33,8 +33,11 @@
  */
 CATALOG(pg_db_role_setting,2964,DbRoleSettingRelationId) BKI_SHARED_RELATION
 {
-	Oid			setdatabase;	/* database */
-	Oid			setrole;		/* role */
+	/* database, or 0 for a role-specific setting */
+	Oid			setdatabase BKI_LOOKUP_OPT(pg_database);
+
+	/* role, or 0 for a database-specific setting */
+	Oid			setrole BKI_LOOKUP_OPT(pg_authid);
 
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 	text		setconfig[1];	/* GUC settings to apply at login */
@@ -42,6 +45,13 @@ CATALOG(pg_db_role_setting,2964,DbRoleSettingRelationId) BKI_SHARED_RELATION
 } FormData_pg_db_role_setting;
 
 typedef FormData_pg_db_role_setting * Form_pg_db_role_setting;
+
+DECLARE_TOAST(pg_db_role_setting, 2966, 2967);
+#define PgDbRoleSettingToastTable 2966
+#define PgDbRoleSettingToastIndex 2967
+
+DECLARE_UNIQUE_INDEX_PKEY(pg_db_role_setting_databaseid_rol_index, 2965, on pg_db_role_setting using btree(setdatabase oid_ops, setrole oid_ops));
+#define DbRoleSettingDatidRolidIndexId	2965
 
 /*
  * prototypes for functions in pg_db_role_setting.h

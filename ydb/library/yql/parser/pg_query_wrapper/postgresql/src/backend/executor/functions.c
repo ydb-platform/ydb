@@ -3,7 +3,7 @@
  * functions.c
  *	  Execution of SQL-language functions
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -26,6 +26,7 @@
 #include "parser/parse_coerce.h"
 #include "parser/parse_collate.h"
 #include "parser/parse_func.h"
+#include "rewrite/rewriteHandler.h"
 #include "storage/proc.h"
 #include "tcop/utility.h"
 #include "utils/builtins.h"
@@ -127,21 +128,6 @@ typedef struct
 } SQLFunctionCache;
 
 typedef SQLFunctionCache *SQLFunctionCachePtr;
-
-/*
- * Data structure needed by the parser callback hooks to resolve parameter
- * references during parsing of a SQL function's body.  This is separate from
- * SQLFunctionCache since we sometimes do parsing separately from execution.
- */
-typedef struct SQLFunctionParseInfo
-{
-	char	   *fname;			/* function's name */
-	int			nargs;			/* number of input arguments */
-	Oid		   *argtypes;		/* resolved types of input arguments */
-	char	  **argnames;		/* names of input arguments; NULL if none */
-	/* Note that argnames[i] can be NULL, if some args are unnamed */
-	Oid			collation;		/* function's input collation, if known */
-}			SQLFunctionParseInfo;
 
 
 /* non-export function prototypes */
@@ -525,13 +511,13 @@ init_execution_state(List *queryTree_list,
 					((CopyStmt *) stmt->utilityStmt)->filename == NULL)
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("cannot COPY to/from client in a SQL function")));
+							 errmsg("cannot COPY to/from client in an SQL function")));
 
 				if (IsA(stmt->utilityStmt, TransactionStmt))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					/* translator: %s is a SQL statement name */
-							 errmsg("%s is not allowed in a SQL function",
+							 errmsg("%s is not allowed in an SQL function",
 									CreateCommandName(stmt->utilityStmt))));
 			}
 
@@ -606,7 +592,6 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK)
 	HeapTuple	procedureTuple;
 	Form_pg_proc procedureStruct;
 	SQLFunctionCachePtr fcache;
-	List	   *raw_parsetree_list;
 	List	   *queryTree_list;
 	List	   *resulttlist;
 	ListCell   *lc;
@@ -685,6 +670,12 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK)
 		elog(ERROR, "null prosrc for function %u", foid);
 	fcache->src = TextDatumGetCString(tmp);
 
+	/* If we have prosqlbody, pay attention to that not prosrc. */
+	tmp = SysCacheGetAttr(PROCOID,
+						  procedureTuple,
+						  Anum_pg_proc_prosqlbody,
+						  &isNull);
+
 	/*
 	 * Parse and rewrite the queries in the function text.  Use sublists to
 	 * keep track of the original query boundaries.
@@ -694,20 +685,46 @@ init_sql_fcache(FunctionCallInfo fcinfo, Oid collation, bool lazyEvalOK)
 	 * but we'll not worry about it until the module is rewritten to use
 	 * plancache.c.
 	 */
-	raw_parsetree_list = pg_parse_query(fcache->src);
-
 	queryTree_list = NIL;
-	foreach(lc, raw_parsetree_list)
+	if (!isNull)
 	{
-		RawStmt    *parsetree = lfirst_node(RawStmt, lc);
-		List	   *queryTree_sublist;
+		Node	   *n;
+		List	   *stored_query_list;
 
-		queryTree_sublist = pg_analyze_and_rewrite_params(parsetree,
-														  fcache->src,
-														  (ParserSetupHook) sql_fn_parser_setup,
-														  fcache->pinfo,
-														  NULL);
-		queryTree_list = lappend(queryTree_list, queryTree_sublist);
+		n = stringToNode(TextDatumGetCString(tmp));
+		if (IsA(n, List))
+			stored_query_list = linitial_node(List, castNode(List, n));
+		else
+			stored_query_list = list_make1(n);
+
+		foreach(lc, stored_query_list)
+		{
+			Query	   *parsetree = lfirst_node(Query, lc);
+			List	   *queryTree_sublist;
+
+			AcquireRewriteLocks(parsetree, true, false);
+			queryTree_sublist = pg_rewrite_query(parsetree);
+			queryTree_list = lappend(queryTree_list, queryTree_sublist);
+		}
+	}
+	else
+	{
+		List	   *raw_parsetree_list;
+
+		raw_parsetree_list = pg_parse_query(fcache->src);
+
+		foreach(lc, raw_parsetree_list)
+		{
+			RawStmt    *parsetree = lfirst_node(RawStmt, lc);
+			List	   *queryTree_sublist;
+
+			queryTree_sublist = pg_analyze_and_rewrite_params(parsetree,
+															  fcache->src,
+															  (ParserSetupHook) sql_fn_parser_setup,
+															  fcache->pinfo,
+															  NULL);
+			queryTree_list = lappend(queryTree_list, queryTree_sublist);
+		}
 	}
 
 	/*
@@ -869,6 +886,7 @@ postquel_getnext(execution_state *es, SQLFunctionCachePtr fcache)
 	{
 		ProcessUtility(es->qd->plannedstmt,
 					   fcache->src,
+					   false,
 					   PROCESS_UTILITY_QUERY,
 					   es->qd->params,
 					   es->qd->queryEnv,
@@ -1518,7 +1536,7 @@ check_sql_fn_statements(List *queryTreeLists)
 			Query	   *query = lfirst_node(Query, lc2);
 
 			/*
-			 * Disallow procedures with output arguments.  The current
+			 * Disallow calling procedures with output arguments.  The current
 			 * implementation would just throw the output values away, unless
 			 * the statement is the last one.  Per SQL standard, we should
 			 * assign the output values by name.  By disallowing this here, we
@@ -1527,31 +1545,12 @@ check_sql_fn_statements(List *queryTreeLists)
 			if (query->commandType == CMD_UTILITY &&
 				IsA(query->utilityStmt, CallStmt))
 			{
-				CallStmt   *stmt = castNode(CallStmt, query->utilityStmt);
-				HeapTuple	tuple;
-				int			numargs;
-				Oid		   *argtypes;
-				char	  **argnames;
-				char	   *argmodes;
-				int			i;
+				CallStmt   *stmt = (CallStmt *) query->utilityStmt;
 
-				tuple = SearchSysCache1(PROCOID,
-										ObjectIdGetDatum(stmt->funcexpr->funcid));
-				if (!HeapTupleIsValid(tuple))
-					elog(ERROR, "cache lookup failed for function %u",
-						 stmt->funcexpr->funcid);
-				numargs = get_func_arg_info(tuple,
-											&argtypes, &argnames, &argmodes);
-				ReleaseSysCache(tuple);
-
-				for (i = 0; i < numargs; i++)
-				{
-					if (argmodes && (argmodes[i] == PROARGMODE_INOUT ||
-									 argmodes[i] == PROARGMODE_OUT))
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("calling procedures with output arguments is not supported in SQL functions")));
-				}
+				if (stmt->outargs != NIL)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("calling procedures with output arguments is not supported in SQL functions")));
 			}
 		}
 	}
@@ -1710,7 +1709,8 @@ check_sql_fn_retval(List *queryTreeLists,
 	if (fn_typtype == TYPTYPE_BASE ||
 		fn_typtype == TYPTYPE_DOMAIN ||
 		fn_typtype == TYPTYPE_ENUM ||
-		fn_typtype == TYPTYPE_RANGE)
+		fn_typtype == TYPTYPE_RANGE ||
+		fn_typtype == TYPTYPE_MULTIRANGE)
 	{
 		/*
 		 * For scalar-type returns, the target list must have exactly one

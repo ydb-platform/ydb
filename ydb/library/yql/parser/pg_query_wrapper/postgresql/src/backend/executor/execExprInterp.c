@@ -46,7 +46,7 @@
  * exported rather than being "static" in this file.)
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -177,6 +177,51 @@ static pg_attribute_always_inline void ExecAggPlainTransByRef(AggState *aggstate
 															  AggStatePerGroup pergroup,
 															  ExprContext *aggcontext,
 															  int setno);
+
+/*
+ * ScalarArrayOpExprHashEntry
+ * 		Hash table entry type used during EEOP_HASHED_SCALARARRAYOP
+ */
+typedef struct ScalarArrayOpExprHashEntry
+{
+	Datum		key;
+	uint32		status;			/* hash status */
+	uint32		hash;			/* hash value (cached) */
+} ScalarArrayOpExprHashEntry;
+
+#define SH_PREFIX saophash
+#define SH_ELEMENT_TYPE ScalarArrayOpExprHashEntry
+#define SH_KEY_TYPE Datum
+#define SH_SCOPE static inline
+#define SH_DECLARE
+#include "lib/simplehash.h"
+
+static bool saop_hash_element_match(struct saophash_hash *tb, Datum key1,
+									Datum key2);
+static uint32 saop_element_hash(struct saophash_hash *tb, Datum key);
+
+/*
+ * ScalarArrayOpExprHashTable
+ *		Hash table for EEOP_HASHED_SCALARARRAYOP
+ */
+typedef struct ScalarArrayOpExprHashTable
+{
+	saophash_hash *hashtab;		/* underlying hash table */
+	struct ExprEvalStep *op;
+} ScalarArrayOpExprHashTable;
+
+/* Define parameters for ScalarArrayOpExpr hash table code generation. */
+#define SH_PREFIX saophash
+#define SH_ELEMENT_TYPE ScalarArrayOpExprHashEntry
+#define SH_KEY_TYPE Datum
+#define SH_KEY key
+#define SH_HASH_KEY(tb, key) saop_element_hash(tb, key)
+#define SH_EQUAL(tb, a, b) saop_hash_element_match(tb, a, b)
+#define SH_SCOPE static inline
+#define SH_STORE_HASH
+#define SH_GET_HASH(tb, a) a->hash
+#define SH_DEFINE
+#include "lib/simplehash.h"
 
 /*
  * Prepare ExprState for interpreted execution.
@@ -417,7 +462,7 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		&&CASE_EEOP_FIELDSELECT,
 		&&CASE_EEOP_FIELDSTORE_DEFORM,
 		&&CASE_EEOP_FIELDSTORE_FORM,
-		&&CASE_EEOP_SBSREF_SUBSCRIPT,
+		&&CASE_EEOP_SBSREF_SUBSCRIPTS,
 		&&CASE_EEOP_SBSREF_OLD,
 		&&CASE_EEOP_SBSREF_ASSIGN,
 		&&CASE_EEOP_SBSREF_FETCH,
@@ -426,12 +471,12 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		&&CASE_EEOP_DOMAIN_CHECK,
 		&&CASE_EEOP_CONVERT_ROWTYPE,
 		&&CASE_EEOP_SCALARARRAYOP,
+		&&CASE_EEOP_HASHED_SCALARARRAYOP,
 		&&CASE_EEOP_XMLEXPR,
 		&&CASE_EEOP_AGGREF,
 		&&CASE_EEOP_GROUPING_FUNC,
 		&&CASE_EEOP_WINDOW_FUNC,
 		&&CASE_EEOP_SUBPLAN,
-		&&CASE_EEOP_ALTERNATIVE_SUBPLAN,
 		&&CASE_EEOP_AGG_STRICT_DESERIALIZE,
 		&&CASE_EEOP_AGG_DESERIALIZE,
 		&&CASE_EEOP_AGG_STRICT_INPUT_CHECK_ARGS,
@@ -1402,12 +1447,10 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			EEO_NEXT();
 		}
 
-		EEO_CASE(EEOP_SBSREF_SUBSCRIPT)
+		EEO_CASE(EEOP_SBSREF_SUBSCRIPTS)
 		{
-			/* Process an array subscript */
-
-			/* too complex for an inline implementation */
-			if (ExecEvalSubscriptingRef(state, op))
+			/* Precheck SubscriptingRef subscript(s) */
+			if (op->d.sbsref_subscript.subscriptfunc(state, op, econtext))
 			{
 				EEO_NEXT();
 			}
@@ -1419,37 +1462,11 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		}
 
 		EEO_CASE(EEOP_SBSREF_OLD)
+			EEO_CASE(EEOP_SBSREF_ASSIGN)
+			EEO_CASE(EEOP_SBSREF_FETCH)
 		{
-			/*
-			 * Fetch the old value in an sbsref assignment, in case it's
-			 * referenced (via a CaseTestExpr) inside the assignment
-			 * expression.
-			 */
-
-			/* too complex for an inline implementation */
-			ExecEvalSubscriptingRefOld(state, op);
-
-			EEO_NEXT();
-		}
-
-		/*
-		 * Perform SubscriptingRef assignment
-		 */
-		EEO_CASE(EEOP_SBSREF_ASSIGN)
-		{
-			/* too complex for an inline implementation */
-			ExecEvalSubscriptingRefAssign(state, op);
-
-			EEO_NEXT();
-		}
-
-		/*
-		 * Fetch subset of an array.
-		 */
-		EEO_CASE(EEOP_SBSREF_FETCH)
-		{
-			/* too complex for an inline implementation */
-			ExecEvalSubscriptingRefFetch(state, op);
+			/* Perform a SubscriptingRef fetch or assignment */
+			op->d.sbsref.subscriptfunc(state, op, econtext);
 
 			EEO_NEXT();
 		}
@@ -1466,6 +1483,14 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		{
 			/* too complex for an inline implementation */
 			ExecEvalScalarArrayOp(state, op);
+
+			EEO_NEXT();
+		}
+
+		EEO_CASE(EEOP_HASHED_SCALARARRAYOP)
+		{
+			/* too complex for an inline implementation */
+			ExecEvalHashedScalarArrayOp(state, op, econtext);
 
 			EEO_NEXT();
 		}
@@ -1500,12 +1525,12 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 			 * Returns a Datum whose value is the precomputed aggregate value
 			 * found in the given expression context.
 			 */
-			AggrefExprState *aggref = op->d.aggref.astate;
+			int			aggno = op->d.aggref.aggno;
 
 			Assert(econtext->ecxt_aggvalues != NULL);
 
-			*op->resvalue = econtext->ecxt_aggvalues[aggref->aggno];
-			*op->resnull = econtext->ecxt_aggnulls[aggref->aggno];
+			*op->resvalue = econtext->ecxt_aggvalues[aggno];
+			*op->resnull = econtext->ecxt_aggnulls[aggno];
 
 			EEO_NEXT();
 		}
@@ -1537,14 +1562,6 @@ ExecInterpExpr(ExprState *state, ExprContext *econtext, bool *isnull)
 		{
 			/* too complex for an inline implementation */
 			ExecEvalSubPlan(state, op, econtext);
-
-			EEO_NEXT();
-		}
-
-		EEO_CASE(EEOP_ALTERNATIVE_SUBPLAN)
-		{
-			/* too complex for an inline implementation */
-			ExecEvalAlternativeSubPlan(state, op, econtext);
 
 			EEO_NEXT();
 		}
@@ -3168,200 +3185,6 @@ ExecEvalFieldStoreForm(ExprState *state, ExprEvalStep *op, ExprContext *econtext
 }
 
 /*
- * Process a subscript in a SubscriptingRef expression.
- *
- * If subscript is NULL, throw error in assignment case, or in fetch case
- * set result to NULL and return false (instructing caller to skip the rest
- * of the SubscriptingRef sequence).
- *
- * Subscript expression result is in subscriptvalue/subscriptnull.
- * On success, integer subscript value has been saved in upperindex[] or
- * lowerindex[] for use later.
- */
-bool
-ExecEvalSubscriptingRef(ExprState *state, ExprEvalStep *op)
-{
-	SubscriptingRefState *sbsrefstate = op->d.sbsref_subscript.state;
-	int		   *indexes;
-	int			off;
-
-	/* If any index expr yields NULL, result is NULL or error */
-	if (sbsrefstate->subscriptnull)
-	{
-		if (sbsrefstate->isassignment)
-			ereport(ERROR,
-					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
-					 errmsg("array subscript in assignment must not be null")));
-		*op->resnull = true;
-		return false;
-	}
-
-	/* Convert datum to int, save in appropriate place */
-	if (op->d.sbsref_subscript.isupper)
-		indexes = sbsrefstate->upperindex;
-	else
-		indexes = sbsrefstate->lowerindex;
-	off = op->d.sbsref_subscript.off;
-
-	indexes[off] = DatumGetInt32(sbsrefstate->subscriptvalue);
-
-	return true;
-}
-
-/*
- * Evaluate SubscriptingRef fetch.
- *
- * Source container is in step's result variable.
- */
-void
-ExecEvalSubscriptingRefFetch(ExprState *state, ExprEvalStep *op)
-{
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
-
-	/* Should not get here if source container (or any subscript) is null */
-	Assert(!(*op->resnull));
-
-	if (sbsrefstate->numlower == 0)
-	{
-		/* Scalar case */
-		*op->resvalue = array_get_element(*op->resvalue,
-										  sbsrefstate->numupper,
-										  sbsrefstate->upperindex,
-										  sbsrefstate->refattrlength,
-										  sbsrefstate->refelemlength,
-										  sbsrefstate->refelembyval,
-										  sbsrefstate->refelemalign,
-										  op->resnull);
-	}
-	else
-	{
-		/* Slice case */
-		*op->resvalue = array_get_slice(*op->resvalue,
-										sbsrefstate->numupper,
-										sbsrefstate->upperindex,
-										sbsrefstate->lowerindex,
-										sbsrefstate->upperprovided,
-										sbsrefstate->lowerprovided,
-										sbsrefstate->refattrlength,
-										sbsrefstate->refelemlength,
-										sbsrefstate->refelembyval,
-										sbsrefstate->refelemalign);
-	}
-}
-
-/*
- * Compute old container element/slice value for a SubscriptingRef assignment
- * expression. Will only be generated if the new-value subexpression
- * contains SubscriptingRef or FieldStore. The value is stored into the
- * SubscriptingRefState's prevvalue/prevnull fields.
- */
-void
-ExecEvalSubscriptingRefOld(ExprState *state, ExprEvalStep *op)
-{
-	SubscriptingRefState *sbsrefstate = op->d.sbsref.state;
-
-	if (*op->resnull)
-	{
-		/* whole array is null, so any element or slice is too */
-		sbsrefstate->prevvalue = (Datum) 0;
-		sbsrefstate->prevnull = true;
-	}
-	else if (sbsrefstate->numlower == 0)
-	{
-		/* Scalar case */
-		sbsrefstate->prevvalue = array_get_element(*op->resvalue,
-												   sbsrefstate->numupper,
-												   sbsrefstate->upperindex,
-												   sbsrefstate->refattrlength,
-												   sbsrefstate->refelemlength,
-												   sbsrefstate->refelembyval,
-												   sbsrefstate->refelemalign,
-												   &sbsrefstate->prevnull);
-	}
-	else
-	{
-		/* Slice case */
-		/* this is currently unreachable */
-		sbsrefstate->prevvalue = array_get_slice(*op->resvalue,
-												 sbsrefstate->numupper,
-												 sbsrefstate->upperindex,
-												 sbsrefstate->lowerindex,
-												 sbsrefstate->upperprovided,
-												 sbsrefstate->lowerprovided,
-												 sbsrefstate->refattrlength,
-												 sbsrefstate->refelemlength,
-												 sbsrefstate->refelembyval,
-												 sbsrefstate->refelemalign);
-		sbsrefstate->prevnull = false;
-	}
-}
-
-/*
- * Evaluate SubscriptingRef assignment.
- *
- * Input container (possibly null) is in result area, replacement value is in
- * SubscriptingRefState's replacevalue/replacenull.
- */
-void
-ExecEvalSubscriptingRefAssign(ExprState *state, ExprEvalStep *op)
-{
-	SubscriptingRefState *sbsrefstate = op->d.sbsref_subscript.state;
-
-	/*
-	 * For an assignment to a fixed-length container type, both the original
-	 * container and the value to be assigned into it must be non-NULL, else
-	 * we punt and return the original container.
-	 */
-	if (sbsrefstate->refattrlength > 0)
-	{
-		if (*op->resnull || sbsrefstate->replacenull)
-			return;
-	}
-
-	/*
-	 * For assignment to varlena arrays, we handle a NULL original array by
-	 * substituting an empty (zero-dimensional) array; insertion of the new
-	 * element will result in a singleton array value.  It does not matter
-	 * whether the new element is NULL.
-	 */
-	if (*op->resnull)
-	{
-		*op->resvalue = PointerGetDatum(construct_empty_array(sbsrefstate->refelemtype));
-		*op->resnull = false;
-	}
-
-	if (sbsrefstate->numlower == 0)
-	{
-		/* Scalar case */
-		*op->resvalue = array_set_element(*op->resvalue,
-										  sbsrefstate->numupper,
-										  sbsrefstate->upperindex,
-										  sbsrefstate->replacevalue,
-										  sbsrefstate->replacenull,
-										  sbsrefstate->refattrlength,
-										  sbsrefstate->refelemlength,
-										  sbsrefstate->refelembyval,
-										  sbsrefstate->refelemalign);
-	}
-	else
-	{
-		/* Slice case */
-		*op->resvalue = array_set_slice(*op->resvalue,
-										sbsrefstate->numupper,
-										sbsrefstate->upperindex,
-										sbsrefstate->lowerindex,
-										sbsrefstate->upperprovided,
-										sbsrefstate->lowerprovided,
-										sbsrefstate->replacevalue,
-										sbsrefstate->replacenull,
-										sbsrefstate->refattrlength,
-										sbsrefstate->refelemlength,
-										sbsrefstate->refelembyval,
-										sbsrefstate->refelemalign);
-	}
-}
-
-/*
  * Evaluate a rowtype coercion operation.
  * This may require rearranging field positions.
  *
@@ -3602,6 +3425,214 @@ ExecEvalScalarArrayOp(ExprState *state, ExprEvalStep *op)
 				bitmap++;
 				bitmask = 1;
 			}
+		}
+	}
+
+	*op->resvalue = result;
+	*op->resnull = resultnull;
+}
+
+/*
+ * Hash function for scalar array hash op elements.
+ *
+ * We use the element type's default hash opclass, and the column collation
+ * if the type is collation-sensitive.
+ */
+static uint32
+saop_element_hash(struct saophash_hash *tb, Datum key)
+{
+	ScalarArrayOpExprHashTable *elements_tab = (ScalarArrayOpExprHashTable *) tb->private_data;
+	FunctionCallInfo fcinfo = elements_tab->op->d.hashedscalararrayop.hash_fcinfo_data;
+	Datum		hash;
+
+	fcinfo->args[0].value = key;
+	fcinfo->args[0].isnull = false;
+
+	hash = elements_tab->op->d.hashedscalararrayop.hash_fn_addr(fcinfo);
+
+	return DatumGetUInt32(hash);
+}
+
+/*
+ * Matching function for scalar array hash op elements, to be used in hashtable
+ * lookups.
+ */
+static bool
+saop_hash_element_match(struct saophash_hash *tb, Datum key1, Datum key2)
+{
+	Datum		result;
+
+	ScalarArrayOpExprHashTable *elements_tab = (ScalarArrayOpExprHashTable *) tb->private_data;
+	FunctionCallInfo fcinfo = elements_tab->op->d.hashedscalararrayop.fcinfo_data;
+
+	fcinfo->args[0].value = key1;
+	fcinfo->args[0].isnull = false;
+	fcinfo->args[1].value = key2;
+	fcinfo->args[1].isnull = false;
+
+	result = elements_tab->op->d.hashedscalararrayop.fn_addr(fcinfo);
+
+	return DatumGetBool(result);
+}
+
+/*
+ * Evaluate "scalar op ANY (const array)".
+ *
+ * Similar to ExecEvalScalarArrayOp, but optimized for faster repeat lookups
+ * by building a hashtable on the first lookup.  This hashtable will be reused
+ * by subsequent lookups.  Unlike ExecEvalScalarArrayOp, this version only
+ * supports OR semantics.
+ *
+ * Source array is in our result area, scalar arg is already evaluated into
+ * fcinfo->args[0].
+ *
+ * The operator always yields boolean.
+ */
+void
+ExecEvalHashedScalarArrayOp(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
+{
+	ScalarArrayOpExprHashTable *elements_tab = op->d.hashedscalararrayop.elements_tab;
+	FunctionCallInfo fcinfo = op->d.hashedscalararrayop.fcinfo_data;
+	bool		strictfunc = op->d.hashedscalararrayop.finfo->fn_strict;
+	Datum		scalar = fcinfo->args[0].value;
+	bool		scalar_isnull = fcinfo->args[0].isnull;
+	Datum		result;
+	bool		resultnull;
+	bool		hashfound;
+
+	/* We don't setup a hashed scalar array op if the array const is null. */
+	Assert(!*op->resnull);
+
+	/*
+	 * If the scalar is NULL, and the function is strict, return NULL; no
+	 * point in executing the search.
+	 */
+	if (fcinfo->args[0].isnull && strictfunc)
+	{
+		*op->resnull = true;
+		return;
+	}
+
+	/* Build the hash table on first evaluation */
+	if (elements_tab == NULL)
+	{
+		int16		typlen;
+		bool		typbyval;
+		char		typalign;
+		int			nitems;
+		bool		has_nulls = false;
+		char	   *s;
+		bits8	   *bitmap;
+		int			bitmask;
+		MemoryContext oldcontext;
+		ArrayType  *arr;
+
+		arr = DatumGetArrayTypeP(*op->resvalue);
+		nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
+
+		get_typlenbyvalalign(ARR_ELEMTYPE(arr),
+							 &typlen,
+							 &typbyval,
+							 &typalign);
+
+		oldcontext = MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
+
+		elements_tab = (ScalarArrayOpExprHashTable *)
+			palloc(sizeof(ScalarArrayOpExprHashTable));
+		op->d.hashedscalararrayop.elements_tab = elements_tab;
+		elements_tab->op = op;
+
+		/*
+		 * Create the hash table sizing it according to the number of elements
+		 * in the array.  This does assume that the array has no duplicates.
+		 * If the array happens to contain many duplicate values then it'll
+		 * just mean that we sized the table a bit on the large side.
+		 */
+		elements_tab->hashtab = saophash_create(CurrentMemoryContext, nitems,
+												elements_tab);
+
+		MemoryContextSwitchTo(oldcontext);
+
+		s = (char *) ARR_DATA_PTR(arr);
+		bitmap = ARR_NULLBITMAP(arr);
+		bitmask = 1;
+		for (int i = 0; i < nitems; i++)
+		{
+			/* Get array element, checking for NULL. */
+			if (bitmap && (*bitmap & bitmask) == 0)
+			{
+				has_nulls = true;
+			}
+			else
+			{
+				Datum		element;
+
+				element = fetch_att(s, typbyval, typlen);
+				s = att_addlength_pointer(s, typlen, s);
+				s = (char *) att_align_nominal(s, typalign);
+
+				saophash_insert(elements_tab->hashtab, element, &hashfound);
+			}
+
+			/* Advance bitmap pointer if any. */
+			if (bitmap)
+			{
+				bitmask <<= 1;
+				if (bitmask == 0x100)
+				{
+					bitmap++;
+					bitmask = 1;
+				}
+			}
+		}
+
+		/*
+		 * Remember if we had any nulls so that we know if we need to execute
+		 * non-strict functions with a null lhs value if no match is found.
+		 */
+		op->d.hashedscalararrayop.has_nulls = has_nulls;
+	}
+
+	/* Check the hash to see if we have a match. */
+	hashfound = NULL != saophash_lookup(elements_tab->hashtab, scalar);
+
+	result = BoolGetDatum(hashfound);
+	resultnull = false;
+
+	/*
+	 * If we didn't find a match in the array, we still might need to handle
+	 * the possibility of null values.  We didn't put any NULLs into the
+	 * hashtable, but instead marked if we found any when building the table
+	 * in has_nulls.
+	 */
+	if (!DatumGetBool(result) && op->d.hashedscalararrayop.has_nulls)
+	{
+		if (strictfunc)
+		{
+
+			/*
+			 * We have nulls in the array so a non-null lhs and no match must
+			 * yield NULL.
+			 */
+			result = (Datum) 0;
+			resultnull = true;
+		}
+		else
+		{
+			/*
+			 * Execute function will null rhs just once.
+			 *
+			 * The hash lookup path will have scribbled on the lhs argument so
+			 * we need to set it up also (even though we entered this function
+			 * with it already set).
+			 */
+			fcinfo->args[0].value = scalar;
+			fcinfo->args[0].isnull = scalar_isnull;
+			fcinfo->args[1].value = (Datum) 0;
+			fcinfo->args[1].isnull = true;
+
+			result = op->d.hashedscalararrayop.fn_addr(fcinfo);
+			resultnull = fcinfo->isnull;
 		}
 	}
 
@@ -3899,20 +3930,6 @@ ExecEvalSubPlan(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
 	check_stack_depth();
 
 	*op->resvalue = ExecSubPlan(sstate, econtext, op->resnull);
-}
-
-/*
- * Hand off evaluation of an alternative subplan to nodeSubplan.c
- */
-void
-ExecEvalAlternativeSubPlan(ExprState *state, ExprEvalStep *op, ExprContext *econtext)
-{
-	AlternativeSubPlanState *asstate = op->d.alternative_subplan.asstate;
-
-	/* could potentially be nested, so make sure there's enough stack */
-	check_stack_depth();
-
-	*op->resvalue = ExecAlternativeSubPlan(asstate, econtext, op->resnull);
 }
 
 /*

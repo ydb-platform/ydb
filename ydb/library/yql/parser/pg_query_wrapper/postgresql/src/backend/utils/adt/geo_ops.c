@@ -13,7 +13,7 @@
  * - circle
  * - polygon
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -1055,12 +1055,19 @@ line_send(PG_FUNCTION_ARGS)
 static inline void
 line_construct(LINE *result, Point *pt, float8 m)
 {
-	if (m == DBL_MAX)
+	if (isinf(m))
 	{
 		/* vertical - use "x = C" */
 		result->A = -1.0;
 		result->B = 0.0;
 		result->C = pt->x;
+	}
+	else if (m == 0)
+	{
+		/* horizontal - use "y = C" */
+		result->A = 0.0;
+		result->B = -1.0;
+		result->C = pt->y;
 	}
 	else
 	{
@@ -1155,9 +1162,6 @@ line_horizontal(PG_FUNCTION_ARGS)
 
 /*
  * Check whether the two lines are the same
- *
- * We consider NaNs values to be equal to each other to let those lines
- * to be found.
  */
 Datum
 line_eq(PG_FUNCTION_ARGS)
@@ -1166,21 +1170,28 @@ line_eq(PG_FUNCTION_ARGS)
 	LINE	   *l2 = PG_GETARG_LINE_P(1);
 	float8		ratio;
 
-	if (!FPzero(l2->A) && !isnan(l2->A))
+	/* If any NaNs are involved, insist on exact equality */
+	if (unlikely(isnan(l1->A) || isnan(l1->B) || isnan(l1->C) ||
+				 isnan(l2->A) || isnan(l2->B) || isnan(l2->C)))
+	{
+		PG_RETURN_BOOL(float8_eq(l1->A, l2->A) &&
+					   float8_eq(l1->B, l2->B) &&
+					   float8_eq(l1->C, l2->C));
+	}
+
+	/* Otherwise, lines whose parameters are proportional are the same */
+	if (!FPzero(l2->A))
 		ratio = float8_div(l1->A, l2->A);
-	else if (!FPzero(l2->B) && !isnan(l2->B))
+	else if (!FPzero(l2->B))
 		ratio = float8_div(l1->B, l2->B);
-	else if (!FPzero(l2->C) && !isnan(l2->C))
+	else if (!FPzero(l2->C))
 		ratio = float8_div(l1->C, l2->C);
 	else
 		ratio = 1.0;
 
-	PG_RETURN_BOOL((FPeq(l1->A, float8_mul(ratio, l2->A)) &&
-					FPeq(l1->B, float8_mul(ratio, l2->B)) &&
-					FPeq(l1->C, float8_mul(ratio, l2->C))) ||
-				   (float8_eq(l1->A, l2->A) &&
-					float8_eq(l1->B, l2->B) &&
-					float8_eq(l1->C, l2->C)));
+	PG_RETURN_BOOL(FPeq(l1->A, float8_mul(ratio, l2->A)) &&
+				   FPeq(l1->B, float8_mul(ratio, l2->B)) &&
+				   FPeq(l1->C, float8_mul(ratio, l2->C)));
 }
 
 
@@ -1197,7 +1208,7 @@ line_sl(LINE *line)
 	if (FPzero(line->A))
 		return 0.0;
 	if (FPzero(line->B))
-		return DBL_MAX;
+		return get_float8_infinity();
 	return float8_div(line->A, -line->B);
 }
 
@@ -1209,7 +1220,7 @@ static inline float8
 line_invsl(LINE *line)
 {
 	if (FPzero(line->A))
-		return DBL_MAX;
+		return get_float8_infinity();
 	if (FPzero(line->B))
 		return 0.0;
 	return float8_div(line->B, line->A);
@@ -1930,15 +1941,16 @@ point_ne(PG_FUNCTION_ARGS)
 
 /*
  * Check whether the two points are the same
- *
- * We consider NaNs coordinates to be equal to each other to let those points
- * to be found.
  */
 static inline bool
 point_eq_point(Point *pt1, Point *pt2)
 {
-	return ((FPeq(pt1->x, pt2->x) && FPeq(pt1->y, pt2->y)) ||
-			(float8_eq(pt1->x, pt2->x) && float8_eq(pt1->y, pt2->y)));
+	/* If any NaNs are involved, insist on exact equality */
+	if (unlikely(isnan(pt1->x) || isnan(pt1->y) ||
+				 isnan(pt2->x) || isnan(pt2->y)))
+		return (float8_eq(pt1->x, pt2->x) && float8_eq(pt1->y, pt2->y));
+
+	return (FPeq(pt1->x, pt2->x) && FPeq(pt1->y, pt2->y));
 }
 
 
@@ -1974,13 +1986,13 @@ point_slope(PG_FUNCTION_ARGS)
 /*
  * Return slope of two points
  *
- * Note that this function returns DBL_MAX when the points are the same.
+ * Note that this function returns Inf when the points are the same.
  */
 static inline float8
 point_sl(Point *pt1, Point *pt2)
 {
 	if (FPeq(pt1->x, pt2->x))
-		return DBL_MAX;
+		return get_float8_infinity();
 	if (FPeq(pt1->y, pt2->y))
 		return 0.0;
 	return float8_div(float8_mi(pt1->y, pt2->y), float8_mi(pt1->x, pt2->x));
@@ -1998,7 +2010,7 @@ point_invsl(Point *pt1, Point *pt2)
 	if (FPeq(pt1->x, pt2->x))
 		return 0.0;
 	if (FPeq(pt1->y, pt2->y))
-		return DBL_MAX;
+		return get_float8_infinity();
 	return float8_div(float8_mi(pt1->x, pt2->x), float8_mi(pt2->y, pt1->y));
 }
 

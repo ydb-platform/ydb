@@ -23,7 +23,7 @@
  * for aborts (whether sync or async), since the post-crash assumption would
  * be that such transactions failed anyway.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/clog.c
@@ -42,6 +42,7 @@
 #include "pg_trace.h"
 #include "pgstat.h"
 #include "storage/proc.h"
+#include "storage/sync.h"
 
 /*
  * Defines for CLOG page sizes.  A page is the same BLCKSZ as is used
@@ -285,17 +286,17 @@ TransactionIdSetPageStatus(TransactionId xid, int nsubxids,
 	 * updates for multiple backends so that the number of times XactSLRULock
 	 * needs to be acquired is reduced.
 	 *
-	 * For this optimization to be safe, the XID in MyPgXact and the subxids
-	 * in MyProc must be the same as the ones for which we're setting the
-	 * status.  Check that this is the case.
+	 * For this optimization to be safe, the XID and subxids in MyProc must be
+	 * the same as the ones for which we're setting the status.  Check that
+	 * this is the case.
 	 *
 	 * For this optimization to be efficient, we shouldn't have too many
 	 * sub-XIDs and all of the XIDs for which we're adjusting clog should be
 	 * on the same page.  Check those conditions, too.
 	 */
-	if (all_xact_same_page && xid == MyPgXact->xid &&
+	if (all_xact_same_page && xid == MyProc->xid &&
 		nsubxids <= THRESHOLD_SUBTRANS_CLOG_OPT &&
-		nsubxids == MyPgXact->nxids &&
+		nsubxids == MyProc->subxidStatus.count &&
 		memcmp(subxids, MyProc->subxids.xids,
 			   nsubxids * sizeof(TransactionId)) == 0)
 	{
@@ -515,16 +516,15 @@ TransactionGroupUpdateXidStatus(TransactionId xid, XidStatus status,
 	while (nextidx != INVALID_PGPROCNO)
 	{
 		PGPROC	   *proc = &ProcGlobal->allProcs[nextidx];
-		PGXACT	   *pgxact = &ProcGlobal->allPgXact[nextidx];
 
 		/*
 		 * Transactions with more than THRESHOLD_SUBTRANS_CLOG_OPT sub-XIDs
 		 * should not use group XID status update mechanism.
 		 */
-		Assert(pgxact->nxids <= THRESHOLD_SUBTRANS_CLOG_OPT);
+		Assert(proc->subxidStatus.count <= THRESHOLD_SUBTRANS_CLOG_OPT);
 
 		TransactionIdSetPageStatusInternal(proc->clogGroupMemberXid,
-										   pgxact->nxids,
+										   proc->subxidStatus.count,
 										   proc->subxids.xids,
 										   proc->clogGroupMemberXidStatus,
 										   proc->clogGroupMemberLsn,
@@ -697,7 +697,8 @@ CLOGShmemInit(void)
 {
 	XactCtl->PagePrecedes = CLOGPagePrecedes;
 	SimpleLruInit(XactCtl, "Xact", CLOGShmemBuffers(), CLOG_LSNS_PER_PAGE,
-				  XactSLRULock, "pg_xact", LWTRANCHE_XACT_BUFFER);
+				  XactSLRULock, "pg_xact", LWTRANCHE_XACT_BUFFER,
+				  SYNC_HANDLER_CLOG);
 	SlruPagePrecedesUnitTests(XactCtl, CLOG_XACTS_PER_PAGE);
 }
 
@@ -748,12 +749,12 @@ ZeroCLOGPage(int pageno, bool writeXlog)
 
 /*
  * This must be called ONCE during postmaster or standalone-backend startup,
- * after StartupXLOG has initialized ShmemVariableCache->nextFullXid.
+ * after StartupXLOG has initialized ShmemVariableCache->nextXid.
  */
 void
 StartupCLOG(void)
 {
-	TransactionId xid = XidFromFullTransactionId(ShmemVariableCache->nextFullXid);
+	TransactionId xid = XidFromFullTransactionId(ShmemVariableCache->nextXid);
 	int			pageno = TransactionIdToPage(xid);
 
 	LWLockAcquire(XactSLRULock, LW_EXCLUSIVE);
@@ -772,15 +773,10 @@ StartupCLOG(void)
 void
 TrimCLOG(void)
 {
-	TransactionId xid = XidFromFullTransactionId(ShmemVariableCache->nextFullXid);
+	TransactionId xid = XidFromFullTransactionId(ShmemVariableCache->nextXid);
 	int			pageno = TransactionIdToPage(xid);
 
 	LWLockAcquire(XactSLRULock, LW_EXCLUSIVE);
-
-	/*
-	 * Re-Initialize our idea of the latest page number.
-	 */
-	XactCtl->shared->latest_page_number = pageno;
 
 	/*
 	 * Zero out the remainder of the current clog page.  Under normal
@@ -791,7 +787,7 @@ TrimCLOG(void)
 	 * but makes no WAL entry).  Let's just be safe. (We need not worry about
 	 * pages beyond the current one, since those will be zeroed when first
 	 * used.  For the same reason, there is no need to do anything when
-	 * nextFullXid is exactly at a page boundary; and it's likely that the
+	 * nextXid is exactly at a page boundary; and it's likely that the
 	 * "current" page doesn't exist yet in that case.)
 	 */
 	if (TransactionIdToPgIndex(xid) != 0)
@@ -816,33 +812,18 @@ TrimCLOG(void)
 }
 
 /*
- * This must be called ONCE during postmaster or standalone-backend shutdown
- */
-void
-ShutdownCLOG(void)
-{
-	/* Flush dirty CLOG pages to disk */
-	TRACE_POSTGRESQL_CLOG_CHECKPOINT_START(false);
-	SimpleLruFlush(XactCtl, false);
-
-	/*
-	 * fsync pg_xact to ensure that any files flushed previously are durably
-	 * on disk.
-	 */
-	fsync_fname("pg_xact", true);
-
-	TRACE_POSTGRESQL_CLOG_CHECKPOINT_DONE(false);
-}
-
-/*
  * Perform a checkpoint --- either during shutdown, or on-the-fly
  */
 void
 CheckPointCLOG(void)
 {
-	/* Flush dirty CLOG pages to disk */
+	/*
+	 * Write dirty CLOG pages to disk.  This may result in sync requests
+	 * queued for later handling by ProcessSyncRequests(), as part of the
+	 * checkpoint.
+	 */
 	TRACE_POSTGRESQL_CLOG_CHECKPOINT_START(true);
-	SimpleLruFlush(XactCtl, true);
+	SimpleLruWriteAll(XactCtl, true);
 	TRACE_POSTGRESQL_CLOG_CHECKPOINT_DONE(true);
 }
 
@@ -1030,16 +1011,19 @@ clog_redo(XLogReaderState *record)
 
 		memcpy(&xlrec, XLogRecGetData(record), sizeof(xl_clog_truncate));
 
-		/*
-		 * During XLOG replay, latest_page_number isn't set up yet; insert a
-		 * suitable value to bypass the sanity test in SimpleLruTruncate.
-		 */
-		XactCtl->shared->latest_page_number = xlrec.pageno;
-
 		AdvanceOldestClogXid(xlrec.oldestXact);
 
 		SimpleLruTruncate(XactCtl, xlrec.pageno);
 	}
 	else
 		elog(PANIC, "clog_redo: unknown op code %u", info);
+}
+
+/*
+ * Entrypoint for sync.c to sync clog files.
+ */
+int
+clogsyncfiletag(const FileTag *ftag, char *path)
+{
+	return SlruSyncFileTag(XactCtl, ftag, path);
 }

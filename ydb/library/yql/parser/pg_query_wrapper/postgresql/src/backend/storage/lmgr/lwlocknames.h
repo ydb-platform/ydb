@@ -10,7 +10,6 @@
 #define WALBufMappingLock (&MainLWLockArray[7].lock)
 #define WALWriteLock (&MainLWLockArray[8].lock)
 #define ControlFileLock (&MainLWLockArray[9].lock)
-#define CheckpointLock (&MainLWLockArray[10].lock)
 #define XactSLRULock (&MainLWLockArray[11].lock)
 #define SubtransSLRULock (&MainLWLockArray[12].lock)
 #define MultiXactGenLock (&MainLWLockArray[13].lock)

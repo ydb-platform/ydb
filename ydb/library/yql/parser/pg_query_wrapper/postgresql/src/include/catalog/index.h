@@ -4,7 +4,7 @@
  *	  prototypes for catalog/index.c.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/index.h
@@ -28,6 +28,20 @@ typedef enum
 	INDEX_DROP_CLEAR_VALID,
 	INDEX_DROP_SET_DEAD
 } IndexStateFlagsAction;
+
+/* options for REINDEX */
+typedef struct ReindexParams
+{
+	bits32		options;		/* bitmask of REINDEXOPT_* */
+	Oid			tablespaceOid;	/* New tablespace to move indexes to.
+								 * InvalidOid to do nothing. */
+} ReindexParams;
+
+/* flag bits for ReindexParams->flags */
+#define REINDEXOPT_VERBOSE		0x01	/* print progress info */
+#define REINDEXOPT_REPORT_PROGRESS 0x02 /* report pgstat progress */
+#define REINDEXOPT_MISSING_OK 	0x04	/* skip missing relations */
+#define REINDEXOPT_CONCURRENTLY	0x08	/* concurrent mode */
 
 /* state info for validate_index bulkdelete callback */
 typedef struct ValidateIndexState
@@ -80,6 +94,7 @@ extern Oid	index_create(Relation heapRelation,
 
 extern Oid	index_concurrently_create_copy(Relation heapRelation,
 										   Oid oldIndexId,
+										   Oid tablespaceOid,
 										   const char *newName);
 
 extern void index_concurrently_build(Oid heapRelationId,
@@ -134,7 +149,7 @@ extern void index_set_state_flags(Oid indexId, IndexStateFlagsAction action);
 extern Oid	IndexGetRelation(Oid indexId, bool missing_ok);
 
 extern void reindex_index(Oid indexId, bool skip_constraint_checks,
-						  char relpersistence, int options);
+						  char relpersistence, ReindexParams *params);
 
 /* Flag bits for reindex_relation(): */
 #define REINDEX_REL_PROCESS_TOAST			0x01
@@ -143,7 +158,7 @@ extern void reindex_index(Oid indexId, bool skip_constraint_checks,
 #define REINDEX_REL_FORCE_INDEXES_UNLOGGED	0x08
 #define REINDEX_REL_FORCE_INDEXES_PERMANENT 0x10
 
-extern bool reindex_relation(Oid relid, int flags, int options);
+extern bool reindex_relation(Oid relid, int flags, ReindexParams *params);
 
 extern bool ReindexIsProcessingHeap(Oid heapOid);
 extern bool ReindexIsProcessingIndex(Oid indexOid);

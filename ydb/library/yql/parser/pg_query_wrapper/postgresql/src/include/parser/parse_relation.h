@@ -4,7 +4,7 @@
  *	  prototypes for parse_relation.c.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/parser/parse_relation.h
@@ -41,8 +41,7 @@ extern Node *scanNSItemForColumn(ParseState *pstate, ParseNamespaceItem *nsitem,
 								 int location);
 extern Node *colNameToVar(ParseState *pstate, const char *colname, bool localonly,
 						  int location);
-extern void markVarForSelectPriv(ParseState *pstate, Var *var,
-								 RangeTblEntry *rte);
+extern void markVarForSelectPriv(ParseState *pstate, Var *var);
 extern Relation parserOpenTable(ParseState *pstate, const RangeVar *relation,
 								int lockmode);
 extern ParseNamespaceItem *addRangeTableEntry(ParseState *pstate,
@@ -89,6 +88,7 @@ extern ParseNamespaceItem *addRangeTableEntryForJoin(ParseState *pstate,
 													 List *aliasvars,
 													 List *leftcols,
 													 List *rightcols,
+													 Alias *joinalias,
 													 Alias *alias,
 													 bool inFromCl);
 extern ParseNamespaceItem *addRangeTableEntryForCTE(ParseState *pstate,

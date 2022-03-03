@@ -2,7 +2,7 @@
  * reorderbuffer.h
  *	  PostgreSQL logical replay/reorder buffer management.
  *
- * Copyright (c) 2012-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2021, PostgreSQL Global Development Group
  *
  * src/include/replication/reorderbuffer.h
  */
@@ -57,13 +57,14 @@ enum ReorderBufferChangeType
 	REORDER_BUFFER_CHANGE_UPDATE,
 	REORDER_BUFFER_CHANGE_DELETE,
 	REORDER_BUFFER_CHANGE_MESSAGE,
+	REORDER_BUFFER_CHANGE_INVALIDATION,
 	REORDER_BUFFER_CHANGE_INTERNAL_SNAPSHOT,
 	REORDER_BUFFER_CHANGE_INTERNAL_COMMAND_ID,
 	REORDER_BUFFER_CHANGE_INTERNAL_TUPLECID,
 	REORDER_BUFFER_CHANGE_INTERNAL_SPEC_INSERT,
 	REORDER_BUFFER_CHANGE_INTERNAL_SPEC_CONFIRM,
-	REORDER_BUFFER_CHANGE_TRUNCATE,
-	REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT
+	REORDER_BUFFER_CHANGE_INTERNAL_SPEC_ABORT,
+	REORDER_BUFFER_CHANGE_TRUNCATE
 };
 
 /* forward declaration */
@@ -150,6 +151,13 @@ typedef struct ReorderBufferChange
 			CommandId	cmax;
 			CommandId	combocid;
 		}			tuplecid;
+
+		/* Invalidation. */
+		struct
+		{
+			uint32		ninvalidations; /* Number of messages */
+			SharedInvalidationMessage *invalidations;	/* invalidation message */
+		}			inval;
 	}			data;
 
 	/*
@@ -163,6 +171,11 @@ typedef struct ReorderBufferChange
 #define RBTXN_HAS_CATALOG_CHANGES 0x0001
 #define RBTXN_IS_SUBXACT          0x0002
 #define RBTXN_IS_SERIALIZED       0x0004
+#define RBTXN_IS_SERIALIZED_CLEAR 0x0008
+#define RBTXN_IS_STREAMED         0x0010
+#define RBTXN_HAS_PARTIAL_CHANGE  0x0020
+#define RBTXN_PREPARE             0x0040
+#define RBTXN_SKIPPED_PREPARE	  0x0080
 
 /* Does the transaction have catalog changes? */
 #define rbtxn_has_catalog_changes(txn) \
@@ -182,6 +195,44 @@ typedef struct ReorderBufferChange
 	((txn)->txn_flags & RBTXN_IS_SERIALIZED) != 0 \
 )
 
+/* Has this transaction ever been spilled to disk? */
+#define rbtxn_is_serialized_clear(txn) \
+( \
+	((txn)->txn_flags & RBTXN_IS_SERIALIZED_CLEAR) != 0 \
+)
+
+/* Has this transaction contains partial changes? */
+#define rbtxn_has_partial_change(txn) \
+( \
+	((txn)->txn_flags & RBTXN_HAS_PARTIAL_CHANGE) != 0 \
+)
+
+/*
+ * Has this transaction been streamed to downstream?
+ *
+ * (It's not possible to deduce this from nentries and nentries_mem for
+ * various reasons. For example, all changes may be in subtransactions in
+ * which case we'd have nentries==0 for the toplevel one, which would say
+ * nothing about the streaming. So we maintain this flag, but only for the
+ * toplevel transaction.)
+ */
+#define rbtxn_is_streamed(txn) \
+( \
+	((txn)->txn_flags & RBTXN_IS_STREAMED) != 0 \
+)
+
+/* Has this transaction been prepared? */
+#define rbtxn_prepared(txn) \
+( \
+	((txn)->txn_flags & RBTXN_PREPARE) != 0 \
+)
+
+/* prepare for this transaction skipped? */
+#define rbtxn_skip_prepared(txn) \
+( \
+	((txn)->txn_flags & RBTXN_SKIPPED_PREPARE) != 0 \
+)
+
 typedef struct ReorderBufferTXN
 {
 	/* See above */
@@ -194,6 +245,12 @@ typedef struct ReorderBufferTXN
 	TransactionId toplevel_xid;
 
 	/*
+	 * Global transaction id required for identification of prepared
+	 * transactions.
+	 */
+	char	   *gid;
+
+	/*
 	 * LSN of the first data carrying, WAL record with knowledge about this
 	 * xid. This is allowed to *not* be first record adorned with this xid, if
 	 * the previous records aren't relevant for logical decoding.
@@ -201,10 +258,11 @@ typedef struct ReorderBufferTXN
 	XLogRecPtr	first_lsn;
 
 	/* ----
-	 * LSN of the record that lead to this xact to be committed or
+	 * LSN of the record that lead to this xact to be prepared or committed or
 	 * aborted. This can be a
 	 * * plain commit record
 	 * * plain commit record, of a parent transaction
+	 * * prepared tansaction
 	 * * prepared transaction commit
 	 * * plain abort record
 	 * * prepared transaction abort
@@ -221,6 +279,9 @@ typedef struct ReorderBufferTXN
 	 */
 	XLogRecPtr	end_lsn;
 
+	/* Toplevel transaction for this subxact (NULL for top-level). */
+	struct ReorderBufferTXN *toptxn;
+
 	/*
 	 * LSN of the last lsn at which snapshot information reside, so we can
 	 * restart decoding from there and fully recover this transaction from
@@ -233,7 +294,8 @@ typedef struct ReorderBufferTXN
 	XLogRecPtr	origin_lsn;
 
 	/*
-	 * Commit time, only known when we read the actual commit record.
+	 * Commit or Prepare time, only known when we read the actual commit or
+	 * prepare record.
 	 */
 	TimestampTz commit_time;
 
@@ -245,6 +307,13 @@ typedef struct ReorderBufferTXN
 	Snapshot	base_snapshot;
 	XLogRecPtr	base_snapshot_lsn;
 	dlist_node	base_snapshot_node; /* link in txns_by_base_snapshot_lsn */
+
+	/*
+	 * Snapshot/CID from the previous streaming run. Only valid for already
+	 * streamed transactions (NULL/InvalidCommandId otherwise).
+	 */
+	Snapshot	snapshot_now;
+	CommandId	command_id;
 
 	/*
 	 * How many ReorderBufferChange's do we have in this txn.
@@ -260,8 +329,8 @@ typedef struct ReorderBufferTXN
 	uint64		nentries_mem;
 
 	/*
-	 * List of ReorderBufferChange structs, including new Snapshots and new
-	 * CommandIds
+	 * List of ReorderBufferChange structs, including new Snapshots, new
+	 * CommandIds and command invalidation messages.
 	 */
 	dlist_head	changes;
 
@@ -311,6 +380,17 @@ typedef struct ReorderBufferTXN
 	 * Size of this transaction (changes currently in memory, in bytes).
 	 */
 	Size		size;
+
+	/* Size of top-transaction including sub-transactions. */
+	Size		total_size;
+
+	/* If we have detected concurrent abort then ignore future changes. */
+	bool		concurrent_abort;
+
+	/*
+	 * Private data pointer of the output plugin.
+	 */
+	void	   *output_plugin_private;
 } ReorderBufferTXN;
 
 /* so we can define the callbacks used inside struct ReorderBuffer itself */
@@ -345,6 +425,80 @@ typedef void (*ReorderBufferMessageCB) (ReorderBuffer *rb,
 										bool transactional,
 										const char *prefix, Size sz,
 										const char *message);
+
+/* begin prepare callback signature */
+typedef void (*ReorderBufferBeginPrepareCB) (ReorderBuffer *rb,
+											 ReorderBufferTXN *txn);
+
+/* prepare callback signature */
+typedef void (*ReorderBufferPrepareCB) (ReorderBuffer *rb,
+										ReorderBufferTXN *txn,
+										XLogRecPtr prepare_lsn);
+
+/* commit prepared callback signature */
+typedef void (*ReorderBufferCommitPreparedCB) (ReorderBuffer *rb,
+											   ReorderBufferTXN *txn,
+											   XLogRecPtr commit_lsn);
+
+/* rollback  prepared callback signature */
+typedef void (*ReorderBufferRollbackPreparedCB) (ReorderBuffer *rb,
+												 ReorderBufferTXN *txn,
+												 XLogRecPtr prepare_end_lsn,
+												 TimestampTz prepare_time);
+
+/* start streaming transaction callback signature */
+typedef void (*ReorderBufferStreamStartCB) (
+											ReorderBuffer *rb,
+											ReorderBufferTXN *txn,
+											XLogRecPtr first_lsn);
+
+/* stop streaming transaction callback signature */
+typedef void (*ReorderBufferStreamStopCB) (
+										   ReorderBuffer *rb,
+										   ReorderBufferTXN *txn,
+										   XLogRecPtr last_lsn);
+
+/* discard streamed transaction callback signature */
+typedef void (*ReorderBufferStreamAbortCB) (
+											ReorderBuffer *rb,
+											ReorderBufferTXN *txn,
+											XLogRecPtr abort_lsn);
+
+/* prepare streamed transaction callback signature */
+typedef void (*ReorderBufferStreamPrepareCB) (
+											  ReorderBuffer *rb,
+											  ReorderBufferTXN *txn,
+											  XLogRecPtr prepare_lsn);
+
+/* commit streamed transaction callback signature */
+typedef void (*ReorderBufferStreamCommitCB) (
+											 ReorderBuffer *rb,
+											 ReorderBufferTXN *txn,
+											 XLogRecPtr commit_lsn);
+
+/* stream change callback signature */
+typedef void (*ReorderBufferStreamChangeCB) (
+											 ReorderBuffer *rb,
+											 ReorderBufferTXN *txn,
+											 Relation relation,
+											 ReorderBufferChange *change);
+
+/* stream message callback signature */
+typedef void (*ReorderBufferStreamMessageCB) (
+											  ReorderBuffer *rb,
+											  ReorderBufferTXN *txn,
+											  XLogRecPtr message_lsn,
+											  bool transactional,
+											  const char *prefix, Size sz,
+											  const char *message);
+
+/* stream truncate callback signature */
+typedef void (*ReorderBufferStreamTruncateCB) (
+											   ReorderBuffer *rb,
+											   ReorderBufferTXN *txn,
+											   int nrelations,
+											   Relation relations[],
+											   ReorderBufferChange *change);
 
 struct ReorderBuffer
 {
@@ -385,6 +539,26 @@ struct ReorderBuffer
 	ReorderBufferMessageCB message;
 
 	/*
+	 * Callbacks to be called when streaming a transaction at prepare time.
+	 */
+	ReorderBufferBeginCB begin_prepare;
+	ReorderBufferPrepareCB prepare;
+	ReorderBufferCommitPreparedCB commit_prepared;
+	ReorderBufferRollbackPreparedCB rollback_prepared;
+
+	/*
+	 * Callbacks to be called when streaming a transaction.
+	 */
+	ReorderBufferStreamStartCB stream_start;
+	ReorderBufferStreamStopCB stream_stop;
+	ReorderBufferStreamAbortCB stream_abort;
+	ReorderBufferStreamPrepareCB stream_prepare;
+	ReorderBufferStreamCommitCB stream_commit;
+	ReorderBufferStreamChangeCB stream_change;
+	ReorderBufferStreamMessageCB stream_message;
+	ReorderBufferStreamTruncateCB stream_truncate;
+
+	/*
 	 * Pointer that will be passed untouched to the callbacks.
 	 */
 	void	   *private_data;
@@ -414,6 +588,29 @@ struct ReorderBuffer
 
 	/* memory accounting */
 	Size		size;
+
+	/*
+	 * Statistics about transactions spilled to disk.
+	 *
+	 * A single transaction may be spilled repeatedly, which is why we keep
+	 * two different counters. For spilling, the transaction counter includes
+	 * both toplevel transactions and subtransactions.
+	 */
+	int64		spillTxns;		/* number of transactions spilled to disk */
+	int64		spillCount;		/* spill-to-disk invocation counter */
+	int64		spillBytes;		/* amount of data spilled to disk */
+
+	/* Statistics about transactions streamed to the decoding output plugin */
+	int64		streamTxns;		/* number of transactions streamed */
+	int64		streamCount;	/* streaming invocation counter */
+	int64		streamBytes;	/* amount of data decoded */
+
+	/*
+	 * Statistics about all the transactions sent to the decoding output
+	 * plugin
+	 */
+	int64		totalTxns;		/* total number of transactions sent */
+	int64		totalBytes;		/* total amount of data decoded */
 };
 
 
@@ -423,24 +620,33 @@ void		ReorderBufferFree(ReorderBuffer *);
 ReorderBufferTupleBuf *ReorderBufferGetTupleBuf(ReorderBuffer *, Size tuple_len);
 void		ReorderBufferReturnTupleBuf(ReorderBuffer *, ReorderBufferTupleBuf *tuple);
 ReorderBufferChange *ReorderBufferGetChange(ReorderBuffer *);
-void		ReorderBufferReturnChange(ReorderBuffer *, ReorderBufferChange *);
+void		ReorderBufferReturnChange(ReorderBuffer *, ReorderBufferChange *, bool);
 
 Oid		   *ReorderBufferGetRelids(ReorderBuffer *, int nrelids);
 void		ReorderBufferReturnRelids(ReorderBuffer *, Oid *relids);
 
-void		ReorderBufferQueueChange(ReorderBuffer *, TransactionId, XLogRecPtr lsn, ReorderBufferChange *);
+void		ReorderBufferQueueChange(ReorderBuffer *, TransactionId,
+									 XLogRecPtr lsn, ReorderBufferChange *,
+									 bool toast_insert);
 void		ReorderBufferQueueMessage(ReorderBuffer *, TransactionId, Snapshot snapshot, XLogRecPtr lsn,
 									  bool transactional, const char *prefix,
 									  Size message_size, const char *message);
 void		ReorderBufferCommit(ReorderBuffer *, TransactionId,
 								XLogRecPtr commit_lsn, XLogRecPtr end_lsn,
 								TimestampTz commit_time, RepOriginId origin_id, XLogRecPtr origin_lsn);
+void		ReorderBufferFinishPrepared(ReorderBuffer *rb, TransactionId xid,
+										XLogRecPtr commit_lsn, XLogRecPtr end_lsn,
+										XLogRecPtr initial_consistent_point,
+										TimestampTz commit_time,
+										RepOriginId origin_id, XLogRecPtr origin_lsn,
+										char *gid, bool is_commit);
 void		ReorderBufferAssignChild(ReorderBuffer *, TransactionId, TransactionId, XLogRecPtr commit_lsn);
 void		ReorderBufferCommitChild(ReorderBuffer *, TransactionId, TransactionId,
 									 XLogRecPtr commit_lsn, XLogRecPtr end_lsn);
 void		ReorderBufferAbort(ReorderBuffer *, TransactionId, XLogRecPtr lsn);
 void		ReorderBufferAbortOld(ReorderBuffer *, TransactionId xid);
 void		ReorderBufferForget(ReorderBuffer *, TransactionId, XLogRecPtr lsn);
+void		ReorderBufferInvalidate(ReorderBuffer *, TransactionId, XLogRecPtr lsn);
 
 void		ReorderBufferSetBaseSnapshot(ReorderBuffer *, TransactionId, XLogRecPtr lsn, struct SnapshotData *snap);
 void		ReorderBufferAddSnapshot(ReorderBuffer *, TransactionId, XLogRecPtr lsn, struct SnapshotData *snap);
@@ -454,10 +660,17 @@ void		ReorderBufferAddInvalidations(ReorderBuffer *, TransactionId, XLogRecPtr l
 void		ReorderBufferImmediateInvalidation(ReorderBuffer *, uint32 ninvalidations,
 											   SharedInvalidationMessage *invalidations);
 void		ReorderBufferProcessXid(ReorderBuffer *, TransactionId xid, XLogRecPtr lsn);
+
 void		ReorderBufferXidSetCatalogChanges(ReorderBuffer *, TransactionId xid, XLogRecPtr lsn);
 bool		ReorderBufferXidHasCatalogChanges(ReorderBuffer *, TransactionId xid);
 bool		ReorderBufferXidHasBaseSnapshot(ReorderBuffer *, TransactionId xid);
 
+bool		ReorderBufferRememberPrepareInfo(ReorderBuffer *rb, TransactionId xid,
+											 XLogRecPtr prepare_lsn, XLogRecPtr end_lsn,
+											 TimestampTz prepare_time,
+											 RepOriginId origin_id, XLogRecPtr origin_lsn);
+void		ReorderBufferSkipPrepare(ReorderBuffer *rb, TransactionId xid);
+void		ReorderBufferPrepare(ReorderBuffer *rb, TransactionId xid, char *gid);
 ReorderBufferTXN *ReorderBufferGetOldestTXN(ReorderBuffer *);
 TransactionId ReorderBufferGetOldestXmin(ReorderBuffer *rb);
 

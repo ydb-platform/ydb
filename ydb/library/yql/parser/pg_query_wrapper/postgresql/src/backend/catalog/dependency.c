@@ -4,7 +4,7 @@
  *	  Routines to support inter-object dependencies.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -66,9 +66,7 @@
 #include "commands/event_trigger.h"
 #include "commands/extension.h"
 #include "commands/policy.h"
-#include "commands/proclang.h"
 #include "commands/publicationcmds.h"
-#include "commands/schemacmds.h"
 #include "commands/seclabel.h"
 #include "commands/sequence.h"
 #include "commands/trigger.h"
@@ -745,8 +743,8 @@ findDependentObjects(const ObjectAddress *object,
 				if (!object_address_present_add_flags(object, objflags,
 													  targetObjects))
 					elog(ERROR, "deletion of owning object %s failed to delete %s",
-						 getObjectDescription(&otherObject),
-						 getObjectDescription(object));
+						 getObjectDescription(&otherObject, false),
+						 getObjectDescription(object, false));
 
 				/* And we're done here. */
 				return;
@@ -792,11 +790,11 @@ findDependentObjects(const ObjectAddress *object,
 				 * the depender fields...
 				 */
 				elog(ERROR, "incorrect use of PIN dependency with %s",
-					 getObjectDescription(object));
+					 getObjectDescription(object, false));
 				break;
 			default:
 				elog(ERROR, "unrecognized dependency type '%c' for %s",
-					 foundDep->deptype, getObjectDescription(object));
+					 foundDep->deptype, getObjectDescription(object, false));
 				break;
 		}
 	}
@@ -814,14 +812,14 @@ findDependentObjects(const ObjectAddress *object,
 		char	   *otherObjDesc;
 
 		if (OidIsValid(partitionObject.classId))
-			otherObjDesc = getObjectDescription(&partitionObject);
+			otherObjDesc = getObjectDescription(&partitionObject, false);
 		else
-			otherObjDesc = getObjectDescription(&owningObject);
+			otherObjDesc = getObjectDescription(&owningObject, false);
 
 		ereport(ERROR,
 				(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 				 errmsg("cannot drop %s because %s requires it",
-						getObjectDescription(object), otherObjDesc),
+						getObjectDescription(object, false), otherObjDesc),
 				 errhint("You can drop %s instead.", otherObjDesc)));
 	}
 
@@ -931,12 +929,12 @@ findDependentObjects(const ObjectAddress *object,
 				ereport(ERROR,
 						(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 						 errmsg("cannot drop %s because it is required by the database system",
-								getObjectDescription(object))));
+								getObjectDescription(object, false))));
 				subflags = 0;	/* keep compiler quiet */
 				break;
 			default:
 				elog(ERROR, "unrecognized dependency type '%c' for %s",
-					 foundDep->deptype, getObjectDescription(object));
+					 foundDep->deptype, getObjectDescription(object, false));
 				subflags = 0;	/* keep compiler quiet */
 				break;
 		}
@@ -1054,12 +1052,13 @@ reportDependentObjects(const ObjectAddresses *targetObjects,
 			!(extra->flags & DEPFLAG_PARTITION))
 		{
 			const ObjectAddress *object = &targetObjects->refs[i];
-			char	   *otherObjDesc = getObjectDescription(&extra->dependee);
+			char	   *otherObjDesc = getObjectDescription(&extra->dependee,
+															false);
 
 			ereport(ERROR,
 					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 					 errmsg("cannot drop %s because %s requires it",
-							getObjectDescription(object), otherObjDesc),
+							getObjectDescription(object, false), otherObjDesc),
 					 errhint("You can drop %s instead.", otherObjDesc)));
 		}
 	}
@@ -1068,15 +1067,9 @@ reportDependentObjects(const ObjectAddresses *targetObjects,
 	 * If no error is to be thrown, and the msglevel is too low to be shown to
 	 * either client or server log, there's no need to do any of the rest of
 	 * the work.
-	 *
-	 * Note: this code doesn't know all there is to be known about elog
-	 * levels, but it works for NOTICE and DEBUG2, which are the only values
-	 * msglevel can currently have.  We also assume we are running in a normal
-	 * operating environment.
 	 */
 	if (behavior == DROP_CASCADE &&
-		msglevel < client_min_messages &&
-		(msglevel < log_min_messages || log_min_messages == LOG))
+		!message_level_is_interesting(msglevel))
 		return;
 
 	/*
@@ -1107,7 +1100,7 @@ reportDependentObjects(const ObjectAddresses *targetObjects,
 		if (extra->flags & DEPFLAG_SUBOBJECT)
 			continue;
 
-		objDesc = getObjectDescription(obj);
+		objDesc = getObjectDescription(obj, false);
 
 		/* An object being dropped concurrently doesn't need to be reported */
 		if (objDesc == NULL)
@@ -1130,12 +1123,13 @@ reportDependentObjects(const ObjectAddresses *targetObjects,
 			 * log_min_messages are different.
 			 */
 			ereport(DEBUG2,
-					(errmsg("drop auto-cascades to %s",
-							objDesc)));
+					(errmsg_internal("drop auto-cascades to %s",
+									 objDesc)));
 		}
 		else if (behavior == DROP_RESTRICT)
 		{
-			char	   *otherDesc = getObjectDescription(&extra->dependee);
+			char	   *otherDesc = getObjectDescription(&extra->dependee,
+														 false);
 
 			if (otherDesc)
 			{
@@ -1198,7 +1192,7 @@ reportDependentObjects(const ObjectAddresses *targetObjects,
 			ereport(ERROR,
 					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 					 errmsg("cannot drop %s because other objects depend on it",
-							getObjectDescription(origObject)),
+							getObjectDescription(origObject, false)),
 					 errdetail("%s", clientdetail.data),
 					 errdetail_log("%s", logdetail.data),
 					 errhint("Use DROP ... CASCADE to drop the dependent objects too.")));
@@ -1230,6 +1224,62 @@ reportDependentObjects(const ObjectAddresses *targetObjects,
 
 	pfree(clientdetail.data);
 	pfree(logdetail.data);
+}
+
+/*
+ * Drop an object by OID.  Works for most catalogs, if no special processing
+ * is needed.
+ */
+static void
+DropObjectById(const ObjectAddress *object)
+{
+	int			cacheId;
+	Relation	rel;
+	HeapTuple	tup;
+
+	cacheId = get_object_catcache_oid(object->classId);
+
+	rel = table_open(object->classId, RowExclusiveLock);
+
+	/*
+	 * Use the system cache for the oid column, if one exists.
+	 */
+	if (cacheId >= 0)
+	{
+		tup = SearchSysCache1(cacheId, ObjectIdGetDatum(object->objectId));
+		if (!HeapTupleIsValid(tup))
+			elog(ERROR, "cache lookup failed for %s %u",
+				 get_object_class_descr(object->classId), object->objectId);
+
+		CatalogTupleDelete(rel, &tup->t_self);
+
+		ReleaseSysCache(tup);
+	}
+	else
+	{
+		ScanKeyData skey[1];
+		SysScanDesc scan;
+
+		ScanKeyInit(&skey[0],
+					get_object_attnum_oid(object->classId),
+					BTEqualStrategyNumber, F_OIDEQ,
+					ObjectIdGetDatum(object->objectId));
+
+		scan = systable_beginscan(rel, get_object_oid_index(object->classId), true,
+								  NULL, 1, skey);
+
+		/* we expect exactly one match */
+		tup = systable_getnext(scan);
+		if (!HeapTupleIsValid(tup))
+			elog(ERROR, "could not find tuple for %s %u",
+				 get_object_class_descr(object->classId), object->objectId);
+
+		CatalogTupleDelete(rel, &tup->t_self);
+
+		systable_endscan(scan);
+	}
+
+	table_close(rel, RowExclusiveLock);
 }
 
 /*
@@ -1385,28 +1435,12 @@ doDeletion(const ObjectAddress *object, int flags)
 			RemoveTypeById(object->objectId);
 			break;
 
-		case OCLASS_CAST:
-			DropCastById(object->objectId);
-			break;
-
-		case OCLASS_COLLATION:
-			RemoveCollationById(object->objectId);
-			break;
-
 		case OCLASS_CONSTRAINT:
 			RemoveConstraintById(object->objectId);
 			break;
 
-		case OCLASS_CONVERSION:
-			RemoveConversionById(object->objectId);
-			break;
-
 		case OCLASS_DEFAULT:
 			RemoveAttrDefaultById(object->objectId);
-			break;
-
-		case OCLASS_LANGUAGE:
-			DropProceduralLanguageById(object->objectId);
 			break;
 
 		case OCLASS_LARGEOBJECT:
@@ -1417,26 +1451,6 @@ doDeletion(const ObjectAddress *object, int flags)
 			RemoveOperatorById(object->objectId);
 			break;
 
-		case OCLASS_OPCLASS:
-			RemoveOpClassById(object->objectId);
-			break;
-
-		case OCLASS_OPFAMILY:
-			RemoveOpFamilyById(object->objectId);
-			break;
-
-		case OCLASS_AM:
-			RemoveAccessMethodById(object->objectId);
-			break;
-
-		case OCLASS_AMOP:
-			RemoveAmOpEntryById(object->objectId);
-			break;
-
-		case OCLASS_AMPROC:
-			RemoveAmProcEntryById(object->objectId);
-			break;
-
 		case OCLASS_REWRITE:
 			RemoveRewriteRuleById(object->objectId);
 			break;
@@ -1445,73 +1459,50 @@ doDeletion(const ObjectAddress *object, int flags)
 			RemoveTriggerById(object->objectId);
 			break;
 
-		case OCLASS_SCHEMA:
-			RemoveSchemaById(object->objectId);
-			break;
-
 		case OCLASS_STATISTIC_EXT:
 			RemoveStatisticsById(object->objectId);
-			break;
-
-		case OCLASS_TSPARSER:
-			RemoveTSParserById(object->objectId);
-			break;
-
-		case OCLASS_TSDICT:
-			RemoveTSDictionaryById(object->objectId);
-			break;
-
-		case OCLASS_TSTEMPLATE:
-			RemoveTSTemplateById(object->objectId);
 			break;
 
 		case OCLASS_TSCONFIG:
 			RemoveTSConfigurationById(object->objectId);
 			break;
 
-			/*
-			 * OCLASS_ROLE, OCLASS_DATABASE, OCLASS_TBLSPACE intentionally not
-			 * handled here
-			 */
-
-		case OCLASS_FDW:
-			RemoveForeignDataWrapperById(object->objectId);
-			break;
-
-		case OCLASS_FOREIGN_SERVER:
-			RemoveForeignServerById(object->objectId);
-			break;
-
-		case OCLASS_USER_MAPPING:
-			RemoveUserMappingById(object->objectId);
-			break;
-
-		case OCLASS_DEFACL:
-			RemoveDefaultACLById(object->objectId);
-			break;
-
 		case OCLASS_EXTENSION:
 			RemoveExtensionById(object->objectId);
-			break;
-
-		case OCLASS_EVENT_TRIGGER:
-			RemoveEventTriggerById(object->objectId);
 			break;
 
 		case OCLASS_POLICY:
 			RemovePolicyById(object->objectId);
 			break;
 
-		case OCLASS_PUBLICATION:
-			RemovePublicationById(object->objectId);
-			break;
-
 		case OCLASS_PUBLICATION_REL:
 			RemovePublicationRelById(object->objectId);
 			break;
 
+		case OCLASS_PUBLICATION:
+			RemovePublicationById(object->objectId);
+			break;
+
+		case OCLASS_CAST:
+		case OCLASS_COLLATION:
+		case OCLASS_CONVERSION:
+		case OCLASS_LANGUAGE:
+		case OCLASS_OPCLASS:
+		case OCLASS_OPFAMILY:
+		case OCLASS_AM:
+		case OCLASS_AMOP:
+		case OCLASS_AMPROC:
+		case OCLASS_SCHEMA:
+		case OCLASS_TSPARSER:
+		case OCLASS_TSDICT:
+		case OCLASS_TSTEMPLATE:
+		case OCLASS_FDW:
+		case OCLASS_FOREIGN_SERVER:
+		case OCLASS_USER_MAPPING:
+		case OCLASS_DEFACL:
+		case OCLASS_EVENT_TRIGGER:
 		case OCLASS_TRANSFORM:
-			DropTransformById(object->objectId);
+			DropObjectById(object);
 			break;
 
 			/*
@@ -1957,6 +1948,22 @@ find_expr_references_walker(Node *node,
 						   context->addrs);
 		/* fall through to examine arguments */
 	}
+	else if (IsA(node, SubscriptingRef))
+	{
+		SubscriptingRef *sbsref = (SubscriptingRef *) node;
+
+		/*
+		 * The refexpr should provide adequate dependency on refcontainertype,
+		 * and that type in turn depends on refelemtype.  However, a custom
+		 * subscripting handler might set refrestype to something different
+		 * from either of those, in which case we'd better record it.
+		 */
+		if (sbsref->refrestype != sbsref->refcontainertype &&
+			sbsref->refrestype != sbsref->refelemtype)
+			add_object_address(OCLASS_TYPE, sbsref->refrestype, 0,
+							   context->addrs);
+		/* fall through to examine arguments */
+	}
 	else if (IsA(node, SubPlan))
 	{
 		/* Extra work needed here if we ever need this case */
@@ -2133,6 +2140,21 @@ find_expr_references_walker(Node *node,
 		if (OidIsValid(wc->inRangeColl) &&
 			wc->inRangeColl != DEFAULT_COLLATION_OID)
 			add_object_address(OCLASS_COLLATION, wc->inRangeColl, 0,
+							   context->addrs);
+		/* fall through to examine substructure */
+	}
+	else if (IsA(node, CTECycleClause))
+	{
+		CTECycleClause *cc = (CTECycleClause *) node;
+
+		if (OidIsValid(cc->cycle_mark_type))
+			add_object_address(OCLASS_TYPE, cc->cycle_mark_type, 0,
+							   context->addrs);
+		if (OidIsValid(cc->cycle_mark_collation))
+			add_object_address(OCLASS_COLLATION, cc->cycle_mark_collation, 0,
+							   context->addrs);
+		if (OidIsValid(cc->cycle_mark_neop))
+			add_object_address(OCLASS_OPERATOR, cc->cycle_mark_neop, 0,
 							   context->addrs);
 		/* fall through to examine substructure */
 	}

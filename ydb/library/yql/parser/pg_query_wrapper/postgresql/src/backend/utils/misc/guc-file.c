@@ -750,7 +750,7 @@ __thread char *yytext;
 /*
  * Scanner for the configuration file
  *
- * Copyright (c) 2000-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2021, PostgreSQL Global Development Group
  *
  * src/backend/utils/misc/guc-file.l
  */
@@ -802,13 +802,12 @@ static void record_config_file_error(const char *errmsg,
 						 ConfigVariable **tail_p);
 
 static int	GUC_flex_fatal(const char *msg);
-static char *GUC_scanstr(const char *s);
 
 /* LCOV_EXCL_START */
 
-#line 810 "guc-file.c"
+#line 809 "guc-file.c"
 #define YY_NO_INPUT 1
-#line 812 "guc-file.c"
+#line 811 "guc-file.c"
 
 #define INITIAL 0
 
@@ -1023,10 +1022,10 @@ YY_DECL
 		}
 
 	{
-#line 94 "guc-file.l"
+#line 93 "guc-file.l"
 
 
-#line 1030 "guc-file.c"
+#line 1029 "guc-file.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1082,65 +1081,65 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 /* rule 1 can match eol */
 YY_RULE_SETUP
-#line 96 "guc-file.l"
+#line 95 "guc-file.l"
 ConfigFileLineno++; return GUC_EOL;
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 97 "guc-file.l"
+#line 96 "guc-file.l"
 /* eat whitespace */
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 98 "guc-file.l"
+#line 97 "guc-file.l"
 /* eat comment (.* matches anything until newline) */
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 100 "guc-file.l"
+#line 99 "guc-file.l"
 return GUC_ID;
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 101 "guc-file.l"
+#line 100 "guc-file.l"
 return GUC_QUALIFIED_ID;
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 102 "guc-file.l"
+#line 101 "guc-file.l"
 return GUC_STRING;
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 103 "guc-file.l"
+#line 102 "guc-file.l"
 return GUC_UNQUOTED_STRING;
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 104 "guc-file.l"
+#line 103 "guc-file.l"
 return GUC_INTEGER;
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 105 "guc-file.l"
+#line 104 "guc-file.l"
 return GUC_REAL;
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 106 "guc-file.l"
+#line 105 "guc-file.l"
 return GUC_EQUALS;
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 108 "guc-file.l"
+#line 107 "guc-file.l"
 return GUC_ERROR;
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 110 "guc-file.l"
+#line 109 "guc-file.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1144 "guc-file.c"
+#line 1143 "guc-file.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2109,7 +2108,7 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 110 "guc-file.l"
+#line 109 "guc-file.l"
 
 
 /* LCOV_EXCL_STOP */
@@ -2286,7 +2285,7 @@ ProcessConfigFileInternal(GucContext context, bool applySettings, int elevel)
 		 * Try to find the variable; but do not create a custom placeholder if
 		 * it's not there already.
 		 */
-		record = find_option(item->name, false, elevel);
+		record = find_option(item->name, false, true, elevel);
 
 		if (record)
 		{
@@ -2310,12 +2309,12 @@ ProcessConfigFileInternal(GucContext context, bool applySettings, int elevel)
 			/* Now mark it as present in file */
 			record->status |= GUC_IS_IN_FILE;
 		}
-		else if (strchr(item->name, GUC_QUALIFIER_SEPARATOR) == NULL)
+		else if (!valid_custom_variable_name(item->name))
 		{
 			/* Invalid non-custom variable, so complain */
 			ereport(elevel,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("unrecognized configuration parameter \"%s\" in file \"%s\" line %u",
+					 errmsg("unrecognized configuration parameter \"%s\" in file \"%s\" line %d",
 							item->name,
 							item->filename, item->sourceline)));
 			item->errmsg = pstrdup("unrecognized configuration parameter");
@@ -2802,7 +2801,7 @@ ParseConfigFp(FILE *fp, const char *config_file, int depth, int elevel,
 			token != GUC_UNQUOTED_STRING)
 			goto parse_error;
 		if (token == GUC_STRING)	/* strip quotes and escapes */
-			opt_value = GUC_scanstr(yytext);
+			opt_value = DeescapeQuotedString(yytext);
 		else
 			opt_value = pstrdup(yytext);
 
@@ -3137,22 +3136,25 @@ FreeConfigVariable(ConfigVariable *item)
 
 
 /*
- *		scanstr
+ *		DeescapeQuotedString
  *
  * Strip the quotes surrounding the given string, and collapse any embedded
  * '' sequences and backslash escapes.
  *
- * the string returned is palloc'd and should eventually be pfree'd by the
+ * The string returned is palloc'd and should eventually be pfree'd by the
  * caller.
+ *
+ * This is exported because it is also used by the bootstrap scanner.
  */
-static char *
-GUC_scanstr(const char *s)
+char *
+DeescapeQuotedString(const char *s)
 {
 	char	   *newStr;
 	int			len,
 				i,
 				j;
 
+	/* We just Assert that there are leading and trailing quotes */
 	Assert(s != NULL && s[0] == '\'');
 	len = strlen(s);
 	Assert(len >= 2);

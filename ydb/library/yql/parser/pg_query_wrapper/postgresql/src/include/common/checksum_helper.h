@@ -3,7 +3,7 @@
  * checksum_helper.h
  *	  Compute a checksum of any of various types using common routines
  *
- * Portions Copyright (c) 2016-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2016-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/include/common/checksum_helper.h
@@ -14,6 +14,7 @@
 #ifndef CHECKSUM_HELPER_H
 #define CHECKSUM_HELPER_H
 
+#include "common/cryptohash.h"
 #include "common/sha2.h"
 #include "port/pg_crc32c.h"
 
@@ -41,10 +42,7 @@ typedef enum pg_checksum_type
 typedef union pg_checksum_raw_context
 {
 	pg_crc32c	c_crc32c;
-	pg_sha224_ctx c_sha224;
-	pg_sha256_ctx c_sha256;
-	pg_sha384_ctx c_sha384;
-	pg_sha512_ctx c_sha512;
+	pg_cryptohash_ctx *c_sha2;
 } pg_checksum_raw_context;
 
 /*
@@ -66,8 +64,8 @@ typedef struct pg_checksum_context
 extern bool pg_checksum_parse_type(char *name, pg_checksum_type *);
 extern char *pg_checksum_type_name(pg_checksum_type);
 
-extern void pg_checksum_init(pg_checksum_context *, pg_checksum_type);
-extern void pg_checksum_update(pg_checksum_context *, const uint8 *input,
+extern int	pg_checksum_init(pg_checksum_context *, pg_checksum_type);
+extern int	pg_checksum_update(pg_checksum_context *, const uint8 *input,
 							   size_t len);
 extern int	pg_checksum_final(pg_checksum_context *, uint8 *output);
 

@@ -4,7 +4,7 @@
  *	  header file for postgres vacuum cleaner and statistics analyzer
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/commands/vacuum.h
@@ -40,7 +40,7 @@
 
 /*
  * bulkdelete can be performed in parallel.  This option can be used by
- * IndexAm's that need to scan the index to delete the tuples.
+ * index AMs that need to scan indexes to delete tuples.
  */
 #define VACUUM_OPTION_PARALLEL_BULKDEL		(1 << 0)
 
@@ -174,30 +174,31 @@ typedef struct VacAttrStats
 	int			rowstride;
 } VacAttrStats;
 
-typedef enum VacuumOption
-{
-	VACOPT_VACUUM = 1 << 0,		/* do VACUUM */
-	VACOPT_ANALYZE = 1 << 1,	/* do ANALYZE */
-	VACOPT_VERBOSE = 1 << 2,	/* print progress info */
-	VACOPT_FREEZE = 1 << 3,		/* FREEZE option */
-	VACOPT_FULL = 1 << 4,		/* FULL (non-concurrent) vacuum */
-	VACOPT_SKIP_LOCKED = 1 << 5,	/* skip if cannot get lock */
-	VACOPT_SKIPTOAST = 1 << 6,	/* don't process the TOAST table, if any */
-	VACOPT_DISABLE_PAGE_SKIPPING = 1 << 7	/* don't skip any pages */
-} VacuumOption;
+/* flag bits for VacuumParams->options */
+#define VACOPT_VACUUM 0x01		/* do VACUUM */
+#define VACOPT_ANALYZE 0x02		/* do ANALYZE */
+#define VACOPT_VERBOSE 0x04		/* print progress info */
+#define VACOPT_FREEZE 0x08		/* FREEZE option */
+#define VACOPT_FULL 0x10		/* FULL (non-concurrent) vacuum */
+#define VACOPT_SKIP_LOCKED 0x20 /* skip if cannot get lock */
+#define VACOPT_PROCESS_TOAST 0x40	/* process the TOAST table, if any */
+#define VACOPT_DISABLE_PAGE_SKIPPING 0x80	/* don't skip any pages */
 
 /*
- * A ternary value used by vacuum parameters.
+ * Values used by index_cleanup and truncate params.
  *
- * DEFAULT value is used to determine the value based on other
- * configurations, e.g. reloptions.
+ * VACOPTVALUE_UNSPECIFIED is used as an initial placeholder when VACUUM
+ * command has no explicit value.  When that happens the final usable value
+ * comes from the corresponding reloption (though the reloption default is
+ * usually used).
  */
-typedef enum VacOptTernaryValue
+typedef enum VacOptValue
 {
-	VACOPT_TERNARY_DEFAULT = 0,
-	VACOPT_TERNARY_DISABLED,
-	VACOPT_TERNARY_ENABLED,
-} VacOptTernaryValue;
+	VACOPTVALUE_UNSPECIFIED = 0,
+	VACOPTVALUE_AUTO,
+	VACOPTVALUE_DISABLED,
+	VACOPTVALUE_ENABLED,
+} VacOptValue;
 
 /*
  * Parameters customizing behavior of VACUUM and ANALYZE.
@@ -207,7 +208,7 @@ typedef enum VacOptTernaryValue
  */
 typedef struct VacuumParams
 {
-	int			options;		/* bitmask of VacuumOption */
+	bits32		options;		/* bitmask of VACOPT_* */
 	int			freeze_min_age; /* min freeze age, -1 to use default */
 	int			freeze_table_age;	/* age at which to scan whole table */
 	int			multixact_freeze_min_age;	/* min multixact freeze age, -1 to
@@ -218,10 +219,8 @@ typedef struct VacuumParams
 	int			log_min_duration;	/* minimum execution threshold in ms at
 									 * which  verbose logs are activated, -1
 									 * to use default */
-	VacOptTernaryValue index_cleanup;	/* Do index vacuum and cleanup,
-										 * default value depends on reloptions */
-	VacOptTernaryValue truncate;	/* Truncate empty pages at the end,
-									 * default value depends on reloptions */
+	VacOptValue index_cleanup;	/* Do index vacuum and cleanup */
+	VacOptValue truncate;		/* Truncate empty pages at the end */
 
 	/*
 	 * The number of parallel vacuum workers.  0 by default which means choose
@@ -237,6 +236,8 @@ extern __thread int	vacuum_freeze_min_age;
 extern __thread int	vacuum_freeze_table_age;
 extern __thread int	vacuum_multixact_freeze_min_age;
 extern __thread int	vacuum_multixact_freeze_table_age;
+extern __thread int	vacuum_failsafe_age;
+extern __thread int	vacuum_multixact_failsafe_age;
 
 /* Variables for cost-based parallel vacuum */
 extern __thread pg_atomic_uint32 *VacuumSharedCostBalance;
@@ -272,12 +273,15 @@ extern void vacuum_set_xid_limits(Relation rel,
 								  TransactionId *xidFullScanLimit,
 								  MultiXactId *multiXactCutoff,
 								  MultiXactId *mxactFullScanLimit);
+extern bool vacuum_xid_failsafe_check(TransactionId relfrozenxid,
+									  MultiXactId relminmxid);
 extern void vac_update_datfrozenxid(void);
 extern void vacuum_delay_point(void);
 extern bool vacuum_is_relation_owner(Oid relid, Form_pg_class reltuple,
-									 int options);
+									 bits32 options);
 extern Relation vacuum_open_relation(Oid relid, RangeVar *relation,
-									 int options, bool verbose, LOCKMODE lmode);
+									 bits32 options, bool verbose,
+									 LOCKMODE lmode);
 
 /* in commands/analyze.c */
 extern void analyze_rel(Oid relid, RangeVar *relation,

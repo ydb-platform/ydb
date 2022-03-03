@@ -95,7 +95,7 @@
  * with the higher XID backs out.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -254,6 +254,16 @@ ExecCloseIndices(ResultRelInfo *resultRelInfo)
  *		into all the relations indexing the result relation
  *		when a heap tuple is inserted into the result relation.
  *
+ *		When 'update' is true, executor is performing an UPDATE
+ *		that could not use an optimization like heapam's HOT (in
+ *		more general terms a call to table_tuple_update() took
+ *		place and set 'update_indexes' to true).  Receiving this
+ *		hint makes us consider if we should pass down the
+ *		'indexUnchanged' hint in turn.  That's something that we
+ *		figure out for each index_insert() call iff 'update' is
+ *		true.  (When 'update' is false we already know not to pass
+ *		the hint to any index.)
+ *
  *		Unique and exclusion constraints are enforced at the same
  *		time.  This returns a list of index OIDs for any unique or
  *		exclusion constraints that are deferred and that had
@@ -263,22 +273,19 @@ ExecCloseIndices(ResultRelInfo *resultRelInfo)
  *
  *		If 'arbiterIndexes' is nonempty, noDupErr applies only to
  *		those indexes.  NIL means noDupErr applies to all indexes.
- *
- *		CAUTION: this must not be called for a HOT update.
- *		We can't defend against that here for lack of info.
- *		Should we change the API to make it safer?
  * ----------------------------------------------------------------
  */
 List *
-ExecInsertIndexTuples(TupleTableSlot *slot,
+ExecInsertIndexTuples(ResultRelInfo *resultRelInfo,
+					  TupleTableSlot *slot,
 					  EState *estate,
+					  bool update,
 					  bool noDupErr,
 					  bool *specConflict,
 					  List *arbiterIndexes)
 {
 	ItemPointer tupleid = &slot->tts_tid;
 	List	   *result = NIL;
-	ResultRelInfo *resultRelInfo;
 	int			i;
 	int			numIndices;
 	RelationPtr relationDescs;
@@ -293,7 +300,6 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 	/*
 	 * Get information from the result relation info structure.
 	 */
-	resultRelInfo = estate->es_result_relation_info;
 	numIndices = resultRelInfo->ri_NumIndices;
 	relationDescs = resultRelInfo->ri_IndexRelationDescs;
 	indexInfoArray = resultRelInfo->ri_IndexRelationInfo;
@@ -320,6 +326,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 		IndexInfo  *indexInfo;
 		bool		applyNoDupErr;
 		IndexUniqueCheck checkUnique;
+		bool		indexUnchanged;
 		bool		satisfiesConstraint;
 
 		if (indexRelation == NULL)
@@ -390,6 +397,17 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 		else
 			checkUnique = UNIQUE_CHECK_PARTIAL;
 
+		/*
+		 * There's definitely going to be an index_insert() call for this
+		 * index.  If we're being called as part of an UPDATE statement,
+		 * consider if the 'indexUnchanged' = true hint should be passed.
+		 *
+		 * XXX We always assume that the hint should be passed for an UPDATE.
+		 * This is a workaround for a bug in PostgreSQL 14.  In practice this
+		 * won't make much difference for current users of the hint.
+		 */
+		indexUnchanged = update;
+
 		satisfiesConstraint =
 			index_insert(indexRelation, /* index relation */
 						 values,	/* array of index Datums */
@@ -397,6 +415,7 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
 						 tupleid,	/* tid of heap tuple */
 						 heapRelation,	/* heap relation */
 						 checkUnique,	/* type of uniqueness check to do */
+						 indexUnchanged,	/* UPDATE without logical change? */
 						 indexInfo);	/* index AM may need this */
 
 		/*
@@ -479,11 +498,10 @@ ExecInsertIndexTuples(TupleTableSlot *slot,
  * ----------------------------------------------------------------
  */
 bool
-ExecCheckIndexConstraints(TupleTableSlot *slot,
+ExecCheckIndexConstraints(ResultRelInfo *resultRelInfo, TupleTableSlot *slot,
 						  EState *estate, ItemPointer conflictTid,
 						  List *arbiterIndexes)
 {
-	ResultRelInfo *resultRelInfo;
 	int			i;
 	int			numIndices;
 	RelationPtr relationDescs;
@@ -501,7 +519,6 @@ ExecCheckIndexConstraints(TupleTableSlot *slot,
 	/*
 	 * Get information from the result relation info structure.
 	 */
-	resultRelInfo = estate->es_result_relation_info;
 	numIndices = resultRelInfo->ri_NumIndices;
 	relationDescs = resultRelInfo->ri_IndexRelationDescs;
 	indexInfoArray = resultRelInfo->ri_IndexRelationInfo;

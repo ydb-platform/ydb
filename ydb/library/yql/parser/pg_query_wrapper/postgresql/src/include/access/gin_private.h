@@ -2,7 +2,7 @@
  * gin_private.h
  *	  header file for postgres inverted index access method implementation.
  *
- *	Copyright (c) 2006-2020, PostgreSQL Global Development Group
+ *	Copyright (c) 2006-2021, PostgreSQL Global Development Group
  *
  *	src/include/access/gin_private.h
  *--------------------------------------------------------------------------
@@ -116,6 +116,7 @@ extern void ginbuildempty(Relation index);
 extern bool gininsert(Relation index, Datum *values, bool *isnull,
 					  ItemPointer ht_ctid, Relation heapRel,
 					  IndexUniqueCheck checkUnique,
+					  bool indexUnchanged,
 					  struct IndexInfo *indexInfo);
 extern void ginEntryInsert(GinState *ginstate,
 						   OffsetNumber attnum, Datum key, GinNullCategory category,
@@ -407,6 +408,10 @@ extern ItemPointer ginVacuumItemPointers(GinVacuumState *gvs,
 
 /* ginvalidate.c */
 extern bool ginvalidate(Oid opclassoid);
+extern void ginadjustmembers(Oid opfamilyoid,
+							 Oid opclassoid,
+							 List *operators,
+							 List *functions);
 
 /* ginbulk.c */
 typedef struct GinEntryAccumulator

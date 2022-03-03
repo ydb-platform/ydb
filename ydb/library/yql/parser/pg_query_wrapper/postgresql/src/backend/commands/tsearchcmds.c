@@ -4,7 +4,7 @@
  *
  *	  Routines for tsearch manipulation commands
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -133,41 +133,40 @@ makeParserDependencies(HeapTuple tuple)
 	Form_pg_ts_parser prs = (Form_pg_ts_parser) GETSTRUCT(tuple);
 	ObjectAddress myself,
 				referenced;
+	ObjectAddresses *addrs;
 
-	myself.classId = TSParserRelationId;
-	myself.objectId = prs->oid;
-	myself.objectSubId = 0;
-
-	/* dependency on namespace */
-	referenced.classId = NamespaceRelationId;
-	referenced.objectId = prs->prsnamespace;
-	referenced.objectSubId = 0;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	ObjectAddressSet(myself, TSParserRelationId, prs->oid);
 
 	/* dependency on extension */
 	recordDependencyOnCurrentExtension(&myself, false);
 
-	/* dependencies on functions */
-	referenced.classId = ProcedureRelationId;
-	referenced.objectSubId = 0;
+	addrs = new_object_addresses();
 
-	referenced.objectId = prs->prsstart;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	/* dependency on namespace */
+	ObjectAddressSet(referenced, NamespaceRelationId, prs->prsnamespace);
+	add_exact_object_address(&referenced, addrs);
+
+	/* dependencies on functions */
+	ObjectAddressSet(referenced, ProcedureRelationId, prs->prsstart);
+	add_exact_object_address(&referenced, addrs);
 
 	referenced.objectId = prs->prstoken;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	add_exact_object_address(&referenced, addrs);
 
 	referenced.objectId = prs->prsend;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	add_exact_object_address(&referenced, addrs);
 
 	referenced.objectId = prs->prslextype;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	add_exact_object_address(&referenced, addrs);
 
 	if (OidIsValid(prs->prsheadline))
 	{
 		referenced.objectId = prs->prsheadline;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		add_exact_object_address(&referenced, addrs);
 	}
+
+	record_object_address_dependencies(&myself, addrs, DEPENDENCY_NORMAL);
+	free_object_addresses(addrs);
 
 	return myself;
 }
@@ -291,29 +290,6 @@ DefineTSParser(List *names, List *parameters)
 	return address;
 }
 
-/*
- * Guts of TS parser deletion.
- */
-void
-RemoveTSParserById(Oid prsId)
-{
-	Relation	relation;
-	HeapTuple	tup;
-
-	relation = table_open(TSParserRelationId, RowExclusiveLock);
-
-	tup = SearchSysCache1(TSPARSEROID, ObjectIdGetDatum(prsId));
-
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for text search parser %u", prsId);
-
-	CatalogTupleDelete(relation, &tup->t_self);
-
-	ReleaseSysCache(tup);
-
-	table_close(relation, RowExclusiveLock);
-}
-
 /* ---------------------- TS Dictionary commands -----------------------*/
 
 /*
@@ -327,16 +303,9 @@ makeDictionaryDependencies(HeapTuple tuple)
 	Form_pg_ts_dict dict = (Form_pg_ts_dict) GETSTRUCT(tuple);
 	ObjectAddress myself,
 				referenced;
+	ObjectAddresses *addrs;
 
-	myself.classId = TSDictionaryRelationId;
-	myself.objectId = dict->oid;
-	myself.objectSubId = 0;
-
-	/* dependency on namespace */
-	referenced.classId = NamespaceRelationId;
-	referenced.objectId = dict->dictnamespace;
-	referenced.objectSubId = 0;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	ObjectAddressSet(myself, TSDictionaryRelationId, dict->oid);
 
 	/* dependency on owner */
 	recordDependencyOnOwner(myself.classId, myself.objectId, dict->dictowner);
@@ -344,11 +313,18 @@ makeDictionaryDependencies(HeapTuple tuple)
 	/* dependency on extension */
 	recordDependencyOnCurrentExtension(&myself, false);
 
+	addrs = new_object_addresses();
+
+	/* dependency on namespace */
+	ObjectAddressSet(referenced, NamespaceRelationId, dict->dictnamespace);
+	add_exact_object_address(&referenced, addrs);
+
 	/* dependency on template */
-	referenced.classId = TSTemplateRelationId;
-	referenced.objectId = dict->dicttemplate;
-	referenced.objectSubId = 0;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	ObjectAddressSet(referenced, TSTemplateRelationId, dict->dicttemplate);
+	add_exact_object_address(&referenced, addrs);
+
+	record_object_address_dependencies(&myself, addrs, DEPENDENCY_NORMAL);
+	free_object_addresses(addrs);
 
 	return myself;
 }
@@ -502,30 +478,6 @@ DefineTSDictionary(List *names, List *parameters)
 	table_close(dictRel, RowExclusiveLock);
 
 	return address;
-}
-
-/*
- * Guts of TS dictionary deletion.
- */
-void
-RemoveTSDictionaryById(Oid dictId)
-{
-	Relation	relation;
-	HeapTuple	tup;
-
-	relation = table_open(TSDictionaryRelationId, RowExclusiveLock);
-
-	tup = SearchSysCache1(TSDICTOID, ObjectIdGetDatum(dictId));
-
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for text search dictionary %u",
-			 dictId);
-
-	CatalogTupleDelete(relation, &tup->t_self);
-
-	ReleaseSysCache(tup);
-
-	table_close(relation, RowExclusiveLock);
 }
 
 /*
@@ -696,32 +648,31 @@ makeTSTemplateDependencies(HeapTuple tuple)
 	Form_pg_ts_template tmpl = (Form_pg_ts_template) GETSTRUCT(tuple);
 	ObjectAddress myself,
 				referenced;
+	ObjectAddresses *addrs;
 
-	myself.classId = TSTemplateRelationId;
-	myself.objectId = tmpl->oid;
-	myself.objectSubId = 0;
-
-	/* dependency on namespace */
-	referenced.classId = NamespaceRelationId;
-	referenced.objectId = tmpl->tmplnamespace;
-	referenced.objectSubId = 0;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	ObjectAddressSet(myself, TSTemplateRelationId, tmpl->oid);
 
 	/* dependency on extension */
 	recordDependencyOnCurrentExtension(&myself, false);
 
-	/* dependencies on functions */
-	referenced.classId = ProcedureRelationId;
-	referenced.objectSubId = 0;
+	addrs = new_object_addresses();
 
-	referenced.objectId = tmpl->tmpllexize;
-	recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+	/* dependency on namespace */
+	ObjectAddressSet(referenced, NamespaceRelationId, tmpl->tmplnamespace);
+	add_exact_object_address(&referenced, addrs);
+
+	/* dependencies on functions */
+	ObjectAddressSet(referenced, ProcedureRelationId, tmpl->tmpllexize);
+	add_exact_object_address(&referenced, addrs);
 
 	if (OidIsValid(tmpl->tmplinit))
 	{
 		referenced.objectId = tmpl->tmplinit;
-		recordDependencyOn(&myself, &referenced, DEPENDENCY_NORMAL);
+		add_exact_object_address(&referenced, addrs);
 	}
+
+	record_object_address_dependencies(&myself, addrs, DEPENDENCY_NORMAL);
+	free_object_addresses(addrs);
 
 	return myself;
 }
@@ -818,30 +769,6 @@ DefineTSTemplate(List *names, List *parameters)
 	table_close(tmplRel, RowExclusiveLock);
 
 	return address;
-}
-
-/*
- * Guts of TS template deletion.
- */
-void
-RemoveTSTemplateById(Oid tmplId)
-{
-	Relation	relation;
-	HeapTuple	tup;
-
-	relation = table_open(TSTemplateRelationId, RowExclusiveLock);
-
-	tup = SearchSysCache1(TSTEMPLATEOID, ObjectIdGetDatum(tmplId));
-
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for text search template %u",
-			 tmplId);
-
-	CatalogTupleDelete(relation, &tup->t_self);
-
-	ReleaseSysCache(tup);
-
-	table_close(relation, RowExclusiveLock);
 }
 
 /* ---------------------- TS Configuration commands -----------------------*/

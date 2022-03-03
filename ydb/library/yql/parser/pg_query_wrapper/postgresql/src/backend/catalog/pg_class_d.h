@@ -3,7 +3,7 @@
  * pg_class_d.h
  *    Macro definitions for pg_class
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -82,7 +82,7 @@
 /*
  * an explicitly chosen candidate key's columns are used as replica identity.
  * Note this will still be set if the index has been dropped; in that case it
- * has the same meaning as 'd'.
+ * has the same meaning as 'n'.
  */
 #define		  REPLICA_IDENTITY_INDEX	'i'
 

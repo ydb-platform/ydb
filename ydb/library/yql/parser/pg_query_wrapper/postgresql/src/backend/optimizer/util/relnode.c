@@ -3,7 +3,7 @@
  * relnode.c
  *	  Relation-node lookup/construction routines
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -234,6 +234,7 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptInfo *parent)
 	rel->subroot = NULL;
 	rel->subplan_params = NIL;
 	rel->rel_parallel_workers = -1; /* set up in get_relation_info */
+	rel->amflags = 0;
 	rel->serverid = InvalidOid;
 	rel->userid = rte->checkAsUser;
 	rel->useridiscurrent = false;
@@ -257,7 +258,6 @@ build_simple_rel(PlannerInfo *root, int relid, RelOptInfo *parent)
 	rel->all_partrels = NULL;
 	rel->partexprs = NULL;
 	rel->nullable_partexprs = NULL;
-	rel->partitioned_child_rels = NIL;
 
 	/*
 	 * Pass assorted information down the inheritance hierarchy.
@@ -401,7 +401,6 @@ build_join_rel_hash(PlannerInfo *root)
 	ListCell   *l;
 
 	/* Create the hash table */
-	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(Relids);
 	hash_ctl.entrysize = sizeof(JoinHashEntry);
 	hash_ctl.hash = bitmap_hash;
@@ -648,6 +647,7 @@ build_join_rel(PlannerInfo *root,
 	joinrel->subroot = NULL;
 	joinrel->subplan_params = NIL;
 	joinrel->rel_parallel_workers = -1;
+	joinrel->amflags = 0;
 	joinrel->serverid = InvalidOid;
 	joinrel->userid = InvalidOid;
 	joinrel->useridiscurrent = false;
@@ -672,7 +672,6 @@ build_join_rel(PlannerInfo *root,
 	joinrel->all_partrels = NULL;
 	joinrel->partexprs = NULL;
 	joinrel->nullable_partexprs = NULL;
-	joinrel->partitioned_child_rels = NIL;
 
 	/* Compute information relevant to the foreign relations. */
 	set_foreign_rel_properties(joinrel, outer_rel, inner_rel);
@@ -829,6 +828,7 @@ build_child_join_rel(PlannerInfo *root, RelOptInfo *outer_rel,
 	joinrel->eclass_indexes = NULL;
 	joinrel->subroot = NULL;
 	joinrel->subplan_params = NIL;
+	joinrel->amflags = 0;
 	joinrel->serverid = InvalidOid;
 	joinrel->userid = InvalidOid;
 	joinrel->useridiscurrent = false;
@@ -850,7 +850,6 @@ build_child_join_rel(PlannerInfo *root, RelOptInfo *outer_rel,
 	joinrel->all_partrels = NULL;
 	joinrel->partexprs = NULL;
 	joinrel->nullable_partexprs = NULL;
-	joinrel->partitioned_child_rels = NIL;
 
 	joinrel->top_parent_relids = bms_union(outer_rel->top_parent_relids,
 										   inner_rel->top_parent_relids);
@@ -978,8 +977,6 @@ build_joinrel_tlist(PlannerInfo *root, RelOptInfo *joinrel,
 	foreach(vars, input_rel->reltarget->exprs)
 	{
 		Var		   *var = (Var *) lfirst(vars);
-		RelOptInfo *baserel;
-		int			ndx;
 
 		/*
 		 * Ignore PlaceHolderVars in the input tlists; we'll make our own
@@ -997,17 +994,35 @@ build_joinrel_tlist(PlannerInfo *root, RelOptInfo *joinrel,
 			elog(ERROR, "unexpected node type in rel targetlist: %d",
 				 (int) nodeTag(var));
 
-		/* Get the Var's original base rel */
-		baserel = find_base_rel(root, var->varno);
-
-		/* Is it still needed above this joinrel? */
-		ndx = var->varattno - baserel->min_attr;
-		if (bms_nonempty_difference(baserel->attr_needed[ndx], relids))
+		if (var->varno == ROWID_VAR)
 		{
-			/* Yup, add it to the output */
-			joinrel->reltarget->exprs = lappend(joinrel->reltarget->exprs, var);
+			/* UPDATE/DELETE row identity vars are always needed */
+			RowIdentityVarInfo *ridinfo = (RowIdentityVarInfo *)
+			list_nth(root->row_identity_vars, var->varattno - 1);
+
+			joinrel->reltarget->exprs = lappend(joinrel->reltarget->exprs,
+												var);
 			/* Vars have cost zero, so no need to adjust reltarget->cost */
-			joinrel->reltarget->width += baserel->attr_widths[ndx];
+			joinrel->reltarget->width += ridinfo->rowidwidth;
+		}
+		else
+		{
+			RelOptInfo *baserel;
+			int			ndx;
+
+			/* Get the Var's original base rel */
+			baserel = find_base_rel(root, var->varno);
+
+			/* Is it still needed above this joinrel? */
+			ndx = var->varattno - baserel->min_attr;
+			if (bms_nonempty_difference(baserel->attr_needed[ndx], relids))
+			{
+				/* Yup, add it to the output */
+				joinrel->reltarget->exprs = lappend(joinrel->reltarget->exprs,
+													var);
+				/* Vars have cost zero, so no need to adjust reltarget->cost */
+				joinrel->reltarget->width += baserel->attr_widths[ndx];
+			}
 		}
 	}
 }

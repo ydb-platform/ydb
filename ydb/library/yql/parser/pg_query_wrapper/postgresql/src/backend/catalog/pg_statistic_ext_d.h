@@ -3,7 +3,7 @@
  * pg_statistic_ext_d.h
  *    Macro definitions for pg_statistic_ext
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -28,13 +28,15 @@
 #define Anum_pg_statistic_ext_stxstattarget 6
 #define Anum_pg_statistic_ext_stxkeys 7
 #define Anum_pg_statistic_ext_stxkind 8
+#define Anum_pg_statistic_ext_stxexprs 9
 
-#define Natts_pg_statistic_ext 8
+#define Natts_pg_statistic_ext 9
 
 
 #define STATS_EXT_NDISTINCT			'd'
 #define STATS_EXT_DEPENDENCIES		'f'
 #define STATS_EXT_MCV				'm'
+#define STATS_EXT_EXPRESSIONS		'e'
 
 
 #endif							/* PG_STATISTIC_EXT_D_H */

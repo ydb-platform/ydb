@@ -3,7 +3,7 @@
  * pg_proc_d.h
  *    Macro definitions for pg_proc
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -48,10 +48,11 @@
 #define Anum_pg_proc_protrftypes 25
 #define Anum_pg_proc_prosrc 26
 #define Anum_pg_proc_probin 27
-#define Anum_pg_proc_proconfig 28
-#define Anum_pg_proc_proacl 29
+#define Anum_pg_proc_prosqlbody 28
+#define Anum_pg_proc_proconfig 29
+#define Anum_pg_proc_proacl 30
 
-#define Natts_pg_proc 29
+#define Natts_pg_proc 30
 
 
 /*
@@ -77,10 +78,10 @@
 /*
  * Symbolic values for proparallel column: these indicate whether a function
  * can be safely be run in a parallel backend, during parallelism but
- * necessarily in the master, or only in non-parallel mode.
+ * necessarily in the leader, or only in non-parallel mode.
  */
-#define PROPARALLEL_SAFE		's' /* can run in worker or master */
-#define PROPARALLEL_RESTRICTED	'r' /* can run in parallel master only */
+#define PROPARALLEL_SAFE		's' /* can run in worker or leader */
+#define PROPARALLEL_RESTRICTED	'r' /* can run in parallel leader only */
 #define PROPARALLEL_UNSAFE		'u' /* banned while in parallel mode */
 
 /*
@@ -94,6 +95,5 @@
 #define PROARGMODE_VARIADIC 'v'
 #define PROARGMODE_TABLE	't'
 
-#define HEAP_TABLE_AM_HANDLER_OID 3
 
 #endif							/* PG_PROC_D_H */

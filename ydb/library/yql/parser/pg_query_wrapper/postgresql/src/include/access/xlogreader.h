@@ -3,7 +3,7 @@
  * xlogreader.h
  *		Definitions for the generic XLog reading facility
  *
- * Portions Copyright (c) 2013-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		src/include/access/xlogreader.h
@@ -17,7 +17,7 @@
  *		XLogBeginRead() or XLogFindNextRecord(), and call XLogReadRecord()
  *		until it returns NULL.
  *
- *		Callers supply a page_read callback if they want to to call
+ *		Callers supply a page_read callback if they want to call
  *		XLogReadRecord or XLogFindNextRecord; it can be passed in as NULL
  *		otherwise.  The WALRead function can be used as a helper to write
  *		page_read callbacks, but it is not mandatory; callers that use it,
@@ -191,6 +191,8 @@ struct XLogReaderState
 
 	RepOriginId record_origin;
 
+	TransactionId toplevel_xid; /* XID of top-level transaction */
+
 	/* information about blocks referenced by the record. */
 	DecodedBkpBlock blocks[XLR_MAX_BLOCK_ID + 1];
 
@@ -314,6 +316,7 @@ extern bool DecodeXLogRecord(XLogReaderState *state, XLogRecord *record,
 #define XLogRecGetRmid(decoder) ((decoder)->decoded_record->xl_rmid)
 #define XLogRecGetXid(decoder) ((decoder)->decoded_record->xl_xid)
 #define XLogRecGetOrigin(decoder) ((decoder)->record_origin)
+#define XLogRecGetTopXid(decoder) ((decoder)->toplevel_xid)
 #define XLogRecGetData(decoder) ((decoder)->main_data)
 #define XLogRecGetDataLen(decoder) ((decoder)->main_data_len)
 #define XLogRecHasAnyBlockRefs(decoder) ((decoder)->max_block_id >= 0)

@@ -4,7 +4,7 @@
  *	  POSTGRES table access method definitions.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/tableam.h
@@ -19,6 +19,7 @@
 
 #include "access/relscan.h"
 #include "access/sdir.h"
+#include "access/xact.h"
 #include "utils/guc.h"
 #include "utils/rel.h"
 #include "utils/snapshot.h"
@@ -48,18 +49,19 @@ typedef enum ScanOptions
 	SO_TYPE_BITMAPSCAN = 1 << 1,
 	SO_TYPE_SAMPLESCAN = 1 << 2,
 	SO_TYPE_TIDSCAN = 1 << 3,
-	SO_TYPE_ANALYZE = 1 << 4,
+	SO_TYPE_TIDRANGESCAN = 1 << 4,
+	SO_TYPE_ANALYZE = 1 << 5,
 
 	/* several of SO_ALLOW_* may be specified */
 	/* allow or disallow use of access strategy */
-	SO_ALLOW_STRAT = 1 << 5,
+	SO_ALLOW_STRAT = 1 << 6,
 	/* report location to syncscan logic? */
-	SO_ALLOW_SYNC = 1 << 6,
+	SO_ALLOW_SYNC = 1 << 7,
 	/* verify visibility page-at-a-time? */
-	SO_ALLOW_PAGEMODE = 1 << 7,
+	SO_ALLOW_PAGEMODE = 1 << 8,
 
 	/* unregister snapshot at scan end? */
-	SO_TEMP_SNAPSHOT = 1 << 8
+	SO_TEMP_SNAPSHOT = 1 << 9
 } ScanOptions;
 
 /*
@@ -126,6 +128,106 @@ typedef struct TM_FailureData
 	CommandId	cmax;
 	bool		traversed;
 } TM_FailureData;
+
+/*
+ * State used when calling table_index_delete_tuples().
+ *
+ * Represents the status of table tuples, referenced by table TID and taken by
+ * index AM from index tuples.  State consists of high level parameters of the
+ * deletion operation, plus two mutable palloc()'d arrays for information
+ * about the status of individual table tuples.  These are conceptually one
+ * single array.  Using two arrays keeps the TM_IndexDelete struct small,
+ * which makes sorting the first array (the deltids array) fast.
+ *
+ * Some index AM callers perform simple index tuple deletion (by specifying
+ * bottomup = false), and include only known-dead deltids.  These known-dead
+ * entries are all marked knowndeletable = true directly (typically these are
+ * TIDs from LP_DEAD-marked index tuples), but that isn't strictly required.
+ *
+ * Callers that specify bottomup = true are "bottom-up index deletion"
+ * callers.  The considerations for the tableam are more subtle with these
+ * callers because they ask the tableam to perform highly speculative work,
+ * and might only expect the tableam to check a small fraction of all entries.
+ * Caller is not allowed to specify knowndeletable = true for any entry
+ * because everything is highly speculative.  Bottom-up caller provides
+ * context and hints to tableam -- see comments below for details on how index
+ * AMs and tableams should coordinate during bottom-up index deletion.
+ *
+ * Simple index deletion callers may ask the tableam to perform speculative
+ * work, too.  This is a little like bottom-up deletion, but not too much.
+ * The tableam will only perform speculative work when it's practically free
+ * to do so in passing for simple deletion caller (while always performing
+ * whatever work is is needed to enable knowndeletable/LP_DEAD index tuples to
+ * be deleted within index AM).  This is the real reason why it's possible for
+ * simple index deletion caller to specify knowndeletable = false up front
+ * (this means "check if it's possible for me to delete corresponding index
+ * tuple when it's cheap to do so in passing").  The index AM should only
+ * include "extra" entries for index tuples whose TIDs point to a table block
+ * that tableam is expected to have to visit anyway (in the event of a block
+ * orientated tableam).  The tableam isn't strictly obligated to check these
+ * "extra" TIDs, but a block-based AM should always manage to do so in
+ * practice.
+ *
+ * The final contents of the deltids/status arrays are interesting to callers
+ * that ask tableam to perform speculative work (i.e. when _any_ items have
+ * knowndeletable set to false up front).  These index AM callers will
+ * naturally need to consult final state to determine which index tuples are
+ * in fact deletable.
+ *
+ * The index AM can keep track of which index tuple relates to which deltid by
+ * setting idxoffnum (and/or relying on each entry being uniquely identifiable
+ * using tid), which is important when the final contents of the array will
+ * need to be interpreted -- the array can shrink from initial size after
+ * tableam processing and/or have entries in a new order (tableam may sort
+ * deltids array for its own reasons).  Bottom-up callers may find that final
+ * ndeltids is 0 on return from call to tableam, in which case no index tuple
+ * deletions are possible.  Simple deletion callers can rely on any entries
+ * they know to be deletable appearing in the final array as deletable.
+ */
+typedef struct TM_IndexDelete
+{
+	ItemPointerData tid;		/* table TID from index tuple */
+	int16		id;				/* Offset into TM_IndexStatus array */
+} TM_IndexDelete;
+
+typedef struct TM_IndexStatus
+{
+	OffsetNumber idxoffnum;		/* Index am page offset number */
+	bool		knowndeletable; /* Currently known to be deletable? */
+
+	/* Bottom-up index deletion specific fields follow */
+	bool		promising;		/* Promising (duplicate) index tuple? */
+	int16		freespace;		/* Space freed in index if deleted */
+} TM_IndexStatus;
+
+/*
+ * Index AM/tableam coordination is central to the design of bottom-up index
+ * deletion.  The index AM provides hints about where to look to the tableam
+ * by marking some entries as "promising".  Index AM does this with duplicate
+ * index tuples that are strongly suspected to be old versions left behind by
+ * UPDATEs that did not logically modify indexed values.  Index AM may find it
+ * helpful to only mark entries as promising when they're thought to have been
+ * affected by such an UPDATE in the recent past.
+ *
+ * Bottom-up index deletion casts a wide net at first, usually by including
+ * all TIDs on a target index page.  It is up to the tableam to worry about
+ * the cost of checking transaction status information.  The tableam is in
+ * control, but needs careful guidance from the index AM.  Index AM requests
+ * that bottomupfreespace target be met, while tableam measures progress
+ * towards that goal by tallying the per-entry freespace value for known
+ * deletable entries. (All !bottomup callers can just set these space related
+ * fields to zero.)
+ */
+typedef struct TM_IndexDeleteOp
+{
+	bool		bottomup;		/* Bottom-up (not simple) deletion? */
+	int			bottomupfreespace;	/* Bottom-up space target */
+
+	/* Mutable per-TID information follows (index AM initializes entries) */
+	int			ndeltids;		/* Current # of deltids/status elements */
+	TM_IndexDelete *deltids;
+	TM_IndexStatus *status;
+} TM_IndexDeleteOp;
 
 /* "options" flag bits for table_tuple_insert */
 /* TABLE_INSERT_SKIP_WAL was 0x0001; RelationNeedsWAL() now governs */
@@ -224,6 +326,34 @@ typedef struct TableAmRoutine
 									 ScanDirection direction,
 									 TupleTableSlot *slot);
 
+	/*-----------
+	 * Optional functions to provide scanning for ranges of ItemPointers.
+	 * Implementations must either provide both of these functions, or neither
+	 * of them.
+	 *
+	 * Implementations of scan_set_tidrange must themselves handle
+	 * ItemPointers of any value. i.e, they must handle each of the following:
+	 *
+	 * 1) mintid or maxtid is beyond the end of the table; and
+	 * 2) mintid is above maxtid; and
+	 * 3) item offset for mintid or maxtid is beyond the maximum offset
+	 * allowed by the AM.
+	 *
+	 * Implementations can assume that scan_set_tidrange is always called
+	 * before can_getnextslot_tidrange or after scan_rescan and before any
+	 * further calls to scan_getnextslot_tidrange.
+	 */
+	void		(*scan_set_tidrange) (TableScanDesc scan,
+									  ItemPointer mintid,
+									  ItemPointer maxtid);
+
+	/*
+	 * Return next tuple from `scan` that's in the range of TIDs defined by
+	 * scan_set_tidrange.
+	 */
+	bool		(*scan_getnextslot_tidrange) (TableScanDesc scan,
+											  ScanDirection direction,
+											  TupleTableSlot *slot);
 
 	/* ------------------------------------------------------------------------
 	 * Parallel table scan related functions.
@@ -341,10 +471,9 @@ typedef struct TableAmRoutine
 											 TupleTableSlot *slot,
 											 Snapshot snapshot);
 
-	/* see table_compute_xid_horizon_for_tuples() */
-	TransactionId (*compute_xid_horizon_for_tuples) (Relation rel,
-													 ItemPointerData *items,
-													 int nitems);
+	/* see table_index_delete_tuples() */
+	TransactionId (*index_delete_tuples) (Relation rel,
+										  TM_IndexDeleteOp *delstate);
 
 
 	/* ------------------------------------------------------------------------
@@ -496,7 +625,7 @@ typedef struct TableAmRoutine
 	 * There probably, in the future, needs to be a separate callback to
 	 * integrate with autovacuum's scheduling.
 	 */
-	void		(*relation_vacuum) (Relation onerel,
+	void		(*relation_vacuum) (Relation rel,
 									struct VacuumParams *params,
 									BufferAccessStrategy bstrategy);
 
@@ -903,7 +1032,74 @@ static inline bool
 table_scan_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
 {
 	slot->tts_tableOid = RelationGetRelid(sscan->rs_rd);
+
+	/*
+	 * We don't expect direct calls to table_scan_getnextslot with valid
+	 * CheckXidAlive for catalog or regular tables.  See detailed comments in
+	 * xact.c where these variables are declared.
+	 */
+	if (unlikely(TransactionIdIsValid(CheckXidAlive) && !bsysscan))
+		elog(ERROR, "unexpected table_scan_getnextslot call during logical decoding");
+
 	return sscan->rs_rd->rd_tableam->scan_getnextslot(sscan, direction, slot);
+}
+
+/* ----------------------------------------------------------------------------
+ * TID Range scanning related functions.
+ * ----------------------------------------------------------------------------
+ */
+
+/*
+ * table_beginscan_tidrange is the entry point for setting up a TableScanDesc
+ * for a TID range scan.
+ */
+static inline TableScanDesc
+table_beginscan_tidrange(Relation rel, Snapshot snapshot,
+						 ItemPointer mintid,
+						 ItemPointer maxtid)
+{
+	TableScanDesc sscan;
+	uint32		flags = SO_TYPE_TIDRANGESCAN | SO_ALLOW_PAGEMODE;
+
+	sscan = rel->rd_tableam->scan_begin(rel, snapshot, 0, NULL, NULL, flags);
+
+	/* Set the range of TIDs to scan */
+	sscan->rs_rd->rd_tableam->scan_set_tidrange(sscan, mintid, maxtid);
+
+	return sscan;
+}
+
+/*
+ * table_rescan_tidrange resets the scan position and sets the minimum and
+ * maximum TID range to scan for a TableScanDesc created by
+ * table_beginscan_tidrange.
+ */
+static inline void
+table_rescan_tidrange(TableScanDesc sscan, ItemPointer mintid,
+					  ItemPointer maxtid)
+{
+	/* Ensure table_beginscan_tidrange() was used. */
+	Assert((sscan->rs_flags & SO_TYPE_TIDRANGESCAN) != 0);
+
+	sscan->rs_rd->rd_tableam->scan_rescan(sscan, NULL, false, false, false, false);
+	sscan->rs_rd->rd_tableam->scan_set_tidrange(sscan, mintid, maxtid);
+}
+
+/*
+ * Fetch the next tuple from `sscan` for a TID range scan created by
+ * table_beginscan_tidrange().  Stores the tuple in `slot` and returns true,
+ * or returns false if no more tuples exist in the range.
+ */
+static inline bool
+table_scan_getnextslot_tidrange(TableScanDesc sscan, ScanDirection direction,
+								TupleTableSlot *slot)
+{
+	/* Ensure table_beginscan_tidrange() was used. */
+	Assert((sscan->rs_flags & SO_TYPE_TIDRANGESCAN) != 0);
+
+	return sscan->rs_rd->rd_tableam->scan_getnextslot_tidrange(sscan,
+															   direction,
+															   slot);
 }
 
 
@@ -1017,6 +1213,13 @@ table_index_fetch_tuple(struct IndexFetchTableData *scan,
 						TupleTableSlot *slot,
 						bool *call_again, bool *all_dead)
 {
+	/*
+	 * We don't expect direct calls to table_index_fetch_tuple with valid
+	 * CheckXidAlive for catalog or regular tables.  See detailed comments in
+	 * xact.c where these variables are declared.
+	 */
+	if (unlikely(TransactionIdIsValid(CheckXidAlive) && !bsysscan))
+		elog(ERROR, "unexpected table_index_fetch_tuple call during logical decoding");
 
 	return scan->rel->rd_tableam->index_fetch_tuple(scan, tid, snapshot,
 													slot, call_again,
@@ -1056,6 +1259,14 @@ table_tuple_fetch_row_version(Relation rel,
 							  Snapshot snapshot,
 							  TupleTableSlot *slot)
 {
+	/*
+	 * We don't expect direct calls to table_tuple_fetch_row_version with
+	 * valid CheckXidAlive for catalog or regular tables.  See detailed
+	 * comments in xact.c where these variables are declared.
+	 */
+	if (unlikely(TransactionIdIsValid(CheckXidAlive) && !bsysscan))
+		elog(ERROR, "unexpected table_tuple_fetch_row_version call during logical decoding");
+
 	return rel->rd_tableam->tuple_fetch_row_version(rel, tid, snapshot, slot);
 }
 
@@ -1097,16 +1308,23 @@ table_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot,
 }
 
 /*
- * Compute the newest xid among the tuples pointed to by items. This is used
- * to compute what snapshots to conflict with when replaying WAL records for
- * page-level index vacuums.
+ * Determine which index tuples are safe to delete based on their table TID.
+ *
+ * Determines which entries from index AM caller's TM_IndexDeleteOp state
+ * point to vacuumable table tuples.  Entries that are found by tableam to be
+ * vacuumable are naturally safe for index AM to delete, and so get directly
+ * marked as deletable.  See comments above TM_IndexDelete and comments above
+ * TM_IndexDeleteOp for full details.
+ *
+ * Returns a latestRemovedXid transaction ID that caller generally places in
+ * its index deletion WAL record.  This might be used during subsequent REDO
+ * of the WAL record when in Hot Standby mode -- a recovery conflict for the
+ * index deletion operation might be required on the standby.
  */
 static inline TransactionId
-table_compute_xid_horizon_for_tuples(Relation rel,
-									 ItemPointerData *items,
-									 int nitems)
+table_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
-	return rel->rd_tableam->compute_xid_horizon_for_tuples(rel, items, nitems);
+	return rel->rd_tableam->index_delete_tuples(rel, delstate);
 }
 
 
@@ -1713,6 +1931,14 @@ static inline bool
 table_scan_bitmap_next_block(TableScanDesc scan,
 							 struct TBMIterateResult *tbmres)
 {
+	/*
+	 * We don't expect direct calls to table_scan_bitmap_next_block with valid
+	 * CheckXidAlive for catalog or regular tables.  See detailed comments in
+	 * xact.c where these variables are declared.
+	 */
+	if (unlikely(TransactionIdIsValid(CheckXidAlive) && !bsysscan))
+		elog(ERROR, "unexpected table_scan_bitmap_next_block call during logical decoding");
+
 	return scan->rs_rd->rd_tableam->scan_bitmap_next_block(scan,
 														   tbmres);
 }
@@ -1730,6 +1956,14 @@ table_scan_bitmap_next_tuple(TableScanDesc scan,
 							 struct TBMIterateResult *tbmres,
 							 TupleTableSlot *slot)
 {
+	/*
+	 * We don't expect direct calls to table_scan_bitmap_next_tuple with valid
+	 * CheckXidAlive for catalog or regular tables.  See detailed comments in
+	 * xact.c where these variables are declared.
+	 */
+	if (unlikely(TransactionIdIsValid(CheckXidAlive) && !bsysscan))
+		elog(ERROR, "unexpected table_scan_bitmap_next_tuple call during logical decoding");
+
 	return scan->rs_rd->rd_tableam->scan_bitmap_next_tuple(scan,
 														   tbmres,
 														   slot);
@@ -1748,6 +1982,13 @@ static inline bool
 table_scan_sample_next_block(TableScanDesc scan,
 							 struct SampleScanState *scanstate)
 {
+	/*
+	 * We don't expect direct calls to table_scan_sample_next_block with valid
+	 * CheckXidAlive for catalog or regular tables.  See detailed comments in
+	 * xact.c where these variables are declared.
+	 */
+	if (unlikely(TransactionIdIsValid(CheckXidAlive) && !bsysscan))
+		elog(ERROR, "unexpected table_scan_sample_next_block call during logical decoding");
 	return scan->rs_rd->rd_tableam->scan_sample_next_block(scan, scanstate);
 }
 
@@ -1764,6 +2005,13 @@ table_scan_sample_next_tuple(TableScanDesc scan,
 							 struct SampleScanState *scanstate,
 							 TupleTableSlot *slot)
 {
+	/*
+	 * We don't expect direct calls to table_scan_sample_next_tuple with valid
+	 * CheckXidAlive for catalog or regular tables.  See detailed comments in
+	 * xact.c where these variables are declared.
+	 */
+	if (unlikely(TransactionIdIsValid(CheckXidAlive) && !bsysscan))
+		elog(ERROR, "unexpected table_scan_sample_next_tuple call during logical decoding");
 	return scan->rs_rd->rd_tableam->scan_sample_next_tuple(scan, scanstate,
 														   slot);
 }
@@ -1793,8 +2041,10 @@ extern Size table_block_parallelscan_initialize(Relation rel,
 extern void table_block_parallelscan_reinitialize(Relation rel,
 												  ParallelTableScanDesc pscan);
 extern BlockNumber table_block_parallelscan_nextpage(Relation rel,
+													 ParallelBlockTableScanWorker pbscanwork,
 													 ParallelBlockTableScanDesc pbscan);
 extern void table_block_parallelscan_startblock_init(Relation rel,
+													 ParallelBlockTableScanWorker pbscanwork,
 													 ParallelBlockTableScanDesc pbscan);
 
 

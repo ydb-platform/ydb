@@ -3,7 +3,7 @@
  * globals.c
  *	  global variable declarations
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -30,9 +30,12 @@ __thread ProtocolVersion FrontendProtocol;
 __thread volatile sig_atomic_t InterruptPending = false;
 __thread volatile sig_atomic_t QueryCancelPending = false;
 __thread volatile sig_atomic_t ProcDiePending = false;
+__thread volatile sig_atomic_t CheckClientConnectionPending = false;
 __thread volatile sig_atomic_t ClientConnectionLost = false;
 __thread volatile sig_atomic_t IdleInTransactionSessionTimeoutPending = false;
+__thread volatile sig_atomic_t IdleSessionTimeoutPending = false;
 __thread volatile sig_atomic_t ProcSignalBarrierPending = false;
+__thread volatile sig_atomic_t LogMemoryContextPending = false;
 __thread volatile uint32 InterruptHoldoffCount = 0;
 __thread volatile uint32 QueryCancelHoldoffCount = 0;
 __thread volatile uint32 CritSectionCount = 0;
@@ -80,7 +83,7 @@ char		postgres_exec_path[MAXPGPATH];	/* full path to backend */
 
 __thread BackendId	MyBackendId = InvalidBackendId;
 
-__thread BackendId	ParallelMasterBackendId = InvalidBackendId;
+__thread BackendId	ParallelLeaderBackendId = InvalidBackendId;
 
 __thread Oid			MyDatabaseId = InvalidOid;
 
@@ -118,9 +121,9 @@ __thread int			IntervalStyle = INTSTYLE_POSTGRES;
 
 __thread bool		enableFsync = true;
 __thread bool		allowSystemTableMods = false;
-__thread int			work_mem = 1024;
+__thread int			work_mem = 4096;
 __thread double		hash_mem_multiplier = 1.0;
-__thread int			maintenance_work_mem = 16384;
+__thread int			maintenance_work_mem = 65536;
 __thread int			max_parallel_maintenance_workers = 2;
 
 /*
@@ -136,7 +139,7 @@ __thread int			max_parallel_workers = 8;
 __thread int			MaxBackends = 0;
 
 __thread int			VacuumCostPageHit = 1;	/* GUC parameters for vacuum */
-__thread int			VacuumCostPageMiss = 10;
+__thread int			VacuumCostPageMiss = 2;
 __thread int			VacuumCostPageDirty = 20;
 __thread int			VacuumCostLimit = 200;
 __thread double		VacuumCostDelay = 0;
@@ -147,5 +150,3 @@ __thread int64		VacuumPageDirty = 0;
 
 __thread int			VacuumCostBalance = 0;	/* working state for vacuum */
 __thread bool		VacuumCostActive = false;
-
-__thread double		vacuum_cleanup_index_scale_factor;

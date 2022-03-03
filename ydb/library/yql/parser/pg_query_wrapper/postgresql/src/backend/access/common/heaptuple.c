@@ -45,7 +45,7 @@
  * and we'd like to still refer to them via C struct offsets.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -719,11 +719,11 @@ heap_copytuple_with_tuple(HeapTuple src, HeapTuple dest)
 }
 
 /*
- * Expand a tuple which has less attributes than required. For each attribute
+ * Expand a tuple which has fewer attributes than required. For each attribute
  * not present in the sourceTuple, if there is a missing value that will be
  * used. Otherwise the attribute will be set to NULL.
  *
- * The source tuple must have less attributes than the required number.
+ * The source tuple must have fewer attributes than the required number.
  *
  * Only one of targetHeapTuple and targetMinimalTuple may be supplied. The
  * other argument must be NULL.
@@ -736,7 +736,7 @@ expand_tuple(HeapTuple *targetHeapTuple,
 {
 	AttrMissing *attrmiss = NULL;
 	int			attnum;
-	int			firstmissingnum = 0;
+	int			firstmissingnum;
 	bool		hasNulls = HeapTupleHasNulls(sourceTuple);
 	HeapTupleHeader targetTHeader;
 	HeapTupleHeader sourceTHeader = sourceTuple->t_data;

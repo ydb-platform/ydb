@@ -4,7 +4,7 @@
  *	  prototypes for costsize.c and clausesel.c.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/optimizer/cost.h
@@ -20,7 +20,7 @@
 
 /* defaults for costsize.c's Cost parameters */
 /* NB: cost-estimation code should use the variables, not these constants! */
-/* If you change these, update backend/utils/misc/postgresql.sample.conf */
+/* If you change these, update backend/utils/misc/postgresql.conf.sample */
 #define DEFAULT_SEQ_PAGE_COST  1.0
 #define DEFAULT_RANDOM_PAGE_COST  4.0
 #define DEFAULT_CPU_TUPLE_COST	0.01
@@ -57,6 +57,7 @@ extern __thread PGDLLIMPORT bool enable_incremental_sort;
 extern __thread PGDLLIMPORT bool enable_hashagg;
 extern __thread PGDLLIMPORT bool enable_nestloop;
 extern __thread PGDLLIMPORT bool enable_material;
+extern __thread PGDLLIMPORT bool enable_memoize;
 extern __thread PGDLLIMPORT bool enable_mergejoin;
 extern __thread PGDLLIMPORT bool enable_hashjoin;
 extern __thread PGDLLIMPORT bool enable_gathermerge;
@@ -65,6 +66,7 @@ extern __thread PGDLLIMPORT bool enable_partitionwise_aggregate;
 extern __thread PGDLLIMPORT bool enable_parallel_append;
 extern __thread PGDLLIMPORT bool enable_parallel_hash;
 extern __thread PGDLLIMPORT bool enable_partition_pruning;
+extern __thread PGDLLIMPORT bool enable_async_append;
 extern __thread PGDLLIMPORT int constraint_exclusion;
 
 extern double index_pages_fetched(double tuples_fetched, BlockNumber pages,
@@ -83,6 +85,9 @@ extern void cost_bitmap_or_node(BitmapOrPath *path, PlannerInfo *root);
 extern void cost_bitmap_tree_node(Path *path, Cost *cost, Selectivity *selec);
 extern void cost_tidscan(Path *path, PlannerInfo *root,
 						 RelOptInfo *baserel, List *tidquals, ParamPathInfo *param_info);
+extern void cost_tidrangescan(Path *path, PlannerInfo *root,
+							  RelOptInfo *baserel, List *tidrangequals,
+							  ParamPathInfo *param_info);
 extern void cost_subqueryscan(SubqueryScanPath *path, PlannerInfo *root,
 							  RelOptInfo *baserel, ParamPathInfo *param_info);
 extern void cost_functionscan(Path *path, PlannerInfo *root,

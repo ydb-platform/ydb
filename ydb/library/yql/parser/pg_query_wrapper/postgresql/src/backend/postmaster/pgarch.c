@@ -14,7 +14,7 @@
  *
  *	Initial author: Simon Riggs		simon@2ndquadrant.com
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -38,16 +38,15 @@
 #include "libpq/pqsignal.h"
 #include "miscadmin.h"
 #include "pgstat.h"
-#include "postmaster/fork_process.h"
 #include "postmaster/interrupt.h"
 #include "postmaster/pgarch.h"
-#include "postmaster/postmaster.h"
-#include "storage/dsm.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
 #include "storage/latch.h"
-#include "storage/pg_shmem.h"
 #include "storage/pmsignal.h"
+#include "storage/proc.h"
+#include "storage/procsignal.h"
+#include "storage/shmem.h"
 #include "utils/guc.h"
 #include "utils/ps_status.h"
 
@@ -73,153 +72,100 @@
  */
 #define NUM_ORPHAN_CLEANUP_RETRIES 3
 
+/* Shared memory area for archiver process */
+typedef struct PgArchData
+{
+	int			pgprocno;		/* pgprocno of archiver process */
+} PgArchData;
+
 
 /* ----------
  * Local data
  * ----------
  */
-static __thread time_t last_pgarch_start_time;
 static __thread time_t last_sigterm_time = 0;
+static __thread PgArchData *PgArch = NULL;
 
 /*
  * Flags set by interrupt handlers for later service in the main loop.
  */
-static __thread volatile sig_atomic_t wakened = false;
 static __thread volatile sig_atomic_t ready_to_stop = false;
 
 /* ----------
  * Local function forward declarations
  * ----------
  */
-#ifdef EXEC_BACKEND
-static pid_t pgarch_forkexec(void);
-#endif
-
-NON_EXEC_STATIC void PgArchiverMain(int argc, char *argv[]) pg_attribute_noreturn();
-static void pgarch_waken(SIGNAL_ARGS);
 static void pgarch_waken_stop(SIGNAL_ARGS);
 static void pgarch_MainLoop(void);
 static void pgarch_ArchiverCopyLoop(void);
 static bool pgarch_archiveXlog(char *xlog);
 static bool pgarch_readyXlog(char *xlog);
 static void pgarch_archiveDone(char *xlog);
+static void pgarch_die(int code, Datum arg);
+static void HandlePgArchInterrupts(void);
 
+/* Report shared memory space needed by PgArchShmemInit */
+Size
+PgArchShmemSize(void)
+{
+	Size		size = 0;
 
-/* ------------------------------------------------------------
- * Public functions called from postmaster follow
- * ------------------------------------------------------------
- */
+	size = add_size(size, sizeof(PgArchData));
+
+	return size;
+}
+
+/* Allocate and initialize archiver-related shared memory */
+void
+PgArchShmemInit(void)
+{
+	bool		found;
+
+	PgArch = (PgArchData *)
+		ShmemInitStruct("Archiver Data", PgArchShmemSize(), &found);
+
+	if (!found)
+	{
+		/* First time through, so initialize */
+		MemSet(PgArch, 0, PgArchShmemSize());
+		PgArch->pgprocno = INVALID_PGPROCNO;
+	}
+}
 
 /*
- * pgarch_start
+ * PgArchCanRestart
  *
- *	Called from postmaster at startup or after an existing archiver
- *	died.  Attempt to fire up a fresh archiver process.
+ * Return true and archiver is allowed to restart if enough time has
+ * passed since it was launched last to reach PGARCH_RESTART_INTERVAL.
+ * Otherwise return false.
  *
- *	Returns PID of child process, or 0 if fail.
- *
- *	Note: if fail, we will be called again from the postmaster main loop.
+ * This is a safety valve to protect against continuous respawn attempts if the
+ * archiver is dying immediately at launch. Note that since we will retry to
+ * launch the archiver from the postmaster main loop, we will get another
+ * chance later.
  */
-int
-pgarch_start(void)
+bool
+PgArchCanRestart(void)
 {
-	time_t		curtime;
-	pid_t		pgArchPid;
+	static __thread time_t last_pgarch_start_time = 0;
+	time_t		curtime = time(NULL);
 
 	/*
-	 * Do nothing if no archiver needed
+	 * Return false and don't restart archiver if too soon since last archiver
+	 * start.
 	 */
-	if (!XLogArchivingActive())
-		return 0;
-
-	/*
-	 * Do nothing if too soon since last archiver start.  This is a safety
-	 * valve to protect against continuous respawn attempts if the archiver is
-	 * dying immediately at launch. Note that since we will be re-called from
-	 * the postmaster main loop, we will get another chance later.
-	 */
-	curtime = time(NULL);
 	if ((unsigned int) (curtime - last_pgarch_start_time) <
 		(unsigned int) PGARCH_RESTART_INTERVAL)
-		return 0;
+		return false;
+
 	last_pgarch_start_time = curtime;
-
-#ifdef EXEC_BACKEND
-	switch ((pgArchPid = pgarch_forkexec()))
-#else
-	switch ((pgArchPid = fork_process()))
-#endif
-	{
-		case -1:
-			ereport(LOG,
-					(errmsg("could not fork archiver: %m")));
-			return 0;
-
-#ifndef EXEC_BACKEND
-		case 0:
-			/* in postmaster child ... */
-			InitPostmasterChild();
-
-			/* Close the postmaster's sockets */
-			ClosePostmasterPorts(false);
-
-			/* Drop our connection to postmaster's shared memory, as well */
-			dsm_detach_all();
-			PGSharedMemoryDetach();
-
-			PgArchiverMain(0, NULL);
-			break;
-#endif
-
-		default:
-			return (int) pgArchPid;
-	}
-
-	/* shouldn't get here */
-	return 0;
+	return true;
 }
 
-/* ------------------------------------------------------------
- * Local functions called by archiver follow
- * ------------------------------------------------------------
- */
 
-
-#ifdef EXEC_BACKEND
-
-/*
- * pgarch_forkexec() -
- *
- * Format up the arglist for, then fork and exec, archive process
- */
-static pid_t
-pgarch_forkexec(void)
-{
-	char	   *av[10];
-	int			ac = 0;
-
-	av[ac++] = "postgres";
-
-	av[ac++] = "--forkarch";
-
-	av[ac++] = NULL;			/* filled in by postmaster_forkexec */
-
-	av[ac] = NULL;
-	Assert(ac < lengthof(av));
-
-	return postmaster_forkexec(ac, av);
-}
-#endif							/* EXEC_BACKEND */
-
-
-/*
- * PgArchiverMain
- *
- *	The argc/argv parameters are valid only in EXEC_BACKEND case.  However,
- *	since we don't use 'em, it hardly matters...
- */
-NON_EXEC_STATIC void
-PgArchiverMain(int argc, char *argv[])
+/* Main entry point for archiver process */
+void
+PgArchiverMain(void)
 {
 	/*
 	 * Ignore all signals usually bound to some action in the postmaster,
@@ -228,35 +174,53 @@ PgArchiverMain(int argc, char *argv[])
 	pqsignal(SIGHUP, SignalHandlerForConfigReload);
 	pqsignal(SIGINT, SIG_IGN);
 	pqsignal(SIGTERM, SignalHandlerForShutdownRequest);
-	pqsignal(SIGQUIT, SignalHandlerForCrashExit);
+	/* SIGQUIT handler was already set up by InitPostmasterChild */
 	pqsignal(SIGALRM, SIG_IGN);
 	pqsignal(SIGPIPE, SIG_IGN);
-	pqsignal(SIGUSR1, pgarch_waken);
+	pqsignal(SIGUSR1, procsignal_sigusr1_handler);
 	pqsignal(SIGUSR2, pgarch_waken_stop);
+
 	/* Reset some signals that are accepted by postmaster but not here */
 	pqsignal(SIGCHLD, SIG_DFL);
+
+	/* Unblock signals (they were blocked when the postmaster forked us) */
 	PG_SETMASK(&UnBlockSig);
 
-	MyBackendType = B_ARCHIVER;
-	init_ps_display(NULL);
+	/* We shouldn't be launched unnecessarily. */
+	Assert(XLogArchivingActive());
+
+	/* Arrange to clean up at archiver exit */
+	on_shmem_exit(pgarch_die, 0);
+
+	/*
+	 * Advertise our pgprocno so that backends can use our latch to wake us up
+	 * while we're sleeping.
+	 */
+	PgArch->pgprocno = MyProc->pgprocno;
 
 	pgarch_MainLoop();
 
-	exit(0);
+	proc_exit(0);
 }
 
-/* SIGUSR1 signal handler for archiver process */
-static void
-pgarch_waken(SIGNAL_ARGS)
+/*
+ * Wake up the archiver
+ */
+void
+PgArchWakeup(void)
 {
-	int			save_errno = errno;
+	int			arch_pgprocno = PgArch->pgprocno;
 
-	/* set flag that there is work to be done */
-	wakened = true;
-	SetLatch(MyLatch);
-
-	errno = save_errno;
+	/*
+	 * We don't acquire ProcArrayLock here.  It's actually fine because
+	 * procLatch isn't ever freed, so we just can potentially set the wrong
+	 * process' (or no process') latch.  Even in that case the archiver will
+	 * be relaunched shortly and will start archiving.
+	 */
+	if (arch_pgprocno != INVALID_PGPROCNO)
+		SetLatch(&ProcGlobal->allProcs[arch_pgprocno].procLatch);
 }
+
 
 /* SIGUSR2 signal handler for archiver process */
 static void
@@ -283,14 +247,6 @@ pgarch_MainLoop(void)
 	bool		time_to_stop;
 
 	/*
-	 * We run the copy loop immediately upon entry, in case there are
-	 * unarchived files left over from a previous database run (or maybe the
-	 * archiver died unexpectedly).  After that we wait for a signal or
-	 * timeout before doing more.
-	 */
-	wakened = true;
-
-	/*
 	 * There shouldn't be anything for the archiver to do except to wait for a
 	 * signal ... however, the archiver exists to protect our data, so she
 	 * wakes up occasionally to allow herself to be proactive.
@@ -302,12 +258,8 @@ pgarch_MainLoop(void)
 		/* When we get SIGUSR2, we do one more archive cycle, then exit */
 		time_to_stop = ready_to_stop;
 
-		/* Check for config update */
-		if (ConfigReloadPending)
-		{
-			ConfigReloadPending = false;
-			ProcessConfigFile(PGC_SIGHUP);
-		}
+		/* Check for barrier events and config update */
+		HandlePgArchInterrupts();
 
 		/*
 		 * If we've gotten SIGTERM, we normally just sit and do nothing until
@@ -328,12 +280,8 @@ pgarch_MainLoop(void)
 		}
 
 		/* Do what we're here for */
-		if (wakened || time_to_stop)
-		{
-			wakened = false;
-			pgarch_ArchiverCopyLoop();
-			last_copy_time = time(NULL);
-		}
+		pgarch_ArchiverCopyLoop();
+		last_copy_time = time(NULL);
 
 		/*
 		 * Sleep until a signal is received, or until a poll is forced by
@@ -354,13 +302,9 @@ pgarch_MainLoop(void)
 							   WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
 							   timeout * 1000L,
 							   WAIT_EVENT_ARCHIVER_MAIN);
-				if (rc & WL_TIMEOUT)
-					wakened = true;
 				if (rc & WL_POSTMASTER_DEATH)
 					time_to_stop = true;
 			}
-			else
-				wakened = true;
 		}
 
 		/*
@@ -408,15 +352,11 @@ pgarch_ArchiverCopyLoop(void)
 				return;
 
 			/*
-			 * Check for config update.  This is so that we'll adopt a new
-			 * setting for archive_command as soon as possible, even if there
-			 * is a backlog of files to be archived.
+			 * Check for barrier events and config update.  This is so that
+			 * we'll adopt a new setting for archive_command as soon as
+			 * possible, even if there is a backlog of files to be archived.
 			 */
-			if (ConfigReloadPending)
-			{
-				ConfigReloadPending = false;
-				ProcessConfigFile(PGC_SIGHUP);
-			}
+			HandlePgArchInterrupts();
 
 			/* can't do anything if no command ... */
 			if (!XLogArchiveCommandSet())
@@ -743,4 +683,36 @@ pgarch_archiveDone(char *xlog)
 	StatusFilePath(rlogready, xlog, ".ready");
 	StatusFilePath(rlogdone, xlog, ".done");
 	(void) durable_rename(rlogready, rlogdone, WARNING);
+}
+
+
+/*
+ * pgarch_die
+ *
+ * Exit-time cleanup handler
+ */
+static void
+pgarch_die(int code, Datum arg)
+{
+	PgArch->pgprocno = INVALID_PGPROCNO;
+}
+
+/*
+ * Interrupt handler for WAL archiver process.
+ *
+ * This is called in the loops pgarch_MainLoop and pgarch_ArchiverCopyLoop.
+ * It checks for barrier events and config update, but not shutdown request
+ * because how to handle shutdown request is different between those loops.
+ */
+static void
+HandlePgArchInterrupts(void)
+{
+	if (ProcSignalBarrierPending)
+		ProcessProcSignalBarrier();
+
+	if (ConfigReloadPending)
+	{
+		ConfigReloadPending = false;
+		ProcessConfigFile(PGC_SIGHUP);
+	}
 }

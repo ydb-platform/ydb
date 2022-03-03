@@ -5,29 +5,19 @@
  *
  * These routines handle the low-level details of communication between
  * frontend and backend.  They just shove data across the communication
- * channel, and are ignorant of the semantics of the data --- or would be,
- * except for major brain damage in the design of the old COPY OUT protocol.
- * Unfortunately, COPY OUT was designed to commandeer the communication
- * channel (it just transfers data without wrapping it into messages).
- * No other messages can be sent while COPY OUT is in progress; and if the
- * copy is aborted by an ereport(ERROR), we need to close out the copy so that
- * the frontend gets back into sync.  Therefore, these routines have to be
- * aware of COPY OUT state.  (New COPY-OUT is message-based and does *not*
- * set the DoingCopyOut flag.)
+ * channel, and are ignorant of the semantics of the data.
  *
- * NOTE: generally, it's a bad idea to emit outgoing messages directly with
- * pq_putbytes(), especially if the message would require multiple calls
- * to send.  Instead, use the routines in pqformat.c to construct the message
- * in a buffer and then emit it in one call to pq_putmessage.  This ensures
- * that the channel will not be clogged by an incomplete message if execution
- * is aborted by ereport(ERROR) partway through the message.  The only
- * non-libpq code that should call pq_putbytes directly is old-style COPY OUT.
+ * To emit an outgoing message, use the routines in pqformat.c to construct
+ * the message in a buffer and then emit it in one call to pq_putmessage.
+ * There are no functions to send raw bytes or partial messages; this
+ * ensures that the channel will not be clogged by an incomplete message if
+ * execution is aborted by ereport(ERROR) partway through the message.
  *
  * At one time, libpq was shared between frontend and backend, but now
  * the backend's "backend/libpq" is quite separate from "interfaces/libpq".
  * All that remains is similarities of names to trap the unwary...
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	src/backend/libpq/pqcomm.c
@@ -49,25 +39,24 @@
  *
  * low-level I/O:
  *		pq_getbytes		- get a known number of bytes from connection
- *		pq_getstring	- get a null terminated string from connection
  *		pq_getmessage	- get a message with length word from connection
  *		pq_getbyte		- get next byte from connection
  *		pq_peekbyte		- peek at next byte from connection
- *		pq_putbytes		- send bytes to connection (not flushed until pq_flush)
  *		pq_flush		- flush pending output
  *		pq_flush_if_writable - flush pending output if writable without blocking
  *		pq_getbyte_if_available - get a byte if available without blocking
  *
- * message-level I/O (and old-style-COPY-OUT cruft):
+ * message-level I/O
  *		pq_putmessage	- send a normal message (suppressed in COPY OUT mode)
  *		pq_putmessage_noblock - buffer a normal message (suppressed in COPY OUT)
- *		pq_startcopyout - inform libpq that a COPY OUT transfer is beginning
- *		pq_endcopyout	- end a COPY OUT transfer
  *
  *------------------------
  */
 #include "postgres.h"
 
+#ifdef HAVE_POLL_H
+#include <poll.h>
+#endif
 #include <signal.h>
 #include <fcntl.h>
 #include <grp.h>
@@ -146,7 +135,6 @@ static __thread int	PqRecvLength;		/* End of data available in PqRecvBuffer */
  */
 static __thread bool PqCommBusy;			/* busy sending data to the client */
 static __thread bool PqCommReadingMsg;	/* in the middle of reading a message */
-static __thread bool DoingCopyOut;		/* in old-protocol COPY OUT processing */
 
 
 /* Internal functions */
@@ -158,8 +146,6 @@ static int	socket_flush_if_writable(void);
 static bool socket_is_send_pending(void);
 static int	socket_putmessage(char msgtype, const char *s, size_t len);
 static void socket_putmessage_noblock(char msgtype, const char *s, size_t len);
-static void socket_startcopyout(void);
-static void socket_endcopyout(bool errorAbort);
 static int	internal_putbytes(const char *s, size_t len);
 static int	internal_flush(void);
 
@@ -174,9 +160,7 @@ static const PQcommMethods PqCommSocketMethods = {
 	socket_flush_if_writable,
 	socket_is_send_pending,
 	socket_putmessage,
-	socket_putmessage_noblock,
-	socket_startcopyout,
-	socket_endcopyout
+	socket_putmessage_noblock
 };
 
 __thread const PQcommMethods *PqCommMethods = &PqCommSocketMethods;
@@ -191,13 +175,15 @@ __thread WaitEventSet *FeBeWaitSet;
 void
 pq_init(void)
 {
+	int			socket_pos PG_USED_FOR_ASSERTS_ONLY;
+	int			latch_pos PG_USED_FOR_ASSERTS_ONLY;
+
 	/* initialize state variables */
 	PqSendBufferSize = PQ_SEND_BUFFER_SIZE;
 	PqSendBuffer = MemoryContextAlloc(TopMemoryContext, PqSendBufferSize);
 	PqSendPointer = PqSendStart = PqRecvPointer = PqRecvLength = 0;
 	PqCommBusy = false;
 	PqCommReadingMsg = false;
-	DoingCopyOut = false;
 
 	/* set up process-exit hook to close the socket */
 	on_proc_exit(socket_close, 0);
@@ -219,10 +205,19 @@ pq_init(void)
 #endif
 
 	FeBeWaitSet = CreateWaitEventSet(TopMemoryContext, 3);
-	AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_WRITEABLE, MyProcPort->sock,
+	socket_pos = AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_WRITEABLE,
+								   MyProcPort->sock, NULL, NULL);
+	latch_pos = AddWaitEventToSet(FeBeWaitSet, WL_LATCH_SET, PGINVALID_SOCKET,
+								  MyLatch, NULL);
+	AddWaitEventToSet(FeBeWaitSet, WL_POSTMASTER_DEATH, PGINVALID_SOCKET,
 					  NULL, NULL);
-	AddWaitEventToSet(FeBeWaitSet, WL_LATCH_SET, -1, MyLatch, NULL);
-	AddWaitEventToSet(FeBeWaitSet, WL_POSTMASTER_DEATH, -1, NULL, NULL);
+
+	/*
+	 * The event positions match the order we added them, but let's sanity
+	 * check them to be sure.
+	 */
+	Assert(socket_pos == FeBeWaitSetSocketPos);
+	Assert(latch_pos == FeBeWaitSetLatchPos);
 }
 
 /* --------------------------------
@@ -238,8 +233,6 @@ socket_comm_reset(void)
 {
 	/* Do not throw away pending data, but do reset the busy flag */
 	PqCommBusy = false;
-	/* We can abort any old-style COPY OUT, too */
-	pq_endcopyout(true);
 }
 
 /* --------------------------------
@@ -492,8 +485,9 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 			{
 				ereport(LOG,
 						(errcode_for_socket_access(),
-				/* translator: first %s is IPv4, IPv6, or Unix */
-						 errmsg("setsockopt(SO_REUSEADDR) failed for %s address \"%s\": %m",
+				/* translator: third %s is IPv4, IPv6, or Unix */
+						 errmsg("%s(%s) failed for %s address \"%s\": %m",
+								"setsockopt", "SO_REUSEADDR",
 								familyDesc, addrDesc)));
 				closesocket(fd);
 				continue;
@@ -509,8 +503,9 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 			{
 				ereport(LOG,
 						(errcode_for_socket_access(),
-				/* translator: first %s is IPv4, IPv6, or Unix */
-						 errmsg("setsockopt(IPV6_V6ONLY) failed for %s address \"%s\": %m",
+				/* translator: third %s is IPv4, IPv6, or Unix */
+						 errmsg("%s(%s) failed for %s address \"%s\": %m",
+								"setsockopt", "IPV6_V6ONLY",
 								familyDesc, addrDesc)));
 				closesocket(fd);
 				continue;
@@ -527,18 +522,20 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 		err = bind(fd, addr->ai_addr, addr->ai_addrlen);
 		if (err < 0)
 		{
+			int			saved_errno = errno;
+
 			ereport(LOG,
 					(errcode_for_socket_access(),
 			/* translator: first %s is IPv4, IPv6, or Unix */
 					 errmsg("could not bind %s address \"%s\": %m",
 							familyDesc, addrDesc),
-					 (IS_AF_UNIX(addr->ai_family)) ?
-					 errhint("Is another postmaster already running on port %d?"
-							 " If not, remove socket file \"%s\" and retry.",
-							 (int) portNumber, service) :
-					 errhint("Is another postmaster already running on port %d?"
-							 " If not, wait a few seconds and retry.",
-							 (int) portNumber)));
+					 saved_errno == EADDRINUSE ?
+					 (IS_AF_UNIX(addr->ai_family) ?
+					  errhint("Is another postmaster already running on port %d?",
+							  (int) portNumber) :
+					  errhint("Is another postmaster already running on port %d?"
+							  " If not, wait a few seconds and retry.",
+							  (int) portNumber)) : 0));
 			closesocket(fd);
 			continue;
 		}
@@ -608,6 +605,10 @@ StreamServerPort(int family, const char *hostName, unsigned short portNumber,
 static int
 Lock_AF_UNIX(const char *unixSocketDir, const char *unixSocketPath)
 {
+	/* no lock file for abstract sockets */
+	if (unixSocketPath[0] == '@')
+		return STATUS_OK;
+
 	/*
 	 * Grab an interlock file associated with the socket file.
 	 *
@@ -639,6 +640,10 @@ Lock_AF_UNIX(const char *unixSocketDir, const char *unixSocketPath)
 static int
 Setup_AF_UNIX(const char *sock_path)
 {
+	/* no file system permissions for abstract sockets */
+	if (sock_path[0] == '@')
+		return STATUS_OK;
+
 	/*
 	 * Fix socket ownership/permission if requested.  Note we must do this
 	 * before we listen() to avoid a window where unwanted connections could
@@ -702,8 +707,8 @@ Setup_AF_UNIX(const char *sock_path)
  *		server port.  Set port->sock to the FD of the new connection.
  *
  * ASSUME: that this doesn't need to be non-blocking because
- *		the Postmaster uses select() to tell when the server master
- *		socket is ready for accept().
+ *		the Postmaster uses select() to tell when the socket is ready for
+ *		accept().
  *
  * RETURNS: STATUS_OK or STATUS_ERROR
  */
@@ -737,7 +742,8 @@ StreamConnection(pgsocket server_fd, Port *port)
 					(struct sockaddr *) &port->laddr.addr,
 					&port->laddr.salen) < 0)
 	{
-		elog(LOG, "getsockname() failed: %m");
+		ereport(LOG,
+				(errmsg("%s() failed: %m", "getsockname")));
 		return STATUS_ERROR;
 	}
 
@@ -756,7 +762,8 @@ StreamConnection(pgsocket server_fd, Port *port)
 		if (setsockopt(port->sock, IPPROTO_TCP, TCP_NODELAY,
 					   (char *) &on, sizeof(on)) < 0)
 		{
-			elog(LOG, "setsockopt(%s) failed: %m", "TCP_NODELAY");
+			ereport(LOG,
+					(errmsg("%s(%s) failed: %m", "setsockopt", "TCP_NODELAY")));
 			return STATUS_ERROR;
 		}
 #endif
@@ -764,7 +771,8 @@ StreamConnection(pgsocket server_fd, Port *port)
 		if (setsockopt(port->sock, SOL_SOCKET, SO_KEEPALIVE,
 					   (char *) &on, sizeof(on)) < 0)
 		{
-			elog(LOG, "setsockopt(%s) failed: %m", "SO_KEEPALIVE");
+			ereport(LOG,
+					(errmsg("%s(%s) failed: %m", "setsockopt", "SO_KEEPALIVE")));
 			return STATUS_ERROR;
 		}
 
@@ -795,7 +803,8 @@ StreamConnection(pgsocket server_fd, Port *port)
 		if (getsockopt(port->sock, SOL_SOCKET, SO_SNDBUF, (char *) &oldopt,
 					   &optlen) < 0)
 		{
-			elog(LOG, "getsockopt(%s) failed: %m", "SO_SNDBUF");
+			ereport(LOG,
+					(errmsg("%s(%s) failed: %m", "getsockopt", "SO_SNDBUF")));
 			return STATUS_ERROR;
 		}
 		newopt = PQ_SEND_BUFFER_SIZE * 4;
@@ -804,7 +813,8 @@ StreamConnection(pgsocket server_fd, Port *port)
 			if (setsockopt(port->sock, SOL_SOCKET, SO_SNDBUF, (char *) &newopt,
 						   sizeof(newopt)) < 0)
 			{
-				elog(LOG, "setsockopt(%s) failed: %m", "SO_SNDBUF");
+				ereport(LOG,
+						(errmsg("%s(%s) failed: %m", "setsockopt", "SO_SNDBUF")));
 				return STATUS_ERROR;
 			}
 		}
@@ -1132,58 +1142,6 @@ pq_discardbytes(size_t len)
 }
 
 /* --------------------------------
- *		pq_getstring	- get a null terminated string from connection
- *
- *		The return value is placed in an expansible StringInfo, which has
- *		already been initialized by the caller.
- *
- *		This is used only for dealing with old-protocol clients.  The idea
- *		is to produce a StringInfo that looks the same as we would get from
- *		pq_getmessage() with a newer client; we will then process it with
- *		pq_getmsgstring.  Therefore, no character set conversion is done here,
- *		even though this is presumably useful only for text.
- *
- *		returns 0 if OK, EOF if trouble
- * --------------------------------
- */
-int
-pq_getstring(StringInfo s)
-{
-	int			i;
-
-	Assert(PqCommReadingMsg);
-
-	resetStringInfo(s);
-
-	/* Read until we get the terminating '\0' */
-	for (;;)
-	{
-		while (PqRecvPointer >= PqRecvLength)
-		{
-			if (pq_recvbuf())	/* If nothing in buffer, then recv some */
-				return EOF;		/* Failed to recv data */
-		}
-
-		for (i = PqRecvPointer; i < PqRecvLength; i++)
-		{
-			if (PqRecvBuffer[i] == '\0')
-			{
-				/* include the '\0' in the copy */
-				appendBinaryStringInfo(s, PqRecvBuffer + PqRecvPointer,
-									   i - PqRecvPointer + 1);
-				PqRecvPointer = i + 1;	/* advance past \0 */
-				return 0;
-			}
-		}
-
-		/* If we're here we haven't got the \0 in the buffer yet. */
-		appendBinaryStringInfo(s, PqRecvBuffer + PqRecvPointer,
-							   PqRecvLength - PqRecvPointer);
-		PqRecvPointer = PqRecvLength;
-	}
-}
-
-/* --------------------------------
  *		pq_buffer_has_data		- is any buffered data available to read?
  *
  * This will *not* attempt to read more data.
@@ -1221,9 +1179,9 @@ pq_startmsgread(void)
 /* --------------------------------
  *		pq_endmsgread	- finish reading message.
  *
- *		This must be called after reading a V2 protocol message with
- *		pq_getstring() and friends, to indicate that we have read the whole
- *		message. In V3 protocol, pq_getmessage() does this implicitly.
+ *		This must be called after reading a message with pq_getbytes()
+ *		and friends, to indicate that we have read the whole message.
+ *		pq_getmessage() does this implicitly.
  * --------------------------------
  */
 void
@@ -1257,7 +1215,7 @@ pq_is_reading_msg(void)
  *		is removed.  Also, s->cursor is initialized to zero for convenience
  *		in scanning the message contents.
  *
- *		If maxlen is not zero, it is an upper limit on the length of the
+ *		maxlen is the upper limit on the length of the
  *		message we are willing to accept.  We abort the connection (by
  *		returning EOF) if client tries to send more than that.
  *
@@ -1284,8 +1242,7 @@ pq_getmessage(StringInfo s, int maxlen)
 
 	len = pg_ntoh32(len);
 
-	if (len < 4 ||
-		(maxlen > 0 && len > maxlen))
+	if (len < 4 || len > maxlen)
 	{
 		ereport(COMMERROR,
 				(errcode(ERRCODE_PROTOCOL_VIOLATION),
@@ -1338,28 +1295,6 @@ pq_getmessage(StringInfo s, int maxlen)
 	return 0;
 }
 
-
-/* --------------------------------
- *		pq_putbytes		- send bytes to connection (not flushed until pq_flush)
- *
- *		returns 0 if OK, EOF if trouble
- * --------------------------------
- */
-int
-pq_putbytes(const char *s, size_t len)
-{
-	int			res;
-
-	/* Should only be called by old-style COPY OUT */
-	Assert(DoingCopyOut);
-	/* No-op if reentrant call */
-	if (PqCommBusy)
-		return 0;
-	PqCommBusy = true;
-	res = internal_putbytes(s, len);
-	PqCommBusy = false;
-	return res;
-}
 
 static int
 internal_putbytes(const char *s, size_t len)
@@ -1521,8 +1456,6 @@ socket_is_send_pending(void)
 
 /* --------------------------------
  * Message-level I/O routines begin here.
- *
- * These routines understand about the old-style COPY OUT protocol.
  * --------------------------------
  */
 
@@ -1530,20 +1463,13 @@ socket_is_send_pending(void)
 /* --------------------------------
  *		socket_putmessage - send a normal message (suppressed in COPY OUT mode)
  *
- *		If msgtype is not '\0', it is a message type code to place before
- *		the message body.  If msgtype is '\0', then the message has no type
- *		code (this is only valid in pre-3.0 protocols).
+ *		msgtype is a message type code to place before the message body.
  *
- *		len is the length of the message body data at *s.  In protocol 3.0
- *		and later, a message length word (equal to len+4 because it counts
- *		itself too) is inserted by this routine.
+ *		len is the length of the message body data at *s.  A message length
+ *		word (equal to len+4 because it counts itself too) is inserted by this
+ *		routine.
  *
- *		All normal messages are suppressed while old-style COPY OUT is in
- *		progress.  (In practice only a few notice messages might get emitted
- *		then; dropping them is annoying, but at least they will still appear
- *		in the postmaster log.)
- *
- *		We also suppress messages generated while pqcomm.c is busy.  This
+ *		We suppress messages generated while pqcomm.c is busy.  This
  *		avoids any possibility of messages being inserted within other
  *		messages.  The only known trouble case arises if SIGQUIT occurs
  *		during a pqcomm.c routine --- quickdie() will try to send a warning
@@ -1555,20 +1481,20 @@ socket_is_send_pending(void)
 static int
 socket_putmessage(char msgtype, const char *s, size_t len)
 {
-	if (DoingCopyOut || PqCommBusy)
+	uint32		n32;
+
+	Assert(msgtype != 0);
+
+	if (PqCommBusy)
 		return 0;
 	PqCommBusy = true;
-	if (msgtype)
-		if (internal_putbytes(&msgtype, 1))
-			goto fail;
-	if (PG_PROTOCOL_MAJOR(FrontendProtocol) >= 3)
-	{
-		uint32		n32;
+	if (internal_putbytes(&msgtype, 1))
+		goto fail;
 
-		n32 = pg_hton32((uint32) (len + 4));
-		if (internal_putbytes((char *) &n32, 4))
-			goto fail;
-	}
+	n32 = pg_hton32((uint32) (len + 4));
+	if (internal_putbytes((char *) &n32, 4))
+		goto fail;
+
 	if (internal_putbytes(s, len))
 		goto fail;
 	PqCommBusy = false;
@@ -1606,37 +1532,41 @@ socket_putmessage_noblock(char msgtype, const char *s, size_t len)
 								 * buffer */
 }
 
-
 /* --------------------------------
- *		socket_startcopyout - inform libpq that an old-style COPY OUT transfer
- *			is beginning
- * --------------------------------
- */
-static void
-socket_startcopyout(void)
-{
-	DoingCopyOut = true;
-}
-
-/* --------------------------------
- *		socket_endcopyout	- end an old-style COPY OUT transfer
+ *		pq_putmessage_v2 - send a message in protocol version 2
  *
- *		If errorAbort is indicated, we are aborting a COPY OUT due to an error,
- *		and must send a terminator line.  Since a partial data line might have
- *		been emitted, send a couple of newlines first (the first one could
- *		get absorbed by a backslash...)  Note that old-style COPY OUT does
- *		not allow binary transfers, so a textual terminator is always correct.
+ *		msgtype is a message type code to place before the message body.
+ *
+ *		We no longer support protocol version 2, but we have kept this
+ *		function so that if a client tries to connect with protocol version 2,
+ *		as a courtesy we can still send the "unsupported protocol version"
+ *		error to the client in the old format.
+ *
+ *		Like in pq_putmessage(), we suppress messages generated while
+ *		pqcomm.c is busy.
+ *
+ *		returns 0 if OK, EOF if trouble
  * --------------------------------
  */
-static void
-socket_endcopyout(bool errorAbort)
+int
+pq_putmessage_v2(char msgtype, const char *s, size_t len)
 {
-	if (!DoingCopyOut)
-		return;
-	if (errorAbort)
-		pq_putbytes("\n\n\\.\n", 5);
-	/* in non-error case, copy.c will have emitted the terminator line */
-	DoingCopyOut = false;
+	Assert(msgtype != 0);
+
+	if (PqCommBusy)
+		return 0;
+	PqCommBusy = true;
+	if (internal_putbytes(&msgtype, 1))
+		goto fail;
+
+	if (internal_putbytes(s, len))
+		goto fail;
+	PqCommBusy = false;
+	return 0;
+
+fail:
+	PqCommBusy = false;
+	return EOF;
 }
 
 /*
@@ -1676,8 +1606,9 @@ pq_setkeepaliveswin32(Port *port, int idle, int interval)
 				 NULL)
 		!= 0)
 	{
-		elog(LOG, "WSAIoctl(SIO_KEEPALIVE_VALS) failed: %ui",
-			 WSAGetLastError());
+		ereport(LOG,
+				(errmsg("%s(%s) failed: error code %d",
+						"WSAIoctl", "SIO_KEEPALIVE_VALS", WSAGetLastError())));
 		return STATUS_ERROR;
 	}
 	if (port->keepalives_idle != idle)
@@ -1707,7 +1638,8 @@ pq_getkeepalivesidle(Port *port)
 					   (char *) &port->default_keepalives_idle,
 					   &size) < 0)
 		{
-			elog(LOG, "getsockopt(%s) failed: %m", PG_TCP_KEEPALIVE_IDLE_STR);
+			ereport(LOG,
+					(errmsg("%s(%s) failed: %m", "getsockopt", PG_TCP_KEEPALIVE_IDLE_STR)));
 			port->default_keepalives_idle = -1; /* don't know */
 		}
 #else							/* WIN32 */
@@ -1751,7 +1683,8 @@ pq_setkeepalivesidle(int idle, Port *port)
 	if (setsockopt(port->sock, IPPROTO_TCP, PG_TCP_KEEPALIVE_IDLE,
 				   (char *) &idle, sizeof(idle)) < 0)
 	{
-		elog(LOG, "setsockopt(%s) failed: %m", PG_TCP_KEEPALIVE_IDLE_STR);
+		ereport(LOG,
+				(errmsg("%s(%s) failed: %m", "setsockopt", PG_TCP_KEEPALIVE_IDLE_STR)));
 		return STATUS_ERROR;
 	}
 
@@ -1762,7 +1695,8 @@ pq_setkeepalivesidle(int idle, Port *port)
 #else
 	if (idle != 0)
 	{
-		elog(LOG, "setting the keepalive idle time is not supported");
+		ereport(LOG,
+				(errmsg("setting the keepalive idle time is not supported")));
 		return STATUS_ERROR;
 	}
 #endif
@@ -1789,7 +1723,8 @@ pq_getkeepalivesinterval(Port *port)
 					   (char *) &port->default_keepalives_interval,
 					   &size) < 0)
 		{
-			elog(LOG, "getsockopt(%s) failed: %m", "TCP_KEEPINTVL");
+			ereport(LOG,
+					(errmsg("%s(%s) failed: %m", "getsockopt", "TCP_KEEPINTVL")));
 			port->default_keepalives_interval = -1; /* don't know */
 		}
 #else
@@ -1832,7 +1767,8 @@ pq_setkeepalivesinterval(int interval, Port *port)
 	if (setsockopt(port->sock, IPPROTO_TCP, TCP_KEEPINTVL,
 				   (char *) &interval, sizeof(interval)) < 0)
 	{
-		elog(LOG, "setsockopt(%s) failed: %m", "TCP_KEEPINTVL");
+		ereport(LOG,
+				(errmsg("%s(%s) failed: %m", "setsockopt", "TCP_KEEPINTVL")));
 		return STATUS_ERROR;
 	}
 
@@ -1843,7 +1779,8 @@ pq_setkeepalivesinterval(int interval, Port *port)
 #else
 	if (interval != 0)
 	{
-		elog(LOG, "setsockopt(%s) not supported", "TCP_KEEPINTVL");
+		ereport(LOG,
+				(errmsg("%s(%s) not supported", "setsockopt", "TCP_KEEPINTVL")));
 		return STATUS_ERROR;
 	}
 #endif
@@ -1869,7 +1806,8 @@ pq_getkeepalivescount(Port *port)
 					   (char *) &port->default_keepalives_count,
 					   &size) < 0)
 		{
-			elog(LOG, "getsockopt(%s) failed: %m", "TCP_KEEPCNT");
+			ereport(LOG,
+					(errmsg("%s(%s) failed: %m", "getsockopt", "TCP_KEEPCNT")));
 			port->default_keepalives_count = -1;	/* don't know */
 		}
 	}
@@ -1907,7 +1845,8 @@ pq_setkeepalivescount(int count, Port *port)
 	if (setsockopt(port->sock, IPPROTO_TCP, TCP_KEEPCNT,
 				   (char *) &count, sizeof(count)) < 0)
 	{
-		elog(LOG, "setsockopt(%s) failed: %m", "TCP_KEEPCNT");
+		ereport(LOG,
+				(errmsg("%s(%s) failed: %m", "setsockopt", "TCP_KEEPCNT")));
 		return STATUS_ERROR;
 	}
 
@@ -1915,7 +1854,8 @@ pq_setkeepalivescount(int count, Port *port)
 #else
 	if (count != 0)
 	{
-		elog(LOG, "setsockopt(%s) not supported", "TCP_KEEPCNT");
+		ereport(LOG,
+				(errmsg("%s(%s) not supported", "setsockopt", "TCP_KEEPCNT")));
 		return STATUS_ERROR;
 	}
 #endif
@@ -1941,7 +1881,8 @@ pq_gettcpusertimeout(Port *port)
 					   (char *) &port->default_tcp_user_timeout,
 					   &size) < 0)
 		{
-			elog(LOG, "getsockopt(%s) failed: %m", "TCP_USER_TIMEOUT");
+			ereport(LOG,
+					(errmsg("%s(%s) failed: %m", "getsockopt", "TCP_USER_TIMEOUT")));
 			port->default_tcp_user_timeout = -1;	/* don't know */
 		}
 	}
@@ -1979,7 +1920,8 @@ pq_settcpusertimeout(int timeout, Port *port)
 	if (setsockopt(port->sock, IPPROTO_TCP, TCP_USER_TIMEOUT,
 				   (char *) &timeout, sizeof(timeout)) < 0)
 	{
-		elog(LOG, "setsockopt(%s) failed: %m", "TCP_USER_TIMEOUT");
+		ereport(LOG,
+				(errmsg("%s(%s) failed: %m", "setsockopt", "TCP_USER_TIMEOUT")));
 		return STATUS_ERROR;
 	}
 
@@ -1987,10 +1929,48 @@ pq_settcpusertimeout(int timeout, Port *port)
 #else
 	if (timeout != 0)
 	{
-		elog(LOG, "setsockopt(%s) not supported", "TCP_USER_TIMEOUT");
+		ereport(LOG,
+				(errmsg("%s(%s) not supported", "setsockopt", "TCP_USER_TIMEOUT")));
 		return STATUS_ERROR;
 	}
 #endif
 
 	return STATUS_OK;
+}
+
+/*
+ * Check if the client is still connected.
+ */
+bool
+pq_check_connection(void)
+{
+#if defined(POLLRDHUP)
+	/*
+	 * POLLRDHUP is a Linux extension to poll(2) to detect sockets closed by
+	 * the other end.  We don't have a portable way to do that without
+	 * actually trying to read or write data on other systems.  We don't want
+	 * to read because that would be confused by pipelined queries and COPY
+	 * data. Perhaps in future we'll try to write a heartbeat message instead.
+	 */
+	struct pollfd pollfd;
+	int			rc;
+
+	pollfd.fd = MyProcPort->sock;
+	pollfd.events = POLLOUT | POLLIN | POLLRDHUP;
+	pollfd.revents = 0;
+
+	rc = poll(&pollfd, 1, 0);
+
+	if (rc < 0)
+	{
+		ereport(COMMERROR,
+				(errcode_for_socket_access(),
+				 errmsg("could not poll socket: %m")));
+		return false;
+	}
+	else if (rc == 1 && (pollfd.revents & (POLLHUP | POLLRDHUP)))
+		return false;
+#endif
+
+	return true;
 }

@@ -9,7 +9,7 @@
  *	  polluting the namespace with lots of stuff...
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/c.h
@@ -98,16 +98,38 @@
  *
  * GCC: https://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html
  * GCC: https://gcc.gnu.org/onlinedocs/gcc/Type-Attributes.html
+ * Clang: https://clang.llvm.org/docs/AttributeReference.html
  * Sunpro: https://docs.oracle.com/cd/E18659_01/html/821-1384/gjzke.html
  * XLC: https://www.ibm.com/support/knowledgecenter/SSGH2K_13.1.2/com.ibm.xlc131.aix.doc/language_ref/function_attributes.html
  * XLC: https://www.ibm.com/support/knowledgecenter/SSGH2K_13.1.2/com.ibm.xlc131.aix.doc/language_ref/type_attrib.html
  */
+
+/*
+ * For compilers which don't support __has_attribute, we just define
+ * __has_attribute(x) to 0 so that we can define macros for various
+ * __attribute__s more easily below.
+ */
+#ifndef __has_attribute
+#define __has_attribute(attribute) 0
+#endif
 
 /* only GCC supports the unused attribute */
 #ifdef __GNUC__
 #define pg_attribute_unused() __attribute__((unused))
 #else
 #define pg_attribute_unused()
+#endif
+
+/*
+ * pg_nodiscard means the compiler should warn if the result of a function
+ * call is ignored.  The name "nodiscard" is chosen in alignment with
+ * (possibly future) C and C++ standards.  For maximum compatibility, use it
+ * as a function declaration specifier, so it goes before the return type.
+ */
+#ifdef __GNUC__
+#define pg_nodiscard __attribute__((warn_unused_result))
+#else
+#define pg_nodiscard
 #endif
 
 /*
@@ -190,6 +212,39 @@
 #define pg_noinline
 #endif
 
+/*
+ * For now, just define pg_attribute_cold and pg_attribute_hot to be empty
+ * macros on minGW 8.1.  There appears to be a compiler bug that results in
+ * compilation failure.  At this time, we still have at least one buildfarm
+ * animal running that compiler, so this should make that green again. It's
+ * likely this compiler is not popular enough to warrant keeping this code
+ * around forever, so let's just remove it once the last buildfarm animal
+ * upgrades.
+ */
+#if defined(__MINGW64__) && __GNUC__ == 8 && __GNUC_MINOR__ == 1
+
+#define pg_attribute_cold
+#define pg_attribute_hot
+
+#else
+/*
+ * Marking certain functions as "hot" or "cold" can be useful to assist the
+ * compiler in arranging the assembly code in a more efficient way.
+ */
+#if __has_attribute (cold)
+#define pg_attribute_cold __attribute__((cold))
+#else
+#define pg_attribute_cold
+#endif
+
+#if __has_attribute (hot)
+#define pg_attribute_hot __attribute__((hot))
+#else
+#define pg_attribute_hot
+#endif
+
+#endif							/* defined(__MINGW64__) && __GNUC__ == 8 &&
+								 * __GNUC_MINOR__ == 1 */
 /*
  * Mark a point as unreachable in a portable fashion.  This should preferably
  * be something that the compiler understands, to aid code generation.
@@ -276,6 +331,13 @@
 #else
 #define dummyret	char
 #endif
+
+/*
+ * Generic function pointer.  This can be used in the rare cases where it's
+ * necessary to cast a function pointer to a seemingly incompatible function
+ * pointer type while avoiding gcc's -Wcast-function-type warnings.
+ */
+typedef void (*pg_funcptr_t) (void);
 
 /*
  * We require C99, hence the compiler should understand flexible array
@@ -541,14 +603,6 @@ typedef uint32 CommandId;
 #define FirstCommandId	((CommandId) 0)
 #define InvalidCommandId	(~(CommandId)0)
 
-/*
- * Array indexing support
- */
-#define MAXDIM 6
-typedef struct
-{
-	int			indx[MAXDIM];
-}			IntArray;
 
 /* ----------------
  *		Variable-length datatypes all share the 'struct varlena' header.
@@ -937,35 +991,6 @@ extern void ExceptionalCondition(const char *conditionName,
  */
 #define Abs(x)			((x) >= 0 ? (x) : -(x))
 
-/*
- * StrNCpy
- *	Like standard library function strncpy(), except that result string
- *	is guaranteed to be null-terminated --- that is, at most N-1 bytes
- *	of the source string will be kept.
- *	Also, the macro returns no result (too hard to do that without
- *	evaluating the arguments multiple times, which seems worse).
- *
- *	BTW: when you need to copy a non-null-terminated string (like a text
- *	datum) and add a null, do not do it with StrNCpy(..., len+1).  That
- *	might seem to work, but it fetches one byte more than there is in the
- *	text object.  One fine day you'll have a SIGSEGV because there isn't
- *	another byte before the end of memory.  Don't laugh, we've had real
- *	live bug reports from real live users over exactly this mistake.
- *	Do it honestly with "memcpy(dst,src,len); dst[len] = '\0';", instead.
- */
-#define StrNCpy(dst,src,len) \
-	do \
-	{ \
-		char * _dst = (dst); \
-		Size _len = (len); \
-\
-		if (_len > 0) \
-		{ \
-			strncpy(_dst, (src), _len); \
-			_dst[_len-1] = '\0'; \
-		} \
-	} while (0)
-
 
 /* Get a bit mask of the bits set in non-long aligned addresses */
 #define LONG_ALIGN_MASK (sizeof(long) - 1)
@@ -1145,7 +1170,6 @@ typedef union PGAlignedXLogBlock
 #define STATUS_OK				(0)
 #define STATUS_ERROR			(-1)
 #define STATUS_EOF				(-2)
-#define STATUS_WAITING			(2)
 
 /*
  * gettext support
@@ -1167,7 +1191,8 @@ typedef union PGAlignedXLogBlock
  *	access to the original string and translated string, and for cases where
  *	immediate translation is not possible, like when initializing global
  *	variables.
- *		http://www.gnu.org/software/autoconf/manual/gettext/Special-cases.html
+ *
+ *	https://www.gnu.org/software/gettext/manual/html_node/Special-cases.html
  */
 #define gettext_noop(x) (x)
 
@@ -1305,14 +1330,21 @@ extern unsigned long long strtoull(const char *str, char **endptr, int base);
 
 /*
  * When there is no sigsetjmp, its functionality is provided by plain
- * setjmp. Incidentally, nothing provides setjmp's functionality in
- * that case.  We now support the case only on Windows.
+ * setjmp.  We now support the case only on Windows.  However, it seems
+ * that MinGW-64 has some longstanding issues in its setjmp support,
+ * so on that toolchain we cheat and use gcc's builtins.
  */
 #ifdef WIN32
+#ifdef __MINGW64__
+typedef intptr_t sigjmp_buf[5];
+#define sigsetjmp(x,y) __builtin_setjmp(x)
+#define siglongjmp __builtin_longjmp
+#else							/* !__MINGW64__ */
 #define sigjmp_buf jmp_buf
 #define sigsetjmp(x,y) setjmp(x)
 #define siglongjmp longjmp
-#endif
+#endif							/* __MINGW64__ */
+#endif							/* WIN32 */
 
 /* EXEC_BACKEND defines */
 #ifdef EXEC_BACKEND

@@ -3,7 +3,7 @@
  * message.c
  *	  Generic logical messages.
  *
- * Copyright (c) 2013-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2013-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/logical/message.c
@@ -32,7 +32,6 @@
 #include "postgres.h"
 
 #include "access/xact.h"
-#include "catalog/indexing.h"
 #include "miscadmin.h"
 #include "nodes/execnodes.h"
 #include "replication/logical.h"
@@ -59,6 +58,7 @@ LogLogicalMessage(const char *prefix, const char *message, size_t size,
 
 	xlrec.dbId = MyDatabaseId;
 	xlrec.transactional = transactional;
+	/* trailing zero is critical; see logicalmsg_desc */
 	xlrec.prefix_size = strlen(prefix) + 1;
 	xlrec.message_size = size;
 

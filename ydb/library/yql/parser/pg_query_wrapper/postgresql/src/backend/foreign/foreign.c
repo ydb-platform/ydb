@@ -3,7 +3,7 @@
  * foreign.c
  *		  support for foreign-data wrappers, servers and user mappings.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/backend/foreign/foreign.c
@@ -544,7 +544,7 @@ deflist_to_tuplestore(ReturnSetInfo *rsinfo, List *options)
 		nulls[0] = false;
 		if (def->arg)
 		{
-			values[1] = CStringGetTextDatum(((Value *) (def->arg))->val.str);
+			values[1] = CStringGetTextDatum(strVal(def->arg));
 			nulls[1] = false;
 		}
 		else

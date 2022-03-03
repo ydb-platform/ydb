@@ -3,7 +3,7 @@
  * pg_authid_d.h
  *    Macro definitions for pg_authid
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -37,13 +37,16 @@
 #define Natts_pg_authid 12
 
 #define BOOTSTRAP_SUPERUSERID 10
-#define DEFAULT_ROLE_MONITOR 3373
-#define DEFAULT_ROLE_READ_ALL_SETTINGS 3374
-#define DEFAULT_ROLE_READ_ALL_STATS 3375
-#define DEFAULT_ROLE_STAT_SCAN_TABLES 3377
-#define DEFAULT_ROLE_READ_SERVER_FILES 4569
-#define DEFAULT_ROLE_WRITE_SERVER_FILES 4570
-#define DEFAULT_ROLE_EXECUTE_SERVER_PROGRAM 4571
-#define DEFAULT_ROLE_SIGNAL_BACKENDID 4200
+#define ROLE_PG_DATABASE_OWNER 6171
+#define ROLE_PG_READ_ALL_DATA 6181
+#define ROLE_PG_WRITE_ALL_DATA 6182
+#define ROLE_PG_MONITOR 3373
+#define ROLE_PG_READ_ALL_SETTINGS 3374
+#define ROLE_PG_READ_ALL_STATS 3375
+#define ROLE_PG_STAT_SCAN_TABLES 3377
+#define ROLE_PG_READ_SERVER_FILES 4569
+#define ROLE_PG_WRITE_SERVER_FILES 4570
+#define ROLE_PG_EXECUTE_SERVER_PROGRAM 4571
+#define ROLE_PG_SIGNAL_BACKEND 4200
 
 #endif							/* PG_AUTHID_D_H */

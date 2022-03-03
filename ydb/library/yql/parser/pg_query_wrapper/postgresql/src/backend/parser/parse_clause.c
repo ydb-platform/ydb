@@ -3,7 +3,7 @@
  * parse_clause.c
  *	  handle clauses in parser
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -58,7 +58,6 @@ static int	extractRemainingColumns(ParseNamespaceColumn *src_nscolumns,
 									List **res_colnames, List **res_colvars,
 									ParseNamespaceColumn *res_nscolumns);
 static Node *transformJoinUsingClause(ParseState *pstate,
-									  RangeTblEntry *leftRTE, RangeTblEntry *rightRTE,
 									  List *leftVars, List *rightVars);
 static Node *transformJoinOnClause(ParseState *pstate, JoinExpr *j,
 								   List *namespace);
@@ -302,7 +301,6 @@ extractRemainingColumns(ParseNamespaceColumn *src_nscolumns,
  */
 static Node *
 transformJoinUsingClause(ParseState *pstate,
-						 RangeTblEntry *leftRTE, RangeTblEntry *rightRTE,
 						 List *leftVars, List *rightVars)
 {
 	Node	   *result;
@@ -325,8 +323,8 @@ transformJoinUsingClause(ParseState *pstate,
 		A_Expr	   *e;
 
 		/* Require read access to the join variables */
-		markVarForSelectPriv(pstate, lvar, leftRTE);
-		markVarForSelectPriv(pstate, rvar, rightRTE);
+		markVarForSelectPriv(pstate, lvar);
+		markVarForSelectPriv(pstate, rvar);
 
 		/* Now create the lvar = rvar join condition */
 		e = makeSimpleA_Expr(AEXPR_OP, "=",
@@ -541,10 +539,10 @@ transformRangeFunction(ParseState *pstate, RangeFunction *r)
 				list_length(fc->args) > 1 &&
 				fc->agg_order == NIL &&
 				fc->agg_filter == NULL &&
+				fc->over == NULL &&
 				!fc->agg_star &&
 				!fc->agg_distinct &&
 				!fc->func_variadic &&
-				fc->over == NULL &&
 				coldeflist == NIL)
 			{
 				ListCell   *lc;
@@ -558,6 +556,7 @@ transformRangeFunction(ParseState *pstate, RangeFunction *r)
 
 					newfc = makeFuncCall(SystemFuncName("unnest"),
 										 list_make1(arg),
+										 COERCE_EXPLICIT_CALL,
 										 fc->location);
 
 					newfexpr = transformExpr(pstate, (Node *) newfc,
@@ -1217,9 +1216,9 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 		 * input column numbers more easily.
 		 */
 		l_nscolumns = l_nsitem->p_nscolumns;
-		l_colnames = l_nsitem->p_rte->eref->colnames;
+		l_colnames = l_nsitem->p_names->colnames;
 		r_nscolumns = r_nsitem->p_nscolumns;
-		r_colnames = r_nsitem->p_rte->eref->colnames;
+		r_colnames = r_nsitem->p_names->colnames;
 
 		/*
 		 * Natural join does not explicitly specify columns; must generate
@@ -1264,6 +1263,13 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 
 			j->usingClause = rlist;
 		}
+
+		/*
+		 * If a USING clause alias was specified, save the USING columns as
+		 * its column list.
+		 */
+		if (j->join_using_alias)
+			j->join_using_alias->colnames = j->usingClause;
 
 		/*
 		 * Now transform the join qualifications, if any.
@@ -1409,8 +1415,6 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 			}
 
 			j->quals = transformJoinUsingClause(pstate,
-												l_nsitem->p_rte,
-												r_nsitem->p_rte,
 												l_usingvars,
 												r_usingvars);
 		}
@@ -1462,6 +1466,7 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 										   res_colvars,
 										   l_colnos,
 										   r_colnos,
+										   j->join_using_alias,
 										   j->alias,
 										   true);
 
@@ -1471,7 +1476,7 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 		 * Now that we know the join RTE's rangetable index, we can fix up the
 		 * res_nscolumns data in places where it should contain that.
 		 */
-		Assert(res_colindex == list_length(nsitem->p_rte->eref->colnames));
+		Assert(res_colindex == list_length(nsitem->p_names->colnames));
 		for (k = 0; k < res_colindex; k++)
 		{
 			ParseNamespaceColumn *nscol = res_nscolumns + k;
@@ -1494,6 +1499,30 @@ transformFromClauseItem(ParseState *pstate, Node *n,
 			pstate->p_joinexprs = lappend(pstate->p_joinexprs, NULL);
 		pstate->p_joinexprs = lappend(pstate->p_joinexprs, j);
 		Assert(list_length(pstate->p_joinexprs) == j->rtindex);
+
+		/*
+		 * If the join has a USING alias, build a ParseNamespaceItem for that
+		 * and add it to the list of nsitems in the join's input.
+		 */
+		if (j->join_using_alias)
+		{
+			ParseNamespaceItem *jnsitem;
+
+			jnsitem = (ParseNamespaceItem *) palloc(sizeof(ParseNamespaceItem));
+			jnsitem->p_names = j->join_using_alias;
+			jnsitem->p_rte = nsitem->p_rte;
+			jnsitem->p_rtindex = nsitem->p_rtindex;
+			/* no need to copy the first N columns, just use res_nscolumns */
+			jnsitem->p_nscolumns = res_nscolumns;
+			/* set default visibility flags; might get changed later */
+			jnsitem->p_rel_visible = true;
+			jnsitem->p_cols_visible = true;
+			jnsitem->p_lateral_only = false;
+			jnsitem->p_lateral_ok = true;
+			/* Per SQL, we must check for alias conflicts */
+			checkNameSpaceConflicts(pstate, list_make1(jnsitem), my_namespace);
+			my_namespace = lappend(my_namespace, jnsitem);
+		}
 
 		/*
 		 * Prepare returned namespace list.  If the JOIN has an alias then it
@@ -1568,24 +1597,13 @@ buildMergedJoinVar(ParseState *pstate, JoinType jointype,
 			   *r_node,
 			   *res_node;
 
-	/*
-	 * Choose output type if input types are dissimilar.
-	 */
-	outcoltype = l_colvar->vartype;
-	outcoltypmod = l_colvar->vartypmod;
-	if (outcoltype != r_colvar->vartype)
-	{
-		outcoltype = select_common_type(pstate,
+	outcoltype = select_common_type(pstate,
+									list_make2(l_colvar, r_colvar),
+									"JOIN/USING",
+									NULL);
+	outcoltypmod = select_common_typmod(pstate,
 										list_make2(l_colvar, r_colvar),
-										"JOIN/USING",
-										NULL);
-		outcoltypmod = -1;		/* ie, unknown */
-	}
-	else if (outcoltypmod != r_colvar->vartypmod)
-	{
-		/* same type, but not same typmod */
-		outcoltypmod = -1;		/* ie, unknown */
-	}
+										outcoltype);
 
 	/*
 	 * Insert coercion functions if needed.  Note that a difference in typmod
@@ -3203,17 +3221,6 @@ transformOnConflictArbiter(ParseState *pstate,
 	/* ON CONFLICT DO NOTHING does not require an inference clause */
 	if (infer)
 	{
-		List	   *save_namespace;
-
-		/*
-		 * While we process the arbiter expressions, accept only non-qualified
-		 * references to the target table. Hide any other relations.
-		 */
-		save_namespace = pstate->p_namespace;
-		pstate->p_namespace = NIL;
-		addNSItemToQuery(pstate, pstate->p_target_nsitem,
-						 false, false, true);
-
 		if (infer->indexElems)
 			*arbiterExpr = resolve_unique_index_expr(pstate, infer,
 													 pstate->p_target_relation);
@@ -3225,8 +3232,6 @@ transformOnConflictArbiter(ParseState *pstate,
 		if (infer->whereClause)
 			*arbiterWhere = transformExpr(pstate, infer->whereClause,
 										  EXPR_KIND_INDEX_PREDICATE);
-
-		pstate->p_namespace = save_namespace;
 
 		/*
 		 * If the arbiter is specified by constraint name, get the constraint

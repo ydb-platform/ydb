@@ -13,7 +13,7 @@
  * use the Windows native routines, but if not, we use our own.
  *
  *
- * Copyright (c) 2003-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2003-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/port/getaddrinfo.c
@@ -79,12 +79,12 @@ haveNativeWindowsIPv6routines(void)
 	{
 		/* We found a dll, so now get the addresses of the routines */
 
-		getaddrinfo_ptr = (getaddrinfo_ptr_t) GetProcAddress(hLibrary,
-															 "getaddrinfo");
-		freeaddrinfo_ptr = (freeaddrinfo_ptr_t) GetProcAddress(hLibrary,
-															   "freeaddrinfo");
-		getnameinfo_ptr = (getnameinfo_ptr_t) GetProcAddress(hLibrary,
-															 "getnameinfo");
+		getaddrinfo_ptr = (getaddrinfo_ptr_t) (pg_funcptr_t) GetProcAddress(hLibrary,
+																			"getaddrinfo");
+		freeaddrinfo_ptr = (freeaddrinfo_ptr_t) (pg_funcptr_t) GetProcAddress(hLibrary,
+																			  "freeaddrinfo");
+		getnameinfo_ptr = (getnameinfo_ptr_t) (pg_funcptr_t) GetProcAddress(hLibrary,
+																			"getnameinfo");
 
 		/*
 		 * If any one of the routines is missing, let's play it safe and

@@ -4,7 +4,7 @@
  *	   Frontend exposed definitions for hot standby mode.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/standbydefs.h
@@ -49,7 +49,7 @@ typedef struct xl_running_xacts
 	int			xcnt;			/* # of xact ids in xids[] */
 	int			subxcnt;		/* # of subxact ids in xids[] */
 	bool		subxid_overflow;	/* snapshot overflowed, subxids missing */
-	TransactionId nextXid;		/* xid from ShmemVariableCache->nextFullXid */
+	TransactionId nextXid;		/* xid from ShmemVariableCache->nextXid */
 	TransactionId oldestRunningXid; /* *not* oldestXmin */
 	TransactionId latestCompletedXid;	/* so we can set xmax */
 

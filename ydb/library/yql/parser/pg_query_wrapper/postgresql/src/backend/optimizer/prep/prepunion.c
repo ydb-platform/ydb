@@ -12,7 +12,7 @@
  * case, but most of the heavy lifting for that is done elsewhere,
  * notably in prepjointree.c and allpaths.c.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -338,6 +338,7 @@ recurse_set_operations(Node *setOp, PlannerInfo *root,
 				*pNumGroups = estimate_num_groups(subroot,
 												  get_tlist_exprs(subquery->targetList, false),
 												  subpath->rows,
+												  NULL,
 												  NULL);
 		}
 	}
@@ -620,7 +621,7 @@ generate_union_paths(SetOperationStmt *op, PlannerInfo *root,
 	 * Append the child results together.
 	 */
 	path = (Path *) create_append_path(root, result_rel, pathlist, NIL,
-									   NIL, NULL, 0, false, NIL, -1);
+									   NIL, NULL, 0, false, -1);
 
 	/*
 	 * For UNION ALL, we just need the Append path.  For UNION, need to add
@@ -677,7 +678,7 @@ generate_union_paths(SetOperationStmt *op, PlannerInfo *root,
 			create_append_path(root, result_rel, NIL, partial_pathlist,
 							   NIL, NULL,
 							   parallel_workers, enable_parallel_append,
-							   NIL, -1);
+							   -1);
 		ppath = (Path *)
 			create_gather_path(root, result_rel, ppath,
 							   result_rel->reltarget, NULL, NULL);
@@ -787,7 +788,7 @@ generate_nonunion_paths(SetOperationStmt *op, PlannerInfo *root,
 	 * Append the child results together.
 	 */
 	path = (Path *) create_append_path(root, result_rel, pathlist, NIL,
-									   NIL, NULL, 0, false, NIL, -1);
+									   NIL, NULL, 0, false, -1);
 
 	/* Identify the grouping semantics */
 	groupList = generate_setop_grouplist(op, tlist);

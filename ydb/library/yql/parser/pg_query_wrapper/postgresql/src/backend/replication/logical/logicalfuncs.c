@@ -6,7 +6,7 @@
  *	   logical replication slots via SQL.
  *
  *
- * Copyright (c) 2012-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2012-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/backend/replication/logicalfuncs.c
@@ -225,7 +225,7 @@ pg_logical_slot_get_changes_guts(FunctionCallInfo fcinfo, bool confirm, bool bin
 	else
 		end_of_wal = GetXLogReplayRecPtr(&ThisTimeLineID);
 
-	(void) ReplicationSlotAcquire(NameStr(*name), SAB_Error);
+	ReplicationSlotAcquire(NameStr(*name), true);
 
 	PG_TRY();
 	{
@@ -250,7 +250,7 @@ pg_logical_slot_get_changes_guts(FunctionCallInfo fcinfo, bool confirm, bool bin
 					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 					 errmsg("can no longer get changes from replication slot \"%s\"",
 							NameStr(*name)),
-					 errdetail("This slot has never previously reserved WAL, or has been invalidated.")));
+					 errdetail("This slot has never previously reserved WAL, or it has been invalidated.")));
 
 		MemoryContextSwitchTo(oldcontext);
 

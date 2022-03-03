@@ -31,7 +31,7 @@
  * should be killed by SIGQUIT and then a recovery cycle started.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -78,6 +78,9 @@ __thread int			WalWriterFlushAfter = 128;
 #define LOOPS_UNTIL_HIBERNATE		50
 #define HIBERNATE_FACTOR			25
 
+/* Prototypes for private functions */
+static void HandleWalWriterInterrupts(void);
+
 /*
  * Main entry point for walwriter process
  *
@@ -101,7 +104,7 @@ WalWriterMain(void)
 	pqsignal(SIGHUP, SignalHandlerForConfigReload);
 	pqsignal(SIGINT, SignalHandlerForShutdownRequest);
 	pqsignal(SIGTERM, SignalHandlerForShutdownRequest);
-	pqsignal(SIGQUIT, SignalHandlerForCrashExit);
+	/* SIGQUIT handler was already set up by InitPostmasterChild */
 	pqsignal(SIGALRM, SIG_IGN);
 	pqsignal(SIGPIPE, SIG_IGN);
 	pqsignal(SIGUSR1, procsignal_sigusr1_handler);
@@ -111,9 +114,6 @@ WalWriterMain(void)
 	 * Reset some signals that are accepted by postmaster but not here
 	 */
 	pqsignal(SIGCHLD, SIG_DFL);
-
-	/* We allow SIGQUIT (quickdie) at all times */
-	sigdelset(&BlockSig, SIGQUIT);
 
 	/*
 	 * Create a memory context that we will do all our work in.  We do this so
@@ -129,7 +129,20 @@ WalWriterMain(void)
 	/*
 	 * If an exception is encountered, processing resumes here.
 	 *
-	 * This code is heavily based on bgwriter.c, q.v.
+	 * You might wonder why this isn't coded as an infinite loop around a
+	 * PG_TRY construct.  The reason is that this is the bottom of the
+	 * exception stack, and so with PG_TRY there would be no exception handler
+	 * in force at all during the CATCH part.  By leaving the outermost setjmp
+	 * always active, we have at least some chance of recovering from an error
+	 * during error recovery.  (If we get into an infinite loop thereby, it
+	 * will soon be stopped by overflow of elog.c's internal state stack.)
+	 *
+	 * Note that we use sigsetjmp(..., 1), so that the prevailing signal mask
+	 * (to wit, BlockSig) will be restored when longjmp'ing to here.  Thus,
+	 * signals other than SIGQUIT will be blocked until we complete error
+	 * recovery.  It might seem that this policy makes the HOLD_INTERRUPTS()
+	 * call redundant, but it is not since InterruptPending might be set
+	 * already.
 	 */
 	if (sigsetjmp(local_sigjmp_buf, 1) != 0)
 	{
@@ -232,7 +245,8 @@ WalWriterMain(void)
 		/* Clear any already-pending wakeups */
 		ResetLatch(MyLatch);
 
-		HandleMainLoopInterrupts();
+		/* Process any signals received recently */
+		HandleWalWriterInterrupts();
 
 		/*
 		 * Do what we're here for; then, if XLogBackgroundFlush() found useful
@@ -242,6 +256,9 @@ WalWriterMain(void)
 			left_till_hibernate = LOOPS_UNTIL_HIBERNATE;
 		else if (left_till_hibernate > 0)
 			left_till_hibernate--;
+
+		/* Send WAL statistics to the stats collector */
+		pgstat_send_wal(false);
 
 		/*
 		 * Sleep until we are signaled or WalWriterDelay has elapsed.  If we
@@ -257,5 +274,36 @@ WalWriterMain(void)
 						 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
 						 cur_timeout,
 						 WAIT_EVENT_WAL_WRITER_MAIN);
+	}
+}
+
+/*
+ * Interrupt handler for main loops of WAL writer process.
+ */
+static void
+HandleWalWriterInterrupts(void)
+{
+	if (ProcSignalBarrierPending)
+		ProcessProcSignalBarrier();
+
+	if (ConfigReloadPending)
+	{
+		ConfigReloadPending = false;
+		ProcessConfigFile(PGC_SIGHUP);
+	}
+
+	if (ShutdownRequestPending)
+	{
+		/*
+		 * Force to send remaining WAL statistics to the stats collector at
+		 * process exit.
+		 *
+		 * Since pgstat_send_wal is invoked with 'force' is false in main loop
+		 * to avoid overloading to the stats collector, there may exist unsent
+		 * stats counters for the WAL writer.
+		 */
+		pgstat_send_wal(true);
+
+		proc_exit(0);
 	}
 }

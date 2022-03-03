@@ -3,7 +3,7 @@
  * partdesc.c
  *		Support routines for manipulating partition descriptors
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -17,7 +17,6 @@
 #include "access/genam.h"
 #include "access/htup_details.h"
 #include "access/table.h"
-#include "catalog/indexing.h"
 #include "catalog/partition.h"
 #include "catalog/pg_inherits.h"
 #include "partitioning/partbounds.h"
@@ -38,6 +37,7 @@ typedef struct PartitionDirectoryData
 {
 	MemoryContext pdir_mcxt;
 	HTAB	   *pdir_hash;
+	bool		omit_detached;
 }			PartitionDirectoryData;
 
 typedef struct PartitionDirectoryEntry
@@ -47,11 +47,18 @@ typedef struct PartitionDirectoryEntry
 	PartitionDesc pd;
 } PartitionDirectoryEntry;
 
-static void RelationBuildPartitionDesc(Relation rel);
+static PartitionDesc RelationBuildPartitionDesc(Relation rel,
+												bool omit_detached);
 
 
 /*
  * RelationGetPartitionDesc -- get partition descriptor, if relation is partitioned
+ *
+ * We keep two partdescs in relcache: rd_partdesc includes all partitions
+ * (even those being concurrently marked detached), while rd_partdesc_nodetach
+ * omits (some of) those.  We store the pg_inherits.xmin value for the latter,
+ * to determine whether it can be validly reused in each case, since that
+ * depends on the active snapshot.
  *
  * Note: we arrange for partition descriptors to not get freed until the
  * relcache entry's refcount goes to zero (see hacks in RelationClose,
@@ -62,15 +69,45 @@ static void RelationBuildPartitionDesc(Relation rel);
  * that the data doesn't become stale.
  */
 PartitionDesc
-RelationGetPartitionDesc(Relation rel)
+RelationGetPartitionDesc(Relation rel, bool omit_detached)
 {
-	if (rel->rd_rel->relkind != RELKIND_PARTITIONED_TABLE)
-		return NULL;
+	Assert(rel->rd_rel->relkind == RELKIND_PARTITIONED_TABLE);
 
-	if (unlikely(rel->rd_partdesc == NULL))
-		RelationBuildPartitionDesc(rel);
+	/*
+	 * If relcache has a partition descriptor, use that.  However, we can only
+	 * do so when we are asked to include all partitions including detached;
+	 * and also when we know that there are no detached partitions.
+	 *
+	 * If there is no active snapshot, detached partitions aren't omitted
+	 * either, so we can use the cached descriptor too in that case.
+	 */
+	if (likely(rel->rd_partdesc &&
+			   (!rel->rd_partdesc->detached_exist || !omit_detached ||
+				!ActiveSnapshotSet())))
+		return rel->rd_partdesc;
 
-	return rel->rd_partdesc;
+	/*
+	 * If we're asked to omit detached partitions, we may be able to use a
+	 * cached descriptor too.  We determine that based on the pg_inherits.xmin
+	 * that was saved alongside that descriptor: if the xmin that was not in
+	 * progress for that active snapshot is also not in progress for the
+	 * current active snapshot, then we can use use it.  Otherwise build one
+	 * from scratch.
+	 */
+	if (omit_detached &&
+		rel->rd_partdesc_nodetached &&
+		ActiveSnapshotSet())
+	{
+		Snapshot	activesnap;
+
+		Assert(TransactionIdIsValid(rel->rd_partdesc_nodetached_xmin));
+		activesnap = GetActiveSnapshot();
+
+		if (!XidInMVCCSnapshot(rel->rd_partdesc_nodetached_xmin, activesnap))
+			return rel->rd_partdesc_nodetached;
+	}
+
+	return RelationBuildPartitionDesc(rel, omit_detached);
 }
 
 /*
@@ -87,9 +124,15 @@ RelationGetPartitionDesc(Relation rel)
  * context the current context except in very brief code sections, out of fear
  * that some of our callees allocate memory on their own which would be leaked
  * permanently.
+ *
+ * As a special case, partition descriptors that are requested to omit
+ * partitions being detached (and which contain such partitions) are transient
+ * and are not associated with the relcache entry.  Such descriptors only last
+ * through the requesting Portal, so we use the corresponding memory context
+ * for them.
  */
-static void
-RelationBuildPartitionDesc(Relation rel)
+static PartitionDesc
+RelationBuildPartitionDesc(Relation rel, bool omit_detached)
 {
 	PartitionDesc partdesc;
 	PartitionBoundInfo boundinfo = NULL;
@@ -97,6 +140,9 @@ RelationBuildPartitionDesc(Relation rel)
 	PartitionBoundSpec **boundspecs = NULL;
 	Oid		   *oids = NULL;
 	bool	   *is_leaf = NULL;
+	bool		detached_exist;
+	bool		is_omit;
+	TransactionId detached_xmin;
 	ListCell   *cell;
 	int			i,
 				nparts;
@@ -111,7 +157,13 @@ RelationBuildPartitionDesc(Relation rel)
 	 * concurrently, whatever this function returns will be accurate as of
 	 * some well-defined point in time.
 	 */
-	inhoids = find_inheritance_children(RelationGetRelid(rel), NoLock);
+	detached_exist = false;
+	detached_xmin = InvalidTransactionId;
+	inhoids = find_inheritance_children_extended(RelationGetRelid(rel),
+												 omit_detached, NoLock,
+												 &detached_exist,
+												 &detached_xmin);
+
 	nparts = list_length(inhoids);
 
 	/* Allocate working arrays for OIDs, leaf flags, and boundspecs. */
@@ -232,6 +284,7 @@ RelationBuildPartitionDesc(Relation rel)
 	partdesc = (PartitionDescData *)
 		MemoryContextAllocZero(new_pdcxt, sizeof(PartitionDescData));
 	partdesc->nparts = nparts;
+	partdesc->detached_exist = detached_exist;
 	/* If there are no partitions, the rest of the partdesc can stay zero */
 	if (nparts > 0)
 	{
@@ -258,22 +311,62 @@ RelationBuildPartitionDesc(Relation rel)
 	}
 
 	/*
-	 * We have a fully valid partdesc ready to store into the relcache.
-	 * Reparent it so it has the right lifespan.
+	 * Are we working with the partdesc that omits the detached partition, or
+	 * the one that includes it?
+	 *
+	 * Note that if a partition was found by the catalog's scan to have been
+	 * detached, but the pg_inherit tuple saying so was not visible to the
+	 * active snapshot (find_inheritance_children_extended will not have set
+	 * detached_xmin in that case), we consider there to be no "omittable"
+	 * detached partitions.
+	 */
+	is_omit = omit_detached && detached_exist && ActiveSnapshotSet() &&
+		TransactionIdIsValid(detached_xmin);
+
+	/*
+	 * We have a fully valid partdesc.  Reparent it so that it has the right
+	 * lifespan.
 	 */
 	MemoryContextSetParent(new_pdcxt, CacheMemoryContext);
 
 	/*
-	 * But first, a kluge: if there's an old rd_pdcxt, it contains an old
-	 * partition descriptor that may still be referenced somewhere.  Preserve
-	 * it, while not leaking it, by reattaching it as a child context of the
-	 * new rd_pdcxt.  Eventually it will get dropped by either RelationClose
-	 * or RelationClearRelation.
+	 * Store it into relcache.
+	 *
+	 * But first, a kluge: if there's an old context for this type of
+	 * descriptor, it contains an old partition descriptor that may still be
+	 * referenced somewhere.  Preserve it, while not leaking it, by
+	 * reattaching it as a child context of the new one.  Eventually it will
+	 * get dropped by either RelationClose or RelationClearRelation. (We keep
+	 * the regular partdesc in rd_pdcxt, and the partdesc-excluding-
+	 * detached-partitions in rd_pddcxt.)
 	 */
-	if (rel->rd_pdcxt != NULL)
-		MemoryContextSetParent(rel->rd_pdcxt, new_pdcxt);
-	rel->rd_pdcxt = new_pdcxt;
-	rel->rd_partdesc = partdesc;
+	if (is_omit)
+	{
+		if (rel->rd_pddcxt != NULL)
+			MemoryContextSetParent(rel->rd_pddcxt, new_pdcxt);
+		rel->rd_pddcxt = new_pdcxt;
+		rel->rd_partdesc_nodetached = partdesc;
+
+		/*
+		 * For partdescs built excluding detached partitions, which we save
+		 * separately, we also record the pg_inherits.xmin of the detached
+		 * partition that was omitted; this informs a future potential user of
+		 * such a cached partdesc to only use it after cross-checking that the
+		 * xmin is indeed visible to the snapshot it is going to be working
+		 * with.
+		 */
+		Assert(TransactionIdIsValid(detached_xmin));
+		rel->rd_partdesc_nodetached_xmin = detached_xmin;
+	}
+	else
+	{
+		if (rel->rd_pdcxt != NULL)
+			MemoryContextSetParent(rel->rd_pdcxt, new_pdcxt);
+		rel->rd_pdcxt = new_pdcxt;
+		rel->rd_partdesc = partdesc;
+	}
+
+	return partdesc;
 }
 
 /*
@@ -281,21 +374,22 @@ RelationBuildPartitionDesc(Relation rel)
  *		Create a new partition directory object.
  */
 PartitionDirectory
-CreatePartitionDirectory(MemoryContext mcxt)
+CreatePartitionDirectory(MemoryContext mcxt, bool omit_detached)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(mcxt);
 	PartitionDirectory pdir;
 	HASHCTL		ctl;
 
-	MemSet(&ctl, 0, sizeof(HASHCTL));
+	pdir = palloc(sizeof(PartitionDirectoryData));
+	pdir->pdir_mcxt = mcxt;
+
 	ctl.keysize = sizeof(Oid);
 	ctl.entrysize = sizeof(PartitionDirectoryEntry);
 	ctl.hcxt = mcxt;
 
-	pdir = palloc(sizeof(PartitionDirectoryData));
-	pdir->pdir_mcxt = mcxt;
 	pdir->pdir_hash = hash_create("partition directory", 256, &ctl,
 								  HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+	pdir->omit_detached = omit_detached;
 
 	MemoryContextSwitchTo(oldcontext);
 	return pdir;
@@ -328,7 +422,7 @@ PartitionDirectoryLookup(PartitionDirectory pdir, Relation rel)
 		 */
 		RelationIncrementReferenceCount(rel);
 		pde->rel = rel;
-		pde->pd = RelationGetPartitionDesc(rel);
+		pde->pd = RelationGetPartitionDesc(rel, pdir->omit_detached);
 		Assert(pde->pd != NULL);
 	}
 	return pde->pd;

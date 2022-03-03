@@ -4,7 +4,7 @@
  *	  Display type names "nicely".
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -22,6 +22,7 @@
 #include "catalog/pg_type.h"
 #include "mb/pg_wchar.h"
 #include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
 #include "utils/numeric.h"
 #include "utils/syscache.h"
@@ -96,13 +97,16 @@ format_type(PG_FUNCTION_ARGS)
  * - FORMAT_TYPE_ALLOW_INVALID
  *			if the type OID is invalid or unknown, return ??? or such instead
  *			of failing
+ * - FORMAT_TYPE_INVALID_AS_NULL
+ *			if the type OID is invalid or unknown, return NULL instead of ???
+ *			or such
  * - FORMAT_TYPE_FORCE_QUALIFY
  *			always schema-qualify type names, regardless of search_path
  *
  * Note that TYPEMOD_GIVEN is not interchangeable with "typemod == -1";
  * see the comments above for format_type().
  *
- * Returns a palloc'd string.
+ * Returns a palloc'd string, or NULL.
  */
 char *
 format_type_extended(Oid type_oid, int32 typemod, bits16 flags)
@@ -114,13 +118,20 @@ format_type_extended(Oid type_oid, int32 typemod, bits16 flags)
 	char	   *buf;
 	bool		with_typemod;
 
-	if (type_oid == InvalidOid && (flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
-		return pstrdup("-");
+	if (type_oid == InvalidOid)
+	{
+		if ((flags & FORMAT_TYPE_INVALID_AS_NULL) != 0)
+			return NULL;
+		else if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
+			return pstrdup("-");
+	}
 
 	tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
 	if (!HeapTupleIsValid(tuple))
 	{
-		if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
+		if ((flags & FORMAT_TYPE_INVALID_AS_NULL) != 0)
+			return NULL;
+		else if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
 			return pstrdup("???");
 		else
 			elog(ERROR, "cache lookup failed for type %u", type_oid);
@@ -128,15 +139,14 @@ format_type_extended(Oid type_oid, int32 typemod, bits16 flags)
 	typeform = (Form_pg_type) GETSTRUCT(tuple);
 
 	/*
-	 * Check if it's a regular (variable length) array type.  Fixed-length
-	 * array types such as "name" shouldn't get deconstructed.  As of Postgres
-	 * 8.1, rather than checking typlen we check the toast property, and don't
+	 * Check if it's a "true" array type.  Pseudo-array types such as "name"
+	 * shouldn't get deconstructed.  Also check the toast property, and don't
 	 * deconstruct "plain storage" array types --- this is because we don't
 	 * want to show oidvector as oid[].
 	 */
 	array_base_type = typeform->typelem;
 
-	if (array_base_type != InvalidOid &&
+	if (IsTrueArrayType(typeform) &&
 		typeform->typstorage != TYPSTORAGE_PLAIN)
 	{
 		/* Switch our attention to the array element type */
@@ -144,7 +154,9 @@ format_type_extended(Oid type_oid, int32 typemod, bits16 flags)
 		tuple = SearchSysCache1(TYPEOID, ObjectIdGetDatum(array_base_type));
 		if (!HeapTupleIsValid(tuple))
 		{
-			if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
+			if ((flags & FORMAT_TYPE_INVALID_AS_NULL) != 0)
+				return NULL;
+			else if ((flags & FORMAT_TYPE_ALLOW_INVALID) != 0)
 				return pstrdup("???[]");
 			else
 				elog(ERROR, "cache lookup failed for type %u", type_oid);

@@ -11,7 +11,7 @@ const char *const IndividualLWLockNames[] = {
 	"WALBufMapping",
 	"WALWrite",
 	"ControlFile",
-	"Checkpoint",
+	"<unassigned:10>",
 	"XactSLRU",
 	"SubtransSLRU",
 	"MultiXactGen",

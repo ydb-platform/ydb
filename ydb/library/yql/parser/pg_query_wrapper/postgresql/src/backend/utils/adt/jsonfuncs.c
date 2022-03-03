@@ -3,7 +3,7 @@
  * jsonfuncs.c
  *		Functions to process JSON data types.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -19,6 +19,7 @@
 #include "access/htup_details.h"
 #include "catalog/pg_type.h"
 #include "common/jsonapi.h"
+#include "common/string.h"
 #include "fmgr.h"
 #include "funcapi.h"
 #include "lib/stringinfo.h"
@@ -26,6 +27,7 @@
 #include "miscadmin.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/hsearch.h"
 #include "utils/json.h"
 #include "utils/jsonb.h"
@@ -43,6 +45,8 @@
 #define JB_PATH_INSERT_AFTER			0x0010
 #define JB_PATH_CREATE_OR_INSERT \
 	(JB_PATH_INSERT_BEFORE | JB_PATH_INSERT_AFTER | JB_PATH_CREATE)
+#define JB_PATH_FILL_GAPS				0x0020
+#define JB_PATH_CONSISTENT_POSITION		0x0040
 
 /* state for json_object_keys */
 typedef struct OkeysState
@@ -462,16 +466,16 @@ static JsonbValue *IteratorConcat(JsonbIterator **it1, JsonbIterator **it2,
 								  JsonbParseState **state);
 static JsonbValue *setPath(JsonbIterator **it, Datum *path_elems,
 						   bool *path_nulls, int path_len,
-						   JsonbParseState **st, int level, Jsonb *newval,
+						   JsonbParseState **st, int level, JsonbValue *newval,
 						   int op_type);
 static void setPathObject(JsonbIterator **it, Datum *path_elems,
 						  bool *path_nulls, int path_len, JsonbParseState **st,
 						  int level,
-						  Jsonb *newval, uint32 npairs, int op_type);
+						  JsonbValue *newval, uint32 npairs, int op_type);
 static void setPathArray(JsonbIterator **it, Datum *path_elems,
 						 bool *path_nulls, int path_len, JsonbParseState **st,
-						 int level, Jsonb *newval, uint32 nelems, int op_type);
-static void addJsonbToParseState(JsonbParseState **jbps, Jsonb *jb);
+						 int level,
+						 JsonbValue *newval, uint32 nelems, int op_type);
 
 /* function supporting iterate_json_values */
 static void iterate_values_scalar(void *state, char *token, JsonTokenType tokentype);
@@ -637,30 +641,19 @@ report_json_context(JsonLexContext *lex)
 	const char *context_start;
 	const char *context_end;
 	const char *line_start;
-	int			line_number;
 	char	   *ctxt;
 	int			ctxtlen;
 	const char *prefix;
 	const char *suffix;
 
 	/* Choose boundaries for the part of the input we will display */
-	context_start = lex->input;
+	line_start = lex->line_start;
+	context_start = line_start;
 	context_end = lex->token_terminator;
-	line_start = context_start;
-	line_number = 1;
-	for (;;)
+
+	/* Advance until we are close enough to context_end */
+	while (context_end - context_start >= 50)
 	{
-		/* Always advance over newlines */
-		if (context_start < context_end && *context_start == '\n')
-		{
-			context_start++;
-			line_start = context_start;
-			line_number++;
-			continue;
-		}
-		/* Otherwise, done as soon as we are close enough to context_end */
-		if (context_end - context_start < 50)
-			break;
 		/* Advance to next multibyte character */
 		if (IS_HIGHBIT_SET(*context_start))
 			context_start += pg_mblen(context_start);
@@ -687,10 +680,12 @@ report_json_context(JsonLexContext *lex)
 	 * suffixing "..." if not ending at end of line.
 	 */
 	prefix = (context_start > line_start) ? "..." : "";
-	suffix = (lex->token_type != JSON_TOKEN_END && context_end - lex->input < lex->input_length && *context_end != '\n' && *context_end != '\r') ? "..." : "";
+	suffix = (lex->token_type != JSON_TOKEN_END &&
+			  context_end - lex->input < lex->input_length &&
+			  *context_end != '\n' && *context_end != '\r') ? "..." : "";
 
 	return errcontext("JSON data, line %d: %s%s%s",
-					  line_number, prefix, ctxt, suffix);
+					  lex->line_number, prefix, ctxt, suffix);
 }
 
 
@@ -1023,15 +1018,15 @@ get_path_all(FunctionCallInfo fcinfo, bool as_text)
 		 */
 		if (*tpath[i] != '\0')
 		{
-			long		ind;
+			int			ind;
 			char	   *endptr;
 
 			errno = 0;
-			ind = strtol(tpath[i], &endptr, 10);
-			if (*endptr == '\0' && errno == 0 && ind <= INT_MAX && ind >= INT_MIN)
-				ipath[i] = (int) ind;
-			else
+			ind = strtoint(tpath[i], &endptr, 10);
+			if (endptr == tpath[i] || *endptr != '\0' || errno != 0)
 				ipath[i] = INT_MIN;
+			else
+				ipath[i] = ind;
 		}
 		else
 			ipath[i] = INT_MIN;
@@ -1447,13 +1442,9 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 	ArrayType  *path = PG_GETARG_ARRAYTYPE_P(1);
 	Datum	   *pathtext;
 	bool	   *pathnulls;
+	bool		isnull;
 	int			npath;
-	int			i;
-	bool		have_object = false,
-				have_array = false;
-	JsonbValue *jbvp = NULL;
-	JsonbValue	jbvbuf;
-	JsonbContainer *container;
+	Datum		res;
 
 	/*
 	 * If the array contains any null elements, return NULL, on the grounds
@@ -1468,9 +1459,26 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 	deconstruct_array(path, TEXTOID, -1, false, TYPALIGN_INT,
 					  &pathtext, &pathnulls, &npath);
 
-	/* Identify whether we have object, array, or scalar at top-level */
-	container = &jb->root;
+	res = jsonb_get_element(jb, pathtext, npath, &isnull, as_text);
 
+	if (isnull)
+		PG_RETURN_NULL();
+	else
+		PG_RETURN_DATUM(res);
+}
+
+Datum
+jsonb_get_element(Jsonb *jb, Datum *path, int npath, bool *isnull, bool as_text)
+{
+	JsonbContainer *container = &jb->root;
+	JsonbValue *jbvp = NULL;
+	int			i;
+	bool		have_object = false,
+				have_array = false;
+
+	*isnull = false;
+
+	/* Identify whether we have object, array, or scalar at top-level */
 	if (JB_ROOT_IS_OBJECT(jb))
 		have_object = true;
 	else if (JB_ROOT_IS_ARRAY(jb) && !JB_ROOT_IS_SCALAR(jb))
@@ -1495,9 +1503,9 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 	{
 		if (as_text)
 		{
-			PG_RETURN_TEXT_P(cstring_to_text(JsonbToCString(NULL,
-															container,
-															VARSIZE(jb))));
+			return PointerGetDatum(cstring_to_text(JsonbToCString(NULL,
+																  container,
+																  VARSIZE(jb))));
 		}
 		else
 		{
@@ -1511,22 +1519,24 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 		if (have_object)
 		{
 			jbvp = getKeyJsonValueFromContainer(container,
-												VARDATA(pathtext[i]),
-												VARSIZE(pathtext[i]) - VARHDRSZ,
-												&jbvbuf);
+												VARDATA(path[i]),
+												VARSIZE(path[i]) - VARHDRSZ,
+												NULL);
 		}
 		else if (have_array)
 		{
-			long		lindex;
+			int			lindex;
 			uint32		index;
-			char	   *indextext = TextDatumGetCString(pathtext[i]);
+			char	   *indextext = TextDatumGetCString(path[i]);
 			char	   *endptr;
 
 			errno = 0;
-			lindex = strtol(indextext, &endptr, 10);
-			if (endptr == indextext || *endptr != '\0' || errno != 0 ||
-				lindex > INT_MAX || lindex < INT_MIN)
-				PG_RETURN_NULL();
+			lindex = strtoint(indextext, &endptr, 10);
+			if (endptr == indextext || *endptr != '\0' || errno != 0)
+			{
+				*isnull = true;
+				return PointerGetDatum(NULL);
+			}
 
 			if (lindex >= 0)
 			{
@@ -1543,8 +1553,11 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 
 				nelements = JsonContainerSize(container);
 
-				if (-lindex > nelements)
-					PG_RETURN_NULL();
+				if (lindex == INT_MIN || -lindex > nelements)
+				{
+					*isnull = true;
+					return PointerGetDatum(NULL);
+				}
 				else
 					index = nelements + lindex;
 			}
@@ -1554,11 +1567,15 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 		else
 		{
 			/* scalar, extraction yields a null */
-			PG_RETURN_NULL();
+			*isnull = true;
+			return PointerGetDatum(NULL);
 		}
 
 		if (jbvp == NULL)
-			PG_RETURN_NULL();
+		{
+			*isnull = true;
+			return PointerGetDatum(NULL);
+		}
 		else if (i == npath - 1)
 			break;
 
@@ -1580,9 +1597,12 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 	if (as_text)
 	{
 		if (jbvp->type == jbvNull)
-			PG_RETURN_NULL();
+		{
+			*isnull = true;
+			return PointerGetDatum(NULL);
+		}
 
-		PG_RETURN_TEXT_P(JsonbValueAsText(jbvp));
+		return PointerGetDatum(JsonbValueAsText(jbvp));
 	}
 	else
 	{
@@ -1590,6 +1610,129 @@ get_jsonb_path_all(FunctionCallInfo fcinfo, bool as_text)
 
 		/* not text mode - just hand back the jsonb */
 		PG_RETURN_JSONB_P(res);
+	}
+}
+
+Datum
+jsonb_set_element(Jsonb *jb, Datum *path, int path_len,
+				  JsonbValue *newval)
+{
+	JsonbValue *res;
+	JsonbParseState *state = NULL;
+	JsonbIterator *it;
+	bool	   *path_nulls = palloc0(path_len * sizeof(bool));
+
+	if (newval->type == jbvArray && newval->val.array.rawScalar)
+		*newval = newval->val.array.elems[0];
+
+	it = JsonbIteratorInit(&jb->root);
+
+	res = setPath(&it, path, path_nulls, path_len, &state, 0, newval,
+				  JB_PATH_CREATE | JB_PATH_FILL_GAPS |
+				  JB_PATH_CONSISTENT_POSITION);
+
+	pfree(path_nulls);
+
+	PG_RETURN_JSONB_P(JsonbValueToJsonb(res));
+}
+
+static void
+push_null_elements(JsonbParseState **ps, int num)
+{
+	JsonbValue	null;
+
+	null.type = jbvNull;
+
+	while (num-- > 0)
+		pushJsonbValue(ps, WJB_ELEM, &null);
+}
+
+/*
+ * Prepare a new structure containing nested empty objects and arrays
+ * corresponding to the specified path, and assign a new value at the end of
+ * this path. E.g. the path [a][0][b] with the new value 1 will produce the
+ * structure {a: [{b: 1}]}.
+ *
+ * Caller is responsible to make sure such path does not exist yet.
+ */
+static void
+push_path(JsonbParseState **st, int level, Datum *path_elems,
+		  bool *path_nulls, int path_len, JsonbValue *newval)
+{
+	/*
+	 * tpath contains expected type of an empty jsonb created at each level
+	 * higher or equal than the current one, either jbvObject or jbvArray.
+	 * Since it contains only information about path slice from level to the
+	 * end, the access index must be normalized by level.
+	 */
+	enum jbvType *tpath = palloc0((path_len - level) * sizeof(enum jbvType));
+	JsonbValue	newkey;
+
+	/*
+	 * Create first part of the chain with beginning tokens. For the current
+	 * level WJB_BEGIN_OBJECT/WJB_BEGIN_ARRAY was already created, so start
+	 * with the next one.
+	 */
+	for (int i = level + 1; i < path_len; i++)
+	{
+		char	   *c,
+				   *badp;
+		int			lindex;
+
+		if (path_nulls[i])
+			break;
+
+		/*
+		 * Try to convert to an integer to find out the expected type, object
+		 * or array.
+		 */
+		c = TextDatumGetCString(path_elems[i]);
+		errno = 0;
+		lindex = strtoint(c, &badp, 10);
+		if (badp == c || *badp != '\0' || errno != 0)
+		{
+			/* text, an object is expected */
+			newkey.type = jbvString;
+			newkey.val.string.len = VARSIZE_ANY_EXHDR(path_elems[i]);
+			newkey.val.string.val = VARDATA_ANY(path_elems[i]);
+
+			(void) pushJsonbValue(st, WJB_BEGIN_OBJECT, NULL);
+			(void) pushJsonbValue(st, WJB_KEY, &newkey);
+
+			tpath[i - level] = jbvObject;
+		}
+		else
+		{
+			/* integer, an array is expected */
+			(void) pushJsonbValue(st, WJB_BEGIN_ARRAY, NULL);
+
+			push_null_elements(st, lindex);
+
+			tpath[i - level] = jbvArray;
+		}
+	}
+
+	/* Insert an actual value for either an object or array */
+	if (tpath[(path_len - level) - 1] == jbvArray)
+	{
+		(void) pushJsonbValue(st, WJB_ELEM, newval);
+	}
+	else
+		(void) pushJsonbValue(st, WJB_VALUE, newval);
+
+	/*
+	 * Close everything up to the last but one level. The last one will be
+	 * closed outside of this function.
+	 */
+	for (int i = path_len - 1; i > level; i--)
+	{
+		if (path_nulls[i])
+			break;
+
+		if (tpath[i - level] == jbvObject)
+			(void) pushJsonbValue(st, WJB_END_OBJECT, NULL);
+		else
+			(void) pushJsonbValue(st, WJB_END_ARRAY, NULL);
 	}
 }
 
@@ -3011,7 +3154,7 @@ prepare_column_cache(ColumnIOData *column,
 		column->io.composite.base_typmod = typmod;
 		column->io.composite.domain_info = NULL;
 	}
-	else if (type->typlen == -1 && OidIsValid(type->typelem))
+	else if (IsTrueArrayType(type))
 	{
 		column->typcat = TYPECAT_ARRAY;
 		column->io.array.element_info = MemoryContextAllocZero(mcxt,
@@ -3438,14 +3581,13 @@ get_json_object_as_hash(char *json, int len, const char *funcname)
 	JsonLexContext *lex = makeJsonLexContextCstringLen(json, len, GetDatabaseEncoding(), true);
 	JsonSemAction *sem;
 
-	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = NAMEDATALEN;
 	ctl.entrysize = sizeof(JsonHashEntry);
 	ctl.hcxt = CurrentMemoryContext;
 	tab = hash_create("json object hashtable",
 					  100,
 					  &ctl,
-					  HASH_ELEM | HASH_CONTEXT);
+					  HASH_ELEM | HASH_STRINGS | HASH_CONTEXT);
 
 	state = palloc0(sizeof(JHashState));
 	sem = palloc0(sizeof(JsonSemAction));
@@ -3830,14 +3972,13 @@ populate_recordset_object_start(void *state)
 		return;
 
 	/* Object at level 1: set up a new hash table for this object */
-	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = NAMEDATALEN;
 	ctl.entrysize = sizeof(JsonHashEntry);
 	ctl.hcxt = CurrentMemoryContext;
 	_state->json_hash = hash_create("json object hashtable",
 									100,
 									&ctl,
-									HASH_ELEM | HASH_CONTEXT);
+									HASH_ELEM | HASH_STRINGS | HASH_CONTEXT);
 }
 
 static void
@@ -4153,58 +4294,6 @@ jsonb_strip_nulls(PG_FUNCTION_ARGS)
 }
 
 /*
- * Add values from the jsonb to the parse state.
- *
- * If the parse state container is an object, the jsonb is pushed as
- * a value, not a key.
- *
- * This needs to be done using an iterator because pushJsonbValue doesn't
- * like getting jbvBinary values, so we can't just push jb as a whole.
- */
-static void
-addJsonbToParseState(JsonbParseState **jbps, Jsonb *jb)
-{
-	JsonbIterator *it;
-	JsonbValue *o = &(*jbps)->contVal;
-	JsonbValue	v;
-	JsonbIteratorToken type;
-
-	it = JsonbIteratorInit(&jb->root);
-
-	Assert(o->type == jbvArray || o->type == jbvObject);
-
-	if (JB_ROOT_IS_SCALAR(jb))
-	{
-		(void) JsonbIteratorNext(&it, &v, false);	/* skip array header */
-		Assert(v.type == jbvArray);
-		(void) JsonbIteratorNext(&it, &v, false);	/* fetch scalar value */
-
-		switch (o->type)
-		{
-			case jbvArray:
-				(void) pushJsonbValue(jbps, WJB_ELEM, &v);
-				break;
-			case jbvObject:
-				(void) pushJsonbValue(jbps, WJB_VALUE, &v);
-				break;
-			default:
-				elog(ERROR, "unexpected parent of nested structure");
-		}
-	}
-	else
-	{
-		while ((type = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
-		{
-			if (type == WJB_KEY || type == WJB_VALUE || type == WJB_ELEM)
-				(void) pushJsonbValue(jbps, type, &v);
-			else
-				(void) pushJsonbValue(jbps, type, NULL);
-		}
-	}
-
-}
-
-/*
  * SQL function jsonb_pretty (jsonb)
  *
  * Pretty-printed text for the jsonb
@@ -4475,7 +4564,8 @@ jsonb_set(PG_FUNCTION_ARGS)
 {
 	Jsonb	   *in = PG_GETARG_JSONB_P(0);
 	ArrayType  *path = PG_GETARG_ARRAYTYPE_P(1);
-	Jsonb	   *newval = PG_GETARG_JSONB_P(2);
+	Jsonb	   *newjsonb = PG_GETARG_JSONB_P(2);
+	JsonbValue	newval;
 	bool		create = PG_GETARG_BOOL(3);
 	JsonbValue *res = NULL;
 	Datum	   *path_elems;
@@ -4483,6 +4573,8 @@ jsonb_set(PG_FUNCTION_ARGS)
 	int			path_len;
 	JsonbIterator *it;
 	JsonbParseState *st = NULL;
+
+	JsonbToJsonbValue(newjsonb, &newval);
 
 	if (ARR_NDIM(path) > 1)
 		ereport(ERROR,
@@ -4506,7 +4598,7 @@ jsonb_set(PG_FUNCTION_ARGS)
 	it = JsonbIteratorInit(&in->root);
 
 	res = setPath(&it, path_elems, path_nulls, path_len, &st,
-				  0, newval, create ? JB_PATH_CREATE : JB_PATH_REPLACE);
+				  0, &newval, create ? JB_PATH_CREATE : JB_PATH_REPLACE);
 
 	Assert(res != NULL);
 
@@ -4633,7 +4725,8 @@ jsonb_insert(PG_FUNCTION_ARGS)
 {
 	Jsonb	   *in = PG_GETARG_JSONB_P(0);
 	ArrayType  *path = PG_GETARG_ARRAYTYPE_P(1);
-	Jsonb	   *newval = PG_GETARG_JSONB_P(2);
+	Jsonb	   *newjsonb = PG_GETARG_JSONB_P(2);
+	JsonbValue	newval;
 	bool		after = PG_GETARG_BOOL(3);
 	JsonbValue *res = NULL;
 	Datum	   *path_elems;
@@ -4641,6 +4734,8 @@ jsonb_insert(PG_FUNCTION_ARGS)
 	int			path_len;
 	JsonbIterator *it;
 	JsonbParseState *st = NULL;
+
+	JsonbToJsonbValue(newjsonb, &newval);
 
 	if (ARR_NDIM(path) > 1)
 		ereport(ERROR,
@@ -4660,7 +4755,7 @@ jsonb_insert(PG_FUNCTION_ARGS)
 
 	it = JsonbIteratorInit(&in->root);
 
-	res = setPath(&it, path_elems, path_nulls, path_len, &st, 0, newval,
+	res = setPath(&it, path_elems, path_nulls, path_len, &st, 0, &newval,
 				  after ? JB_PATH_INSERT_AFTER : JB_PATH_INSERT_BEFORE);
 
 	Assert(res != NULL);
@@ -4785,13 +4880,28 @@ IteratorConcat(JsonbIterator **it1, JsonbIterator **it2,
  * Bits JB_PATH_INSERT_BEFORE and JB_PATH_INSERT_AFTER in op_type
  * behave as JB_PATH_CREATE if new value is inserted in JsonbObject.
  *
+ * If JB_PATH_FILL_GAPS bit is set, this will change an assignment logic in
+ * case if target is an array. The assignment index will not be restricted by
+ * number of elements in the array, and if there are any empty slots between
+ * last element of the array and a new one they will be filled with nulls. If
+ * the index is negative, it still will be considered an index from the end
+ * of the array. Of a part of the path is not present and this part is more
+ * than just one last element, this flag will instruct to create the whole
+ * chain of corresponding objects and insert the value.
+ *
+ * JB_PATH_CONSISTENT_POSITION for an array indicates that the caller wants to
+ * keep values with fixed indices. Indices for existing elements could be
+ * changed (shifted forward) in case if the array is prepended with a new value
+ * and a negative index out of the range, so this behavior will be prevented
+ * and return an error.
+ *
  * All path elements before the last must already exist
  * whatever bits in op_type are set, or nothing is done.
  */
 static JsonbValue *
 setPath(JsonbIterator **it, Datum *path_elems,
 		bool *path_nulls, int path_len,
-		JsonbParseState **st, int level, Jsonb *newval, int op_type)
+		JsonbParseState **st, int level, JsonbValue *newval, int op_type)
 {
 	JsonbValue	v;
 	JsonbIteratorToken r;
@@ -4810,6 +4920,21 @@ setPath(JsonbIterator **it, Datum *path_elems,
 	switch (r)
 	{
 		case WJB_BEGIN_ARRAY:
+
+			/*
+			 * If instructed complain about attempts to replace whithin a raw
+			 * scalar value. This happens even when current level is equal to
+			 * path_len, because the last path key should also correspond to
+			 * an object or an array, not raw scalar.
+			 */
+			if ((op_type & JB_PATH_FILL_GAPS) && (level <= path_len - 1) &&
+				v.val.array.rawScalar)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("cannot replace existing key"),
+						 errdetail("The path assumes key is a composite object, "
+								   "but it is a scalar value.")));
+
 			(void) pushJsonbValue(st, r, NULL);
 			setPathArray(it, path_elems, path_nulls, path_len, st, level,
 						 newval, v.val.array.nElems, op_type);
@@ -4827,6 +4952,20 @@ setPath(JsonbIterator **it, Datum *path_elems,
 			break;
 		case WJB_ELEM:
 		case WJB_VALUE:
+
+			/*
+			 * If instructed complain about attempts to replace whithin a
+			 * scalar value. This happens even when current level is equal to
+			 * path_len, because the last path key should also correspond to
+			 * an object or an array, not an element or value.
+			 */
+			if ((op_type & JB_PATH_FILL_GAPS) && (level <= path_len - 1))
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("cannot replace existing key"),
+						 errdetail("The path assumes key is a composite object, "
+								   "but it is a scalar value.")));
+
 			res = pushJsonbValue(st, r, &v);
 			break;
 		default:
@@ -4844,11 +4983,11 @@ setPath(JsonbIterator **it, Datum *path_elems,
 static void
 setPathObject(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 			  int path_len, JsonbParseState **st, int level,
-			  Jsonb *newval, uint32 npairs, int op_type)
+			  JsonbValue *newval, uint32 npairs, int op_type)
 {
-	JsonbValue	v;
 	int			i;
-	JsonbValue	k;
+	JsonbValue	k,
+				v;
 	bool		done = false;
 
 	if (level >= path_len || path_nulls[level])
@@ -4865,7 +5004,7 @@ setPathObject(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 		newkey.val.string.val = VARDATA_ANY(path_elems[level]);
 
 		(void) pushJsonbValue(st, WJB_KEY, &newkey);
-		addJsonbToParseState(st, newval);
+		(void) pushJsonbValue(st, WJB_VALUE, newval);
 	}
 
 	for (i = 0; i < npairs; i++)
@@ -4879,6 +5018,8 @@ setPathObject(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 			memcmp(k.val.string.val, VARDATA_ANY(path_elems[level]),
 				   k.val.string.len) == 0)
 		{
+			done = true;
+
 			if (level == path_len - 1)
 			{
 				/*
@@ -4896,9 +5037,8 @@ setPathObject(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 				if (!(op_type & JB_PATH_DELETE))
 				{
 					(void) pushJsonbValue(st, WJB_KEY, &k);
-					addJsonbToParseState(st, newval);
+					(void) pushJsonbValue(st, WJB_VALUE, newval);
 				}
-				done = true;
 			}
 			else
 			{
@@ -4919,7 +5059,7 @@ setPathObject(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 				newkey.val.string.val = VARDATA_ANY(path_elems[level]);
 
 				(void) pushJsonbValue(st, WJB_KEY, &newkey);
-				addJsonbToParseState(st, newval);
+				(void) pushJsonbValue(st, WJB_VALUE, newval);
 			}
 
 			(void) pushJsonbValue(st, r, &k);
@@ -4943,6 +5083,31 @@ setPathObject(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 			}
 		}
 	}
+
+	/*--
+	 * If we got here there are only few possibilities:
+	 * - no target path was found, and an open object with some keys/values was
+	 *   pushed into the state
+	 * - an object is empty, only WJB_BEGIN_OBJECT is pushed
+	 *
+	 * In both cases if instructed to create the path when not present,
+	 * generate the whole chain of empty objects and insert the new value
+	 * there.
+	 */
+	if (!done && (op_type & JB_PATH_FILL_GAPS) && (level < path_len - 1))
+	{
+		JsonbValue	newkey;
+
+		newkey.type = jbvString;
+		newkey.val.string.len = VARSIZE_ANY_EXHDR(path_elems[level]);
+		newkey.val.string.val = VARDATA_ANY(path_elems[level]);
+
+		(void) pushJsonbValue(st, WJB_KEY, &newkey);
+		(void) push_path(st, level, path_elems, path_nulls,
+						 path_len, newval);
+
+		/* Result is closed with WJB_END_OBJECT outside of this function */
+	}
 }
 
 /*
@@ -4951,7 +5116,7 @@ setPathObject(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 static void
 setPathArray(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 			 int path_len, JsonbParseState **st, int level,
-			 Jsonb *newval, uint32 nelems, int op_type)
+			 JsonbValue *newval, uint32 nelems, int op_type)
 {
 	JsonbValue	v;
 	int			idx,
@@ -4962,18 +5127,15 @@ setPathArray(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 	if (level < path_len && !path_nulls[level])
 	{
 		char	   *c = TextDatumGetCString(path_elems[level]);
-		long		lindex;
 		char	   *badp;
 
 		errno = 0;
-		lindex = strtol(c, &badp, 10);
-		if (errno != 0 || badp == c || *badp != '\0' || lindex > INT_MAX ||
-			lindex < INT_MIN)
+		idx = strtoint(c, &badp, 10);
+		if (badp == c || *badp != '\0' || errno != 0)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
 					 errmsg("path element at position %d is not an integer: \"%s\"",
 							level + 1, c)));
-		idx = lindex;
 	}
 	else
 		idx = nelems;
@@ -4981,25 +5143,48 @@ setPathArray(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 	if (idx < 0)
 	{
 		if (-idx > nelems)
-			idx = INT_MIN;
+		{
+			/*
+			 * If asked to keep elements position consistent, it's not allowed
+			 * to prepend the array.
+			 */
+			if (op_type & JB_PATH_CONSISTENT_POSITION)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("path element at position %d is out of range: %d",
+								level + 1, idx)));
+			else
+				idx = INT_MIN;
+		}
 		else
 			idx = nelems + idx;
 	}
 
-	if (idx > 0 && idx > nelems)
-		idx = nelems;
+	/*
+	 * Filling the gaps means there are no limits on the positive index are
+	 * imposed, we can set any element. Otherwise limit the index by nelems.
+	 */
+	if (!(op_type & JB_PATH_FILL_GAPS))
+	{
+		if (idx > 0 && idx > nelems)
+			idx = nelems;
+	}
 
 	/*
 	 * if we're creating, and idx == INT_MIN, we prepend the new value to the
 	 * array also if the array is empty - in which case we don't really care
 	 * what the idx value is
 	 */
-
 	if ((idx == INT_MIN || nelems == 0) && (level == path_len - 1) &&
 		(op_type & JB_PATH_CREATE_OR_INSERT))
 	{
 		Assert(newval != NULL);
-		addJsonbToParseState(st, newval);
+
+		if (op_type & JB_PATH_FILL_GAPS && nelems == 0 && idx > 0)
+			push_null_elements(st, idx);
+
+		(void) pushJsonbValue(st, WJB_ELEM, newval);
+
 		done = true;
 	}
 
@@ -5010,12 +5195,14 @@ setPathArray(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 
 		if (i == idx && level < path_len)
 		{
+			done = true;
+
 			if (level == path_len - 1)
 			{
 				r = JsonbIteratorNext(it, &v, true);	/* skip */
 
 				if (op_type & (JB_PATH_INSERT_BEFORE | JB_PATH_CREATE))
-					addJsonbToParseState(st, newval);
+					(void) pushJsonbValue(st, WJB_ELEM, newval);
 
 				/*
 				 * We should keep current value only in case of
@@ -5026,9 +5213,7 @@ setPathArray(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 					(void) pushJsonbValue(st, r, &v);
 
 				if (op_type & (JB_PATH_INSERT_AFTER | JB_PATH_REPLACE))
-					addJsonbToParseState(st, newval);
-
-				done = true;
+					(void) pushJsonbValue(st, WJB_ELEM, newval);
 			}
 			else
 				(void) setPath(it, path_elems, path_nulls, path_len,
@@ -5056,13 +5241,41 @@ setPathArray(JsonbIterator **it, Datum *path_elems, bool *path_nulls,
 					(void) pushJsonbValue(st, r, r < WJB_BEGIN_ARRAY ? &v : NULL);
 				}
 			}
-
-			if ((op_type & JB_PATH_CREATE_OR_INSERT) && !done &&
-				level == path_len - 1 && i == nelems - 1)
-			{
-				addJsonbToParseState(st, newval);
-			}
 		}
+	}
+
+	if ((op_type & JB_PATH_CREATE_OR_INSERT) && !done && level == path_len - 1)
+	{
+		/*
+		 * If asked to fill the gaps, idx could be bigger than nelems, so
+		 * prepend the new element with nulls if that's the case.
+		 */
+		if (op_type & JB_PATH_FILL_GAPS && idx > nelems)
+			push_null_elements(st, idx - nelems);
+
+		(void) pushJsonbValue(st, WJB_ELEM, newval);
+		done = true;
+	}
+
+	/*--
+	 * If we got here there are only few possibilities:
+	 * - no target path was found, and an open array with some keys/values was
+	 *   pushed into the state
+	 * - an array is empty, only WJB_BEGIN_ARRAY is pushed
+	 *
+	 * In both cases if instructed to create the path when not present,
+	 * generate the whole chain of empty objects and insert the new value
+	 * there.
+	 */
+	if (!done && (op_type & JB_PATH_FILL_GAPS) && (level < path_len - 1))
+	{
+		if (idx > 0)
+			push_null_elements(st, idx - nelems);
+
+		(void) push_path(st, level, path_elems, path_nulls,
+						 path_len, newval);
+
+		/* Result is closed with WJB_END_OBJECT outside of this function */
 	}
 }
 

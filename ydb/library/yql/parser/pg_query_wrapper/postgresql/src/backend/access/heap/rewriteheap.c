@@ -92,7 +92,7 @@
  * heap's TOAST table will go through the normal bufmgr.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994-5, Regents of the University of California
  *
  * IDENTIFICATION
@@ -266,7 +266,6 @@ begin_heap_rewrite(Relation old_heap, Relation new_heap, TransactionId oldest_xm
 	state->rs_cxt = rw_cxt;
 
 	/* Initialize hash tables used to track update chains */
-	memset(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(TidHashKey);
 	hash_ctl.entrysize = sizeof(UnresolvedTupData);
 	hash_ctl.hcxt = state->rs_cxt;
@@ -677,7 +676,11 @@ raw_heap_insert(RewriteState state, HeapTuple tup)
 
 		if (len + saveFreeSpace > pageFreeSpace)
 		{
-			/* Doesn't fit, so write out the existing page */
+			/*
+			 * Doesn't fit, so write out the existing page.  It always
+			 * contains a tuple.  Hence, unlike RelationGetBufferForTuple(),
+			 * enforce saveFreeSpace unconditionally.
+			 */
 
 			/* XLOG stuff */
 			if (RelationNeedsWAL(state->rs_new_rel))
@@ -828,7 +831,6 @@ logical_begin_heap_rewrite(RewriteState state)
 	state->rs_begin_lsn = GetXLogInsertRecPtr();
 	state->rs_num_rewrite_mappings = 0;
 
-	memset(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(TransactionId);
 	hash_ctl.entrysize = sizeof(RewriteMappingFile);
 	hash_ctl.hcxt = state->rs_cxt;
@@ -1003,8 +1005,7 @@ logical_rewrite_log_mapping(RewriteState state, TransactionId xid,
 		snprintf(path, MAXPGPATH,
 				 "pg_logical/mappings/" LOGICAL_REWRITE_FORMAT,
 				 dboid, relid,
-				 (uint32) (state->rs_begin_lsn >> 32),
-				 (uint32) state->rs_begin_lsn,
+				 LSN_FORMAT_ARGS(state->rs_begin_lsn),
 				 xid, GetCurrentTransactionId());
 
 		dlist_init(&src->mappings);
@@ -1126,8 +1127,7 @@ heap_xlog_logical_rewrite(XLogReaderState *r)
 	snprintf(path, MAXPGPATH,
 			 "pg_logical/mappings/" LOGICAL_REWRITE_FORMAT,
 			 xlrec->mapped_db, xlrec->mapped_rel,
-			 (uint32) (xlrec->start_lsn >> 32),
-			 (uint32) xlrec->start_lsn,
+			 LSN_FORMAT_ARGS(xlrec->start_lsn),
 			 xlrec->mapped_xid, XLogRecGetXid(r));
 
 	fd = OpenTransientFile(path,
@@ -1262,8 +1262,8 @@ CheckPointLogicalRewriteHeap(void)
 
 			/*
 			 * The file cannot vanish due to concurrency since this function
-			 * is the only one removing logical mappings and it's run while
-			 * CheckpointLock is held exclusively.
+			 * is the only one removing logical mappings and only one
+			 * checkpoint can be in progress at a time.
 			 */
 			if (fd < 0)
 				ereport(ERROR,
@@ -1289,4 +1289,7 @@ CheckPointLogicalRewriteHeap(void)
 		}
 	}
 	FreeDir(mappings_dir);
+
+	/* persist directory entries to disk */
+	fsync_fname("pg_logical/mappings", true);
 }

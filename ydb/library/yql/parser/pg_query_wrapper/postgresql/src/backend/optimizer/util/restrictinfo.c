@@ -3,7 +3,7 @@
  * restrictinfo.c
  *	  RestrictInfo node manipulation routines.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -20,9 +20,6 @@
 #include "optimizer/optimizer.h"
 #include "optimizer/restrictinfo.h"
 
-
-/* source-code-compatibility hacks for pull_varnos() API change */
-#define pull_varnos(a,b) pull_varnos_new(a,b)
 
 static RestrictInfo *make_restrictinfo_internal(PlannerInfo *root,
 												Expr *clause,
@@ -61,7 +58,8 @@ static Expr *make_sub_restrictinfos(PlannerInfo *root,
  * later.
  */
 RestrictInfo *
-make_restrictinfo(Expr *clause,
+make_restrictinfo(PlannerInfo *root,
+				  Expr *clause,
 				  bool is_pushed_down,
 				  bool outerjoin_delayed,
 				  bool pseudoconstant,
@@ -69,28 +67,6 @@ make_restrictinfo(Expr *clause,
 				  Relids required_relids,
 				  Relids outer_relids,
 				  Relids nullable_relids)
-{
-	return make_restrictinfo_new(NULL,
-								 clause,
-								 is_pushed_down,
-								 outerjoin_delayed,
-								 pseudoconstant,
-								 security_level,
-								 required_relids,
-								 outer_relids,
-								 nullable_relids);
-}
-
-RestrictInfo *
-make_restrictinfo_new(PlannerInfo *root,
-					  Expr *clause,
-					  bool is_pushed_down,
-					  bool outerjoin_delayed,
-					  bool pseudoconstant,
-					  Index security_level,
-					  Relids required_relids,
-					  Relids outer_relids,
-					  Relids nullable_relids)
 {
 	/*
 	 * If it's an OR clause, build a modified copy with RestrictInfos inserted
@@ -160,6 +136,13 @@ make_restrictinfo_internal(PlannerInfo *root,
 		restrictinfo->leakproof = !contain_leaked_vars((Node *) clause);
 	else
 		restrictinfo->leakproof = false;	/* really, "don't know" */
+
+	/*
+	 * Mark volatility as unknown.  The contain_volatile_functions function
+	 * will determine if there are any volatile functions when called for the
+	 * first time with this RestrictInfo.
+	 */
+	restrictinfo->has_volatile = VOLATILITY_UNKNOWN;
 
 	/*
 	 * If it's a binary opclause, set up left/right relids info. In any case
@@ -233,6 +216,8 @@ make_restrictinfo_internal(PlannerInfo *root,
 	restrictinfo->right_bucketsize = -1;
 	restrictinfo->left_mcvfreq = -1;
 	restrictinfo->right_mcvfreq = -1;
+
+	restrictinfo->hasheqoperator = InvalidOid;
 
 	return restrictinfo;
 }
@@ -383,6 +368,7 @@ commute_restrictinfo(RestrictInfo *rinfo, Oid comm_op)
 	result->right_bucketsize = rinfo->left_bucketsize;
 	result->left_mcvfreq = rinfo->right_mcvfreq;
 	result->right_mcvfreq = rinfo->left_mcvfreq;
+	result->hasheqoperator = InvalidOid;
 
 	return result;
 }

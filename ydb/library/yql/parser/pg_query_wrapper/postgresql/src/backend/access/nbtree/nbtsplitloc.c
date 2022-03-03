@@ -3,7 +3,7 @@
  * nbtsplitloc.c
  *	  Choose split point code for Postgres btree implementation.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -190,7 +190,7 @@ _bt_findsplitloc(Relation rel,
 	Assert(!BTreeTupleIsPosting(newitem));
 
 	/*
-	 * maxsplits should never exceed maxoff because there will be at most as
+	 * nsplits should never exceed maxoff because there will be at most as
 	 * many candidate split points as there are points _between_ tuples, once
 	 * you imagine that the new item is already on the original page (the
 	 * final number of splits may be slightly lower because not all points

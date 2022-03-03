@@ -3,7 +3,7 @@
  * foreigncmds.c
  *	  foreign-data wrapper/server creation/manipulation commands
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -836,30 +836,6 @@ AlterForeignDataWrapper(AlterFdwStmt *stmt)
 
 
 /*
- * Drop foreign-data wrapper by OID
- */
-void
-RemoveForeignDataWrapperById(Oid fdwId)
-{
-	HeapTuple	tp;
-	Relation	rel;
-
-	rel = table_open(ForeignDataWrapperRelationId, RowExclusiveLock);
-
-	tp = SearchSysCache1(FOREIGNDATAWRAPPEROID, ObjectIdGetDatum(fdwId));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for foreign-data wrapper %u", fdwId);
-
-	CatalogTupleDelete(rel, &tp->t_self);
-
-	ReleaseSysCache(tp);
-
-	table_close(rel, RowExclusiveLock);
-}
-
-
-/*
  * Create a foreign server
  */
 ObjectAddress
@@ -1082,30 +1058,6 @@ AlterForeignServer(AlterForeignServerStmt *stmt)
 	table_close(rel, RowExclusiveLock);
 
 	return address;
-}
-
-
-/*
- * Drop foreign server by OID
- */
-void
-RemoveForeignServerById(Oid srvId)
-{
-	HeapTuple	tp;
-	Relation	rel;
-
-	rel = table_open(ForeignServerRelationId, RowExclusiveLock);
-
-	tp = SearchSysCache1(FOREIGNSERVEROID, ObjectIdGetDatum(srvId));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for foreign server %u", srvId);
-
-	CatalogTupleDelete(rel, &tp->t_self);
-
-	ReleaseSysCache(tp);
-
-	table_close(rel, RowExclusiveLock);
 }
 
 
@@ -1436,29 +1388,6 @@ RemoveUserMapping(DropUserMappingStmt *stmt)
 
 
 /*
- * Drop user mapping by OID.  This is called to clean up dependencies.
- */
-void
-RemoveUserMappingById(Oid umId)
-{
-	HeapTuple	tp;
-	Relation	rel;
-
-	rel = table_open(UserMappingRelationId, RowExclusiveLock);
-
-	tp = SearchSysCache1(USERMAPPINGOID, ObjectIdGetDatum(umId));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for user mapping %u", umId);
-
-	CatalogTupleDelete(rel, &tp->t_self);
-
-	ReleaseSysCache(tp);
-
-	table_close(rel, RowExclusiveLock);
-}
-
-/*
  * Create a foreign table
  * call after DefineRelation().
  */
@@ -1641,8 +1570,7 @@ ImportForeignSchema(ImportForeignSchemaStmt *stmt)
 			pstmt->stmt_len = rs->stmt_len;
 
 			/* Execute statement */
-			ProcessUtility(pstmt,
-						   cmd,
+			ProcessUtility(pstmt, cmd, false,
 						   PROCESS_UTILITY_SUBCOMMAND, NULL, NULL,
 						   None_Receiver, NULL);
 

@@ -3,7 +3,7 @@
  * detoast.h
  *	  Access to compressed and external varlena values.
  *
- * Copyright (c) 2000-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2000-2021, PostgreSQL Global Development Group
  *
  * src/include/access/detoast.h
  *
@@ -11,16 +11,6 @@
  */
 #ifndef DETOAST_H
 #define DETOAST_H
-
-/*
- * Testing whether an externally-stored value is compressed now requires
- * comparing extsize (the actual length of the external data) to rawsize
- * (the original uncompressed datum's size).  The latter includes VARHDRSZ
- * overhead, the former doesn't.  We never use compression unless it actually
- * saves space, so we expect either equality or less-than.
- */
-#define VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer) \
-	((toast_pointer).va_extsize < (toast_pointer).va_rawsize - VARHDRSZ)
 
 /*
  * Macro to fetch the possibly-unaligned contents of an EXTERNAL datum

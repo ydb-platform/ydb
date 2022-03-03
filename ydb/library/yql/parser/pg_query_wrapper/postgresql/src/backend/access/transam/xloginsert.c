@@ -9,7 +9,7 @@
  * of XLogRecData structs by a call to XLogRecordAssemble(). See
  * access/transam/README for details.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/xloginsert.c
@@ -90,11 +90,13 @@ static __thread XLogRecData hdr_rdt;
 static __thread char *hdr_scratch = NULL;
 
 #define SizeOfXlogOrigin	(sizeof(RepOriginId) + sizeof(char))
+#define SizeOfXLogTransactionId	(sizeof(TransactionId) + sizeof(char))
 
 #define HEADER_SCRATCH_SIZE \
 	(SizeOfXLogRecord + \
 	 MaxSizeOfXLogRecordBlockHeader * (XLR_MAX_BLOCK_ID + 1) + \
-	 SizeOfXLogRecordDataHeaderLong + SizeOfXlogOrigin)
+	 SizeOfXLogRecordDataHeaderLong + SizeOfXlogOrigin + \
+	 SizeOfXLogTransactionId)
 
 /*
  * An array of XLogRecData structs, to hold registered data.
@@ -195,6 +197,10 @@ void
 XLogResetInsertion(void)
 {
 	int			i;
+
+	/* reset the subxact assignment flag (if needed) */
+	if (curinsert_flags & XLOG_INCLUDE_XID)
+		MarkSubTransactionAssigned();
 
 	for (i = 0; i < max_registered_block_id; i++)
 		registered_buffers[i].in_use = false;
@@ -394,12 +400,14 @@ XLogRegisterBufData(uint8 block_id, char *data, int len)
  * - XLOG_MARK_UNIMPORTANT, to signal that the record is not important for
  *	 durability, which allows to avoid triggering WAL archiving and other
  *	 background activity.
+ * - XLOG_INCLUDE_XID, a message-passing hack between XLogRecordAssemble
+ *	 and XLogResetInsertion.
  */
 void
 XLogSetRecordFlags(uint8 flags)
 {
 	Assert(begininsert_called);
-	curinsert_flags = flags;
+	curinsert_flags |= flags;
 }
 
 /*
@@ -749,6 +757,19 @@ XLogRecordAssemble(RmgrId rmid, uint8 info,
 		scratch += sizeof(replorigin_session_origin);
 	}
 
+	/* followed by toplevel XID, if not already included in previous record */
+	if (IsSubTransactionAssignmentPending())
+	{
+		TransactionId xid = GetTopTransactionIdIfAny();
+
+		/* update the flag (later used by XLogResetInsertion) */
+		XLogSetRecordFlags(XLOG_INCLUDE_XID);
+
+		*(scratch++) = (char) XLR_BLOCK_ID_TOPLEVEL_XID;
+		memcpy(scratch, &xid, sizeof(TransactionId));
+		scratch += sizeof(TransactionId);
+	}
+
 	/* followed by main data, if any */
 	if (mainrdata_len > 0)
 	{
@@ -999,6 +1020,63 @@ log_newpage(RelFileNode *rnode, ForkNumber forkNum, BlockNumber blkno,
 	}
 
 	return recptr;
+}
+
+/*
+ * Like log_newpage(), but allows logging multiple pages in one operation.
+ * It is more efficient than calling log_newpage() for each page separately,
+ * because we can write multiple pages in a single WAL record.
+ */
+void
+log_newpages(RelFileNode *rnode, ForkNumber forkNum, int num_pages,
+			 BlockNumber *blknos, Page *pages, bool page_std)
+{
+	int			flags;
+	XLogRecPtr	recptr;
+	int			i;
+	int			j;
+
+	flags = REGBUF_FORCE_IMAGE;
+	if (page_std)
+		flags |= REGBUF_STANDARD;
+
+	/*
+	 * Iterate over all the pages. They are collected into batches of
+	 * XLR_MAX_BLOCK_ID pages, and a single WAL-record is written for each
+	 * batch.
+	 */
+	XLogEnsureRecordSpace(XLR_MAX_BLOCK_ID - 1, 0);
+
+	i = 0;
+	while (i < num_pages)
+	{
+		int			batch_start = i;
+		int			nbatch;
+
+		XLogBeginInsert();
+
+		nbatch = 0;
+		while (nbatch < XLR_MAX_BLOCK_ID && i < num_pages)
+		{
+			XLogRegisterBlock(nbatch, rnode, forkNum, blknos[i], pages[i], flags);
+			i++;
+			nbatch++;
+		}
+
+		recptr = XLogInsert(RM_XLOG_ID, XLOG_FPI);
+
+		for (j = batch_start; j < i; j++)
+		{
+			/*
+			 * The page may be uninitialized. If so, we can't set the LSN
+			 * because that would corrupt the page.
+			 */
+			if (!PageIsNew(pages[j]))
+			{
+				PageSetLSN(pages[j], recptr);
+			}
+		}
+	}
 }
 
 /*

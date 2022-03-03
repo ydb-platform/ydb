@@ -3,7 +3,7 @@
  * pg_wchar.h
  *	  multibyte-character support
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/mb/pg_wchar.h
@@ -306,14 +306,32 @@ typedef enum pg_enc
 
 /*
  * When converting strings between different encodings, we assume that space
- * for converted result is 4-to-1 growth in the worst case. The rate for
+ * for converted result is 4-to-1 growth in the worst case.  The rate for
  * currently supported encoding pairs are within 3 (SJIS JIS X0201 half width
- * kanna -> UTF8 is the worst case).  So "4" should be enough for the moment.
+ * kana -> UTF8 is the worst case).  So "4" should be enough for the moment.
  *
  * Note that this is not the same as the maximum character width in any
  * particular encoding.
  */
 #define MAX_CONVERSION_GROWTH  4
+
+/*
+ * Maximum byte length of a string that's required in any encoding to convert
+ * at least one character to any other encoding.  In other words, if you feed
+ * MAX_CONVERSION_INPUT_LENGTH bytes to any encoding conversion function, it
+ * is guaranteed to be able to convert something without needing more input
+ * (assuming the input is valid).
+ *
+ * Currently, the maximum case is the conversion UTF8 -> SJIS JIS X0201 half
+ * width kana, where a pair of UTF-8 characters is converted into a single
+ * SHIFT_JIS_2004 character (the reverse of the worst case for
+ * MAX_CONVERSION_GROWTH).  It needs 6 bytes of input.  In theory, a
+ * user-defined conversion function might have more complicated cases, although
+ * for the reverse mapping you would probably also need to bump up
+ * MAX_CONVERSION_GROWTH.  But there is no need to be stingy here, so make it
+ * generous.
+ */
+#define MAX_CONVERSION_INPUT_LENGTH	16
 
 /*
  * Maximum byte length of the string equivalent to any one Unicode code point,
@@ -371,7 +389,9 @@ typedef int (*mbdisplaylen_converter) (const unsigned char *mbstr);
 
 typedef bool (*mbcharacter_incrementer) (unsigned char *mbstr, int len);
 
-typedef int (*mbverifier) (const unsigned char *mbstr, int len);
+typedef int (*mbchar_verifier) (const unsigned char *mbstr, int len);
+
+typedef int (*mbstr_verifier) (const unsigned char *mbstr, int len);
 
 typedef struct
 {
@@ -381,7 +401,8 @@ typedef struct
 													 * to a multibyte */
 	mblen_converter mblen;		/* get byte length of a char */
 	mbdisplaylen_converter dsplen;	/* get display width of a char */
-	mbverifier	mbverify;		/* verify multibyte sequence */
+	mbchar_verifier mbverifychar;	/* verify multibyte character */
+	mbstr_verifier mbverifystr; /* verify multibyte string */
 	int			maxmblen;		/* max bytes for a char in this encoding */
 } pg_wchar_tbl;
 
@@ -555,7 +576,8 @@ extern int	pg_valid_server_encoding_id(int encoding);
 extern int	pg_encoding_mblen(int encoding, const char *mbstr);
 extern int	pg_encoding_mblen_bounded(int encoding, const char *mbstr);
 extern int	pg_encoding_dsplen(int encoding, const char *mbstr);
-extern int	pg_encoding_verifymb(int encoding, const char *mbstr, int len);
+extern int	pg_encoding_verifymbchar(int encoding, const char *mbstr, int len);
+extern int	pg_encoding_verifymbstr(int encoding, const char *mbstr, int len);
 extern int	pg_encoding_max_length(int encoding);
 extern int	pg_valid_client_encoding(const char *name);
 extern int	pg_valid_server_encoding(const char *name);
@@ -613,6 +635,12 @@ extern int	pg_bind_textdomain_codeset(const char *domainname);
 extern unsigned char *pg_do_encoding_conversion(unsigned char *src, int len,
 												int src_encoding,
 												int dest_encoding);
+extern int	pg_do_encoding_conversion_buf(Oid proc,
+										  int src_encoding,
+										  int dest_encoding,
+										  unsigned char *src, int srclen,
+										  unsigned char *dst, int dstlen,
+										  bool noError);
 
 extern char *pg_client_to_server(const char *s, int len);
 extern char *pg_server_to_client(const char *s, int len);
@@ -624,18 +652,18 @@ extern void pg_unicode_to_server(pg_wchar c, unsigned char *s);
 extern unsigned short BIG5toCNS(unsigned short big5, unsigned char *lc);
 extern unsigned short CNStoBIG5(unsigned short cns, unsigned char lc);
 
-extern void UtfToLocal(const unsigned char *utf, int len,
+extern int	UtfToLocal(const unsigned char *utf, int len,
 					   unsigned char *iso,
 					   const pg_mb_radix_tree *map,
 					   const pg_utf_to_local_combined *cmap, int cmapsize,
 					   utf_local_conversion_func conv_func,
-					   int encoding);
-extern void LocalToUtf(const unsigned char *iso, int len,
+					   int encoding, bool noError);
+extern int	LocalToUtf(const unsigned char *iso, int len,
 					   unsigned char *utf,
 					   const pg_mb_radix_tree *map,
 					   const pg_local_to_utf_combined *cmap, int cmapsize,
 					   utf_local_conversion_func conv_func,
-					   int encoding);
+					   int encoding, bool noError);
 
 extern bool pg_verifymbstr(const char *mbstr, int len, bool noError);
 extern bool pg_verify_mbstr(int encoding, const char *mbstr, int len,
@@ -653,18 +681,19 @@ extern void report_invalid_encoding(int encoding, const char *mbstr, int len) pg
 extern void report_untranslatable_char(int src_encoding, int dest_encoding,
 									   const char *mbstr, int len) pg_attribute_noreturn();
 
-extern void local2local(const unsigned char *l, unsigned char *p, int len,
-						int src_encoding, int dest_encoding, const unsigned char *tab);
-extern void latin2mic(const unsigned char *l, unsigned char *p, int len,
-					  int lc, int encoding);
-extern void mic2latin(const unsigned char *mic, unsigned char *p, int len,
-					  int lc, int encoding);
-extern void latin2mic_with_table(const unsigned char *l, unsigned char *p,
+extern int	local2local(const unsigned char *l, unsigned char *p, int len,
+						int src_encoding, int dest_encoding,
+						const unsigned char *tab, bool noError);
+extern int	latin2mic(const unsigned char *l, unsigned char *p, int len,
+					  int lc, int encoding, bool noError);
+extern int	mic2latin(const unsigned char *mic, unsigned char *p, int len,
+					  int lc, int encoding, bool noError);
+extern int	latin2mic_with_table(const unsigned char *l, unsigned char *p,
 								 int len, int lc, int encoding,
-								 const unsigned char *tab);
-extern void mic2latin_with_table(const unsigned char *mic, unsigned char *p,
+								 const unsigned char *tab, bool noError);
+extern int	mic2latin_with_table(const unsigned char *mic, unsigned char *p,
 								 int len, int lc, int encoding,
-								 const unsigned char *tab);
+								 const unsigned char *tab, bool noError);
 
 #ifdef WIN32
 extern WCHAR *pgwin32_message_to_UTF16(const char *str, int len, int *utf16len);

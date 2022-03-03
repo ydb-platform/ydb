@@ -3,7 +3,7 @@
  * evtcache.c
  *	  Special-purpose cache for event trigger data.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -16,7 +16,6 @@
 #include "access/genam.h"
 #include "access/htup_details.h"
 #include "access/relation.h"
-#include "catalog/indexing.h"
 #include "catalog/pg_event_trigger.h"
 #include "catalog/pg_type.h"
 #include "commands/trigger.h"
@@ -119,7 +118,6 @@ BuildEventTriggerCache(void)
 	EventTriggerCacheState = ETCS_REBUILD_STARTED;
 
 	/* Create new hash table. */
-	MemSet(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(EventTriggerEvent);
 	ctl.entrysize = sizeof(EventTriggerCacheEntry);
 	ctl.hcxt = EventTriggerCacheContext;

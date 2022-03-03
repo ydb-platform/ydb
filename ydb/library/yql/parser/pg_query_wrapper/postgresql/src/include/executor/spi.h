@@ -3,7 +3,7 @@
  * spi.h
  *				Server Programming Interface public declarations
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/executor/spi.h
@@ -15,7 +15,7 @@
 
 #include "commands/trigger.h"
 #include "lib/ilist.h"
-#include "nodes/parsenodes.h"
+#include "parser/parser.h"
 #include "utils/portal.h"
 
 
@@ -32,6 +32,35 @@ typedef struct SPITupleTable
 	slist_node	next;			/* link for internal bookkeeping */
 	SubTransactionId subid;		/* subxact in which tuptable was created */
 } SPITupleTable;
+
+/* Optional arguments for SPI_prepare_extended */
+typedef struct SPIPrepareOptions
+{
+	ParserSetupHook parserSetup;
+	void	   *parserSetupArg;
+	RawParseMode parseMode;
+	int			cursorOptions;
+} SPIPrepareOptions;
+
+/* Optional arguments for SPI_execute[_plan]_extended */
+typedef struct SPIExecuteOptions
+{
+	ParamListInfo params;
+	bool		read_only;
+	bool		allow_nonatomic;
+	bool		must_return_tuples;
+	uint64		tcount;
+	DestReceiver *dest;
+	ResourceOwner owner;
+} SPIExecuteOptions;
+
+/* Optional arguments for SPI_cursor_parse_open */
+typedef struct SPIParseOpenOptions
+{
+	ParamListInfo params;
+	int			cursorOptions;
+	bool		read_only;
+} SPIParseOpenOptions;
 
 /* Plans are opaque structs for standard users of SPI */
 typedef struct _SPI_plan *SPIPlanPtr;
@@ -85,8 +114,12 @@ extern int	SPI_connect(void);
 extern int	SPI_connect_ext(int options);
 extern int	SPI_finish(void);
 extern int	SPI_execute(const char *src, bool read_only, long tcount);
+extern int	SPI_execute_extended(const char *src,
+								 const SPIExecuteOptions *options);
 extern int	SPI_execute_plan(SPIPlanPtr plan, Datum *Values, const char *Nulls,
 							 bool read_only, long tcount);
+extern int	SPI_execute_plan_extended(SPIPlanPtr plan,
+									  const SPIExecuteOptions *options);
 extern int	SPI_execute_plan_with_paramlist(SPIPlanPtr plan,
 											ParamListInfo params,
 											bool read_only, long tcount);
@@ -105,6 +138,8 @@ extern int	SPI_execute_with_args(const char *src,
 extern SPIPlanPtr SPI_prepare(const char *src, int nargs, Oid *argtypes);
 extern SPIPlanPtr SPI_prepare_cursor(const char *src, int nargs, Oid *argtypes,
 									 int cursorOptions);
+extern SPIPlanPtr SPI_prepare_extended(const char *src,
+									   const SPIPrepareOptions *options);
 extern SPIPlanPtr SPI_prepare_params(const char *src,
 									 ParserSetupHook parserSetup,
 									 void *parserSetupArg,
@@ -150,6 +185,9 @@ extern Portal SPI_cursor_open_with_args(const char *name,
 										bool read_only, int cursorOptions);
 extern Portal SPI_cursor_open_with_paramlist(const char *name, SPIPlanPtr plan,
 											 ParamListInfo params, bool read_only);
+extern Portal SPI_cursor_parse_open(const char *name,
+									const char *src,
+									const SPIParseOpenOptions *options);
 extern Portal SPI_cursor_find(const char *name);
 extern void SPI_cursor_fetch(Portal portal, bool forward, long count);
 extern void SPI_cursor_move(Portal portal, bool forward, long count);

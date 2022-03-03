@@ -5,7 +5,7 @@
  *
  * All the actual insertion logic is in spgdoinsert.c.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -56,7 +56,7 @@ spgistBuildCallback(Relation index, ItemPointer tid, Datum *values,
 	 * any temp data when retrying.
 	 */
 	while (!spgdoinsert(index, &buildstate->spgstate, tid,
-						*values, *isnull))
+						values, isnull))
 	{
 		MemoryContextReset(buildstate->tmpCtx);
 	}
@@ -207,6 +207,7 @@ bool
 spginsert(Relation index, Datum *values, bool *isnull,
 		  ItemPointer ht_ctid, Relation heapRel,
 		  IndexUniqueCheck checkUnique,
+		  bool indexUnchanged,
 		  IndexInfo *indexInfo)
 {
 	SpGistState spgstate;
@@ -226,7 +227,7 @@ spginsert(Relation index, Datum *values, bool *isnull,
 	 * to avoid cumulative memory consumption.  That means we also have to
 	 * redo initSpGistState(), but it's cheap enough not to matter.
 	 */
-	while (!spgdoinsert(index, &spgstate, ht_ctid, *values, *isnull))
+	while (!spgdoinsert(index, &spgstate, ht_ctid, values, isnull))
 	{
 		MemoryContextReset(insertCtx);
 		initSpGistState(&spgstate, index);

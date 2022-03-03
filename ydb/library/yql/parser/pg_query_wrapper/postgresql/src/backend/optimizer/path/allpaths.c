@@ -3,7 +3,7 @@
  * allpaths.c
  *	  Routines to find possible search paths for processing a query
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -99,13 +99,13 @@ static void set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 									Index rti, RangeTblEntry *rte);
 static void generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 										 List *live_childrels,
-										 List *all_child_pathkeys,
-										 List *partitioned_rels);
+										 List *all_child_pathkeys);
 static Path *get_cheapest_parameterized_child_path(PlannerInfo *root,
 												   RelOptInfo *rel,
 												   Relids required_outer);
 static void accumulate_append_subpath(Path *path,
-									  List **subpaths, List **special_subpaths);
+									  List **subpaths,
+									  List **special_subpaths);
 static Path *get_singleton_append_subpath(Path *path);
 static void set_dummy_rel_pathlist(RelOptInfo *rel);
 static void set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
@@ -134,7 +134,8 @@ static void check_output_expressions(Query *subquery,
 static void compare_tlist_datatypes(List *tlist, List *colTypes,
 									pushdown_safety_info *safetyInfo);
 static bool targetIsInAllPartitionLists(TargetEntry *tle, Query *query);
-static bool qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
+static bool qual_is_pushdown_safe(Query *subquery, Index rti,
+								  RestrictInfo *rinfo,
 								  pushdown_safety_info *safetyInfo);
 static void subquery_push_qual(Query *subquery,
 							   RangeTblEntry *rte, Index rti, Node *qual);
@@ -912,7 +913,11 @@ set_foreign_size(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	/* ... but do not let it set the rows estimate to zero */
 	rel->rows = clamp_row_est(rel->rows);
 
-	/* also, make sure rel->tuples is not insane relative to rel->rows */
+	/*
+	 * Also, make sure rel->tuples is not insane relative to rel->rows.
+	 * Notably, this ensures sanity if pg_class.reltuples contains -1 and the
+	 * FDW doesn't do anything to replace that.
+	 */
 	rel->tuples = Max(rel->tuples, rel->rows);
 }
 
@@ -954,17 +959,6 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel,
 	check_stack_depth();
 
 	Assert(IS_SIMPLE_REL(rel));
-
-	/*
-	 * Initialize partitioned_child_rels to contain this RT index.
-	 *
-	 * Note that during the set_append_rel_pathlist() phase, we will bubble up
-	 * the indexes of partitioned relations that appear down in the tree, so
-	 * that when we've created Paths for all the children, the root
-	 * partitioned table's list will contain all such indexes.
-	 */
-	if (rte->relkind == RELKIND_PARTITIONED_TABLE)
-		rel->partitioned_child_rels = list_make1_int(rti);
 
 	/*
 	 * If this is a partitioned baserel, set the consider_partitionwise_join
@@ -1155,7 +1149,7 @@ set_append_rel_size(PlannerInfo *root, RelOptInfo *rel,
 			Var		   *parentvar = (Var *) lfirst(parentvars);
 			Node	   *childvar = (Node *) lfirst(childvars);
 
-			if (IsA(parentvar, Var))
+			if (IsA(parentvar, Var) && parentvar->varno == parentRTindex)
 			{
 				int			pndx = parentvar->varattno - rel->min_attr;
 				int32		child_width = 0;
@@ -1265,12 +1259,6 @@ set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel,
 		if (IS_DUMMY_REL(childrel))
 			continue;
 
-		/* Bubble up childrel's partitioned children. */
-		if (rel->part_scheme)
-			rel->partitioned_child_rels =
-				list_concat(rel->partitioned_child_rels,
-							childrel->partitioned_child_rels);
-
 		/*
 		 * Child is live, so add it to the live_childrels list for use below.
 		 */
@@ -1307,58 +1295,10 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 	List	   *all_child_pathkeys = NIL;
 	List	   *all_child_outers = NIL;
 	ListCell   *l;
-	List	   *partitioned_rels = NIL;
 	double		partial_rows = -1;
 
 	/* If appropriate, consider parallel append */
 	pa_subpaths_valid = enable_parallel_append && rel->consider_parallel;
-
-	/*
-	 * AppendPath generated for partitioned tables must record the RT indexes
-	 * of partitioned tables that are direct or indirect children of this
-	 * Append rel.
-	 *
-	 * AppendPath may be for a sub-query RTE (UNION ALL), in which case, 'rel'
-	 * itself does not represent a partitioned relation, but the child sub-
-	 * queries may contain references to partitioned relations.  The loop
-	 * below will look for such children and collect them in a list to be
-	 * passed to the path creation function.  (This assumes that we don't need
-	 * to look through multiple levels of subquery RTEs; if we ever do, we
-	 * could consider stuffing the list we generate here into sub-query RTE's
-	 * RelOptInfo, just like we do for partitioned rels, which would be used
-	 * when populating our parent rel with paths.  For the present, that
-	 * appears to be unnecessary.)
-	 */
-	if (rel->part_scheme != NULL)
-	{
-		if (IS_SIMPLE_REL(rel))
-			partitioned_rels = list_make1(rel->partitioned_child_rels);
-		else if (IS_JOIN_REL(rel))
-		{
-			int			relid = -1;
-			List	   *partrels = NIL;
-
-			/*
-			 * For a partitioned joinrel, concatenate the component rels'
-			 * partitioned_child_rels lists.
-			 */
-			while ((relid = bms_next_member(rel->relids, relid)) >= 0)
-			{
-				RelOptInfo *component;
-
-				Assert(relid >= 1 && relid < root->simple_rel_array_size);
-				component = root->simple_rel_array[relid];
-				Assert(component->part_scheme != NULL);
-				Assert(list_length(component->partitioned_child_rels) >= 1);
-				partrels = list_concat(partrels,
-									   component->partitioned_child_rels);
-			}
-
-			partitioned_rels = list_make1(partrels);
-		}
-
-		Assert(list_length(partitioned_rels) >= 1);
-	}
 
 	/*
 	 * For every non-dummy child, remember the cheapest path.  Also, identify
@@ -1370,14 +1310,6 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 		RelOptInfo *childrel = lfirst(l);
 		ListCell   *lcp;
 		Path	   *cheapest_partial_path = NULL;
-
-		/*
-		 * For UNION ALLs with non-empty partitioned_child_rels, accumulate
-		 * the Lists of child relations.
-		 */
-		if (rel->rtekind == RTE_SUBQUERY && childrel->partitioned_child_rels != NIL)
-			partitioned_rels = lappend(partitioned_rels,
-									   childrel->partitioned_child_rels);
 
 		/*
 		 * If child has an unparameterized cheapest-total path, add that to
@@ -1429,7 +1361,6 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 				accumulate_append_subpath(cheapest_partial_path,
 										  &pa_partial_subpaths,
 										  &pa_nonpartial_subpaths);
-
 			}
 			else
 			{
@@ -1525,7 +1456,7 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 	if (subpaths_valid)
 		add_path(rel, (Path *) create_append_path(root, rel, subpaths, NIL,
 												  NIL, NULL, 0, false,
-												  partitioned_rels, -1));
+												  -1));
 
 	/*
 	 * Consider an append of unordered, unparameterized partial paths.  Make
@@ -1568,7 +1499,7 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 		appendpath = create_append_path(root, rel, NIL, partial_subpaths,
 										NIL, NULL, parallel_workers,
 										enable_parallel_append,
-										partitioned_rels, -1);
+										-1);
 
 		/*
 		 * Make sure any subsequent partial paths use the same row count
@@ -1617,7 +1548,7 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 		appendpath = create_append_path(root, rel, pa_nonpartial_subpaths,
 										pa_partial_subpaths,
 										NIL, NULL, parallel_workers, true,
-										partitioned_rels, partial_rows);
+										partial_rows);
 		add_partial_path(rel, (Path *) appendpath);
 	}
 
@@ -1627,8 +1558,7 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 	 */
 	if (subpaths_valid)
 		generate_orderedappend_paths(root, rel, live_childrels,
-									 all_child_pathkeys,
-									 partitioned_rels);
+									 all_child_pathkeys);
 
 	/*
 	 * Build Append paths for each parameterization seen among the child rels.
@@ -1679,7 +1609,7 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 			add_path(rel, (Path *)
 					 create_append_path(root, rel, subpaths, NIL,
 										NIL, required_outer, 0, false,
-										partitioned_rels, -1));
+										-1));
 	}
 
 	/*
@@ -1693,23 +1623,20 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 	{
 		RelOptInfo *childrel = (RelOptInfo *) linitial(live_childrels);
 
-		foreach(l, childrel->partial_pathlist)
+		/* skip the cheapest partial path, since we already used that above */
+		for_each_from(l, childrel->partial_pathlist, 1)
 		{
 			Path	   *path = (Path *) lfirst(l);
 			AppendPath *appendpath;
 
-			/*
-			 * Skip paths with no pathkeys.  Also skip the cheapest partial
-			 * path, since we already used that above.
-			 */
-			if (path->pathkeys == NIL ||
-				path == linitial(childrel->partial_pathlist))
+			/* skip paths with no pathkeys. */
+			if (path->pathkeys == NIL)
 				continue;
 
 			appendpath = create_append_path(root, rel, NIL, list_make1(path),
 											NIL, NULL,
 											path->parallel_workers, true,
-											partitioned_rels, partial_rows);
+											partial_rows);
 			add_partial_path(rel, (Path *) appendpath);
 		}
 	}
@@ -1745,8 +1672,7 @@ add_paths_to_append_rel(PlannerInfo *root, RelOptInfo *rel,
 static void
 generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 							 List *live_childrels,
-							 List *all_child_pathkeys,
-							 List *partitioned_rels)
+							 List *all_child_pathkeys)
 {
 	ListCell   *lcp;
 	List	   *partition_pathkeys = NIL;
@@ -1912,7 +1838,6 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 													  NULL,
 													  0,
 													  false,
-													  partitioned_rels,
 													  -1));
 			if (startup_neq_total)
 				add_path(rel, (Path *) create_append_path(root,
@@ -1923,7 +1848,6 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 														  NULL,
 														  0,
 														  false,
-														  partitioned_rels,
 														  -1));
 		}
 		else
@@ -1933,15 +1857,13 @@ generate_orderedappend_paths(PlannerInfo *root, RelOptInfo *rel,
 															rel,
 															startup_subpaths,
 															pathkeys,
-															NULL,
-															partitioned_rels));
+															NULL));
 			if (startup_neq_total)
 				add_path(rel, (Path *) create_merge_append_path(root,
 																rel,
 																total_subpaths,
 																pathkeys,
-																NULL,
-																partitioned_rels));
+																NULL));
 		}
 	}
 }
@@ -2135,7 +2057,7 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 	/* Set up the dummy path */
 	add_path(rel, (Path *) create_append_path(NULL, rel, NIL, NIL,
 											  NIL, rel->lateral_relids,
-											  0, false, NIL, -1));
+											  0, false, -1));
 
 	/*
 	 * We set the cheapest-path fields immediately, just in case they were
@@ -2219,7 +2141,7 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 
 	/*
 	 * If the subquery has the "security_barrier" flag, it means the subquery
-	 * originated from a view that must enforce row level security.  Then we
+	 * originated from a view that must enforce row-level security.  Then we
 	 * must not push down quals that contain leaky functions.  (Ideally this
 	 * would be checked inside subquery_is_pushdown_safe, but since we don't
 	 * currently pass the RTE to that function, we must do it here.)
@@ -2256,11 +2178,12 @@ set_subquery_pathlist(PlannerInfo *root, RelOptInfo *rel,
 		foreach(l, rel->baserestrictinfo)
 		{
 			RestrictInfo *rinfo = (RestrictInfo *) lfirst(l);
-			Node	   *clause = (Node *) rinfo->clause;
 
 			if (!rinfo->pseudoconstant &&
-				qual_is_pushdown_safe(subquery, rti, clause, &safetyInfo))
+				qual_is_pushdown_safe(subquery, rti, rinfo, &safetyInfo))
 			{
+				Node	   *clause = (Node *) rinfo->clause;
+
 				/* Push it down */
 				subquery_push_qual(subquery, rte, rti, clause);
 			}
@@ -2774,20 +2697,19 @@ get_useful_pathkeys_for_relation(PlannerInfo *root, RelOptInfo *rel,
 			EquivalenceClass *pathkey_ec = pathkey->pk_eclass;
 
 			/*
-			 * We can only build a sort for pathkeys which contain an EC
-			 * member in the current relation's target, so ignore any suffix
-			 * of the list as soon as we find a pathkey without an EC member
-			 * in the relation.
+			 * We can only build a sort for pathkeys that contain a
+			 * safe-to-compute-early EC member computable from the current
+			 * relation's reltarget, so ignore the remainder of the list as
+			 * soon as we find a pathkey without such a member.
 			 *
-			 * By still returning the prefix of the pathkeys list that does
-			 * meet criteria of EC membership in the current relation, we
-			 * enable not just an incremental sort on the entirety of
-			 * query_pathkeys but also incremental sort below a JOIN.
+			 * It's still worthwhile to return any prefix of the pathkeys list
+			 * that meets this requirement, as we may be able to do an
+			 * incremental sort.
 			 *
-			 * If requested, ensure the expression is parallel safe too.
+			 * If requested, ensure the sort expression is parallel-safe too.
 			 */
-			if (!find_em_expr_usable_for_sorting_rel(root, pathkey_ec, rel,
-													 require_parallel_safe))
+			if (!relation_can_be_sorted_early(root, rel, pathkey_ec,
+											  require_parallel_safe))
 				break;
 
 			npathkeys++;
@@ -3098,10 +3020,11 @@ standard_join_search(PlannerInfo *root, int levels_needed, List *initial_rels)
 		join_search_one_level(root, lev);
 
 		/*
-		 * Run generate_partitionwise_join_paths() and generate_gather_paths()
-		 * for each just-processed joinrel.  We could not do this earlier
-		 * because both regular and partial paths can get added to a
-		 * particular joinrel at multiple times within join_search_one_level.
+		 * Run generate_partitionwise_join_paths() and
+		 * generate_useful_gather_paths() for each just-processed joinrel.  We
+		 * could not do this earlier because both regular and partial paths
+		 * can get added to a particular joinrel at multiple times within
+		 * join_search_one_level.
 		 *
 		 * After that, we're done creating paths for the joinrel, so run
 		 * set_cheapest().
@@ -3468,37 +3391,39 @@ targetIsInAllPartitionLists(TargetEntry *tle, Query *query)
 }
 
 /*
- * qual_is_pushdown_safe - is a particular qual safe to push down?
+ * qual_is_pushdown_safe - is a particular rinfo safe to push down?
  *
- * qual is a restriction clause applying to the given subquery (whose RTE
+ * rinfo is a restriction clause applying to the given subquery (whose RTE
  * has index rti in the parent query).
  *
  * Conditions checked here:
  *
- * 1. The qual must not contain any SubPlans (mainly because I'm not sure
- * it will work correctly: SubLinks will already have been transformed into
- * SubPlans in the qual, but not in the subquery).  Note that SubLinks that
- * transform to initplans are safe, and will be accepted here because what
- * we'll see in the qual is just a Param referencing the initplan output.
+ * 1. rinfo's clause must not contain any SubPlans (mainly because it's
+ * unclear that it will work correctly: SubLinks will already have been
+ * transformed into SubPlans in the qual, but not in the subquery).  Note that
+ * SubLinks that transform to initplans are safe, and will be accepted here
+ * because what we'll see in the qual is just a Param referencing the initplan
+ * output.
  *
- * 2. If unsafeVolatile is set, the qual must not contain any volatile
+ * 2. If unsafeVolatile is set, rinfo's clause must not contain any volatile
  * functions.
  *
- * 3. If unsafeLeaky is set, the qual must not contain any leaky functions
- * that are passed Var nodes, and therefore might reveal values from the
- * subquery as side effects.
+ * 3. If unsafeLeaky is set, rinfo's clause must not contain any leaky
+ * functions that are passed Var nodes, and therefore might reveal values from
+ * the subquery as side effects.
  *
- * 4. The qual must not refer to the whole-row output of the subquery
+ * 4. rinfo's clause must not refer to the whole-row output of the subquery
  * (since there is no easy way to name that within the subquery itself).
  *
- * 5. The qual must not refer to any subquery output columns that were
+ * 5. rinfo's clause must not refer to any subquery output columns that were
  * found to be unsafe to reference by subquery_is_pushdown_safe().
  */
 static bool
-qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
+qual_is_pushdown_safe(Query *subquery, Index rti, RestrictInfo *rinfo,
 					  pushdown_safety_info *safetyInfo)
 {
 	bool		safe = true;
+	Node	   *qual = (Node *) rinfo->clause;
 	List	   *vars;
 	ListCell   *vl;
 
@@ -3508,7 +3433,7 @@ qual_is_pushdown_safe(Query *subquery, Index rti, Node *qual,
 
 	/* Refuse volatile quals if we found they'd be unsafe (point 2) */
 	if (safetyInfo->unsafeVolatile &&
-		contain_volatile_functions(qual))
+		contain_volatile_functions((Node *) rinfo))
 		return false;
 
 	/* Refuse leaky quals if told to (point 3) */
@@ -4105,6 +4030,10 @@ print_path(PlannerInfo *root, Path *path, int indent)
 		case T_MaterialPath:
 			ptype = "Material";
 			subpath = ((MaterialPath *) path)->subpath;
+			break;
+		case T_MemoizePath:
+			ptype = "Memoize";
+			subpath = ((MemoizePath *) path)->subpath;
 			break;
 		case T_UniquePath:
 			ptype = "Unique";

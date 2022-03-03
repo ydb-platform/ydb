@@ -3,7 +3,7 @@
  * pgtz.c
  *	  Timezone Library Integration Functions
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/timezone/pgtz.c
@@ -203,15 +203,13 @@ init_timezone_hashtable(void)
 {
 	HASHCTL		hash_ctl;
 
-	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
-
 	hash_ctl.keysize = TZ_STRLEN_MAX + 1;
 	hash_ctl.entrysize = sizeof(pg_tz_cache);
 
 	timezone_cache = hash_create("Timezones",
 								 4,
 								 &hash_ctl,
-								 HASH_ELEM);
+								 HASH_ELEM | HASH_STRINGS);
 	if (!timezone_cache)
 		return false;
 

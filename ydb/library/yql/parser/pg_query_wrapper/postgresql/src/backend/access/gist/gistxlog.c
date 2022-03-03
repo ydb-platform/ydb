@@ -4,7 +4,7 @@
  *	  WAL replay logic for GiST.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -184,10 +184,10 @@ gistRedoDeleteRecord(XLogReaderState *record)
 	 *
 	 * GiST delete records can conflict with standby queries.  You might think
 	 * that vacuum records would conflict as well, but we've handled that
-	 * already.  XLOG_HEAP2_CLEANUP_INFO records provide the highest xid
-	 * cleaned by the vacuum of the heap and so we can resolve any conflicts
-	 * just once when that arrives.  After that we know that no conflicts
-	 * exist from individual gist vacuum records on that index.
+	 * already.  XLOG_HEAP2_PRUNE records provide the highest xid cleaned by
+	 * the vacuum of the heap and so we can resolve any conflicts just once
+	 * when that arrives.  After that we know that no conflicts exist from
+	 * individual gist vacuum records on that index.
 	 */
 	if (InHotStandby)
 	{
@@ -387,36 +387,15 @@ gistRedoPageReuse(XLogReaderState *record)
 	 * PAGE_REUSE records exist to provide a conflict point when we reuse
 	 * pages in the index via the FSM.  That's all they do though.
 	 *
-	 * latestRemovedXid was the page's deleteXid.  The deleteXid <
-	 * RecentGlobalXmin test in gistPageRecyclable() conceptually mirrors the
-	 * pgxact->xmin > limitXmin test in GetConflictingVirtualXIDs().
-	 * Consequently, one XID value achieves the same exclusion effect on
-	 * master and standby.
+	 * latestRemovedXid was the page's deleteXid.  The
+	 * GlobalVisCheckRemovableFullXid(deleteXid) test in gistPageRecyclable()
+	 * conceptually mirrors the PGPROC->xmin > limitXmin test in
+	 * GetConflictingVirtualXIDs().  Consequently, one XID value achieves the
+	 * same exclusion effect on primary and standby.
 	 */
 	if (InHotStandby)
-	{
-		FullTransactionId latestRemovedFullXid = xlrec->latestRemovedFullXid;
-		FullTransactionId nextFullXid = ReadNextFullTransactionId();
-		uint64		diff;
-
-		/*
-		 * ResolveRecoveryConflictWithSnapshot operates on 32-bit
-		 * TransactionIds, so truncate the logged FullTransactionId. If the
-		 * logged value is very old, so that XID wrap-around already happened
-		 * on it, there can't be any snapshots that still see it.
-		 */
-		nextFullXid = ReadNextFullTransactionId();
-		diff = U64FromFullTransactionId(nextFullXid) -
-			U64FromFullTransactionId(latestRemovedFullXid);
-		if (diff < MaxTransactionId / 2)
-		{
-			TransactionId latestRemovedXid;
-
-			latestRemovedXid = XidFromFullTransactionId(latestRemovedFullXid);
-			ResolveRecoveryConflictWithSnapshot(latestRemovedXid,
-												xlrec->node);
-		}
-	}
+		ResolveRecoveryConflictWithSnapshotFullXid(xlrec->latestRemovedFullXid,
+												   xlrec->node);
 }
 
 void

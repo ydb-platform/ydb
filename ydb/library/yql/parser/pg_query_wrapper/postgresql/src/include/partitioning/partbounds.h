@@ -2,7 +2,7 @@
  *
  * partbounds.h
  *
- * Copyright (c) 2007-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2007-2021, PostgreSQL Global Development Group
  *
  * src/include/partitioning/partbounds.h
  *
@@ -12,10 +12,9 @@
 #define PARTBOUNDS_H
 
 #include "fmgr.h"
-#include "nodes/parsenodes.h"
-#include "nodes/pg_list.h"
+#include "parser/parse_node.h"
 #include "partitioning/partdefs.h"
-#include "utils/relcache.h"
+
 struct RelOptInfo;				/* avoid including pathnodes.h here */
 
 
@@ -71,12 +70,12 @@ typedef struct PartitionBoundInfoData
 	PartitionRangeDatumKind **kind; /* The kind of each range bound datum;
 									 * NULL for hash and list partitioned
 									 * tables */
+	int			nindexes;		/* Length of the indexes[] array */
 	int		   *indexes;		/* Partition indexes */
 	int			null_index;		/* Index of the null-accepting partition; -1
 								 * if there isn't one */
 	int			default_index;	/* Index of the default partition; -1 if there
 								 * isn't one */
-	int			nindexes;		/* Length of the indexes[] array */
 } PartitionBoundInfoData;
 
 #define partition_bound_accepts_nulls(bi) ((bi)->null_index != -1)
@@ -105,7 +104,8 @@ extern PartitionBoundInfo partition_bounds_merge(int partnatts,
 												 List **inner_parts);
 extern bool partitions_are_ordered(PartitionBoundInfo boundinfo, int nparts);
 extern void check_new_partition_bound(char *relname, Relation parent,
-									  PartitionBoundSpec *spec);
+									  PartitionBoundSpec *spec,
+									  ParseState *pstate);
 extern void check_default_partition_contents(Relation parent,
 											 Relation defaultRel,
 											 PartitionBoundSpec *new_spec);

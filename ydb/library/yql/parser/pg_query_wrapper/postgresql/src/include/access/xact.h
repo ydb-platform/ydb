@@ -4,7 +4,7 @@
  *	  postgres transaction system definitions
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/xact.h
@@ -16,11 +16,11 @@
 
 #include "access/transam.h"
 #include "access/xlogreader.h"
+#include "datatype/timestamp.h"
 #include "lib/stringinfo.h"
 #include "nodes/pg_list.h"
 #include "storage/relfilenode.h"
 #include "storage/sinval.h"
-#include "utils/datetime.h"
 
 /*
  * Maximum size of Global Transaction ID (including '\0').
@@ -72,8 +72,8 @@ typedef enum
 	SYNCHRONOUS_COMMIT_REMOTE_WRITE,	/* wait for local flush and remote
 										 * write */
 	SYNCHRONOUS_COMMIT_REMOTE_FLUSH,	/* wait for local and remote flush */
-	SYNCHRONOUS_COMMIT_REMOTE_APPLY /* wait for local and remote flush
-									   and remote apply */
+	SYNCHRONOUS_COMMIT_REMOTE_APPLY /* wait for local and remote flush and
+									 * remote apply */
 }			SyncCommitLevel;
 
 /* Define the default setting for synchronous_commit */
@@ -81,6 +81,10 @@ typedef enum
 
 /* Synchronous commit level */
 extern __thread int	synchronous_commit;
+
+/* used during logical streaming of a transaction */
+extern __thread PGDLLIMPORT TransactionId CheckXidAlive;
+extern __thread PGDLLIMPORT bool bsysscan;
 
 /*
  * Miscellaneous flag bits to record events which occur on the top level
@@ -147,7 +151,7 @@ typedef void (*SubXactCallback) (SubXactEvent event, SubTransactionId mySubid,
 #define XLOG_XACT_COMMIT_PREPARED	0x30
 #define XLOG_XACT_ABORT_PREPARED	0x40
 #define XLOG_XACT_ASSIGNMENT		0x50
-/* free opcode 0x60 */
+#define XLOG_XACT_INVALIDATIONS		0x60
 /* free opcode 0x70 */
 
 /* mask for filtering opcodes out of xl_info */
@@ -429,13 +433,16 @@ extern void UnregisterXactCallback(XactCallback callback, void *arg);
 extern void RegisterSubXactCallback(SubXactCallback callback, void *arg);
 extern void UnregisterSubXactCallback(SubXactCallback callback, void *arg);
 
+extern bool IsSubTransactionAssignmentPending(void);
+extern void MarkSubTransactionAssigned(void);
+
 extern int	xactGetCommittedChildren(TransactionId **ptr);
 
 extern XLogRecPtr XactLogCommitRecord(TimestampTz commit_time,
 									  int nsubxacts, TransactionId *subxacts,
 									  int nrels, RelFileNode *rels,
 									  int nmsgs, SharedInvalidationMessage *msgs,
-									  bool relcacheInval, bool forceSync,
+									  bool relcacheInval,
 									  int xactflags,
 									  TransactionId twophase_xid,
 									  const char *twophase_gid);

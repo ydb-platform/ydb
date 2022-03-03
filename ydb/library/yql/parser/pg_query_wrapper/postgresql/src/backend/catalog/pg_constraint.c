@@ -3,7 +3,7 @@
  * pg_constraint.c
  *	  routines to support manipulation of the pg_constraint relation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -91,6 +91,8 @@ CreateConstraintEntry(const char *constraintName,
 	NameData	cname;
 	int			i;
 	ObjectAddress conobject;
+	ObjectAddresses *addrs_auto;
+	ObjectAddresses *addrs_normal;
 
 	conDesc = table_open(ConstraintRelationId, RowExclusiveLock);
 
@@ -223,11 +225,12 @@ CreateConstraintEntry(const char *constraintName,
 
 	CatalogTupleInsert(conDesc, tup);
 
-	conobject.classId = ConstraintRelationId;
-	conobject.objectId = conOid;
-	conobject.objectSubId = 0;
+	ObjectAddressSet(conobject, ConstraintRelationId, conOid);
 
 	table_close(conDesc, RowExclusiveLock);
+
+	/* Handle set of auto dependencies */
+	addrs_auto = new_object_addresses();
 
 	if (OidIsValid(relId))
 	{
@@ -237,22 +240,19 @@ CreateConstraintEntry(const char *constraintName,
 		 */
 		ObjectAddress relobject;
 
-		relobject.classId = RelationRelationId;
-		relobject.objectId = relId;
 		if (constraintNTotalKeys > 0)
 		{
 			for (i = 0; i < constraintNTotalKeys; i++)
 			{
-				relobject.objectSubId = constraintKey[i];
-
-				recordDependencyOn(&conobject, &relobject, DEPENDENCY_AUTO);
+				ObjectAddressSubSet(relobject, RelationRelationId, relId,
+									constraintKey[i]);
+				add_exact_object_address(&relobject, addrs_auto);
 			}
 		}
 		else
 		{
-			relobject.objectSubId = 0;
-
-			recordDependencyOn(&conobject, &relobject, DEPENDENCY_AUTO);
+			ObjectAddressSet(relobject, RelationRelationId, relId);
+			add_exact_object_address(&relobject, addrs_auto);
 		}
 	}
 
@@ -263,12 +263,16 @@ CreateConstraintEntry(const char *constraintName,
 		 */
 		ObjectAddress domobject;
 
-		domobject.classId = TypeRelationId;
-		domobject.objectId = domainId;
-		domobject.objectSubId = 0;
-
-		recordDependencyOn(&conobject, &domobject, DEPENDENCY_AUTO);
+		ObjectAddressSet(domobject, TypeRelationId, domainId);
+		add_exact_object_address(&domobject, addrs_auto);
 	}
+
+	record_object_address_dependencies(&conobject, addrs_auto,
+									   DEPENDENCY_AUTO);
+	free_object_addresses(addrs_auto);
+
+	/* Handle set of normal dependencies */
+	addrs_normal = new_object_addresses();
 
 	if (OidIsValid(foreignRelId))
 	{
@@ -278,22 +282,19 @@ CreateConstraintEntry(const char *constraintName,
 		 */
 		ObjectAddress relobject;
 
-		relobject.classId = RelationRelationId;
-		relobject.objectId = foreignRelId;
 		if (foreignNKeys > 0)
 		{
 			for (i = 0; i < foreignNKeys; i++)
 			{
-				relobject.objectSubId = foreignKey[i];
-
-				recordDependencyOn(&conobject, &relobject, DEPENDENCY_NORMAL);
+				ObjectAddressSubSet(relobject, RelationRelationId,
+									foreignRelId, foreignKey[i]);
+				add_exact_object_address(&relobject, addrs_normal);
 			}
 		}
 		else
 		{
-			relobject.objectSubId = 0;
-
-			recordDependencyOn(&conobject, &relobject, DEPENDENCY_NORMAL);
+			ObjectAddressSet(relobject, RelationRelationId, foreignRelId);
+			add_exact_object_address(&relobject, addrs_normal);
 		}
 	}
 
@@ -307,11 +308,8 @@ CreateConstraintEntry(const char *constraintName,
 		 */
 		ObjectAddress relobject;
 
-		relobject.classId = RelationRelationId;
-		relobject.objectId = indexRelId;
-		relobject.objectSubId = 0;
-
-		recordDependencyOn(&conobject, &relobject, DEPENDENCY_NORMAL);
+		ObjectAddressSet(relobject, RelationRelationId, indexRelId);
+		add_exact_object_address(&relobject, addrs_normal);
 	}
 
 	if (foreignNKeys > 0)
@@ -330,19 +328,23 @@ CreateConstraintEntry(const char *constraintName,
 		for (i = 0; i < foreignNKeys; i++)
 		{
 			oprobject.objectId = pfEqOp[i];
-			recordDependencyOn(&conobject, &oprobject, DEPENDENCY_NORMAL);
+			add_exact_object_address(&oprobject, addrs_normal);
 			if (ppEqOp[i] != pfEqOp[i])
 			{
 				oprobject.objectId = ppEqOp[i];
-				recordDependencyOn(&conobject, &oprobject, DEPENDENCY_NORMAL);
+				add_exact_object_address(&oprobject, addrs_normal);
 			}
 			if (ffEqOp[i] != pfEqOp[i])
 			{
 				oprobject.objectId = ffEqOp[i];
-				recordDependencyOn(&conobject, &oprobject, DEPENDENCY_NORMAL);
+				add_exact_object_address(&oprobject, addrs_normal);
 			}
 		}
 	}
+
+	record_object_address_dependencies(&conobject, addrs_normal,
+									   DEPENDENCY_NORMAL);
+	free_object_addresses(addrs_normal);
 
 	/*
 	 * We don't bother to register dependencies on the exclusion operators of
@@ -498,7 +500,7 @@ ChooseConstraintName(const char *name1, const char *name2,
 	conDesc = table_open(ConstraintRelationId, AccessShareLock);
 
 	/* try the unmodified label first */
-	StrNCpy(modlabel, label, sizeof(modlabel));
+	strlcpy(modlabel, label, sizeof(modlabel));
 
 	for (;;)
 	{
@@ -722,9 +724,7 @@ AlterConstraintNamespaces(Oid ownerId, Oid oldNspId,
 		Form_pg_constraint conform = (Form_pg_constraint) GETSTRUCT(tup);
 		ObjectAddress thisobj;
 
-		thisobj.classId = ConstraintRelationId;
-		thisobj.objectId = conform->oid;
-		thisobj.objectSubId = 0;
+		ObjectAddressSet(thisobj, ConstraintRelationId, conform->oid);
 
 		if (object_address_present(&thisobj, objsMoved))
 			continue;

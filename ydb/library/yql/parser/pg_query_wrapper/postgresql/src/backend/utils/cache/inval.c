@@ -99,8 +99,11 @@
  *	worth trying to avoid sending such inval traffic in the future, if those
  *	problems can be overcome cheaply.
  *
+ *	When wal_level=logical, write invalidations into WAL at each command end to
+ *	support the decoding of the in-progress transactions.  See
+ *	CommandEndInvalidationMessages.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -120,6 +123,7 @@
 #include "storage/sinval.h"
 #include "storage/smgr.h"
 #include "utils/catcache.h"
+#include "utils/guc.h"
 #include "utils/inval.h"
 #include "utils/memdebug.h"
 #include "utils/memutils.h"
@@ -190,6 +194,8 @@ static __thread SharedInvalidationMessage *SharedInvalidMessagesArray;
 static __thread int	numSharedInvalidMessagesArray;
 static __thread int	maxSharedInvalidMessagesArray;
 
+/* GUC storage */
+__thread int			debug_discard_caches = 0;
 
 /*
  * Dynamically-registered callback functions.  Current implementation
@@ -703,38 +709,36 @@ AcceptInvalidationMessages(void)
 	ReceiveSharedInvalidMessages(LocalExecuteInvalidationMessage,
 								 InvalidateSystemCaches);
 
-	/*
+	/*----------
 	 * Test code to force cache flushes anytime a flush could happen.
 	 *
-	 * If used with CLOBBER_FREED_MEMORY, CLOBBER_CACHE_ALWAYS provides a
-	 * fairly thorough test that the system contains no cache-flush hazards.
-	 * However, it also makes the system unbelievably slow --- the regression
-	 * tests take about 100 times longer than normal.
+	 * This helps detect intermittent faults caused by code that reads a cache
+	 * entry and then performs an action that could invalidate the entry, but
+	 * rarely actually does so.  This can spot issues that would otherwise
+	 * only arise with badly timed concurrent DDL, for example.
 	 *
-	 * If you're a glutton for punishment, try CLOBBER_CACHE_RECURSIVELY. This
-	 * slows things by at least a factor of 10000, so I wouldn't suggest
+	 * The default debug_discard_caches = 0 does no forced cache flushes.
+	 *
+	 * If used with CLOBBER_FREED_MEMORY,
+	 * debug_discard_caches = 1 (formerly known as CLOBBER_CACHE_ALWAYS)
+	 * provides a fairly thorough test that the system contains no cache-flush
+	 * hazards.  However, it also makes the system unbelievably slow --- the
+	 * regression tests take about 100 times longer than normal.
+	 *
+	 * If you're a glutton for punishment, try
+	 * debug_discard_caches = 3 (formerly known as CLOBBER_CACHE_RECURSIVELY).
+	 * This slows things by at least a factor of 10000, so I wouldn't suggest
 	 * trying to run the entire regression tests that way.  It's useful to try
 	 * a few simple tests, to make sure that cache reload isn't subject to
 	 * internal cache-flush hazards, but after you've done a few thousand
 	 * recursive reloads it's unlikely you'll learn more.
+	 *----------
 	 */
-#if defined(CLOBBER_CACHE_ALWAYS)
-	{
-		static bool in_recursion = false;
-
-		if (!in_recursion)
-		{
-			in_recursion = true;
-			InvalidateSystemCaches();
-			in_recursion = false;
-		}
-	}
-#elif defined(CLOBBER_CACHE_RECURSIVELY)
+#ifdef DISCARD_CACHES_ENABLED
 	{
 		static int	recursion_depth = 0;
 
-		/* Maximum depth is arbitrary depending on your threshold of pain */
-		if (recursion_depth < 3)
+		if (recursion_depth < debug_discard_caches)
 		{
 			recursion_depth++;
 			InvalidateSystemCachesExtended(true);
@@ -1114,6 +1118,11 @@ CommandEndInvalidationMessages(void)
 
 	ProcessInvalidationMessages(&transInvalInfo->CurrentCmdInvalidMsgs,
 								LocalExecuteInvalidationMessage);
+
+	/* WAL Log per-command invalidation messages for wal_level=logical */
+	if (XLogLogicalInfoActive())
+		LogLogicalInvalidations();
+
 	AppendInvalidationMessages(&transInvalInfo->PriorCmdInvalidMsgs,
 							   &transInvalInfo->CurrentCmdInvalidMsgs);
 }
@@ -1519,5 +1528,51 @@ CallSyscacheCallbacks(int cacheid, uint32 hashvalue)
 		Assert(ccitem->id == cacheid);
 		ccitem->function(ccitem->arg, cacheid, hashvalue);
 		i = ccitem->link - 1;
+	}
+}
+
+/*
+ * LogLogicalInvalidations
+ *
+ * Emit WAL for invalidations.  This is currently only used for logging
+ * invalidations at the command end or at commit time if any invalidations
+ * are pending.
+ */
+void
+LogLogicalInvalidations()
+{
+	xl_xact_invals xlrec;
+	SharedInvalidationMessage *invalMessages;
+	int			nmsgs = 0;
+
+	/* Quick exit if we haven't done anything with invalidation messages. */
+	if (transInvalInfo == NULL)
+		return;
+
+	ProcessInvalidationMessagesMulti(&transInvalInfo->CurrentCmdInvalidMsgs,
+									 MakeSharedInvalidMessagesArray);
+
+	Assert(!(numSharedInvalidMessagesArray > 0 &&
+			 SharedInvalidMessagesArray == NULL));
+
+	invalMessages = SharedInvalidMessagesArray;
+	nmsgs = numSharedInvalidMessagesArray;
+	SharedInvalidMessagesArray = NULL;
+	numSharedInvalidMessagesArray = 0;
+
+	if (nmsgs > 0)
+	{
+		/* prepare record */
+		memset(&xlrec, 0, MinSizeOfXactInvals);
+		xlrec.nmsgs = nmsgs;
+
+		/* perform insertion */
+		XLogBeginInsert();
+		XLogRegisterData((char *) (&xlrec), MinSizeOfXactInvals);
+		XLogRegisterData((char *) invalMessages,
+						 nmsgs * sizeof(SharedInvalidationMessage));
+		XLogInsert(RM_XACT_ID, XLOG_XACT_INVALIDATIONS);
+
+		pfree(invalMessages);
 	}
 }

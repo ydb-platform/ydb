@@ -4,7 +4,7 @@
  *	  vacuuming routines for the postgres GiST index access method.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -133,9 +133,21 @@ gistvacuumscan(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 	MemoryContext oldctx;
 
 	/*
-	 * Reset counts that will be incremented during the scan; needed in case
-	 * of multiple scans during a single VACUUM command.
+	 * Reset fields that track information about the entire index now.  This
+	 * avoids double-counting in the case where a single VACUUM command
+	 * requires multiple scans of the index.
+	 *
+	 * Avoid resetting the tuples_removed and pages_newly_deleted fields here,
+	 * since they track information about the VACUUM command, and so must last
+	 * across each call to gistvacuumscan().
+	 *
+	 * (Note that pages_free is treated as state about the whole index, not
+	 * the current VACUUM.  This is appropriate because RecordFreeIndexPage()
+	 * calls are idempotent, and get repeated for the same deleted pages in
+	 * some scenarios.  The point for us is to track the number of recyclable
+	 * pages in the index at the end of the VACUUM command.)
 	 */
+	stats->num_pages = 0;
 	stats->estimated_count = false;
 	stats->num_index_tuples = 0;
 	stats->pages_deleted = 0;
@@ -281,8 +293,8 @@ restart:
 	{
 		/* Okay to recycle this page */
 		RecordFreeIndexPage(rel, blkno);
-		vstate->stats->pages_free++;
 		vstate->stats->pages_deleted++;
+		vstate->stats->pages_free++;
 	}
 	else if (GistPageIsDeleted(page))
 	{
@@ -546,9 +558,6 @@ gistvacuum_delete_empty_pages(IndexVacuumInfo *info, GistVacState *vstate)
 
 		ReleaseBuffer(buffer);
 
-		/* update stats */
-		vstate->stats->pages_removed += deleted;
-
 		/*
 		 * We can stop the scan as soon as we have seen the downlinks, even if
 		 * we were not able to remove them all.
@@ -639,6 +648,7 @@ gistdeletepage(IndexVacuumInfo *info, IndexBulkDeleteResult *stats,
 	/* mark the page as deleted */
 	MarkBufferDirty(leafBuffer);
 	GistPageSetDeleted(leafPage, txid);
+	stats->pages_newly_deleted++;
 	stats->pages_deleted++;
 
 	/* remove the downlink from the parent */

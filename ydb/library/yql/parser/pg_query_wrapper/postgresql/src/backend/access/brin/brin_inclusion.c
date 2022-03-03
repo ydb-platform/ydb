@@ -16,7 +16,7 @@
  * writing is the INET type, where IPv6 values cannot be merged with IPv4
  * values.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -108,6 +108,7 @@ brin_inclusion_opcinfo(PG_FUNCTION_ARGS)
 	 */
 	result = palloc0(MAXALIGN(SizeofBrinOpcInfo(3)) + sizeof(InclusionOpaque));
 	result->oi_nstored = 3;
+	result->oi_regular_nulls = true;
 	result->oi_opaque = (InclusionOpaque *)
 		MAXALIGN((char *) result + SizeofBrinOpcInfo(3));
 
@@ -139,7 +140,7 @@ brin_inclusion_add_value(PG_FUNCTION_ARGS)
 	BrinDesc   *bdesc = (BrinDesc *) PG_GETARG_POINTER(0);
 	BrinValues *column = (BrinValues *) PG_GETARG_POINTER(1);
 	Datum		newval = PG_GETARG_DATUM(2);
-	bool		isnull = PG_GETARG_BOOL(3);
+	bool		isnull PG_USED_FOR_ASSERTS_ONLY = PG_GETARG_BOOL(3);
 	Oid			colloid = PG_GET_COLLATION();
 	FmgrInfo   *finfo;
 	Datum		result;
@@ -147,18 +148,7 @@ brin_inclusion_add_value(PG_FUNCTION_ARGS)
 	AttrNumber	attno;
 	Form_pg_attribute attr;
 
-	/*
-	 * If the new value is null, we record that we saw it if it's the first
-	 * one; otherwise, there's nothing to do.
-	 */
-	if (isnull)
-	{
-		if (column->bv_hasnulls)
-			PG_RETURN_BOOL(false);
-
-		column->bv_hasnulls = true;
-		PG_RETURN_BOOL(true);
-	}
+	Assert(!isnull);
 
 	attno = column->bv_attno;
 	attr = TupleDescAttr(bdesc->bd_tupdesc, attno - 1);
@@ -251,6 +241,10 @@ brin_inclusion_add_value(PG_FUNCTION_ARGS)
 /*
  * BRIN inclusion consistent function
  *
+ * We're no longer dealing with NULL keys in the consistent function, that is
+ * now handled by the AM code. That means we should not get any all-NULL ranges
+ * either, because those can't be consistent with regular (not [IS] NULL) keys.
+ *
  * All of the strategies are optional.
  */
 Datum
@@ -267,35 +261,11 @@ brin_inclusion_consistent(PG_FUNCTION_ARGS)
 	FmgrInfo   *finfo;
 	Datum		result;
 
-	Assert(key->sk_attno == column->bv_attno);
+	/* This opclass uses the old signature with only three arguments. */
+	Assert(PG_NARGS() == 3);
 
-	/* Handle IS NULL/IS NOT NULL tests. */
-	if (key->sk_flags & SK_ISNULL)
-	{
-		if (key->sk_flags & SK_SEARCHNULL)
-		{
-			if (column->bv_allnulls || column->bv_hasnulls)
-				PG_RETURN_BOOL(true);
-			PG_RETURN_BOOL(false);
-		}
-
-		/*
-		 * For IS NOT NULL, we can only skip ranges that are known to have
-		 * only nulls.
-		 */
-		if (key->sk_flags & SK_SEARCHNOTNULL)
-			PG_RETURN_BOOL(!column->bv_allnulls);
-
-		/*
-		 * Neither IS NULL nor IS NOT NULL was used; assume all indexable
-		 * operators are strict and return false.
-		 */
-		PG_RETURN_BOOL(false);
-	}
-
-	/* If it is all nulls, it cannot possibly be consistent. */
-	if (column->bv_allnulls)
-		PG_RETURN_BOOL(false);
+	/* Should not be dealing with all-NULL ranges. */
+	Assert(!column->bv_allnulls);
 
 	/* It has to be checked, if it contains elements that are not mergeable. */
 	if (DatumGetBool(column->bv_values[INCLUSION_UNMERGEABLE]))
@@ -378,7 +348,6 @@ brin_inclusion_consistent(PG_FUNCTION_ARGS)
 
 		case RTOverlapStrategyNumber:
 		case RTContainsStrategyNumber:
-		case RTOldContainsStrategyNumber:
 		case RTContainsElemStrategyNumber:
 		case RTSubStrategyNumber:
 		case RTSubEqualStrategyNumber:
@@ -399,7 +368,6 @@ brin_inclusion_consistent(PG_FUNCTION_ARGS)
 			 */
 
 		case RTContainedByStrategyNumber:
-		case RTOldContainedByStrategyNumber:
 		case RTSuperStrategyNumber:
 		case RTSuperEqualStrategyNumber:
 			finfo = inclusion_get_strategy_procinfo(bdesc, attno, subtype,
@@ -516,36 +484,10 @@ brin_inclusion_union(PG_FUNCTION_ARGS)
 	Datum		result;
 
 	Assert(col_a->bv_attno == col_b->bv_attno);
-
-	/* Adjust "hasnulls". */
-	if (!col_a->bv_hasnulls && col_b->bv_hasnulls)
-		col_a->bv_hasnulls = true;
-
-	/* If there are no values in B, there's nothing left to do. */
-	if (col_b->bv_allnulls)
-		PG_RETURN_VOID();
+	Assert(!col_a->bv_allnulls && !col_b->bv_allnulls);
 
 	attno = col_a->bv_attno;
 	attr = TupleDescAttr(bdesc->bd_tupdesc, attno - 1);
-
-	/*
-	 * Adjust "allnulls".  If A doesn't have values, just copy the values from
-	 * B into A, and we're done.  We cannot run the operators in this case,
-	 * because values in A might contain garbage.  Note we already established
-	 * that B contains values.
-	 */
-	if (col_a->bv_allnulls)
-	{
-		col_a->bv_allnulls = false;
-		col_a->bv_values[INCLUSION_UNION] =
-			datumCopy(col_b->bv_values[INCLUSION_UNION],
-					  attr->attbyval, attr->attlen);
-		col_a->bv_values[INCLUSION_UNMERGEABLE] =
-			col_b->bv_values[INCLUSION_UNMERGEABLE];
-		col_a->bv_values[INCLUSION_CONTAINS_EMPTY] =
-			col_b->bv_values[INCLUSION_CONTAINS_EMPTY];
-		PG_RETURN_VOID();
-	}
 
 	/* If B includes empty elements, mark A similarly, if needed. */
 	if (!DatumGetBool(col_a->bv_values[INCLUSION_CONTAINS_EMPTY]) &&

@@ -3,7 +3,7 @@
  * spell.c
  *		Normalizing word with ISpell
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  *
  * Ispell dictionary
  * -----------------
@@ -1736,7 +1736,7 @@ void
 NISortDictionary(IspellDict *Conf)
 {
 	int			i;
-	int			naffix = 0;
+	int			naffix;
 	int			curaffix;
 
 	/* compress affixes */
@@ -2020,7 +2020,7 @@ NISortAffixes(IspellDict *Conf)
 						 (const unsigned char *) Affix->repl,
 						 (ptr - 1)->len))
 			{
-				/* leave only unique and minimals suffixes */
+				/* leave only unique and minimal suffixes */
 				ptr->affix = Affix->repl;
 				ptr->len = Affix->replen;
 				ptr->issuffix = issuffix;

@@ -17,7 +17,7 @@
  * line and start/end of string.  Colors are numbered 0..C-1, but note that
  * color 0 is "white" (all unused characters) and can generally be ignored.
  *
- * Portions Copyright (c) 2013-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2013-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1998, 1999 Henry Spencer
  *
  * IDENTIFICATION
@@ -29,6 +29,10 @@
 #define _REGEXPORT_H_
 
 #include "regex/regex.h"
+
+/* These macros must match corresponding ones in regguts.h: */
+#define COLOR_WHITE		0		/* color for chars not appearing in regex */
+#define COLOR_RAINBOW	(-2)	/* represents all colors except pseudocolors */
 
 /* information about one arc of a regex's NFA */
 typedef struct

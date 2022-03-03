@@ -5,7 +5,7 @@
  *	  wherein you authenticate a user by seeing what IP address the system
  *	  says he comes from and choosing authentication method based on it).
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -29,6 +29,7 @@
 #include "catalog/pg_collation.h"
 #include "catalog/pg_type.h"
 #include "common/ip.h"
+#include "common/string.h"
 #include "funcapi.h"
 #include "libpq/ifaddr.h"
 #include "libpq/libpq.h"
@@ -54,7 +55,6 @@
 
 
 #define MAX_TOKEN	256
-#define MAX_LINE	8192
 
 /* callback data for check_network_callback */
 typedef struct check_network_data
@@ -144,8 +144,6 @@ static List *tokenize_inc_file(List *tokens, const char *outer_filename,
 							   const char *inc_filename, int elevel, char **err_msg);
 static bool parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline,
 							   int elevel, char **err_msg);
-static bool verify_option_list_length(List *options, const char *optionname,
-									  List *masters, const char *mastername, int line_num);
 static ArrayType *gethba_options(HbaLine *hba);
 static void fill_hba_line(Tuplestorestate *tuple_store, TupleDesc tupdesc,
 						  int lineno, HbaLine *hba, const char *err_msg);
@@ -166,11 +164,19 @@ pg_isblank(const char c)
 /*
  * Grab one token out of the string pointed to by *lineptr.
  *
- * Tokens are strings of non-blank
- * characters bounded by blank characters, commas, beginning of line, and
- * end of line. Blank means space or tab. Tokens can be delimited by
- * double quotes (this allows the inclusion of blanks, but not newlines).
- * Comments (started by an unquoted '#') are skipped.
+ * Tokens are strings of non-blank characters bounded by blank characters,
+ * commas, beginning of line, and end of line.  Blank means space or tab.
+ *
+ * Tokens can be delimited by double quotes (this allows the inclusion of
+ * blanks or '#', but not newlines).  As in SQL, write two double-quotes
+ * to represent a double quote.
+ *
+ * Comments (started by an unquoted '#') are skipped, i.e. the remainder
+ * of the line is ignored.
+ *
+ * (Note that line continuation processing happens before tokenization.
+ * Thus, if a continuation occurs within quoted text or a comment, the
+ * quoted text or comment is considered to continue to the next line.)
  *
  * The token, if any, is returned at *buf (a buffer of size bufsz), and
  * *lineptr is advanced past the token.
@@ -470,6 +476,7 @@ static MemoryContext
 tokenize_file(const char *filename, FILE *file, List **tok_lines, int elevel)
 {
 	int			line_number = 1;
+	StringInfoData buf;
 	MemoryContext linecxt;
 	MemoryContext oldcxt;
 
@@ -478,47 +485,60 @@ tokenize_file(const char *filename, FILE *file, List **tok_lines, int elevel)
 									ALLOCSET_SMALL_SIZES);
 	oldcxt = MemoryContextSwitchTo(linecxt);
 
+	initStringInfo(&buf);
+
 	*tok_lines = NIL;
 
 	while (!feof(file) && !ferror(file))
 	{
-		char		rawline[MAX_LINE];
 		char	   *lineptr;
 		List	   *current_line = NIL;
 		char	   *err_msg = NULL;
+		int			last_backslash_buflen = 0;
+		int			continuations = 0;
 
-		if (!fgets(rawline, sizeof(rawline), file))
+		/* Collect the next input line, handling backslash continuations */
+		resetStringInfo(&buf);
+
+		while (pg_get_line_append(file, &buf))
 		{
+			/* Strip trailing newline, including \r in case we're on Windows */
+			buf.len = pg_strip_crlf(buf.data);
+
+			/*
+			 * Check for backslash continuation.  The backslash must be after
+			 * the last place we found a continuation, else two backslashes
+			 * followed by two \n's would behave surprisingly.
+			 */
+			if (buf.len > last_backslash_buflen &&
+				buf.data[buf.len - 1] == '\\')
+			{
+				/* Continuation, so strip it and keep reading */
+				buf.data[--buf.len] = '\0';
+				last_backslash_buflen = buf.len;
+				continuations++;
+				continue;
+			}
+
+			/* Nope, so we have the whole line */
+			break;
+		}
+
+		if (ferror(file))
+		{
+			/* I/O error! */
 			int			save_errno = errno;
 
-			if (!ferror(file))
-				break;			/* normal EOF */
-			/* I/O error! */
 			ereport(elevel,
 					(errcode_for_file_access(),
 					 errmsg("could not read file \"%s\": %m", filename)));
 			err_msg = psprintf("could not read file \"%s\": %s",
 							   filename, strerror(save_errno));
-			rawline[0] = '\0';
+			break;
 		}
-		if (strlen(rawline) == MAX_LINE - 1)
-		{
-			/* Line too long! */
-			ereport(elevel,
-					(errcode(ERRCODE_CONFIG_FILE_ERROR),
-					 errmsg("authentication file line too long"),
-					 errcontext("line %d of configuration file \"%s\"",
-								line_number, filename)));
-			err_msg = "authentication file line too long";
-		}
-
-		/* Strip trailing linebreak from rawline */
-		lineptr = rawline + strlen(rawline) - 1;
-		while (lineptr >= rawline && (*lineptr == '\n' || *lineptr == '\r'))
-			*lineptr-- = '\0';
 
 		/* Parse fields */
-		lineptr = rawline;
+		lineptr = buf.data;
 		while (*lineptr && err_msg == NULL)
 		{
 			List	   *current_field;
@@ -538,12 +558,12 @@ tokenize_file(const char *filename, FILE *file, List **tok_lines, int elevel)
 			tok_line = (TokenizedLine *) palloc(sizeof(TokenizedLine));
 			tok_line->fields = current_line;
 			tok_line->line_num = line_number;
-			tok_line->raw_line = pstrdup(rawline);
+			tok_line->raw_line = pstrdup(buf.data);
 			tok_line->err_msg = err_msg;
 			*tok_lines = lappend(*tok_lines, tok_line);
 		}
 
-		line_number++;
+		line_number += continuations + 1;
 	}
 
 	MemoryContextSwitchTo(oldcxt);
@@ -835,7 +855,8 @@ check_same_host_or_net(SockAddr *raddr, IPCompareMethod method)
 	errno = 0;
 	if (pg_foreach_ifaddr(check_network_callback, &cn) < 0)
 	{
-		elog(LOG, "error enumerating network interfaces: %m");
+		ereport(LOG,
+				(errmsg("error enumerating network interfaces: %m")));
 		return false;
 	}
 
@@ -1018,7 +1039,7 @@ parse_hba_line(TokenizedLine *tok_line, int elevel)
 			ereport(elevel,
 					(errcode(ERRCODE_CONFIG_FILE_ERROR),
 					 errmsg("hostssl record cannot match because SSL is not supported by this build"),
-					 errhint("Compile with --with-openssl to use SSL connections."),
+					 errhint("Compile with --with-ssl to use SSL connections."),
 					 errcontext("line %d of configuration file \"%s\"",
 								line_num, HbaFileName)));
 			*err_msg = "hostssl record cannot match because SSL is not supported by this build";
@@ -1584,21 +1605,23 @@ parse_hba_line(TokenizedLine *tok_line, int elevel)
 
 		if (list_length(parsedline->radiusservers) < 1)
 		{
-			ereport(LOG,
+			ereport(elevel,
 					(errcode(ERRCODE_CONFIG_FILE_ERROR),
 					 errmsg("list of RADIUS servers cannot be empty"),
 					 errcontext("line %d of configuration file \"%s\"",
 								line_num, HbaFileName)));
+			*err_msg = "list of RADIUS servers cannot be empty";
 			return NULL;
 		}
 
 		if (list_length(parsedline->radiussecrets) < 1)
 		{
-			ereport(LOG,
+			ereport(elevel,
 					(errcode(ERRCODE_CONFIG_FILE_ERROR),
 					 errmsg("list of RADIUS secrets cannot be empty"),
 					 errcontext("line %d of configuration file \"%s\"",
 								line_num, HbaFileName)));
+			*err_msg = "list of RADIUS secrets cannot be empty";
 			return NULL;
 		}
 
@@ -1607,24 +1630,53 @@ parse_hba_line(TokenizedLine *tok_line, int elevel)
 		 * but that's already checked above), 1 (use the same value
 		 * everywhere) or the same as the number of servers.
 		 */
-		if (!verify_option_list_length(parsedline->radiussecrets,
-									   "RADIUS secrets",
-									   parsedline->radiusservers,
-									   "RADIUS servers",
-									   line_num))
+		if (!(list_length(parsedline->radiussecrets) == 1 ||
+			  list_length(parsedline->radiussecrets) == list_length(parsedline->radiusservers)))
+		{
+			ereport(elevel,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("the number of RADIUS secrets (%d) must be 1 or the same as the number of RADIUS servers (%d)",
+							list_length(parsedline->radiussecrets),
+							list_length(parsedline->radiusservers)),
+					 errcontext("line %d of configuration file \"%s\"",
+								line_num, HbaFileName)));
+			*err_msg = psprintf("the number of RADIUS secrets (%d) must be 1 or the same as the number of RADIUS servers (%d)",
+								list_length(parsedline->radiussecrets),
+								list_length(parsedline->radiusservers));
 			return NULL;
-		if (!verify_option_list_length(parsedline->radiusports,
-									   "RADIUS ports",
-									   parsedline->radiusservers,
-									   "RADIUS servers",
-									   line_num))
+		}
+		if (!(list_length(parsedline->radiusports) == 0 ||
+			  list_length(parsedline->radiusports) == 1 ||
+			  list_length(parsedline->radiusports) == list_length(parsedline->radiusservers)))
+		{
+			ereport(elevel,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("the number of RADIUS ports (%d) must be 1 or the same as the number of RADIUS servers (%d)",
+							list_length(parsedline->radiusports),
+							list_length(parsedline->radiusservers)),
+					 errcontext("line %d of configuration file \"%s\"",
+								line_num, HbaFileName)));
+			*err_msg = psprintf("the number of RADIUS ports (%d) must be 1 or the same as the number of RADIUS servers (%d)",
+								list_length(parsedline->radiusports),
+								list_length(parsedline->radiusservers));
 			return NULL;
-		if (!verify_option_list_length(parsedline->radiusidentifiers,
-									   "RADIUS identifiers",
-									   parsedline->radiusservers,
-									   "RADIUS servers",
-									   line_num))
+		}
+		if (!(list_length(parsedline->radiusidentifiers) == 0 ||
+			  list_length(parsedline->radiusidentifiers) == 1 ||
+			  list_length(parsedline->radiusidentifiers) == list_length(parsedline->radiusservers)))
+		{
+			ereport(elevel,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("the number of RADIUS identifiers (%d) must be 1 or the same as the number of RADIUS servers (%d)",
+							list_length(parsedline->radiusidentifiers),
+							list_length(parsedline->radiusservers)),
+					 errcontext("line %d of configuration file \"%s\"",
+								line_num, HbaFileName)));
+			*err_msg = psprintf("the number of RADIUS identifiers (%d) must be 1 or the same as the number of RADIUS servers (%d)",
+								list_length(parsedline->radiusidentifiers),
+								list_length(parsedline->radiusservers));
 			return NULL;
+		}
 	}
 
 	/*
@@ -1632,33 +1684,16 @@ parse_hba_line(TokenizedLine *tok_line, int elevel)
 	 */
 	if (parsedline->auth_method == uaCert)
 	{
-		parsedline->clientcert = clientCertCA;
+		/*
+		 * For auth method cert, client certificate validation is mandatory, and it implies
+		 * the level of verify-full.
+		 */
+		parsedline->clientcert = clientCertFull;
 	}
 
 	return parsedline;
 }
 
-
-static bool
-verify_option_list_length(List *options, const char *optionname, List *masters, const char *mastername, int line_num)
-{
-	if (list_length(options) == 0 ||
-		list_length(options) == 1 ||
-		list_length(options) == list_length(masters))
-		return true;
-
-	ereport(LOG,
-			(errcode(ERRCODE_CONFIG_FILE_ERROR),
-			 errmsg("the number of %s (%d) must be 1 or the same as the number of %s (%d)",
-					optionname,
-					list_length(options),
-					mastername,
-					list_length(masters)
-					),
-			 errcontext("line %d of configuration file \"%s\"",
-						line_num, HbaFileName)));
-	return false;
-}
 
 /*
  * Parse one name-value pair as an authentication option into the given
@@ -1698,35 +1733,62 @@ parse_hba_auth_opt(char *name, char *val, HbaLine *hbaline,
 			*err_msg = "clientcert can only be configured for \"hostssl\" rows";
 			return false;
 		}
-		if (strcmp(val, "1") == 0
-			|| strcmp(val, "verify-ca") == 0)
-		{
-			hbaline->clientcert = clientCertCA;
-		}
-		else if (strcmp(val, "verify-full") == 0)
+
+		if (strcmp(val, "verify-full") == 0)
 		{
 			hbaline->clientcert = clientCertFull;
 		}
-		else if (strcmp(val, "0") == 0
-				 || strcmp(val, "no-verify") == 0)
+		else if (strcmp(val, "verify-ca") == 0)
 		{
 			if (hbaline->auth_method == uaCert)
 			{
 				ereport(elevel,
 						(errcode(ERRCODE_CONFIG_FILE_ERROR),
-						 errmsg("clientcert cannot be set to \"no-verify\" when using \"cert\" authentication"),
+						 errmsg("clientcert only accepts \"verify-full\" when using \"cert\" authentication"),
 						 errcontext("line %d of configuration file \"%s\"",
 									line_num, HbaFileName)));
-				*err_msg = "clientcert cannot be set to \"no-verify\" when using \"cert\" authentication";
+				*err_msg = "clientcert can only be set to \"verify-full\" when using \"cert\" authentication";
 				return false;
 			}
-			hbaline->clientcert = clientCertOff;
+
+			hbaline->clientcert = clientCertCA;
 		}
 		else
 		{
 			ereport(elevel,
 					(errcode(ERRCODE_CONFIG_FILE_ERROR),
 					 errmsg("invalid value for clientcert: \"%s\"", val),
+					 errcontext("line %d of configuration file \"%s\"",
+								line_num, HbaFileName)));
+			return false;
+		}
+	}
+	else if (strcmp(name, "clientname") == 0)
+	{
+		if (hbaline->conntype != ctHostSSL)
+		{
+			ereport(elevel,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("clientname can only be configured for \"hostssl\" rows"),
+					 errcontext("line %d of configuration file \"%s\"",
+								line_num, HbaFileName)));
+			*err_msg = "clientname can only be configured for \"hostssl\" rows";
+			return false;
+		}
+
+		if (strcmp(val, "CN") == 0)
+		{
+			hbaline->clientcertname = clientCertCN;
+		}
+		else if (strcmp(val, "DN") == 0)
+		{
+			hbaline->clientcertname = clientCertDN;
+		}
+		else
+		{
+			ereport(elevel,
+					(errcode(ERRCODE_CONFIG_FILE_ERROR),
+					 errmsg("invalid value for clientname: \"%s\"", val),
 					 errcontext("line %d of configuration file \"%s\"",
 								line_num, HbaFileName)));
 			return false;
@@ -2555,14 +2617,8 @@ fill_hba_line(Tuplestorestate *tuple_store, TupleDesc tupdesc,
 		else
 			nulls[index++] = true;
 
-		/*
-		 * Make sure UserAuthName[] tracks additions to the UserAuth enum
-		 */
-		StaticAssertStmt(lengthof(UserAuthName) == USER_AUTH_LAST + 1,
-						 "UserAuthName[] must match the UserAuth enum");
-
 		/* auth_method */
-		values[index++] = CStringGetTextDatum(UserAuthName[hba->auth_method]);
+		values[index++] = CStringGetTextDatum(hba_authname(hba->auth_method));
 
 		/* options */
 		options = gethba_options(hba);
@@ -3088,4 +3144,23 @@ void
 hba_getauthmethod(hbaPort *port)
 {
 	check_hba(port);
+}
+
+
+/*
+ * Return the name of the auth method in use ("gss", "md5", "trust", etc.).
+ *
+ * The return value is statically allocated (see the UserAuthName array) and
+ * should not be freed.
+ */
+const char *
+hba_authname(UserAuth auth_method)
+{
+	/*
+	 * Make sure UserAuthName[] tracks additions to the UserAuth enum
+	 */
+	StaticAssertStmt(lengthof(UserAuthName) == USER_AUTH_LAST + 1,
+					 "UserAuthName[] must match the UserAuth enum");
+
+	return UserAuthName[auth_method];
 }

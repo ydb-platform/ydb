@@ -4,7 +4,7 @@
  *	  definitions for run-time statistics collection
  *
  *
- * Copyright (c) 2001-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2021, PostgreSQL Global Development Group
  *
  * src/include/executor/instrument.h
  *
@@ -16,26 +16,38 @@
 #include "portability/instr_time.h"
 
 
+/*
+ * BufferUsage and WalUsage counters keep being incremented infinitely,
+ * i.e., must never be reset to zero, so that we can calculate how much
+ * the counters are incremented in an arbitrary period.
+ */
 typedef struct BufferUsage
 {
-	long		shared_blks_hit;	/* # of shared buffer hits */
-	long		shared_blks_read;	/* # of shared disk blocks read */
-	long		shared_blks_dirtied;	/* # of shared blocks dirtied */
-	long		shared_blks_written;	/* # of shared disk blocks written */
-	long		local_blks_hit; /* # of local buffer hits */
-	long		local_blks_read;	/* # of local disk blocks read */
-	long		local_blks_dirtied; /* # of shared blocks dirtied */
-	long		local_blks_written; /* # of local disk blocks written */
-	long		temp_blks_read; /* # of temp blocks read */
-	long		temp_blks_written;	/* # of temp blocks written */
+	int64		shared_blks_hit;	/* # of shared buffer hits */
+	int64		shared_blks_read;	/* # of shared disk blocks read */
+	int64		shared_blks_dirtied;	/* # of shared blocks dirtied */
+	int64		shared_blks_written;	/* # of shared disk blocks written */
+	int64		local_blks_hit; /* # of local buffer hits */
+	int64		local_blks_read;	/* # of local disk blocks read */
+	int64		local_blks_dirtied; /* # of local blocks dirtied */
+	int64		local_blks_written; /* # of local disk blocks written */
+	int64		temp_blks_read; /* # of temp blocks read */
+	int64		temp_blks_written;	/* # of temp blocks written */
 	instr_time	blk_read_time;	/* time spent reading */
 	instr_time	blk_write_time; /* time spent writing */
 } BufferUsage;
 
+/*
+ * WalUsage tracks only WAL activity like WAL records generation that
+ * can be measured per query and is displayed by EXPLAIN command,
+ * pg_stat_statements extension, etc. It does not track other WAL activity
+ * like WAL writes that it's not worth measuring per query. That's tracked
+ * by WAL global statistics counters in WalStats, instead.
+ */
 typedef struct WalUsage
 {
-	long		wal_records;	/* # of WAL records produced */
-	long		wal_fpi;		/* # of WAL full page images produced */
+	int64		wal_records;	/* # of WAL records produced */
+	int64		wal_fpi;		/* # of WAL full page images produced */
 	uint64		wal_bytes;		/* size of WAL records produced */
 } WalUsage;
 
@@ -55,6 +67,7 @@ typedef struct Instrumentation
 	bool		need_timer;		/* true if we need timer data */
 	bool		need_bufusage;	/* true if we need buffer usage data */
 	bool		need_walusage;	/* true if we need WAL usage data */
+	bool		async_mode;		/* true if node is in async mode */
 	/* Info about current plan cycle: */
 	bool		running;		/* true if we've completed first tuple */
 	instr_time	starttime;		/* start time of current iteration of node */
@@ -84,10 +97,12 @@ typedef struct WorkerInstrumentation
 extern __thread PGDLLIMPORT BufferUsage pgBufferUsage;
 extern __thread PGDLLIMPORT WalUsage pgWalUsage;
 
-extern Instrumentation *InstrAlloc(int n, int instrument_options);
+extern Instrumentation *InstrAlloc(int n, int instrument_options,
+								   bool async_mode);
 extern void InstrInit(Instrumentation *instr, int instrument_options);
 extern void InstrStartNode(Instrumentation *instr);
 extern void InstrStopNode(Instrumentation *instr, double nTuples);
+extern void InstrUpdateTupleCount(Instrumentation *instr, double nTuples);
 extern void InstrEndLoop(Instrumentation *instr);
 extern void InstrAggNode(Instrumentation *dst, Instrumentation *add);
 extern void InstrStartParallelQuery(void);

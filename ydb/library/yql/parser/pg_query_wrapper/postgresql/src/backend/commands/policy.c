@@ -3,7 +3,7 @@
  * policy.c
  *	  Commands for manipulating policies.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/commands/policy.c
@@ -650,12 +650,12 @@ CreatePolicy(CreatePolicyStmt *stmt)
 	addNSItemToQuery(with_check_pstate, nsitem, false, true, true);
 
 	qual = transformWhereClause(qual_pstate,
-								copyObject(stmt->qual),
+								stmt->qual,
 								EXPR_KIND_POLICY,
 								"POLICY");
 
 	with_check_qual = transformWhereClause(with_check_pstate,
-										   copyObject(stmt->with_check),
+										   stmt->with_check,
 										   EXPR_KIND_POLICY,
 										   "POLICY");
 
@@ -825,7 +825,7 @@ AlterPolicy(AlterPolicyStmt *stmt)
 
 		addNSItemToQuery(qual_pstate, nsitem, false, true, true);
 
-		qual = transformWhereClause(qual_pstate, copyObject(stmt->qual),
+		qual = transformWhereClause(qual_pstate, stmt->qual,
 									EXPR_KIND_POLICY,
 									"POLICY");
 
@@ -849,7 +849,7 @@ AlterPolicy(AlterPolicyStmt *stmt)
 		addNSItemToQuery(with_check_pstate, nsitem, false, true, true);
 
 		with_check_qual = transformWhereClause(with_check_pstate,
-											   copyObject(stmt->with_check),
+											   stmt->with_check,
 											   EXPR_KIND_POLICY,
 											   "POLICY");
 

@@ -3,7 +3,7 @@
  * checksum_helper.c
  *	  Compute a checksum of any of various types using common routines
  *
- * Portions Copyright (c) 2016-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2016-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *		  src/common/checksum_helper.c
@@ -77,8 +77,9 @@ pg_checksum_type_name(pg_checksum_type type)
 
 /*
  * Initialize a checksum context for checksums of the given type.
+ * Returns 0 for a success, -1 for a failure.
  */
-void
+int
 pg_checksum_init(pg_checksum_context *context, pg_checksum_type type)
 {
 	context->type = type;
@@ -92,24 +93,55 @@ pg_checksum_init(pg_checksum_context *context, pg_checksum_type type)
 			INIT_CRC32C(context->raw_context.c_crc32c);
 			break;
 		case CHECKSUM_TYPE_SHA224:
-			pg_sha224_init(&context->raw_context.c_sha224);
+			context->raw_context.c_sha2 = pg_cryptohash_create(PG_SHA224);
+			if (context->raw_context.c_sha2 == NULL)
+				return -1;
+			if (pg_cryptohash_init(context->raw_context.c_sha2) < 0)
+			{
+				pg_cryptohash_free(context->raw_context.c_sha2);
+				return -1;
+			}
 			break;
 		case CHECKSUM_TYPE_SHA256:
-			pg_sha256_init(&context->raw_context.c_sha256);
+			context->raw_context.c_sha2 = pg_cryptohash_create(PG_SHA256);
+			if (context->raw_context.c_sha2 == NULL)
+				return -1;
+			if (pg_cryptohash_init(context->raw_context.c_sha2) < 0)
+			{
+				pg_cryptohash_free(context->raw_context.c_sha2);
+				return -1;
+			}
 			break;
 		case CHECKSUM_TYPE_SHA384:
-			pg_sha384_init(&context->raw_context.c_sha384);
+			context->raw_context.c_sha2 = pg_cryptohash_create(PG_SHA384);
+			if (context->raw_context.c_sha2 == NULL)
+				return -1;
+			if (pg_cryptohash_init(context->raw_context.c_sha2) < 0)
+			{
+				pg_cryptohash_free(context->raw_context.c_sha2);
+				return -1;
+			}
 			break;
 		case CHECKSUM_TYPE_SHA512:
-			pg_sha512_init(&context->raw_context.c_sha512);
+			context->raw_context.c_sha2 = pg_cryptohash_create(PG_SHA512);
+			if (context->raw_context.c_sha2 == NULL)
+				return -1;
+			if (pg_cryptohash_init(context->raw_context.c_sha2) < 0)
+			{
+				pg_cryptohash_free(context->raw_context.c_sha2);
+				return -1;
+			}
 			break;
 	}
+
+	return 0;
 }
 
 /*
  * Update a checksum context with new data.
+ * Returns 0 for a success, -1 for a failure.
  */
-void
+int
 pg_checksum_update(pg_checksum_context *context, const uint8 *input,
 				   size_t len)
 {
@@ -122,25 +154,23 @@ pg_checksum_update(pg_checksum_context *context, const uint8 *input,
 			COMP_CRC32C(context->raw_context.c_crc32c, input, len);
 			break;
 		case CHECKSUM_TYPE_SHA224:
-			pg_sha224_update(&context->raw_context.c_sha224, input, len);
-			break;
 		case CHECKSUM_TYPE_SHA256:
-			pg_sha256_update(&context->raw_context.c_sha256, input, len);
-			break;
 		case CHECKSUM_TYPE_SHA384:
-			pg_sha384_update(&context->raw_context.c_sha384, input, len);
-			break;
 		case CHECKSUM_TYPE_SHA512:
-			pg_sha512_update(&context->raw_context.c_sha512, input, len);
+			if (pg_cryptohash_update(context->raw_context.c_sha2, input, len) < 0)
+				return -1;
 			break;
 	}
+
+	return 0;
 }
 
 /*
  * Finalize a checksum computation and write the result to an output buffer.
  *
  * The caller must ensure that the buffer is at least PG_CHECKSUM_MAX_LENGTH
- * bytes in length. The return value is the number of bytes actually written.
+ * bytes in length. The return value is the number of bytes actually written,
+ * or -1 for a failure.
  */
 int
 pg_checksum_final(pg_checksum_context *context, uint8 *output)
@@ -150,13 +180,13 @@ pg_checksum_final(pg_checksum_context *context, uint8 *output)
 	StaticAssertStmt(sizeof(pg_crc32c) <= PG_CHECKSUM_MAX_LENGTH,
 					 "CRC-32C digest too big for PG_CHECKSUM_MAX_LENGTH");
 	StaticAssertStmt(PG_SHA224_DIGEST_LENGTH <= PG_CHECKSUM_MAX_LENGTH,
-					 "SHA224 digest too for PG_CHECKSUM_MAX_LENGTH");
+					 "SHA224 digest too big for PG_CHECKSUM_MAX_LENGTH");
 	StaticAssertStmt(PG_SHA256_DIGEST_LENGTH <= PG_CHECKSUM_MAX_LENGTH,
-					 "SHA256 digest too for PG_CHECKSUM_MAX_LENGTH");
+					 "SHA256 digest too big for PG_CHECKSUM_MAX_LENGTH");
 	StaticAssertStmt(PG_SHA384_DIGEST_LENGTH <= PG_CHECKSUM_MAX_LENGTH,
-					 "SHA384 digest too for PG_CHECKSUM_MAX_LENGTH");
+					 "SHA384 digest too big for PG_CHECKSUM_MAX_LENGTH");
 	StaticAssertStmt(PG_SHA512_DIGEST_LENGTH <= PG_CHECKSUM_MAX_LENGTH,
-					 "SHA512 digest too for PG_CHECKSUM_MAX_LENGTH");
+					 "SHA512 digest too big for PG_CHECKSUM_MAX_LENGTH");
 
 	switch (context->type)
 	{
@@ -168,20 +198,32 @@ pg_checksum_final(pg_checksum_context *context, uint8 *output)
 			memcpy(output, &context->raw_context.c_crc32c, retval);
 			break;
 		case CHECKSUM_TYPE_SHA224:
-			pg_sha224_final(&context->raw_context.c_sha224, output);
 			retval = PG_SHA224_DIGEST_LENGTH;
+			if (pg_cryptohash_final(context->raw_context.c_sha2,
+									output, retval) < 0)
+				return -1;
+			pg_cryptohash_free(context->raw_context.c_sha2);
 			break;
 		case CHECKSUM_TYPE_SHA256:
-			pg_sha256_final(&context->raw_context.c_sha256, output);
 			retval = PG_SHA256_DIGEST_LENGTH;
+			if (pg_cryptohash_final(context->raw_context.c_sha2,
+									output, retval) < 0)
+				return -1;
+			pg_cryptohash_free(context->raw_context.c_sha2);
 			break;
 		case CHECKSUM_TYPE_SHA384:
-			pg_sha384_final(&context->raw_context.c_sha384, output);
 			retval = PG_SHA384_DIGEST_LENGTH;
+			if (pg_cryptohash_final(context->raw_context.c_sha2,
+									output, retval) < 0)
+				return -1;
+			pg_cryptohash_free(context->raw_context.c_sha2);
 			break;
 		case CHECKSUM_TYPE_SHA512:
-			pg_sha512_final(&context->raw_context.c_sha512, output);
 			retval = PG_SHA512_DIGEST_LENGTH;
+			if (pg_cryptohash_final(context->raw_context.c_sha2,
+									output, retval) < 0)
+				return -1;
+			pg_cryptohash_free(context->raw_context.c_sha2);
 			break;
 	}
 

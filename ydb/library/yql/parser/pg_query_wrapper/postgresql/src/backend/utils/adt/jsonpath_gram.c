@@ -81,7 +81,7 @@
  *
  * Transforms tokenized jsonpath into tree of JsonPathParseItem structs.
  *
- * Copyright (c) 2019-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2019-2021, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	src/backend/utils/adt/jsonpath_gram.y
@@ -2395,8 +2395,8 @@ makeItemLikeRegex(JsonPathParseItem *expr, JsonPathString *pattern,
 				ereport(ERROR,
 						(errcode(ERRCODE_SYNTAX_ERROR),
 						 errmsg("invalid input syntax for type %s", "jsonpath"),
-						 errdetail("unrecognized flag character \"%c\" in LIKE_REGEX predicate",
-								   flags->val[i])));
+						 errdetail("unrecognized flag character \"%.*s\" in LIKE_REGEX predicate",
+								   pg_mblen(flags->val + i), flags->val + i)));
 				break;
 		}
 	}

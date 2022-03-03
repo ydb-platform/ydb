@@ -38,7 +38,7 @@
  * by re-setting the page's page_dirty flag.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/access/transam/slru.c
@@ -63,22 +63,33 @@
 	snprintf(path, MAXPGPATH, "%s/%04X", (ctl)->Dir, seg)
 
 /*
- * During SimpleLruFlush(), we will usually not need to write/fsync more
- * than one or two physical files, but we may need to write several pages
- * per file.  We can consolidate the I/O requests by leaving files open
- * until control returns to SimpleLruFlush().  This data structure remembers
- * which files are open.
+ * During SimpleLruWriteAll(), we will usually not need to write more than one
+ * or two physical files, but we may need to write several pages per file.  We
+ * can consolidate the I/O requests by leaving files open until control returns
+ * to SimpleLruWriteAll().  This data structure remembers which files are open.
  */
-#define MAX_FLUSH_BUFFERS	16
+#define MAX_WRITEALL_BUFFERS	16
 
-typedef struct SlruFlushData
+typedef struct SlruWriteAllData
 {
 	int			num_files;		/* # files actually open */
-	int			fd[MAX_FLUSH_BUFFERS];	/* their FD's */
-	int			segno[MAX_FLUSH_BUFFERS];	/* their log seg#s */
-} SlruFlushData;
+	int			fd[MAX_WRITEALL_BUFFERS];	/* their FD's */
+	int			segno[MAX_WRITEALL_BUFFERS];	/* their log seg#s */
+} SlruWriteAllData;
 
-typedef struct SlruFlushData *SlruFlush;
+typedef struct SlruWriteAllData *SlruWriteAll;
+
+/*
+ * Populate a file tag describing a segment file.  We only use the segment
+ * number, since we can derive everything else we need by having separate
+ * sync handler functions for clog, multixact etc.
+ */
+#define INIT_SLRUFILETAG(a,xx_handler,xx_segno) \
+( \
+	memset(&(a), 0, sizeof(FileTag)), \
+	(a).handler = (xx_handler), \
+	(a).segno = (xx_segno) \
+)
 
 /*
  * Macro to mark a buffer slot "most recently used".  Note multiple evaluation
@@ -125,16 +136,16 @@ static __thread int	slru_errno;
 
 static void SimpleLruZeroLSNs(SlruCtl ctl, int slotno);
 static void SimpleLruWaitIO(SlruCtl ctl, int slotno);
-static void SlruInternalWritePage(SlruCtl ctl, int slotno, SlruFlush fdata);
+static void SlruInternalWritePage(SlruCtl ctl, int slotno, SlruWriteAll fdata);
 static bool SlruPhysicalReadPage(SlruCtl ctl, int pageno, int slotno);
 static bool SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno,
-								  SlruFlush fdata);
+								  SlruWriteAll fdata);
 static void SlruReportIOError(SlruCtl ctl, int pageno, TransactionId xid);
 static int	SlruSelectLRUPage(SlruCtl ctl, int pageno);
 
 static bool SlruScanDirCbDeleteCutoff(SlruCtl ctl, char *filename,
 									  int segpage, void *data);
-static void SlruInternalDeleteSegment(SlruCtl ctl, char *filename);
+static void SlruInternalDeleteSegment(SlruCtl ctl, int segno);
 
 /*
  * Initialization of shared memory
@@ -173,7 +184,8 @@ SimpleLruShmemSize(int nslots, int nlsns)
  */
 void
 SimpleLruInit(SlruCtl ctl, const char *name, int nslots, int nlsns,
-			  LWLock *ctllock, const char *subdir, int tranche_id)
+			  LWLock *ctllock, const char *subdir, int tranche_id,
+			  SyncRequestHandler sync_handler)
 {
 	SlruShared	shared;
 	bool		found;
@@ -251,8 +263,8 @@ SimpleLruInit(SlruCtl ctl, const char *name, int nslots, int nlsns,
 	 * assume caller set PagePrecedes.
 	 */
 	ctl->shared = shared;
-	ctl->do_fsync = true;		/* default behavior */
-	StrNCpy(ctl->Dir, subdir, sizeof(ctl->Dir));
+	ctl->sync_handler = sync_handler;
+	strlcpy(ctl->Dir, subdir, sizeof(ctl->Dir));
 }
 
 /*
@@ -523,7 +535,7 @@ SimpleLruReadPage_ReadOnly(SlruCtl ctl, int pageno, TransactionId xid)
  * Control lock must be held at entry, and will be held at exit.
  */
 static void
-SlruInternalWritePage(SlruCtl ctl, int slotno, SlruFlush fdata)
+SlruInternalWritePage(SlruCtl ctl, int slotno, SlruWriteAll fdata)
 {
 	SlruShared	shared = ctl->shared;
 	int			pageno = shared->page_number[slotno];
@@ -587,6 +599,10 @@ SlruInternalWritePage(SlruCtl ctl, int slotno, SlruFlush fdata)
 	/* Now it's okay to ereport if we failed */
 	if (!ok)
 		SlruReportIOError(ctl, pageno, InvalidTransactionId);
+
+	/* If part of a checkpoint, count this as a buffer written. */
+	if (fdata)
+		CheckpointStats.ckpt_bufs_written++;
 }
 
 /*
@@ -669,7 +685,7 @@ SlruPhysicalReadPage(SlruCtl ctl, int pageno, int slotno)
 	SlruShared	shared = ctl->shared;
 	int			segno = pageno / SLRU_PAGES_PER_SEGMENT;
 	int			rpageno = pageno % SLRU_PAGES_PER_SEGMENT;
-	int			offset = rpageno * BLCKSZ;
+	off_t		offset = rpageno * BLCKSZ;
 	char		path[MAXPGPATH];
 	int			fd;
 
@@ -699,17 +715,9 @@ SlruPhysicalReadPage(SlruCtl ctl, int pageno, int slotno)
 		return true;
 	}
 
-	if (lseek(fd, (off_t) offset, SEEK_SET) < 0)
-	{
-		slru_errcause = SLRU_SEEK_FAILED;
-		slru_errno = errno;
-		CloseTransientFile(fd);
-		return false;
-	}
-
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_SLRU_READ);
-	if (read(fd, shared->page_buffer[slotno], BLCKSZ) != BLCKSZ)
+	if (pg_pread(fd, shared->page_buffer[slotno], BLCKSZ, offset) != BLCKSZ)
 	{
 		pgstat_report_wait_end();
 		slru_errcause = SLRU_READ_FAILED;
@@ -738,18 +746,18 @@ SlruPhysicalReadPage(SlruCtl ctl, int pageno, int slotno)
  *
  * For now, assume it's not worth keeping a file pointer open across
  * independent read/write operations.  We do batch operations during
- * SimpleLruFlush, though.
+ * SimpleLruWriteAll, though.
  *
  * fdata is NULL for a standalone write, pointer to open-file info during
- * SimpleLruFlush.
+ * SimpleLruWriteAll.
  */
 static bool
-SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruFlush fdata)
+SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruWriteAll fdata)
 {
 	SlruShared	shared = ctl->shared;
 	int			segno = pageno / SLRU_PAGES_PER_SEGMENT;
 	int			rpageno = pageno % SLRU_PAGES_PER_SEGMENT;
-	int			offset = rpageno * BLCKSZ;
+	off_t		offset = rpageno * BLCKSZ;
 	char		path[MAXPGPATH];
 	int			fd = -1;
 
@@ -799,7 +807,7 @@ SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruFlush fdata)
 	}
 
 	/*
-	 * During a Flush, we may already have the desired file open.
+	 * During a WriteAll, we may already have the desired file open.
 	 */
 	if (fdata)
 	{
@@ -845,7 +853,7 @@ SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruFlush fdata)
 
 		if (fdata)
 		{
-			if (fdata->num_files < MAX_FLUSH_BUFFERS)
+			if (fdata->num_files < MAX_WRITEALL_BUFFERS)
 			{
 				fdata->fd[fdata->num_files] = fd;
 				fdata->segno[fdata->num_files] = segno;
@@ -862,18 +870,9 @@ SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruFlush fdata)
 		}
 	}
 
-	if (lseek(fd, (off_t) offset, SEEK_SET) < 0)
-	{
-		slru_errcause = SLRU_SEEK_FAILED;
-		slru_errno = errno;
-		if (!fdata)
-			CloseTransientFile(fd);
-		return false;
-	}
-
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_SLRU_WRITE);
-	if (write(fd, shared->page_buffer[slotno], BLCKSZ) != BLCKSZ)
+	if (pg_pwrite(fd, shared->page_buffer[slotno], BLCKSZ, offset) != BLCKSZ)
 	{
 		pgstat_report_wait_end();
 		/* if write didn't set errno, assume problem is no disk space */
@@ -887,23 +886,31 @@ SlruPhysicalWritePage(SlruCtl ctl, int pageno, int slotno, SlruFlush fdata)
 	}
 	pgstat_report_wait_end();
 
-	/*
-	 * If not part of Flush, need to fsync now.  We assume this happens
-	 * infrequently enough that it's not a performance issue.
-	 */
+	/* Queue up a sync request for the checkpointer. */
+	if (ctl->sync_handler != SYNC_HANDLER_NONE)
+	{
+		FileTag		tag;
+
+		INIT_SLRUFILETAG(tag, ctl->sync_handler, segno);
+		if (!RegisterSyncRequest(&tag, SYNC_REQUEST, false))
+		{
+			/* No space to enqueue sync request.  Do it synchronously. */
+			pgstat_report_wait_start(WAIT_EVENT_SLRU_SYNC);
+			if (pg_fsync(fd) != 0)
+			{
+				pgstat_report_wait_end();
+				slru_errcause = SLRU_FSYNC_FAILED;
+				slru_errno = errno;
+				CloseTransientFile(fd);
+				return false;
+			}
+			pgstat_report_wait_end();
+		}
+	}
+
+	/* Close file, unless part of flush request. */
 	if (!fdata)
 	{
-		pgstat_report_wait_start(WAIT_EVENT_SLRU_SYNC);
-		if (ctl->do_fsync && pg_fsync(fd) != 0)
-		{
-			pgstat_report_wait_end();
-			slru_errcause = SLRU_FSYNC_FAILED;
-			slru_errno = errno;
-			CloseTransientFile(fd);
-			return false;
-		}
-		pgstat_report_wait_end();
-
 		if (CloseTransientFile(fd) != 0)
 		{
 			slru_errcause = SLRU_CLOSE_FAILED;
@@ -1139,13 +1146,16 @@ SlruSelectLRUPage(SlruCtl ctl, int pageno)
 }
 
 /*
- * Flush dirty pages to disk during checkpoint or database shutdown
+ * Write dirty pages to disk during checkpoint or database shutdown.  Flushing
+ * is deferred until the next call to ProcessSyncRequests(), though we do fsync
+ * the containing directory here to make sure that newly created directory
+ * entries are on disk.
  */
 void
-SimpleLruFlush(SlruCtl ctl, bool allow_redirtied)
+SimpleLruWriteAll(SlruCtl ctl, bool allow_redirtied)
 {
 	SlruShared	shared = ctl->shared;
-	SlruFlushData fdata;
+	SlruWriteAllData fdata;
 	int			slotno;
 	int			pageno = 0;
 	int			i;
@@ -1179,21 +1189,11 @@ SimpleLruFlush(SlruCtl ctl, bool allow_redirtied)
 	LWLockRelease(shared->ControlLock);
 
 	/*
-	 * Now fsync and close any files that were open
+	 * Now close any files that were open
 	 */
 	ok = true;
 	for (i = 0; i < fdata.num_files; i++)
 	{
-		pgstat_report_wait_start(WAIT_EVENT_SLRU_FLUSH_SYNC);
-		if (ctl->do_fsync && pg_fsync(fdata.fd[i]) != 0)
-		{
-			slru_errcause = SLRU_FSYNC_FAILED;
-			slru_errno = errno;
-			pageno = fdata.segno[i] * SLRU_PAGES_PER_SEGMENT;
-			ok = false;
-		}
-		pgstat_report_wait_end();
-
 		if (CloseTransientFile(fdata.fd[i]) != 0)
 		{
 			slru_errcause = SLRU_CLOSE_FAILED;
@@ -1206,7 +1206,7 @@ SimpleLruFlush(SlruCtl ctl, bool allow_redirtied)
 		SlruReportIOError(ctl, pageno, InvalidTransactionId);
 
 	/* Ensure that directory entries for new files are on disk. */
-	if (ctl->do_fsync)
+	if (ctl->sync_handler != SYNC_HANDLER_NONE)
 		fsync_fname(ctl->Dir, true);
 }
 
@@ -1294,19 +1294,28 @@ restart:;
 }
 
 /*
- * Delete an individual SLRU segment, identified by the filename.
+ * Delete an individual SLRU segment.
  *
  * NB: This does not touch the SLRU buffers themselves, callers have to ensure
  * they either can't yet contain anything, or have already been cleaned out.
  */
 static void
-SlruInternalDeleteSegment(SlruCtl ctl, char *filename)
+SlruInternalDeleteSegment(SlruCtl ctl, int segno)
 {
 	char		path[MAXPGPATH];
 
-	snprintf(path, MAXPGPATH, "%s/%s", ctl->Dir, filename);
-	ereport(DEBUG2,
-			(errmsg("removing file \"%s\"", path)));
+	/* Forget any fsync requests queued for this segment. */
+	if (ctl->sync_handler != SYNC_HANDLER_NONE)
+	{
+		FileTag		tag;
+
+		INIT_SLRUFILETAG(tag, ctl->sync_handler, segno);
+		RegisterSyncRequest(&tag, SYNC_FORGET_REQUEST, true);
+	}
+
+	/* Unlink the file. */
+	SlruFileName(ctl, path, segno);
+	ereport(DEBUG2, (errmsg_internal("removing file \"%s\"", path)));
 	unlink(path);
 }
 
@@ -1318,7 +1327,6 @@ SlruDeleteSegment(SlruCtl ctl, int segno)
 {
 	SlruShared	shared = ctl->shared;
 	int			slotno;
-	char		path[MAXPGPATH];
 	bool		did_write;
 
 	/* Clean out any possibly existing references to the segment. */
@@ -1360,10 +1368,7 @@ restart:
 	if (did_write)
 		goto restart;
 
-	snprintf(path, MAXPGPATH, "%s/%04X", ctl->Dir, segno);
-	ereport(DEBUG2,
-			(errmsg("removing file \"%s\"", path)));
-	unlink(path);
+	SlruInternalDeleteSegment(ctl, segno);
 
 	LWLockRelease(shared->ControlLock);
 }
@@ -1511,7 +1516,7 @@ SlruScanDirCbDeleteCutoff(SlruCtl ctl, char *filename, int segpage, void *data)
 	int			cutoffPage = *(int *) data;
 
 	if (SlruMayDeleteSegment(ctl, segpage, cutoffPage))
-		SlruInternalDeleteSegment(ctl, filename);
+		SlruInternalDeleteSegment(ctl, segpage / SLRU_PAGES_PER_SEGMENT);
 
 	return false;				/* keep going */
 }
@@ -1523,7 +1528,7 @@ SlruScanDirCbDeleteCutoff(SlruCtl ctl, char *filename, int segpage, void *data)
 bool
 SlruScanDirCbDeleteAll(SlruCtl ctl, char *filename, int segpage, void *data)
 {
-	SlruInternalDeleteSegment(ctl, filename);
+	SlruInternalDeleteSegment(ctl, segpage / SLRU_PAGES_PER_SEGMENT);
 
 	return false;				/* keep going */
 }
@@ -1575,4 +1580,32 @@ SlruScanDirectory(SlruCtl ctl, SlruScanCallback callback, void *data)
 	FreeDir(cldir);
 
 	return retval;
+}
+
+/*
+ * Individual SLRUs (clog, ...) have to provide a sync.c handler function so
+ * that they can provide the correct "SlruCtl" (otherwise we don't know how to
+ * build the path), but they just forward to this common implementation that
+ * performs the fsync.
+ */
+int
+SlruSyncFileTag(SlruCtl ctl, const FileTag *ftag, char *path)
+{
+	int			fd;
+	int			save_errno;
+	int			result;
+
+	SlruFileName(ctl, path, ftag->segno);
+
+	fd = OpenTransientFile(path, O_RDWR | PG_BINARY);
+	if (fd < 0)
+		return -1;
+
+	result = pg_fsync(fd);
+	save_errno = errno;
+
+	CloseTransientFile(fd);
+
+	errno = save_errno;
+	return result;
 }

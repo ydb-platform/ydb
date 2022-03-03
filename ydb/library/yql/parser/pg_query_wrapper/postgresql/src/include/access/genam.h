@@ -4,7 +4,7 @@
  *	  POSTGRES generalized index access method definitions.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/genam.h
@@ -38,8 +38,8 @@ typedef struct IndexBuildResult
  *
  * num_heap_tuples is accurate only when estimated_count is false;
  * otherwise it's just an estimate (currently, the estimate is the
- * prior value of the relation's pg_class.reltuples field).  It will
- * always just be an estimate during ambulkdelete.
+ * prior value of the relation's pg_class.reltuples field, so it could
+ * even be -1).  It will always just be an estimate during ambulkdelete.
  */
 typedef struct IndexVacuumInfo
 {
@@ -63,20 +63,22 @@ typedef struct IndexVacuumInfo
  * of which this is just the first field; this provides a way for ambulkdelete
  * to communicate additional private data to amvacuumcleanup.
  *
- * Note: pages_removed is the amount by which the index physically shrank,
- * if any (ie the change in its total size on disk).  pages_deleted and
- * pages_free refer to free space within the index file.  Some index AMs
- * may compute num_index_tuples by reference to num_heap_tuples, in which
- * case they should copy the estimated_count field from IndexVacuumInfo.
+ * Note: pages_newly_deleted is the number of pages in the index that were
+ * deleted by the current vacuum operation.  pages_deleted and pages_free
+ * refer to free space within the index file.
+ *
+ * Note: Some index AMs may compute num_index_tuples by reference to
+ * num_heap_tuples, in which case they should copy the estimated_count field
+ * from IndexVacuumInfo.
  */
 typedef struct IndexBulkDeleteResult
 {
 	BlockNumber num_pages;		/* pages remaining in index */
-	BlockNumber pages_removed;	/* # removed during vacuum operation */
 	bool		estimated_count;	/* num_index_tuples is an estimate */
 	double		num_index_tuples;	/* tuples remaining */
 	double		tuples_removed; /* # removed during vacuum operation */
-	BlockNumber pages_deleted;	/* # unused pages in index */
+	BlockNumber pages_newly_deleted;	/* # pages marked deleted by us  */
+	BlockNumber pages_deleted;	/* # pages marked deleted (could be by us) */
 	BlockNumber pages_free;		/* # pages available for reuse */
 } IndexBulkDeleteResult;
 
@@ -143,6 +145,7 @@ extern bool index_insert(Relation indexRelation,
 						 ItemPointer heap_t_ctid,
 						 Relation heapRelation,
 						 IndexUniqueCheck checkUnique,
+						 bool indexUnchanged,
 						 struct IndexInfo *indexInfo);
 
 extern IndexScanDesc index_beginscan(Relation heapRelation,
@@ -174,11 +177,11 @@ extern bool index_getnext_slot(IndexScanDesc scan, ScanDirection direction,
 extern int64 index_getbitmap(IndexScanDesc scan, TIDBitmap *bitmap);
 
 extern IndexBulkDeleteResult *index_bulk_delete(IndexVacuumInfo *info,
-												IndexBulkDeleteResult *stats,
+												IndexBulkDeleteResult *istat,
 												IndexBulkDeleteCallback callback,
 												void *callback_state);
 extern IndexBulkDeleteResult *index_vacuum_cleanup(IndexVacuumInfo *info,
-												   IndexBulkDeleteResult *stats);
+												   IndexBulkDeleteResult *istat);
 extern bool index_can_return(Relation indexRelation, int attno);
 extern RegProcedure index_getprocid(Relation irel, AttrNumber attnum,
 									uint16 procnum);

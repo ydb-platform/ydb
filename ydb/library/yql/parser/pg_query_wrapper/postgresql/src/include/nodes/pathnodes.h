@@ -4,7 +4,7 @@
  *	  Definitions for planner's internal data structures, especially Paths.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/pathnodes.h
@@ -55,10 +55,6 @@ typedef struct QualCost
  */
 typedef struct AggClauseCosts
 {
-	int			numAggs;		/* total number of aggregate functions */
-	int			numOrderedAggs; /* number w/ DISTINCT/ORDER BY/WITHIN GROUP */
-	bool		hasNonPartial;	/* does any agg not support partial mode? */
-	bool		hasNonSerial;	/* is any partial agg non-serializable? */
 	QualCost	transCost;		/* total per-input-row execution costs */
 	QualCost	finalCost;		/* total per-aggregated-row costs */
 	Size		transitionSpace;	/* space for pass-by-ref transition data */
@@ -80,18 +76,6 @@ typedef enum UpperRelationKind
 	UPPERREL_FINAL				/* result of any remaining top-level actions */
 	/* NB: UPPERREL_FINAL must be last enum entry; it's used to size arrays */
 } UpperRelationKind;
-
-/*
- * This enum identifies which type of relation is being planned through the
- * inheritance planner.  INHKIND_NONE indicates the inheritance planner
- * was not used.
- */
-typedef enum InheritanceKind
-{
-	INHKIND_NONE,
-	INHKIND_INHERITED,
-	INHKIND_PARTITIONED
-} InheritanceKind;
 
 /*----------
  * PlannerGlobal
@@ -119,8 +103,6 @@ typedef struct PlannerGlobal
 	List	   *finalrowmarks;	/* "flat" list of PlanRowMarks */
 
 	List	   *resultRelations;	/* "flat" list of integer RT indexes */
-
-	List	   *rootResultRelations;	/* "flat" list of integer RT indexes */
 
 	List	   *appendRelations;	/* "flat" list of AppendRelInfos */
 
@@ -283,11 +265,24 @@ struct PlannerInfo
 	List	   *join_info_list; /* list of SpecialJoinInfos */
 
 	/*
+	 * all_result_relids is empty for SELECT, otherwise it contains at least
+	 * parse->resultRelation.  For UPDATE/DELETE across an inheritance or
+	 * partitioning tree, the result rel's child relids are added.  When using
+	 * multi-level partitioning, intermediate partitioned rels are included.
+	 * leaf_result_relids is similar except that only actual result tables,
+	 * not partitioned tables, are included in it.
+	 */
+	Relids		all_result_relids;	/* set of all result relids */
+	Relids		leaf_result_relids; /* set of all leaf relids */
+
+	/*
 	 * Note: for AppendRelInfos describing partitions of a partitioned table,
 	 * we guarantee that partitions that come earlier in the partitioned
 	 * table's PartitionDesc will appear earlier in append_rel_list.
 	 */
 	List	   *append_rel_list;	/* list of AppendRelInfos */
+
+	List	   *row_identity_vars;	/* list of RowIdentityVarInfos */
 
 	List	   *rowMarks;		/* list of PlanRowMarks */
 
@@ -315,14 +310,22 @@ struct PlannerInfo
 
 	/*
 	 * The fully-processed targetlist is kept here.  It differs from
-	 * parse->targetList in that (for INSERT and UPDATE) it's been reordered
-	 * to match the target table, and defaults have been filled in.  Also,
-	 * additional resjunk targets may be present.  preprocess_targetlist()
-	 * does most of this work, but note that more resjunk targets can get
-	 * added during appendrel expansion.  (Hence, upper_targets mustn't get
-	 * set up till after that.)
+	 * parse->targetList in that (for INSERT) it's been reordered to match the
+	 * target table, and defaults have been filled in.  Also, additional
+	 * resjunk targets may be present.  preprocess_targetlist() does most of
+	 * that work, but note that more resjunk targets can get added during
+	 * appendrel expansion.  (Hence, upper_targets mustn't get set up till
+	 * after that.)
 	 */
 	List	   *processed_tlist;
+
+	/*
+	 * For UPDATE, this list contains the target table's attribute numbers to
+	 * which the first N entries of processed_tlist are to be assigned.  (Any
+	 * additional entries in processed_tlist must be resjunk.)  DO NOT use the
+	 * resnos in processed_tlist to identify the UPDATE target columns.
+	 */
+	List	   *update_colnos;
 
 	/* Fields filled during create_plan() for use in setrefs.c */
 	AttrNumber *grouping_map;	/* for GroupingFunc fixup */
@@ -339,15 +342,22 @@ struct PlannerInfo
 	Index		qual_security_level;	/* minimum security_level for quals */
 	/* Note: qual_security_level is zero if there are no securityQuals */
 
-	InheritanceKind inhTargetKind;	/* indicates if the target relation is an
-									 * inheritance child or partition or a
-									 * partitioned table */
 	bool		hasJoinRTEs;	/* true if any RTEs are RTE_JOIN kind */
 	bool		hasLateralRTEs; /* true if any RTEs are marked LATERAL */
 	bool		hasHavingQual;	/* true if havingQual was non-null */
 	bool		hasPseudoConstantQuals; /* true if any RestrictInfo has
 										 * pseudoconstant = true */
+	bool		hasAlternativeSubPlans; /* true if we've made any of those */
 	bool		hasRecursion;	/* true if planning a recursive WITH item */
+
+	/*
+	 * Information about aggregates. Filled by preprocess_aggrefs().
+	 */
+	List	   *agginfos;		/* AggInfo structs */
+	List	   *aggtransinfos;	/* AggTransInfo structs */
+	int			numOrderedAggs; /* number w/ DISTINCT/ORDER BY/WITHIN GROUP */
+	bool		hasNonPartialAggs;	/* does any agg not support partial mode? */
+	bool		hasNonSerialAggs;	/* is any partial agg non-serializable? */
 
 	/* These fields are used only when hasRecursion is true: */
 	int			wt_param_id;	/* PARAM_EXEC ID for the work table */
@@ -356,6 +366,10 @@ struct PlannerInfo
 	/* These fields are workspace for createplan.c */
 	Relids		curOuterRels;	/* outer rels above current node */
 	List	   *curOuterParams; /* not-yet-assigned NestLoopParams */
+
+	/* These fields are workspace for setrefs.c */
+	bool	   *isAltSubplan;	/* array corresponding to glob->subplans */
+	bool	   *isUsedSubplan;	/* array corresponding to glob->subplans */
 
 	/* optional private data for join_search_hook, e.g., GEQO */
 	void	   *join_search_private;
@@ -602,9 +616,6 @@ typedef struct PartitionSchemeData *PartitionScheme;
  *		part_rels - RelOptInfos for each partition
  *		all_partrels - Relids set of all partition relids
  *		partexprs, nullable_partexprs - Partition key expressions
- *		partitioned_child_rels - RT indexes of unpruned partitions of
- *								 this relation that are partitioned tables
- *								 themselves, in hierarchical order
  *
  * The partexprs and nullable_partexprs arrays each contain
  * part_scheme->partnatts elements.  Each of the elements is a list of
@@ -620,6 +631,10 @@ typedef struct PartitionSchemeData *PartitionScheme;
  * to simplify matching join clauses to those lists.
  *----------
  */
+
+/* Bitmask of flags supported by table AMs */
+#define AMFLAG_HAS_TID_RANGE (1 << 0)
+
 typedef enum RelOptKind
 {
 	RELOPT_BASEREL,
@@ -709,6 +724,8 @@ typedef struct RelOptInfo
 	PlannerInfo *subroot;		/* if subquery */
 	List	   *subplan_params; /* if subquery */
 	int			rel_parallel_workers;	/* wanted number of parallel workers */
+	uint32		amflags;		/* Bitmask of optional features supported by
+								 * the table AM */
 
 	/* Information about foreign tables and foreign joins */
 	Oid			serverid;		/* identifies server for the table or join */
@@ -752,7 +769,6 @@ typedef struct RelOptInfo
 	Relids		all_partrels;	/* Relids set of all partition relids */
 	List	  **partexprs;		/* Non-nullable partition key expressions */
 	List	  **nullable_partexprs; /* Nullable partition key expressions */
-	List	   *partitioned_child_rels; /* List of RT indexes */
 } RelOptInfo;
 
 /*
@@ -891,10 +907,13 @@ typedef struct ForeignKeyOptInfo
 
 	/* Derived info about whether FK's equality conditions match the query: */
 	int			nmatched_ec;	/* # of FK cols matched by ECs */
+	int			nconst_ec;		/* # of these ECs that are ec_has_const */
 	int			nmatched_rcols; /* # of FK cols matched by non-EC rinfos */
 	int			nmatched_ri;	/* total # of non-EC rinfos matched to FK */
 	/* Pointer to eclass matching each column's condition, if there is one */
 	struct EquivalenceClass *eclass[INDEX_MAX_KEYS];
+	/* Pointer to eclass member for the referencing Var, if there is one */
+	struct EquivalenceMember *fk_eclass_member[INDEX_MAX_KEYS];
 	/* List of non-EC RestrictInfos matching each column's condition */
 	List	   *rinfos[INDEX_MAX_KEYS];
 } ForeignKeyOptInfo;
@@ -914,6 +933,7 @@ typedef struct StatisticExtInfo
 	RelOptInfo *rel;			/* back-link to statistic's table */
 	char		kind;			/* statistics kind of this entry */
 	Bitmapset  *keys;			/* attnums of the columns covered */
+	List	   *exprs;			/* expressions */
 } StatisticExtInfo;
 
 /*
@@ -1045,6 +1065,17 @@ typedef struct PathKey
 	bool		pk_nulls_first; /* do NULLs come before normal values? */
 } PathKey;
 
+/*
+ * VolatileFunctionStatus -- allows nodes to cache their
+ * contain_volatile_functions properties. VOLATILITY_UNKNOWN means not yet
+ * determined.
+ */
+typedef enum VolatileFunctionStatus
+{
+	VOLATILITY_UNKNOWN = 0,
+	VOLATILITY_VOLATILE,
+	VOLATILITY_NOVOLATILE
+} VolatileFunctionStatus;
 
 /*
  * PathTarget
@@ -1076,6 +1107,8 @@ typedef struct PathTarget
 	Index	   *sortgrouprefs;	/* corresponding sort/group refnos, or 0 */
 	QualCost	cost;			/* cost of evaluating the expressions */
 	int			width;			/* estimated avg width of result tuples */
+	VolatileFunctionStatus has_volatile_expr;	/* indicates if exprs contain
+												 * any volatile functions. */
 } PathTarget;
 
 /* Convenience macro to get a sort/group refno from a PathTarget */
@@ -1321,6 +1354,18 @@ typedef struct TidPath
 } TidPath;
 
 /*
+ * TidRangePath represents a scan by a continguous range of TIDs
+ *
+ * tidrangequals is an implicitly AND'ed list of qual expressions of the form
+ * "CTID relop pseudoconstant", where relop is one of >,>=,<,<=.
+ */
+typedef struct TidRangePath
+{
+	Path		path;
+	List	   *tidrangequals;
+} TidRangePath;
+
+/*
  * SubqueryScanPath represents a scan of an unflattened subquery-in-FROM
  *
  * Note that the subpath comes from a different planning domain; for example
@@ -1400,8 +1445,6 @@ typedef struct CustomPath
 typedef struct AppendPath
 {
 	Path		path;
-	/* RT indexes of non-leaf tables in a partition tree */
-	List	   *partitioned_rels;
 	List	   *subpaths;		/* list of component Paths */
 	/* Index of first partial path in subpaths; list_length(subpaths) if none */
 	int			first_partial_path;
@@ -1426,8 +1469,6 @@ extern bool is_dummy_rel(RelOptInfo *rel);
 typedef struct MergeAppendPath
 {
 	Path		path;
-	/* RT indexes of non-leaf tables in a partition tree */
-	List	   *partitioned_rels;
 	List	   *subpaths;		/* list of component Paths */
 	double		limit_tuples;	/* hard limit on output tuples, or -1 */
 } MergeAppendPath;
@@ -1456,6 +1497,27 @@ typedef struct MaterialPath
 	Path		path;
 	Path	   *subpath;
 } MaterialPath;
+
+/*
+ * MemoizePath represents a Memoize plan node, i.e., a cache that caches
+ * tuples from parameterized paths to save the underlying node from having to
+ * be rescanned for parameter values which are already cached.
+ */
+typedef struct MemoizePath
+{
+	Path		path;
+	Path	   *subpath;		/* outerpath to cache tuples from */
+	List	   *hash_operators; /* hash operators for each key */
+	List	   *param_exprs;	/* cache keys */
+	bool		singlerow;		/* true if the cache entry is to be marked as
+								 * complete after caching the first record. */
+	bool		binary_mode;	/* true when cache key should be compared bit
+								 * by bit, false when using hash equality ops */
+	double		calls;			/* expected number of rescans */
+	uint32		est_entries;	/* The maximum number of entries that the
+								 * planner expects will fit in the cache, or 0
+								 * if unknown */
+} MemoizePath;
 
 /*
  * UniquePath represents elimination of distinct rows from the output of
@@ -1808,20 +1870,20 @@ typedef struct LockRowsPath
  * ModifyTablePath represents performing INSERT/UPDATE/DELETE modifications
  *
  * We represent most things that will be in the ModifyTable plan node
- * literally, except we have child Path(s) not Plan(s).  But analysis of the
+ * literally, except we have a child Path not Plan.  But analysis of the
  * OnConflictExpr is deferred to createplan.c, as is collection of FDW data.
  */
 typedef struct ModifyTablePath
 {
 	Path		path;
+	Path	   *subpath;		/* Path producing source data */
 	CmdType		operation;		/* INSERT, UPDATE, or DELETE */
 	bool		canSetTag;		/* do we set the command tag/es_processed? */
 	Index		nominalRelation;	/* Parent RT index for use of EXPLAIN */
 	Index		rootRelation;	/* Root RT index, if target is partitioned */
-	bool		partColsUpdated;	/* some part key in hierarchy updated */
+	bool		partColsUpdated;	/* some part key in hierarchy updated? */
 	List	   *resultRelations;	/* integer list of RT indexes */
-	List	   *subpaths;		/* Path(s) producing source data */
-	List	   *subroots;		/* per-target-table PlannerInfos */
+	List	   *updateColnosLists;	/* per-target-table update_colnos lists */
 	List	   *withCheckOptionLists;	/* per-target-table WCO lists */
 	List	   *returningLists; /* per-target-table RETURNING tlists */
 	List	   *rowMarks;		/* PlanRowMarks (non-locking only) */
@@ -1998,6 +2060,9 @@ typedef struct RestrictInfo
 
 	bool		leakproof;		/* true if known to contain no leaked Vars */
 
+	VolatileFunctionStatus has_volatile;	/* to indicate if clause contains
+											 * any volatile functions. */
+
 	Index		security_level; /* see comment above */
 
 	/* The set of relids (varnos) actually referenced in the clause: */
@@ -2051,6 +2116,9 @@ typedef struct RestrictInfo
 	Selectivity right_bucketsize;	/* avg bucketsize of right side */
 	Selectivity left_mcvfreq;	/* left side's most common val's freq */
 	Selectivity right_mcvfreq;	/* right side's most common val's freq */
+
+	/* hash equality operator used for memoize nodes, else InvalidOid */
+	Oid			hasheqoperator;
 } RestrictInfo;
 
 /*
@@ -2276,6 +2344,34 @@ typedef struct AppendRelInfo
 	 */
 	Oid			parent_reloid;	/* OID of parent relation */
 } AppendRelInfo;
+
+/*
+ * Information about a row-identity "resjunk" column in UPDATE/DELETE.
+ *
+ * In partitioned UPDATE/DELETE it's important for child partitions to share
+ * row-identity columns whenever possible, so as not to chew up too many
+ * targetlist columns.  We use these structs to track which identity columns
+ * have been requested.  In the finished plan, each of these will give rise
+ * to one resjunk entry in the targetlist of the ModifyTable's subplan node.
+ *
+ * All the Vars stored in RowIdentityVarInfos must have varno ROWID_VAR, for
+ * convenience of detecting duplicate requests.  We'll replace that, in the
+ * final plan, with the varno of the generating rel.
+ *
+ * Outside this list, a Var with varno ROWID_VAR and varattno k is a reference
+ * to the k-th element of the row_identity_vars list (k counting from 1).
+ * We add such a reference to root->processed_tlist when creating the entry,
+ * and it propagates into the plan tree from there.
+ */
+typedef struct RowIdentityVarInfo
+{
+	NodeTag		type;
+
+	Var		   *rowidvar;		/* Var to be evaluated (but varno=ROWID_VAR) */
+	int32		rowidwidth;		/* estimated average width */
+	char	   *rowidname;		/* name of the resjunk column */
+	Relids		rowidrels;		/* RTE indexes of target rels using this */
+} RowIdentityVarInfo;
 
 /*
  * For each distinct placeholder expression generated during planning, we
@@ -2552,5 +2648,72 @@ typedef struct JoinCostWorkspace
 	int			numbatches;
 	double		inner_rows_total;
 } JoinCostWorkspace;
+
+/*
+ * AggInfo holds information about an aggregate that needs to be computed.
+ * Multiple Aggrefs in a query can refer to the same AggInfo by having the
+ * same 'aggno' value, so that the aggregate is computed only once.
+ */
+typedef struct AggInfo
+{
+	/*
+	 * Link to an Aggref expr this state value is for.
+	 *
+	 * There can be multiple identical Aggref's sharing the same per-agg. This
+	 * points to the first one of them.
+	 */
+	Aggref	   *representative_aggref;
+
+	int			transno;
+
+	/*
+	 * "shareable" is false if this agg cannot share state values with other
+	 * aggregates because the final function is read-write.
+	 */
+	bool		shareable;
+
+	/* Oid of the final function or InvalidOid */
+	Oid			finalfn_oid;
+
+} AggInfo;
+
+/*
+ * AggTransInfo holds information about transition state that is used by one
+ * or more aggregates in the query.  Multiple aggregates can share the same
+ * transition state, if they have the same inputs and the same transition
+ * function.  Aggrefs that share the same transition info have the same
+ * 'aggtransno' value.
+ */
+typedef struct AggTransInfo
+{
+	List	   *args;
+	Expr	   *aggfilter;
+
+	/* Oid of the state transition function */
+	Oid			transfn_oid;
+
+	/* Oid of the serialization function or InvalidOid */
+	Oid			serialfn_oid;
+
+	/* Oid of the deserialization function or InvalidOid */
+	Oid			deserialfn_oid;
+
+	/* Oid of the combine function or InvalidOid */
+	Oid			combinefn_oid;
+
+	/* Oid of state value's datatype */
+	Oid			aggtranstype;
+	int32		aggtranstypmod;
+	int			transtypeLen;
+	bool		transtypeByVal;
+	int32		aggtransspace;
+
+	/*
+	 * initial value from pg_aggregate entry
+	 */
+	Datum		initValue;
+	bool		initValueIsNull;
+
+} AggTransInfo;
 
 #endif							/* PATHNODES_H */

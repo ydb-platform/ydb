@@ -3,7 +3,7 @@
  * jsonapi.c
  *		JSON parser and lexer interfaces
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -535,10 +535,12 @@ json_lex(JsonLexContext *lex)
 	while (len < lex->input_length &&
 		   (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r'))
 	{
-		if (*s == '\n')
+		if (*s++ == '\n')
+		{
 			++lex->line_number;
-		++s;
-		++len;
+			lex->line_start = s;
+		}
+		len++;
 	}
 	lex->token_start = s;
 

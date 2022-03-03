@@ -3,7 +3,7 @@
  * timestamp.c
  *	  Functions for the built-in SQL types "timestamp" and "interval".
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -22,6 +22,7 @@
 
 #include "access/xact.h"
 #include "catalog/pg_type.h"
+#include "common/int.h"
 #include "common/int128.h"
 #include "funcapi.h"
 #include "libpq/pqformat.h"
@@ -35,6 +36,7 @@
 #include "utils/date.h"
 #include "utils/datetime.h"
 #include "utils/float.h"
+#include "utils/numeric.h"
 
 /*
  * gcc's -ffast-math switch breaks routines that expect exact results from
@@ -556,17 +558,21 @@ make_timestamp_internal(int year, int month, int day,
 	TimeOffset	date;
 	TimeOffset	time;
 	int			dterr;
+	bool		bc = false;
 	Timestamp	result;
 
 	tm.tm_year = year;
 	tm.tm_mon = month;
 	tm.tm_mday = day;
 
-	/*
-	 * Note: we'll reject zero or negative year values.  Perhaps negatives
-	 * should be allowed to represent BC years?
-	 */
-	dterr = ValidateDate(DTK_DATE_M, false, false, false, &tm);
+	/* Handle negative years as BC */
+	if (tm.tm_year < 0)
+	{
+		bc = true;
+		tm.tm_year = -tm.tm_year;
+	}
+
+	dterr = ValidateDate(DTK_DATE_M, false, false, bc, &tm);
 
 	if (dterr != 0)
 		ereport(ERROR,
@@ -3808,6 +3814,55 @@ timestamptz_age(PG_FUNCTION_ARGS)
  *---------------------------------------------------------*/
 
 
+/* timestamp_bin()
+ * Bin timestamp into specified interval.
+ */
+Datum
+timestamp_bin(PG_FUNCTION_ARGS)
+{
+	Interval   *stride = PG_GETARG_INTERVAL_P(0);
+	Timestamp	timestamp = PG_GETARG_TIMESTAMP(1);
+	Timestamp	origin = PG_GETARG_TIMESTAMP(2);
+	Timestamp	result,
+				tm_diff,
+				stride_usecs,
+				tm_delta;
+
+	if (TIMESTAMP_NOT_FINITE(timestamp))
+		PG_RETURN_TIMESTAMP(timestamp);
+
+	if (TIMESTAMP_NOT_FINITE(origin))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("origin out of range")));
+
+	if (stride->month != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("timestamps cannot be binned into intervals containing months or years")));
+
+	stride_usecs = stride->day * USECS_PER_DAY + stride->time;
+
+	if (stride_usecs <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("stride must be greater than zero")));
+
+	tm_diff = timestamp - origin;
+	tm_delta = tm_diff - tm_diff % stride_usecs;
+
+	/*
+	 * Make sure the returned timestamp is at the start of the bin, even if
+	 * the origin is in the future.
+	 */
+	if (origin > timestamp && stride_usecs > 1)
+		tm_delta -= stride_usecs;
+
+	result = origin + tm_delta;
+
+	PG_RETURN_TIMESTAMP(result);
+}
+
 /* timestamp_trunc()
  * Truncate timestamp to specified units.
  */
@@ -3940,6 +3995,55 @@ timestamp_trunc(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_TIMESTAMP(result);
+}
+
+/* timestamptz_bin()
+ * Bin timestamptz into specified interval using specified origin.
+ */
+Datum
+timestamptz_bin(PG_FUNCTION_ARGS)
+{
+	Interval   *stride = PG_GETARG_INTERVAL_P(0);
+	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
+	TimestampTz origin = PG_GETARG_TIMESTAMPTZ(2);
+	TimestampTz result,
+				stride_usecs,
+				tm_diff,
+				tm_delta;
+
+	if (TIMESTAMP_NOT_FINITE(timestamp))
+		PG_RETURN_TIMESTAMPTZ(timestamp);
+
+	if (TIMESTAMP_NOT_FINITE(origin))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("origin out of range")));
+
+	if (stride->month != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("timestamps cannot be binned into intervals containing months or years")));
+
+	stride_usecs = stride->day * USECS_PER_DAY + stride->time;
+
+	if (stride_usecs <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("stride must be greater than zero")));
+
+	tm_diff = timestamp - origin;
+	tm_delta = tm_diff - tm_diff % stride_usecs;
+
+	/*
+	 * Make sure the returned timestamp is at the start of the bin, even if
+	 * the origin is in the future.
+	 */
+	if (origin > timestamp && stride_usecs > 1)
+		tm_delta -= stride_usecs;
+
+	result = origin + tm_delta;
+
+	PG_RETURN_TIMESTAMPTZ(result);
 }
 
 /*
@@ -4519,15 +4623,15 @@ NonFiniteTimestampTzPart(int type, int unit, char *lowunits,
 	}
 }
 
-/* timestamp_part()
+/* timestamp_part() and extract_timestamp()
  * Extract specified field from timestamp.
  */
-Datum
-timestamp_part(PG_FUNCTION_ARGS)
+static Datum
+timestamp_part_common(PG_FUNCTION_ARGS, bool retnumeric)
 {
 	text	   *units = PG_GETARG_TEXT_PP(0);
 	Timestamp	timestamp = PG_GETARG_TIMESTAMP(1);
-	float8		result;
+	int64		intresult;
 	Timestamp	epoch;
 	int			type,
 				val;
@@ -4546,11 +4650,28 @@ timestamp_part(PG_FUNCTION_ARGS)
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 	{
-		result = NonFiniteTimestampTzPart(type, val, lowunits,
-										  TIMESTAMP_IS_NOBEGIN(timestamp),
-										  false);
-		if (result)
-			PG_RETURN_FLOAT8(result);
+		double		r = NonFiniteTimestampTzPart(type, val, lowunits,
+												 TIMESTAMP_IS_NOBEGIN(timestamp),
+												 false);
+
+		if (r)
+		{
+			if (retnumeric)
+			{
+				if (r < 0)
+					return DirectFunctionCall3(numeric_in,
+											   CStringGetDatum("-Infinity"),
+											   ObjectIdGetDatum(InvalidOid),
+											   Int32GetDatum(-1));
+				else if (r > 0)
+					return DirectFunctionCall3(numeric_in,
+											   CStringGetDatum("Infinity"),
+											   ObjectIdGetDatum(InvalidOid),
+											   Int32GetDatum(-1));
+			}
+			else
+				PG_RETURN_FLOAT8(r);
+		}
 		else
 			PG_RETURN_NULL();
 	}
@@ -4565,47 +4686,61 @@ timestamp_part(PG_FUNCTION_ARGS)
 		switch (val)
 		{
 			case DTK_MICROSEC:
-				result = tm->tm_sec * 1000000.0 + fsec;
+				intresult = tm->tm_sec * INT64CONST(1000000) + fsec;
 				break;
 
 			case DTK_MILLISEC:
-				result = tm->tm_sec * 1000.0 + fsec / 1000.0;
+				if (retnumeric)
+					/*---
+					 * tm->tm_sec * 1000 + fsec / 1000
+					 * = (tm->tm_sec * 1'000'000 + fsec) / 1000
+					 */
+					PG_RETURN_NUMERIC(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 3));
+				else
+					PG_RETURN_FLOAT8(tm->tm_sec * 1000.0 + fsec / 1000.0);
 				break;
 
 			case DTK_SECOND:
-				result = tm->tm_sec + fsec / 1000000.0;
+				if (retnumeric)
+					/*---
+					 * tm->tm_sec + fsec / 1'000'000
+					 * = (tm->tm_sec * 1'000'000 + fsec) / 1'000'000
+					 */
+					PG_RETURN_NUMERIC(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 6));
+				else
+					PG_RETURN_FLOAT8(tm->tm_sec + fsec / 1000000.0);
 				break;
 
 			case DTK_MINUTE:
-				result = tm->tm_min;
+				intresult = tm->tm_min;
 				break;
 
 			case DTK_HOUR:
-				result = tm->tm_hour;
+				intresult = tm->tm_hour;
 				break;
 
 			case DTK_DAY:
-				result = tm->tm_mday;
+				intresult = tm->tm_mday;
 				break;
 
 			case DTK_MONTH:
-				result = tm->tm_mon;
+				intresult = tm->tm_mon;
 				break;
 
 			case DTK_QUARTER:
-				result = (tm->tm_mon - 1) / 3 + 1;
+				intresult = (tm->tm_mon - 1) / 3 + 1;
 				break;
 
 			case DTK_WEEK:
-				result = (float8) date2isoweek(tm->tm_year, tm->tm_mon, tm->tm_mday);
+				intresult = date2isoweek(tm->tm_year, tm->tm_mon, tm->tm_mday);
 				break;
 
 			case DTK_YEAR:
 				if (tm->tm_year > 0)
-					result = tm->tm_year;
+					intresult = tm->tm_year;
 				else
 					/* there is no year 0, just 1 BC and 1 AD */
-					result = tm->tm_year - 1;
+					intresult = tm->tm_year - 1;
 				break;
 
 			case DTK_DECADE:
@@ -4616,9 +4751,9 @@ timestamp_part(PG_FUNCTION_ARGS)
 				 * is 11 BC thru 2 BC...
 				 */
 				if (tm->tm_year >= 0)
-					result = tm->tm_year / 10;
+					intresult = tm->tm_year / 10;
 				else
-					result = -((8 - (tm->tm_year - 1)) / 10);
+					intresult = -((8 - (tm->tm_year - 1)) / 10);
 				break;
 
 			case DTK_CENTURY:
@@ -4630,43 +4765,50 @@ timestamp_part(PG_FUNCTION_ARGS)
 				 * ----
 				 */
 				if (tm->tm_year > 0)
-					result = (tm->tm_year + 99) / 100;
+					intresult = (tm->tm_year + 99) / 100;
 				else
 					/* caution: C division may have negative remainder */
-					result = -((99 - (tm->tm_year - 1)) / 100);
+					intresult = -((99 - (tm->tm_year - 1)) / 100);
 				break;
 
 			case DTK_MILLENNIUM:
 				/* see comments above. */
 				if (tm->tm_year > 0)
-					result = (tm->tm_year + 999) / 1000;
+					intresult = (tm->tm_year + 999) / 1000;
 				else
-					result = -((999 - (tm->tm_year - 1)) / 1000);
+					intresult = -((999 - (tm->tm_year - 1)) / 1000);
 				break;
 
 			case DTK_JULIAN:
-				result = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday);
-				result += ((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) +
-						   tm->tm_sec + (fsec / 1000000.0)) / (double) SECS_PER_DAY;
+				if (retnumeric)
+					PG_RETURN_NUMERIC(numeric_add_opt_error(int64_to_numeric(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)),
+															numeric_div_opt_error(int64_to_numeric(((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) + tm->tm_sec) * INT64CONST(1000000) + fsec),
+																				  int64_to_numeric(SECS_PER_DAY * INT64CONST(1000000)),
+																				  NULL),
+															NULL));
+				else
+					PG_RETURN_FLOAT8(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday) +
+									 ((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) +
+									  tm->tm_sec + (fsec / 1000000.0)) / (double) SECS_PER_DAY);
 				break;
 
 			case DTK_ISOYEAR:
-				result = date2isoyear(tm->tm_year, tm->tm_mon, tm->tm_mday);
+				intresult = date2isoyear(tm->tm_year, tm->tm_mon, tm->tm_mday);
 				/* Adjust BC years */
-				if (result <= 0)
-					result -= 1;
+				if (intresult <= 0)
+					intresult -= 1;
 				break;
 
 			case DTK_DOW:
 			case DTK_ISODOW:
-				result = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
-				if (val == DTK_ISODOW && result == 0)
-					result = 7;
+				intresult = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
+				if (val == DTK_ISODOW && intresult == 0)
+					intresult = 7;
 				break;
 
 			case DTK_DOY:
-				result = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
-						  - date2j(tm->tm_year, 1, 1) + 1);
+				intresult = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
+							 - date2j(tm->tm_year, 1, 1) + 1);
 				break;
 
 			case DTK_TZ:
@@ -4677,7 +4819,7 @@ timestamp_part(PG_FUNCTION_ARGS)
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("timestamp units \"%s\" not supported",
 								lowunits)));
-				result = 0;
+				intresult = 0;
 		}
 	}
 	else if (type == RESERV)
@@ -4686,11 +4828,37 @@ timestamp_part(PG_FUNCTION_ARGS)
 		{
 			case DTK_EPOCH:
 				epoch = SetEpochTimestamp();
-				/* try to avoid precision loss in subtraction */
-				if (timestamp < (PG_INT64_MAX + epoch))
-					result = (timestamp - epoch) / 1000000.0;
+				/* (timestamp - epoch) / 1000000 */
+				if (retnumeric)
+				{
+					Numeric		result;
+
+					if (timestamp < (PG_INT64_MAX + epoch))
+						result = int64_div_fast_to_numeric(timestamp - epoch, 6);
+					else
+					{
+						result = numeric_div_opt_error(numeric_sub_opt_error(int64_to_numeric(timestamp),
+																			 int64_to_numeric(epoch),
+																			 NULL),
+													   int64_to_numeric(1000000),
+													   NULL);
+						result = DatumGetNumeric(DirectFunctionCall2(numeric_round,
+																	 NumericGetDatum(result),
+																	 Int32GetDatum(6)));
+					}
+					PG_RETURN_NUMERIC(result);
+				}
 				else
-					result = ((float8) timestamp - epoch) / 1000000.0;
+				{
+					float8		result;
+
+					/* try to avoid precision loss in subtraction */
+					if (timestamp < (PG_INT64_MAX + epoch))
+						result = (timestamp - epoch) / 1000000.0;
+					else
+						result = ((float8) timestamp - epoch) / 1000000.0;
+					PG_RETURN_FLOAT8(result);
+				}
 				break;
 
 			default:
@@ -4698,7 +4866,7 @@ timestamp_part(PG_FUNCTION_ARGS)
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("timestamp units \"%s\" not supported",
 								lowunits)));
-				result = 0;
+				intresult = 0;
 		}
 
 	}
@@ -4707,27 +4875,41 @@ timestamp_part(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("timestamp units \"%s\" not recognized", lowunits)));
-		result = 0;
+		intresult = 0;
 	}
 
-	PG_RETURN_FLOAT8(result);
+	if (retnumeric)
+		PG_RETURN_NUMERIC(int64_to_numeric(intresult));
+	else
+		PG_RETURN_FLOAT8(intresult);
 }
 
-/* timestamptz_part()
+Datum
+timestamp_part(PG_FUNCTION_ARGS)
+{
+	return timestamp_part_common(fcinfo, false);
+}
+
+Datum
+extract_timestamp(PG_FUNCTION_ARGS)
+{
+	return timestamp_part_common(fcinfo, true);
+}
+
+/* timestamptz_part() and extract_timestamptz()
  * Extract specified field from timestamp with time zone.
  */
-Datum
-timestamptz_part(PG_FUNCTION_ARGS)
+static Datum
+timestamptz_part_common(PG_FUNCTION_ARGS, bool retnumeric)
 {
 	text	   *units = PG_GETARG_TEXT_PP(0);
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(1);
-	float8		result;
+	int64		intresult;
 	Timestamp	epoch;
 	int			tz;
 	int			type,
 				val;
 	char	   *lowunits;
-	double		dummy;
 	fsec_t		fsec;
 	struct pg_tm tt,
 			   *tm = &tt;
@@ -4742,11 +4924,28 @@ timestamptz_part(PG_FUNCTION_ARGS)
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
 	{
-		result = NonFiniteTimestampTzPart(type, val, lowunits,
-										  TIMESTAMP_IS_NOBEGIN(timestamp),
-										  true);
-		if (result)
-			PG_RETURN_FLOAT8(result);
+		double		r = NonFiniteTimestampTzPart(type, val, lowunits,
+												 TIMESTAMP_IS_NOBEGIN(timestamp),
+												 true);
+
+		if (r)
+		{
+			if (retnumeric)
+			{
+				if (r < 0)
+					return DirectFunctionCall3(numeric_in,
+											   CStringGetDatum("-Infinity"),
+											   ObjectIdGetDatum(InvalidOid),
+											   Int32GetDatum(-1));
+				else if (r > 0)
+					return DirectFunctionCall3(numeric_in,
+											   CStringGetDatum("Infinity"),
+											   ObjectIdGetDatum(InvalidOid),
+											   Int32GetDatum(-1));
+			}
+			else
+				PG_RETURN_FLOAT8(r);
+		}
 		else
 			PG_RETURN_NULL();
 	}
@@ -4761,111 +4960,129 @@ timestamptz_part(PG_FUNCTION_ARGS)
 		switch (val)
 		{
 			case DTK_TZ:
-				result = -tz;
+				intresult = -tz;
 				break;
 
 			case DTK_TZ_MINUTE:
-				result = -tz;
-				result /= MINS_PER_HOUR;
-				FMODULO(result, dummy, (double) MINS_PER_HOUR);
+				intresult = (-tz / SECS_PER_MINUTE) % MINS_PER_HOUR;
 				break;
 
 			case DTK_TZ_HOUR:
-				dummy = -tz;
-				FMODULO(dummy, result, (double) SECS_PER_HOUR);
+				intresult = -tz / SECS_PER_HOUR;
 				break;
 
 			case DTK_MICROSEC:
-				result = tm->tm_sec * 1000000.0 + fsec;
+				intresult = tm->tm_sec * INT64CONST(1000000) + fsec;
 				break;
 
 			case DTK_MILLISEC:
-				result = tm->tm_sec * 1000.0 + fsec / 1000.0;
+				if (retnumeric)
+					/*---
+					 * tm->tm_sec * 1000 + fsec / 1000
+					 * = (tm->tm_sec * 1'000'000 + fsec) / 1000
+					 */
+					PG_RETURN_NUMERIC(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 3));
+				else
+					PG_RETURN_FLOAT8(tm->tm_sec * 1000.0 + fsec / 1000.0);
 				break;
 
 			case DTK_SECOND:
-				result = tm->tm_sec + fsec / 1000000.0;
+				if (retnumeric)
+					/*---
+					 * tm->tm_sec + fsec / 1'000'000
+					 * = (tm->tm_sec * 1'000'000 + fsec) / 1'000'000
+					 */
+					PG_RETURN_NUMERIC(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 6));
+				else
+					PG_RETURN_FLOAT8(tm->tm_sec + fsec / 1000000.0);
 				break;
 
 			case DTK_MINUTE:
-				result = tm->tm_min;
+				intresult = tm->tm_min;
 				break;
 
 			case DTK_HOUR:
-				result = tm->tm_hour;
+				intresult = tm->tm_hour;
 				break;
 
 			case DTK_DAY:
-				result = tm->tm_mday;
+				intresult = tm->tm_mday;
 				break;
 
 			case DTK_MONTH:
-				result = tm->tm_mon;
+				intresult = tm->tm_mon;
 				break;
 
 			case DTK_QUARTER:
-				result = (tm->tm_mon - 1) / 3 + 1;
+				intresult = (tm->tm_mon - 1) / 3 + 1;
 				break;
 
 			case DTK_WEEK:
-				result = (float8) date2isoweek(tm->tm_year, tm->tm_mon, tm->tm_mday);
+				intresult = date2isoweek(tm->tm_year, tm->tm_mon, tm->tm_mday);
 				break;
 
 			case DTK_YEAR:
 				if (tm->tm_year > 0)
-					result = tm->tm_year;
+					intresult = tm->tm_year;
 				else
 					/* there is no year 0, just 1 BC and 1 AD */
-					result = tm->tm_year - 1;
+					intresult = tm->tm_year - 1;
 				break;
 
 			case DTK_DECADE:
 				/* see comments in timestamp_part */
 				if (tm->tm_year > 0)
-					result = tm->tm_year / 10;
+					intresult = tm->tm_year / 10;
 				else
-					result = -((8 - (tm->tm_year - 1)) / 10);
+					intresult = -((8 - (tm->tm_year - 1)) / 10);
 				break;
 
 			case DTK_CENTURY:
 				/* see comments in timestamp_part */
 				if (tm->tm_year > 0)
-					result = (tm->tm_year + 99) / 100;
+					intresult = (tm->tm_year + 99) / 100;
 				else
-					result = -((99 - (tm->tm_year - 1)) / 100);
+					intresult = -((99 - (tm->tm_year - 1)) / 100);
 				break;
 
 			case DTK_MILLENNIUM:
 				/* see comments in timestamp_part */
 				if (tm->tm_year > 0)
-					result = (tm->tm_year + 999) / 1000;
+					intresult = (tm->tm_year + 999) / 1000;
 				else
-					result = -((999 - (tm->tm_year - 1)) / 1000);
+					intresult = -((999 - (tm->tm_year - 1)) / 1000);
 				break;
 
 			case DTK_JULIAN:
-				result = date2j(tm->tm_year, tm->tm_mon, tm->tm_mday);
-				result += ((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) +
-						   tm->tm_sec + (fsec / 1000000.0)) / (double) SECS_PER_DAY;
+				if (retnumeric)
+					PG_RETURN_NUMERIC(numeric_add_opt_error(int64_to_numeric(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)),
+															numeric_div_opt_error(int64_to_numeric(((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) + tm->tm_sec) * INT64CONST(1000000) + fsec),
+																				  int64_to_numeric(SECS_PER_DAY * INT64CONST(1000000)),
+																				  NULL),
+															NULL));
+				else
+					PG_RETURN_FLOAT8(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday) +
+									 ((((tm->tm_hour * MINS_PER_HOUR) + tm->tm_min) * SECS_PER_MINUTE) +
+									  tm->tm_sec + (fsec / 1000000.0)) / (double) SECS_PER_DAY);
 				break;
 
 			case DTK_ISOYEAR:
-				result = date2isoyear(tm->tm_year, tm->tm_mon, tm->tm_mday);
+				intresult = date2isoyear(tm->tm_year, tm->tm_mon, tm->tm_mday);
 				/* Adjust BC years */
-				if (result <= 0)
-					result -= 1;
+				if (intresult <= 0)
+					intresult -= 1;
 				break;
 
 			case DTK_DOW:
 			case DTK_ISODOW:
-				result = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
-				if (val == DTK_ISODOW && result == 0)
-					result = 7;
+				intresult = j2day(date2j(tm->tm_year, tm->tm_mon, tm->tm_mday));
+				if (val == DTK_ISODOW && intresult == 0)
+					intresult = 7;
 				break;
 
 			case DTK_DOY:
-				result = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
-						  - date2j(tm->tm_year, 1, 1) + 1);
+				intresult = (date2j(tm->tm_year, tm->tm_mon, tm->tm_mday)
+							 - date2j(tm->tm_year, 1, 1) + 1);
 				break;
 
 			default:
@@ -4873,7 +5090,7 @@ timestamptz_part(PG_FUNCTION_ARGS)
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("timestamp with time zone units \"%s\" not supported",
 								lowunits)));
-				result = 0;
+				intresult = 0;
 		}
 
 	}
@@ -4883,11 +5100,37 @@ timestamptz_part(PG_FUNCTION_ARGS)
 		{
 			case DTK_EPOCH:
 				epoch = SetEpochTimestamp();
-				/* try to avoid precision loss in subtraction */
-				if (timestamp < (PG_INT64_MAX + epoch))
-					result = (timestamp - epoch) / 1000000.0;
+				/* (timestamp - epoch) / 1000000 */
+				if (retnumeric)
+				{
+					Numeric		result;
+
+					if (timestamp < (PG_INT64_MAX + epoch))
+						result = int64_div_fast_to_numeric(timestamp - epoch, 6);
+					else
+					{
+						result = numeric_div_opt_error(numeric_sub_opt_error(int64_to_numeric(timestamp),
+																			 int64_to_numeric(epoch),
+																			 NULL),
+													   int64_to_numeric(1000000),
+													   NULL);
+						result = DatumGetNumeric(DirectFunctionCall2(numeric_round,
+																	 NumericGetDatum(result),
+																	 Int32GetDatum(6)));
+					}
+					PG_RETURN_NUMERIC(result);
+				}
 				else
-					result = ((float8) timestamp - epoch) / 1000000.0;
+				{
+					float8		result;
+
+					/* try to avoid precision loss in subtraction */
+					if (timestamp < (PG_INT64_MAX + epoch))
+						result = (timestamp - epoch) / 1000000.0;
+					else
+						result = ((float8) timestamp - epoch) / 1000000.0;
+					PG_RETURN_FLOAT8(result);
+				}
 				break;
 
 			default:
@@ -4895,7 +5138,7 @@ timestamptz_part(PG_FUNCTION_ARGS)
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("timestamp with time zone units \"%s\" not supported",
 								lowunits)));
-				result = 0;
+				intresult = 0;
 		}
 	}
 	else
@@ -4905,22 +5148,37 @@ timestamptz_part(PG_FUNCTION_ARGS)
 				 errmsg("timestamp with time zone units \"%s\" not recognized",
 						lowunits)));
 
-		result = 0;
+		intresult = 0;
 	}
 
-	PG_RETURN_FLOAT8(result);
+	if (retnumeric)
+		PG_RETURN_NUMERIC(int64_to_numeric(intresult));
+	else
+		PG_RETURN_FLOAT8(intresult);
+}
+
+Datum
+timestamptz_part(PG_FUNCTION_ARGS)
+{
+	return timestamptz_part_common(fcinfo, false);
+}
+
+Datum
+extract_timestamptz(PG_FUNCTION_ARGS)
+{
+	return timestamptz_part_common(fcinfo, true);
 }
 
 
-/* interval_part()
+/* interval_part() and extract_interval()
  * Extract specified field from interval.
  */
-Datum
-interval_part(PG_FUNCTION_ARGS)
+static Datum
+interval_part_common(PG_FUNCTION_ARGS, bool retnumeric)
 {
 	text	   *units = PG_GETARG_TEXT_PP(0);
 	Interval   *interval = PG_GETARG_INTERVAL_P(1);
-	float8		result;
+	int64		intresult;
 	int			type,
 				val;
 	char	   *lowunits;
@@ -4943,54 +5201,68 @@ interval_part(PG_FUNCTION_ARGS)
 			switch (val)
 			{
 				case DTK_MICROSEC:
-					result = tm->tm_sec * 1000000.0 + fsec;
+					intresult = tm->tm_sec * INT64CONST(1000000) + fsec;
 					break;
 
 				case DTK_MILLISEC:
-					result = tm->tm_sec * 1000.0 + fsec / 1000.0;
+					if (retnumeric)
+						/*---
+						 * tm->tm_sec * 1000 + fsec / 1000
+						 * = (tm->tm_sec * 1'000'000 + fsec) / 1000
+						 */
+						PG_RETURN_NUMERIC(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 3));
+					else
+						PG_RETURN_FLOAT8(tm->tm_sec * 1000.0 + fsec / 1000.0);
 					break;
 
 				case DTK_SECOND:
-					result = tm->tm_sec + fsec / 1000000.0;
+					if (retnumeric)
+						/*---
+						 * tm->tm_sec + fsec / 1'000'000
+						 * = (tm->tm_sec * 1'000'000 + fsec) / 1'000'000
+						 */
+						PG_RETURN_NUMERIC(int64_div_fast_to_numeric(tm->tm_sec * INT64CONST(1000000) + fsec, 6));
+					else
+						PG_RETURN_FLOAT8(tm->tm_sec + fsec / 1000000.0);
 					break;
 
 				case DTK_MINUTE:
-					result = tm->tm_min;
+					intresult = tm->tm_min;
 					break;
 
 				case DTK_HOUR:
-					result = tm->tm_hour;
+					intresult = tm->tm_hour;
 					break;
 
 				case DTK_DAY:
-					result = tm->tm_mday;
+					intresult = tm->tm_mday;
 					break;
 
 				case DTK_MONTH:
-					result = tm->tm_mon;
+					intresult = tm->tm_mon;
 					break;
 
 				case DTK_QUARTER:
-					result = (tm->tm_mon / 3) + 1;
+					intresult = (tm->tm_mon / 3) + 1;
 					break;
 
 				case DTK_YEAR:
-					result = tm->tm_year;
+					intresult = tm->tm_year;
 					break;
 
 				case DTK_DECADE:
 					/* caution: C division may have negative remainder */
-					result = tm->tm_year / 10;
+					intresult = tm->tm_year / 10;
 					break;
 
 				case DTK_CENTURY:
 					/* caution: C division may have negative remainder */
-					result = tm->tm_year / 100;
+					intresult = tm->tm_year / 100;
 					break;
 
 				case DTK_MILLENNIUM:
 					/* caution: C division may have negative remainder */
-					result = tm->tm_year / 1000;
+					intresult = tm->tm_year / 1000;
 					break;
 
 				default:
@@ -4998,22 +5270,60 @@ interval_part(PG_FUNCTION_ARGS)
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("interval units \"%s\" not supported",
 									lowunits)));
-					result = 0;
+					intresult = 0;
 			}
-
 		}
 		else
 		{
 			elog(ERROR, "could not convert interval to tm");
-			result = 0;
+			intresult = 0;
 		}
 	}
 	else if (type == RESERV && val == DTK_EPOCH)
 	{
-		result = interval->time / 1000000.0;
-		result += ((double) DAYS_PER_YEAR * SECS_PER_DAY) * (interval->month / MONTHS_PER_YEAR);
-		result += ((double) DAYS_PER_MONTH * SECS_PER_DAY) * (interval->month % MONTHS_PER_YEAR);
-		result += ((double) SECS_PER_DAY) * interval->day;
+		if (retnumeric)
+		{
+			Numeric		result;
+			int64		secs_from_day_month;
+			int64		val;
+
+			/* this always fits into int64 */
+			secs_from_day_month = ((int64) DAYS_PER_YEAR * (interval->month / MONTHS_PER_YEAR) +
+								   (int64) DAYS_PER_MONTH * (interval->month % MONTHS_PER_YEAR) +
+								   interval->day) * SECS_PER_DAY;
+
+			/*---
+			 * result = secs_from_day_month + interval->time / 1'000'000
+			 * = (secs_from_day_month * 1'000'000 + interval->time) / 1'000'000
+			 */
+
+			/*
+			 * Try the computation inside int64; if it overflows, do it in
+			 * numeric (slower).  This overflow happens around 10^9 days, so
+			 * not common in practice.
+			 */
+			if (!pg_mul_s64_overflow(secs_from_day_month, 1000000, &val) &&
+				!pg_add_s64_overflow(val, interval->time, &val))
+				result = int64_div_fast_to_numeric(val, 6);
+			else
+				result =
+					numeric_add_opt_error(int64_div_fast_to_numeric(interval->time, 6),
+										  int64_to_numeric(secs_from_day_month),
+										  NULL);
+
+			PG_RETURN_NUMERIC(result);
+		}
+		else
+		{
+			float8		result;
+
+			result = interval->time / 1000000.0;
+			result += ((double) DAYS_PER_YEAR * SECS_PER_DAY) * (interval->month / MONTHS_PER_YEAR);
+			result += ((double) DAYS_PER_MONTH * SECS_PER_DAY) * (interval->month % MONTHS_PER_YEAR);
+			result += ((double) SECS_PER_DAY) * interval->day;
+
+			PG_RETURN_FLOAT8(result);
+		}
 	}
 	else
 	{
@@ -5021,10 +5331,25 @@ interval_part(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("interval units \"%s\" not recognized",
 						lowunits)));
-		result = 0;
+		intresult = 0;
 	}
 
-	PG_RETURN_FLOAT8(result);
+	if (retnumeric)
+		PG_RETURN_NUMERIC(int64_to_numeric(intresult));
+	else
+		PG_RETURN_FLOAT8(intresult);
+}
+
+Datum
+interval_part(PG_FUNCTION_ARGS)
+{
+	return interval_part_common(fcinfo, false);
+}
+
+Datum
+extract_interval(PG_FUNCTION_ARGS)
+{
+	return interval_part_common(fcinfo, true);
 }
 
 

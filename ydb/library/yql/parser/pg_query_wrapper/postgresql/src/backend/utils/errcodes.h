@@ -296,6 +296,7 @@
 #define ERRCODE_CRASH_SHUTDOWN MAKE_SQLSTATE('5','7','P','0','2')
 #define ERRCODE_CANNOT_CONNECT_NOW MAKE_SQLSTATE('5','7','P','0','3')
 #define ERRCODE_DATABASE_DROPPED MAKE_SQLSTATE('5','7','P','0','4')
+#define ERRCODE_IDLE_SESSION_TIMEOUT MAKE_SQLSTATE('5','7','P','0','5')
 
 /* Class 58 - System Error (errors external to PostgreSQL itself) */
 #define ERRCODE_SYSTEM_ERROR MAKE_SQLSTATE('5','8','0','0','0')

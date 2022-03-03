@@ -80,7 +80,7 @@
  * general, after logging in, but let's do what we can here.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/backend/libpq/auth-scram.c
@@ -95,6 +95,7 @@
 #include "catalog/pg_authid.h"
 #include "catalog/pg_control.h"
 #include "common/base64.h"
+#include "common/hmac.h"
 #include "common/saslprep.h"
 #include "common/scram-common.h"
 #include "common/sha2.h"
@@ -527,8 +528,12 @@ scram_verify_plain_password(const char *username, const char *password,
 		password = prep_password;
 
 	/* Compute Server Key based on the user-supplied plaintext password */
-	scram_SaltedPassword(password, salt, saltlen, iterations, salted_password);
-	scram_ServerKey(salted_password, computed_key);
+	if (scram_SaltedPassword(password, salt, saltlen, iterations,
+							 salted_password) < 0 ||
+		scram_ServerKey(salted_password, computed_key) < 0)
+	{
+		elog(ERROR, "could not compute server key");
+	}
 
 	if (prep_password)
 		pfree(prep_password);
@@ -651,8 +656,17 @@ mock_scram_secret(const char *username, int *iterations, char **salt,
 	char	   *encoded_salt;
 	int			encoded_len;
 
-	/* Generate deterministic salt */
+	/*
+	 * Generate deterministic salt.
+	 *
+	 * Note that we cannot reveal any information to an attacker here so the
+	 * error messages need to remain generic.  This should never fail anyway
+	 * as the salt generated for mock authentication uses the cluster's nonce
+	 * value.
+	 */
 	raw_salt = scram_mock_salt(username);
+	if (raw_salt == NULL)
+		elog(ERROR, "could not encode salt");
 
 	encoded_len = pg_b64_enc_len(SCRAM_DEFAULT_SALT_LEN);
 	/* don't forget the zero-terminator */
@@ -660,12 +674,6 @@ mock_scram_secret(const char *username, int *iterations, char **salt,
 	encoded_len = pg_b64_encode(raw_salt, SCRAM_DEFAULT_SALT_LEN, encoded_salt,
 								encoded_len);
 
-	/*
-	 * Note that we cannot reveal any information to an attacker here so the
-	 * error message needs to remain generic.  This should never fail anyway
-	 * as the salt generated for mock authentication uses the cluster's nonce
-	 * value.
-	 */
 	if (encoded_len < 0)
 		elog(ERROR, "could not encode salt");
 	encoded_salt[encoded_len] = '\0';
@@ -1084,7 +1092,8 @@ verify_final_nonce(scram_state *state)
 
 /*
  * Verify the client proof contained in the last message received from
- * client in an exchange.
+ * client in an exchange.  Returns true if the verification is a success,
+ * or false for a failure.
  */
 static bool
 verify_client_proof(scram_state *state)
@@ -1092,30 +1101,40 @@ verify_client_proof(scram_state *state)
 	uint8		ClientSignature[SCRAM_KEY_LEN];
 	uint8		ClientKey[SCRAM_KEY_LEN];
 	uint8		client_StoredKey[SCRAM_KEY_LEN];
-	scram_HMAC_ctx ctx;
+	pg_hmac_ctx *ctx = pg_hmac_create(PG_SHA256);
 	int			i;
 
-	/* calculate ClientSignature */
-	scram_HMAC_init(&ctx, state->StoredKey, SCRAM_KEY_LEN);
-	scram_HMAC_update(&ctx,
-					  state->client_first_message_bare,
-					  strlen(state->client_first_message_bare));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  state->server_first_message,
-					  strlen(state->server_first_message));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  state->client_final_message_without_proof,
-					  strlen(state->client_final_message_without_proof));
-	scram_HMAC_final(ClientSignature, &ctx);
+	/*
+	 * Calculate ClientSignature.  Note that we don't log directly a failure
+	 * here even when processing the calculations as this could involve a mock
+	 * authentication.
+	 */
+	if (pg_hmac_init(ctx, state->StoredKey, SCRAM_KEY_LEN) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->client_first_message_bare,
+					   strlen(state->client_first_message_bare)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->server_first_message,
+					   strlen(state->server_first_message)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->client_final_message_without_proof,
+					   strlen(state->client_final_message_without_proof)) < 0 ||
+		pg_hmac_final(ctx, ClientSignature, sizeof(ClientSignature)) < 0)
+	{
+		elog(ERROR, "could not calculate client signature");
+	}
+
+	pg_hmac_free(ctx);
 
 	/* Extract the ClientKey that the client calculated from the proof */
 	for (i = 0; i < SCRAM_KEY_LEN; i++)
 		ClientKey[i] = state->ClientProof[i] ^ ClientSignature[i];
 
 	/* Hash it one more time, and compare with StoredKey */
-	scram_H(ClientKey, SCRAM_KEY_LEN, client_StoredKey);
+	if (scram_H(ClientKey, SCRAM_KEY_LEN, client_StoredKey) < 0)
+		elog(ERROR, "could not hash stored key");
 
 	if (memcmp(client_StoredKey, state->StoredKey, SCRAM_KEY_LEN) != 0)
 		return false;
@@ -1343,22 +1362,27 @@ build_server_final_message(scram_state *state)
 	uint8		ServerSignature[SCRAM_KEY_LEN];
 	char	   *server_signature_base64;
 	int			siglen;
-	scram_HMAC_ctx ctx;
+	pg_hmac_ctx *ctx = pg_hmac_create(PG_SHA256);
 
 	/* calculate ServerSignature */
-	scram_HMAC_init(&ctx, state->ServerKey, SCRAM_KEY_LEN);
-	scram_HMAC_update(&ctx,
-					  state->client_first_message_bare,
-					  strlen(state->client_first_message_bare));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  state->server_first_message,
-					  strlen(state->server_first_message));
-	scram_HMAC_update(&ctx, ",", 1);
-	scram_HMAC_update(&ctx,
-					  state->client_final_message_without_proof,
-					  strlen(state->client_final_message_without_proof));
-	scram_HMAC_final(ServerSignature, &ctx);
+	if (pg_hmac_init(ctx, state->ServerKey, SCRAM_KEY_LEN) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->client_first_message_bare,
+					   strlen(state->client_first_message_bare)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->server_first_message,
+					   strlen(state->server_first_message)) < 0 ||
+		pg_hmac_update(ctx, (uint8 *) ",", 1) < 0 ||
+		pg_hmac_update(ctx,
+					   (uint8 *) state->client_final_message_without_proof,
+					   strlen(state->client_final_message_without_proof)) < 0 ||
+		pg_hmac_final(ctx, ServerSignature, sizeof(ServerSignature)) < 0)
+	{
+		elog(ERROR, "could not calculate server signature");
+	}
+
+	pg_hmac_free(ctx);
 
 	siglen = pg_b64_enc_len(SCRAM_KEY_LEN);
 	/* don't forget the zero-terminator */
@@ -1388,28 +1412,34 @@ build_server_final_message(scram_state *state)
 /*
  * Deterministically generate salt for mock authentication, using a SHA256
  * hash based on the username and a cluster-level secret key.  Returns a
- * pointer to a static buffer of size SCRAM_DEFAULT_SALT_LEN.
+ * pointer to a static buffer of size SCRAM_DEFAULT_SALT_LEN, or NULL.
  */
 static char *
 scram_mock_salt(const char *username)
 {
-	pg_sha256_ctx ctx;
+	pg_cryptohash_ctx *ctx;
 	static __thread uint8 sha_digest[PG_SHA256_DIGEST_LENGTH];
 	char	   *mock_auth_nonce = GetMockAuthenticationNonce();
 
 	/*
 	 * Generate salt using a SHA256 hash of the username and the cluster's
 	 * mock authentication nonce.  (This works as long as the salt length is
-	 * not larger the SHA256 digest length. If the salt is smaller, the caller
-	 * will just ignore the extra data.)
+	 * not larger than the SHA256 digest length.  If the salt is smaller, the
+	 * caller will just ignore the extra data.)
 	 */
 	StaticAssertStmt(PG_SHA256_DIGEST_LENGTH >= SCRAM_DEFAULT_SALT_LEN,
 					 "salt length greater than SHA256 digest length");
 
-	pg_sha256_init(&ctx);
-	pg_sha256_update(&ctx, (uint8 *) username, strlen(username));
-	pg_sha256_update(&ctx, (uint8 *) mock_auth_nonce, MOCK_AUTH_NONCE_LEN);
-	pg_sha256_final(&ctx, sha_digest);
+	ctx = pg_cryptohash_create(PG_SHA256);
+	if (pg_cryptohash_init(ctx) < 0 ||
+		pg_cryptohash_update(ctx, (uint8 *) username, strlen(username)) < 0 ||
+		pg_cryptohash_update(ctx, (uint8 *) mock_auth_nonce, MOCK_AUTH_NONCE_LEN) < 0 ||
+		pg_cryptohash_final(ctx, sha_digest, sizeof(sha_digest)) < 0)
+	{
+		pg_cryptohash_free(ctx);
+		return NULL;
+	}
+	pg_cryptohash_free(ctx);
 
 	return (char *) sha_digest;
 }

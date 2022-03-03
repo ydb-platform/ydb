@@ -3,7 +3,7 @@
  * pqsignal.c
  *	  Backend signal(2) support (see also src/port/pqsignal.c)
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -35,12 +35,14 @@ sigset_t	UnBlockSig,
  * collection; it's essentially BlockSig minus SIGTERM, SIGQUIT, SIGALRM.
  *
  * UnBlockSig is the set of signals to block when we don't want to block
- * signals (is this ever nonzero??)
+ * signals.
  */
 void
 pqinitmask(void)
 {
 	sigemptyset(&UnBlockSig);
+
+	/* Note: InitializeLatchSupport() modifies UnBlockSig. */
 
 	/* First set all signals, then clear some. */
 	sigfillset(&BlockSig);

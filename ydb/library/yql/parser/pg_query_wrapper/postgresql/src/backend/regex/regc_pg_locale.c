@@ -6,7 +6,7 @@
  *
  * This file is #included by regcomp.c; it's not meant to compile standalone.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -398,6 +398,15 @@ pg_wc_isalnum(pg_wchar c)
 			break;
 	}
 	return 0;					/* can't get here, but keep compiler quiet */
+}
+
+static int
+pg_wc_isword(pg_wchar c)
+{
+	/* We define word characters as alnum class plus underscore */
+	if (c == CHR('_'))
+		return 1;
+	return pg_wc_isalnum(c);
 }
 
 static int

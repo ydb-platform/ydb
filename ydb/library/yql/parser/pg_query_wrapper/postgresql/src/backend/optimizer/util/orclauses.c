@@ -3,7 +3,7 @@
  * orclauses.c
  *	  Routines to extract restriction OR clauses from join OR clauses
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -23,9 +23,6 @@
 #include "optimizer/orclauses.h"
 #include "optimizer/restrictinfo.h"
 
-
-/* source-code-compatibility hacks for pull_varnos() API change */
-#define make_restrictinfo(a,b,c,d,e,f,g,h,i) make_restrictinfo_new(a,b,c,d,e,f,g,h,i)
 
 static bool is_safe_restriction_clause_for(RestrictInfo *rinfo, RelOptInfo *rel);
 static Expr *extract_or_clause(RestrictInfo *or_rinfo, RelOptInfo *rel);

@@ -4,7 +4,7 @@
  * Postgres write-ahead log manager record pointer and
  * timeline number definitions
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/xlogdefs.h
@@ -34,6 +34,13 @@ typedef uint64 XLogRecPtr;
  * Values smaller than this can be used for special per-AM purposes.
  */
 #define FirstNormalUnloggedLSN	((XLogRecPtr) 1000)
+
+/*
+ * Handy macro for printing XLogRecPtr in conventional format, e.g.,
+ *
+ * printf("%X/%X", LSN_FORMAT_ARGS(lsn));
+ */
+#define LSN_FORMAT_ARGS(lsn) (AssertVariableIsOfTypeMacro((lsn), XLogRecPtr), (uint32) ((lsn) >> 32)), ((uint32) (lsn))
 
 /*
  * XLogSegNo - physical log file sequence number.

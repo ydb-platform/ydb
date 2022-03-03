@@ -3,7 +3,7 @@
  * pg_conversion.c
  *	  routines to support manipulation of the pg_conversion relation
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -140,39 +140,6 @@ ConversionCreate(const char *conname, Oid connamespace,
 	table_close(rel, RowExclusiveLock);
 
 	return myself;
-}
-
-/*
- * RemoveConversionById
- *
- * Remove a tuple from pg_conversion by Oid. This function is solely
- * called inside catalog/dependency.c
- */
-void
-RemoveConversionById(Oid conversionOid)
-{
-	Relation	rel;
-	HeapTuple	tuple;
-	TableScanDesc scan;
-	ScanKeyData scanKeyData;
-
-	ScanKeyInit(&scanKeyData,
-				Anum_pg_conversion_oid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(conversionOid));
-
-	/* open pg_conversion */
-	rel = table_open(ConversionRelationId, RowExclusiveLock);
-
-	scan = table_beginscan_catalog(rel, 1, &scanKeyData);
-
-	/* search for the target tuple */
-	if (HeapTupleIsValid(tuple = heap_getnext(scan, ForwardScanDirection)))
-		CatalogTupleDelete(rel, &tuple->t_self);
-	else
-		elog(ERROR, "could not find tuple for conversion %u", conversionOid);
-	table_endscan(scan);
-	table_close(rel, RowExclusiveLock);
 }
 
 /*

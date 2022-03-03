@@ -11,7 +11,7 @@
  * algorithm.  Parallel sorts use a variant of this external sort
  * algorithm, and are typically only used for large amounts of data.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/tuplesort.h
@@ -215,6 +215,10 @@ extern Tuplesortstate *tuplesort_begin_index_hash(Relation heapRel,
 												  uint32 high_mask,
 												  uint32 low_mask,
 												  uint32 max_buckets,
+												  int workMem, SortCoordinate coordinate,
+												  bool randomAccess);
+extern Tuplesortstate *tuplesort_begin_index_gist(Relation heapRel,
+												  Relation indexRel,
 												  int workMem, SortCoordinate coordinate,
 												  bool randomAccess);
 extern Tuplesortstate *tuplesort_begin_datum(Oid datumType,

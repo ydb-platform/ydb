@@ -3,7 +3,7 @@
  * misc.c
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -25,6 +25,7 @@
 #include "catalog/catalog.h"
 #include "catalog/pg_tablespace.h"
 #include "catalog/pg_type.h"
+#include "catalog/system_fk_info.h"
 #include "commands/dbcommands.h"
 #include "commands/tablespace.h"
 #include "common/keywords.h"
@@ -35,8 +36,10 @@
 #include "postmaster/syslogger.h"
 #include "rewrite/rewriteHandler.h"
 #include "storage/fd.h"
+#include "storage/latch.h"
 #include "tcop/tcopprot.h"
 #include "utils/builtins.h"
+#include "utils/fmgroids.h"
 #include "utils/lsyscache.h"
 #include "utils/ruleutils.h"
 #include "utils/timestamp.h"
@@ -416,12 +419,16 @@ pg_get_keywords(PG_FUNCTION_ARGS)
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
-		tupdesc = CreateTemplateTupleDesc(3);
+		tupdesc = CreateTemplateTupleDesc(5);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "word",
 						   TEXTOID, -1, 0);
 		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "catcode",
 						   CHAROID, -1, 0);
-		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "catdesc",
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "barelabel",
+						   BOOLOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "catdesc",
+						   TEXTOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "baredesc",
 						   TEXTOID, -1, 0);
 
 		funcctx->attinmeta = TupleDescGetAttInMetadata(tupdesc);
@@ -433,7 +440,7 @@ pg_get_keywords(PG_FUNCTION_ARGS)
 
 	if (funcctx->call_cntr < ScanKeywords.num_keywords)
 	{
-		char	   *values[3];
+		char	   *values[5];
 		HeapTuple	tuple;
 
 		/* cast-away-const is ugly but alternatives aren't much better */
@@ -445,27 +452,116 @@ pg_get_keywords(PG_FUNCTION_ARGS)
 		{
 			case UNRESERVED_KEYWORD:
 				values[1] = "U";
-				values[2] = _("unreserved");
+				values[3] = _("unreserved");
 				break;
 			case COL_NAME_KEYWORD:
 				values[1] = "C";
-				values[2] = _("unreserved (cannot be function or type name)");
+				values[3] = _("unreserved (cannot be function or type name)");
 				break;
 			case TYPE_FUNC_NAME_KEYWORD:
 				values[1] = "T";
-				values[2] = _("reserved (can be function or type name)");
+				values[3] = _("reserved (can be function or type name)");
 				break;
 			case RESERVED_KEYWORD:
 				values[1] = "R";
-				values[2] = _("reserved");
+				values[3] = _("reserved");
 				break;
 			default:			/* shouldn't be possible */
 				values[1] = NULL;
-				values[2] = NULL;
+				values[3] = NULL;
 				break;
 		}
 
+		if (ScanKeywordBareLabel[funcctx->call_cntr])
+		{
+			values[2] = "true";
+			values[4] = _("can be bare label");
+		}
+		else
+		{
+			values[2] = "false";
+			values[4] = _("requires AS");
+		}
+
 		tuple = BuildTupleFromCStrings(funcctx->attinmeta, values);
+
+		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
+	}
+
+	SRF_RETURN_DONE(funcctx);
+}
+
+
+/* Function to return the list of catalog foreign key relationships */
+Datum
+pg_get_catalog_foreign_keys(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	FmgrInfo   *arrayinp;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+		TupleDesc	tupdesc;
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		tupdesc = CreateTemplateTupleDesc(6);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 1, "fktable",
+						   REGCLASSOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 2, "fkcols",
+						   TEXTARRAYOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 3, "pktable",
+						   REGCLASSOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 4, "pkcols",
+						   TEXTARRAYOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 5, "is_array",
+						   BOOLOID, -1, 0);
+		TupleDescInitEntry(tupdesc, (AttrNumber) 6, "is_opt",
+						   BOOLOID, -1, 0);
+
+		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+
+		/*
+		 * We use array_in to convert the C strings in sys_fk_relationships[]
+		 * to text arrays.  But we cannot use DirectFunctionCallN to call
+		 * array_in, and it wouldn't be very efficient if we could.  Fill an
+		 * FmgrInfo to use for the call.
+		 */
+		arrayinp = (FmgrInfo *) palloc(sizeof(FmgrInfo));
+		fmgr_info(F_ARRAY_IN, arrayinp);
+		funcctx->user_fctx = arrayinp;
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	arrayinp = (FmgrInfo *) funcctx->user_fctx;
+
+	if (funcctx->call_cntr < lengthof(sys_fk_relationships))
+	{
+		const SysFKRelationship *fkrel = &sys_fk_relationships[funcctx->call_cntr];
+		Datum		values[6];
+		bool		nulls[6];
+		HeapTuple	tuple;
+
+		memset(nulls, false, sizeof(nulls));
+
+		values[0] = ObjectIdGetDatum(fkrel->fk_table);
+		values[1] = FunctionCall3(arrayinp,
+								  CStringGetDatum(fkrel->fk_columns),
+								  ObjectIdGetDatum(TEXTOID),
+								  Int32GetDatum(-1));
+		values[2] = ObjectIdGetDatum(fkrel->pk_table);
+		values[3] = FunctionCall3(arrayinp,
+								  CStringGetDatum(fkrel->pk_columns),
+								  ObjectIdGetDatum(TEXTOID),
+								  Int32GetDatum(-1));
+		values[4] = BoolGetDatum(fkrel->is_array);
+		values[5] = BoolGetDatum(fkrel->is_opt);
+
+		tuple = heap_form_tuple(funcctx->tuple_desc, values, nulls);
 
 		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 	}

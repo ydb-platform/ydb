@@ -3,7 +3,7 @@
  * backup_manifest.h
  *	  Routines for generating a backup manifest.
  *
- * Portions Copyright (c) 2010-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2021, PostgreSQL Global Development Group
  *
  * src/include/replication/backup_manifest.h
  *
@@ -28,7 +28,7 @@ typedef struct backup_manifest_info
 {
 	BufFile    *buffile;
 	pg_checksum_type checksum_type;
-	pg_sha256_ctx manifest_ctx;
+	pg_cryptohash_ctx *manifest_ctx;
 	uint64		manifest_size;
 	bool		force_encode;
 	bool		first_file;
@@ -48,5 +48,6 @@ extern void AddWALInfoToBackupManifest(backup_manifest_info *manifest,
 									   TimeLineID starttli, XLogRecPtr endptr,
 									   TimeLineID endtli);
 extern void SendBackupManifest(backup_manifest_info *manifest);
+extern void FreeBackupManifest(backup_manifest_info *manifest);
 
 #endif

@@ -1,10 +1,10 @@
 /*-------------------------------------------------------------------------
  *
  * pmsignal.h
- *	  routines for signaling the postmaster from its child processes
+ *	  routines for signaling between the postmaster and its child processes
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/storage/pmsignal.h
@@ -34,7 +34,6 @@ typedef enum
 {
 	PMSIGNAL_RECOVERY_STARTED,	/* recovery has started */
 	PMSIGNAL_BEGIN_HOT_STANDBY, /* begin Hot Standby */
-	PMSIGNAL_WAKEN_ARCHIVER,	/* send a NOTIFY signal to xlog archiver */
 	PMSIGNAL_ROTATE_LOGFILE,	/* send SIGUSR1 to syslogger to rotate logfile */
 	PMSIGNAL_START_AUTOVAC_LAUNCHER,	/* start an autovacuum launcher */
 	PMSIGNAL_START_AUTOVAC_WORKER,	/* start an autovacuum worker */
@@ -44,6 +43,16 @@ typedef enum
 
 	NUM_PMSIGNALS				/* Must be last value of enum! */
 } PMSignalReason;
+
+/*
+ * Reasons why the postmaster would send SIGQUIT to its children.
+ */
+typedef enum
+{
+	PMQUIT_NOT_SENT = 0,		/* postmaster hasn't sent SIGQUIT */
+	PMQUIT_FOR_CRASH,			/* some other backend bought the farm */
+	PMQUIT_FOR_STOP				/* immediate stop was commanded */
+} QuitSignalReason;
 
 /* PMSignalData is an opaque struct, details known only within pmsignal.c */
 typedef struct PMSignalData PMSignalData;
@@ -55,6 +64,8 @@ extern Size PMSignalShmemSize(void);
 extern void PMSignalShmemInit(void);
 extern void SendPostmasterSignal(PMSignalReason reason);
 extern bool CheckPostmasterSignal(PMSignalReason reason);
+extern void SetQuitSignalReason(QuitSignalReason reason);
+extern QuitSignalReason GetQuitSignalReason(void);
 extern int	AssignPostmasterChildSlot(void);
 extern bool ReleasePostmasterChildSlot(int slot);
 extern bool IsPostmasterChildWalSender(int slot);

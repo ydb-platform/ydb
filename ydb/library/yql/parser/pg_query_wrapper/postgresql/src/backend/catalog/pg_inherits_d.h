@@ -3,7 +3,7 @@
  * pg_inherits_d.h
  *    Macro definitions for pg_inherits
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -23,8 +23,9 @@
 #define Anum_pg_inherits_inhrelid 1
 #define Anum_pg_inherits_inhparent 2
 #define Anum_pg_inherits_inhseqno 3
+#define Anum_pg_inherits_inhdetachpending 4
 
-#define Natts_pg_inherits 3
+#define Natts_pg_inherits 4
 
 
 #endif							/* PG_INHERITS_D_H */

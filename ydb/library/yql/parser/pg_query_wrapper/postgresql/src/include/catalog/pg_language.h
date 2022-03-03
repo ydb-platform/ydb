@@ -4,7 +4,7 @@
  *	  definition of the "language" system catalog (pg_language)
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_language.h
@@ -34,7 +34,7 @@ CATALOG(pg_language,2612,LanguageRelationId)
 	NameData	lanname;
 
 	/* Language's owner */
-	Oid			lanowner BKI_DEFAULT(PGUID);
+	Oid			lanowner BKI_DEFAULT(POSTGRES) BKI_LOOKUP(pg_authid);
 
 	/* Is a procedural language */
 	bool		lanispl BKI_DEFAULT(f);
@@ -43,13 +43,13 @@ CATALOG(pg_language,2612,LanguageRelationId)
 	bool		lanpltrusted BKI_DEFAULT(f);
 
 	/* Call handler, if it's a PL */
-	Oid			lanplcallfoid BKI_DEFAULT(0) BKI_LOOKUP(pg_proc);
+	Oid			lanplcallfoid BKI_DEFAULT(0) BKI_LOOKUP_OPT(pg_proc);
 
 	/* Optional anonymous-block handler function */
-	Oid			laninline BKI_DEFAULT(0) BKI_LOOKUP(pg_proc);
+	Oid			laninline BKI_DEFAULT(0) BKI_LOOKUP_OPT(pg_proc);
 
 	/* Optional validation function */
-	Oid			lanvalidator BKI_DEFAULT(0) BKI_LOOKUP(pg_proc);
+	Oid			lanvalidator BKI_DEFAULT(0) BKI_LOOKUP_OPT(pg_proc);
 
 #ifdef CATALOG_VARLEN			/* variable-length fields start here */
 	/* Access privileges */
@@ -63,5 +63,12 @@ CATALOG(pg_language,2612,LanguageRelationId)
  * ----------------
  */
 typedef FormData_pg_language *Form_pg_language;
+
+DECLARE_TOAST(pg_language, 4157, 4158);
+
+DECLARE_UNIQUE_INDEX(pg_language_name_index, 2681, on pg_language using btree(lanname name_ops));
+#define LanguageNameIndexId  2681
+DECLARE_UNIQUE_INDEX_PKEY(pg_language_oid_index, 2682, on pg_language using btree(oid oid_ops));
+#define LanguageOidIndexId	2682
 
 #endif							/* PG_LANGUAGE_H */

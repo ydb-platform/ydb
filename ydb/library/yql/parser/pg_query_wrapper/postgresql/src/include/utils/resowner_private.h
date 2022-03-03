@@ -6,7 +6,7 @@
  * See utils/resowner/README for more info.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/resowner_private.h
@@ -94,5 +94,19 @@ extern void ResourceOwnerRememberJIT(ResourceOwner owner,
 									 Datum handle);
 extern void ResourceOwnerForgetJIT(ResourceOwner owner,
 								   Datum handle);
+
+/* support for cryptohash context management */
+extern void ResourceOwnerEnlargeCryptoHash(ResourceOwner owner);
+extern void ResourceOwnerRememberCryptoHash(ResourceOwner owner,
+											Datum handle);
+extern void ResourceOwnerForgetCryptoHash(ResourceOwner owner,
+										  Datum handle);
+
+/* support for HMAC context management */
+extern void ResourceOwnerEnlargeHMAC(ResourceOwner owner);
+extern void ResourceOwnerRememberHMAC(ResourceOwner owner,
+									  Datum handle);
+extern void ResourceOwnerForgetHMAC(ResourceOwner owner,
+									Datum handle);
 
 #endif							/* RESOWNER_PRIVATE_H */

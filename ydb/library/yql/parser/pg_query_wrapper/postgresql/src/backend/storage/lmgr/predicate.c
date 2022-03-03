@@ -135,7 +135,7 @@
  *		- Protects both PredXact and SerializableXidHash.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -873,9 +873,7 @@ SerialInit(void)
 	SerialSlruCtl->PagePrecedes = SerialPagePrecedesLogically;
 	SimpleLruInit(SerialSlruCtl, "Serial",
 				  NUM_SERIAL_BUFFERS, 0, SerialSLRULock, "pg_serial",
-				  LWTRANCHE_SERIAL_BUFFER);
-	/* Override default assumption that writes should be fsync'd */
-	SerialSlruCtl->do_fsync = false;
+				  LWTRANCHE_SERIAL_BUFFER, SYNC_HANDLER_NONE);
 #ifdef USE_ASSERT_CHECKING
 	SerialPagePrecedesLogicallyUnitTests();
 #endif
@@ -1127,7 +1125,7 @@ CheckPointPredicate(void)
 	SimpleLruTruncate(SerialSlruCtl, tailPage);
 
 	/*
-	 * Flush dirty SLRU pages to disk
+	 * Write dirty SLRU pages to disk
 	 *
 	 * This is not actually necessary from a correctness point of view. We do
 	 * it merely as a debugging aid.
@@ -1136,7 +1134,7 @@ CheckPointPredicate(void)
 	 * before deleting the file in which they sit, which would be completely
 	 * pointless.
 	 */
-	SimpleLruFlush(SerialSlruCtl, true);
+	SimpleLruWriteAll(SerialSlruCtl, true);
 }
 
 /*------------------------------------------------------------------------*/
@@ -1173,7 +1171,6 @@ InitPredicateLocks(void)
 	 * Allocate hash table for PREDICATELOCKTARGET structs.  This stores
 	 * per-predicate-lock-target information.
 	 */
-	MemSet(&info, 0, sizeof(info));
 	info.keysize = sizeof(PREDICATELOCKTARGETTAG);
 	info.entrysize = sizeof(PREDICATELOCKTARGET);
 	info.num_partitions = NUM_PREDICATELOCK_PARTITIONS;
@@ -1206,7 +1203,6 @@ InitPredicateLocks(void)
 	 * Allocate hash table for PREDICATELOCK structs.  This stores per
 	 * xact-lock-of-a-target information.
 	 */
-	MemSet(&info, 0, sizeof(info));
 	info.keysize = sizeof(PREDICATELOCKTAG);
 	info.entrysize = sizeof(PREDICATELOCK);
 	info.hash = predicatelock_hash;
@@ -1289,7 +1285,6 @@ InitPredicateLocks(void)
 	 * Allocate hash table for SERIALIZABLEXID structs.  This stores per-xid
 	 * information for serializable transactions which have accessed data.
 	 */
-	MemSet(&info, 0, sizeof(info));
 	info.keysize = sizeof(SERIALIZABLEXIDTAG);
 	info.entrysize = sizeof(SERIALIZABLEXID);
 
@@ -1607,7 +1602,7 @@ GetSafeSnapshot(Snapshot origSnapshot)
 		/* else, need to retry... */
 		ereport(DEBUG2,
 				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-				 errmsg("deferrable snapshot was unsafe; trying a new one")));
+				 errmsg_internal("deferrable snapshot was unsafe; trying a new one")));
 		ReleasePredicateLocks(false, false);
 	}
 
@@ -1930,7 +1925,6 @@ CreateLocalPredicateLockHash(void)
 
 	/* Initialize the backend-local hash table of parent locks */
 	Assert(LocalPredicateLockHash == NULL);
-	MemSet(&hash_ctl, 0, sizeof(hash_ctl));
 	hash_ctl.keysize = sizeof(PREDICATELOCKTARGETTAG);
 	hash_ctl.entrysize = sizeof(LOCALPREDICATELOCK);
 	LocalPredicateLockHash = hash_create("Local predicate lock",
@@ -3465,7 +3459,7 @@ ReleasePredicateLocks(bool isCommit, bool isReadOnlySafe)
 	 * transaction to complete before freeing some RAM; correctness of visible
 	 * behavior is not affected.
 	 */
-	MySerializableXact->finishedBefore = XidFromFullTransactionId(ShmemVariableCache->nextFullXid);
+	MySerializableXact->finishedBefore = XidFromFullTransactionId(ShmemVariableCache->nextXid);
 
 	/*
 	 * If it's not a commit it's either a rollback or a read-only transaction

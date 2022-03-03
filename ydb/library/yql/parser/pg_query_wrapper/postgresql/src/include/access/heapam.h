@@ -4,7 +4,7 @@
  *	  POSTGRES heap access method definitions.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/access/heapam.h
@@ -65,6 +65,12 @@ typedef struct HeapScanDescData
 
 	HeapTupleData rs_ctup;		/* current tuple in scan, if any */
 
+	/*
+	 * For parallel scans to store page allocation data.  NULL when not
+	 * performing a parallel scan.
+	 */
+	ParallelBlockTableScanWorkerData *rs_parallelworkerdata;
+
 	/* these fields only used in page-at-a-time mode and for bitmap scans */
 	int			rs_cindex;		/* current tuple's index in vistuples */
 	int			rs_ntuples;		/* number of visible tuples on page */
@@ -121,7 +127,11 @@ extern void heap_endscan(TableScanDesc scan);
 extern HeapTuple heap_getnext(TableScanDesc scan, ScanDirection direction);
 extern bool heap_getnextslot(TableScanDesc sscan,
 							 ScanDirection direction, struct TupleTableSlot *slot);
-
+extern void heap_set_tidrange(TableScanDesc sscan, ItemPointer mintid,
+							  ItemPointer maxtid);
+extern bool heap_getnextslot_tidrange(TableScanDesc sscan,
+									  ScanDirection direction,
+									  TupleTableSlot *slot);
 extern bool heap_fetch(Relation relation, Snapshot snapshot,
 					   HeapTuple tuple, Buffer *userbuf);
 extern bool heap_hot_search_buffer(ItemPointer tid, Relation relation,
@@ -129,7 +139,6 @@ extern bool heap_hot_search_buffer(ItemPointer tid, Relation relation,
 								   bool *all_dead, bool first_call);
 
 extern void heap_get_latest_tid(TableScanDesc scan, ItemPointer tid);
-extern void setLastTid(const ItemPointer tid);
 
 extern BulkInsertState GetBulkInsertState(void);
 extern void FreeBulkInsertState(BulkInsertState);
@@ -167,30 +176,27 @@ extern void simple_heap_delete(Relation relation, ItemPointer tid);
 extern void simple_heap_update(Relation relation, ItemPointer otid,
 							   HeapTuple tup);
 
-extern TransactionId heap_compute_xid_horizon_for_tuples(Relation rel,
-														 ItemPointerData *items,
-														 int nitems);
+extern TransactionId heap_index_delete_tuples(Relation rel,
+											  TM_IndexDeleteOp *delstate);
 
 /* in heap/pruneheap.c */
+struct GlobalVisState;
 extern void heap_page_prune_opt(Relation relation, Buffer buffer);
 extern int	heap_page_prune(Relation relation, Buffer buffer,
-							TransactionId OldestXmin,
-							bool report_stats, TransactionId *latestRemovedXid);
+							struct GlobalVisState *vistest,
+							TransactionId old_snap_xmin,
+							TimestampTz old_snap_ts_ts,
+							bool report_stats,
+							OffsetNumber *off_loc);
 extern void heap_page_prune_execute(Buffer buffer,
 									OffsetNumber *redirected, int nredirected,
 									OffsetNumber *nowdead, int ndead,
 									OffsetNumber *nowunused, int nunused);
 extern void heap_get_root_tuples(Page page, OffsetNumber *root_offsets);
 
-/* in heap/syncscan.c */
-extern void ss_report_location(Relation rel, BlockNumber location);
-extern BlockNumber ss_get_location(Relation rel, BlockNumber relnblocks);
-extern void SyncScanShmemInit(void);
-extern Size SyncScanShmemSize(void);
-
 /* in heap/vacuumlazy.c */
 struct VacuumParams;
-extern void heap_vacuum_rel(Relation onerel,
+extern void heap_vacuum_rel(Relation rel,
 							struct VacuumParams *params, BufferAccessStrategy bstrategy);
 extern void parallel_vacuum_main(dsm_segment *seg, shm_toc *toc);
 
@@ -201,11 +207,14 @@ extern TM_Result HeapTupleSatisfiesUpdate(HeapTuple stup, CommandId curcid,
 										  Buffer buffer);
 extern HTSV_Result HeapTupleSatisfiesVacuum(HeapTuple stup, TransactionId OldestXmin,
 											Buffer buffer);
+extern HTSV_Result HeapTupleSatisfiesVacuumHorizon(HeapTuple stup, Buffer buffer,
+												   TransactionId *dead_after);
 extern void HeapTupleSetHintBits(HeapTupleHeader tuple, Buffer buffer,
 								 uint16 infomask, TransactionId xid);
 extern bool HeapTupleHeaderIsOnlyLocked(HeapTupleHeader tuple);
 extern bool XidInMVCCSnapshot(TransactionId xid, Snapshot snapshot);
-extern bool HeapTupleIsSurelyDead(HeapTuple htup, TransactionId OldestXmin);
+extern bool HeapTupleIsSurelyDead(HeapTuple htup,
+								  struct GlobalVisState *vistest);
 
 /*
  * To avoid leaking too much knowledge about reorderbuffer implementation

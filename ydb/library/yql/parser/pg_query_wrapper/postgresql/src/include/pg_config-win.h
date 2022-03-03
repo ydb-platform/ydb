@@ -160,6 +160,8 @@
 /* Define to 1 if you have the `readlink' function. */
 #undef HAVE_READLINK
 
+/* Define to 1 if you have the `syncfs' function. */
+#undef HAVE_SYNCFS
 
 
 /* PostgreSQL's CFLAG for windows. */

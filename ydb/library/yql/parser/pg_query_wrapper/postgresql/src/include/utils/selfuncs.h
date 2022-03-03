@@ -5,7 +5,7 @@
  *	  infrastructure for selectivity and cost estimation.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/utils/selfuncs.h
@@ -39,6 +39,9 @@
 /* default selectivity estimate for range inequalities "A > b AND A < c" */
 #define DEFAULT_RANGE_INEQ_SEL	0.005
 
+/* default selectivity estimate for multirange inequalities "A > b AND A < c" */
+#define DEFAULT_MULTIRANGE_INEQ_SEL	0.005
+
 /* default selectivity estimate for pattern-match operators such as LIKE */
 #define DEFAULT_MATCH_SEL	0.005
 
@@ -65,6 +68,20 @@
 			p = 1.0; \
 	} while (0)
 
+/*
+ * A set of flags which some selectivity estimation functions can pass back to
+ * callers to provide further details about some assumptions which were made
+ * during the estimation.
+ */
+#define SELFLAG_USED_DEFAULT		(1 << 0)	/* Estimation fell back on one
+												 * of the DEFAULTs as defined
+												 * above. */
+
+typedef struct EstimationInfo
+{
+	uint32		flags;			/* Flags, as defined above to mark special
+								 * properties of the estimation. */
+} EstimationInfo;
 
 /* Return data from examine_variable and friends */
 typedef struct VariableStatData
@@ -194,13 +211,14 @@ extern void mergejoinscansel(PlannerInfo *root, Node *clause,
 							 Selectivity *rightstart, Selectivity *rightend);
 
 extern double estimate_num_groups(PlannerInfo *root, List *groupExprs,
-								  double input_rows, List **pgset);
+								  double input_rows, List **pgset,
+								  EstimationInfo *estinfo);
 
 extern void estimate_hash_bucket_stats(PlannerInfo *root,
 									   Node *hashkey, double nbuckets,
 									   Selectivity *mcv_freq,
 									   Selectivity *bucketsize_frac);
-extern double estimate_hashagg_tablesize(Path *path,
+extern double estimate_hashagg_tablesize(PlannerInfo *root, Path *path,
 										 const AggClauseCosts *agg_costs,
 										 double dNumGroups);
 

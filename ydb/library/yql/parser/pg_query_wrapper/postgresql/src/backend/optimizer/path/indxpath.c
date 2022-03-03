@@ -4,7 +4,7 @@
  *	  Routines to determine which indexes are usable for scanning a
  *	  given relation, and create Paths accordingly.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -35,12 +35,6 @@
 #include "utils/lsyscache.h"
 #include "utils/selfuncs.h"
 
-
-/* source-code-compatibility hacks for pull_varnos() API change */
-#define pull_varnos(a,b) pull_varnos_new(a,b)
-#undef make_simple_restrictinfo
-#define make_simple_restrictinfo(root, clause)  \
-	make_restrictinfo_new(root, clause, true, false, false, 0, NULL, NULL, NULL)
 
 /* XXX see PartCollMatchesExprColl */
 #define IndexCollMatchesExprColl(idxcollation, exprcollation) \
@@ -1996,6 +1990,7 @@ adjust_rowcount_for_semijoins(PlannerInfo *root,
 			nunique = estimate_num_groups(root,
 										  sjinfo->semi_rhs_exprs,
 										  nraw,
+										  NULL,
 										  NULL);
 			if (rowcount > nunique)
 				rowcount = nunique;
@@ -3403,7 +3398,7 @@ check_index_predicates(PlannerInfo *root, RelOptInfo *rel)
 	 * and pass them through to EvalPlanQual via a side channel; but for now,
 	 * we just don't remove implied quals at all for target relations.
 	 */
-	is_target_rel = (rel->relid == root->parse->resultRelation ||
+	is_target_rel = (bms_is_member(rel->relid, root->all_result_relids) ||
 					 get_plan_rowmark(root->rowMarks, rel->relid) != NULL);
 
 	/*
@@ -3820,13 +3815,7 @@ match_index_to_operand(Node *operand,
  * index: the index of interest
  */
 bool
-is_pseudo_constant_for_index(Node *expr, IndexOptInfo *index)
-{
-	return is_pseudo_constant_for_index_new(NULL, expr, index);
-}
-
-bool
-is_pseudo_constant_for_index_new(PlannerInfo *root, Node *expr, IndexOptInfo *index)
+is_pseudo_constant_for_index(PlannerInfo *root, Node *expr, IndexOptInfo *index)
 {
 	/* pull_varnos is cheaper than volatility check, so do that first */
 	if (bms_is_member(index->rel->relid, pull_varnos(root, expr)))

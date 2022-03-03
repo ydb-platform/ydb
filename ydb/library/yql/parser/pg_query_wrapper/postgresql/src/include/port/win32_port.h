@@ -53,8 +53,6 @@
 #undef near
 
 /* needed before sys/stat hacking below: */
-#define fstat microsoft_native_fstat
-#define stat microsoft_native_stat
 #include <sys/stat.h>
 #undef fstat
 #undef stat

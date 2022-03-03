@@ -14,8 +14,10 @@
 #define PG_PORT_H
 
 #include <ctype.h>
+#if !defined(WIN32)
 #include <netdb.h>
 #include <pwd.h>
+#endif
 
 /*
  * Windows has enough specialized port stuff that we push most of it off

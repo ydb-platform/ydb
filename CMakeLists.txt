@@ -141,6 +141,9 @@ conan_cmake_configure(
     "bin, ragel* -> ./bin"
     "bin, ytasm* -> ./bin"
     "res, * -> ./bin/bison/res"
+  OPTIONS
+    libiconv:shared=True
+    libidn:shared=True
 )
 conan_cmake_autodetect(settings)
 conan_cmake_install(

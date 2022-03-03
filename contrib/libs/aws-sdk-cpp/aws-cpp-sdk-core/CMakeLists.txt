@@ -90,13 +90,6 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/monitoring/DefaultMonitoring.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/monitoring/HttpClientMetrics.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/monitoring/MonitoringManager.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/net/linux-shared/Net.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/net/linux-shared/SimpleUDP.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/Environment.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/FileSystem.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/OSVersionInfo.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/Security.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/Time.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/ARN.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/Array.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/DNS.cpp
@@ -148,4 +141,11 @@ target_sources(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/threading/Semaphore.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/threading/ThreadTask.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/utils/xml/XmlSerializer.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/net/linux-shared/Net.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/net/linux-shared/SimpleUDP.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/Environment.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/FileSystem.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/OSVersionInfo.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/Security.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/source/platform/linux-shared/Time.cpp
 )

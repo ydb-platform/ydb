@@ -100,13 +100,6 @@ SRCS(
     source/monitoring/DefaultMonitoring.cpp
     source/monitoring/HttpClientMetrics.cpp
     source/monitoring/MonitoringManager.cpp
-    source/net/linux-shared/Net.cpp
-    source/net/linux-shared/SimpleUDP.cpp
-    source/platform/linux-shared/Environment.cpp
-    source/platform/linux-shared/FileSystem.cpp
-    source/platform/linux-shared/OSVersionInfo.cpp
-    source/platform/linux-shared/Security.cpp
-    source/platform/linux-shared/Time.cpp
     source/utils/ARN.cpp
     source/utils/Array.cpp
     source/utils/DNS.cpp
@@ -159,5 +152,27 @@ SRCS(
     source/utils/threading/ThreadTask.cpp
     source/utils/xml/XmlSerializer.cpp
 )
+
+IF (OS_WINDOWS)
+    SRCS(
+        source/net/windows/Net.cpp
+        source/net/windows/SimpleUDP.cpp
+        source/platform/windows/Environment.cpp
+        source/platform/windows/FileSystem.cpp
+        source/platform/windows/OSVersionInfo.cpp
+        source/platform/windows/Security.cpp
+        source/platform/windows/Time.cpp
+    )
+ELSE()
+    SRCS(
+        source/net/linux-shared/Net.cpp
+        source/net/linux-shared/SimpleUDP.cpp
+        source/platform/linux-shared/Environment.cpp
+        source/platform/linux-shared/FileSystem.cpp
+        source/platform/linux-shared/OSVersionInfo.cpp
+        source/platform/linux-shared/Security.cpp
+        source/platform/linux-shared/Time.cpp
+    )
+ENDIF()
 
 END()

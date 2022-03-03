@@ -54,11 +54,7 @@ namespace Aws
                 {
                     m_data.reset(Aws::NewArray<T>(m_size, ARRAY_ALLOCATION_TAG));
 
-#ifdef _WIN32
-                    std::copy(arrayToCopy, arrayToCopy + arraySize, stdext::checked_array_iterator< T * >(m_data.get(), m_size));
-#else
                     std::copy(arrayToCopy, arrayToCopy + arraySize, m_data.get());
-#endif // MSVC
                 }
             }
 
@@ -82,11 +78,7 @@ namespace Aws
                     if(arr->m_size > 0 && arr->m_data)
                     {
                         size_t arraySize = arr->m_size;
-#ifdef _WIN32
-                        std::copy(arr->m_data.get(), arr->m_data.get() + arraySize, stdext::checked_array_iterator< T * >(m_data.get() + location, m_size));
-#else
                         std::copy(arr->m_data.get(), arr->m_data.get() + arraySize, m_data.get() + location);
-#endif // MSVC
                         location += arraySize;
                     }
                 }
@@ -101,11 +93,7 @@ namespace Aws
                 {
                     m_data.reset(Aws::NewArray<T>(m_size, ARRAY_ALLOCATION_TAG));
 
-#ifdef _WIN32
-                    std::copy(other.m_data.get(), other.m_data.get() + other.m_size, stdext::checked_array_iterator< T * >(m_data.get(), m_size));
-#else
                     std::copy(other.m_data.get(), other.m_data.get() + other.m_size, m_data.get());
-#endif // MSVC
                 }
             }
 
@@ -134,11 +122,7 @@ namespace Aws
                 {
                     m_data.reset(Aws::NewArray<T>(m_size, ARRAY_ALLOCATION_TAG));
 
-#ifdef _WIN32
-                    std::copy(other.m_data.get(), other.m_data.get() + other.m_size, stdext::checked_array_iterator< T * >(m_data.get(), m_size));
-#else
                     std::copy(other.m_data.get(), other.m_data.get() + other.m_size, m_data.get());
-#endif // MSVC
                 }
 
                 return *this;

@@ -180,19 +180,32 @@ void TKqpCountersBase::Init() {
 
     WorkersCreated = KqpGroup->GetCounter("Workers/Created", true);
     WorkersClosedIdle = KqpGroup->GetCounter("Workers/ClosedIdle", true);
-    YdbWorkersClosedIdle = YdbGroup->GetNamedCounter("name", "table.session.closed_by_idle_count", true);
     WorkersClosedError = KqpGroup->GetCounter("Workers/ClosedError", true);
     WorkersClosedRequest = KqpGroup->GetCounter("Workers/ClosedRequest", true);
     ActiveWorkers = KqpGroup->GetCounter("Workers/Active", false);
     ProxyForwardedRequests = KqpGroup->GetCounter("Proxy/Forwarded", true);
 
-    SessionBalancerCV = KqpGroup->GetCounter("SessionBalancer/CV", false);
-    SessionBalancerShutdowns = KqpGroup->GetCounter("SessionBalancer/Shutdown", true);
-
-    YdbActiveWorkers = YdbGroup->GetNamedCounter("name", "table.session.active_count", false);
-
     WorkerCleanupLatency = KqpGroup->GetHistogram(
         "Workers/CleanupLatencyMs", NMonitoring::ExponentialHistogram(10, 2, 1));
+
+    /* common for worker and session actors */
+    YdbSessionsActiveCount = YdbGroup->GetNamedCounter("name", "table.session.active_count", false);
+    YdbSessionsClosedIdle = YdbGroup->GetNamedCounter("name", "table.session.closed_by_idle_count", true);
+
+    /* SessionActors */
+    SessionActorLifeSpan = KqpGroup->GetHistogram(
+        "SessionActors/LifeSpanMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    QueriesPerSessionActor = KqpGroup->GetHistogram(
+        "SessionActors/QueriesPerSessionActorQ", NMonitoring::ExponentialHistogram(16, 2, 1));
+
+    SessionActorsCreated = KqpGroup->GetCounter("SessionActors/Created", true);
+    SessionActorsClosedIdle = KqpGroup->GetCounter("SessionActors/ClosedIdle", true);
+    SessionActorsClosedError = KqpGroup->GetCounter("SessionActors/ClosedError", true);
+    SessionActorsClosedRequest = KqpGroup->GetCounter("SessionActors/ClosedRequest", true);
+    ActiveSessionActors = KqpGroup->GetCounter("SessionActors/Active", false);
+
+    SessionBalancerCV = KqpGroup->GetCounter("SessionBalancer/CV", false);
+    SessionBalancerShutdowns = KqpGroup->GetCounter("SessionBalancer/Shutdown", true);
 
     /* Transactions */
     TxCreated = KqpGroup->GetCounter("Transactions/Created", true);
@@ -425,9 +438,8 @@ void TKqpCountersBase::ReportSqlVersion(ui16 sqlVersion) {
 void TKqpCountersBase::ReportWorkerCreated() {
     WorkersCreated->Inc();
     ActiveWorkers->Inc();
-    YdbActiveWorkers->Inc();
+    YdbSessionsActiveCount->Inc();
 }
-
 
 void TKqpCountersBase::ReportSessionBalancerCV(ui32 value) {
     SessionBalancerCV->Set(value);
@@ -440,8 +452,9 @@ void TKqpCountersBase::ReportProxyForwardedRequest() {
 void TKqpCountersBase::ReportWorkerFinished(TDuration lifeSpan) {
     WorkerLifeSpan->Collect(lifeSpan.MilliSeconds());
     ActiveWorkers->Dec();
-    YdbActiveWorkers->Dec();
+    YdbSessionsActiveCount->Dec();
 }
+
 
 void TKqpCountersBase::ReportWorkerCleanupLatency(TDuration cleanupTime) {
     WorkerCleanupLatency->Collect(cleanupTime.MilliSeconds());
@@ -449,7 +462,7 @@ void TKqpCountersBase::ReportWorkerCleanupLatency(TDuration cleanupTime) {
 
 void TKqpCountersBase::ReportWorkerClosedIdle() {
     WorkersClosedIdle->Inc();
-    YdbWorkersClosedIdle->Inc();
+    YdbSessionsClosedIdle->Inc();
 }
 
 void TKqpCountersBase::ReportWorkerClosedError() {
@@ -462,6 +475,31 @@ void TKqpCountersBase::ReportWorkerClosedRequest() {
 
 void TKqpCountersBase::ReportQueriesPerWorker(ui32 queryId) {
     QueriesPerWorker->Collect(queryId);
+}
+
+void TKqpCountersBase::ReportSessionActorCreated() {
+    SessionActorsCreated->Inc();
+    ActiveSessionActors->Inc();
+    YdbSessionsActiveCount->Inc();
+}
+
+void TKqpCountersBase::ReportSessionActorClosedIdle() {
+    SessionActorsClosedIdle->Inc();
+    YdbSessionsClosedIdle->Inc();
+}
+
+void TKqpCountersBase::ReportSessionActorFinished(TDuration lifeSpan) {
+    SessionActorLifeSpan->Collect(lifeSpan.MilliSeconds());
+    ActiveSessionActors->Dec();
+    YdbSessionsActiveCount->Dec();
+}
+
+void TKqpCountersBase::ReportSessionActorClosedError() {
+    SessionActorsClosedError->Inc();
+}
+
+void TKqpCountersBase::ReportQueriesPerSessionActor(ui32 queryId) {
+    QueriesPerSessionActor->Collect(queryId);
 }
 
 void TKqpCountersBase::ReportBeginTransaction(ui32 evictedTx, ui32 currentActiveTx, ui32 currentAbortedTx) {
@@ -970,6 +1008,41 @@ void TKqpCounters::ReportQueriesPerWorker(TKqpDbCountersPtr dbCounters, ui32 que
     TKqpCountersBase::ReportQueriesPerWorker(queryId);
     if (dbCounters) {
         dbCounters->ReportQueriesPerWorker(queryId);
+    }
+}
+
+void TKqpCounters::ReportSessionActorCreated(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportSessionActorCreated();
+    if (dbCounters) {
+        dbCounters->ReportSessionActorCreated();
+    }
+}
+
+void TKqpCounters::ReportSessionActorFinished(TKqpDbCountersPtr dbCounters, TDuration lifeSpan) {
+    TKqpCountersBase::ReportSessionActorFinished(lifeSpan);
+    if (dbCounters) {
+        dbCounters->ReportSessionActorFinished(lifeSpan);
+    }
+}
+
+void TKqpCounters::ReportSessionActorClosedError(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportSessionActorClosedError();
+    if (dbCounters) {
+        dbCounters->ReportSessionActorClosedError();
+    }
+}
+
+void TKqpCounters::ReportSessionActorClosedIdle(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportSessionActorClosedIdle();
+    if (dbCounters) {
+        dbCounters->ReportSessionActorClosedIdle();
+    }
+}
+
+void TKqpCounters::ReportQueriesPerSessionActor(TKqpDbCountersPtr dbCounters, ui32 queryId) {
+    TKqpCountersBase::ReportQueriesPerSessionActor(queryId);
+    if (dbCounters) {
+        dbCounters->ReportQueriesPerSessionActor(queryId);
     }
 }
 

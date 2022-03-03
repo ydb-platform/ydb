@@ -45,4 +45,6 @@ void TransformerStatsFromProto(const NKikimrKqp::TTransformProfile& proto, IGrap
 void KikimrProfileToYson(const NKikimrKqp::TKqlProfile& kqlProfile, NYson::TYsonWriter& writer);
 void KikimrProfileToYson(const NKikimrKqp::TQueryProfile& profile, NYson::TYsonWriter& writer);
 
+bool IsSameType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType& expected);
+
 } // namespace NYql

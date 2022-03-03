@@ -7,7 +7,7 @@ namespace NKqp {
 
 #define DB_KQP_SIMPLE_COUNTERS_MAP(XX) \
     XX(DB_KQP_WORKERS_ACTIVE, ActiveWorkers) \
-    XX(DB_KQP_YDB_WORKERS_ACTIVE, YdbActiveWorkers) \
+    XX(DB_KQP_YDB_WORKERS_ACTIVE, YdbSessionsActiveCount) \
     XX(DB_KQP_COMPILE_ACTIVE, CompileActive)
 
 #define DB_KQP_CUMULATIVE_COUNTERS_MAP(XX) \
@@ -79,7 +79,7 @@ namespace NKqp {
     XX(DB_KQP_COMPILE_TOTAL, CompileTotal) \
     XX(DB_KQP_COMPILE_ERRORS, CompileErrors) \
     XX(DB_KQP_DEPRECATED1, &DeprecatedCounter) \
-    XX(DB_KQP_YDB_WORKERS_CLOSED_IDLE, YdbWorkersClosedIdle) \
+    XX(DB_KQP_YDB_WORKERS_CLOSED_IDLE, YdbSessionsClosedIdle) \
     XX(DB_KQP_YDB_REQUEST_BYTES, YdbRequestBytes) \
     XX(DB_KQP_YDB_PARAMS_BYTES, YdbParametersBytes) \
     XX(DB_KQP_YDB_RSP_LOCKS_INVALIDATED, YdbResponsesLocksInvalidated) \

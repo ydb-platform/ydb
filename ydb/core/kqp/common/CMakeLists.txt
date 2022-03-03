@@ -33,6 +33,11 @@ target_sources(core-kqp-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_timeouts.cpp
 )
 generate_enum_serilization(core-kqp-common
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_tx_info.h
+  INCLUDE_HEADERS
+  ydb/core/kqp/common/kqp_tx_info.h
+)
+generate_enum_serilization(core-kqp-common
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/kqp_yql.h
   INCLUDE_HEADERS
   ydb/core/kqp/common/kqp_yql.h

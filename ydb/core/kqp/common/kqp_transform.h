@@ -175,7 +175,7 @@ public:
     }
 
     [[nodiscard]]
-    bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx>&& physicalTx, TParamValueMap&& params) {
+    bool AddDeferredEffect(std::shared_ptr<const NKqpProto::TKqpPhyTx> physicalTx, TParamValueMap&& params) {
         return DeferredEffects.Add(std::move(physicalTx), std::move(params));
     }
 

@@ -72,6 +72,14 @@ protected:
     void ReportWorkerClosedRequest();
     void ReportQueriesPerWorker(ui32 queryId);
 
+    void ReportSessionActorCreated();
+    void ReportSessionActorFinished(TDuration lifeSpan);
+    void ReportSessionActorCleanupLatency(TDuration cleanupTime);
+    void ReportSessionActorClosedIdle();
+    void ReportSessionActorClosedError();
+    void ReportSessionActorClosedRequest();
+    void ReportQueriesPerSessionActor(ui32 queryId);
+
     void ReportProxyForwardedRequest();
     void ReportSessionBalancerCV(ui32 value);
 
@@ -150,16 +158,29 @@ protected:
     NMonitoring::THistogramPtr QueriesPerWorker;
     NMonitoring::TDynamicCounters::TCounterPtr WorkersCreated;
     NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedIdle;
-    NMonitoring::TDynamicCounters::TCounterPtr YdbWorkersClosedIdle;
     NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedError;
     NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedRequest;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers;
-    NMonitoring::TDynamicCounters::TCounterPtr YdbActiveWorkers;
     NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerCV;
     NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerShutdowns;
     NMonitoring::TDynamicCounters::TCounterPtr ProxyForwardedRequests;
 
     NMonitoring::THistogramPtr WorkerCleanupLatency;
+
+    // Workers and SessionActors
+    NMonitoring::TDynamicCounters::TCounterPtr YdbSessionsClosedIdle;
+    NMonitoring::TDynamicCounters::TCounterPtr YdbSessionsActiveCount;
+
+    // SessionActors
+    NMonitoring::THistogramPtr SessionActorLifeSpan;
+    NMonitoring::THistogramPtr QueriesPerSessionActor;
+
+    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsCreated;
+    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedIdle;
+    //NMonitoring::TDynamicCounters::TCounterPtr YdbSessionActorsClosedIdle;
+    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedError;
+    NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedRequest;
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveSessionActors;
 
     // Transactions
     NMonitoring::TDynamicCounters::TCounterPtr TxCreated;
@@ -281,6 +302,14 @@ public:
     void ReportWorkerClosedError(TKqpDbCountersPtr dbCounters);
     void ReportWorkerClosedRequest(TKqpDbCountersPtr dbCounters);
     void ReportQueriesPerWorker(TKqpDbCountersPtr dbCounters, ui32 queryId);
+
+    void ReportSessionActorCreated(TKqpDbCountersPtr dbCounters);
+    void ReportSessionActorFinished(TKqpDbCountersPtr dbCounters, TDuration lifeSpan);
+    void ReportSessionActorCleanupLatency(TKqpDbCountersPtr dbCounters, TDuration cleanupTime);
+    void ReportSessionActorClosedIdle(TKqpDbCountersPtr dbCounters);
+    void ReportSessionActorClosedError(TKqpDbCountersPtr dbCounters);
+    void ReportSessionActorClosedRequest(TKqpDbCountersPtr dbCounters);
+    void ReportQueriesPerSessionActor(TKqpDbCountersPtr dbCounters, ui32 queryId);
 
     void ReportBeginTransaction(TKqpDbCountersPtr dbCounters,
         ui32 evictedTx, ui32 currentActiveTx, ui32 currentAbortedTx);

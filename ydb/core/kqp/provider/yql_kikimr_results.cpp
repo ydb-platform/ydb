@@ -274,6 +274,64 @@ TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue
     }
 }
 
+bool IsSameType(const NKikimrMiniKQL::TDataType& actual, const NKikimrMiniKQL::TDataType& expected) {
+        return actual.GetScheme() == expected.GetScheme() &&
+            actual.GetDecimalParams().GetPrecision() == expected.GetDecimalParams().GetPrecision() &&
+            actual.GetDecimalParams().GetScale() == expected.GetDecimalParams().GetScale();
+}
+
+bool IsSameType(const NKikimrMiniKQL::TTupleType& actual, const NKikimrMiniKQL::TTupleType& expected) {
+    size_t size = actual.ElementSize();
+    if (size != expected.ElementSize()) {
+        return false;
+    }
+    for (size_t i = 0; i < size; ++i) {
+        if (!NYql::IsSameType(actual.GetElement(i), expected.GetElement(i))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsSameType(const NKikimrMiniKQL::TStructType& actual, const NKikimrMiniKQL::TStructType& expected) {
+    size_t size = actual.MemberSize();
+    if (size != expected.MemberSize()) {
+        return false;
+    }
+    std::map<TString, NKikimrMiniKQL::TType> expected_fields;
+    for (size_t i = 0; i < size; ++i) {
+        auto& st = expected.GetMember(i);
+        expected_fields.emplace(st.GetName(), st.GetType());
+    }
+    for (size_t i = 0; i < size; ++i) {
+        auto& f = actual.GetMember(i);
+        auto it = expected_fields.find(f.GetName());
+        if (it == expected_fields.end()) {
+            return false;
+        }
+
+        if (!NYql::IsSameType(f.GetType(), it->second)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsSameType(const NKikimrMiniKQL::TVariantType& actual, const NKikimrMiniKQL::TVariantType& expected) {
+    if (actual.GetTypeCase() != expected.GetTypeCase()) {
+        return false;
+    }
+    switch (actual.GetTypeCase()) {
+        case NKikimrMiniKQL::TVariantType::kTupleItems:
+            return IsSameType(actual.GetTupleItems(), expected.GetTupleItems());
+        case NKikimrMiniKQL::TVariantType::kStructItems:
+            return IsSameType(actual.GetStructItems(), expected.GetStructItems());
+        case NKikimrMiniKQL::TVariantType::TYPE_NOT_SET:
+            Y_ENSURE(false, "Variant type not set");
+            return false;
+    }
+}
+
 } // namespace
 
 bool GetRunResultIndex(const NKikimrMiniKQL::TStructType& resultType, const TString& resultName, ui32& index) {
@@ -1127,6 +1185,41 @@ void KikimrProfileToYson(const NKikimrKqp::TQueryProfile& queryProfile, NYson::T
     }
     writer.OnEndList();
     writer.OnEndMap();
+}
+
+bool IsSameType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType& expected) {
+    if (actual.GetKind() != expected.GetKind()) {
+        return false;
+    }
+
+    switch (actual.GetKind()) {
+        case NKikimrMiniKQL::ETypeKind::Void:
+            return true;
+        case NKikimrMiniKQL::ETypeKind::Data:
+            return IsSameType(actual.GetData(), expected.GetData());
+        case NKikimrMiniKQL::ETypeKind::Optional:
+            return IsSameType(actual.GetOptional().GetItem(), expected.GetOptional().GetItem());
+        case NKikimrMiniKQL::ETypeKind::List:
+            return IsSameType(actual.GetList().GetItem(), expected.GetList().GetItem());
+        case NKikimrMiniKQL::ETypeKind::Tuple:
+            return IsSameType(actual.GetTuple(), expected.GetTuple());
+        case NKikimrMiniKQL::ETypeKind::Struct:
+            return IsSameType(actual.GetStruct(), expected.GetStruct());
+        case NKikimrMiniKQL::ETypeKind::Dict:
+            return IsSameType(actual.GetDict().GetKey(), expected.GetDict().GetKey()) &&
+                IsSameType(actual.GetDict().GetPayload(), expected.GetDict().GetPayload());
+        case NKikimrMiniKQL::ETypeKind::Variant:
+            return IsSameType(actual.GetVariant(), expected.GetVariant());
+        case NKikimrMiniKQL::ETypeKind::Null:
+            return true;
+        case NKikimrMiniKQL::ETypeKind::Unknown:
+        case NKikimrMiniKQL::ETypeKind::Reserved_10:
+        case NKikimrMiniKQL::ETypeKind::Reserved_11:
+        case NKikimrMiniKQL::ETypeKind::Reserved_12:
+        case NKikimrMiniKQL::ETypeKind::Reserved_13:
+        case NKikimrMiniKQL::ETypeKind::Reserved_14:
+            return false;
+    }
 }
 
 } // namespace NYql

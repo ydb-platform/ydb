@@ -1774,7 +1774,8 @@ private:
         const TActorContext& ctx)
     {
         if (requestInfo.GetSessionId() != SessionId) {
-            TString error = TStringBuilder() << "Invalid session, expected: " << SessionId << ", request ignored";
+            TString error = TStringBuilder() << "Invalid session, got: " << requestInfo.GetSessionId()
+                << " expected: " << SessionId << ", request ignored";
             ReplyProcessError(sender, proxyRequestId, requestInfo, Ydb::StatusIds::BAD_SESSION, error, ctx);
             return false;
         }

@@ -169,6 +169,18 @@ class Config(object):
         Setting this to False disables the injection of operation parameters
         into the prefix of the hostname. This is useful for clients providing
         custom endpoints that should not have their host prefix modified.
+
+    :type use_dualstack_endpoint: bool
+    :param use_dualstack_endpoint: Setting to True enables dualstack
+        endpoint resolution.
+
+        Defaults to None.
+
+    :type use_fips_endpoint: bool
+    :param use_fips_endpoint: Setting to True enables fips
+        endpoint resolution.
+
+        Defaults to None.
     """
     OPTION_DEFAULTS = OrderedDict([
         ('region_name', None),
@@ -186,7 +198,14 @@ class Config(object):
         ('client_cert', None),
         ('inject_host_prefix', True),
         ('endpoint_discovery_enabled', None),
+        ('use_dualstack_endpoint', None),
+        ('use_fips_endpoint', None),
+        ('defaults_mode', None)
     ])
+
+    NON_LEGACY_OPTION_DEFAULTS = {
+        'connect_timeout': None,
+    }
 
     def __init__(self, *args, **kwargs):
         self._user_provided_options = self._record_user_provided_options(
@@ -194,6 +213,10 @@ class Config(object):
 
         # Merge the user_provided options onto the default options
         config_vars = copy.copy(self.OPTION_DEFAULTS)
+        defaults_mode = self._user_provided_options.get(
+            'defaults_mode', 'legacy')
+        if defaults_mode != 'legacy':
+            config_vars.update(self.NON_LEGACY_OPTION_DEFAULTS)
         config_vars.update(self._user_provided_options)
 
         # Set the attributes based on the config_vars

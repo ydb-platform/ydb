@@ -180,7 +180,16 @@ class RetryHandler(object):
         this will process retries appropriately.
 
         """
-        if self._checker(attempts, response, caught_exception):
+        checker_kwargs = {
+            'attempt_number': attempts,
+            'response': response,
+            'caught_exception': caught_exception
+        }
+        if isinstance(self._checker, MaxAttemptsDecorator):
+            retries_context = kwargs['request_dict']['context'].get('retries')
+            checker_kwargs.update({'retries_context': retries_context})
+
+        if self._checker(**checker_kwargs):
             result = self._action(attempts=attempts)
             logger.debug("Retry needed, action of: %s", result)
             return result
@@ -246,7 +255,13 @@ class MaxAttemptsDecorator(BaseChecker):
         self._max_attempts = max_attempts
         self._retryable_exceptions = retryable_exceptions
 
-    def __call__(self, attempt_number, response, caught_exception):
+    def __call__(self, attempt_number, response, caught_exception,
+                 retries_context):
+        if retries_context:
+            retries_context['max'] = max(
+                retries_context.get('max', 0), self._max_attempts
+            )
+
         should_retry = self._should_retry(attempt_number, response,
                                           caught_exception)
         if should_retry:

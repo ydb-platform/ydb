@@ -32,8 +32,10 @@ from botocore.configprovider import ConfigValueStore
 from botocore.configprovider import ConfigChainFactory
 from botocore.configprovider import create_botocore_default_config_mapping
 from botocore.configprovider import BOTOCORE_DEFAUT_SESSION_VARIABLES
+from botocore.configprovider import DefaultConfigResolver
+from botocore.configprovider import SmartDefaultsConfigStoreFactory
 from botocore.exceptions import (
-    ConfigNotFound, ProfileNotFound, UnknownServiceError,
+    ConfigNotFound, ProfileNotFound, UnknownServiceError, InvalidDefaultsMode,
     PartialCredentialsError,
 )
 from botocore.errorfactory import ClientExceptionsFactory
@@ -48,7 +50,7 @@ from botocore import monitoring
 from botocore import paginate
 from botocore import waiter
 from botocore import retryhandler, translate
-from botocore.utils import EVENT_ALIASES, validate_region_name
+from botocore.utils import EVENT_ALIASES, validate_region_name, IMDSRegionProvider
 from botocore.compat import MutableMapping, HAS_CRT
 
 
@@ -137,6 +139,8 @@ class Session(object):
         self._register_exceptions_factory()
         self._register_config_store()
         self._register_monitor()
+        self._register_default_config_resolver()
+        self._register_smart_defaults_factory()
 
     def _register_event_emitter(self):
         self._components.register_component('event_emitter', self._events)
@@ -162,6 +166,24 @@ class Session(object):
             return EndpointResolver(endpoints)
         self._internal_components.lazy_register_component(
             'endpoint_resolver', create_default_resolver)
+
+    def _register_default_config_resolver(self):
+        def create_default_config_resolver():
+            loader = self.get_component('data_loader')
+            defaults = loader.load_data('sdk-default-configuration')
+            return DefaultConfigResolver(defaults)
+        self._internal_components.lazy_register_component(
+            'default_config_resolver', create_default_config_resolver)
+
+    def _register_smart_defaults_factory(self):
+        def create_smart_defaults_factory():
+            default_config_resolver = self._get_internal_component(
+                'default_config_resolver')
+            imds_region_provider = IMDSRegionProvider(session=self)
+            return SmartDefaultsConfigStoreFactory(
+                default_config_resolver, imds_region_provider)
+        self._internal_components.lazy_register_component(
+            'smart_defaults_factory', create_smart_defaults_factory)
 
     def _register_response_parser_factory(self):
         self._components.register_component('response_parser_factory',
@@ -834,6 +856,13 @@ class Session(object):
         endpoint_resolver = self._get_internal_component('endpoint_resolver')
         exceptions_factory = self._get_internal_component('exceptions_factory')
         config_store = self.get_component('config_store')
+        defaults_mode = self._resolve_defaults_mode(config, config_store)
+        if defaults_mode != 'legacy':
+            smart_defaults_factory = self._get_internal_component(
+                'smart_defaults_factory')
+            config_store = copy.deepcopy(config_store)
+            smart_defaults_factory.merge_smart_defaults(
+                config_store, defaults_mode, region_name)
         client_creator = botocore.client.ClientCreator(
             loader, endpoint_resolver, self.user_agent(), event_emitter,
             retryhandler, translate, response_parser_factory,
@@ -869,6 +898,24 @@ class Session(object):
         # all regions in the partition.
         self._last_client_region_used = region_name
         return region_name
+
+    def _resolve_defaults_mode(self, client_config, config_store):
+        mode = config_store.get_config_variable('defaults_mode')
+
+        if client_config and client_config.defaults_mode:
+            mode = client_config.defaults_mode
+
+        default_config_resolver = self._get_internal_component(
+            'default_config_resolver')
+        default_modes = default_config_resolver.get_default_modes()
+        lmode = mode.lower()
+        if lmode not in default_modes:
+            raise InvalidDefaultsMode(
+                mode=mode,
+                valid_modes=', '.join(default_modes)
+            )
+
+        return lmode
 
     def _missing_cred_vars(self, access_key, secret_key):
         if access_key is not None and secret_key is None:

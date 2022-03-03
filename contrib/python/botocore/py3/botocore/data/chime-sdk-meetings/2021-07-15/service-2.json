@@ -27,7 +27,7 @@
         {"shape":"ForbiddenException"},
         {"shape":"LimitExceededException"}
       ],
-      "documentation":"<p>Creates a group of meeting attendees.</p>"
+      "documentation":"<p>Creates up to 100 attendees for an active Amazon Chime SDK meeting. For more information about the Amazon Chime SDK, see <a href=\"https://docs.aws.amazon.com/chime/latest/dg/meetings-sdk.html\">Using the Amazon Chime SDK</a> in the <i>Amazon Chime Developer Guide</i>.</p>"
     },
     "CreateAttendee":{
       "name":"CreateAttendee",
@@ -208,7 +208,7 @@
           "documentation":"<p>The Amazon Chime SDK external user ID. An idempotency token. Links the attendee to an identity managed by a builder application.</p>"
         },
         "AttendeeId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK attendee ID.</p>"
         },
         "JoinToken":{
@@ -221,6 +221,16 @@
     "AttendeeList":{
       "type":"list",
       "member":{"shape":"Attendee"}
+    },
+    "AudioFeatures":{
+      "type":"structure",
+      "members":{
+        "EchoReduction":{
+          "shape":"MeetingFeatureStatus",
+          "documentation":"<p>Makes echo reduction available to clients who connect to the meeting.</p>"
+        }
+      },
+      "documentation":"<p>An optional category of meeting features that contains audio-specific configurations, such as operating parameters for Amazon Voice Focus.</p>"
     },
     "BadRequestException":{
       "type":"structure",
@@ -248,7 +258,7 @@
       ],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK ID of the meeting to which you're adding attendees.</p>",
           "location":"uri",
           "locationName":"MeetingId"
@@ -272,6 +282,7 @@
         }
       }
     },
+    "Boolean":{"type":"boolean"},
     "ClientRequestToken":{
       "type":"string",
       "max":64,
@@ -305,7 +316,7 @@
       ],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The unique ID of the meeting.</p>",
           "location":"uri",
           "locationName":"MeetingId"
@@ -356,8 +367,8 @@
           "idempotencyToken":true
         },
         "MediaRegion":{
-          "shape":"String",
-          "documentation":"<p>The Region in which to create the meeting. Default: <code>us-east-1</code>.</p> <p> Available values: <code>af-south-1</code> , <code>ap-northeast-1</code> , <code>ap-northeast-2</code> , <code>ap-south-1</code> , <code>ap-southeast-1</code> , <code>ap-southeast-2</code> , <code>ca-central-1</code> , <code>eu-central-1</code> , <code>eu-north-1</code> , <code>eu-south-1</code> , <code>eu-west-1</code> , <code>eu-west-2</code> , <code>eu-west-3</code> , <code>sa-east-1</code> , <code>us-east-1</code> , <code>us-east-2</code> , <code>us-west-1</code> , <code>us-west-2</code> . </p>"
+          "shape":"MediaRegion",
+          "documentation":"<p>The Region in which to create the meeting.</p> <p> Available values: <code>af-south-1</code> , <code>ap-northeast-1</code> , <code>ap-northeast-2</code> , <code>ap-south-1</code> , <code>ap-southeast-1</code> , <code>ap-southeast-2</code> , <code>ca-central-1</code> , <code>eu-central-1</code> , <code>eu-north-1</code> , <code>eu-south-1</code> , <code>eu-west-1</code> , <code>eu-west-2</code> , <code>eu-west-3</code> , <code>sa-east-1</code> , <code>us-east-1</code> , <code>us-east-2</code> , <code>us-west-1</code> , <code>us-west-2</code> . </p>"
         },
         "MeetingHostId":{
           "shape":"ExternalUserId",
@@ -370,6 +381,10 @@
         "NotificationsConfiguration":{
           "shape":"NotificationsConfiguration",
           "documentation":"<p>The configuration for resource targets to receive notifications when meeting and attendee events occur.</p>"
+        },
+        "MeetingFeatures":{
+          "shape":"MeetingFeaturesConfiguration",
+          "documentation":"<p>Lists the audio and video features enabled for a meeting, such as echo reduction.</p>"
         }
       }
     },
@@ -397,8 +412,8 @@
           "idempotencyToken":true
         },
         "MediaRegion":{
-          "shape":"String",
-          "documentation":"<p>The Region in which to create the meeting. Default: <code>us-east-1</code>.</p>"
+          "shape":"MediaRegion",
+          "documentation":"<p>The Region in which to create the meeting.</p>"
         },
         "MeetingHostId":{
           "shape":"ExternalUserId",
@@ -407,6 +422,10 @@
         "ExternalMeetingId":{
           "shape":"ExternalMeetingId",
           "documentation":"<p>The external meeting ID.</p>"
+        },
+        "MeetingFeatures":{
+          "shape":"MeetingFeaturesConfiguration",
+          "documentation":"<p>Lists the audio and video features enabled for a meeting, such as echo reduction.</p>"
         },
         "NotificationsConfiguration":{
           "shape":"NotificationsConfiguration",
@@ -449,13 +468,13 @@
       ],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK meeting ID.</p>",
           "location":"uri",
           "locationName":"MeetingId"
         },
         "AttendeeId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK attendee ID.</p>",
           "location":"uri",
           "locationName":"AttendeeId"
@@ -467,7 +486,7 @@
       "required":["MeetingId"],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK meeting ID.</p>",
           "location":"uri",
           "locationName":"MeetingId"
@@ -501,6 +520,10 @@
         "Region":{
           "shape":"TranscribeMedicalRegion",
           "documentation":"<p>The AWS Region passed to Amazon Transcribe Medical. If you don't specify a Region, Amazon Chime uses the meeting's Region.</p>"
+        },
+        "ContentIdentificationType":{
+          "shape":"TranscribeMedicalContentIdentificationType",
+          "documentation":"<p>Set this field to <code>PHI</code> to identify personal health information in the transcription output.</p>"
         }
       },
       "documentation":"<p>Settings specific to the Amazon Transcribe Medical engine.</p>"
@@ -528,6 +551,30 @@
         "Region":{
           "shape":"TranscribeRegion",
           "documentation":"<p>The AWS Region passed to Amazon Transcribe. If you don't specify a Region, Amazon Chime uses the meeting's Region.</p>"
+        },
+        "EnablePartialResultsStabilization":{
+          "shape":"Boolean",
+          "documentation":"<p>Generates partial transcription results that are less likely to change as meeting attendees speak. It does so by only allowing the last few words from the partial results to change.</p>"
+        },
+        "PartialResultsStability":{
+          "shape":"TranscribePartialResultsStability",
+          "documentation":"<p>The stabity level of a partial results transcription. Determines how stable you want the transcription results to be. A higher level means the transcription results are less likely to change.</p>"
+        },
+        "ContentIdentificationType":{
+          "shape":"TranscribeContentIdentificationType",
+          "documentation":"<p>Set this field to <code>PII</code> to identify personally identifiable information in the transcription output.</p>"
+        },
+        "ContentRedactionType":{
+          "shape":"TranscribeContentRedactionType",
+          "documentation":"<p>Set this field to <code>PII</code> to redact personally identifiable information in the transcription output. Content redaction is performed only upon complete transcription of the audio segments.</p> <p>You can’t set <code>ContentRedactionType</code> and <code>ContentIdentificationType</code> in the same request. If you set both, your request returns a <code>BadRequestException</code>.</p>"
+        },
+        "PiiEntityTypes":{
+          "shape":"TranscribePiiEntityTypes",
+          "documentation":"<p>Lists the PII entity types you want to identify or redact. To specify entity types, you must enable <code>ContentIdentificationType</code> or <code>ContentRedactionType</code>.</p> <p>PIIEntityTypes must be comma-separated. The available values are: <code>BANK_ACCOUNT_NUMBER</code>, <code>BANK_ROUTING, CREDIT_DEBIT_NUMBER</code>, <code>CREDIT_DEBIT_CVV</code>, <code>CREDIT_DEBIT_EXPIRY</code>, <code>PIN</code>, <code>EMAIL</code>, <code>ADDRESS</code>, <code>NAME</code>, <code>PHONE</code>, <code>SSN</code>, and <code>ALL</code>.</p> <p> <code>PiiEntityTypes</code> is an optional parameter with a default value of <code>ALL</code>.</p>"
+        },
+        "LanguageModelName":{
+          "shape":"TranscribeLanguageModelName",
+          "documentation":"<p>The name of the language model used during transcription.</p>"
         }
       },
       "documentation":"<p>Settings specific to the Amazon Transcribe engine.</p>"
@@ -566,13 +613,13 @@
       ],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK meeting ID.</p>",
           "location":"uri",
           "locationName":"MeetingId"
         },
         "AttendeeId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK attendee ID.</p>",
           "location":"uri",
           "locationName":"AttendeeId"
@@ -593,7 +640,7 @@
       "required":["MeetingId"],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK meeting ID.</p>",
           "location":"uri",
           "locationName":"MeetingId"
@@ -615,7 +662,7 @@
     },
     "JoinTokenString":{
       "type":"string",
-      "max":4096,
+      "max":2048,
       "min":2,
       "sensitive":true
     },
@@ -638,7 +685,7 @@
       "required":["MeetingId"],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The Amazon Chime SDK meeting ID.</p>",
           "location":"uri",
           "locationName":"MeetingId"
@@ -708,6 +755,11 @@
       },
       "documentation":"<p>A set of endpoints used by clients to connect to the media service group for an Amazon Chime SDK meeting.</p>"
     },
+    "MediaRegion":{
+      "type":"string",
+      "max":64,
+      "min":2
+    },
     "Meeting":{
       "type":"structure",
       "members":{
@@ -724,15 +776,36 @@
           "documentation":"<p>The external meeting ID.</p>"
         },
         "MediaRegion":{
-          "shape":"String",
+          "shape":"MediaRegion",
           "documentation":"<p>The Region in which you create the meeting. Available values: <code>af-south-1</code>, <code>ap-northeast-1</code>, <code>ap-northeast-2</code>, <code>ap-south-1</code>, <code>ap-southeast-1</code>, <code>ap-southeast-2</code>, <code>ca-central-1</code>, <code>eu-central-1</code>, <code>eu-north-1</code>, <code>eu-south-1</code>, <code>eu-west-1</code>, <code>eu-west-2</code>, <code>eu-west-3</code>, <code>sa-east-1</code>, <code>us-east-1</code>, <code>us-east-2</code>, <code>us-west-1</code>, <code>us-west-2</code>.</p>"
         },
         "MediaPlacement":{
           "shape":"MediaPlacement",
           "documentation":"<p>The media placement for the meeting.</p>"
+        },
+        "MeetingFeatures":{
+          "shape":"MeetingFeaturesConfiguration",
+          "documentation":"<p>The features available to a meeting, such as Amazon Voice Focus.</p>"
         }
       },
       "documentation":"<p>A meeting created using the Amazon Chime SDK.</p>"
+    },
+    "MeetingFeatureStatus":{
+      "type":"string",
+      "enum":[
+        "AVAILABLE",
+        "UNAVAILABLE"
+      ]
+    },
+    "MeetingFeaturesConfiguration":{
+      "type":"structure",
+      "members":{
+        "Audio":{
+          "shape":"AudioFeatures",
+          "documentation":"<p>The configuration settings for the audio features available to a meeting. </p>"
+        }
+      },
+      "documentation":"<p>The configuration settings of the features available to a meeting.</p>"
     },
     "NotFoundException":{
       "type":"structure",
@@ -801,7 +874,7 @@
       ],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The unique ID of the meeting being transcribed.</p>",
           "location":"uri",
           "locationName":"MeetingId"
@@ -817,7 +890,7 @@
       "required":["MeetingId"],
       "members":{
         "MeetingId":{
-          "shape":"String",
+          "shape":"GuidString",
           "documentation":"<p>The unique ID of the meeting for which you stop transcription.</p>",
           "location":"uri",
           "locationName":"MeetingId"
@@ -827,6 +900,14 @@
     "String":{
       "type":"string",
       "max":4096
+    },
+    "TranscribeContentIdentificationType":{
+      "type":"string",
+      "enum":["PII"]
+    },
+    "TranscribeContentRedactionType":{
+      "type":"string",
+      "enum":["PII"]
     },
     "TranscribeLanguageCode":{
       "type":"string",
@@ -844,6 +925,16 @@
         "ko-KR",
         "zh-CN"
       ]
+    },
+    "TranscribeLanguageModelName":{
+      "type":"string",
+      "max":200,
+      "min":1,
+      "pattern":"^[0-9a-zA-Z._-]+"
+    },
+    "TranscribeMedicalContentIdentificationType":{
+      "type":"string",
+      "enum":["PHI"]
     },
     "TranscribeMedicalLanguageCode":{
       "type":"string",
@@ -878,6 +969,20 @@
         "CONVERSATION",
         "DICTATION"
       ]
+    },
+    "TranscribePartialResultsStability":{
+      "type":"string",
+      "enum":[
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "TranscribePiiEntityTypes":{
+      "type":"string",
+      "max":300,
+      "min":1,
+      "pattern":"^[A-Z_, ]+"
     },
     "TranscribeRegion":{
       "type":"string",

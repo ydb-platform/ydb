@@ -13,10 +13,14 @@
 # language governing permissions and limitations under the License.
 
 import logging
+from io import IOBase
 
 from botocore.compat import set_socket_timeout
-from botocore.exceptions import IncompleteReadError, ReadTimeoutError
+from botocore.exceptions import (
+    IncompleteReadError, ReadTimeoutError, ResponseStreamingError
+)
 from urllib3.exceptions import ReadTimeoutError as URLLib3ReadTimeoutError
+from urllib3.exceptions import ProtocolError as URLLib3ProtocolError
 from botocore import parsers
 
 # Keep these imported.  There's pre-existing code that uses them.
@@ -28,7 +32,7 @@ from botocore.hooks import first_non_none_response # noqa
 logger = logging.getLogger(__name__)
 
 
-class StreamingBody(object):
+class StreamingBody(IOBase):
     """Wrapper class for an http response body.
 
     This provides a few additional conveniences that do not exist
@@ -46,6 +50,12 @@ class StreamingBody(object):
         self._raw_stream = raw_stream
         self._content_length = content_length
         self._amount_read = 0
+
+    def __del__(self):
+        # Extending destructor in order to preserve the underlying raw_stream.
+        # The ability to add custom cleanup logic introduced in Python3.4+.
+        # https://www.python.org/dev/peps/pep-0442/
+        pass
 
     def set_socket_timeout(self, timeout):
         """Set the timeout seconds on the socket."""
@@ -70,6 +80,12 @@ class StreamingBody(object):
                          "the interface has changed.", exc_info=True)
             raise
 
+    def readable(self):
+        try:
+            return self._raw_stream.readable()
+        except AttributeError:
+            return False
+
     def read(self, amt=None):
         """Read at most amt bytes from the stream.
 
@@ -80,6 +96,8 @@ class StreamingBody(object):
         except URLLib3ReadTimeoutError as e:
             # TODO: the url will be None as urllib3 isn't setting it yet
             raise ReadTimeoutError(endpoint_url=e.url, error=e)
+        except URLLib3ProtocolError as e:
+            raise ResponseStreamingError(error=e)
         self._amount_read += len(chunk)
         if amt is None or (not chunk and amt > 0):
             # If the server sends empty contents or
@@ -87,6 +105,9 @@ class StreamingBody(object):
             # we need to verify the content length.
             self._verify_content_length()
         return chunk
+
+    def readlines(self):
+        return self._raw_stream.readlines()
 
     def __iter__(self):
         """Return an iterator to yield 1k chunks from the raw stream.
@@ -103,7 +124,7 @@ class StreamingBody(object):
 
     next = __next__
 
-    def iter_lines(self, chunk_size=1024, keepends=False):
+    def iter_lines(self, chunk_size=_DEFAULT_CHUNK_SIZE, keepends=False):
         """Return an iterator to yield lines from the raw stream.
 
         This is achieved by reading chunk of bytes (of size chunk_size) at a
@@ -137,6 +158,9 @@ class StreamingBody(object):
             raise IncompleteReadError(
                 actual_bytes=self._amount_read,
                 expected_bytes=int(self._content_length))
+
+    def tell(self):
+        return self._raw_stream.tell()
 
     def close(self):
         """Close the underlying http response stream."""

@@ -142,6 +142,10 @@ class ProxyConnectionError(ConnectionError, requests.exceptions.ProxyError):
     fmt = 'Failed to connect to proxy URL: "{proxy_url}"'
 
 
+class ResponseStreamingError(HTTPClientError):
+    fmt = 'An error occurred while reading from response stream: {error}'
+
+
 class NoCredentialsError(BotoCoreError):
     """
     No credentials could be found.
@@ -203,6 +207,19 @@ class BaseEndpointResolverError(BotoCoreError):
 class NoRegionError(BaseEndpointResolverError):
     """No region was specified."""
     fmt = 'You must specify a region.'
+
+
+class EndpointVariantError(BaseEndpointResolverError):
+    """
+    Could not construct modeled endpoint variant.
+
+    :ivar error_msg: The message explaining why the modeled endpoint variant
+        is unable to be constructed.
+
+    """
+
+    fmt = ('Unable to construct a modeled endpoint with the following '
+           'variant(s) {tags}: ')
 
 
 class UnknownEndpointError(BaseEndpointResolverError, ValueError):
@@ -684,4 +701,11 @@ class CapacityNotAvailableError(BotoCoreError):
 class InvalidProxiesConfigError(BotoCoreError):
     fmt = (
         'Invalid configuration value(s) provided for proxies_config.'
+    )
+
+
+class InvalidDefaultsMode(BotoCoreError):
+    fmt = (
+        'Client configured with invalid defaults mode: {mode}. '
+        'Valid defaults modes include: {valid_modes}.'
     )

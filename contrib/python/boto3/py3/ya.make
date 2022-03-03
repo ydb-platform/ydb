@@ -2,7 +2,7 @@ PY3_LIBRARY()
 
 OWNER(g:python-contrib)
 
-VERSION(1.19.12)
+VERSION(1.20.54)
 
 LICENSE(Apache-2.0)
 

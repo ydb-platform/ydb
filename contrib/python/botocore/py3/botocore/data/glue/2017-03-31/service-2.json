@@ -73,7 +73,9 @@
         {"shape":"InvalidInputException"},
         {"shape":"EntityNotFoundException"},
         {"shape":"InternalServiceException"},
-        {"shape":"OperationTimeoutException"}
+        {"shape":"OperationTimeoutException"},
+        {"shape":"GlueEncryptionException"},
+        {"shape":"ResourceNotReadyException"}
       ],
       "documentation":"<p>Deletes multiple tables at once.</p> <note> <p>After completing this operation, you no longer have access to the table versions and partitions that belong to the deleted table. Glue deletes these \"orphaned\" resources asynchronously in a timely manner, at the discretion of the service.</p> <p>To ensure the immediate deletion of all related resources, before calling <code>BatchDeleteTable</code>, use <code>DeleteTableVersion</code> or <code>BatchDeleteTableVersion</code>, and <code>DeletePartition</code> or <code>BatchDeletePartition</code>, to delete any resources that belong to the table.</p> </note>"
     },
@@ -166,7 +168,8 @@
         {"shape":"EntityNotFoundException"},
         {"shape":"OperationTimeoutException"},
         {"shape":"InternalServiceException"},
-        {"shape":"GlueEncryptionException"}
+        {"shape":"GlueEncryptionException"},
+        {"shape":"InvalidStateException"}
       ],
       "documentation":"<p>Retrieves partitions in a batch request.</p>"
     },
@@ -456,6 +459,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"AlreadyExistsException"},
         {"shape":"ResourceNumberLimitExceededException"},
+        {"shape":"ConcurrentModificationException"},
         {"shape":"InternalServiceException"}
       ],
       "documentation":"<p>Creates a new registry which may be used to hold a collection of schemas.</p>"
@@ -474,6 +478,7 @@
         {"shape":"EntityNotFoundException"},
         {"shape":"AlreadyExistsException"},
         {"shape":"ResourceNumberLimitExceededException"},
+        {"shape":"ConcurrentModificationException"},
         {"shape":"InternalServiceException"}
       ],
       "documentation":"<p>Creates a new schema set and registers the schema definition. Returns an error if the schema set already exists without actually registering the version.</p> <p>When the schema set is created, a version checkpoint will be set to the first version. Compatibility mode \"DISABLED\" restricts any additional schema versions from being added after the first schema version. For all other compatibility modes, validation of compatibility settings will be applied only from the second version onwards when the <code>RegisterSchemaVersion</code> API is used.</p> <p>When this API is called without a <code>RegistryId</code>, this will create an entry for a \"default-registry\" in the registry database tables, if it is not already present.</p>"
@@ -526,7 +531,8 @@
         {"shape":"InternalServiceException"},
         {"shape":"OperationTimeoutException"},
         {"shape":"GlueEncryptionException"},
-        {"shape":"ConcurrentModificationException"}
+        {"shape":"ConcurrentModificationException"},
+        {"shape":"ResourceNotReadyException"}
       ],
       "documentation":"<p>Creates a new table definition in the Data Catalog.</p>"
     },
@@ -872,7 +878,8 @@
         {"shape":"InvalidInputException"},
         {"shape":"InternalServiceException"},
         {"shape":"OperationTimeoutException"},
-        {"shape":"ConcurrentModificationException"}
+        {"shape":"ConcurrentModificationException"},
+        {"shape":"ResourceNotReadyException"}
       ],
       "documentation":"<p>Removes a table definition from the Data Catalog.</p> <note> <p>After completing this operation, you no longer have access to the table versions and partitions that belong to the deleted table. Glue deletes these \"orphaned\" resources asynchronously in a timely manner, at the discretion of the service.</p> <p>To ensure the immediate deletion of all related resources, before calling <code>DeleteTable</code>, use <code>DeleteTableVersion</code> or <code>BatchDeleteTableVersion</code>, and <code>DeletePartition</code> or <code>BatchDeletePartition</code>, to delete any resources that belong to the table.</p> </note>"
     },
@@ -1437,7 +1444,9 @@
         {"shape":"InvalidInputException"},
         {"shape":"OperationTimeoutException"},
         {"shape":"InternalServiceException"},
-        {"shape":"GlueEncryptionException"}
+        {"shape":"GlueEncryptionException"},
+        {"shape":"InvalidStateException"},
+        {"shape":"ResourceNotReadyException"}
       ],
       "documentation":"<p>Retrieves information about the partitions in a table.</p>"
     },
@@ -1613,7 +1622,8 @@
         {"shape":"InvalidInputException"},
         {"shape":"InternalServiceException"},
         {"shape":"OperationTimeoutException"},
-        {"shape":"GlueEncryptionException"}
+        {"shape":"GlueEncryptionException"},
+        {"shape":"ResourceNotReadyException"}
       ],
       "documentation":"<p>Retrieves the <code>Table</code> definition in a Data Catalog for a specified table.</p>"
     },
@@ -1715,6 +1725,57 @@
         {"shape":"OperationTimeoutException"}
       ],
       "documentation":"<p>Gets all the triggers associated with a job.</p>"
+    },
+    "GetUnfilteredPartitionMetadata":{
+      "name":"GetUnfilteredPartitionMetadata",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetUnfilteredPartitionMetadataRequest"},
+      "output":{"shape":"GetUnfilteredPartitionMetadataResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"GlueEncryptionException"},
+        {"shape":"PermissionTypeMismatchException"}
+      ]
+    },
+    "GetUnfilteredPartitionsMetadata":{
+      "name":"GetUnfilteredPartitionsMetadata",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetUnfilteredPartitionsMetadataRequest"},
+      "output":{"shape":"GetUnfilteredPartitionsMetadataResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"GlueEncryptionException"},
+        {"shape":"PermissionTypeMismatchException"}
+      ]
+    },
+    "GetUnfilteredTableMetadata":{
+      "name":"GetUnfilteredTableMetadata",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetUnfilteredTableMetadataRequest"},
+      "output":{"shape":"GetUnfilteredTableMetadataResponse"},
+      "errors":[
+        {"shape":"EntityNotFoundException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InternalServiceException"},
+        {"shape":"OperationTimeoutException"},
+        {"shape":"GlueEncryptionException"},
+        {"shape":"PermissionTypeMismatchException"}
+      ]
     },
     "GetUserDefinedFunction":{
       "name":"GetUserDefinedFunction",
@@ -2671,7 +2732,8 @@
         {"shape":"OperationTimeoutException"},
         {"shape":"ConcurrentModificationException"},
         {"shape":"ResourceNumberLimitExceededException"},
-        {"shape":"GlueEncryptionException"}
+        {"shape":"GlueEncryptionException"},
+        {"shape":"ResourceNotReadyException"}
       ],
       "documentation":"<p>Updates a metadata table in the Data Catalog.</p>"
     },
@@ -2739,6 +2801,11 @@
       "documentation":"<p>Access to a resource was denied.</p>",
       "exception":true
     },
+    "AccountId":{
+      "type":"string",
+      "max":12,
+      "min":0
+    },
     "Action":{
       "type":"structure",
       "members":{
@@ -2790,6 +2857,17 @@
       "exception":true
     },
     "AttemptCount":{"type":"integer"},
+    "AuditContext":{
+      "type":"structure",
+      "members":{
+        "AdditionalAuditContext":{"shape":"AuditContextString"}
+      }
+    },
+    "AuditContextString":{
+      "type":"string",
+      "max":2048,
+      "min":0
+    },
     "BackfillError":{
       "type":"structure",
       "members":{
@@ -2949,6 +3027,10 @@
         "TablesToDelete":{
           "shape":"BatchDeleteTableNameList",
           "documentation":"<p>A list of the table to delete.</p>"
+        },
+        "TransactionId":{
+          "shape":"TransactionIdString",
+          "documentation":"<p>The transaction ID at which to delete the table contents.</p>"
         }
       }
     },
@@ -3681,6 +3763,10 @@
         "Tables":{
           "shape":"CatalogTablesList",
           "documentation":"<p>A list of the tables to be synchronized.</p>"
+        },
+        "ConnectionName":{
+          "shape":"ConnectionName",
+          "documentation":"<p>The name of the connection for an Amazon S3-backed Data Catalog table to be a target of the crawl when using a <code>Catalog</code> connection type paired with a <code>NETWORK</code> Connection type.</p>"
         }
       },
       "documentation":"<p>Specifies an Glue Data Catalog target.</p>"
@@ -3698,7 +3784,7 @@
       "members":{
         "DataFormat":{
           "shape":"DataFormat",
-          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code> and <code>JSON</code> are supported.</p>"
+          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code>, <code>JSON</code> and <code>PROTOBUF</code> are supported.</p>"
         },
         "SchemaDefinition":{
           "shape":"SchemaDefinitionString",
@@ -3927,6 +4013,17 @@
       "max":1024,
       "min":1,
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\t]*"
+    },
+    "ColumnRowFilter":{
+      "type":"structure",
+      "members":{
+        "ColumnName":{"shape":"NameString"},
+        "RowFilterExpression":{"shape":"PredicateString"}
+      }
+    },
+    "ColumnRowFilterList":{
+      "type":"list",
+      "member":{"shape":"ColumnRowFilter"}
     },
     "ColumnStatistics":{
       "type":"structure",
@@ -4448,7 +4545,8 @@
         "CrawlerSecurityConfiguration":{
           "shape":"CrawlerSecurityConfiguration",
           "documentation":"<p>The name of the <code>SecurityConfiguration</code> structure to be used by this crawler.</p>"
-        }
+        },
+        "LakeFormationConfiguration":{"shape":"LakeFormationConfiguration"}
       },
       "documentation":"<p>Specifies a crawler program that examines a data source and uses classifiers to try to determine its schema. If successful, the crawler records metadata concerning the data source in the Glue Data Catalog.</p>"
     },
@@ -4590,6 +4688,10 @@
         "CatalogTargets":{
           "shape":"CatalogTargetList",
           "documentation":"<p>Specifies Glue Data Catalog targets.</p>"
+        },
+        "DeltaTargets":{
+          "shape":"DeltaTargetList",
+          "documentation":"<p>Specifies Delta data store targets.</p>"
         }
       },
       "documentation":"<p>Specifies data stores to crawl.</p>"
@@ -4729,6 +4831,7 @@
           "shape":"LineageConfiguration",
           "documentation":"<p>Specifies data lineage configuration settings for the crawler.</p>"
         },
+        "LakeFormationConfiguration":{"shape":"LakeFormationConfiguration"},
         "Configuration":{
           "shape":"CrawlerConfiguration",
           "documentation":"<p>Crawler configuration information. This versioned JSON string allows users to specify aspects of a crawler's behavior. For more information, see <a href=\"https://docs.aws.amazon.com/glue/latest/dg/crawler-configuration.html\">Configuring a Crawler</a>.</p>"
@@ -5284,7 +5387,7 @@
         },
         "DataFormat":{
           "shape":"DataFormat",
-          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code> and <code>JSON</code> are supported.</p>"
+          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code>, <code>JSON</code> and <code>PROTOBUF</code> are supported.</p>"
         },
         "Compatibility":{
           "shape":"Compatibility",
@@ -5329,7 +5432,7 @@
         },
         "DataFormat":{
           "shape":"DataFormat",
-          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code> and <code>JSON</code> are supported.</p>"
+          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code>, <code>JSON</code> and <code>PROTOBUF</code> are supported.</p>"
         },
         "Compatibility":{
           "shape":"Compatibility",
@@ -5447,6 +5550,10 @@
         "PartitionIndexes":{
           "shape":"PartitionIndexList",
           "documentation":"<p>A list of partition indexes, <code>PartitionIndex</code> structures, to create in the table.</p>"
+        },
+        "TransactionId":{
+          "shape":"TransactionIdString",
+          "documentation":"<p>The ID of the transaction.</p>"
         }
       }
     },
@@ -5702,7 +5809,8 @@
       "type":"string",
       "enum":[
         "AVRO",
-        "JSON"
+        "JSON",
+        "PROTOBUF"
       ]
     },
     "DataLakePrincipal":{
@@ -6293,6 +6401,10 @@
         "Name":{
           "shape":"NameString",
           "documentation":"<p>The name of the table to be deleted. For Hive compatibility, this name is entirely lowercase.</p>"
+        },
+        "TransactionId":{
+          "shape":"TransactionIdString",
+          "documentation":"<p>The transaction ID at which to delete the table contents.</p>"
         }
       }
     },
@@ -6395,6 +6507,28 @@
           "documentation":"<p>Name of the workflow specified in input.</p>"
         }
       }
+    },
+    "DeltaTarget":{
+      "type":"structure",
+      "members":{
+        "DeltaTables":{
+          "shape":"PathList",
+          "documentation":"<p>A list of the Amazon S3 paths to the Delta tables.</p>"
+        },
+        "ConnectionName":{
+          "shape":"ConnectionName",
+          "documentation":"<p>The name of the connection to use to connect to the Delta table target.</p>"
+        },
+        "WriteManifest":{
+          "shape":"NullableBoolean",
+          "documentation":"<p>Specifies whether to write the manifest files to the Delta table path.</p>"
+        }
+      },
+      "documentation":"<p>Specifies a Delta data store to crawl one or more Delta tables.</p>"
+    },
+    "DeltaTargetList":{
+      "type":"list",
+      "member":{"shape":"DeltaTarget"}
     },
     "DescriptionString":{
       "type":"string",
@@ -7883,6 +8017,14 @@
         "ExcludeColumnSchema":{
           "shape":"BooleanNullable",
           "documentation":"<p>When true, specifies not returning the partition column schema. Useful when you are interested only in other partition attributes such as partition values or location. This approach avoids the problem of a large response by not returning duplicate data.</p>"
+        },
+        "TransactionId":{
+          "shape":"TransactionIdString",
+          "documentation":"<p>The transaction ID at which to read the partition contents.</p>"
+        },
+        "QueryAsOfTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time as of when to read the partition contents. If not set, the most recent transaction commit time will be used. Cannot be specified along with <code>TransactionId</code>.</p>"
         }
       }
     },
@@ -8074,7 +8216,7 @@
         },
         "DataFormat":{
           "shape":"DataFormat",
-          "documentation":"<p>The data format of the schema definition. Currently only <code>AVRO</code> and <code>JSON</code> are supported.</p>"
+          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code>, <code>JSON</code> and <code>PROTOBUF</code> are supported.</p>"
         },
         "Status":{
           "shape":"SchemaVersionStatus",
@@ -8121,7 +8263,7 @@
         },
         "DataFormat":{
           "shape":"DataFormat",
-          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code> and <code>JSON</code> are supported.</p>"
+          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code>, <code>JSON</code> and <code>PROTOBUF</code> are supported.</p>"
         },
         "Compatibility":{
           "shape":"Compatibility",
@@ -8183,7 +8325,7 @@
         },
         "DataFormat":{
           "shape":"DataFormat",
-          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code> and <code>JSON</code> are supported.</p>"
+          "documentation":"<p>The data format of the schema definition. Currently <code>AVRO</code>, <code>JSON</code> and <code>PROTOBUF</code> are supported.</p>"
         },
         "SchemaArn":{
           "shape":"GlueResourceArn",
@@ -8302,6 +8444,14 @@
         "Name":{
           "shape":"NameString",
           "documentation":"<p>The name of the table for which to retrieve the definition. For Hive compatibility, this name is entirely lowercase.</p>"
+        },
+        "TransactionId":{
+          "shape":"TransactionIdString",
+          "documentation":"<p>The transaction ID at which to read the table contents. </p>"
+        },
+        "QueryAsOfTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time as of when to read the table contents. If not set, the most recent transaction commit time will be used. Cannot be specified along with <code>TransactionId</code>.</p>"
         }
       }
     },
@@ -8417,6 +8567,14 @@
         "MaxResults":{
           "shape":"CatalogGetterPageSize",
           "documentation":"<p>The maximum number of tables to return in a single response.</p>"
+        },
+        "TransactionId":{
+          "shape":"TransactionIdString",
+          "documentation":"<p>The transaction ID at which to read the table contents.</p>"
+        },
+        "QueryAsOfTime":{
+          "shape":"Timestamp",
+          "documentation":"<p>The time as of when to read the table contents. If not set, the most recent transaction commit time will be used. Cannot be specified along with <code>TransactionId</code>.</p>"
         }
       }
     },
@@ -8499,6 +8657,84 @@
           "shape":"GenericString",
           "documentation":"<p>A continuation token, if not all the requested triggers have yet been returned.</p>"
         }
+      }
+    },
+    "GetUnfilteredPartitionMetadataRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "TableName",
+        "PartitionValues",
+        "SupportedPermissionTypes"
+      ],
+      "members":{
+        "CatalogId":{"shape":"CatalogIdString"},
+        "DatabaseName":{"shape":"NameString"},
+        "TableName":{"shape":"NameString"},
+        "PartitionValues":{"shape":"ValueStringList"},
+        "AuditContext":{"shape":"AuditContext"},
+        "SupportedPermissionTypes":{"shape":"PermissionTypeList"}
+      }
+    },
+    "GetUnfilteredPartitionMetadataResponse":{
+      "type":"structure",
+      "members":{
+        "Partition":{"shape":"Partition"},
+        "AuthorizedColumns":{"shape":"NameStringList"},
+        "IsRegisteredWithLakeFormation":{"shape":"Boolean"}
+      }
+    },
+    "GetUnfilteredPartitionsMetadataRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "TableName",
+        "SupportedPermissionTypes"
+      ],
+      "members":{
+        "CatalogId":{"shape":"CatalogIdString"},
+        "DatabaseName":{"shape":"NameString"},
+        "TableName":{"shape":"NameString"},
+        "Expression":{"shape":"PredicateString"},
+        "AuditContext":{"shape":"AuditContext"},
+        "SupportedPermissionTypes":{"shape":"PermissionTypeList"},
+        "NextToken":{"shape":"Token"},
+        "Segment":{"shape":"Segment"},
+        "MaxResults":{"shape":"PageSize"}
+      }
+    },
+    "GetUnfilteredPartitionsMetadataResponse":{
+      "type":"structure",
+      "members":{
+        "UnfilteredPartitions":{"shape":"UnfilteredPartitionList"},
+        "NextToken":{"shape":"Token"}
+      }
+    },
+    "GetUnfilteredTableMetadataRequest":{
+      "type":"structure",
+      "required":[
+        "CatalogId",
+        "DatabaseName",
+        "Name",
+        "SupportedPermissionTypes"
+      ],
+      "members":{
+        "CatalogId":{"shape":"CatalogIdString"},
+        "DatabaseName":{"shape":"NameString"},
+        "Name":{"shape":"NameString"},
+        "AuditContext":{"shape":"AuditContext"},
+        "SupportedPermissionTypes":{"shape":"PermissionTypeList"}
+      }
+    },
+    "GetUnfilteredTableMetadataResponse":{
+      "type":"structure",
+      "members":{
+        "Table":{"shape":"Table"},
+        "AuthorizedColumns":{"shape":"NameStringList"},
+        "IsRegisteredWithLakeFormation":{"shape":"Boolean"},
+        "CellFilters":{"shape":"ColumnRowFilterList"}
       }
     },
     "GetUserDefinedFunctionRequest":{
@@ -8903,6 +9139,17 @@
         }
       },
       "documentation":"<p>The input provided was not valid.</p>",
+      "exception":true
+    },
+    "InvalidStateException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"MessageString",
+          "documentation":"<p>A message describing the problem.</p>"
+        }
+      },
+      "documentation":"<p>An error that indicates your data is in an invalid state.</p>",
       "exception":true
     },
     "IsVersionValid":{"type":"boolean"},
@@ -9377,6 +9624,13 @@
       },
       "documentation":"<p>Specifies configuration properties for a labeling set generation task run.</p>"
     },
+    "LakeFormationConfiguration":{
+      "type":"structure",
+      "members":{
+        "UseLakeFormationCredentials":{"shape":"NullableBoolean"},
+        "AccountId":{"shape":"AccountId"}
+      }
+    },
     "Language":{
       "type":"string",
       "enum":[
@@ -9792,6 +10046,10 @@
       "type":"string",
       "max":2056,
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\r\\n\\t]*"
+    },
+    "LocationStringList":{
+      "type":"list",
+      "member":{"shape":"LocationString"}
     },
     "LogGroup":{
       "type":"string",
@@ -10484,6 +10742,26 @@
       "type":"list",
       "member":{"shape":"Permission"}
     },
+    "PermissionType":{
+      "type":"string",
+      "enum":[
+        "COLUMN_PERMISSION",
+        "CELL_FILTER_PERMISSION"
+      ]
+    },
+    "PermissionTypeList":{
+      "type":"list",
+      "member":{"shape":"PermissionType"},
+      "max":255,
+      "min":1
+    },
+    "PermissionTypeMismatchException":{
+      "type":"structure",
+      "members":{
+        "Message":{"shape":"MessageString"}
+      },
+      "exception":true
+    },
     "PhysicalConnectionRequirements":{
       "type":"structure",
       "members":{
@@ -10983,6 +11261,17 @@
           "documentation":"<p>The reset bookmark entry.</p>"
         }
       }
+    },
+    "ResourceNotReadyException":{
+      "type":"structure",
+      "members":{
+        "Message":{
+          "shape":"MessageString",
+          "documentation":"<p>A message describing the problem.</p>"
+        }
+      },
+      "documentation":"<p>A resource was not ready for a transaction.</p>",
+      "exception":true
     },
     "ResourceNumberLimitExceededException":{
       "type":"structure",
@@ -11822,6 +12111,10 @@
         "Name":{
           "shape":"NameString",
           "documentation":"<p>The name of the workflow to start.</p>"
+        },
+        "RunProperties":{
+          "shape":"WorkflowRunProperties",
+          "documentation":"<p>The workflow run properties for the new workflow run.</p>"
         }
       }
     },
@@ -11930,6 +12223,7 @@
           "shape":"LocationString",
           "documentation":"<p>The physical location of the table. By default, this takes the form of the warehouse location, followed by the database location in the warehouse, followed by the table name.</p>"
         },
+        "AdditionalLocations":{"shape":"LocationStringList"},
         "InputFormat":{
           "shape":"FormatString",
           "documentation":"<p>The input format: <code>SequenceFileInputFormat</code> (binary), or <code>TextInputFormat</code>, or a custom format.</p>"
@@ -12441,6 +12735,12 @@
       "max":10,
       "min":1
     },
+    "TransactionIdString":{
+      "type":"string",
+      "max":255,
+      "min":1,
+      "pattern":"[\\p{L}\\p{N}\\p{P}]*"
+    },
     "TransformEncryption":{
       "type":"structure",
       "members":{
@@ -12693,6 +12993,18 @@
       "min":1,
       "pattern":"[\\u0020-\\uD7FF\\uE000-\\uFFFD\\uD800\\uDC00-\\uDBFF\\uDFFF\\r\\n\\t]*"
     },
+    "UnfilteredPartition":{
+      "type":"structure",
+      "members":{
+        "Partition":{"shape":"Partition"},
+        "AuthorizedColumns":{"shape":"NameStringList"},
+        "IsRegisteredWithLakeFormation":{"shape":"Boolean"}
+      }
+    },
+    "UnfilteredPartitionList":{
+      "type":"list",
+      "member":{"shape":"UnfilteredPartition"}
+    },
     "UntagResourceRequest":{
       "type":"structure",
       "required":[
@@ -12933,6 +13245,7 @@
           "shape":"LineageConfiguration",
           "documentation":"<p>Specifies data lineage configuration settings for the crawler.</p>"
         },
+        "LakeFormationConfiguration":{"shape":"LakeFormationConfiguration"},
         "Configuration":{
           "shape":"CrawlerConfiguration",
           "documentation":"<p>Crawler configuration information. This versioned JSON string allows users to specify aspects of a crawler's behavior. For more information, see <a href=\"https://docs.aws.amazon.com/glue/latest/dg/crawler-configuration.html\">Configuring a Crawler</a>.</p>"
@@ -13321,6 +13634,10 @@
         "SkipArchive":{
           "shape":"BooleanNullable",
           "documentation":"<p>By default, <code>UpdateTable</code> always creates an archived version of the table before updating it. However, if <code>skipArchive</code> is set to true, <code>UpdateTable</code> does not create the archived version.</p>"
+        },
+        "TransactionId":{
+          "shape":"TransactionIdString",
+          "documentation":"<p>The transaction ID at which to update the table contents. </p>"
         }
       }
     },

@@ -27,7 +27,7 @@ from botocore.compat import (
     six, unquote, urlsplit, urlunsplit, HAS_CRT
 )
 from botocore.exceptions import NoCredentialsError
-from botocore.utils import normalize_url_path, percent_encode_sequence
+from botocore.utils import is_valid_ipv6_endpoint_url, normalize_url_path, percent_encode_sequence
 
 # Imports for backwards compatibility
 from botocore.compat import MD5_AVAILABLE # noqa
@@ -59,6 +59,8 @@ def _host_from_url(url):
     # 3) excludes userinfo
     url_parts = urlsplit(url)
     host = url_parts.hostname  # urlsplit's hostname is always lowercase
+    if is_valid_ipv6_endpoint_url(url):
+        host = '[%s]' % (host)
     default_ports = {
         'http': 80,
         'https': 443

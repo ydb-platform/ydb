@@ -22,6 +22,7 @@ import subprocess
 from collections import namedtuple
 from copy import deepcopy
 from hashlib import sha1
+from pathlib import Path
 
 from dateutil.parser import parse
 from dateutil.tz import tzlocal, tzutc
@@ -305,6 +306,14 @@ class JSONFileCache(object):
             with open(actual_key) as f:
                 return json.load(f)
         except (OSError, ValueError, IOError):
+            raise KeyError(cache_key)
+
+    def __delitem__(self, cache_key):
+        actual_key = self._convert_cache_key(cache_key)
+        try:
+            key_path = Path(actual_key)
+            key_path.unlink()
+        except FileNotFoundError:
             raise KeyError(cache_key)
 
     def __setitem__(self, cache_key, value):

@@ -20,9 +20,9 @@
          pass
 --- contrib/python/botocore/py3/botocore/endpoint.py	(index)
 +++ contrib/python/botocore/py3/botocore/endpoint.py	(working tree)
-@@ -17,7 +17,7 @@ import logging
- import time
+@@ -19,7 +19,7 @@ import logging
  import threading
+ import uuid
  
 -from botocore.vendored import six
 +from botocore.compat import six
@@ -31,7 +31,7 @@
  from botocore.exceptions import HTTPClientError
 --- contrib/python/botocore/py3/botocore/httpsession.py	(index)
 +++ contrib/python/botocore/py3/botocore/httpsession.py	(working tree)
-@@ -21,7 +21,7 @@ except ImportError:
+@@ -30,7 +30,7 @@ except ImportError:
      from urllib3.util.ssl_ import SSLContext
  
  import botocore.awsrequest

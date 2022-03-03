@@ -12,17 +12,21 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 
+import datetime
 import os
 import logging
 import time
 import threading
+import uuid
 
 from botocore.compat import six
 
 from botocore.awsrequest import create_request_object
 from botocore.exceptions import HTTPClientError
 from botocore.httpsession import URLLib3Session
-from botocore.utils import is_valid_endpoint_url, get_environ_proxies
+from botocore.utils import (
+    is_valid_endpoint_url, is_valid_ipv6_endpoint_url, get_environ_proxies
+)
 from botocore.hooks import first_non_none_response
 from botocore.history import get_global_history_recorder
 from botocore.response import StreamingBody
@@ -127,15 +131,60 @@ class Endpoint(object):
         self._encode_headers(request.headers)
         return request.prepare()
 
+    def _calculate_ttl(self, response_received_timestamp, date_header,
+                       read_timeout):
+        local_timestamp = datetime.datetime.utcnow()
+        date_conversion = datetime.datetime.strptime(
+            date_header,
+            "%a, %d %b %Y %H:%M:%S %Z"
+        )
+        estimated_skew = date_conversion - response_received_timestamp
+        ttl = local_timestamp + datetime.timedelta(
+            seconds=read_timeout) + estimated_skew
+        return ttl.strftime('%Y%m%dT%H%M%SZ')
+
+    def _set_ttl(self, retries_context, read_timeout, success_response):
+        response_date_header = success_response[0].headers.get('Date')
+        has_streaming_input = retries_context.get('has_streaming_input')
+        if response_date_header and not has_streaming_input:
+            try:
+                response_received_timestamp = datetime.datetime.utcnow()
+                retries_context['ttl'] = self._calculate_ttl(
+                    response_received_timestamp,
+                    response_date_header,
+                    read_timeout
+                )
+            except Exception:
+                logger.debug(
+                    "Exception received when updating retries context with TTL",
+                    exc_info=True
+                )
+
+    def _update_retries_context(
+            self, context, attempt, success_response=None
+    ):
+        retries_context = context.setdefault('retries', {})
+        retries_context['attempt'] = attempt
+        if 'invocation-id' not in retries_context:
+            retries_context['invocation-id'] = str(uuid.uuid4())
+
+        if success_response:
+            read_timeout = context['client_config'].read_timeout
+            self._set_ttl(retries_context, read_timeout, success_response)
+
     def _send_request(self, request_dict, operation_model):
         attempts = 1
-        request = self.create_request(request_dict, operation_model)
         context = request_dict['context']
+        self._update_retries_context(context, attempts)
+        request = self.create_request(request_dict, operation_model)
         success_response, exception = self._get_response(
             request, operation_model, context)
         while self._needs_retry(attempts, operation_model, request_dict,
                                 success_response, exception):
             attempts += 1
+            self._update_retries_context(
+                context, attempts, success_response
+            )
             # If there is a stream associated with the request, we need
             # to reset it before attempting to send the request again.
             # This will ensure that we resend the entire contents of the
@@ -272,18 +321,19 @@ class EndpointCreator(object):
     def __init__(self, event_emitter):
         self._event_emitter = event_emitter
 
-    def create_endpoint(self, service_model, region_name, endpoint_url,
-                        verify=None, response_parser_factory=None,
-                        timeout=DEFAULT_TIMEOUT,
-                        max_pool_connections=MAX_POOL_CONNECTIONS,
-                        http_session_cls=URLLib3Session,
-                        proxies=None,
-                        socket_options=None,
-                        client_cert=None,
-                        proxies_config=None):
-        if not is_valid_endpoint_url(endpoint_url):
-
+    def create_endpoint(
+        self, service_model, region_name, endpoint_url,
+        verify=None, response_parser_factory=None,
+        timeout=DEFAULT_TIMEOUT, max_pool_connections=MAX_POOL_CONNECTIONS,
+        http_session_cls=URLLib3Session, proxies=None, socket_options=None,
+        client_cert=None, proxies_config=None
+    ):
+        if (
+            not is_valid_endpoint_url(endpoint_url)
+            and not is_valid_ipv6_endpoint_url(endpoint_url)
+        ):
             raise ValueError("Invalid endpoint: %s" % endpoint_url)
+
         if proxies is None:
             proxies = self._get_proxies(endpoint_url)
         endpoint_prefix = service_model.endpoint_prefix

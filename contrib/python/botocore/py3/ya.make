@@ -2,7 +2,7 @@ PY3_LIBRARY()
 
 OWNER(g:python-contrib)
 
-VERSION(1.22.12)
+VERSION(1.23.54)
 
 LICENSE(Apache-2.0)
 
@@ -119,6 +119,8 @@ RESOURCE_FILES(
     #botocore/data/amplify/2017-07-25/service-2.json
     #botocore/data/amplifybackend/2020-08-11/paginators-1.json
     #botocore/data/amplifybackend/2020-08-11/service-2.json
+    #botocore/data/amplifyuibuilder/2021-08-11/paginators-1.json
+    #botocore/data/amplifyuibuilder/2021-08-11/service-2.json
     #botocore/data/apigateway/2015-07-09/examples-1.json
     #botocore/data/apigateway/2015-07-09/paginators-1.json
     #botocore/data/apigateway/2015-07-09/service-2.json
@@ -128,6 +130,8 @@ RESOURCE_FILES(
     #botocore/data/apigatewayv2/2018-11-29/service-2.json
     #botocore/data/appconfig/2019-10-09/paginators-1.json
     #botocore/data/appconfig/2019-10-09/service-2.json
+    #botocore/data/appconfigdata/2021-11-11/paginators-1.json
+    #botocore/data/appconfigdata/2021-11-11/service-2.json
     #botocore/data/appflow/2020-08-23/paginators-1.json
     #botocore/data/appflow/2020-08-23/service-2.json
     #botocore/data/appintegrations/2020-07-29/paginators-1.json
@@ -163,6 +167,8 @@ RESOURCE_FILES(
     #botocore/data/autoscaling/2011-01-01/examples-1.json
     #botocore/data/autoscaling/2011-01-01/paginators-1.json
     #botocore/data/autoscaling/2011-01-01/service-2.json
+    #botocore/data/backup-gateway/2021-01-01/paginators-1.json
+    #botocore/data/backup-gateway/2021-01-01/service-2.json
     #botocore/data/backup/2018-11-15/paginators-1.json
     #botocore/data/backup/2018-11-15/service-2.json
     #botocore/data/batch/2016-08-10/examples-1.json
@@ -374,6 +380,8 @@ RESOURCE_FILES(
     #botocore/data/docdb/2014-10-31/service-2.json
     #botocore/data/docdb/2014-10-31/service-2.sdk-extras.json
     #botocore/data/docdb/2014-10-31/waiters-2.json
+    #botocore/data/drs/2020-02-26/paginators-1.json
+    #botocore/data/drs/2020-02-26/service-2.json
     #botocore/data/ds/2015-04-16/examples-1.json
     #botocore/data/ds/2015-04-16/paginators-1.json
     #botocore/data/ds/2015-04-16/service-2.json
@@ -471,6 +479,8 @@ RESOURCE_FILES(
     #botocore/data/events/2015-10-07/examples-1.json
     #botocore/data/events/2015-10-07/paginators-1.json
     #botocore/data/events/2015-10-07/service-2.json
+    #botocore/data/evidently/2021-02-01/paginators-1.json
+    #botocore/data/evidently/2021-02-01/service-2.json
     #botocore/data/finspace-data/2020-07-13/paginators-1.json
     #botocore/data/finspace-data/2020-07-13/service-2.json
     #botocore/data/finspace/2021-03-12/paginators-1.json
@@ -535,6 +545,9 @@ RESOURCE_FILES(
     #botocore/data/inspector/2016-02-16/examples-1.json
     #botocore/data/inspector/2016-02-16/paginators-1.json
     #botocore/data/inspector/2016-02-16/service-2.json
+    #botocore/data/inspector2/2020-06-08/paginators-1.json
+    #botocore/data/inspector2/2020-06-08/paginators-1.sdk-extras.json
+    #botocore/data/inspector2/2020-06-08/service-2.json
     #botocore/data/iot-data/2015-05-28/paginators-1.json
     #botocore/data/iot-data/2015-05-28/service-2.json
     #botocore/data/iot-jobs-data/2017-09-29/examples-1.json
@@ -566,6 +579,9 @@ RESOURCE_FILES(
     #botocore/data/iotsitewise/2019-12-02/waiters-2.json
     #botocore/data/iotthingsgraph/2018-09-06/paginators-1.json
     #botocore/data/iotthingsgraph/2018-09-06/service-2.json
+    #botocore/data/iottwinmaker/2021-11-29/paginators-1.json
+    #botocore/data/iottwinmaker/2021-11-29/service-2.json
+    #botocore/data/iottwinmaker/2021-11-29/waiters-2.json
     #botocore/data/iotwireless/2020-11-22/paginators-1.json
     #botocore/data/iotwireless/2020-11-22/service-2.json
     #botocore/data/ivs/2020-07-14/paginators-1.json
@@ -600,6 +616,7 @@ RESOURCE_FILES(
     #botocore/data/kms/2014-11-01/paginators-1.json
     #botocore/data/kms/2014-11-01/service-2.json
     #botocore/data/lakeformation/2017-03-31/paginators-1.json
+    #botocore/data/lakeformation/2017-03-31/paginators-1.sdk-extras.json
     #botocore/data/lakeformation/2017-03-31/service-2.json
     #botocore/data/lambda/2014-11-11/service-2.json
     #botocore/data/lambda/2015-03-31/examples-1.json
@@ -682,8 +699,13 @@ RESOURCE_FILES(
     #botocore/data/mgh/2017-05-31/service-2.json
     #botocore/data/mgn/2020-02-26/paginators-1.json
     #botocore/data/mgn/2020-02-26/service-2.json
+    #botocore/data/migration-hub-refactor-spaces/2021-10-26/paginators-1.json
+    #botocore/data/migration-hub-refactor-spaces/2021-10-26/service-2.json
     #botocore/data/migrationhub-config/2019-06-30/paginators-1.json
     #botocore/data/migrationhub-config/2019-06-30/service-2.json
+    #botocore/data/migrationhubstrategy/2020-02-19/paginators-1.json
+    #botocore/data/migrationhubstrategy/2020-02-19/paginators-1.sdk-extras.json
+    #botocore/data/migrationhubstrategy/2020-02-19/service-2.json
     #botocore/data/mobile/2017-07-01/examples-1.json
     #botocore/data/mobile/2017-07-01/paginators-1.json
     #botocore/data/mobile/2017-07-01/service-2.json
@@ -755,6 +777,8 @@ RESOURCE_FILES(
     #botocore/data/quicksight/2018-04-01/service-2.json
     #botocore/data/ram/2018-01-04/paginators-1.json
     #botocore/data/ram/2018-01-04/service-2.json
+    #botocore/data/rbin/2021-06-15/paginators-1.json
+    #botocore/data/rbin/2021-06-15/service-2.json
     #botocore/data/rds-data/2018-08-01/paginators-1.json
     #botocore/data/rds-data/2018-08-01/service-2.json
     #botocore/data/rds/2014-09-01/paginators-1.json
@@ -776,6 +800,8 @@ RESOURCE_FILES(
     #botocore/data/rekognition/2016-06-27/paginators-1.json
     #botocore/data/rekognition/2016-06-27/service-2.json
     #botocore/data/rekognition/2016-06-27/waiters-2.json
+    #botocore/data/resiliencehub/2020-04-30/paginators-1.json
+    #botocore/data/resiliencehub/2020-04-30/service-2.json
     #botocore/data/resource-groups/2017-11-27/examples-1.json
     #botocore/data/resource-groups/2017-11-27/paginators-1.json
     #botocore/data/resource-groups/2017-11-27/service-2.json
@@ -801,6 +827,8 @@ RESOURCE_FILES(
     botocore/data/route53resolver/2018-04-01/paginators-1.json
     botocore/data/route53resolver/2018-04-01/paginators-1.sdk-extras.json
     botocore/data/route53resolver/2018-04-01/service-2.json
+    #botocore/data/rum/2018-05-10/paginators-1.json
+    #botocore/data/rum/2018-05-10/service-2.json
     botocore/data/s3/2006-03-01/examples-1.json
     botocore/data/s3/2006-03-01/paginators-1.json
     botocore/data/s3/2006-03-01/service-2.json
@@ -829,6 +857,7 @@ RESOURCE_FILES(
     #botocore/data/schemas/2019-12-02/waiters-2.json
     #botocore/data/sdb/2009-04-15/paginators-1.json
     #botocore/data/sdb/2009-04-15/service-2.json
+    botocore/data/sdk-default-configuration.json
     botocore/data/secretsmanager/2017-10-17/examples-1.json
     botocore/data/secretsmanager/2017-10-17/paginators-1.json
     botocore/data/secretsmanager/2017-10-17/service-2.json
@@ -945,6 +974,8 @@ RESOURCE_FILES(
     #botocore/data/workmail/2017-10-01/service-2.json
     #botocore/data/workmailmessageflow/2019-05-01/paginators-1.json
     #botocore/data/workmailmessageflow/2019-05-01/service-2.json
+    #botocore/data/workspaces-web/2020-07-08/paginators-1.json
+    #botocore/data/workspaces-web/2020-07-08/service-2.json
     #botocore/data/workspaces/2015-04-08/examples-1.json
     #botocore/data/workspaces/2015-04-08/paginators-1.json
     #botocore/data/workspaces/2015-04-08/service-2.json

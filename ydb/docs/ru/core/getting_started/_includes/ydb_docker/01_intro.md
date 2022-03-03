@@ -8,14 +8,14 @@
 
 - gRPC
 
-  - [Эндпоинт](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
-  - [Размещение базы данных](../../../concepts/connect.md#database): `/local`
-  - [Аутентификация](../../../concepts/connect.md#auth-modes): Анонимная (без аутентификации)
+  * [эндпоинт](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`;
+  * [размещение базы данных](../../../concepts/connect.md#database): `/local`;
+  * [аутентификация](../../../concepts/connect.md#auth-modes): Анонимная (без аутентификации).
 
 - gRPCs/TLS
 
-  - [Эндпоинт](../../../concepts/connect.md#endpoint): `grpcs://localhost:2135`
-  - [Размещение базы данных](../../../concepts/connect.md#database): `/local`
-  - [Аутентификация](../../../concepts/connect.md#auth-modes): Анонимная (без аутентификации)
+  * [эндпоинт](../../../concepts/connect.md#endpoint): `grpcs://localhost:2135`;
+  * [размещение базы данных](../../../concepts/connect.md#database): `/local`;
+  * [аутентификация](../../../concepts/connect.md#auth-modes): Анонимная (без аутентификации).
 
 {% endlist %}

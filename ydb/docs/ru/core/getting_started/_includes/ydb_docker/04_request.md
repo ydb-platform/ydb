@@ -18,6 +18,6 @@ ydb -e grpcs://localhost:2135 --ca-file ydb_certs/ca.pem -d /local scheme ls
 docker exec <container_id> /ydb -e localhost:2136 -d /local scheme ls
 ```
 
-, где
+где
 
-`<container_id>`: идентификатор контейнера, выведенный при его [запуске](#start).
+`<container_id>` — идентификатор контейнера, выведенный при его [запуске](#start).

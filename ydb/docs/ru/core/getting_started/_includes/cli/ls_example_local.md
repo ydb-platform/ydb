@@ -5,5 +5,3 @@
 ``` bash
 {{ ydb-cli }} -e grpc://localhost:2136 -d /local scheme ls
 ```
-
-

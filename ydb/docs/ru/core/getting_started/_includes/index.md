@@ -11,4 +11,3 @@
 {% include [yql.md](index/yql.md) %}
 
 {% include [sdk.md](index/sdk.md) %}
-

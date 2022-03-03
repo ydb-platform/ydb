@@ -4,7 +4,7 @@
  *	  definition of the "operator family" system catalog (pg_opfamily)
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_opfamily.h
@@ -37,10 +37,10 @@ CATALOG(pg_opfamily,2753,OperatorFamilyRelationId)
 	NameData	opfname;
 
 	/* namespace of this opfamily */
-	Oid			opfnamespace BKI_DEFAULT(PGNSP);
+	Oid			opfnamespace BKI_DEFAULT(pg_catalog) BKI_LOOKUP(pg_namespace);
 
 	/* opfamily owner */
-	Oid			opfowner BKI_DEFAULT(PGUID);
+	Oid			opfowner BKI_DEFAULT(POSTGRES) BKI_LOOKUP(pg_authid);
 } FormData_pg_opfamily;
 
 /* ----------------
@@ -49,6 +49,11 @@ CATALOG(pg_opfamily,2753,OperatorFamilyRelationId)
  * ----------------
  */
 typedef FormData_pg_opfamily *Form_pg_opfamily;
+
+DECLARE_UNIQUE_INDEX(pg_opfamily_am_name_nsp_index, 2754, on pg_opfamily using btree(opfmethod oid_ops, opfname name_ops, opfnamespace oid_ops));
+#define OpfamilyAmNameNspIndexId  2754
+DECLARE_UNIQUE_INDEX_PKEY(pg_opfamily_oid_index, 2755, on pg_opfamily using btree(oid oid_ops));
+#define OpfamilyOidIndexId	2755
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 

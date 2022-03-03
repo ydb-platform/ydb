@@ -3,7 +3,7 @@
 # pg_aggregate.dat
 #    Initial contents of the pg_aggregate system catalog.
 #
-# Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+# Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
 # Portions Copyright (c) 1994, Regents of the University of California
 #
 # src/include/catalog/pg_aggregate.dat
@@ -505,17 +505,25 @@
   aggcombinefn => 'int2and', aggtranstype => 'int2' },
 { aggfnoid => 'bit_or(int2)', aggtransfn => 'int2or', aggcombinefn => 'int2or',
   aggtranstype => 'int2' },
+{ aggfnoid => 'bit_xor(int2)', aggtransfn => 'int2xor',
+  aggcombinefn => 'int2xor', aggtranstype => 'int2' },
 { aggfnoid => 'bit_and(int4)', aggtransfn => 'int4and',
   aggcombinefn => 'int4and', aggtranstype => 'int4' },
 { aggfnoid => 'bit_or(int4)', aggtransfn => 'int4or', aggcombinefn => 'int4or',
   aggtranstype => 'int4' },
+{ aggfnoid => 'bit_xor(int4)', aggtransfn => 'int4xor',
+  aggcombinefn => 'int4xor', aggtranstype => 'int4' },
 { aggfnoid => 'bit_and(int8)', aggtransfn => 'int8and',
   aggcombinefn => 'int8and', aggtranstype => 'int8' },
 { aggfnoid => 'bit_or(int8)', aggtransfn => 'int8or', aggcombinefn => 'int8or',
   aggtranstype => 'int8' },
+{ aggfnoid => 'bit_xor(int8)', aggtransfn => 'int8xor',
+  aggcombinefn => 'int8xor', aggtranstype => 'int8' },
 { aggfnoid => 'bit_and(bit)', aggtransfn => 'bitand', aggcombinefn => 'bitand',
   aggtranstype => 'bit' },
 { aggfnoid => 'bit_or(bit)', aggtransfn => 'bitor', aggcombinefn => 'bitor',
+  aggtranstype => 'bit' },
+{ aggfnoid => 'bit_xor(bit)', aggtransfn => 'bitxor', aggcombinefn => 'bitxor',
   aggtranstype => 'bit' },
 
 # xml
@@ -537,6 +545,18 @@
 { aggfnoid => 'string_agg(bytea,bytea)',
   aggtransfn => 'bytea_string_agg_transfn',
   aggfinalfn => 'bytea_string_agg_finalfn', aggtranstype => 'internal' },
+
+# range
+{ aggfnoid => 'range_intersect_agg(anyrange)',
+  aggtransfn => 'range_intersect_agg_transfn',
+  aggcombinefn => 'range_intersect_agg_transfn', aggtranstype => 'anyrange' },
+{ aggfnoid => 'range_intersect_agg(anymultirange)',
+  aggtransfn => 'multirange_intersect_agg_transfn',
+  aggcombinefn => 'multirange_intersect_agg_transfn',
+  aggtranstype => 'anymultirange' },
+{ aggfnoid => 'range_agg(anyrange)', aggtransfn => 'range_agg_transfn',
+  aggfinalfn => 'range_agg_finalfn', aggfinalextra => 't',
+  aggtranstype => 'internal' },
 
 # json
 { aggfnoid => 'json_agg', aggtransfn => 'json_agg_transfn',

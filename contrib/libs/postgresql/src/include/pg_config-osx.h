@@ -29,3 +29,6 @@
 
 /* Define to 1 if you have the `strchrnul' function. */
 #undef HAVE_STRCHRNUL
+
+/* Define to 1 if you have the `syncfs' function. */
+#undef HAVE_SYNCFS

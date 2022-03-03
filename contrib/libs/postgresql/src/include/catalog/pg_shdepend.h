@@ -12,7 +12,7 @@
  * from a relation to its database.  Currently, only dependencies on roles
  * are explicitly stored in pg_shdepend.
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_shdepend.h
@@ -42,8 +42,10 @@ CATALOG(pg_shdepend,1214,SharedDependRelationId) BKI_SHARED_RELATION
 	 * These fields are all zeroes for a DEPENDENCY_PIN entry.  Also, dbid can
 	 * be zero to denote a shared object.
 	 */
-	Oid			dbid;			/* OID of database containing object */
-	Oid			classid;		/* OID of table containing object */
+	Oid			dbid BKI_LOOKUP_OPT(pg_database);	/* OID of database
+													 * containing object */
+	Oid			classid BKI_LOOKUP_OPT(pg_class);	/* OID of table containing
+													 * object */
 	Oid			objid;			/* OID of object itself */
 	int32		objsubid;		/* column number, or 0 if not used */
 
@@ -52,7 +54,8 @@ CATALOG(pg_shdepend,1214,SharedDependRelationId) BKI_SHARED_RELATION
 	 * a shared object, so we need no database ID field.  We don't bother with
 	 * a sub-object ID either.
 	 */
-	Oid			refclassid;		/* OID of table containing object */
+	Oid			refclassid BKI_LOOKUP(pg_class);	/* OID of table containing
+													 * object */
 	Oid			refobjid;		/* OID of object itself */
 
 	/*
@@ -68,5 +71,10 @@ CATALOG(pg_shdepend,1214,SharedDependRelationId) BKI_SHARED_RELATION
  * ----------------
  */
 typedef FormData_pg_shdepend *Form_pg_shdepend;
+
+DECLARE_INDEX(pg_shdepend_depender_index, 1232, on pg_shdepend using btree(dbid oid_ops, classid oid_ops, objid oid_ops, objsubid int4_ops));
+#define SharedDependDependerIndexId		1232
+DECLARE_INDEX(pg_shdepend_reference_index, 1233, on pg_shdepend using btree(refclassid oid_ops, refobjid oid_ops));
+#define SharedDependReferenceIndexId	1233
 
 #endif							/* PG_SHDEPEND_H */

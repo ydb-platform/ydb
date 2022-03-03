@@ -4,7 +4,7 @@
  *	  definition of the "index" system catalog (pg_index)
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_index.h
@@ -28,8 +28,9 @@
  */
 CATALOG(pg_index,2610,IndexRelationId) BKI_SCHEMA_MACRO
 {
-	Oid			indexrelid;		/* OID of the index */
-	Oid			indrelid;		/* OID of the relation it indexes */
+	Oid			indexrelid BKI_LOOKUP(pg_class);	/* OID of the index */
+	Oid			indrelid BKI_LOOKUP(pg_class);	/* OID of the relation it
+												 * indexes */
 	int16		indnatts;		/* total number of columns in index */
 	int16		indnkeyatts;	/* number of key columns in index */
 	bool		indisunique;	/* is this a unique index? */
@@ -44,12 +45,14 @@ CATALOG(pg_index,2610,IndexRelationId) BKI_SCHEMA_MACRO
 	bool		indisreplident; /* is this index the identity for replication? */
 
 	/* variable-length fields start here, but we allow direct access to indkey */
-	int2vector	indkey;			/* column numbers of indexed cols, or 0 */
+	int2vector	indkey BKI_FORCE_NOT_NULL;	/* column numbers of indexed cols,
+											 * or 0 */
 
 #ifdef CATALOG_VARLEN
-	oidvector	indcollation;	/* collation identifiers */
-	oidvector	indclass;		/* opclass identifiers */
-	int2vector	indoption;		/* per-column flags (AM-specific meanings) */
+	oidvector	indcollation BKI_LOOKUP_OPT(pg_collation) BKI_FORCE_NOT_NULL;	/* collation identifiers */
+	oidvector	indclass BKI_LOOKUP(pg_opclass) BKI_FORCE_NOT_NULL; /* opclass identifiers */
+	int2vector	indoption BKI_FORCE_NOT_NULL;	/* per-column flags
+												 * (AM-specific meanings) */
 	pg_node_tree indexprs;		/* expression trees for index attributes that
 								 * are not simple column references; one for
 								 * each zero entry in indkey[] */
@@ -64,6 +67,14 @@ CATALOG(pg_index,2610,IndexRelationId) BKI_SCHEMA_MACRO
  * ----------------
  */
 typedef FormData_pg_index *Form_pg_index;
+
+DECLARE_INDEX(pg_index_indrelid_index, 2678, on pg_index using btree(indrelid oid_ops));
+#define IndexIndrelidIndexId  2678
+DECLARE_UNIQUE_INDEX_PKEY(pg_index_indexrelid_index, 2679, on pg_index using btree(indexrelid oid_ops));
+#define IndexRelidIndexId  2679
+
+/* indkey can contain zero (InvalidAttrNumber) to represent expressions */
+DECLARE_ARRAY_FOREIGN_KEY_OPT((indrelid, indkey), pg_attribute, (attrelid, attnum));
 
 #ifdef EXPOSE_TO_CLIENT_CODE
 

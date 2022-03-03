@@ -4,7 +4,7 @@
  *		Header file for structures and utility functions related to
  *		partitioning
  *
- * Copyright (c) 2007-2020, PostgreSQL Global Development Group
+ * Copyright (c) 2007-2021, PostgreSQL Global Development Group
  *
  * src/include/catalog/partition.h
  *
@@ -19,7 +19,7 @@
 /* Seed for the extended hash function */
 #define HASH_PARTITION_SEED UINT64CONST(0x7A5B22367996DCFD)
 
-extern Oid	get_partition_parent(Oid relid);
+extern Oid	get_partition_parent(Oid relid, bool even_if_detached);
 extern List *get_partition_ancestors(Oid relid);
 extern Oid	index_get_partition(Relation partition, Oid indexId);
 extern List *map_partition_varattnos(List *expr, int fromrel_varno,

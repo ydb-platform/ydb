@@ -4,9 +4,9 @@ LIBRARY(postgres)
 
 OWNER(g:cpp-contrib)
 
-VERSION(13.6)
+VERSION(14.2)
 
-ORIGINAL_SOURCE(mirror://postgresql/source/v13.6/postgresql-13.6.tar.bz2)
+ORIGINAL_SOURCE(mirror://postgresql/source/v14.2/postgresql-14.2.tar.bz2)
 
 LICENSE(
     Apache-2.0 AND
@@ -35,11 +35,13 @@ PEERDIR(
     contrib/libs/libc_compat
     contrib/libs/libiconv
     contrib/libs/libxml
+    contrib/libs/lz4
     contrib/libs/openssl
 )
 
 ADDINCL(
     contrib/libs/libiconv/include
+    contrib/libs/lz4
     contrib/libs/postgresql/src/backend/bootstrap
     contrib/libs/postgresql/src/backend/parser
     contrib/libs/postgresql/src/backend/replication
@@ -62,8 +64,10 @@ CFLAGS(
 
 SRCS(
     src/backend/access/brin/brin.c
+    src/backend/access/brin/brin_bloom.c
     src/backend/access/brin/brin_inclusion.c
     src/backend/access/brin/brin_minmax.c
+    src/backend/access/brin/brin_minmax_multi.c
     src/backend/access/brin/brin_pageops.c
     src/backend/access/brin/brin_revmap.c
     src/backend/access/brin/brin_tuple.c
@@ -80,6 +84,8 @@ SRCS(
     src/backend/access/common/reloptions.c
     src/backend/access/common/scankey.c
     src/backend/access/common/session.c
+    src/backend/access/common/syncscan.c
+    src/backend/access/common/toast_compression.c
     src/backend/access/common/toast_internals.c
     src/backend/access/common/tupconvert.c
     src/backend/access/common/tupdesc.c
@@ -126,7 +132,6 @@ SRCS(
     src/backend/access/heap/hio.c
     src/backend/access/heap/pruneheap.c
     src/backend/access/heap/rewriteheap.c
-    src/backend/access/heap/syncscan.c
     src/backend/access/heap/vacuumlazy.c
     src/backend/access/heap/visibilitymap.c
     src/backend/access/index/amapi.c
@@ -246,6 +251,9 @@ SRCS(
     src/backend/commands/constraint.c
     src/backend/commands/conversioncmds.c
     src/backend/commands/copy.c
+    src/backend/commands/copyfrom.c
+    src/backend/commands/copyfromparse.c
+    src/backend/commands/copyto.c
     src/backend/commands/createas.c
     src/backend/commands/dbcommands.c
     src/backend/commands/define.c
@@ -281,6 +289,7 @@ SRCS(
     src/backend/commands/variable.c
     src/backend/commands/view.c
     src/backend/executor/execAmi.c
+    src/backend/executor/execAsync.c
     src/backend/executor/execCurrent.c
     src/backend/executor/execExpr.c
     src/backend/executor/execExprInterp.c
@@ -319,6 +328,7 @@ SRCS(
     src/backend/executor/nodeLimit.c
     src/backend/executor/nodeLockRows.c
     src/backend/executor/nodeMaterial.c
+    src/backend/executor/nodeMemoize.c
     src/backend/executor/nodeMergeAppend.c
     src/backend/executor/nodeMergejoin.c
     src/backend/executor/nodeModifyTable.c
@@ -334,6 +344,7 @@ SRCS(
     src/backend/executor/nodeSubplan.c
     src/backend/executor/nodeSubqueryscan.c
     src/backend/executor/nodeTableFuncscan.c
+    src/backend/executor/nodeTidrangescan.c
     src/backend/executor/nodeTidscan.c
     src/backend/executor/nodeUnique.c
     src/backend/executor/nodeValuesscan.c
@@ -414,6 +425,7 @@ SRCS(
     src/backend/optimizer/plan/planner.c
     src/backend/optimizer/plan/setrefs.c
     src/backend/optimizer/plan/subselect.c
+    src/backend/optimizer/prep/prepagg.c
     src/backend/optimizer/prep/prepjointree.c
     src/backend/optimizer/prep/prepqual.c
     src/backend/optimizer/prep/preptlist.c
@@ -500,6 +512,7 @@ SRCS(
     src/backend/rewrite/rewriteHandler.c
     src/backend/rewrite/rewriteManip.c
     src/backend/rewrite/rewriteRemove.c
+    src/backend/rewrite/rewriteSearchCycle.c
     src/backend/rewrite/rewriteSupport.c
     src/backend/rewrite/rowsecurity.c
     src/backend/statistics/dependencies.c
@@ -574,6 +587,9 @@ SRCS(
     src/backend/tsearch/ts_utils.c
     src/backend/tsearch/wparser.c
     src/backend/tsearch/wparser_def.c
+    src/backend/utils/activity/backend_progress.c
+    src/backend/utils/activity/backend_status.c
+    src/backend/utils/activity/wait_event.c
     src/backend/utils/adt/acl.c
     src/backend/utils/adt/amutils.c
     src/backend/utils/adt/array_expanded.c
@@ -581,12 +597,13 @@ SRCS(
     src/backend/utils/adt/array_typanalyze.c
     src/backend/utils/adt/array_userfuncs.c
     src/backend/utils/adt/arrayfuncs.c
+    src/backend/utils/adt/arraysubs.c
     src/backend/utils/adt/arrayutils.c
     src/backend/utils/adt/ascii.c
     src/backend/utils/adt/bool.c
     src/backend/utils/adt/cash.c
     src/backend/utils/adt/char.c
-    src/backend/utils/adt/cryptohashes.c
+    src/backend/utils/adt/cryptohashfuncs.c
     src/backend/utils/adt/date.c
     src/backend/utils/adt/datetime.c
     src/backend/utils/adt/datum.c
@@ -612,6 +629,7 @@ SRCS(
     src/backend/utils/adt/jsonb_gin.c
     src/backend/utils/adt/jsonb_op.c
     src/backend/utils/adt/jsonb_util.c
+    src/backend/utils/adt/jsonbsubs.c
     src/backend/utils/adt/jsonfuncs.c
     src/backend/utils/adt/jsonpath.c
     src/backend/utils/adt/jsonpath_exec.c
@@ -621,7 +639,10 @@ SRCS(
     src/backend/utils/adt/lockfuncs.c
     src/backend/utils/adt/mac.c
     src/backend/utils/adt/mac8.c
+    src/backend/utils/adt/mcxtfuncs.c
     src/backend/utils/adt/misc.c
+    src/backend/utils/adt/multirangetypes.c
+    src/backend/utils/adt/multirangetypes_selfuncs.c
     src/backend/utils/adt/name.c
     src/backend/utils/adt/network.c
     src/backend/utils/adt/network_gist.c
@@ -711,6 +732,7 @@ SRCS(
     src/backend/utils/misc/pg_rusage.c
     src/backend/utils/misc/ps_status.c
     src/backend/utils/misc/queryenvironment.c
+    src/backend/utils/misc/queryjumble.c
     src/backend/utils/misc/rls.c
     src/backend/utils/misc/sampling.c
     src/backend/utils/misc/superuser.c
@@ -737,18 +759,22 @@ SRCS(
     src/common/checksum_helper.c
     src/common/config_info.c
     src/common/controldata_utils.c
+    src/common/cryptohash_openssl.c
     src/common/d2s.c
     src/common/encnames.c
     src/common/exec.c
     src/common/f2s.c
     src/common/file_perm.c
+    src/common/file_utils.c
     src/common/hashfn.c
+    src/common/hmac_openssl.c
     src/common/ip.c
     src/common/jsonapi.c
     src/common/keywords.c
     src/common/kwlookup.c
     src/common/link-canary.c
-    src/common/md5.c
+    src/common/md5_common.c
+    src/common/pg_get_line.c
     src/common/pg_lzcompress.c
     src/common/pgfnames.c
     src/common/protocol_openssl.c
@@ -757,13 +783,13 @@ SRCS(
     src/common/rmtree.c
     src/common/saslprep.c
     src/common/scram-common.c
-    src/common/sha2_openssl.c
     src/common/string.c
     src/common/stringinfo.c
     src/common/unicode_norm.c
     src/common/username.c
     src/common/wait_error.c
     src/common/wchar.c
+    src/port/bsearch_arg.c
     src/port/chklocale.c
     src/port/erand48.c
     src/port/fls.c
@@ -786,7 +812,6 @@ SRCS(
     src/port/qsort_arg.c
     src/port/quotes.c
     src/port/snprintf.c
-    src/port/sprompt.c
     src/port/strerror.c
     src/port/tar.c
     src/port/thread.c
@@ -824,11 +849,13 @@ ELSEIF (OS_WINDOWS)
         src/port/open.c
         src/port/pread.c
         src/port/pwrite.c
+        src/port/pwritev.c
         src/port/system.c
         src/port/win32env.c
         src/port/win32error.c
         src/port/win32security.c
         src/port/win32setlocale.c
+        src/port/win32stat.c
     )
 ENDIF()
 

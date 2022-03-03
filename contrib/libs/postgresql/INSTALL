@@ -96,9 +96,9 @@ are enabled, as explained below:
     the case).
 
 -   To build the PL/Python server programming language, you need a
-    Python installation with the header files and the distutils module.
-    The minimum required version is Python 2.6. Python 3 is supported if
-    it's version 3.1 or later; but see the PL/Python documentation when
+    Python installation with the header files and the sysconfig module.
+    The minimum required version is Python 2.7. Python 3 is supported if
+    it's version 3.2 or later; but see the PL/Python documentation when
     using Python 3.
 
     Since PL/Python will be a shared library, the "libpython" library
@@ -119,7 +119,7 @@ are enabled, as explained below:
     need an implementation of the Gettext API. Some operating systems
     have this built-in (e.g., Linux, NetBSD, Solaris), for other systems
     you can download an add-on package from
-    http://www.gnu.org/software/gettext/. If you are using the Gettext
+    https://www.gnu.org/software/gettext/. If you are using the Gettext
     implementation in the GNU C library then you will additionally need
     the GNU Gettext package for some utility programs. For any of the
     other implementations you will not need it.
@@ -131,6 +131,9 @@ are enabled, as explained below:
 
 -   You need Kerberos, OpenLDAP, and/or PAM, if you want to support
     authentication using those services.
+
+-   You need LZ4, if you want to support compression of data with this
+    method; see the configuration parameter default_toast_compression.
 
 -   To build the PostgreSQL documentation, there is a separate set of
     requirements; see the main documentation's appendix on
@@ -297,9 +300,6 @@ Installation Procedure
     The standard installation provides all the header files needed for
     client application development as well as for server-side program
     development, such as custom functions or data types written in C.
-    (Prior to PostgreSQL 8.0, a separate make     install-all-headers
-    command was needed for the latter, but this step has been folded
-    into the standard install.)
 
     CLIENT-ONLY INSTALLATION:  If you want to install only the client
     applications and interface libraries, then you can use these
@@ -523,12 +523,22 @@ in the section called "Requirements".
     compiler (specified, if necessary, using the CXX environment
     variable).
 
---with-openssl 
+--with-lz4
 
-    Build with support for SSL (encrypted) connections. This requires
-    the OpenSSL package to be installed. "configure" will check for the
-    required header files and libraries to make sure that your OpenSSL
-    installation is sufficient before proceeding.
+    Build with LZ4 compression support. This allows the use of LZ4 for
+    compression of table data.
+
+--with-ssl=LIBRARY 
+
+    Build with support for SSL (encrypted) connections. The only
+    "LIBRARY" supported is "openssl". This requires the OpenSSL package
+    to be installed. "configure" will check for the required header
+    files and libraries to make sure that your OpenSSL installation is
+    sufficient before proceeding.
+
+--with-openssl
+
+    Obsolete equivalent of --with-ssl=openssl.
 
 --with-gssapi
 

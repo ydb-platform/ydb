@@ -6,7 +6,7 @@
  * for developers.  If you edit any of these, be sure to do a *full*
  * rebuild (and an initdb if noted).
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/pg_config_manual.h
@@ -21,7 +21,7 @@
 
 /*
  * Maximum length for identifiers (e.g. table names, column names,
- * function names).  Names actually are limited to one less byte than this,
+ * function names).  Names actually are limited to one fewer byte than this,
  * because the length must include a trailing zero byte.
  *
  * Changing this requires an initdb.
@@ -183,8 +183,7 @@
 
 /*
  * USE_SSL code should be compiled only when compiling with an SSL
- * implementation.  (Currently, only OpenSSL is supported, but we might add
- * more implementations in the future.)
+ * implementation.
  */
 #ifdef USE_OPENSSL
 #define USE_SSL
@@ -276,12 +275,21 @@
 /*
  * Include Valgrind "client requests", mostly in the memory allocator, so
  * Valgrind understands PostgreSQL memory contexts.  This permits detecting
- * memory errors that Valgrind would not detect on a vanilla build.  See also
- * src/tools/valgrind.supp.  "make installcheck" runs 20-30x longer under
- * Valgrind.  Note that USE_VALGRIND slowed older versions of Valgrind by an
- * additional order of magnitude; Valgrind 3.8.1 does not have this problem.
- * The client requests fall in hot code paths, so USE_VALGRIND also slows
- * native execution by a few percentage points.
+ * memory errors that Valgrind would not detect on a vanilla build.  It also
+ * enables detection of buffer accesses that take place without holding a
+ * buffer pin (or without holding a buffer lock in the case of index access
+ * methods that superimpose their own custom client requests on top of the
+ * generic bufmgr.c requests).
+ *
+ * "make installcheck" is significantly slower under Valgrind.  The client
+ * requests fall in hot code paths, so USE_VALGRIND slows execution by a few
+ * percentage points even when not run under Valgrind.
+ *
+ * Do not try to test the server under Valgrind without having built the
+ * server with USE_VALGRIND; else you will get false positives from sinval
+ * messaging (see comments in AddCatcacheInvalidationMessage).  It's also
+ * important to use the suppression file src/tools/valgrind.supp to
+ * exclude other known false positives.
  *
  * You should normally use MEMORY_CONTEXT_CHECKING with USE_VALGRIND;
  * instrumentation of repalloc() is inferior without it.
@@ -312,6 +320,45 @@
  * memory.  Caution: this is horrendously expensive.
  */
 /* #define RANDOMIZE_ALLOCATED_MEMORY */
+
+/*
+ * For cache-invalidation debugging, define DISCARD_CACHES_ENABLED to enable
+ * use of the debug_discard_caches GUC to aggressively flush syscache/relcache
+ * entries whenever it's possible to deliver invalidations.  See
+ * AcceptInvalidationMessages() in src/backend/utils/cache/inval.c for
+ * details.
+ *
+ * USE_ASSERT_CHECKING builds default to enabling this.  It's possible to use
+ * DISCARD_CACHES_ENABLED without a cassert build and the implied
+ * CLOBBER_FREED_MEMORY and MEMORY_CONTEXT_CHECKING options, but it's unlikely
+ * to be as effective at identifying problems.
+ */
+/* #define DISCARD_CACHES_ENABLED */
+
+#if defined(USE_ASSERT_CHECKING) && !defined(DISCARD_CACHES_ENABLED)
+#define DISCARD_CACHES_ENABLED
+#endif
+
+/*
+ * Backwards compatibility for the older compile-time-only clobber-cache
+ * macros.
+ */
+#if !defined(DISCARD_CACHES_ENABLED) && (defined(CLOBBER_CACHE_ALWAYS) || defined(CLOBBER_CACHE_RECURSIVELY))
+#define DISCARD_CACHES_ENABLED
+#endif
+
+/*
+ * Recover memory used for relcache entries when invalidated.  See
+ * RelationBuildDescr() in src/backend/utils/cache/relcache.c.
+ *
+ * This is active automatically for clobber-cache builds when clobbering is
+ * active, but can be overridden here by explicitly defining
+ * RECOVER_RELATION_BUILD_MEMORY.  Define to 1 to always free relation cache
+ * memory even when clobber is off, or to 0 to never free relation cache
+ * memory even when clobbering is on.
+ */
+ /* #define RECOVER_RELATION_BUILD_MEMORY 0 */	/* Force disable */
+ /* #define RECOVER_RELATION_BUILD_MEMORY 1 */	/* Force enable */
 
 /*
  * Define this to force all parse and plan trees to be passed through

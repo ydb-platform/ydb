@@ -18,7 +18,7 @@
  * some don't pay attention to non-default functions at all.
  *
  *
- * Portions Copyright (c) 1996-2020, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/catalog/pg_amproc.h
@@ -66,5 +66,10 @@ CATALOG(pg_amproc,2603,AccessMethodProcedureRelationId)
  * ----------------
  */
 typedef FormData_pg_amproc *Form_pg_amproc;
+
+DECLARE_UNIQUE_INDEX(pg_amproc_fam_proc_index, 2655, on pg_amproc using btree(amprocfamily oid_ops, amproclefttype oid_ops, amprocrighttype oid_ops, amprocnum int2_ops));
+#define AccessMethodProcedureIndexId  2655
+DECLARE_UNIQUE_INDEX_PKEY(pg_amproc_oid_index, 2757, on pg_amproc using btree(oid oid_ops));
+#define AccessMethodProcedureOidIndexId  2757
 
 #endif							/* PG_AMPROC_H */

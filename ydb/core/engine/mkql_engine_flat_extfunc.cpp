@@ -576,17 +576,17 @@ namespace {
     {
         TUnboxedValueVector values;
         if (localReadCallables.contains(callable.GetUniqueId())) {
-            values.push_back(PerformLocalSelectRange(callable, *host, ctx.HolderFactory, ctx.Env));
+            values.emplace_back(PerformLocalSelectRange(callable, *host, ctx.HolderFactory, ctx.Env));
         }
-
-        auto returnType = GetActualReturnType(callable, ctx.Env, strings);
-        MKQL_ENSURE(returnType->IsStruct(), "Expected struct type");
-        TValuePacker valuePacker(false, returnType);
 
         auto resultIt = results.find(callable.GetUniqueId());
         if (resultIt != results.end()) {
+            auto returnType = GetActualReturnType(callable, ctx.Env, strings);
+            MKQL_ENSURE(returnType->IsStruct(), "Expected struct type");
+            TValuePacker valuePacker(false, returnType);
+
             for (auto& result : resultIt->second) {
-                values.push_back(valuePacker.Unpack(result, ctx.HolderFactory));
+                values.emplace_back(valuePacker.Unpack(result, ctx.HolderFactory));
             }
         }
 

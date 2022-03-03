@@ -231,8 +231,11 @@ private:
                         else if (labels.count(SinkLabel)) publicCounterName = "query.output_bytes";
                         isDeriv = true;
                     } else if (name == "RowsIn") {
-                        if (labels.count(SourceLabel)) publicCounterName = "query.source_input_messages";
-                        else if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_messages"; // RowsIn == RowsOut for Sinks
+                        if (labels.count(SourceLabel)) publicCounterName = "query.source_input_records";
+                        else if (labels.count(SinkLabel)) publicCounterName = "query.sink_output_records"; // RowsIn == RowsOut for Sinks
+                        isDeriv = true;
+                    } else if (name == "MultiHop_ThrownEventsCount") {
+                        publicCounterName = "query.late_events";
                         isDeriv = true;
                     }
 

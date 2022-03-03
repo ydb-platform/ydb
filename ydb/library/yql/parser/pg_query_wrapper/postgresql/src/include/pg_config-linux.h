@@ -181,7 +181,7 @@
 /* #undef HAVE_EDITLINE_READLINE_H */
 
 /* Define to 1 if you have the <execinfo.h> header file. */
-#define HAVE_EXECINFO_H 1
+#undef HAVE_EXECINFO_H
 
 /* Define to 1 if you have the `explicit_bzero' function. */
 #define HAVE_EXPLICIT_BZERO 1

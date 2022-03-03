@@ -2,110 +2,157 @@ LIBRARY()
 
 OWNER(g:yql)
 
+YQL_LAST_ABI_VERSION()
+
 ADDINCL(
-    ydb/library/yql/parser/pg_query_wrapper/contrib/src/postgres/include
+    contrib/libs/libiconv/include
+    contrib/libs/lz4
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/bootstrap
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/parser
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/replication
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/replication/logical
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/utils/adt
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/utils/misc
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/utils/sort
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/common
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/include
+    contrib/libs/postgresql/src/port
 )
 
 SRCS(
     wrapper.cpp
-    outfuncs.c
-
-    contrib/src/postgres/guc-file.c
-    contrib/src/postgres/src_backend_catalog_namespace.c
-    contrib/src/postgres/src_backend_catalog_pg_proc.c
-    contrib/src/postgres/src_backend_commands_define.c
-    contrib/src/postgres/src_backend_nodes_bitmapset.c
-    contrib/src/postgres/src_backend_nodes_copyfuncs.c
-    contrib/src/postgres/src_backend_nodes_equalfuncs.c
-    contrib/src/postgres/src_backend_nodes_extensible.c
-    contrib/src/postgres/src_backend_nodes_list.c
-    contrib/src/postgres/src_backend_nodes_makefuncs.c
-    contrib/src/postgres/src_backend_nodes_nodeFuncs.c
-    contrib/src/postgres/src_backend_nodes_value.c
-    contrib/src/postgres/src_backend_parser_gram.c
-    contrib/src/postgres/src_backend_parser_parse_expr.c
-    contrib/src/postgres/src_backend_parser_parser.c
-    contrib/src/postgres/src_backend_parser_scan.c
-    contrib/src/postgres/src_backend_parser_scansup.c
-    contrib/src/postgres/src_backend_storage_ipc_ipc.c
-    contrib/src/postgres/src_backend_storage_lmgr_s_lock.c
-    contrib/src/postgres/src_backend_tcop_postgres.c
-    contrib/src/postgres/src_backend_utils_adt_datum.c
-    contrib/src/postgres/src_backend_utils_adt_expandeddatum.c
-    contrib/src/postgres/src_backend_utils_adt_format_type.c
-    contrib/src/postgres/src_backend_utils_adt_ruleutils.c
-    contrib/src/postgres/src_backend_utils_error_assert.c
-    contrib/src/postgres/src_backend_utils_error_elog.c
-    contrib/src/postgres/src_backend_utils_fmgr_fmgr.c
-    contrib/src/postgres/src_backend_utils_hash_dynahash.c
-    contrib/src/postgres/src_backend_utils_init_globals.c
-    contrib/src/postgres/src_backend_utils_mb_mbutils.c
-    contrib/src/postgres/src_backend_utils_misc_guc.c
-    contrib/src/postgres/src_backend_utils_mmgr_aset.c
-    contrib/src/postgres/src_backend_utils_mmgr_mcxt.c
-    contrib/src/postgres/src_common_encnames.c
-    contrib/src/postgres/src_common_hashfn.c
-    contrib/src/postgres/src_common_keywords.c
-    contrib/src/postgres/src_common_kwlookup.c
-    contrib/src/postgres/src_common_psprintf.c
-    contrib/src/postgres/src_common_string.c
-    contrib/src/postgres/src_common_stringinfo.c
-    contrib/src/postgres/src_common_wchar.c
-    contrib/src/postgres/src_pl_plpgsql_src_pl_comp.c
-    contrib/src/postgres/src_pl_plpgsql_src_pl_funcs.c
-    contrib/src/postgres/src_pl_plpgsql_src_pl_gram.c
-    contrib/src/postgres/src_pl_plpgsql_src_pl_handler.c
-    contrib/src/postgres/src_pl_plpgsql_src_pl_scanner.c
-    contrib/src/postgres/src_port_erand48.c
-    contrib/src/postgres/src_port_pg_bitutils.c
-    contrib/src/postgres/src_port_pgsleep.c
-    contrib/src/postgres/src_port_pgstrcasecmp.c
-    contrib/src/postgres/src_port_qsort.c
-    contrib/src/postgres/src_port_random.c
-    contrib/src/postgres/src_port_snprintf.c
-    contrib/src/postgres/src_port_strerror.c
+    thread_inits.c
+    comp_factory.cpp
 )
 
-IF(NOT OS_WINDOWS)
-SRCS(
-    contrib/src/postgres/src_port_strnlen.c
-)
-ENDIF()
+INCLUDE(pg_sources.inc)
 
 PEERDIR(
     ydb/library/yql/public/issue
+    library/cpp/resource
+    ydb/library/yql/minikql/computation
+    ydb/library/yql/parser/pg_catalog
+
+    contrib/libs/icu
+    contrib/libs/libc_compat
+    contrib/libs/libiconv
+    contrib/libs/libxml
+    contrib/libs/lz4
+    contrib/libs/openssl
+)
+
+CFLAGS(
+    -DDLSUFFIX=\".so\"
 )
 
 NO_COMPILER_WARNINGS()
 
-CFLAGS(
-    -Dpg_encoding_max_length=pg_encoding_max_length2
-    -Dpg_encoding_mblen=pg_encoding_mblen2
-    -Dpg_mule_mblen=pg_mule_mblen2
-    -Dpg_utf8_islegal=pg_utf8_islegal2
-    -Dpg_utf_mblen=pg_utf_mblen2
-    -Dpg_wchar_table=pg_wchar_table2
-    -Dunicode_to_utf8=unicode_to_utf82
-    -Dutf8_to_unicode=utf8_to_unicode2
-    -Dpg_enc2name_tbl=pg_enc2name_tbl2
-    -Dstrtoint=strtoint2
-    -Dpalloc=pallocx
-    -Dpalloc0=palloc0x
-    -Dpfree=pfreex
-    -Dpstrdup=pstrdupx
-    -Drepalloc=repallocx
-)
-
-IF (OS_LINUX)
-CFLAGS(
-   -DHAVE_STRCHRNUL
-)
-ENDIF()
-
 IF (OS_WINDOWS)
 CFLAGS(
    "-D__thread=__declspec(thread)"
+   -Dfstat=microsoft_native_fstat
+   -Dstat=microsoft_native_stat
 )
+ENDIF()
+
+CFLAGS(
+    -Darray_length=yql_array_length
+    -Dpg_encoding_max_length=yql_pg_encoding_max_length
+    -Dpg_encoding_mblen=yql_pg_encoding_mblen
+    -Dpg_mule_mblen=yql_pg_mule_mblen
+    -Dpg_utf8_islegal=yql_pg_utf8_islegal
+    -Dpg_utf_mblen=yql_pg_utf_mblen
+    -Dpg_wchar_table=yql_pg_wchar_table
+    -Dunicode_to_utf8=yql_unicode_to_utf8
+    -Dutf8_to_unicode=yql_utf8_to_unicode
+    -Dpg_enc2name_tbl=yql_pg_enc2name_tbl
+    -Dstrtoint=yql_strtoint
+    -Dpalloc=yql_palloc
+    -Dpalloc0=yql_palloc0
+    -Dpfree=yql_pfree
+    -Dpstrdup=yql_pstrdup
+    -Drepalloc=yql_repalloc
+    -Dpalloc_extended=yql_palloc_extended
+    -Dpg_clean_ascii=yql_pg_clean_ascii
+    -Dpg_str_endswith=yql_pg_str_endswith
+    -Dpg_strip_crlf=yql_pg_strip_crlf
+    -Dpg_encoding_dsplen=yql_pg_encoding_dsplen
+    -Dpg_encoding_mblen_bounded=yql_pg_encoding_mblen_bounded
+    -Dpg_encoding_verifymb=yql_pg_encoding_verifymb
+    -Dunicode_normalize=yql_unicode_normalize
+    -Ddurable_rename=yql_durable_rename
+    -Dfsync_fname=yql_fsync_fname
+    -Dget_encoding_name_for_icu=yql_get_encoding_name_for_icu
+    -Dis_encoding_supported_by_icu=yql_is_encoding_supported_by_icu
+    -Dpg_char_to_encoding=yql_pg_char_to_encoding
+    -Dpg_enc2gettext_tbl=yql_pg_enc2gettext_tbl
+    -Dpg_encoding_to_char=yql_pg_encoding_to_char
+    -Dpg_valid_client_encoding=yql_pg_valid_client_encoding
+    -Dpg_valid_server_encoding=yql_pg_valid_server_encoding
+    -Dpg_valid_server_encoding_id=yql_pg_valid_server_encoding_id
+    -Dpnstrdup=yql_pnstrdup
+    -Dget_ps_display=yql_get_ps_display
+    -Dinit_ps_display=yql_init_ps_display
+    -Dsave_ps_display_args=yql_save_ps_display_args
+    -Dset_ps_display=yql_set_ps_display
+    -Dupdate_process_title=yql_update_process_title
+    -Dlo_read=yql_lo_read
+    -Dlo_write=yql_lo_write
+    -Drtrim=yql_rtrim
+    -Dstr_tolower=yql_str_tolower
+    -Dstr_toupper=yql_str_toupper
+    -Dpg_file_create_mode=yql_pg_file_create_mode
+    -Dpg_dir_create_mode=yql_pg_dir_create_mode
+    -Descape_json=yql_escape_json
+    -DSetDataDirectoryCreatePerm=yql_SetDataDirectoryCreatePerm
+    -Dpg_mode_mask=yql_pg_mode_mask
+    -Dpg_strong_random=yql_pg_strong_random
+    -DScanKeywordCategories=yql_ScanKeywordCategories
+    -DScanKeywords=yql_ScanKeywords
+    -Dscram_ClientKey=yql_scram_ClientKey
+    -Dscram_H=yql_scram_H
+    -Dscram_SaltedPassword=yql_scram_SaltedPassword
+    -Dscram_ServerKey=yql_scram_ServerKey
+    -Dscram_build_secret=yql_scram_build_secret
+)
+
+IF (OS_LINUX OR OS_DARWIN)
+    SRCS(
+        ../../../../../contrib/libs/postgresql/src/backend/port/posix_sema.c
+        ../../../../../contrib/libs/postgresql/src/backend/port/sysv_shmem.c
+    )
+ELSEIF (OS_WINDOWS)
+    ADDINCL(
+        contrib/libs/postgresql/src/include/port
+        contrib/libs/postgresql/src/include/port/win32
+        contrib/libs/postgresql/src/include/port/win32_msvc
+    )
+    SRCS(
+        ../../../../../contrib/libs/postgresql/src/backend/port/win32/crashdump.c
+        ../../../../../contrib/libs/postgresql/src/backend/port/win32/signal.c
+        ../../../../../contrib/libs/postgresql/src/backend/port/win32/socket.c
+        ../../../../../contrib/libs/postgresql/src/backend/port/win32/timer.c
+        ../../../../../contrib/libs/postgresql/src/backend/port/win32_sema.c
+        ../../../../../contrib/libs/postgresql/src/backend/port/win32_shmem.c
+        ../../../../../contrib/libs/postgresql/src/port/dirmod.c
+        ../../../../../contrib/libs/postgresql/src/port/dlopen.c
+        ../../../../../contrib/libs/postgresql/src/port/getaddrinfo.c
+        ../../../../../contrib/libs/postgresql/src/port/getopt.c
+        ../../../../../contrib/libs/postgresql/src/port/getrusage.c
+        ../../../../../contrib/libs/postgresql/src/port/gettimeofday.c
+        ../../../../../contrib/libs/postgresql/src/port/inet_aton.c
+        ../../../../../contrib/libs/postgresql/src/port/kill.c
+        ../../../../../contrib/libs/postgresql/src/port/open.c
+        ../../../../../contrib/libs/postgresql/src/port/pread.c
+        ../../../../../contrib/libs/postgresql/src/port/pwrite.c
+        ../../../../../contrib/libs/postgresql/src/port/pwritev.c
+        ../../../../../contrib/libs/postgresql/src/port/system.c
+        ../../../../../contrib/libs/postgresql/src/port/win32env.c
+        ../../../../../contrib/libs/postgresql/src/port/win32error.c
+        ../../../../../contrib/libs/postgresql/src/port/win32security.c
+        ../../../../../contrib/libs/postgresql/src/port/win32setlocale.c
+        ../../../../../contrib/libs/postgresql/src/port/win32stat.c
+    )
 ENDIF()
 
 END()

@@ -35,7 +35,6 @@ target_link_libraries(core-kqp-provider PUBLIC
   common-schema-expr
   providers-result-expr_nodes
   providers-result-provider
-  yql-sql-pg_dummy
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-kqp-provider PRIVATE

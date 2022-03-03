@@ -25,7 +25,6 @@ PEERDIR(
     ydb/library/yql/core/services
     ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/sql
-    ydb/library/yql/sql/pg_dummy
     ydb/library/yql/core
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/udf_resolve

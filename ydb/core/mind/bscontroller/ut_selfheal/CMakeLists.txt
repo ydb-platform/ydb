@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-mind-bscontroller-ut_selfheal PUBLIC
   core-mind-bscontroller
   core-tx-scheme_board
   udf-service-stub
+  yql-sql-pg_dummy
 )
 target_sources(ydb-core-mind-bscontroller-ut_selfheal PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_selfheal/main.cpp

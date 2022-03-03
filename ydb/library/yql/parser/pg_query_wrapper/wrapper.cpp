@@ -23,13 +23,31 @@ extern "C" {
 #include "utils/palloc.h"
 #include "utils/memutils.h"
 #include "utils/memdebug.h"
+#include "port/pg_bitutils.h"
+#include "port/pg_crc32c.h"
+#include "thread_inits.h"
+#undef Abs
 #undef Min
 #undef Max
 #undef TypeName
 #undef SortBy
+#undef LOG
+#undef INFO
+#undef NOTICE
+#undef WARNING
+#undef ERROR
+#undef FATAL
+#undef PANIC
+#undef open
+#undef fopen
+#undef bind
+#undef locale_t
 }
 
 extern "C" {
+
+const char *progname;
+
 #define STDERR_BUFFER_LEN 4096
 #define DEBUG
 
@@ -79,7 +97,7 @@ PgQueryInternalParsetreeAndError pg_query_raw_parse(const char* input) {
 
     PG_TRY();
     {
-        result.tree = raw_parser(input);
+        result.tree = raw_parser(input, RAW_PARSE_DEFAULT);
 
 #ifndef DEBUG
         // Save stderr for result
@@ -175,8 +193,10 @@ bool MyAllocSetIsEmpty(MemoryContext context) {
     return false;
 }
 
-void MyAllocSetStats(MemoryContext context, MemoryStatsPrintFunc printfunc,
-    void* passthru, MemoryContextCounters *totals) {
+void MyAllocSetStats(MemoryContext context,
+    MemoryStatsPrintFunc printfunc, void *passthru,
+    MemoryContextCounters *totals,
+    bool print_to_stderr) {
 }
 
 void MyAllocSetCheck(MemoryContext context) {
@@ -200,7 +220,16 @@ const MemoryContextMethods MyMethods = {
 
 namespace NYql {
 
+static struct TGlobalInit {
+    TGlobalInit() {
+        pg_popcount32(0);
+        pg_popcount64(0);
+        pg_comp_crc32c(0,"",0);
+    }
+} GlobalInit;
+
 void PGParse(const TString& input, IPGParseEvents& events) {
+    pg_thread_init();
     MemoryContext ctx = NULL;
     PgQueryInternalParsetreeAndError parsetree_and_error;
 

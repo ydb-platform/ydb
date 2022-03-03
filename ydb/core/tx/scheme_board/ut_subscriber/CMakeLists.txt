@@ -24,6 +24,7 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_subscriber PUBLIC
   cpp-actors-interconnect
   cpp-testing-unittest
   core-testlib-basics
+  yql-sql-pg_dummy
 )
 target_sources(ydb-core-tx-scheme_board-ut_subscriber PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/subscriber_ut.cpp

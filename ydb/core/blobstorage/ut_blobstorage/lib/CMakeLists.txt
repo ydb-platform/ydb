@@ -23,6 +23,7 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   core-tx-scheme_board
   ydb-core-util
   udf-service-stub
+  yql-sql-pg_dummy
 )
 target_sources(blobstorage-ut_blobstorage-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/lib/node_warden_mock_bsc.cpp

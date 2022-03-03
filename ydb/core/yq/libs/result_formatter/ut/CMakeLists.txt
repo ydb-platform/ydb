@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-yq-libs-result_formatter-ut PUBLIC
   cpp-testing-unittest_main
   yq-libs-result_formatter
   udf-service-stub
+  yql-sql-pg_dummy
   ydb-services-ydb
 )
 target_sources(ydb-core-yq-libs-result_formatter-ut PRIVATE

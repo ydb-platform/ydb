@@ -48,7 +48,6 @@ target_link_libraries(yq-libs-actors PUBLIC
   yql-public-issue
   public-issue-protos
   yql-sql-settings
-  yql-sql-pg_dummy
   yql-utils-actor_log
   api-protos
   public-lib-yq

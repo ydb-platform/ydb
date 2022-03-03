@@ -9,7 +9,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    ydb/library/yql/parser/pg_query_wrapper/contrib/src/postgres/include
+    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/include
 )
 
 SRCS(
@@ -19,7 +19,11 @@ SRCS(
 IF (OS_WINDOWS)
 CFLAGS(
    "-D__thread=__declspec(thread)"
+   -Dfstat=microsoft_native_fstat
+   -Dstat=microsoft_native_stat
 )
 ENDIF()
+
+NO_COMPILER_WARNINGS()
 
 END()

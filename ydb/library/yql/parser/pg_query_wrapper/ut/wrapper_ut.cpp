@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TWrapperTests) {
         UNIT_ASSERT(!events.Issue);
         const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList "
         "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> "
-        ":whereClause <> :groupClause <> :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
+        ":whereClause <> :groupClause <> :groupDistinct false :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
         ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> "
         ":rarg <>} :stmt_location 0 :stmt_len 0})";
         UNIT_ASSERT_NO_DIFF(*events.Result, expected);
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TMTWrapperTests) {
                     Y_ENSURE(!events.Issue);
                     const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList "
                     "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> "
-                    ":whereClause <> :groupClause <> :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
+                    ":whereClause <> :groupClause <> :groupDistinct false :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
                     ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> "
                     ":rarg <>} :stmt_location 0 :stmt_len 0})";
                     Y_ENSURE(*events.Result == expected);

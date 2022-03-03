@@ -35,7 +35,6 @@ target_link_libraries(yq-libs-mock PUBLIC
   yql-public-issue
   public-issue-protos
   yql-sql-settings
-  yql-sql-pg_dummy
   api-protos
   cpp-client-ydb_table
   providers-clickhouse-provider

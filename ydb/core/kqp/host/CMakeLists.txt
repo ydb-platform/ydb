@@ -22,7 +22,6 @@ target_link_libraries(core-kqp-host PUBLIC
   yql-core-services
   yql-minikql-invoke_builtins
   library-yql-sql
-  yql-sql-pg_dummy
   library-yql-core
   providers-common-codec
   providers-common-udf_resolve

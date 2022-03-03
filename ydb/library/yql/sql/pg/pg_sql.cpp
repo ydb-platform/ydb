@@ -421,9 +421,16 @@ public:
                 return nullptr;
             }
 
-            if (x != value && x->limitOption != LIMIT_OPTION_DEFAULT) {
-                AddError("SelectStmt: limit should be used only on top");
-                return nullptr;
+            if (x != value) {
+                if (x->limitOption == LIMIT_OPTION_COUNT || x->limitOption == LIMIT_OPTION_DEFAULT) {
+                    if (value->limitCount || value->limitOffset) {
+                        AddError("SelectStmt: limit should be used only on top");
+                        return nullptr;
+                    }
+                } else {
+                    AddError(TStringBuilder() << "LimitOption unsupported value: " << (int)x->limitOption);
+                    return nullptr;
+                }
             }
 
             if (ListLength(x->lockingClause) > 0) {

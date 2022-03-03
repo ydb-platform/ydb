@@ -1,3 +1,4 @@
+#include "yql_pg_codec.h"
 #include "yql_codec.h"
 #include "yql_restricted_yson.h"
 #include "yql_codec_type_flags.h"
@@ -135,26 +136,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
     case TType::EKind::Pg:
         {
             auto pgType = AS_TYPE(TPgType, type);
-            TString ret;
-            switch (pgType->GetTypeId()) {
-            case 23: // TODO INT4OID
-                ret = ToString(value.Get<i32>());
-                break;
-            case 701: // TODO FLOAT8OID
-                ret = ::FloatToString(value.Get<double>());
-                break;
-            case 25: {
-                auto datumStart = ((const char*)value.AsBoxed().Get()) + sizeof(NUdf::IBoxedValue) + sizeof(void*);
-                auto varHdr = (const int*)datumStart; // TODO VARDATA
-                ui32 len = *varHdr / 4 - sizeof(ui32);
-                ret = TString((const char*)(varHdr + 1), len);
-                break;
-            }
-            default:
-                throw yexception() << "Unsupported pg type: " << pgType->GetName();
-            }
-
-            writer.OnStringScalar(ret);
+            WriteYsonValuePg(writer, value, pgType, structPositions);
             return;
         }
 

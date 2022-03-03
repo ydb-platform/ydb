@@ -2568,6 +2568,7 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
                 auto type = fb->Head().Content();
                 if (type == "currentRow") {
                     if (fb->ChildrenSize() == 1) {
+                        frameBound = fb;
                         continue;
                     }
                     ctx.AddError(TIssue(ctx.GetPosition(fb->Pos()), TStringBuilder() << "Expecting no value for '" << type << "'"));
@@ -2575,10 +2576,67 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
                 }
 
                 if (!(type == "preceding" || type == "following")) {
-                    ctx.AddError(TIssue(ctx.GetPosition(fb->Pos()), TStringBuilder() << "Expecting preceding or follwing, but got '" << type << "'"));
+                    ctx.AddError(TIssue(ctx.GetPosition(fb->Pos()), TStringBuilder() << "Expecting preceding or following, but got '" << type << "'"));
                     return {};
                 }
 
+                if (!EnsureTupleSize(*fb, 2, ctx)) {
+                    return {};
+                }
+
+                auto boundValue = fb->ChildPtr(1);
+                if (boundValue->IsAtom()) {
+                    if (boundValue->Content() == "unbounded") {
+                        continue;
+                    }
+                    ctx.AddError(TIssue(ctx.GetPosition(fb->Pos()), TStringBuilder() << "Expecting unbounded, but got '" << boundValue->Content() << "'"));
+                    return {};
+                }
+
+                if (node.IsCallable({"WinOnRows", "WinOnGroups"})) {
+                    if (!EnsureDataType(*boundValue, ctx)) {
+                        return {};
+                    }
+
+                    auto slot = boundValue->GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
+                    bool groups = node.IsCallable("WinOnGroups");
+                    if (!IsDataTypeIntegral(slot)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(boundValue->Pos()),
+                            TStringBuilder() << "Expecting integral values for " << (groups ? "GROUPS" : "ROWS") << " but got " << *boundValue->GetTypeAnn()));
+                        return {};
+                    }
+
+                    if (!groups) {
+                        auto maybeIntLiteral = TMaybeNode<TCoIntegralCtor>(boundValue);
+                        if (!maybeIntLiteral) {
+                            // TODO: this is not strictly necessary, and only needed for current implementation via Queue
+                            ctx.AddError(TIssue(ctx.GetPosition(boundValue->Pos()),
+                                TStringBuilder() << "Expecting literal values for ROWS"));
+                            return {};
+                        }
+                        auto strLiteralValue = maybeIntLiteral.Cast().Literal().Value();
+                        if (strLiteralValue.StartsWith("-")) {
+                            ctx.AddError(TIssue(ctx.GetPosition(boundValue->Pos()),
+                                TStringBuilder() << "Expecting positive literal values for ROWS, but got " << strLiteralValue));
+                            return {};
+                        }
+
+                        ui64 literalValue = FromString<ui64>(strLiteralValue);
+                        if (literalValue > std::numeric_limits<i32>::max()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(boundValue->Pos()),
+                                TStringBuilder() << "ROWS offset too big: " << strLiteralValue << ", maximum is " << std::numeric_limits<i32>::max()));
+                            return {};
+                        }
+
+                        i32 castedValue = (i32)literalValue;
+                        if (type == "preceding") {
+                            castedValue = -castedValue;
+                        }
+                        boundOffset = castedValue;
+                    }
+                } else if (!EnsureComparableType(boundValue->Pos(), *boundValue->GetTypeAnn(), ctx)) {
+                    return {};
+                }
                 frameBound = fb;
             } else if (setting->Tail().IsCallable("Int32")) {
                 auto& valNode = setting->Tail().Head();

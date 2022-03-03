@@ -17,6 +17,7 @@ OPENSOURCE_EXPORT_REPLACEMENT(
     CMAKE Iconv
     CMAKE_TARGET Iconv::Iconv
     CONAN libiconv/1.15
+    CONAN_OPTIONS libiconv:shared=True
 )
 
 IF (NOT EXPORT_CMAKE)

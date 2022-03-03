@@ -21,6 +21,7 @@ OPENSOURCE_EXPORT_REPLACEMENT(
     CMAKE libidn
     CMAKE_TARGET libidn::libidn
     CONAN libidn/1.36
+    CONAN_OPTIONS libidn:shared=True
 )
 
 IF (NOT EXPORT_CMAKE)

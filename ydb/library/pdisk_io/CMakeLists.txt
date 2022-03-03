@@ -14,6 +14,7 @@ target_link_libraries(ydb-library-pdisk_io PUBLIC
   yutil
   tools-enum_parser-enum_serialization_runtime
   AIO::aio
+  $CONAN_OPTS_SEM
   cpp-actors-core
   cpp-monlib-dynamic_counters
   ydb-core-debug

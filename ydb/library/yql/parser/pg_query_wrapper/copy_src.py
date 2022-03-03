@@ -42,6 +42,9 @@ def fix_line(line, all_lines, pos):
     if line.startswith("#define HAVE_EXECINFO_H 1"):
         return "#undef HAVE_EXECINFO_H\n"
 
+    if line.startswith("#define HAVE_BACKTRACE_SYMBOLS 1"):
+        return "#undef HAVE_BACKTRACE_SYMBOLS\n"
+
     if "static YYSTYPE yyval_default" in line or \
        "static YYLTYPE yyloc_default" in line:
         return line.replace("static","static __thread")

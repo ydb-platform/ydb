@@ -85,7 +85,7 @@
 /* #undef HAVE_ATOMIC_H */
 
 /* Define to 1 if you have the `backtrace_symbols' function. */
-#define HAVE_BACKTRACE_SYMBOLS 1
+#undef HAVE_BACKTRACE_SYMBOLS
 
 /* Define to 1 if you have the `BIO_get_data' function. */
 #define HAVE_BIO_GET_DATA 1

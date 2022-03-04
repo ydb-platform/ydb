@@ -20,10 +20,12 @@ OWNER(
     g:cpp-contrib
 )
 
+INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+
 NO_UTIL()
 
 # This is the header-only version of boost
-# To use a boost library with separate compilation units, 
+# To use a boost library with separate compilation units,
 # one should use `contrib/restricted/boost/libs/$lib`
 
 ADDINCL(

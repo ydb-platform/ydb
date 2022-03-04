@@ -15,6 +15,7 @@ OWNER(
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
 PEERDIR(
+    ${BOOST_ROOT}
     ${BOOST_ROOT}/libs/date_time
     ${BOOST_ROOT}/libs/system
     contrib/libs/openssl

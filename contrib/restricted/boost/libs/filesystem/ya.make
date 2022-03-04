@@ -11,6 +11,9 @@ OWNER(
 )
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+PEERDIR(
+    ${BOOST_ROOT}
+)
 
 IF (DYNAMIC_BOOST)
     CFLAGS(

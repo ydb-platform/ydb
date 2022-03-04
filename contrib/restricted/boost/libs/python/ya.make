@@ -11,6 +11,9 @@ OWNER(
 )
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
+PEERDIR(
+    ${BOOST_ROOT}
+)
 
 CFLAGS(
     GLOBAL -DBOOST_PYTHON_STATIC_LIB

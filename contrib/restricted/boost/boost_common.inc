@@ -6,10 +6,6 @@ LICENSE(BSL-1.0)
 
 SET(BOOST_ROOT contrib/restricted/boost)
 
-PEERDIR(
-    ${BOOST_ROOT}
-)
-
 ADDINCL(
     ${BOOST_ROOT}/boost/predef
 )

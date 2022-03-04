@@ -20,10 +20,10 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
-alignas(16) ABSL_CONST_INIT ABSL_DLL const ctrl_t kEmptyGroup[16] = {
+alignas(16) Y_ABSL_CONST_INIT Y_ABSL_DLL const ctrl_t kEmptyGroup[16] = {
     ctrl_t::kSentinel, ctrl_t::kEmpty, ctrl_t::kEmpty, ctrl_t::kEmpty,
     ctrl_t::kEmpty,    ctrl_t::kEmpty, ctrl_t::kEmpty, ctrl_t::kEmpty,
     ctrl_t::kEmpty,    ctrl_t::kEmpty, ctrl_t::kEmpty, ctrl_t::kEmpty,
@@ -33,13 +33,13 @@ constexpr size_t Group::kWidth;
 
 // Returns "random" seed.
 inline size_t RandomSeed() {
-#ifdef ABSL_HAVE_THREAD_LOCAL
+#ifdef Y_ABSL_HAVE_THREAD_LOCAL
   static thread_local size_t counter = 0;
   size_t value = ++counter;
-#else   // ABSL_HAVE_THREAD_LOCAL
+#else   // Y_ABSL_HAVE_THREAD_LOCAL
   static std::atomic<size_t> counter(0);
   size_t value = counter.fetch_add(1, std::memory_order_relaxed);
-#endif  // ABSL_HAVE_THREAD_LOCAL
+#endif  // Y_ABSL_HAVE_THREAD_LOCAL
   return value ^ static_cast<size_t>(reinterpret_cast<uintptr_t>(&counter));
 }
 
@@ -63,5 +63,5 @@ void ConvertDeletedToEmptyAndFullToDeleted(ctrl_t* ctrl, size_t capacity) {
 template FindInfo find_first_non_full(const ctrl_t*, size_t, size_t);
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

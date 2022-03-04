@@ -39,15 +39,15 @@
 // The CPU is not required to maintain the ordering of a cycle counter read
 // with respect to surrounding instructions.
 
-#ifndef ABSL_BASE_INTERNAL_CYCLECLOCK_H_
-#define ABSL_BASE_INTERNAL_CYCLECLOCK_H_
+#ifndef Y_ABSL_BASE_INTERNAL_CYCLECLOCK_H_
+#define Y_ABSL_BASE_INTERNAL_CYCLECLOCK_H_
 
 #include <cstdint>
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // -----------------------------------------------------------------------------
@@ -88,7 +88,7 @@ class CycleClockSource {
 };
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_CYCLECLOCK_H_
+#endif  // Y_ABSL_BASE_INTERNAL_CYCLECLOCK_H_

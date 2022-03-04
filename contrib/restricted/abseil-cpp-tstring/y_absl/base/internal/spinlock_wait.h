@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_BASE_INTERNAL_SPINLOCK_WAIT_H_
-#define ABSL_BASE_INTERNAL_SPINLOCK_WAIT_H_
+#ifndef Y_ABSL_BASE_INTERNAL_SPINLOCK_WAIT_H_
+#define Y_ABSL_BASE_INTERNAL_SPINLOCK_WAIT_H_
 
 // Operations to make atomic transitions on a word, and to allow
 // waiting for those transitions to become possible.
@@ -24,7 +24,7 @@
 #include "y_absl/base/internal/scheduling_mode.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // SpinLockWait() waits until it can perform one of several transitions from
@@ -63,7 +63,7 @@ void SpinLockDelay(std::atomic<uint32_t> *w, uint32_t value, int loop,
 int SpinLockSuggestedDelayNS(int loop);
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 // In some build configurations we pass --detect-odr-violations to the
@@ -73,23 +73,23 @@ ABSL_NAMESPACE_END
 // By changing our extension points to be extern "C", we dodge this
 // check.
 extern "C" {
-void ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockWake)(std::atomic<uint32_t> *w,
+void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockWake)(std::atomic<uint32_t> *w,
                                                       bool all);
-void ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)(
+void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)(
     std::atomic<uint32_t> *w, uint32_t value, int loop,
     y_absl::base_internal::SchedulingMode scheduling_mode);
 }
 
 inline void y_absl::base_internal::SpinLockWake(std::atomic<uint32_t> *w,
                                               bool all) {
-  ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockWake)(w, all);
+  Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockWake)(w, all);
 }
 
 inline void y_absl::base_internal::SpinLockDelay(
     std::atomic<uint32_t> *w, uint32_t value, int loop,
     y_absl::base_internal::SchedulingMode scheduling_mode) {
-  ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)
+  Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)
   (w, value, loop, scheduling_mode);
 }
 
-#endif  // ABSL_BASE_INTERNAL_SPINLOCK_WAIT_H_
+#endif  // Y_ABSL_BASE_INTERNAL_SPINLOCK_WAIT_H_

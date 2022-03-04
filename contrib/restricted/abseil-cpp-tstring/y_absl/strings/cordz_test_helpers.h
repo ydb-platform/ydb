@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_CORDZ_TEST_HELPERS_H_
-#define ABSL_STRINGS_CORDZ_TEST_HELPERS_H_
+#ifndef Y_ABSL_STRINGS_CORDZ_TEST_HELPERS_H_
+#define Y_ABSL_STRINGS_CORDZ_TEST_HELPERS_H_
 
 #include <utility>
 
@@ -30,7 +30,7 @@
 #include "y_absl/strings/str_cat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Returns the CordzInfo for the cord, or nullptr if the cord is not sampled.
 inline const cord_internal::CordzInfo* GetCordzInfoForTesting(
@@ -141,11 +141,11 @@ template <typename... Args>
 Cord UnsampledCord(Args... args) {
   CordzSamplingIntervalHelper never(9999);
   Cord cord(std::forward<Args>(args)...);
-  ABSL_ASSERT(GetCordzInfoForTesting(cord) == nullptr);
+  Y_ABSL_ASSERT(GetCordzInfoForTesting(cord) == nullptr);
   return cord;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_CORDZ_TEST_HELPERS_H_
+#endif  // Y_ABSL_STRINGS_CORDZ_TEST_HELPERS_H_

@@ -31,7 +31,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 static HANDLE process = NULL;
 
@@ -47,10 +47,10 @@ void InitializeSymbolizer(const char*) {
   SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
   if (!SymInitialize(process, nullptr, true)) {
     // GetLastError() returns a Win32 DWORD, but we assign to
-    // unsigned long long to simplify the ABSL_RAW_LOG case below.  The uniform
+    // unsigned long long to simplify the Y_ABSL_RAW_LOG case below.  The uniform
     // initialization guarantees this is not a narrowing conversion.
     const unsigned long long error{GetLastError()};  // NOLINT(runtime/int)
-    ABSL_RAW_LOG(FATAL, "SymInitialize() failed: %llu", error);
+    Y_ABSL_RAW_LOG(FATAL, "SymInitialize() failed: %llu", error);
   }
 }
 
@@ -77,5 +77,5 @@ bool Symbolize(const void* pc, char* out, int out_size) {
   return true;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

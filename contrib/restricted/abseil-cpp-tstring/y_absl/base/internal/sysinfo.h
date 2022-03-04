@@ -21,8 +21,8 @@
 // All functions here are thread-hostile due to file caching unless
 // commented otherwise.
 
-#ifndef ABSL_BASE_INTERNAL_SYSINFO_H_
-#define ABSL_BASE_INTERNAL_SYSINFO_H_
+#ifndef Y_ABSL_BASE_INTERNAL_SYSINFO_H_
+#define Y_ABSL_BASE_INTERNAL_SYSINFO_H_
 
 #ifndef _WIN32
 #include <sys/types.h>
@@ -34,7 +34,7 @@
 #include "y_absl/base/port.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // Nominal core processor cycles per second of each processor.   This is _not_
@@ -68,7 +68,7 @@ pid_t GetTID();
 pid_t GetCachedTID();
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_SYSINFO_H_
+#endif  // Y_ABSL_BASE_INTERNAL_SYSINFO_H_

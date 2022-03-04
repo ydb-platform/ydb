@@ -59,8 +59,8 @@
 // --                      MEMCASEIS
 // strcount                MEMCOUNT       (strcount is from strutil.h)
 
-#ifndef ABSL_STRINGS_INTERNAL_MEMUTIL_H_
-#define ABSL_STRINGS_INTERNAL_MEMUTIL_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_MEMUTIL_H_
+#define Y_ABSL_STRINGS_INTERNAL_MEMUTIL_H_
 
 #include <cstddef>
 #include <cstring>
@@ -69,7 +69,7 @@
 #include "y_absl/strings/ascii.h"  // for y_absl::ascii_tolower
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 inline char* memcat(char* dest, size_t destlen, const char* src,
@@ -142,7 +142,7 @@ const char* memmatch(const char* phaystack, size_t haylen, const char* pneedle,
                      size_t neelen);
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_MEMUTIL_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_MEMUTIL_H_

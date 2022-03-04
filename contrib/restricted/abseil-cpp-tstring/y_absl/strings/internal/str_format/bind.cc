@@ -20,7 +20,7 @@
 #include <util/generic/string.h>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 namespace {
@@ -208,7 +208,7 @@ std::ostream& Streamable::Print(std::ostream& os) const {
 TString& AppendPack(TString* out, const UntypedFormatSpecImpl format,
                         y_absl::Span<const FormatArgImpl> args) {
   size_t orig = out->size();
-  if (ABSL_PREDICT_FALSE(!FormatUntyped(out, format, args))) {
+  if (Y_ABSL_PREDICT_FALSE(!FormatUntyped(out, format, args))) {
     out->erase(orig);
   }
   return *out;
@@ -217,7 +217,7 @@ TString& AppendPack(TString* out, const UntypedFormatSpecImpl format,
 TString FormatPack(const UntypedFormatSpecImpl format,
                        y_absl::Span<const FormatArgImpl> args) {
   TString out;
-  if (ABSL_PREDICT_FALSE(!FormatUntyped(&out, format, args))) {
+  if (Y_ABSL_PREDICT_FALSE(!FormatUntyped(&out, format, args))) {
     out.clear();
   }
   return out;
@@ -254,5 +254,5 @@ int SnprintF(char* output, size_t size, const UntypedFormatSpecImpl format,
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

@@ -32,8 +32,8 @@
 // `node_hash_set` and perhaps converting to a more efficient `flat_hash_set`
 // upon further review.
 
-#ifndef ABSL_CONTAINER_NODE_HASH_SET_H_
-#define ABSL_CONTAINER_NODE_HASH_SET_H_
+#ifndef Y_ABSL_CONTAINER_NODE_HASH_SET_H_
+#define Y_ABSL_CONTAINER_NODE_HASH_SET_H_
 
 #include <type_traits>
 
@@ -44,7 +44,7 @@
 #include "y_absl/memory/memory.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <typename T>
 struct NodeHashSetPolicy;
@@ -487,7 +487,7 @@ struct IsUnorderedContainer<y_absl::node_hash_set<Key, Hash, KeyEqual, Allocator
     : std::true_type {};
 
 }  // namespace container_algorithm_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_NODE_HASH_SET_H_
+#endif  // Y_ABSL_CONTAINER_NODE_HASH_SET_H_

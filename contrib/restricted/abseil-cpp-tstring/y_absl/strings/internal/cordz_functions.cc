@@ -25,7 +25,7 @@
 #include "y_absl/profiling/internal/exponential_biased.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 namespace {
 
@@ -35,18 +35,18 @@ std::atomic<int> g_cordz_mean_interval(50000);
 
 }  // namespace
 
-#ifdef ABSL_INTERNAL_CORDZ_ENABLED
+#ifdef Y_ABSL_INTERNAL_CORDZ_ENABLED
 
 // Special negative 'not initialized' per thread value for cordz_next_sample.
 static constexpr int64_t kInitCordzNextSample = -1;
 
-ABSL_CONST_INIT thread_local int64_t cordz_next_sample = kInitCordzNextSample;
+Y_ABSL_CONST_INIT thread_local int64_t cordz_next_sample = kInitCordzNextSample;
 
 // kIntervalIfDisabled is the number of profile-eligible events need to occur
 // before the code will confirm that cordz is still disabled.
 constexpr int64_t kIntervalIfDisabled = 1 << 16;
 
-ABSL_ATTRIBUTE_NOINLINE bool cordz_should_profile_slow() {
+Y_ABSL_ATTRIBUTE_NOINLINE bool cordz_should_profile_slow() {
 
   thread_local y_absl::profiling_internal::ExponentialBiased
       exponential_biased_generator;
@@ -81,7 +81,7 @@ void cordz_set_next_sample_for_testing(int64_t next_sample) {
   cordz_next_sample = next_sample;
 }
 
-#endif  // ABSL_INTERNAL_CORDZ_ENABLED
+#endif  // Y_ABSL_INTERNAL_CORDZ_ENABLED
 
 int32_t get_cordz_mean_interval() {
   return g_cordz_mean_interval.load(std::memory_order_acquire);
@@ -92,5 +92,5 @@ void set_cordz_mean_interval(int32_t mean_interval) {
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

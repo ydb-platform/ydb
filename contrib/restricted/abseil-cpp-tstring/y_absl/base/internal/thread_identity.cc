@@ -29,10 +29,10 @@
 #include "y_absl/base/internal/spinlock.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
-#if ABSL_THREAD_IDENTITY_MODE != ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#if Y_ABSL_THREAD_IDENTITY_MODE != Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
 namespace {
 // Used to co-ordinate one-time creation of our pthread_key
 y_absl::once_flag init_thread_identity_key_once;
@@ -46,8 +46,8 @@ void AllocateThreadIdentityKey(ThreadIdentityReclaimerFunction reclaimer) {
 }  // namespace
 #endif
 
-#if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
-    ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#if Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
+    Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
 // The actual TLS storage for a thread's currently associated ThreadIdentity.
 // This is referenced by inline accessors in the header.
 // "protected" visibility ensures that if multiple instances of Abseil code
@@ -56,15 +56,15 @@ void AllocateThreadIdentityKey(ThreadIdentityReclaimerFunction reclaimer) {
 // *different* instances of this ptr.
 // Apple platforms have the visibility attribute, but issue a compile warning
 // that protected visibility is unsupported.
-#if ABSL_HAVE_ATTRIBUTE(visibility) && !defined(__APPLE__)
+#if Y_ABSL_HAVE_ATTRIBUTE(visibility) && !defined(__APPLE__)
 __attribute__((visibility("protected")))
-#endif  // ABSL_HAVE_ATTRIBUTE(visibility) && !defined(__APPLE__)
-#if ABSL_PER_THREAD_TLS
+#endif  // Y_ABSL_HAVE_ATTRIBUTE(visibility) && !defined(__APPLE__)
+#if Y_ABSL_PER_THREAD_TLS
 // Prefer __thread to thread_local as benchmarks indicate it is a bit faster.
-ABSL_PER_THREAD_TLS_KEYWORD ThreadIdentity* thread_identity_ptr = nullptr;
-#elif defined(ABSL_HAVE_THREAD_LOCAL)
+Y_ABSL_PER_THREAD_TLS_KEYWORD ThreadIdentity* thread_identity_ptr = nullptr;
+#elif defined(Y_ABSL_HAVE_THREAD_LOCAL)
 thread_local ThreadIdentity* thread_identity_ptr = nullptr;
-#endif  // ABSL_PER_THREAD_TLS
+#endif  // Y_ABSL_PER_THREAD_TLS
 #endif  // TLS or CPP11
 
 void SetCurrentThreadIdentity(
@@ -73,7 +73,7 @@ void SetCurrentThreadIdentity(
   // Associate our destructor.
   // NOTE: This call to pthread_setspecific is currently the only immovable
   // barrier to CurrentThreadIdentity() always being async signal safe.
-#if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
+#if Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
   // NOTE: Not async-safe.  But can be open-coded.
   y_absl::call_once(init_thread_identity_key_once, AllocateThreadIdentityKey,
                   reclaimer);
@@ -100,46 +100,46 @@ void SetCurrentThreadIdentity(
   pthread_sigmask(SIG_SETMASK, &curr_signals, nullptr);
 #endif  // !__EMSCRIPTEN__ && !__MINGW32__
 
-#elif ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_TLS
+#elif Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS
   // NOTE: Not async-safe.  But can be open-coded.
   y_absl::call_once(init_thread_identity_key_once, AllocateThreadIdentityKey,
                   reclaimer);
   pthread_setspecific(thread_identity_pthread_key,
                       reinterpret_cast<void*>(identity));
   thread_identity_ptr = identity;
-#elif ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#elif Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
   thread_local std::unique_ptr<ThreadIdentity, ThreadIdentityReclaimerFunction>
       holder(identity, reclaimer);
   thread_identity_ptr = identity;
 #else
-#error Unimplemented ABSL_THREAD_IDENTITY_MODE
+#error Unimplemented Y_ABSL_THREAD_IDENTITY_MODE
 #endif
 }
 
-#if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
-    ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#if Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
+    Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
 
 // Please see the comment on `CurrentThreadIdentityIfPresent` in
 // thread_identity.h. When we cannot expose thread_local variables in
 // headers, we opt for the correct-but-slower option of not inlining this
 // function.
-#ifndef ABSL_INTERNAL_INLINE_CURRENT_THREAD_IDENTITY_IF_PRESENT
+#ifndef Y_ABSL_INTERNAL_INLINE_CURRENT_THREAD_IDENTITY_IF_PRESENT
 ThreadIdentity* CurrentThreadIdentityIfPresent() { return thread_identity_ptr; }
 #endif
 #endif
 
 void ClearCurrentThreadIdentity() {
-#if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
-    ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#if Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
+    Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
   thread_identity_ptr = nullptr;
-#elif ABSL_THREAD_IDENTITY_MODE == \
-      ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
+#elif Y_ABSL_THREAD_IDENTITY_MODE == \
+      Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
   // pthread_setspecific expected to clear value on destruction
   assert(CurrentThreadIdentityIfPresent() == nullptr);
 #endif
 }
 
-#if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
+#if Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
 ThreadIdentity* CurrentThreadIdentityIfPresent() {
   bool initialized = pthread_key_initialized.load(std::memory_order_acquire);
   if (!initialized) {
@@ -151,5 +151,5 @@ ThreadIdentity* CurrentThreadIdentityIfPresent() {
 #endif
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

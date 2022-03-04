@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_STR_FORMAT_CHECKER_H_
-#define ABSL_STRINGS_INTERNAL_STR_FORMAT_CHECKER_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_CHECKER_H_
+#define Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_CHECKER_H_
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/strings/internal/str_format/arg.h"
@@ -21,14 +21,14 @@
 
 // Compile time check support for entry points.
 
-#ifndef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
-#if ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__)
-#define ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 1
-#endif  // ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__)
-#endif  // ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+#ifndef Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+#if Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__)
+#define Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 1
+#endif  // Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__)
+#endif  // Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 constexpr bool AllOf() { return true; }
@@ -38,7 +38,7 @@ constexpr bool AllOf(bool b, T... t) {
   return b && AllOf(t...);
 }
 
-#ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+#ifdef Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
 constexpr bool ContainsChar(const char* chars, char c) {
   return *chars == c || (*chars && ContainsChar(chars + 1, c));
@@ -324,10 +324,10 @@ constexpr bool ValidFormatImpl(string_view format) {
       .Run();
 }
 
-#endif  // ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+#endif  // Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_CHECKER_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_CHECKER_H_

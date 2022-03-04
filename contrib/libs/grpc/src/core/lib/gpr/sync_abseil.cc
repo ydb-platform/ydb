@@ -50,12 +50,12 @@ void gpr_mu_destroy(gpr_mu* mu) {
   reinterpret_cast<y_absl::Mutex*>(mu)->~Mutex();
 }
 
-void gpr_mu_lock(gpr_mu* mu) ABSL_NO_THREAD_SAFETY_ANALYSIS {
+void gpr_mu_lock(gpr_mu* mu) Y_ABSL_NO_THREAD_SAFETY_ANALYSIS {
   GPR_TIMER_SCOPE("gpr_mu_lock", 0);
   reinterpret_cast<y_absl::Mutex*>(mu)->Lock();
 }
 
-void gpr_mu_unlock(gpr_mu* mu) ABSL_NO_THREAD_SAFETY_ANALYSIS {
+void gpr_mu_unlock(gpr_mu* mu) Y_ABSL_NO_THREAD_SAFETY_ANALYSIS {
   GPR_TIMER_SCOPE("gpr_mu_unlock", 0);
   reinterpret_cast<y_absl::Mutex*>(mu)->Unlock();
 }

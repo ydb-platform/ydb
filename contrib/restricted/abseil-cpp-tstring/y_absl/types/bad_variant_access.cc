@@ -14,7 +14,7 @@
 
 #include "y_absl/types/bad_variant_access.h"
 
-#ifndef ABSL_USES_STD_VARIANT
+#ifndef Y_ABSL_USES_STD_VARIANT
 
 #include <cstdlib>
 #include <stdexcept>
@@ -23,7 +23,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 //////////////////////////
 // [variant.bad.access] //
@@ -38,19 +38,19 @@ const char* bad_variant_access::what() const noexcept {
 namespace variant_internal {
 
 void ThrowBadVariantAccess() {
-#ifdef ABSL_HAVE_EXCEPTIONS
+#ifdef Y_ABSL_HAVE_EXCEPTIONS
   throw bad_variant_access();
 #else
-  ABSL_RAW_LOG(FATAL, "Bad variant access");
+  Y_ABSL_RAW_LOG(FATAL, "Bad variant access");
   abort();  // TODO(calabrese) Remove once RAW_LOG FATAL is noreturn.
 #endif
 }
 
 void Rethrow() {
-#ifdef ABSL_HAVE_EXCEPTIONS
+#ifdef Y_ABSL_HAVE_EXCEPTIONS
   throw;
 #else
-  ABSL_RAW_LOG(FATAL,
+  Y_ABSL_RAW_LOG(FATAL,
                "Internal error in y_absl::variant implementation. Attempted to "
                "rethrow an exception when building with exceptions disabled.");
   abort();  // TODO(calabrese) Remove once RAW_LOG FATAL is noreturn.
@@ -58,7 +58,7 @@ void Rethrow() {
 }
 
 }  // namespace variant_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USES_STD_VARIANT
+#endif  // Y_ABSL_USES_STD_VARIANT

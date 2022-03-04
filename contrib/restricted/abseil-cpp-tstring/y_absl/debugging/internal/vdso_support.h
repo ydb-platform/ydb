@@ -36,24 +36,24 @@
 //     fn = reinterpret_cast<FN>(info.address);
 //  }
 
-#ifndef ABSL_DEBUGGING_INTERNAL_VDSO_SUPPORT_H_
-#define ABSL_DEBUGGING_INTERNAL_VDSO_SUPPORT_H_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_VDSO_SUPPORT_H_
+#define Y_ABSL_DEBUGGING_INTERNAL_VDSO_SUPPORT_H_
 
 #include <atomic>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/debugging/internal/elf_mem_image.h"
 
-#ifdef ABSL_HAVE_ELF_MEM_IMAGE
+#ifdef Y_ABSL_HAVE_ELF_MEM_IMAGE
 
-#ifdef ABSL_HAVE_VDSO_SUPPORT
-#error ABSL_HAVE_VDSO_SUPPORT cannot be directly set
+#ifdef Y_ABSL_HAVE_VDSO_SUPPORT
+#error Y_ABSL_HAVE_VDSO_SUPPORT cannot be directly set
 #else
-#define ABSL_HAVE_VDSO_SUPPORT 1
+#define Y_ABSL_HAVE_VDSO_SUPPORT 1
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 // NOTE: this class may be used from within tcmalloc, and can not
@@ -134,7 +134,7 @@ class VDSOSupport {
 
   // This function pointer may point to InitAndGetCPU,
   // GetCPUViaSyscall, or __vdso_getcpu at different stages of initialization.
-  ABSL_CONST_INIT static std::atomic<GetCpuFn> getcpu_fn_;
+  Y_ABSL_CONST_INIT static std::atomic<GetCpuFn> getcpu_fn_;
 
   friend int GetCPU(void);  // Needs access to getcpu_fn_.
 
@@ -150,9 +150,9 @@ class VDSOSupport {
 int GetCPU();
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_HAVE_ELF_MEM_IMAGE
+#endif  // Y_ABSL_HAVE_ELF_MEM_IMAGE
 
-#endif  // ABSL_DEBUGGING_INTERNAL_VDSO_SUPPORT_H_
+#endif  // Y_ABSL_DEBUGGING_INTERNAL_VDSO_SUPPORT_H_

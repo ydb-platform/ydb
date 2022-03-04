@@ -35,8 +35,8 @@
 //                                                {">", "&gt;"},
 //                                                {"\"", "&quot;"},
 //                                                {"'", "&#39;"}});
-#ifndef ABSL_STRINGS_STR_REPLACE_H_
-#define ABSL_STRINGS_STR_REPLACE_H_
+#ifndef Y_ABSL_STRINGS_STR_REPLACE_H_
+#define Y_ABSL_STRINGS_STR_REPLACE_H_
 
 #include <util/generic/string.h>
 #include <utility>
@@ -46,7 +46,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // StrReplaceAll()
 //
@@ -65,7 +65,7 @@ ABSL_NAMESPACE_BEGIN
 //        {"$who", "Bob"},
 //        {"#Noun", "Apples"}});
 //   EXPECT_EQ("Bob bought 5 Apples. Thanks Bob!", s);
-ABSL_MUST_USE_RESULT TString StrReplaceAll(
+Y_ABSL_MUST_USE_RESULT TString StrReplaceAll(
     y_absl::string_view s,
     std::initializer_list<std::pair<y_absl::string_view, y_absl::string_view>>
         replacements);
@@ -213,7 +213,7 @@ int StrReplaceAll(const StrToStrMapping& replacements, TString* target) {
   return substitutions;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_STR_REPLACE_H_
+#endif  // Y_ABSL_STRINGS_STR_REPLACE_H_

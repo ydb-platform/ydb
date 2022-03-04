@@ -14,7 +14,7 @@
 
 #include "y_absl/types/bad_optional_access.h"
 
-#ifndef ABSL_USES_STD_OPTIONAL
+#ifndef Y_ABSL_USES_STD_OPTIONAL
 
 #include <cstdlib>
 
@@ -22,7 +22,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 bad_optional_access::~bad_optional_access() = default;
 
@@ -33,16 +33,16 @@ const char* bad_optional_access::what() const noexcept {
 namespace optional_internal {
 
 void throw_bad_optional_access() {
-#ifdef ABSL_HAVE_EXCEPTIONS
+#ifdef Y_ABSL_HAVE_EXCEPTIONS
   throw bad_optional_access();
 #else
-  ABSL_RAW_LOG(FATAL, "Bad optional access");
+  Y_ABSL_RAW_LOG(FATAL, "Bad optional access");
   abort();
 #endif
 }
 
 }  // namespace optional_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USES_STD_OPTIONAL
+#endif  // Y_ABSL_USES_STD_OPTIONAL

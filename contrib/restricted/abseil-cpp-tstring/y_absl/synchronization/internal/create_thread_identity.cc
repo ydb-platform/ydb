@@ -17,7 +17,7 @@
 
 // This file is a no-op if the required LowLevelAlloc support is missing.
 #include "y_absl/base/internal/low_level_alloc.h"
-#ifndef ABSL_LOW_LEVEL_ALLOC_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_MISSING
 
 #include <string.h>
 
@@ -27,14 +27,14 @@
 #include "y_absl/synchronization/internal/per_thread_sem.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 // ThreadIdentity storage is persistent, we maintain a free-list of previously
 // released ThreadIdentity objects.
-ABSL_CONST_INIT static base_internal::SpinLock freelist_lock(
+Y_ABSL_CONST_INIT static base_internal::SpinLock freelist_lock(
     y_absl::kConstInit, base_internal::SCHEDULE_KERNEL_ONLY);
-ABSL_CONST_INIT static base_internal::ThreadIdentity* thread_identity_freelist;
+Y_ABSL_CONST_INIT static base_internal::ThreadIdentity* thread_identity_freelist;
 
 // A per-thread destructor for reclaiming associated ThreadIdentity objects.
 // Since we must preserve their storage we cache them for re-use.
@@ -134,7 +134,7 @@ base_internal::ThreadIdentity* CreateThreadIdentity() {
 }
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_LOW_LEVEL_ALLOC_MISSING
+#endif  // Y_ABSL_LOW_LEVEL_ALLOC_MISSING

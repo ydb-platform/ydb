@@ -35,7 +35,7 @@
 #include "y_absl/base/thread_annotations.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 Time Now() {
   // TODO(bww): Get a timespec instead so we don't have to divide.
   int64_t n = y_absl::GetCurrentTimeNanos();
@@ -45,18 +45,18 @@ Time Now() {
   }
   return time_internal::FromUnixDuration(y_absl::Nanoseconds(n));
 }
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 // Decide if we should use the fast GetCurrentTimeNanos() algorithm
 // based on the cyclecounter, otherwise just get the time directly
 // from the OS on every call. This can be chosen at compile-time via
 // -DABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS=[0|1]
-#ifndef ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
-#if ABSL_USE_UNSCALED_CYCLECLOCK
-#define ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS 1
+#ifndef Y_ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
+#if Y_ABSL_USE_UNSCALED_CYCLECLOCK
+#define Y_ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS 1
 #else
-#define ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS 0
+#define Y_ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS 0
 #endif
 #endif
 
@@ -72,11 +72,11 @@ ABSL_NAMESPACE_END
   ::y_absl::time_internal::GetCurrentTimeNanosFromSystem()
 #endif
 
-#if !ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
+#if !Y_ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 int64_t GetCurrentTimeNanos() { return GET_CURRENT_TIME_NANOS_FROM_SYSTEM(); }
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 #else  // Use the cyclecounter-based implementation below.
 
@@ -87,7 +87,7 @@ ABSL_NAMESPACE_END
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 // This is a friend wrapper around UnscaledCycleClock::Now()
 // (needed to access UnscaledCycleClock).
@@ -169,7 +169,7 @@ struct TimeSample {
   uint64_t min_cycles_per_sample = 0;  // approx cycles before next sample
 };
 
-struct ABSL_CACHELINE_ALIGNED TimeState {
+struct Y_ABSL_CACHELINE_ALIGNED TimeState {
   std::atomic<uint64_t> seq{0};
   TimeSampleAtomic last_sample;  // the last sample; under seq
 
@@ -180,7 +180,7 @@ struct ABSL_CACHELINE_ALIGNED TimeState {
   int64_t stats_slow_paths{0};
   int64_t stats_fast_slow_paths{0};
 
-  uint64_t last_now_cycles ABSL_GUARDED_BY(lock){0};
+  uint64_t last_now_cycles Y_ABSL_GUARDED_BY(lock){0};
 
   // Used by GetCurrentTimeNanosFromKernel().
   // We try to read clock values at about the same time as the kernel clock.
@@ -196,7 +196,7 @@ struct ABSL_CACHELINE_ALIGNED TimeState {
   y_absl::base_internal::SpinLock lock{y_absl::kConstInit,
                                      base_internal::SCHEDULE_KERNEL_ONLY};
 };
-ABSL_CONST_INIT static TimeState time_state{};
+Y_ABSL_CONST_INIT static TimeState time_state{};
 
 // Return the time in ns as told by the kernel interface.  Place in *cycleclock
 // the value of the cycleclock at about the time of the syscall.
@@ -207,7 +207,7 @@ ABSL_CONST_INIT static TimeState time_state{};
 // reinitialization of the outer algorithm should occur.)
 static int64_t GetCurrentTimeNanosFromKernel(uint64_t last_cycleclock,
                                              uint64_t *cycleclock)
-    ABSL_EXCLUSIVE_LOCKS_REQUIRED(time_state.lock) {
+    Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(time_state.lock) {
   uint64_t local_approx_syscall_time_in_cycles =  // local copy
       time_state.approx_syscall_time_in_cycles.load(std::memory_order_relaxed);
 
@@ -255,7 +255,7 @@ static int64_t GetCurrentTimeNanosFromKernel(uint64_t last_cycleclock,
   return current_time_nanos_from_system;
 }
 
-static int64_t GetCurrentTimeNanosSlowPath() ABSL_ATTRIBUTE_COLD;
+static int64_t GetCurrentTimeNanosSlowPath() Y_ABSL_ATTRIBUTE_COLD;
 
 // Read the contents of *atomic into *sample.
 // Each field is read atomically, but to maintain atomicity between fields,
@@ -381,7 +381,7 @@ static uint64_t SafeDivideAndScale(uint64_t a, uint64_t b) {
 
 static uint64_t UpdateLastSample(
     uint64_t now_cycles, uint64_t now_ns, uint64_t delta_cycles,
-    const struct TimeSample *sample) ABSL_ATTRIBUTE_COLD;
+    const struct TimeSample *sample) Y_ABSL_ATTRIBUTE_COLD;
 
 // The slow path of GetCurrentTimeNanos().  This is taken while gathering
 // initial samples, when enough time has elapsed since the last sample, and if
@@ -394,9 +394,9 @@ static uint64_t UpdateLastSample(
 //
 // TODO(y_absl-team): Remove this attribute when our compiler is smart enough
 // to do the right thing.
-ABSL_ATTRIBUTE_NOINLINE
+Y_ABSL_ATTRIBUTE_NOINLINE
 static int64_t GetCurrentTimeNanosSlowPath()
-    ABSL_LOCKS_EXCLUDED(time_state.lock) {
+    Y_ABSL_LOCKS_EXCLUDED(time_state.lock) {
   // Serialize access to slow-path.  Fast-path readers are not blocked yet, and
   // code below must not modify last_sample until the seqlock is acquired.
   time_state.lock.Lock();
@@ -441,7 +441,7 @@ static int64_t GetCurrentTimeNanosSlowPath()
 static uint64_t UpdateLastSample(uint64_t now_cycles, uint64_t now_ns,
                                  uint64_t delta_cycles,
                                  const struct TimeSample *sample)
-    ABSL_EXCLUSIVE_LOCKS_REQUIRED(time_state.lock) {
+    Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(time_state.lock) {
   uint64_t estimated_base_ns = now_ns;
   uint64_t lock_value =
       SeqAcquire(&time_state.seq);  // acquire seqlock to block readers
@@ -535,12 +535,12 @@ static uint64_t UpdateLastSample(uint64_t now_cycles, uint64_t now_ns,
 
   return estimated_base_ns;
 }
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
-#endif  // ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
+#endif  // Y_ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace {
 
 // Returns the maximum duration that SleepOnce() can sleep for.
@@ -568,12 +568,12 @@ void SleepOnce(y_absl::Duration to_sleep) {
 }
 
 }  // namespace
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 extern "C" {
 
-ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalSleepFor)(
+Y_ABSL_ATTRIBUTE_WEAK void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSleepFor)(
     y_absl::Duration duration) {
   while (duration > y_absl::ZeroDuration()) {
     y_absl::Duration to_sleep = std::min(duration, y_absl::MaxSleep());

@@ -27,8 +27,8 @@
 // In most cases, your default choice for a hash map should be a map of type
 // `flat_hash_map`.
 
-#ifndef ABSL_CONTAINER_FLAT_HASH_MAP_H_
-#define ABSL_CONTAINER_FLAT_HASH_MAP_H_
+#ifndef Y_ABSL_CONTAINER_FLAT_HASH_MAP_H_
+#define Y_ABSL_CONTAINER_FLAT_HASH_MAP_H_
 
 #include <cstddef>
 #include <new>
@@ -42,7 +42,7 @@
 #include "y_absl/memory/memory.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <class K, class V>
 struct FlatHashMapPolicy;
@@ -600,7 +600,7 @@ struct IsUnorderedContainer<
 
 }  // namespace container_algorithm_internal
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_FLAT_HASH_MAP_H_
+#endif  // Y_ABSL_CONTAINER_FLAT_HASH_MAP_H_

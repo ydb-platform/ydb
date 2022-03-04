@@ -20,8 +20,8 @@
 // This header file contains string utilities involved in escaping and
 // unescaping strings in various ways.
 
-#ifndef ABSL_STRINGS_ESCAPING_H_
-#define ABSL_STRINGS_ESCAPING_H_
+#ifndef Y_ABSL_STRINGS_ESCAPING_H_
+#define Y_ABSL_STRINGS_ESCAPING_H_
 
 #include <cstddef>
 #include <util/generic/string.h>
@@ -33,7 +33,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // CUnescape()
 //
@@ -158,7 +158,7 @@ TString HexStringToBytes(y_absl::string_view from);
 // `2*from.size()`.
 TString BytesToHexString(y_absl::string_view from);
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_ESCAPING_H_
+#endif  // Y_ABSL_STRINGS_ESCAPING_H_

@@ -23,7 +23,7 @@
 #include "y_absl/strings/internal/cord_rep_flat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 y_absl::string_view CordRepBtreeReader::Read(size_t n, size_t chunk_size,
@@ -64,5 +64,5 @@ y_absl::string_view CordRepBtreeReader::Read(size_t n, size_t chunk_size,
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

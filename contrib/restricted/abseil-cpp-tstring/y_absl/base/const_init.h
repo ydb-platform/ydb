@@ -19,8 +19,8 @@
 // A constructor tag used to mark an object as safe for use as a global
 // variable, avoiding the usual lifetime issues that can affect globals.
 
-#ifndef ABSL_BASE_CONST_INIT_H_
-#define ABSL_BASE_CONST_INIT_H_
+#ifndef Y_ABSL_BASE_CONST_INIT_H_
+#define Y_ABSL_BASE_CONST_INIT_H_
 
 #include "y_absl/base/config.h"
 
@@ -36,7 +36,7 @@
 // Constant initialization is guaranteed to occur before any other code
 // executes.  Constructors that are declared 'constexpr' are eligible for
 // constant initialization.  You can annotate a variable declaration with the
-// ABSL_CONST_INIT macro to express this intent.  For compilers that support
+// Y_ABSL_CONST_INIT macro to express this intent.  For compilers that support
 // it, this annotation will cause a compilation error for declarations that
 // aren't subject to constant initialization (perhaps because a runtime value
 // was passed as a constructor argument).
@@ -52,7 +52,7 @@
 // For a few core Abseil classes, we make a best effort to allow for safe global
 // instances, even though these classes have non-trivial destructors.  These
 // objects can be created with the y_absl::kConstInit tag.  For example:
-//   ABSL_CONST_INIT y_absl::Mutex global_mutex(y_absl::kConstInit);
+//   Y_ABSL_CONST_INIT y_absl::Mutex global_mutex(y_absl::kConstInit);
 //
 // The line above declares a global variable of type y_absl::Mutex which can be
 // accessed at any point during startup or shutdown.  global_mutex's destructor
@@ -64,13 +64,13 @@
 // or thread_local storage duration.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 enum ConstInitType {
   kConstInit,
 };
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_CONST_INIT_H_
+#endif  // Y_ABSL_BASE_CONST_INIT_H_

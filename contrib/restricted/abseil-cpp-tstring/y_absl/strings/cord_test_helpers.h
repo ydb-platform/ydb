@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 
-#ifndef ABSL_STRINGS_CORD_TEST_HELPERS_H_
-#define ABSL_STRINGS_CORD_TEST_HELPERS_H_
+#ifndef Y_ABSL_STRINGS_CORD_TEST_HELPERS_H_
+#define Y_ABSL_STRINGS_CORD_TEST_HELPERS_H_
 
 #include <cstdint>
 #include <iostream>
@@ -27,7 +27,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Cord sizes relevant for testing
 enum class TestCordSize {
@@ -116,7 +116,7 @@ inline Cord MakeFragmentedCord(std::initializer_list<y_absl::string_view> list) 
   return MakeFragmentedCord<std::initializer_list<y_absl::string_view>>(list);
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_CORD_TEST_HELPERS_H_
+#endif  // Y_ABSL_STRINGS_CORD_TEST_HELPERS_H_

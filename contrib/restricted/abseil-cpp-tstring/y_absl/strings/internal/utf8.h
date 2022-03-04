@@ -14,8 +14,8 @@
 //
 // UTF8 utilities, implemented to reduce dependencies.
 
-#ifndef ABSL_STRINGS_INTERNAL_UTF8_H_
-#define ABSL_STRINGS_INTERNAL_UTF8_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_UTF8_H_
+#define Y_ABSL_STRINGS_INTERNAL_UTF8_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -23,7 +23,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // For Unicode code points 0 through 0x10FFFF, EncodeUTF8Char writes
@@ -44,7 +44,7 @@ enum { kMaxEncodedUTF8Size = 4 };
 size_t EncodeUTF8Char(char *buffer, char32_t utf8_char);
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_UTF8_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_UTF8_H_

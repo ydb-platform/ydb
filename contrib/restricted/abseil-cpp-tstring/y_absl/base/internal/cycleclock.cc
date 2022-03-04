@@ -28,15 +28,15 @@
 #include "y_absl/base/internal/unscaledcycleclock.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
-#if ABSL_USE_UNSCALED_CYCLECLOCK
+#if Y_ABSL_USE_UNSCALED_CYCLECLOCK
 
 namespace {
 
 #ifdef NDEBUG
-#ifdef ABSL_INTERNAL_UNSCALED_CYCLECLOCK_FREQUENCY_IS_CPU_FREQUENCY
+#ifdef Y_ABSL_INTERNAL_UNSCALED_CYCLECLOCK_FREQUENCY_IS_CPU_FREQUENCY
 // Not debug mode and the UnscaledCycleClock frequency is the CPU
 // frequency.  Scale the CycleClock to prevent overflow if someone
 // tries to represent the time as cycles since the Unix epoch.
@@ -103,5 +103,5 @@ double CycleClock::Frequency() {
 #endif
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

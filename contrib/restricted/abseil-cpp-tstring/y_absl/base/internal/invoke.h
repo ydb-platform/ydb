@@ -32,8 +32,8 @@
 // The implementation is SFINAE-friendly: substitution failure within invoke()
 // isn't an error.
 
-#ifndef ABSL_BASE_INTERNAL_INVOKE_H_
-#define ABSL_BASE_INTERNAL_INVOKE_H_
+#ifndef Y_ABSL_BASE_INTERNAL_INVOKE_H_
+#define Y_ABSL_BASE_INTERNAL_INVOKE_H_
 
 #include <algorithm>
 #include <type_traits>
@@ -45,7 +45,7 @@
 // top of this file for the API documentation.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // The five classes below each implement one of the clauses from the definition
@@ -181,7 +181,7 @@ invoke_result_t<F, Args...> invoke(F&& f, Args&&... args) {
                                            std::forward<Args>(args)...);
 }
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_INVOKE_H_
+#endif  // Y_ABSL_BASE_INTERNAL_INVOKE_H_

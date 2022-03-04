@@ -64,8 +64,8 @@
 // proper Abseil implementation at compile-time, which will not be sufficient
 // to guarantee ABI stability to package managers.
 
-#ifndef ABSL_BASE_OPTIONS_H_
-#define ABSL_BASE_OPTIONS_H_
+#ifndef Y_ABSL_BASE_OPTIONS_H_
+#define Y_ABSL_BASE_OPTIONS_H_
 
 // Include a standard library header to allow configuration based on the
 // standard library in use.
@@ -77,7 +77,7 @@
 // Type Compatibility Options
 // -----------------------------------------------------------------------------
 //
-// ABSL_OPTION_USE_STD_ANY
+// Y_ABSL_OPTION_USE_STD_ANY
 //
 // This option controls whether y_absl::any is implemented as an alias to
 // std::any, or as an independent implementation.
@@ -98,12 +98,12 @@
 // For more info, see https://abseil.io/about/design/dropin-types.
 //
 // User code should not inspect this macro.  To check in the preprocessor if
-// y_absl::any is a typedef of std::any, use the feature macro ABSL_USES_STD_ANY.
+// y_absl::any is a typedef of std::any, use the feature macro Y_ABSL_USES_STD_ANY.
 
-#define ABSL_OPTION_USE_STD_ANY 2
+#define Y_ABSL_OPTION_USE_STD_ANY 2
 
 
-// ABSL_OPTION_USE_STD_OPTIONAL
+// Y_ABSL_OPTION_USE_STD_OPTIONAL
 //
 // This option controls whether y_absl::optional is implemented as an alias to
 // std::optional, or as an independent implementation.
@@ -125,12 +125,12 @@
 
 // User code should not inspect this macro.  To check in the preprocessor if
 // y_absl::optional is a typedef of std::optional, use the feature macro
-// ABSL_USES_STD_OPTIONAL.
+// Y_ABSL_USES_STD_OPTIONAL.
 
-#define ABSL_OPTION_USE_STD_OPTIONAL 2
+#define Y_ABSL_OPTION_USE_STD_OPTIONAL 2
 
 
-// ABSL_OPTION_USE_STD_STRING_VIEW
+// Y_ABSL_OPTION_USE_STD_STRING_VIEW
 //
 // This option controls whether y_absl::string_view is implemented as an alias to
 // std::string_view, or as an independent implementation.
@@ -152,11 +152,11 @@
 //
 // User code should not inspect this macro.  To check in the preprocessor if
 // y_absl::string_view is a typedef of std::string_view, use the feature macro
-// ABSL_USES_STD_STRING_VIEW.
+// Y_ABSL_USES_STD_STRING_VIEW.
 
-#define ABSL_OPTION_USE_STD_STRING_VIEW 2
+#define Y_ABSL_OPTION_USE_STD_STRING_VIEW 2
 
-// ABSL_OPTION_USE_STD_VARIANT
+// Y_ABSL_OPTION_USE_STD_VARIANT
 //
 // This option controls whether y_absl::variant is implemented as an alias to
 // std::variant, or as an independent implementation.
@@ -178,13 +178,13 @@
 //
 // User code should not inspect this macro.  To check in the preprocessor if
 // y_absl::variant is a typedef of std::variant, use the feature macro
-// ABSL_USES_STD_VARIANT.
+// Y_ABSL_USES_STD_VARIANT.
 
-#define ABSL_OPTION_USE_STD_VARIANT 2
+#define Y_ABSL_OPTION_USE_STD_VARIANT 2
 
 
-// ABSL_OPTION_USE_INLINE_NAMESPACE
-// ABSL_OPTION_INLINE_NAMESPACE_NAME
+// Y_ABSL_OPTION_USE_INLINE_NAMESPACE
+// Y_ABSL_OPTION_INLINE_NAMESPACE_NAME
 //
 // These options controls whether all entities in the y_absl namespace are
 // contained within an inner inline namespace.  This does not affect the
@@ -201,14 +201,14 @@
 // A value of 0 means not to use inline namespaces.
 //
 // A value of 1 means to use an inline namespace with the given name inside
-// namespace y_absl.  If this is set, ABSL_OPTION_INLINE_NAMESPACE_NAME must also
+// namespace y_absl.  If this is set, Y_ABSL_OPTION_INLINE_NAMESPACE_NAME must also
 // be changed to a new, unique identifier name.  In particular "head" is not
 // allowed.
 
-#define ABSL_OPTION_USE_INLINE_NAMESPACE 1
-#define ABSL_OPTION_INLINE_NAMESPACE_NAME lts_y_20211102
+#define Y_ABSL_OPTION_USE_INLINE_NAMESPACE 1
+#define Y_ABSL_OPTION_INLINE_NAMESPACE_NAME lts_y_20211102
 
-// ABSL_OPTION_HARDENED
+// Y_ABSL_OPTION_HARDENED
 //
 // This option enables a "hardened" build in release mode (in this context,
 // release mode is defined as a build where the `NDEBUG` macro is defined).
@@ -220,7 +220,7 @@
 // Hardened builds have additional security checks enabled when `NDEBUG` is
 // defined. Defining `NDEBUG` is normally used to turn `assert()` macro into a
 // no-op, as well as disabling other bespoke program consistency checks. By
-// defining ABSL_OPTION_HARDENED to 1, a select set of checks remain enabled in
+// defining Y_ABSL_OPTION_HARDENED to 1, a select set of checks remain enabled in
 // release mode. These checks guard against programming errors that may lead to
 // security vulnerabilities. In release mode, when one of these programming
 // errors is encountered, the program will immediately abort, possibly without
@@ -229,10 +229,10 @@
 // The checks enabled by this option are not free; they do incur runtime cost.
 //
 // The checks enabled by this option are always active when `NDEBUG` is not
-// defined, even in the case when ABSL_OPTION_HARDENED is defined to 0. The
+// defined, even in the case when Y_ABSL_OPTION_HARDENED is defined to 0. The
 // checks enabled by this option may abort the program in a different way and
 // log additional information when `NDEBUG` is not defined.
 
-#define ABSL_OPTION_HARDENED 0
+#define Y_ABSL_OPTION_HARDENED 0
 
-#endif  // ABSL_BASE_OPTIONS_H_
+#endif  // Y_ABSL_BASE_OPTIONS_H_

@@ -32,27 +32,27 @@
 // `y_absl::optional` is a C++11 compatible version of the C++17 `std::optional`
 // abstraction and is designed to be a drop-in replacement for code compliant
 // with C++17.
-#ifndef ABSL_TYPES_OPTIONAL_H_
-#define ABSL_TYPES_OPTIONAL_H_
+#ifndef Y_ABSL_TYPES_OPTIONAL_H_
+#define Y_ABSL_TYPES_OPTIONAL_H_
 
 #include "y_absl/base/config.h"   // TODO(calabrese) IWYU removal?
 #include "y_absl/utility/utility.h"
 
-#ifdef ABSL_USES_STD_OPTIONAL
+#ifdef Y_ABSL_USES_STD_OPTIONAL
 
 #include <optional>  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 using std::bad_optional_access;
 using std::optional;
 using std::make_optional;
 using std::nullopt_t;
 using std::nullopt;
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#else  // ABSL_USES_STD_OPTIONAL
+#else  // Y_ABSL_USES_STD_OPTIONAL
 
 #include <cassert>
 #include <functional>
@@ -67,7 +67,7 @@ ABSL_NAMESPACE_END
 #include "y_absl/types/internal/optional.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // nullopt_t
 //
@@ -82,7 +82,7 @@ struct nullopt_t {
 //
 // A tag constant of type `y_absl::nullopt_t` used to indicate an empty
 // `y_absl::optional` in certain functions, such as construction or assignment.
-ABSL_INTERNAL_INLINE_CONSTEXPR(nullopt_t, nullopt,
+Y_ABSL_INTERNAL_INLINE_CONSTEXPR(nullopt_t, nullopt,
                                nullopt_t(optional_internal::init_t()));
 
 // -----------------------------------------------------------------------------
@@ -109,7 +109,7 @@ ABSL_INTERNAL_INLINE_CONSTEXPR(nullopt_t, nullopt,
 //      guaranteed copy elision.
 //    * The move constructor's `noexcept` specification is stronger, i.e. if the
 //      default allocator is non-throwing (via setting
-//      `ABSL_ALLOCATOR_NOTHROW`), it evaluates to `noexcept(true)`, because
+//      `Y_ABSL_ALLOCATOR_NOTHROW`), it evaluates to `noexcept(true)`, because
 //      we assume
 //       a) move constructors should only throw due to allocation failure and
 //       b) if T's move constructor allocates, it uses the same allocation
@@ -336,7 +336,7 @@ class optional : private optional_internal::optional_data<T>,
   // optional::reset()
   //
   // Destroys the inner `T` value of an `y_absl::optional` if one is present.
-  ABSL_ATTRIBUTE_REINITIALIZES void reset() noexcept { this->destruct(); }
+  Y_ABSL_ATTRIBUTE_REINITIALIZES void reset() noexcept { this->destruct(); }
 
   // optional::emplace()
   //
@@ -412,11 +412,11 @@ class optional : private optional_internal::optional_data<T>,
   //
   // If you need myOpt->foo in constexpr, use (*myOpt).foo instead.
   const T* operator->() const {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    Y_ABSL_HARDENING_ASSERT(this->engaged_);
     return std::addressof(this->data_);
   }
   T* operator->() {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    Y_ABSL_HARDENING_ASSERT(this->engaged_);
     return std::addressof(this->data_);
   }
 
@@ -425,17 +425,17 @@ class optional : private optional_internal::optional_data<T>,
   // Accesses the underlying `T` value of an `optional`. If the `optional` is
   // empty, behavior is undefined.
   constexpr const T& operator*() const& {
-    return ABSL_HARDENING_ASSERT(this->engaged_), reference();
+    return Y_ABSL_HARDENING_ASSERT(this->engaged_), reference();
   }
   T& operator*() & {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    Y_ABSL_HARDENING_ASSERT(this->engaged_);
     return reference();
   }
   constexpr const T&& operator*() const && {
-    return ABSL_HARDENING_ASSERT(this->engaged_), y_absl::move(reference());
+    return Y_ABSL_HARDENING_ASSERT(this->engaged_), y_absl::move(reference());
   }
   T&& operator*() && {
-    ABSL_HARDENING_ASSERT(this->engaged_);
+    Y_ABSL_HARDENING_ASSERT(this->engaged_);
     return std::move(reference());
   }
 
@@ -757,7 +757,7 @@ constexpr auto operator>=(const U& v, const optional<T>& x)
   return static_cast<bool>(x) ? static_cast<bool>(v >= *x) : true;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 namespace std {
@@ -769,8 +769,8 @@ struct hash<y_absl::optional<T> >
 
 }  // namespace std
 
-#undef ABSL_MSVC_CONSTEXPR_BUG_IN_UNION_LIKE_CLASS
+#undef Y_ABSL_MSVC_CONSTEXPR_BUG_IN_UNION_LIKE_CLASS
 
-#endif  // ABSL_USES_STD_OPTIONAL
+#endif  // Y_ABSL_USES_STD_OPTIONAL
 
-#endif  // ABSL_TYPES_OPTIONAL_H_
+#endif  // Y_ABSL_TYPES_OPTIONAL_H_

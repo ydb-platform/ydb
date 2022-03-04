@@ -25,16 +25,16 @@
 #include "y_absl/strings/internal/charconv_bigint.h"
 #include "y_absl/strings/internal/charconv_parse.h"
 
-// The macro ABSL_BIT_PACK_FLOATS is defined on x86-64, where IEEE floating
+// The macro Y_ABSL_BIT_PACK_FLOATS is defined on x86-64, where IEEE floating
 // point numbers have the same endianness in memory as a bitfield struct
 // containing the corresponding parts.
 //
 // When set, we replace calls to ldexp() with manual bit packing, which is
 // faster and is unaffected by floating point environment.
-#ifdef ABSL_BIT_PACK_FLOATS
-#error ABSL_BIT_PACK_FLOATS cannot be directly set
+#ifdef Y_ABSL_BIT_PACK_FLOATS
+#error Y_ABSL_BIT_PACK_FLOATS cannot be directly set
 #elif defined(__x86_64__) || defined(_M_X64)
-#define ABSL_BIT_PACK_FLOATS 1
+#define Y_ABSL_BIT_PACK_FLOATS 1
 #endif
 
 // A note about subnormals:
@@ -57,7 +57,7 @@
 // narrower mantissas.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace {
 
 template <typename FloatType>
@@ -104,7 +104,7 @@ struct FloatTraits<double> {
   // `exponent` must be exactly kMinNormalExponent, and a subnormal value is
   // made.
   static double Make(uint64_t mantissa, int exponent, bool sign) {
-#ifndef ABSL_BIT_PACK_FLOATS
+#ifndef Y_ABSL_BIT_PACK_FLOATS
     // Support ldexp no matter which namespace it's in.  Some platforms
     // incorrectly don't put it in namespace std.
     using namespace std;  // NOLINT
@@ -125,7 +125,7 @@ struct FloatTraits<double> {
     }
     dbl += mantissa;
     return y_absl::bit_cast<double>(dbl);
-#endif  // ABSL_BIT_PACK_FLOATS
+#endif  // Y_ABSL_BIT_PACK_FLOATS
   }
 };
 
@@ -144,7 +144,7 @@ struct FloatTraits<float> {
     return nanf(tagp);
   }
   static float Make(uint32_t mantissa, int exponent, bool sign) {
-#ifndef ABSL_BIT_PACK_FLOATS
+#ifndef Y_ABSL_BIT_PACK_FLOATS
     // Support ldexpf no matter which namespace it's in.  Some platforms
     // incorrectly don't put it in namespace std.
     using namespace std;  // NOLINT
@@ -165,7 +165,7 @@ struct FloatTraits<float> {
     }
     flt += mantissa;
     return y_absl::bit_cast<float>(flt);
-#endif  // ABSL_BIT_PACK_FLOATS
+#endif  // Y_ABSL_BIT_PACK_FLOATS
   }
 };
 
@@ -980,5 +980,5 @@ const int16_t kPower10ExponentTable[] = {
 };
 
 }  // namespace
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

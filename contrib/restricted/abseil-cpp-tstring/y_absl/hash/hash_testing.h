@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_HASH_HASH_TESTING_H_
-#define ABSL_HASH_HASH_TESTING_H_
+#ifndef Y_ABSL_HASH_HASH_TESTING_H_
+#define Y_ABSL_HASH_HASH_TESTING_H_
 
 #include <initializer_list>
 #include <tuple>
@@ -28,7 +28,7 @@
 #include "y_absl/types/variant.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Run the y_absl::Hash algorithm over all the elements passed in and verify that
 // their hash expansion is congruent with their `==` operator.
@@ -141,19 +141,19 @@ ABSL_NAMESPACE_BEGIN
 // }
 //
 template <int&... ExplicitBarrier, typename Container>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(const Container& values);
 
 template <int&... ExplicitBarrier, typename Container, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals);
 
 template <int&..., typename T>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values);
 
 template <int&..., typename T, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values,
                                       Eq equals);
 
@@ -184,7 +184,7 @@ struct ExpandVisitor {
 };
 
 template <typename Container, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
   using V = typename Container::value_type;
 
@@ -341,7 +341,7 @@ struct DefaultEquals {
 }  // namespace hash_internal
 
 template <int&..., typename Container>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(const Container& values) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
       hash_internal::ContainerAsVector<Container>::Do(values),
@@ -349,14 +349,14 @@ VerifyTypeImplementsAbslHashCorrectly(const Container& values) {
 }
 
 template <int&..., typename Container, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(const Container& values, Eq equals) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
       hash_internal::ContainerAsVector<Container>::Do(values), equals);
 }
 
 template <int&..., typename T>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
       hash_internal::ContainerAsVector<std::initializer_list<T>>::Do(values),
@@ -364,7 +364,7 @@ VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values) {
 }
 
 template <int&..., typename T, typename Eq>
-ABSL_MUST_USE_RESULT testing::AssertionResult
+Y_ABSL_MUST_USE_RESULT testing::AssertionResult
 VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values,
                                       Eq equals) {
   return hash_internal::VerifyTypeImplementsAbslHashCorrectly(
@@ -372,7 +372,7 @@ VerifyTypeImplementsAbslHashCorrectly(std::initializer_list<T> values,
       equals);
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_HASH_HASH_TESTING_H_
+#endif  // Y_ABSL_HASH_HASH_TESTING_H_

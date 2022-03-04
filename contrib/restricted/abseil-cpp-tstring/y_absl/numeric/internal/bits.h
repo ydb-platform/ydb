@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_NUMERIC_INTERNAL_BITS_H_
-#define ABSL_NUMERIC_INTERNAL_BITS_H_
+#ifndef Y_ABSL_NUMERIC_INTERNAL_BITS_H_
+#define Y_ABSL_NUMERIC_INTERNAL_BITS_H_
 
 #include <cstdint>
 #include <limits>
@@ -30,40 +30,40 @@
 
 #if defined(__GNUC__) && !defined(__clang__)
 // GCC
-#define ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(x) 1
+#define Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(x) 1
 #else
-#define ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(x) ABSL_HAVE_BUILTIN(x)
+#define Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(x) Y_ABSL_HAVE_BUILTIN(x)
 #endif
 
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcountl) && \
-    ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcountll)
-#define ABSL_INTERNAL_CONSTEXPR_POPCOUNT constexpr
-#define ABSL_INTERNAL_HAS_CONSTEXPR_POPCOUNT 1
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcountl) && \
+    Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcountll)
+#define Y_ABSL_INTERNAL_CONSTEXPR_POPCOUNT constexpr
+#define Y_ABSL_INTERNAL_HAS_CONSTEXPR_POPCOUNT 1
 #else
-#define ABSL_INTERNAL_CONSTEXPR_POPCOUNT
-#define ABSL_INTERNAL_HAS_CONSTEXPR_POPCOUNT 0
+#define Y_ABSL_INTERNAL_CONSTEXPR_POPCOUNT
+#define Y_ABSL_INTERNAL_HAS_CONSTEXPR_POPCOUNT 0
 #endif
 
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clz) && \
-    ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clzll)
-#define ABSL_INTERNAL_CONSTEXPR_CLZ constexpr
-#define ABSL_INTERNAL_HAS_CONSTEXPR_CLZ 1
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clz) && \
+    Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clzll)
+#define Y_ABSL_INTERNAL_CONSTEXPR_CLZ constexpr
+#define Y_ABSL_INTERNAL_HAS_CONSTEXPR_CLZ 1
 #else
-#define ABSL_INTERNAL_CONSTEXPR_CLZ
-#define ABSL_INTERNAL_HAS_CONSTEXPR_CLZ 0
+#define Y_ABSL_INTERNAL_CONSTEXPR_CLZ
+#define Y_ABSL_INTERNAL_HAS_CONSTEXPR_CLZ 0
 #endif
 
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctz) && \
-    ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctzll)
-#define ABSL_INTERNAL_CONSTEXPR_CTZ constexpr
-#define ABSL_INTERNAL_HAS_CONSTEXPR_CTZ 1
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctz) && \
+    Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctzll)
+#define Y_ABSL_INTERNAL_CONSTEXPR_CTZ constexpr
+#define Y_ABSL_INTERNAL_HAS_CONSTEXPR_CTZ 1
 #else
-#define ABSL_INTERNAL_CONSTEXPR_CTZ
-#define ABSL_INTERNAL_HAS_CONSTEXPR_CTZ 0
+#define Y_ABSL_INTERNAL_CONSTEXPR_CTZ
+#define Y_ABSL_INTERNAL_HAS_CONSTEXPR_CTZ 0
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace numeric_internal {
 
 constexpr bool IsPowerOf2(unsigned int x) noexcept {
@@ -71,7 +71,7 @@ constexpr bool IsPowerOf2(unsigned int x) noexcept {
 }
 
 template <class T>
-ABSL_MUST_USE_RESULT ABSL_ATTRIBUTE_ALWAYS_INLINE constexpr T RotateRight(
+Y_ABSL_MUST_USE_RESULT Y_ABSL_ATTRIBUTE_ALWAYS_INLINE constexpr T RotateRight(
     T x, int s) noexcept {
   static_assert(std::is_unsigned<T>::value, "T must be unsigned");
   static_assert(IsPowerOf2(std::numeric_limits<T>::digits),
@@ -82,7 +82,7 @@ ABSL_MUST_USE_RESULT ABSL_ATTRIBUTE_ALWAYS_INLINE constexpr T RotateRight(
 }
 
 template <class T>
-ABSL_MUST_USE_RESULT ABSL_ATTRIBUTE_ALWAYS_INLINE constexpr T RotateLeft(
+Y_ABSL_MUST_USE_RESULT Y_ABSL_ATTRIBUTE_ALWAYS_INLINE constexpr T RotateLeft(
     T x, int s) noexcept {
   static_assert(std::is_unsigned<T>::value, "T must be unsigned");
   static_assert(IsPowerOf2(std::numeric_limits<T>::digits),
@@ -92,9 +92,9 @@ ABSL_MUST_USE_RESULT ABSL_ATTRIBUTE_ALWAYS_INLINE constexpr T RotateLeft(
          static_cast<T>(x >> ((-s) & (std::numeric_limits<T>::digits - 1)));
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline int
 Popcount32(uint32_t x) noexcept {
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcount)
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcount)
   static_assert(sizeof(unsigned int) == sizeof(x),
                 "__builtin_popcount does not take 32-bit arg");
   return __builtin_popcount(x);
@@ -105,9 +105,9 @@ Popcount32(uint32_t x) noexcept {
 #endif
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline int
 Popcount64(uint64_t x) noexcept {
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcountll)
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_popcountll)
   static_assert(sizeof(unsigned long long) == sizeof(x),  // NOLINT(runtime/int)
                 "__builtin_popcount does not take 64-bit arg");
   return __builtin_popcountll(x);
@@ -120,7 +120,7 @@ Popcount64(uint64_t x) noexcept {
 }
 
 template <class T>
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline int
 Popcount(T x) noexcept {
   static_assert(std::is_unsigned<T>::value, "T must be unsigned");
   static_assert(IsPowerOf2(std::numeric_limits<T>::digits),
@@ -129,9 +129,9 @@ Popcount(T x) noexcept {
   return sizeof(x) <= sizeof(uint32_t) ? Popcount32(x) : Popcount64(x);
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline int
 CountLeadingZeroes32(uint32_t x) {
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clz)
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clz)
   // Use __builtin_clz, which uses the following instructions:
   //  x86: bsr, lzcnt
   //  ARM64: clz
@@ -165,9 +165,9 @@ CountLeadingZeroes32(uint32_t x) {
 #endif
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline int
 CountLeadingZeroes16(uint16_t x) {
-#if ABSL_HAVE_BUILTIN(__builtin_clzs)
+#if Y_ABSL_HAVE_BUILTIN(__builtin_clzs)
   static_assert(sizeof(unsigned short) == sizeof(x),  // NOLINT(runtime/int)
                 "__builtin_clzs does not take 16-bit arg");
   return x == 0 ? 16 : __builtin_clzs(x);
@@ -176,9 +176,9 @@ CountLeadingZeroes16(uint16_t x) {
 #endif
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline int
 CountLeadingZeroes64(uint64_t x) {
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clzll)
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_clzll)
   // Use __builtin_clzll, which uses the following instructions:
   //  x86: bsr, lzcnt
   //  ARM64: clz
@@ -230,7 +230,7 @@ CountLeadingZeroes64(uint64_t x) {
 }
 
 template <typename T>
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline int
 CountLeadingZeroes(T x) {
   static_assert(std::is_unsigned<T>::value, "T must be unsigned");
   static_assert(IsPowerOf2(std::numeric_limits<T>::digits),
@@ -247,9 +247,9 @@ CountLeadingZeroes(T x) {
                     : CountLeadingZeroes64(x));
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CTZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CTZ inline int
 CountTrailingZeroesNonzero32(uint32_t x) {
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctz)
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctz)
   static_assert(sizeof(unsigned int) == sizeof(x),
                 "__builtin_ctz does not take 32-bit arg");
   return __builtin_ctz(x);
@@ -269,9 +269,9 @@ CountTrailingZeroesNonzero32(uint32_t x) {
 #endif
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CTZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CTZ inline int
 CountTrailingZeroesNonzero64(uint64_t x) {
-#if ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctzll)
+#if Y_ABSL_NUMERIC_INTERNAL_HAVE_BUILTIN_OR_GCC(__builtin_ctzll)
   static_assert(sizeof(unsigned long long) == sizeof(x),  // NOLINT(runtime/int)
                 "__builtin_ctzll does not take 64-bit arg");
   return __builtin_ctzll(x);
@@ -301,9 +301,9 @@ CountTrailingZeroesNonzero64(uint64_t x) {
 #endif
 }
 
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CTZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CTZ inline int
 CountTrailingZeroesNonzero16(uint16_t x) {
-#if ABSL_HAVE_BUILTIN(__builtin_ctzs)
+#if Y_ABSL_HAVE_BUILTIN(__builtin_ctzs)
   static_assert(sizeof(unsigned short) == sizeof(x),  // NOLINT(runtime/int)
                 "__builtin_ctzs does not take 16-bit arg");
   return __builtin_ctzs(x);
@@ -313,7 +313,7 @@ CountTrailingZeroesNonzero16(uint16_t x) {
 }
 
 template <class T>
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CTZ inline int
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CTZ inline int
 CountTrailingZeroes(T x) noexcept {
   static_assert(std::is_unsigned<T>::value, "T must be unsigned");
   static_assert(IsPowerOf2(std::numeric_limits<T>::digits),
@@ -332,14 +332,14 @@ CountTrailingZeroes(T x) noexcept {
 // want to force it to wraparound so that bit_ceil of an invalid value are not
 // core constant expressions.
 template <class T>
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline
     typename std::enable_if<std::is_unsigned<T>::value, T>::type
     BitCeilPromotionHelper(T x, T promotion) {
   return (T{1} << (x + promotion)) >> promotion;
 }
 
 template <class T>
-ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline
+Y_ABSL_ATTRIBUTE_ALWAYS_INLINE Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline
     typename std::enable_if<std::is_unsigned<T>::value, T>::type
     BitCeilNonPowerOf2(T x) {
   // If T is narrower than unsigned, it undergoes promotion to unsigned when we
@@ -352,7 +352,7 @@ ABSL_ATTRIBUTE_ALWAYS_INLINE ABSL_INTERNAL_CONSTEXPR_CLZ inline
 }
 
 }  // namespace numeric_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_NUMERIC_INTERNAL_BITS_H_
+#endif  // Y_ABSL_NUMERIC_INTERNAL_BITS_H_

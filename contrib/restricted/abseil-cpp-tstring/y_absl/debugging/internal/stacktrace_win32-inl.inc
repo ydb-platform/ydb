@@ -34,8 +34,8 @@
 // This code is inspired by a patch from David Vitek:
 //   https://code.google.com/p/google-perftools/issues/detail?id=83
 
-#ifndef ABSL_DEBUGGING_INTERNAL_STACKTRACE_WIN32_INL_H_
-#define ABSL_DEBUGGING_INTERNAL_STACKTRACE_WIN32_INL_H_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_WIN32_INL_H_
+#define Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_WIN32_INL_H_
 
 #include <windows.h>    // for GetProcAddress and GetModuleHandle
 #include <cassert>
@@ -81,13 +81,13 @@ static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
 }
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() {
   return false;
 }
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_WIN32_INL_H_
+#endif  // Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_WIN32_INL_H_

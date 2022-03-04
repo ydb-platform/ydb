@@ -14,7 +14,7 @@
 
 #include "y_absl/types/bad_any_cast.h"
 
-#ifndef ABSL_USES_STD_ANY
+#ifndef Y_ABSL_USES_STD_ANY
 
 #include <cstdlib>
 
@@ -22,7 +22,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 bad_any_cast::~bad_any_cast() = default;
 
@@ -31,16 +31,16 @@ const char* bad_any_cast::what() const noexcept { return "Bad any cast"; }
 namespace any_internal {
 
 void ThrowBadAnyCast() {
-#ifdef ABSL_HAVE_EXCEPTIONS
+#ifdef Y_ABSL_HAVE_EXCEPTIONS
   throw bad_any_cast();
 #else
-  ABSL_RAW_LOG(FATAL, "Bad any cast");
+  Y_ABSL_RAW_LOG(FATAL, "Bad any cast");
   std::abort();
 #endif
 }
 
 }  // namespace any_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USES_STD_ANY
+#endif  // Y_ABSL_USES_STD_ANY

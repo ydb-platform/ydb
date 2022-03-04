@@ -14,7 +14,7 @@
 
 // This file is a no-op if the required LowLevelAlloc support is missing.
 #include "y_absl/base/internal/low_level_alloc.h"
-#ifndef ABSL_LOW_LEVEL_ALLOC_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_MISSING
 
 #include "y_absl/synchronization/internal/per_thread_sem.h"
 
@@ -25,7 +25,7 @@
 #include "y_absl/synchronization/internal/waiter.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 void PerThreadSem::SetThreadBlockedCounter(std::atomic<int> *counter) {
@@ -63,17 +63,17 @@ void PerThreadSem::Tick(base_internal::ThreadIdentity *identity) {
 }
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 extern "C" {
 
-ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(
+Y_ABSL_ATTRIBUTE_WEAK void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(
     y_absl::base_internal::ThreadIdentity *identity) {
   y_absl::synchronization_internal::Waiter::GetWaiter(identity)->Post();
 }
 
-ABSL_ATTRIBUTE_WEAK bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
+Y_ABSL_ATTRIBUTE_WEAK bool Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
     y_absl::synchronization_internal::KernelTimeout t) {
   bool timeout = false;
   y_absl::base_internal::ThreadIdentity *identity;
@@ -103,4 +103,4 @@ ABSL_ATTRIBUTE_WEAK bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
 
 }  // extern "C"
 
-#endif  // ABSL_LOW_LEVEL_ALLOC_MISSING
+#endif  // Y_ABSL_LOW_LEVEL_ALLOC_MISSING

@@ -26,8 +26,8 @@
 //
 // IWYU pragma: private, include "y_absl/strings/str_split.h"
 
-#ifndef ABSL_STRINGS_INTERNAL_STR_SPLIT_INTERNAL_H_
-#define ABSL_STRINGS_INTERNAL_STR_SPLIT_INTERNAL_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_STR_SPLIT_INTERNAL_H_
+#define Y_ABSL_STRINGS_INTERNAL_STR_SPLIT_INTERNAL_H_
 
 #include <array>
 #include <initializer_list>
@@ -47,7 +47,7 @@
 #endif  // _GLIBCXX_DEBUG
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // This class is implicitly constructible from everything that y_absl::string_view
@@ -424,7 +424,7 @@ class Splitter {
 };
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_STR_SPLIT_INTERNAL_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_STR_SPLIT_INTERNAL_H_

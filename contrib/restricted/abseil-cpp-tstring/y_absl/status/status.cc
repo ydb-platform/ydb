@@ -25,7 +25,7 @@
 #include "y_absl/strings/str_split.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 TString StatusCodeToString(StatusCode code) {
   switch (code) {
@@ -227,7 +227,7 @@ y_absl::StatusCode Status::code() const {
 }
 
 void Status::PrepareToModify() {
-  ABSL_RAW_CHECK(!ok(), "PrepareToModify shouldn't be called on OK status.");
+  Y_ABSL_RAW_CHECK(!ok(), "PrepareToModify shouldn't be called on OK status.");
   if (IsInlined(rep_)) {
     rep_ = PointerToRep(new status_internal::StatusRep(
         static_cast<y_absl::StatusCode>(raw_code()), y_absl::string_view(),
@@ -440,5 +440,5 @@ bool IsUnknown(const Status& status) {
   return status.code() == y_absl::StatusCode::kUnknown;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

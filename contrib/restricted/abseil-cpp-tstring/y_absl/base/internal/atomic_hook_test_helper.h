@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_
-#define ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_
+#ifndef Y_ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_
+#define Y_ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_
 
 #include "y_absl/base/internal/atomic_hook.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace atomic_hook_internal {
 
 using VoidF = void (*)();
@@ -28,7 +28,7 @@ void DefaultFunc();
 void RegisterFunc(VoidF func);
 
 }  // namespace atomic_hook_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_
+#endif  // Y_ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_

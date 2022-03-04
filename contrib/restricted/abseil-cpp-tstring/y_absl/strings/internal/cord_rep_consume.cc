@@ -22,7 +22,7 @@
 #include "y_absl/strings/internal/cord_internal.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 namespace {
@@ -125,5 +125,5 @@ void ReverseConsume(CordRep* rep, ConsumeFn consume_fn) {
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

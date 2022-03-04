@@ -74,7 +74,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 namespace {
 
@@ -715,12 +715,12 @@ struct DisplayUnit {
   int prec;
   double pow10;
 };
-ABSL_CONST_INIT const DisplayUnit kDisplayNano = {"ns", 2, 1e2};
-ABSL_CONST_INIT const DisplayUnit kDisplayMicro = {"us", 5, 1e5};
-ABSL_CONST_INIT const DisplayUnit kDisplayMilli = {"ms", 8, 1e8};
-ABSL_CONST_INIT const DisplayUnit kDisplaySec = {"s", 11, 1e11};
-ABSL_CONST_INIT const DisplayUnit kDisplayMin = {"m", -1, 0.0};  // prec ignored
-ABSL_CONST_INIT const DisplayUnit kDisplayHour = {"h", -1,
+Y_ABSL_CONST_INIT const DisplayUnit kDisplayNano = {"ns", 2, 1e2};
+Y_ABSL_CONST_INIT const DisplayUnit kDisplayMicro = {"us", 5, 1e5};
+Y_ABSL_CONST_INIT const DisplayUnit kDisplayMilli = {"ms", 8, 1e8};
+Y_ABSL_CONST_INIT const DisplayUnit kDisplaySec = {"s", 11, 1e11};
+Y_ABSL_CONST_INIT const DisplayUnit kDisplayMin = {"m", -1, 0.0};  // prec ignored
+Y_ABSL_CONST_INIT const DisplayUnit kDisplayHour = {"h", -1,
                                                   0.0};  // prec ignored
 
 void AppendNumberUnit(TString* out, int64_t n, DisplayUnit unit) {
@@ -870,7 +870,7 @@ bool ConsumeDurationUnit(const char** start, const char* end, Duration* unit) {
         default:
           break;
       }
-      ABSL_FALLTHROUGH_INTENDED;
+      Y_ABSL_FALLTHROUGH_INTENDED;
     case 1:
       switch (**start) {
         case 's':
@@ -950,5 +950,5 @@ bool ParseFlag(const TString& text, Duration* dst, TString* ) {
 
 TString UnparseFlag(Duration d) { return FormatDuration(d); }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

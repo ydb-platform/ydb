@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_H_
-#define ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_H_
+#define Y_ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_H_
 
 #include <cassert>
 #include <cstdint>
@@ -28,7 +28,7 @@
 #include "y_absl/types/span.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 class CordRepBtreeNavigator;
@@ -674,7 +674,7 @@ inline void CordRepBtree::Destroy(CordRepBtree* tree) {
 
 inline void CordRepBtree::Unref(y_absl::Span<CordRep* const> edges) {
   for (CordRep* edge : edges) {
-    if (ABSL_PREDICT_FALSE(!edge->refcount.Decrement())) {
+    if (Y_ABSL_PREDICT_FALSE(!edge->refcount.Decrement())) {
       CordRep::Destroy(edge);
     }
   }
@@ -722,7 +722,7 @@ inline void CordRepBtree::AlignBegin() {
   // effects, making the compiler emit register save/store/spills, and minimize
   // the size of code.
   const size_t delta = begin();
-  if (ABSL_PREDICT_FALSE(delta != 0)) {
+  if (Y_ABSL_PREDICT_FALSE(delta != 0)) {
     const size_t new_end = end() - delta;
     set_begin(0);
     set_end(new_end);
@@ -731,7 +731,7 @@ inline void CordRepBtree::AlignBegin() {
     // size, and then do overlapping load/store of up to 4 pointers (inlined as
     // XMM, YMM or ZMM load/store) and up to 2 pointers (XMM / YMM), which is a)
     // compact and b) not clobbering any registers.
-    ABSL_INTERNAL_ASSUME(new_end <= kMaxCapacity);
+    Y_ABSL_INTERNAL_ASSUME(new_end <= kMaxCapacity);
 #ifdef __clang__
 #pragma unroll 1
 #endif
@@ -749,7 +749,7 @@ inline void CordRepBtree::AlignEnd() {
     const size_t new_end = end() + delta;
     set_begin(new_begin);
     set_end(new_end);
-    ABSL_INTERNAL_ASSUME(new_end <= kMaxCapacity);
+    Y_ABSL_INTERNAL_ASSUME(new_end <= kMaxCapacity);
 #ifdef __clang__
 #pragma unroll 1
 #endif
@@ -860,16 +860,16 @@ inline Span<char> CordRepBtree::GetAppendBuffer(size_t size) {
       tree = tree->Edge(kBack)->btree();
       if (!tree->refcount.IsMutable()) return {};
       n2 = tree;
-      ABSL_FALLTHROUGH_INTENDED;
+      Y_ABSL_FALLTHROUGH_INTENDED;
     case 2:
       tree = tree->Edge(kBack)->btree();
       if (!tree->refcount.IsMutable()) return {};
       n1 = tree;
-      ABSL_FALLTHROUGH_INTENDED;
+      Y_ABSL_FALLTHROUGH_INTENDED;
     case 1:
       tree = tree->Edge(kBack)->btree();
       if (!tree->refcount.IsMutable()) return {};
-      ABSL_FALLTHROUGH_INTENDED;
+      Y_ABSL_FALLTHROUGH_INTENDED;
     case 0:
       CordRep* edge = tree->Edge(kBack);
       if (!edge->refcount.IsMutable()) return {};
@@ -882,13 +882,13 @@ inline Span<char> CordRepBtree::GetAppendBuffer(size_t size) {
       switch (height) {
         case 3:
           n3->length += delta;
-          ABSL_FALLTHROUGH_INTENDED;
+          Y_ABSL_FALLTHROUGH_INTENDED;
         case 2:
           n2->length += delta;
-          ABSL_FALLTHROUGH_INTENDED;
+          Y_ABSL_FALLTHROUGH_INTENDED;
         case 1:
           n1->length += delta;
-          ABSL_FALLTHROUGH_INTENDED;
+          Y_ABSL_FALLTHROUGH_INTENDED;
         case 0:
           tree->length += delta;
           return span;
@@ -905,14 +905,14 @@ extern template CordRepBtree* CordRepBtree::AddCordRep<CordRepBtree::kFront>(
     CordRepBtree* tree, CordRep* rep);
 
 inline CordRepBtree* CordRepBtree::Append(CordRepBtree* tree, CordRep* rep) {
-  if (ABSL_PREDICT_TRUE(IsDataEdge(rep))) {
+  if (Y_ABSL_PREDICT_TRUE(IsDataEdge(rep))) {
     return CordRepBtree::AddCordRep<kBack>(tree, rep);
   }
   return AppendSlow(tree, rep);
 }
 
 inline CordRepBtree* CordRepBtree::Prepend(CordRepBtree* tree, CordRep* rep) {
-  if (ABSL_PREDICT_TRUE(IsDataEdge(rep))) {
+  if (Y_ABSL_PREDICT_TRUE(IsDataEdge(rep))) {
     return CordRepBtree::AddCordRep<kFront>(tree, rep);
   }
   return PrependSlow(tree, rep);
@@ -933,7 +933,7 @@ inline const CordRepBtree* CordRepBtree::AssertValid(const CordRepBtree* tree,
 #endif
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_H_

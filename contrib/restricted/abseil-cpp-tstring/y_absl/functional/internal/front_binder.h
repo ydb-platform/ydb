@@ -14,8 +14,8 @@
 
 // Implementation details for `y_absl::bind_front()`.
 
-#ifndef ABSL_FUNCTIONAL_INTERNAL_FRONT_BINDER_H_
-#define ABSL_FUNCTIONAL_INTERNAL_FRONT_BINDER_H_
+#ifndef Y_ABSL_FUNCTIONAL_INTERNAL_FRONT_BINDER_H_
+#define Y_ABSL_FUNCTIONAL_INTERNAL_FRONT_BINDER_H_
 
 #include <cstddef>
 #include <type_traits>
@@ -27,7 +27,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace functional_internal {
 
 // Invoke the method, expanding the tuple of bound arguments.
@@ -89,7 +89,7 @@ template <class F, class... BoundArgs>
 using bind_front_t = FrontBinder<decay_t<F>, y_absl::decay_t<BoundArgs>...>;
 
 }  // namespace functional_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_FUNCTIONAL_INTERNAL_FRONT_BINDER_H_
+#endif  // Y_ABSL_FUNCTIONAL_INTERNAL_FRONT_BINDER_H_

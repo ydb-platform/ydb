@@ -27,9 +27,9 @@
 #include "y_absl/numeric/bits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
-ABSL_DLL const uint128 kuint128max = MakeUint128(
+Y_ABSL_DLL const uint128 kuint128max = MakeUint128(
     std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint64_t>::max());
 
 namespace {
@@ -40,13 +40,13 @@ namespace {
 // For example:
 //   Given: 5 (decimal) == 101 (binary)
 //   Returns: 2
-inline ABSL_ATTRIBUTE_ALWAYS_INLINE int Fls128(uint128 n) {
+inline Y_ABSL_ATTRIBUTE_ALWAYS_INLINE int Fls128(uint128 n) {
   if (uint64_t hi = Uint128High64(n)) {
-    ABSL_INTERNAL_ASSUME(hi != 0);
+    Y_ABSL_INTERNAL_ASSUME(hi != 0);
     return 127 - countl_zero(hi);
   }
   const uint64_t low = Uint128Low64(n);
-  ABSL_INTERNAL_ASSUME(low != 0);
+  Y_ABSL_INTERNAL_ASSUME(low != 0);
   return 63 - countl_zero(low);
 }
 
@@ -138,7 +138,7 @@ uint128::uint128(float v) : uint128(MakeUint128FromFloat(v)) {}
 uint128::uint128(double v) : uint128(MakeUint128FromFloat(v)) {}
 uint128::uint128(long double v) : uint128(MakeUint128FromFloat(v)) {}
 
-#if !defined(ABSL_HAVE_INTRINSIC_INT128)
+#if !defined(Y_ABSL_HAVE_INTRINSIC_INT128)
 uint128 operator/(uint128 lhs, uint128 rhs) {
   uint128 quotient = 0;
   uint128 remainder = 0;
@@ -152,7 +152,7 @@ uint128 operator%(uint128 lhs, uint128 rhs) {
   DivModImpl(lhs, rhs, &quotient, &remainder);
   return remainder;
 }
-#endif  // !defined(ABSL_HAVE_INTRINSIC_INT128)
+#endif  // !defined(Y_ABSL_HAVE_INTRINSIC_INT128)
 
 namespace {
 
@@ -233,7 +233,7 @@ uint128 UnsignedAbsoluteValue(int128 v) {
 
 }  // namespace
 
-#if !defined(ABSL_HAVE_INTRINSIC_INT128)
+#if !defined(Y_ABSL_HAVE_INTRINSIC_INT128)
 namespace {
 
 template <typename T>
@@ -282,7 +282,7 @@ int128 operator%(int128 lhs, int128 rhs) {
   return MakeInt128(int128_internal::BitCastToSigned(Uint128High64(remainder)),
                     Uint128Low64(remainder));
 }
-#endif  // ABSL_HAVE_INTRINSIC_INT128
+#endif  // Y_ABSL_HAVE_INTRINSIC_INT128
 
 std::ostream& operator<<(std::ostream& os, int128 v) {
   std::ios_base::fmtflags flags = os.flags();
@@ -329,7 +329,7 @@ std::ostream& operator<<(std::ostream& os, int128 v) {
   return os << rep;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 namespace std {

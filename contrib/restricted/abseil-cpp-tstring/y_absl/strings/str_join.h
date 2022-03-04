@@ -43,8 +43,8 @@
 //
 // See comments on the `y_absl::StrJoin()` function for more examples.
 
-#ifndef ABSL_STRINGS_STR_JOIN_H_
-#define ABSL_STRINGS_STR_JOIN_H_
+#ifndef Y_ABSL_STRINGS_STR_JOIN_H_
+#define Y_ABSL_STRINGS_STR_JOIN_H_
 
 #include <cstdio>
 #include <cstring>
@@ -60,7 +60,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // Concept: Formatter
@@ -287,7 +287,7 @@ TString StrJoin(const std::tuple<T...>& value,
   return strings_internal::JoinAlgorithm(value, separator, AlphaNumFormatter());
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_STR_JOIN_H_
+#endif  // Y_ABSL_STRINGS_STR_JOIN_H_

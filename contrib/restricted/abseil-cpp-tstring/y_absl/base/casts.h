@@ -21,8 +21,8 @@
 // the standard casts provided in the C++ standard. As with all cast operations,
 // use these with caution and only if alternatives do not exist.
 
-#ifndef ABSL_BASE_CASTS_H_
-#define ABSL_BASE_CASTS_H_
+#ifndef Y_ABSL_BASE_CASTS_H_
+#define Y_ABSL_BASE_CASTS_H_
 
 #include <cstring>
 #include <memory>
@@ -34,7 +34,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 namespace internal_casts {
 
@@ -168,7 +168,7 @@ template <
     typename std::enable_if<
         !internal_casts::is_bitcastable<Dest, Source>::value,
         int>::type = 0>
-ABSL_DEPRECATED(
+Y_ABSL_DEPRECATED(
     "y_absl::bit_cast type requirements were violated. Update the types "
     "being used such that they are the same size and are both "
     "TriviallyCopyable.")
@@ -181,7 +181,7 @@ inline Dest bit_cast(const Source& source) {
   return dest;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_CASTS_H_
+#endif  // Y_ABSL_BASE_CASTS_H_

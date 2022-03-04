@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 
-#ifndef ABSL_SYNCHRONIZATION_INTERNAL_GRAPHCYCLES_H_
-#define ABSL_SYNCHRONIZATION_INTERNAL_GRAPHCYCLES_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_INTERNAL_GRAPHCYCLES_H_
+#define Y_ABSL_SYNCHRONIZATION_INTERNAL_GRAPHCYCLES_H_
 
 // GraphCycles detects the introduction of a cycle into a directed
 // graph that is being built up incrementally.
@@ -43,7 +43,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 // Opaque identifier for a graph node.
@@ -135,7 +135,7 @@ class GraphCycles {
 };
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif

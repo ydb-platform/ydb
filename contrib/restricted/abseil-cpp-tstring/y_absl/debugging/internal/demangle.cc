@@ -24,7 +24,7 @@
 #include <limits>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 typedef struct {
@@ -1955,5 +1955,5 @@ bool Demangle(const char *mangled, char *out, int out_size) {
 }
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

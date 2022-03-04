@@ -29,26 +29,26 @@
 #include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 constexpr int HashtablezInfo::kMaxStackDepth;
 
 namespace {
-ABSL_CONST_INIT std::atomic<bool> g_hashtablez_enabled{
+Y_ABSL_CONST_INIT std::atomic<bool> g_hashtablez_enabled{
     false
 };
-ABSL_CONST_INIT std::atomic<int32_t> g_hashtablez_sample_parameter{1 << 10};
+Y_ABSL_CONST_INIT std::atomic<int32_t> g_hashtablez_sample_parameter{1 << 10};
 
-#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
-ABSL_PER_THREAD_TLS_KEYWORD y_absl::profiling_internal::ExponentialBiased
+#if defined(Y_ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+Y_ABSL_PER_THREAD_TLS_KEYWORD y_absl::profiling_internal::ExponentialBiased
     g_exponential_biased_generator;
 #endif
 
 }  // namespace
 
-#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
-ABSL_PER_THREAD_TLS_KEYWORD int64_t global_next_sample = 0;
-#endif  // defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+#if defined(Y_ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+Y_ABSL_PER_THREAD_TLS_KEYWORD int64_t global_next_sample = 0;
+#endif  // defined(Y_ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
 
 HashtablezSampler& GlobalHashtablezSampler() {
   static auto* sampler = new HashtablezSampler();
@@ -87,13 +87,13 @@ static bool ShouldForceSampling() {
     kForce,
     kUninitialized
   };
-  ABSL_CONST_INIT static std::atomic<ForceState> global_state{
+  Y_ABSL_CONST_INIT static std::atomic<ForceState> global_state{
       kUninitialized};
   ForceState state = global_state.load(std::memory_order_relaxed);
-  if (ABSL_PREDICT_TRUE(state == kDontForce)) return false;
+  if (Y_ABSL_PREDICT_TRUE(state == kDontForce)) return false;
 
   if (state == kUninitialized) {
-    state = ABSL_INTERNAL_C_SYMBOL(AbslContainerInternalSampleEverything)()
+    state = Y_ABSL_INTERNAL_C_SYMBOL(AbslContainerInternalSampleEverything)()
                 ? kForce
                 : kDontForce;
     global_state.store(state, std::memory_order_relaxed);
@@ -102,14 +102,14 @@ static bool ShouldForceSampling() {
 }
 
 HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size) {
-  if (ABSL_PREDICT_FALSE(ShouldForceSampling())) {
+  if (Y_ABSL_PREDICT_FALSE(ShouldForceSampling())) {
     *next_sample = 1;
     HashtablezInfo* result = GlobalHashtablezSampler().Register();
     result->inline_element_size = inline_element_size;
     return result;
   }
 
-#if !defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+#if !defined(Y_ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
   *next_sample = std::numeric_limits<int64_t>::max();
   return nullptr;
 #else
@@ -117,7 +117,7 @@ HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size) {
   *next_sample = g_exponential_biased_generator.GetStride(
       g_hashtablez_sample_parameter.load(std::memory_order_relaxed));
   // Small values of interval are equivalent to just sampling next time.
-  ABSL_ASSERT(*next_sample >= 1);
+  Y_ABSL_ASSERT(*next_sample >= 1);
 
   // g_hashtablez_enabled can be dynamically flipped, we need to set a threshold
   // low enough that we will start sampling in a reasonable time, so we just use
@@ -127,7 +127,7 @@ HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size) {
   // We will only be negative on our first count, so we should just retry in
   // that case.
   if (first) {
-    if (ABSL_PREDICT_TRUE(--*next_sample > 0)) return nullptr;
+    if (Y_ABSL_PREDICT_TRUE(--*next_sample > 0)) return nullptr;
     return SampleSlow(next_sample, inline_element_size);
   }
 
@@ -146,7 +146,7 @@ void RecordInsertSlow(HashtablezInfo* info, size_t hash,
   // SwissTables probe in groups of 16, so scale this to count items probes and
   // not offset from desired.
   size_t probe_length = distance_from_desired;
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
+#if Y_ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
   probe_length /= 16;
 #else
   probe_length /= 8;
@@ -171,7 +171,7 @@ void SetHashtablezSampleParameter(int32_t rate) {
   if (rate > 0) {
     g_hashtablez_sample_parameter.store(rate, std::memory_order_release);
   } else {
-    ABSL_RAW_LOG(ERROR, "Invalid hashtablez sample rate: %lld",
+    Y_ABSL_RAW_LOG(ERROR, "Invalid hashtablez sample rate: %lld",
                  static_cast<long long>(rate));  // NOLINT(runtime/int)
   }
 }
@@ -180,11 +180,11 @@ void SetHashtablezMaxSamples(int32_t max) {
   if (max > 0) {
     GlobalHashtablezSampler().SetMaxSamples(max);
   } else {
-    ABSL_RAW_LOG(ERROR, "Invalid hashtablez max samples: %lld",
+    Y_ABSL_RAW_LOG(ERROR, "Invalid hashtablez max samples: %lld",
                  static_cast<long long>(max));  // NOLINT(runtime/int)
   }
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

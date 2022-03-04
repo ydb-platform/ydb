@@ -22,14 +22,14 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 void Notification::Notify() {
   MutexLock l(&this->mutex_);
 
 #ifndef NDEBUG
-  if (ABSL_PREDICT_FALSE(notified_yet_.load(std::memory_order_relaxed))) {
-    ABSL_RAW_LOG(
+  if (Y_ABSL_PREDICT_FALSE(notified_yet_.load(std::memory_order_relaxed))) {
+    Y_ABSL_RAW_LOG(
         FATAL,
         "Notify() method called more than once for Notification object %p",
         static_cast<void *>(this));
@@ -74,5 +74,5 @@ bool Notification::WaitForNotificationWithDeadline(y_absl::Time deadline) const 
   return notified;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

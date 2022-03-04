@@ -22,8 +22,8 @@
 // The semantics of PerThreadSem are the same as that of a counting semaphore.
 // Each thread maintains an abstract "count" value associated with its identity.
 
-#ifndef ABSL_SYNCHRONIZATION_INTERNAL_PER_THREAD_SEM_H_
-#define ABSL_SYNCHRONIZATION_INTERNAL_PER_THREAD_SEM_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_INTERNAL_PER_THREAD_SEM_H_
+#define Y_ABSL_SYNCHRONIZATION_INTERNAL_PER_THREAD_SEM_H_
 
 #include <atomic>
 
@@ -32,7 +32,7 @@
 #include "y_absl/synchronization/internal/kernel_timeout.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 class Mutex;
 
@@ -86,7 +86,7 @@ class PerThreadSem {
 };
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 // In some build configurations we pass --detect-odr-violations to the
@@ -96,20 +96,20 @@ ABSL_NAMESPACE_END
 // By changing our extension points to be extern "C", we dodge this
 // check.
 extern "C" {
-void ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(
+void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(
     y_absl::base_internal::ThreadIdentity* identity);
-bool ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
+bool Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(
     y_absl::synchronization_internal::KernelTimeout t);
 }  // extern "C"
 
 void y_absl::synchronization_internal::PerThreadSem::Post(
     y_absl::base_internal::ThreadIdentity* identity) {
-  ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(identity);
+  Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemPost)(identity);
 }
 
 bool y_absl::synchronization_internal::PerThreadSem::Wait(
     y_absl::synchronization_internal::KernelTimeout t) {
-  return ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(t);
+  return Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalPerThreadSemWait)(t);
 }
 
-#endif  // ABSL_SYNCHRONIZATION_INTERNAL_PER_THREAD_SEM_H_
+#endif  // Y_ABSL_SYNCHRONIZATION_INTERNAL_PER_THREAD_SEM_H_

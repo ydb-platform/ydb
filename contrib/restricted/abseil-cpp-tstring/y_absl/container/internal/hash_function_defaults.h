@@ -42,8 +42,8 @@
 // the hash function is hash<TString> but as a pointer when the hash
 // function is hash<void*>.
 //
-#ifndef ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_
-#define ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_
+#define Y_ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_
 
 #include <stdint.h>
 #include <cstddef>
@@ -57,7 +57,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // The hash of an object of type T is computed by using y_absl::Hash.
@@ -157,7 +157,7 @@ template <class T>
 using hash_default_eq = typename container_internal::HashEq<T>::Eq;
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_

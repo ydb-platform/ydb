@@ -20,7 +20,7 @@
 #include "y_absl/strings/internal/cord_rep_btree.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 using ReadResult = CordRepBtreeNavigator::ReadResult;
@@ -181,5 +181,5 @@ ReadResult CordRepBtreeNavigator::Read(size_t edge_offset, size_t n) {
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

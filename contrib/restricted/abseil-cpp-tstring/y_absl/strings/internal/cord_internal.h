@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_
-#define ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_
+#define Y_ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_
 
 #include <atomic>
 #include <cassert>
@@ -30,7 +30,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 class CordzInfo;
@@ -366,7 +366,7 @@ inline void CordRepExternal::Delete(CordRep* rep) {
 
 template <typename Str>
 struct ConstInitExternalStorage {
-  ABSL_CONST_INIT static CordRepExternal value;
+  Y_ABSL_CONST_INIT static CordRepExternal value;
 };
 
 template <typename Str>
@@ -395,7 +395,7 @@ static_assert(sizeof(cordz_info_t) >= sizeof(intptr_t), "");
 // endian value where the last byte in the host's representation holds 'value`,
 // with all other bytes being 0.
 static constexpr cordz_info_t BigEndianByte(unsigned char value) {
-#if defined(ABSL_IS_BIG_ENDIAN)
+#if defined(Y_ABSL_IS_BIG_ENDIAN)
   return value;
 #else
   return static_cast<cordz_info_t>(value) << ((sizeof(cordz_info_t) - 1) * 8);
@@ -534,7 +534,7 @@ class InlineData {
   // Requires `size` to be <= kMaxInline.
   // See the documentation on 'as_chars()' for more information and examples.
   void set_inline_size(size_t size) {
-    ABSL_ASSERT(size <= kMaxInline);
+    Y_ABSL_ASSERT(size <= kMaxInline);
     tag() = static_cast<char>(size << 1);
   }
 
@@ -608,13 +608,13 @@ inline void CordRep::Unref(CordRep* rep) {
   assert(rep != nullptr);
   // Expect refcount to be 0. Avoiding the cost of an atomic decrement should
   // typically outweigh the cost of an extra branch checking for ref == 1.
-  if (ABSL_PREDICT_FALSE(!rep->refcount.DecrementExpectHighRefcount())) {
+  if (Y_ABSL_PREDICT_FALSE(!rep->refcount.DecrementExpectHighRefcount())) {
     Destroy(rep);
   }
 }
 
 }  // namespace cord_internal
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
-#endif  // ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CORD_INTERNAL_H_

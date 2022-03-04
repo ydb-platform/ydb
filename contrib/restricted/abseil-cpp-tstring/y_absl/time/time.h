@@ -59,8 +59,8 @@
 //       "My flight will land in Sydney on %Y-%m-%d at %H:%M:%S",
 //       landing, syd);
 
-#ifndef ABSL_TIME_TIME_H_
-#define ABSL_TIME_TIME_H_
+#ifndef Y_ABSL_TIME_TIME_H_
+#define Y_ABSL_TIME_TIME_H_
 
 #if !defined(_MSC_VER)
 #include <sys/time.h>
@@ -89,7 +89,7 @@ struct timeval;
 #include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 class Duration;  // Defined below
 class Time;      // Defined below
@@ -488,12 +488,12 @@ Duration Hours(T n) {
 //
 //   y_absl::Duration d = y_absl::Milliseconds(1500);
 //   int64_t isec = y_absl::ToInt64Seconds(d);  // isec == 1
-ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Nanoseconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Microseconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Milliseconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Seconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Minutes(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Hours(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Nanoseconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Microseconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Milliseconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Seconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Minutes(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Hours(Duration d);
 
 // ToDoubleNanoSeconds()
 // ToDoubleMicroseconds()
@@ -510,12 +510,12 @@ ABSL_ATTRIBUTE_PURE_FUNCTION int64_t ToInt64Hours(Duration d);
 //
 //   y_absl::Duration d = y_absl::Milliseconds(1500);
 //   double dsec = y_absl::ToDoubleSeconds(d);  // dsec == 1.5
-ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleNanoseconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleMicroseconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleMilliseconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleSeconds(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleMinutes(Duration d);
-ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleHours(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleNanoseconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleMicroseconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleMilliseconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleSeconds(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleMinutes(Duration d);
+Y_ABSL_ATTRIBUTE_PURE_FUNCTION double ToDoubleHours(Duration d);
 
 // FromChrono()
 //
@@ -591,9 +591,9 @@ bool AbslParseFlag(y_absl::string_view text, Duration* dst, TString* error);
 // the format specified by `y_absl::ParseDuration()`.
 TString AbslUnparseFlag(Duration d);
 
-ABSL_DEPRECATED("Use AbslParseFlag() instead.")
+Y_ABSL_DEPRECATED("Use AbslParseFlag() instead.")
 bool ParseFlag(const TString& text, Duration* dst, TString* error);
-ABSL_DEPRECATED("Use AbslUnparseFlag() instead.")
+Y_ABSL_DEPRECATED("Use AbslUnparseFlag() instead.")
 TString UnparseFlag(Duration d);
 
 // Time
@@ -875,9 +875,9 @@ bool AbslParseFlag(y_absl::string_view text, Time* t, TString* error);
 // the format specified by `y_absl::ParseTime()`.
 TString AbslUnparseFlag(Time t);
 
-ABSL_DEPRECATED("Use AbslParseFlag() instead.")
+Y_ABSL_DEPRECATED("Use AbslParseFlag() instead.")
 bool ParseFlag(const TString& text, Time* t, TString* error);
-ABSL_DEPRECATED("Use AbslUnparseFlag() instead.")
+Y_ABSL_DEPRECATED("Use AbslUnparseFlag() instead.")
 TString UnparseFlag(Time t);
 
 // TimeZone
@@ -1257,15 +1257,15 @@ struct tm ToTM(Time t, TimeZone tz);
 // time with UTC offset.  Also note the use of "%Y": RFC3339 mandates that
 // years have exactly four digits, but we allow them to take their natural
 // width.
-ABSL_DLL extern const char RFC3339_full[];  // %Y-%m-%d%ET%H:%M:%E*S%Ez
-ABSL_DLL extern const char RFC3339_sec[];   // %Y-%m-%d%ET%H:%M:%S%Ez
+Y_ABSL_DLL extern const char RFC3339_full[];  // %Y-%m-%d%ET%H:%M:%E*S%Ez
+Y_ABSL_DLL extern const char RFC3339_sec[];   // %Y-%m-%d%ET%H:%M:%S%Ez
 
 // RFC1123_full
 // RFC1123_no_wday
 //
 // FormatTime()/ParseTime() format specifiers for RFC1123 date/time strings.
-ABSL_DLL extern const char RFC1123_full[];     // %a, %d %b %E4Y %H:%M:%S %z
-ABSL_DLL extern const char RFC1123_no_wday[];  // %d %b %E4Y %H:%M:%S %z
+Y_ABSL_DLL extern const char RFC1123_full[];     // %a, %d %b %E4Y %H:%M:%S %z
+Y_ABSL_DLL extern const char RFC1123_no_wday[];  // %d %b %E4Y %H:%M:%S %z
 
 // FormatTime()
 //
@@ -1610,7 +1610,7 @@ constexpr Time FromTimeT(time_t t) {
   return time_internal::FromUnixDuration(Seconds(t));
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TIME_TIME_H_
+#endif  // Y_ABSL_TIME_TIME_H_

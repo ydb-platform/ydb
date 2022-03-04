@@ -28,13 +28,13 @@
 // frames consisting of function addresses rather than human-readable function
 // names. (See symbolize.h for information on symbolizing these values.)
 
-#ifndef ABSL_DEBUGGING_STACKTRACE_H_
-#define ABSL_DEBUGGING_STACKTRACE_H_
+#ifndef Y_ABSL_DEBUGGING_STACKTRACE_H_
+#define Y_ABSL_DEBUGGING_STACKTRACE_H_
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // GetStackFrames()
 //
@@ -225,7 +225,7 @@ namespace debugging_internal {
 // working.
 extern bool StackTraceWorksForTest();
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_STACKTRACE_H_
+#endif  // Y_ABSL_DEBUGGING_STACKTRACE_H_

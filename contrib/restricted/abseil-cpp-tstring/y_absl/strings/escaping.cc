@@ -34,7 +34,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace {
 
 // These are used for the leave_nulls_escaped argument to CUnescapeInternal().
@@ -640,7 +640,7 @@ bool Base64UnescapeInternal(const char* src_param, size_t szsrc, char* dest,
 
     default:
       // state should have no other values at this point.
-      ABSL_RAW_LOG(FATAL, "This can't happen; base64 decoder state = %d",
+      Y_ABSL_RAW_LOG(FATAL, "This can't happen; base64 decoder state = %d",
                    state);
   }
 
@@ -945,5 +945,5 @@ TString BytesToHexString(y_absl::string_view from) {
   return result;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

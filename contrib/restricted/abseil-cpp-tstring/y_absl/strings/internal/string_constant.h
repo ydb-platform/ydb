@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_STRING_CONSTANT_H_
-#define ABSL_STRINGS_INTERNAL_STRING_CONSTANT_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_STRING_CONSTANT_H_
+#define Y_ABSL_STRINGS_INTERNAL_STRING_CONSTANT_H_
 
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // StringConstant<T> represents a compile time string constant.
@@ -58,7 +58,7 @@ constexpr StringConstant<T> MakeStringConstant(T) {
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_STRING_CONSTANT_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_STRING_CONSTANT_H_

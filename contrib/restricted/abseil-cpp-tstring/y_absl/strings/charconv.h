@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_CHARCONV_H_
-#define ABSL_STRINGS_CHARCONV_H_
+#ifndef Y_ABSL_STRINGS_CHARCONV_H_
+#define Y_ABSL_STRINGS_CHARCONV_H_
 
 #include <system_error>  // NOLINT(build/c++11)
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Workalike compatibilty version of std::chars_format from C++17.
 //
@@ -114,7 +114,7 @@ inline chars_format& operator^=(chars_format& lhs, chars_format rhs) {
   return lhs;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_CHARCONV_H_
+#endif  // Y_ABSL_STRINGS_CHARCONV_H_

@@ -14,8 +14,8 @@
 //
 // Produce stack trace
 
-#ifndef ABSL_DEBUGGING_INTERNAL_STACKTRACE_X86_INL_INC_
-#define ABSL_DEBUGGING_INTERNAL_STACKTRACE_X86_INL_INC_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_X86_INL_INC_
+#define Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_X86_INL_INC_
 
 #if defined(__linux__) && (defined(__i386__) || defined(__x86_64__))
 #include <ucontext.h>  // for ucontext_t
@@ -157,8 +157,8 @@ static uintptr_t GetFP(const void *vuc) {
 // checks (the strictness of which is controlled by the boolean parameter
 // "STRICT_UNWINDING") to reduce the chance that a bad pointer is returned.
 template <bool STRICT_UNWINDING, bool WITH_CONTEXT>
-ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
-ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
 static void **NextStackFrame(void **old_fp, const void *uc,
                              size_t stack_low, size_t stack_high) {
   void **new_fp = (void **)*old_fp;
@@ -174,7 +174,7 @@ static void **NextStackFrame(void **old_fp, const void *uc,
     static const unsigned char *kernel_rt_sigreturn_address = nullptr;
     static const unsigned char *kernel_vsyscall_address = nullptr;
     if (num_push_instructions == -1) {
-#ifdef ABSL_HAVE_VDSO_SUPPORT
+#ifdef Y_ABSL_HAVE_VDSO_SUPPORT
       y_absl::debugging_internal::VDSOSupport vdso;
       if (vdso.IsPresent()) {
         y_absl::debugging_internal::VDSOSupport::SymbolInfo
@@ -203,9 +203,9 @@ static void **NextStackFrame(void **old_fp, const void *uc,
       } else {
         num_push_instructions = 0;
       }
-#else  // ABSL_HAVE_VDSO_SUPPORT
+#else  // Y_ABSL_HAVE_VDSO_SUPPORT
       num_push_instructions = 0;
-#endif  // ABSL_HAVE_VDSO_SUPPORT
+#endif  // Y_ABSL_HAVE_VDSO_SUPPORT
     }
     if (num_push_instructions != 0 && kernel_rt_sigreturn_address != nullptr &&
         old_fp[1] == kernel_rt_sigreturn_address) {
@@ -302,9 +302,9 @@ static void **NextStackFrame(void **old_fp, const void *uc,
 }
 
 template <bool IS_STACK_FRAMES, bool IS_WITH_CONTEXT>
-ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
-ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
-ABSL_ATTRIBUTE_NOINLINE
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NOINLINE
 static int UnwindImpl(void **result, int *sizes, int max_depth, int skip_count,
                       const void *ucp, int *min_dropped_frames) {
   int n = 0;
@@ -352,13 +352,13 @@ static int UnwindImpl(void **result, int *sizes, int max_depth, int skip_count,
 }
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() {
   return true;
 }
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_X86_INL_INC_
+#endif  // Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_X86_INL_INC_

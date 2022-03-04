@@ -28,7 +28,7 @@
 #include <unordered_set>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 using CC = FormatConversionCharInternal;
@@ -41,7 +41,7 @@ constexpr auto f_pos = Flags::kShowPos;
 constexpr auto f_left = Flags::kLeft;
 constexpr auto f_zero = Flags::kZero;
 
-ABSL_CONST_INIT const ConvTag kTags[256] = {
+Y_ABSL_CONST_INIT const ConvTag kTags[256] = {
     {},     {},    {},    {},    {},    {},     {},    {},     // 00-07
     {},     {},    {},    {},    {},    {},     {},    {},     // 08-0f
     {},     {},    {},    {},    {},    {},     {},    {},     // 10-17
@@ -104,9 +104,9 @@ const char *ConsumeConversion(const char *pos, const char *const end,
   char c;
   // Read the next char into `c` and update `pos`. Returns false if there are
   // no more chars to read.
-#define ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR()          \
+#define Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR()          \
   do {                                                  \
-    if (ABSL_PREDICT_FALSE(pos == end)) return nullptr; \
+    if (Y_ABSL_PREDICT_FALSE(pos == end)) return nullptr; \
     c = *pos++;                                         \
   } while (0)
 
@@ -117,25 +117,25 @@ const char *ConsumeConversion(const char *pos, const char *const end,
     // digit doesn't match the expected characters.
     int num_digits = std::numeric_limits<int>::digits10;
     for (;;) {
-      if (ABSL_PREDICT_FALSE(pos == end)) break;
+      if (Y_ABSL_PREDICT_FALSE(pos == end)) break;
       c = *pos++;
       if (!std::isdigit(c)) break;
       --num_digits;
-      if (ABSL_PREDICT_FALSE(!num_digits)) break;
+      if (Y_ABSL_PREDICT_FALSE(!num_digits)) break;
       digits = 10 * digits + c - '0';
     }
     return digits;
   };
 
   if (is_positional) {
-    ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
-    if (ABSL_PREDICT_FALSE(c < '1' || c > '9')) return nullptr;
+    Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+    if (Y_ABSL_PREDICT_FALSE(c < '1' || c > '9')) return nullptr;
     conv->arg_position = parse_digits();
     assert(conv->arg_position > 0);
-    if (ABSL_PREDICT_FALSE(c != '$')) return nullptr;
+    if (Y_ABSL_PREDICT_FALSE(c != '$')) return nullptr;
   }
 
-  ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+  Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
 
   // We should start with the basic flag on.
   assert(conv->flags == Flags::kBasic);
@@ -148,7 +148,7 @@ const char *ConsumeConversion(const char *pos, const char *const end,
       auto tag = GetTagForChar(c);
       if (tag.is_flags()) {
         conv->flags = conv->flags | tag.as_flags();
-        ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+        Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
       } else {
         break;
       }
@@ -158,7 +158,7 @@ const char *ConsumeConversion(const char *pos, const char *const end,
       if (c >= '0') {
         int maybe_width = parse_digits();
         if (!is_positional && c == '$') {
-          if (ABSL_PREDICT_FALSE(*next_arg != 0)) return nullptr;
+          if (Y_ABSL_PREDICT_FALSE(*next_arg != 0)) return nullptr;
           // Positional conversion.
           *next_arg = -1;
           return ConsumeConversion<true>(original_pos, end, conv, next_arg);
@@ -167,12 +167,12 @@ const char *ConsumeConversion(const char *pos, const char *const end,
         conv->width.set_value(maybe_width);
       } else if (c == '*') {
         conv->flags = conv->flags | Flags::kNonBasic;
-        ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+        Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
         if (is_positional) {
-          if (ABSL_PREDICT_FALSE(c < '1' || c > '9')) return nullptr;
+          if (Y_ABSL_PREDICT_FALSE(c < '1' || c > '9')) return nullptr;
           conv->width.set_from_arg(parse_digits());
-          if (ABSL_PREDICT_FALSE(c != '$')) return nullptr;
-          ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+          if (Y_ABSL_PREDICT_FALSE(c != '$')) return nullptr;
+          Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
         } else {
           conv->width.set_from_arg(++*next_arg);
         }
@@ -181,16 +181,16 @@ const char *ConsumeConversion(const char *pos, const char *const end,
 
     if (c == '.') {
       conv->flags = conv->flags | Flags::kNonBasic;
-      ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+      Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
       if (std::isdigit(c)) {
         conv->precision.set_value(parse_digits());
       } else if (c == '*') {
-        ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+        Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
         if (is_positional) {
-          if (ABSL_PREDICT_FALSE(c < '1' || c > '9')) return nullptr;
+          if (Y_ABSL_PREDICT_FALSE(c < '1' || c > '9')) return nullptr;
           conv->precision.set_from_arg(parse_digits());
           if (c != '$') return nullptr;
-          ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+          Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
         } else {
           conv->precision.set_from_arg(++*next_arg);
         }
@@ -202,24 +202,24 @@ const char *ConsumeConversion(const char *pos, const char *const end,
 
   auto tag = GetTagForChar(c);
 
-  if (ABSL_PREDICT_FALSE(!tag.is_conv())) {
-    if (ABSL_PREDICT_FALSE(!tag.is_length())) return nullptr;
+  if (Y_ABSL_PREDICT_FALSE(!tag.is_conv())) {
+    if (Y_ABSL_PREDICT_FALSE(!tag.is_length())) return nullptr;
 
     // It is a length modifier.
     using str_format_internal::LengthMod;
     LengthMod length_mod = tag.as_length();
-    ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+    Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
     if (c == 'h' && length_mod == LengthMod::h) {
       conv->length_mod = LengthMod::hh;
-      ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+      Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
     } else if (c == 'l' && length_mod == LengthMod::l) {
       conv->length_mod = LengthMod::ll;
-      ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
+      Y_ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
     } else {
       conv->length_mod = length_mod;
     }
     tag = GetTagForChar(c);
-    if (ABSL_PREDICT_FALSE(!tag.is_conv())) return nullptr;
+    if (Y_ABSL_PREDICT_FALSE(!tag.is_conv())) return nullptr;
   }
 
   assert(CheckFastPathSetting(*conv));
@@ -335,5 +335,5 @@ bool ParsedFormatBase::MatchesConversions(
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

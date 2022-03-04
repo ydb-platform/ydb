@@ -19,14 +19,14 @@
 // This header file contains utility functions for working with the system-wide
 // realtime clock. For descriptions of the main time abstractions used within
 // this header file, consult the time.h header file.
-#ifndef ABSL_TIME_CLOCK_H_
-#define ABSL_TIME_CLOCK_H_
+#ifndef Y_ABSL_TIME_CLOCK_H_
+#define Y_ABSL_TIME_CLOCK_H_
 
 #include "y_absl/base/macros.h"
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Now()
 //
@@ -50,7 +50,7 @@ int64_t GetCurrentTimeNanos();
 // * Returns immediately when passed a nonpositive duration.
 void SleepFor(y_absl::Duration duration);
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 // -----------------------------------------------------------------------------
@@ -64,11 +64,11 @@ ABSL_NAMESPACE_END
 // By changing our extension points to be extern "C", we dodge this
 // check.
 extern "C" {
-void ABSL_INTERNAL_C_SYMBOL(AbslInternalSleepFor)(y_absl::Duration duration);
+void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSleepFor)(y_absl::Duration duration);
 }  // extern "C"
 
 inline void y_absl::SleepFor(y_absl::Duration duration) {
-  ABSL_INTERNAL_C_SYMBOL(AbslInternalSleepFor)(duration);
+  Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSleepFor)(duration);
 }
 
-#endif  // ABSL_TIME_CLOCK_H_
+#endif  // Y_ABSL_TIME_CLOCK_H_

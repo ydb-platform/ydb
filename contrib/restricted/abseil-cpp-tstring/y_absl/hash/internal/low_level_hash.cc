@@ -19,7 +19,7 @@
 #include "y_absl/numeric/int128.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 static uint64_t Mix(uint64_t v0, uint64_t v1) {
@@ -119,5 +119,5 @@ uint64_t LowLevelHash(const void* data, size_t len, uint64_t seed,
 }
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

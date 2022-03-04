@@ -16,11 +16,11 @@
 #include "y_absl/strings/internal/cordz_handle.h"
 #include "y_absl/strings/internal/cordz_info.h"
 
-#ifndef ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
-#define ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
+#ifndef Y_ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
+#define Y_ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 // The existence of a CordzSampleToken guarantees that a reader can traverse the
@@ -91,7 +91,7 @@ class CordzSampleToken : public CordzSnapshot {
 };
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_
+#endif  // Y_ABSL_STRINGS_CORDZ_SAMPLE_TOKEN_H_

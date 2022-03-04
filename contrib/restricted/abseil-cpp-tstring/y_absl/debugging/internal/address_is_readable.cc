@@ -20,14 +20,14 @@
 #if !defined(__linux__) || defined(__ANDROID__)
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 // On platforms other than Linux, just return true.
 bool AddressIsReadable(const void* /* addr */) { return true; }
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #else
@@ -44,13 +44,13 @@ ABSL_NAMESPACE_END
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 // Pack a pid and two file descriptors into a 64-bit word,
 // using 16, 24, and 24 bits for each respectively.
 static uint64_t Pack(uint64_t pid, uint64_t read_fd, uint64_t write_fd) {
-  ABSL_RAW_CHECK((read_fd >> 24) == 0 && (write_fd >> 24) == 0,
+  Y_ABSL_RAW_CHECK((read_fd >> 24) == 0 && (write_fd >> 24) == 0,
                  "fd out of range");
   return (pid << 48) | ((read_fd & 0xffffff) << 24) | (write_fd & 0xffffff);
 }
@@ -93,7 +93,7 @@ bool AddressIsReadable(const void *addr) {
       int p[2];
       // new pipe
       if (pipe(p) != 0) {
-        ABSL_RAW_LOG(FATAL, "Failed to create pipe, errno=%d", errno);
+        Y_ABSL_RAW_LOG(FATAL, "Failed to create pipe, errno=%d", errno);
       }
       fcntl(p[0], F_SETFD, FD_CLOEXEC);
       fcntl(p[1], F_SETFD, FD_CLOEXEC);
@@ -133,7 +133,7 @@ bool AddressIsReadable(const void *addr) {
 }
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif

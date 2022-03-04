@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#ifndef ABSL_TYPES_INTERNAL_OPTIONAL_H_
-#define ABSL_TYPES_INTERNAL_OPTIONAL_H_
+#ifndef Y_ABSL_TYPES_INTERNAL_OPTIONAL_H_
+#define Y_ABSL_TYPES_INTERNAL_OPTIONAL_H_
 
 #include <functional>
 #include <new>
@@ -25,7 +25,7 @@
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/utility/utility.h"
 
-// ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
+// Y_ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
 //
 // Inheriting constructors is supported in GCC 4.8+, Clang 3.3+ and MSVC 2015.
 // __cpp_inheriting_constructors is a predefined macro and a recommended way to
@@ -44,17 +44,17 @@
 // constexpr Foo foo(0);  // doesn't work on MSVC 2015
 #if defined(__clang__)
 #if __has_feature(cxx_inheriting_constructors)
-#define ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS 1
+#define Y_ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS 1
 #endif
 #elif (defined(__GNUC__) &&                                       \
        (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__ >= 8)) || \
     (__cpp_inheriting_constructors >= 200802) ||                  \
     (defined(_MSC_VER) && _MSC_VER >= 1910)
-#define ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS 1
+#define Y_ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS 1
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Forward declaration
 template <typename T>
@@ -137,7 +137,7 @@ template <typename T>
 class optional_data_base : public optional_data_dtor_base<T> {
  protected:
   using base = optional_data_dtor_base<T>;
-#ifdef ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
+#ifdef Y_ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
   using base::base;
 #else
   optional_data_base() = default;
@@ -180,7 +180,7 @@ class optional_data;
 template <typename T>
 class optional_data<T, true> : public optional_data_base<T> {
  protected:
-#ifdef ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
+#ifdef Y_ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
   using optional_data_base<T>::optional_data_base;
 #else
   optional_data() = default;
@@ -194,7 +194,7 @@ class optional_data<T, true> : public optional_data_base<T> {
 template <typename T>
 class optional_data<T, false> : public optional_data_base<T> {
  protected:
-#ifdef ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
+#ifdef Y_ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
   using optional_data_base<T>::optional_data_base;
 #else
   template <typename... Args>
@@ -388,9 +388,9 @@ struct optional_hash_base<T, decltype(std::hash<y_absl::remove_const_t<T> >()(
 };
 
 }  // namespace optional_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#undef ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
+#undef Y_ABSL_OPTIONAL_USE_INHERITING_CONSTRUCTORS
 
-#endif  // ABSL_TYPES_INTERNAL_OPTIONAL_H_
+#endif  // Y_ABSL_TYPES_INTERNAL_OPTIONAL_H_

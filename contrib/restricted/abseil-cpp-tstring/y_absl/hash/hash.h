@@ -70,15 +70,15 @@
 //
 // For more information, see Adding Type Support to `y_absl::Hash` below.
 //
-#ifndef ABSL_HASH_HASH_H_
-#define ABSL_HASH_HASH_H_
+#ifndef Y_ABSL_HASH_HASH_H_
+#define Y_ABSL_HASH_HASH_H_
 
 #include <tuple>
 
 #include "y_absl/hash/internal/hash.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // `y_absl::Hash`
@@ -341,7 +341,7 @@ class HashState : public hash_internal::HashStateBase<HashState> {
   void (*combine_contiguous_)(void*, const unsigned char*, size_t);
 };
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_HASH_HASH_H_
+#endif  // Y_ABSL_HASH_HASH_H_

@@ -23,15 +23,15 @@
 #include "y_absl/strings/internal/cord_rep_ring.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
-ABSL_CONST_INIT std::atomic<bool> cord_btree_enabled(kCordEnableBtreeDefault);
-ABSL_CONST_INIT std::atomic<bool> cord_ring_buffer_enabled(
+Y_ABSL_CONST_INIT std::atomic<bool> cord_btree_enabled(kCordEnableBtreeDefault);
+Y_ABSL_CONST_INIT std::atomic<bool> cord_ring_buffer_enabled(
     kCordEnableRingBufferDefault);
-ABSL_CONST_INIT std::atomic<bool> shallow_subcords_enabled(
+Y_ABSL_CONST_INIT std::atomic<bool> shallow_subcords_enabled(
     kCordShallowSubcordsDefault);
-ABSL_CONST_INIT std::atomic<bool> cord_btree_exhaustive_validation(false);
+Y_ABSL_CONST_INIT std::atomic<bool> cord_btree_exhaustive_validation(false);
 
 void CordRep::Destroy(CordRep* rep) {
   assert(rep != nullptr);
@@ -85,5 +85,5 @@ void CordRep::Destroy(CordRep* rep) {
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

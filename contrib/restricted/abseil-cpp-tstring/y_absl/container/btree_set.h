@@ -44,14 +44,14 @@
 // reason, `insert()` and `erase()` return a valid iterator at the current
 // position.
 
-#ifndef ABSL_CONTAINER_BTREE_SET_H_
-#define ABSL_CONTAINER_BTREE_SET_H_
+#ifndef Y_ABSL_CONTAINER_BTREE_SET_H_
+#define Y_ABSL_CONTAINER_BTREE_SET_H_
 
 #include "y_absl/container/internal/btree.h"  // IWYU pragma: export
 #include "y_absl/container/internal/btree_container.h"  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // y_absl::btree_set<>
 //
@@ -722,7 +722,7 @@ void erase_if(btree_multiset<K, C, A> &set, Pred pred) {
   }
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_BTREE_SET_H_
+#endif  // Y_ABSL_CONTAINER_BTREE_SET_H_

@@ -27,7 +27,7 @@
 #include "y_absl/strings/ascii.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 namespace {
 
@@ -120,7 +120,7 @@ y_absl::string_view ByAnyChar::Find(y_absl::string_view text, size_t pos) const 
 // ByLength
 //
 ByLength::ByLength(ptrdiff_t length) : length_(length) {
-  ABSL_RAW_CHECK(length > 0, "");
+  Y_ABSL_RAW_CHECK(length > 0, "");
 }
 
 y_absl::string_view ByLength::Find(y_absl::string_view text,
@@ -135,5 +135,5 @@ y_absl::string_view ByLength::Find(y_absl::string_view text,
   return y_absl::string_view(substr.data() + length_, 0);
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

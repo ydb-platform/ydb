@@ -14,15 +14,15 @@
 // limitations under the License.
 //
 
-#ifndef ABSL_BASE_INTERNAL_SCOPED_SET_ENV_H_
-#define ABSL_BASE_INTERNAL_SCOPED_SET_ENV_H_
+#ifndef Y_ABSL_BASE_INTERNAL_SCOPED_SET_ENV_H_
+#define Y_ABSL_BASE_INTERNAL_SCOPED_SET_ENV_H_
 
 #include <util/generic/string.h>
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 class ScopedSetEnv {
@@ -39,7 +39,7 @@ class ScopedSetEnv {
 };
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_SCOPED_SET_ENV_H_
+#endif  // Y_ABSL_BASE_INTERNAL_SCOPED_SET_ENV_H_

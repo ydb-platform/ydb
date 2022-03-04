@@ -35,7 +35,7 @@
 #include "y_absl/types/span.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 namespace {
@@ -61,7 +61,7 @@ class StackArray {
   // Otherwise the caller will allocate the stack space unnecessarily for all
   // the variants even though it only calls one.
   template <size_t steps>
-  ABSL_ATTRIBUTE_NOINLINE static void RunWithCapacityImpl(Func f) {
+  Y_ABSL_ATTRIBUTE_NOINLINE static void RunWithCapacityImpl(Func f) {
     uint32_t values[steps * kStep]{};
     f(y_absl::MakeSpan(values));
   }
@@ -670,13 +670,13 @@ void FormatF(Int mantissa, int exp, const FormatState &state) {
 
     // Fallback to the slow stack-based approach if we can't do it in a 64 or
     // 128 bit state.
-    if (ABSL_PREDICT_FALSE(total_bits > 128)) {
+    if (Y_ABSL_PREDICT_FALSE(total_bits > 128)) {
       return FormatFPositiveExpSlow(mantissa, exp, state);
     }
   } else {
     // Fallback to the slow stack-based approach if we can't do it in a 64 or
     // 128 bit state.
-    if (ABSL_PREDICT_FALSE(exp < -128)) {
+    if (Y_ABSL_PREDICT_FALSE(exp < -128)) {
       return FormatFNegativeExpSlow(mantissa, -exp, state);
     }
   }
@@ -811,7 +811,7 @@ void FormatARound(bool precision_specified, const FormatState &state,
     // Need to round up.
     bool overflow = IncrementNibble(final_nibble_displayed, mantissa);
     *leading += (overflow ? 1 : 0);
-    if (ABSL_PREDICT_FALSE(*leading > 15)) {
+    if (Y_ABSL_PREDICT_FALSE(*leading > 15)) {
       // We have overflowed the leading digit. This would mean that we would
       // need two hex digits to the left of the dot, which is not allowed. So
       // adjust the mantissa and exponent so that the result is always 1.0eXXX.
@@ -836,7 +836,7 @@ void FormatANormalize(const HexFloatTypeParams float_traits, uint8_t *leading,
   // Normalize mantissa so that highest bit set is in MSB position, unless we
   // get interrupted by the exponent threshold.
   while (*mantissa && !(*mantissa & kHighIntBit)) {
-    if (ABSL_PREDICT_FALSE(*exp - 1 < float_traits.min_exponent)) {
+    if (Y_ABSL_PREDICT_FALSE(*exp - 1 < float_traits.min_exponent)) {
       *mantissa >>= (float_traits.min_exponent - *exp);
       *exp = float_traits.min_exponent;
       return;
@@ -1266,7 +1266,7 @@ bool FloatToBuffer(Decomposed<Float> decomposed, int precision, Buffer *out,
           static_cast<std::uint64_t>(decomposed.exponent), precision, out, exp))
     return true;
 
-#if defined(ABSL_HAVE_INTRINSIC_INT128)
+#if defined(Y_ABSL_HAVE_INTRINSIC_INT128)
   // If that is not enough, try with __uint128_t.
   return CanFitMantissa<Float, __uint128_t>() &&
          FloatToBufferImpl<__uint128_t, Float, mode>(
@@ -1419,5 +1419,5 @@ bool ConvertFloatImpl(double v, const FormatConversionSpecImpl &conv,
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

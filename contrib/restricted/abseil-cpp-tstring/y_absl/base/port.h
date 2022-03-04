@@ -15,11 +15,11 @@
 // This files is a forwarding header for other headers containing various
 // portability macros and functions.
 
-#ifndef ABSL_BASE_PORT_H_
-#define ABSL_BASE_PORT_H_
+#ifndef Y_ABSL_BASE_PORT_H_
+#define Y_ABSL_BASE_PORT_H_
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/optimization.h"
 
-#endif  // ABSL_BASE_PORT_H_
+#endif  // Y_ABSL_BASE_PORT_H_

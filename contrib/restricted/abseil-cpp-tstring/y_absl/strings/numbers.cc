@@ -41,7 +41,7 @@
 #include "y_absl/strings/str_cat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 bool SimpleAtof(y_absl::string_view str, float* out) {
   *out = 0.0;
@@ -106,7 +106,7 @@ bool SimpleAtod(y_absl::string_view str, double* out) {
 }
 
 bool SimpleAtob(y_absl::string_view str, bool* out) {
-  ABSL_RAW_CHECK(out != nullptr, "Output pointer must not be nullptr.");
+  Y_ABSL_RAW_CHECK(out != nullptr, "Output pointer must not be nullptr.");
   if (EqualsIgnoreCase(str, "true") || EqualsIgnoreCase(str, "t") ||
       EqualsIgnoreCase(str, "yes") || EqualsIgnoreCase(str, "y") ||
       EqualsIgnoreCase(str, "1")) {
@@ -567,15 +567,15 @@ size_t numbers_internal::SixDigitsToBuffer(double d, char* const buffer) {
     case -4:
       out[2] = '0';
       ++out;
-      ABSL_FALLTHROUGH_INTENDED;
+      Y_ABSL_FALLTHROUGH_INTENDED;
     case -3:
       out[2] = '0';
       ++out;
-      ABSL_FALLTHROUGH_INTENDED;
+      Y_ABSL_FALLTHROUGH_INTENDED;
     case -2:
       out[2] = '0';
       ++out;
-      ABSL_FALLTHROUGH_INTENDED;
+      Y_ABSL_FALLTHROUGH_INTENDED;
     case -1:
       out += 2;
       memcpy(out, &digits[0], 6);
@@ -730,8 +730,8 @@ inline bool safe_parse_sign_and_base(y_absl::string_view* text /*inout*/,
 // commonly used bases.
 template <typename IntType>
 struct LookupTables {
-  ABSL_CONST_INIT static const IntType kVmaxOverBase[];
-  ABSL_CONST_INIT static const IntType kVminOverBase[];
+  Y_ABSL_CONST_INIT static const IntType kVmaxOverBase[];
+  Y_ABSL_CONST_INIT static const IntType kVminOverBase[];
 };
 
 // An array initializer macro for X/base where base in [0, 36].
@@ -1024,10 +1024,10 @@ inline bool safe_uint_internal(y_absl::string_view text, IntType* value_p,
 namespace numbers_internal {
 
 // Digit conversion.
-ABSL_CONST_INIT ABSL_DLL const char kHexChar[] =
+Y_ABSL_CONST_INIT Y_ABSL_DLL const char kHexChar[] =
     "0123456789abcdef";
 
-ABSL_CONST_INIT ABSL_DLL const char kHexTable[513] =
+Y_ABSL_CONST_INIT Y_ABSL_DLL const char kHexTable[513] =
     "000102030405060708090a0b0c0d0e0f"
     "101112131415161718191a1b1c1d1e1f"
     "202122232425262728292a2b2c2d2e2f"
@@ -1045,7 +1045,7 @@ ABSL_CONST_INIT ABSL_DLL const char kHexTable[513] =
     "e0e1e2e3e4e5e6e7e8e9eaebecedeeef"
     "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff";
 
-ABSL_CONST_INIT ABSL_DLL const char two_ASCII_digits[100][2] = {
+Y_ABSL_CONST_INIT Y_ABSL_DLL const char two_ASCII_digits[100][2] = {
     {'0', '0'}, {'0', '1'}, {'0', '2'}, {'0', '3'}, {'0', '4'}, {'0', '5'},
     {'0', '6'}, {'0', '7'}, {'0', '8'}, {'0', '9'}, {'1', '0'}, {'1', '1'},
     {'1', '2'}, {'1', '3'}, {'1', '4'}, {'1', '5'}, {'1', '6'}, {'1', '7'},
@@ -1089,5 +1089,5 @@ bool safe_strtou128_base(y_absl::string_view text, uint128* value, int base) {
 }
 
 }  // namespace numbers_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

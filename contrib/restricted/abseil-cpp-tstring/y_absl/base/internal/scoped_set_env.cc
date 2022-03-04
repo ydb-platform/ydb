@@ -23,7 +23,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 namespace {
@@ -51,7 +51,7 @@ ScopedSetEnv::ScopedSetEnv(const char* var_name, const char* new_value)
 #ifdef _WIN32
   char buf[kMaxEnvVarValueSize];
   auto get_res = GetEnvironmentVariableA(var_name_.c_str(), buf, sizeof(buf));
-  ABSL_INTERNAL_CHECK(get_res < sizeof(buf), "value exceeds buffer size");
+  Y_ABSL_INTERNAL_CHECK(get_res < sizeof(buf), "value exceeds buffer size");
 
   if (get_res == 0) {
     was_unset_ = (GetLastError() == ERROR_ENVVAR_NOT_FOUND);
@@ -77,5 +77,5 @@ ScopedSetEnv::~ScopedSetEnv() {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

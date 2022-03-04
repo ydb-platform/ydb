@@ -30,7 +30,7 @@
 #include "y_absl/strings/internal/cord_rep_flat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 namespace {
@@ -45,7 +45,7 @@ inline bool IsFlatOrExternal(CordRep* rep) {
 
 // Verifies that n + extra <= kMaxCapacity: throws std::length_error otherwise.
 inline void CheckCapacity(size_t n, size_t extra) {
-  if (ABSL_PREDICT_FALSE(extra > CordRepRing::kMaxCapacity - n)) {
+  if (Y_ABSL_PREDICT_FALSE(extra > CordRepRing::kMaxCapacity - n)) {
     base_internal::ThrowStdLengthError("Maximum capacity exceeded");
   }
 }
@@ -594,7 +594,7 @@ CordRepRing::index_type CordRepRing::FindBinary(index_type head,
     head = larger ? after_mid : head;
     tail = larger ? tail : mid;
     assert(head != tail);
-  } while (ABSL_PREDICT_TRUE(count > kBinarySearchEndCount));
+  } while (Y_ABSL_PREDICT_TRUE(count > kBinarySearchEndCount));
   return head;
 }
 
@@ -767,5 +767,5 @@ CordRepRing* CordRepRing::RemoveSuffix(CordRepRing* rep, size_t len,
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

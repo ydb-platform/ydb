@@ -18,27 +18,27 @@
 //
 // This header file defines the `y_absl::bad_variant_access` type.
 
-#ifndef ABSL_TYPES_BAD_VARIANT_ACCESS_H_
-#define ABSL_TYPES_BAD_VARIANT_ACCESS_H_
+#ifndef Y_ABSL_TYPES_BAD_VARIANT_ACCESS_H_
+#define Y_ABSL_TYPES_BAD_VARIANT_ACCESS_H_
 
 #include <stdexcept>
 
 #include "y_absl/base/config.h"
 
-#ifdef ABSL_USES_STD_VARIANT
+#ifdef Y_ABSL_USES_STD_VARIANT
 
 #include <variant>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 using std::bad_variant_access;
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#else  // ABSL_USES_STD_VARIANT
+#else  // Y_ABSL_USES_STD_VARIANT
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // bad_variant_access
@@ -70,13 +70,13 @@ class bad_variant_access : public std::exception {
 
 namespace variant_internal {
 
-[[noreturn]] ABSL_DLL void ThrowBadVariantAccess();
-[[noreturn]] ABSL_DLL void Rethrow();
+[[noreturn]] Y_ABSL_DLL void ThrowBadVariantAccess();
+[[noreturn]] Y_ABSL_DLL void Rethrow();
 
 }  // namespace variant_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USES_STD_VARIANT
+#endif  // Y_ABSL_USES_STD_VARIANT
 
-#endif  // ABSL_TYPES_BAD_VARIANT_ACCESS_H_
+#endif  // Y_ABSL_TYPES_BAD_VARIANT_ACCESS_H_

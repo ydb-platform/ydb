@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 
-#ifndef ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_
-#define ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_
+#define Y_ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_
 
 #include "y_absl/base/config.h"
 
@@ -28,7 +28,7 @@
 #include <linux/futex.h>
 #endif
 
-#ifdef ABSL_HAVE_SEMAPHORE_H
+#ifdef Y_ABSL_HAVE_SEMAPHORE_H
 #include <semaphore.h>
 #endif
 
@@ -40,25 +40,25 @@
 #include "y_absl/synchronization/internal/kernel_timeout.h"
 
 // May be chosen at compile time via -DABSL_FORCE_WAITER_MODE=<index>
-#define ABSL_WAITER_MODE_FUTEX 0
-#define ABSL_WAITER_MODE_SEM 1
-#define ABSL_WAITER_MODE_CONDVAR 2
-#define ABSL_WAITER_MODE_WIN32 3
+#define Y_ABSL_WAITER_MODE_FUTEX 0
+#define Y_ABSL_WAITER_MODE_SEM 1
+#define Y_ABSL_WAITER_MODE_CONDVAR 2
+#define Y_ABSL_WAITER_MODE_WIN32 3
 
-#if defined(ABSL_FORCE_WAITER_MODE)
-#define ABSL_WAITER_MODE ABSL_FORCE_WAITER_MODE
+#if defined(Y_ABSL_FORCE_WAITER_MODE)
+#define Y_ABSL_WAITER_MODE Y_ABSL_FORCE_WAITER_MODE
 #elif defined(_WIN32) && _WIN32_WINNT >= _WIN32_WINNT_VISTA
-#define ABSL_WAITER_MODE ABSL_WAITER_MODE_WIN32
-#elif defined(ABSL_INTERNAL_HAVE_FUTEX)
-#define ABSL_WAITER_MODE ABSL_WAITER_MODE_FUTEX
-#elif defined(ABSL_HAVE_SEMAPHORE_H)
-#define ABSL_WAITER_MODE ABSL_WAITER_MODE_SEM
+#define Y_ABSL_WAITER_MODE Y_ABSL_WAITER_MODE_WIN32
+#elif defined(Y_ABSL_INTERNAL_HAVE_FUTEX)
+#define Y_ABSL_WAITER_MODE Y_ABSL_WAITER_MODE_FUTEX
+#elif defined(Y_ABSL_HAVE_SEMAPHORE_H)
+#define Y_ABSL_WAITER_MODE Y_ABSL_WAITER_MODE_SEM
 #else
-#define ABSL_WAITER_MODE ABSL_WAITER_MODE_CONDVAR
+#define Y_ABSL_WAITER_MODE Y_ABSL_WAITER_MODE_CONDVAR
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 // Waiter is an OS-specific semaphore.
@@ -96,7 +96,7 @@ class Waiter {
   }
 
   // How many periods to remain idle before releasing resources
-#ifndef ABSL_HAVE_THREAD_SANITIZER
+#ifndef Y_ABSL_HAVE_THREAD_SANITIZER
   static constexpr int kIdlePeriods = 60;
 #else
   // Memory consumption under ThreadSanitizer is a serious concern,
@@ -106,13 +106,13 @@ class Waiter {
 #endif
 
  private:
-#if ABSL_WAITER_MODE == ABSL_WAITER_MODE_FUTEX
+#if Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_FUTEX
   // Futexes are defined by specification to be 32-bits.
   // Thus std::atomic<int32_t> must be just an int32_t with lockfree methods.
   std::atomic<int32_t> futex_;
   static_assert(sizeof(int32_t) == sizeof(futex_), "Wrong size for futex");
 
-#elif ABSL_WAITER_MODE == ABSL_WAITER_MODE_CONDVAR
+#elif Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_CONDVAR
   // REQUIRES: mu_ must be held.
   void InternalCondVarPoke();
 
@@ -121,14 +121,14 @@ class Waiter {
   int waiter_count_;
   int wakeup_count_;  // Unclaimed wakeups.
 
-#elif ABSL_WAITER_MODE == ABSL_WAITER_MODE_SEM
+#elif Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_SEM
   sem_t sem_;
   // This seems superfluous, but for Poke() we need to cause spurious
   // wakeups on the semaphore. Hence we can't actually use the
   // semaphore's count.
   std::atomic<int> wakeups_;
 
-#elif ABSL_WAITER_MODE == ABSL_WAITER_MODE_WIN32
+#elif Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_WIN32
   // WinHelper - Used to define utilities for accessing the lock and
   // condition variable storage once the types are complete.
   class WinHelper;
@@ -144,12 +144,12 @@ class Waiter {
   int wakeup_count_;
 
 #else
-  #error Unknown ABSL_WAITER_MODE
+  #error Unknown Y_ABSL_WAITER_MODE
 #endif
 };
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_
+#endif  // Y_ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_

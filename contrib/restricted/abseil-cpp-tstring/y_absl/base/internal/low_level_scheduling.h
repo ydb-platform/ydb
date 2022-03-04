@@ -15,8 +15,8 @@
 // Core interfaces and definitions used by by low-level interfaces such as
 // SpinLock.
 
-#ifndef ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
-#define ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
+#ifndef Y_ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
+#define Y_ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
 
 #include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/base/internal/scheduling_mode.h"
@@ -29,7 +29,7 @@ extern "C" bool __google_disable_rescheduling(void);
 extern "C" void __google_enable_rescheduling(bool disable_result);
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 class CondVar;
 class Mutex;
 
@@ -124,11 +124,11 @@ inline void SchedulingGuard::EnableRescheduling(bool /* disable_result */) {
 inline SchedulingGuard::ScopedEnable::ScopedEnable()
     : scheduling_disabled_depth_(0) {}
 inline SchedulingGuard::ScopedEnable::~ScopedEnable() {
-  ABSL_RAW_CHECK(scheduling_disabled_depth_ == 0, "disable unused warning");
+  Y_ABSL_RAW_CHECK(scheduling_disabled_depth_ == 0, "disable unused warning");
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_
+#endif  // Y_ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_

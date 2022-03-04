@@ -29,7 +29,7 @@
 #include "y_absl/strings/numbers.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 namespace {
 
@@ -320,7 +320,7 @@ bool ConvertIntArg(T v, const FormatConversionSpecImpl conv,
       return ConvertFloatImpl(static_cast<double>(v), conv, sink);
 
     default:
-       ABSL_INTERNAL_ASSUME(false);
+       Y_ABSL_INTERNAL_ASSUME(false);
   }
 
   if (conv.is_basic()) {
@@ -478,11 +478,11 @@ IntegralConvertResult FormatConvertImpl(y_absl::uint128 v,
   return {ConvertIntArg(v, conv, sink)};
 }
 
-ABSL_INTERNAL_FORMAT_DISPATCH_OVERLOADS_EXPAND_();
+Y_ABSL_INTERNAL_FORMAT_DISPATCH_OVERLOADS_EXPAND_();
 
 
 
 }  // namespace str_format_internal
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

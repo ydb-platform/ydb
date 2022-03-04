@@ -17,8 +17,8 @@
 // times (represented by cctz::civil_second) using the rules defined by
 // a time zone (cctz::time_zone).
 
-#ifndef ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_
-#define ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_
+#ifndef Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_
+#define Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_
 
 #include <chrono>
 #include <cstdint>
@@ -30,7 +30,7 @@
 #include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
@@ -453,7 +453,7 @@ inline bool join_seconds(const time_point<seconds>& sec, const femtoseconds&,
 }  // namespace detail
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_
+#endif  // Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_

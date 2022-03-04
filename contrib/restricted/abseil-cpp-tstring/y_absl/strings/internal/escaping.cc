@@ -18,7 +18,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 const char kBase64Chars[] =
@@ -169,12 +169,12 @@ size_t Base64EscapeInternal(const unsigned char* src, size_t szsrc, char* dest,
     default:
       // Should not be reached: blocks of 4 bytes are handled
       // in the while loop before this switch statement.
-      ABSL_RAW_LOG(FATAL, "Logic problem? szsrc = %zu", szsrc);
+      Y_ABSL_RAW_LOG(FATAL, "Logic problem? szsrc = %zu", szsrc);
       break;
   }
   return (cur_dest - dest);
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

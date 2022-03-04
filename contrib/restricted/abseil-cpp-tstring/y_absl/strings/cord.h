@@ -58,8 +58,8 @@
 // const methods without synchronization. Copying a Cord produces a new instance
 // that can be used concurrently with the original in arbitrary ways.
 
-#ifndef ABSL_STRINGS_CORD_H_
-#define ABSL_STRINGS_CORD_H_
+#ifndef Y_ABSL_STRINGS_CORD_H_
+#define Y_ABSL_STRINGS_CORD_H_
 
 #include <algorithm>
 #include <cstddef>
@@ -93,7 +93,7 @@
 #include "y_absl/types/optional.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 class Cord;
 class CordTestPeer;
 template <typename Releaser>
@@ -921,11 +921,11 @@ class Cord {
   }
 };
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // allow a Cord to be logged
 extern std::ostream& operator<<(std::ostream& out, const Cord& cord);
@@ -1319,7 +1319,7 @@ inline void Cord::ChunkIterator::AdvanceBytesBtree(size_t n) {
 }
 
 inline Cord::ChunkIterator& Cord::ChunkIterator::operator++() {
-  ABSL_HARDENING_ASSERT(bytes_remaining_ > 0 &&
+  Y_ABSL_HARDENING_ASSERT(bytes_remaining_ > 0 &&
                         "Attempted to iterate past `end()`");
   assert(bytes_remaining_ >= current_chunk_.size());
   bytes_remaining_ -= current_chunk_.size();
@@ -1346,12 +1346,12 @@ inline bool Cord::ChunkIterator::operator!=(const ChunkIterator& other) const {
 }
 
 inline Cord::ChunkIterator::reference Cord::ChunkIterator::operator*() const {
-  ABSL_HARDENING_ASSERT(bytes_remaining_ != 0);
+  Y_ABSL_HARDENING_ASSERT(bytes_remaining_ != 0);
   return current_chunk_;
 }
 
 inline Cord::ChunkIterator::pointer Cord::ChunkIterator::operator->() const {
-  ABSL_HARDENING_ASSERT(bytes_remaining_ != 0);
+  Y_ABSL_HARDENING_ASSERT(bytes_remaining_ != 0);
   return &current_chunk_;
 }
 
@@ -1363,7 +1363,7 @@ inline void Cord::ChunkIterator::RemoveChunkPrefix(size_t n) {
 
 inline void Cord::ChunkIterator::AdvanceBytes(size_t n) {
   assert(bytes_remaining_ >= n);
-  if (ABSL_PREDICT_TRUE(n < current_chunk_.size())) {
+  if (Y_ABSL_PREDICT_TRUE(n < current_chunk_.size())) {
     RemoveChunkPrefix(n);
   } else if (n != 0) {
     btree_reader_ ? AdvanceBytesBtree(n) : AdvanceBytesSlowPath(n);
@@ -1387,7 +1387,7 @@ inline Cord::ChunkIterator Cord::ChunkRange::end() const {
 inline Cord::ChunkRange Cord::Chunks() const { return ChunkRange(this); }
 
 inline Cord::CharIterator& Cord::CharIterator::operator++() {
-  if (ABSL_PREDICT_TRUE(chunk_iterator_->size() > 1)) {
+  if (Y_ABSL_PREDICT_TRUE(chunk_iterator_->size() > 1)) {
     chunk_iterator_.RemoveChunkPrefix(1);
   } else {
     ++chunk_iterator_;
@@ -1515,7 +1515,7 @@ class CordTestAccess {
   static uint8_t LengthToTag(size_t s);
 };
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_CORD_H_
+#endif  // Y_ABSL_STRINGS_CORD_H_

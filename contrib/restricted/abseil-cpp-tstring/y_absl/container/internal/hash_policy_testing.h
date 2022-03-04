@@ -15,8 +15,8 @@
 // Utilities to help tests verify that hash tables properly handle stateful
 // allocators and hash functions.
 
-#ifndef ABSL_CONTAINER_INTERNAL_HASH_POLICY_TESTING_H_
-#define ABSL_CONTAINER_INTERNAL_HASH_POLICY_TESTING_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_HASH_POLICY_TESTING_H_
+#define Y_ABSL_CONTAINER_INTERNAL_HASH_POLICY_TESTING_H_
 
 #include <cstdlib>
 #include <limits>
@@ -30,7 +30,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 namespace hash_testing_internal {
 
@@ -163,10 +163,10 @@ auto keys(const Set& s)
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-// ABSL_UNORDERED_SUPPORTS_ALLOC_CTORS is false for glibcxx versions
+// Y_ABSL_UNORDERED_SUPPORTS_ALLOC_CTORS is false for glibcxx versions
 // where the unordered containers are missing certain constructors that
 // take allocator arguments. This test is defined ad-hoc for the platforms
 // we care about (notably Crosstool 17) because libstdcxx's useless
@@ -176,9 +176,9 @@ ABSL_NAMESPACE_END
 // meet the allocator-aware container requirements;"
 #if (defined(__GLIBCXX__) && __GLIBCXX__ <= 20140425 ) || \
 ( __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 9 ))
-#define ABSL_UNORDERED_SUPPORTS_ALLOC_CTORS 0
+#define Y_ABSL_UNORDERED_SUPPORTS_ALLOC_CTORS 0
 #else
-#define ABSL_UNORDERED_SUPPORTS_ALLOC_CTORS 1
+#define Y_ABSL_UNORDERED_SUPPORTS_ALLOC_CTORS 1
 #endif
 
-#endif  // ABSL_CONTAINER_INTERNAL_HASH_POLICY_TESTING_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_HASH_POLICY_TESTING_H_

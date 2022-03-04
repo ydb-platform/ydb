@@ -33,8 +33,8 @@
 // `node_hash_map` and perhaps converting to a more efficient `flat_hash_map`
 // upon further review.
 
-#ifndef ABSL_CONTAINER_NODE_HASH_MAP_H_
-#define ABSL_CONTAINER_NODE_HASH_MAP_H_
+#ifndef Y_ABSL_CONTAINER_NODE_HASH_MAP_H_
+#define Y_ABSL_CONTAINER_NODE_HASH_MAP_H_
 
 #include <tuple>
 #include <type_traits>
@@ -48,7 +48,7 @@
 #include "y_absl/memory/memory.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <class Key, class Value>
 class NodeHashMapPolicy;
@@ -591,7 +591,7 @@ struct IsUnorderedContainer<
 
 }  // namespace container_algorithm_internal
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_NODE_HASH_MAP_H_
+#endif  // Y_ABSL_CONTAINER_NODE_HASH_MAP_H_

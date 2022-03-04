@@ -31,7 +31,7 @@
 // LowLevelAlloc requires that the platform support low-level
 // allocation of virtual memory. Platforms lacking this cannot use
 // LowLevelAlloc.
-#ifndef ABSL_LOW_LEVEL_ALLOC_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_MISSING
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -63,7 +63,7 @@
 #endif  // __APPLE__
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // A first-fit allocator with amortized logarithmic free() time.
@@ -145,7 +145,7 @@ static int LLA_SkiplistLevels(size_t size, size_t base, uint32_t *random) {
   int level = IntLog2(size, base) + (random != nullptr ? Random(random) : 1);
   if (static_cast<size_t>(level) > max_fit) level = static_cast<int>(max_fit);
   if (level > kMaxLevel-1) level = kMaxLevel - 1;
-  ABSL_RAW_CHECK(level >= 1, "block not big enough for even one level");
+  Y_ABSL_RAW_CHECK(level >= 1, "block not big enough for even one level");
   return level;
 }
 
@@ -185,7 +185,7 @@ static void LLA_SkiplistInsert(AllocList *head, AllocList *e,
 static void LLA_SkiplistDelete(AllocList *head, AllocList *e,
                                AllocList **prev) {
   AllocList *found = LLA_SkiplistSearch(head, e, prev);
-  ABSL_RAW_CHECK(e == found, "element not in freelist");
+  Y_ABSL_RAW_CHECK(e == found, "element not in freelist");
   for (int i = 0; i != e->levels && prev[i]->next[i] == e; i++) {
     prev[i]->next[i] = e->next[i];
   }
@@ -204,9 +204,9 @@ struct LowLevelAlloc::Arena {
 
   base_internal::SpinLock mu;
   // Head of free list, sorted by address
-  AllocList freelist ABSL_GUARDED_BY(mu);
+  AllocList freelist Y_ABSL_GUARDED_BY(mu);
   // Count of allocated blocks
-  int32_t allocation_count ABSL_GUARDED_BY(mu);
+  int32_t allocation_count Y_ABSL_GUARDED_BY(mu);
   // flags passed to NewArena
   const uint32_t flags;
   // Result of sysconf(_SC_PAGESIZE)
@@ -216,7 +216,7 @@ struct LowLevelAlloc::Arena {
   // Smallest allocation block size
   const size_t min_size;
   // PRNG state
-  uint32_t random ABSL_GUARDED_BY(mu);
+  uint32_t random Y_ABSL_GUARDED_BY(mu);
 };
 
 namespace {
@@ -227,7 +227,7 @@ alignas(LowLevelAlloc::Arena) unsigned char default_arena_storage[sizeof(
     LowLevelAlloc::Arena)];
 alignas(LowLevelAlloc::Arena) unsigned char unhooked_arena_storage[sizeof(
     LowLevelAlloc::Arena)];
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
 alignas(
     LowLevelAlloc::Arena) unsigned char unhooked_async_sig_safe_arena_storage
     [sizeof(LowLevelAlloc::Arena)];
@@ -241,7 +241,7 @@ void CreateGlobalArenas() {
   new (&default_arena_storage)
       LowLevelAlloc::Arena(LowLevelAlloc::kCallMallocHook);
   new (&unhooked_arena_storage) LowLevelAlloc::Arena(0);
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
   new (&unhooked_async_sig_safe_arena_storage)
       LowLevelAlloc::Arena(LowLevelAlloc::kAsyncSignalSafe);
 #endif
@@ -254,7 +254,7 @@ LowLevelAlloc::Arena* UnhookedArena() {
   return reinterpret_cast<LowLevelAlloc::Arena*>(&unhooked_arena_storage);
 }
 
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
 // Returns a global arena that is async-signal safe.  Used by NewArena() when
 // kAsyncSignalSafe is set.
 LowLevelAlloc::Arena *UnhookedAsyncSigSafeArena() {
@@ -277,12 +277,12 @@ static const uintptr_t kMagicAllocated = 0x4c833e95U;
 static const uintptr_t kMagicUnallocated = ~kMagicAllocated;
 
 namespace {
-class ABSL_SCOPED_LOCKABLE ArenaLock {
+class Y_ABSL_SCOPED_LOCKABLE ArenaLock {
  public:
   explicit ArenaLock(LowLevelAlloc::Arena *arena)
-      ABSL_EXCLUSIVE_LOCK_FUNCTION(arena->mu)
+      Y_ABSL_EXCLUSIVE_LOCK_FUNCTION(arena->mu)
       : arena_(arena) {
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
     if ((arena->flags & LowLevelAlloc::kAsyncSignalSafe) != 0) {
       sigset_t all;
       sigfillset(&all);
@@ -291,14 +291,14 @@ class ABSL_SCOPED_LOCKABLE ArenaLock {
 #endif
     arena_->mu.Lock();
   }
-  ~ArenaLock() { ABSL_RAW_CHECK(left_, "haven't left Arena region"); }
-  void Leave() ABSL_UNLOCK_FUNCTION() {
+  ~ArenaLock() { Y_ABSL_RAW_CHECK(left_, "haven't left Arena region"); }
+  void Leave() Y_ABSL_UNLOCK_FUNCTION() {
     arena_->mu.Unlock();
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
     if (mask_valid_) {
       const int err = pthread_sigmask(SIG_SETMASK, &mask_, nullptr);
       if (err != 0) {
-        ABSL_RAW_LOG(FATAL, "pthread_sigmask failed: %d", err);
+        Y_ABSL_RAW_LOG(FATAL, "pthread_sigmask failed: %d", err);
       }
     }
 #endif
@@ -307,7 +307,7 @@ class ABSL_SCOPED_LOCKABLE ArenaLock {
 
  private:
   bool left_ = false;  // whether left region
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
   bool mask_valid_ = false;
   sigset_t mask_;  // old mask of blocked signals
 #endif
@@ -366,7 +366,7 @@ LowLevelAlloc::Arena::Arena(uint32_t flags_value)
 // L < meta_data_arena->mu
 LowLevelAlloc::Arena *LowLevelAlloc::NewArena(int32_t flags) {
   Arena *meta_data_arena = DefaultArena();
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
   if ((flags & LowLevelAlloc::kAsyncSignalSafe) != 0) {
     meta_data_arena = UnhookedAsyncSigSafeArena();
   } else  // NOLINT(readability/braces)
@@ -381,7 +381,7 @@ LowLevelAlloc::Arena *LowLevelAlloc::NewArena(int32_t flags) {
 
 // L < arena->mu, L < arena->arena->mu
 bool LowLevelAlloc::DeleteArena(Arena *arena) {
-  ABSL_RAW_CHECK(
+  Y_ABSL_RAW_CHECK(
       arena != nullptr && arena != DefaultArena() && arena != UnhookedArena(),
       "may not delete default arena");
   ArenaLock section(arena);
@@ -393,22 +393,22 @@ bool LowLevelAlloc::DeleteArena(Arena *arena) {
     AllocList *region = arena->freelist.next[0];
     size_t size = region->header.size;
     arena->freelist.next[0] = region->next[0];
-    ABSL_RAW_CHECK(
+    Y_ABSL_RAW_CHECK(
         region->header.magic == Magic(kMagicUnallocated, &region->header),
         "bad magic number in DeleteArena()");
-    ABSL_RAW_CHECK(region->header.arena == arena,
+    Y_ABSL_RAW_CHECK(region->header.arena == arena,
                    "bad arena pointer in DeleteArena()");
-    ABSL_RAW_CHECK(size % arena->pagesize == 0,
+    Y_ABSL_RAW_CHECK(size % arena->pagesize == 0,
                    "empty arena has non-page-aligned block size");
-    ABSL_RAW_CHECK(reinterpret_cast<uintptr_t>(region) % arena->pagesize == 0,
+    Y_ABSL_RAW_CHECK(reinterpret_cast<uintptr_t>(region) % arena->pagesize == 0,
                    "empty arena has non-page-aligned block");
     int munmap_result;
 #ifdef _WIN32
     munmap_result = VirtualFree(region, 0, MEM_RELEASE);
-    ABSL_RAW_CHECK(munmap_result != 0,
+    Y_ABSL_RAW_CHECK(munmap_result != 0,
                    "LowLevelAlloc::DeleteArena: VitualFree failed");
 #else
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
     if ((arena->flags & LowLevelAlloc::kAsyncSignalSafe) == 0) {
       munmap_result = munmap(region, size);
     } else {
@@ -416,9 +416,9 @@ bool LowLevelAlloc::DeleteArena(Arena *arena) {
     }
 #else
     munmap_result = munmap(region, size);
-#endif  // ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#endif  // Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
     if (munmap_result != 0) {
-      ABSL_RAW_LOG(FATAL, "LowLevelAlloc::DeleteArena: munmap failed: %d",
+      Y_ABSL_RAW_LOG(FATAL, "LowLevelAlloc::DeleteArena: munmap failed: %d",
                    errno);
     }
 #endif  // _WIN32
@@ -435,7 +435,7 @@ bool LowLevelAlloc::DeleteArena(Arena *arena) {
 // manages to push through a request that would cause arithmetic to fail.
 static inline uintptr_t CheckedAdd(uintptr_t a, uintptr_t b) {
   uintptr_t sum = a + b;
-  ABSL_RAW_CHECK(sum >= a, "LowLevelAlloc arithmetic overflow");
+  Y_ABSL_RAW_CHECK(sum >= a, "LowLevelAlloc arithmetic overflow");
   return sum;
 }
 
@@ -451,16 +451,16 @@ static inline uintptr_t RoundUp(uintptr_t addr, uintptr_t align) {
 // are adjacent in memory (they should have been coalesced).
 // L >= arena->mu
 static AllocList *Next(int i, AllocList *prev, LowLevelAlloc::Arena *arena) {
-  ABSL_RAW_CHECK(i < prev->levels, "too few levels in Next()");
+  Y_ABSL_RAW_CHECK(i < prev->levels, "too few levels in Next()");
   AllocList *next = prev->next[i];
   if (next != nullptr) {
-    ABSL_RAW_CHECK(
+    Y_ABSL_RAW_CHECK(
         next->header.magic == Magic(kMagicUnallocated, &next->header),
         "bad magic number in Next()");
-    ABSL_RAW_CHECK(next->header.arena == arena, "bad arena pointer in Next()");
+    Y_ABSL_RAW_CHECK(next->header.arena == arena, "bad arena pointer in Next()");
     if (prev != &arena->freelist) {
-      ABSL_RAW_CHECK(prev < next, "unordered freelist");
-      ABSL_RAW_CHECK(reinterpret_cast<char *>(prev) + prev->header.size <
+      Y_ABSL_RAW_CHECK(prev < next, "unordered freelist");
+      Y_ABSL_RAW_CHECK(reinterpret_cast<char *>(prev) + prev->header.size <
                          reinterpret_cast<char *>(next),
                      "malformed freelist");
     }
@@ -491,9 +491,9 @@ static void Coalesce(AllocList *a) {
 static void AddToFreelist(void *v, LowLevelAlloc::Arena *arena) {
   AllocList *f = reinterpret_cast<AllocList *>(
                         reinterpret_cast<char *>(v) - sizeof (f->header));
-  ABSL_RAW_CHECK(f->header.magic == Magic(kMagicAllocated, &f->header),
+  Y_ABSL_RAW_CHECK(f->header.magic == Magic(kMagicAllocated, &f->header),
                  "bad magic number in AddToFreelist()");
-  ABSL_RAW_CHECK(f->header.arena == arena,
+  Y_ABSL_RAW_CHECK(f->header.arena == arena,
                  "bad arena pointer in AddToFreelist()");
   f->levels = LLA_SkiplistLevels(f->header.size, arena->min_size,
                                  &arena->random);
@@ -513,7 +513,7 @@ void LowLevelAlloc::Free(void *v) {
     LowLevelAlloc::Arena *arena = f->header.arena;
     ArenaLock section(arena);
     AddToFreelist(v, arena);
-    ABSL_RAW_CHECK(arena->allocation_count > 0, "nothing in arena to free");
+    Y_ABSL_RAW_CHECK(arena->allocation_count > 0, "nothing in arena to free");
     arena->allocation_count--;
     section.Leave();
   }
@@ -552,9 +552,9 @@ static void *DoAllocWithArena(size_t request, LowLevelAlloc::Arena *arena) {
 #ifdef _WIN32
       new_pages = VirtualAlloc(0, new_pages_size,
                                MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-      ABSL_RAW_CHECK(new_pages != nullptr, "VirtualAlloc failed");
+      Y_ABSL_RAW_CHECK(new_pages != nullptr, "VirtualAlloc failed");
 #else
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
       if ((arena->flags & LowLevelAlloc::kAsyncSignalSafe) != 0) {
         new_pages = base_internal::DirectMmap(nullptr, new_pages_size,
             PROT_WRITE|PROT_READ, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
@@ -565,9 +565,9 @@ static void *DoAllocWithArena(size_t request, LowLevelAlloc::Arena *arena) {
 #else
       new_pages = mmap(nullptr, new_pages_size, PROT_WRITE | PROT_READ,
                        MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-#endif  // ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#endif  // Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
       if (new_pages == MAP_FAILED) {
-        ABSL_RAW_LOG(FATAL, "mmap error: %d", errno);
+        Y_ABSL_RAW_LOG(FATAL, "mmap error: %d", errno);
       }
 
 #endif  // _WIN32
@@ -593,12 +593,12 @@ static void *DoAllocWithArena(size_t request, LowLevelAlloc::Arena *arena) {
       AddToFreelist(&n->levels, arena);
     }
     s->header.magic = Magic(kMagicAllocated, &s->header);
-    ABSL_RAW_CHECK(s->header.arena == arena, "");
+    Y_ABSL_RAW_CHECK(s->header.arena == arena, "");
     arena->allocation_count++;
     section.Leave();
     result = &s->levels;
   }
-  ABSL_ANNOTATE_MEMORY_IS_UNINITIALIZED(result, request);
+  Y_ABSL_ANNOTATE_MEMORY_IS_UNINITIALIZED(result, request);
   return result;
 }
 
@@ -608,13 +608,13 @@ void *LowLevelAlloc::Alloc(size_t request) {
 }
 
 void *LowLevelAlloc::AllocWithArena(size_t request, Arena *arena) {
-  ABSL_RAW_CHECK(arena != nullptr, "must pass a valid arena");
+  Y_ABSL_RAW_CHECK(arena != nullptr, "must pass a valid arena");
   void *result = DoAllocWithArena(request, arena);
   return result;
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_LOW_LEVEL_ALLOC_MISSING
+#endif  // Y_ABSL_LOW_LEVEL_ALLOC_MISSING

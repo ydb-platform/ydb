@@ -17,7 +17,7 @@
 #include "y_absl/strings/internal/utf8.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 size_t EncodeUTF8Char(char *buffer, char32_t utf8_char) {
@@ -49,5 +49,5 @@ size_t EncodeUTF8Char(char *buffer, char32_t utf8_char) {
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

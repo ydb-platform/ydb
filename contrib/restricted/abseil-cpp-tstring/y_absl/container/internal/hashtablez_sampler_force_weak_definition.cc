@@ -17,15 +17,15 @@
 #include "y_absl/base/attributes.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // See hashtablez_sampler.h for details.
-extern "C" ABSL_ATTRIBUTE_WEAK bool ABSL_INTERNAL_C_SYMBOL(
+extern "C" Y_ABSL_ATTRIBUTE_WEAK bool Y_ABSL_INTERNAL_C_SYMBOL(
     AbslContainerInternalSampleEverything)() {
   return false;
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

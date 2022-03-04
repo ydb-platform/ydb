@@ -21,8 +21,8 @@
 //
 // This utility is internal-only. Use at your own risk.
 
-#ifndef ABSL_PROFILING_INTERNAL_SAMPLE_RECORDER_H_
-#define ABSL_PROFILING_INTERNAL_SAMPLE_RECORDER_H_
+#ifndef Y_ABSL_PROFILING_INTERNAL_SAMPLE_RECORDER_H_
+#define Y_ABSL_PROFILING_INTERNAL_SAMPLE_RECORDER_H_
 
 #include <atomic>
 #include <cstddef>
@@ -34,7 +34,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace profiling_internal {
 
 // Sample<T> that has members required for linking samples in the linked list of
@@ -45,7 +45,7 @@ struct Sample {
   // prevents races with sampling and resurrecting an object.
   y_absl::Mutex init_mu;
   T* next = nullptr;
-  T* dead ABSL_GUARDED_BY(init_mu) = nullptr;
+  T* dead Y_ABSL_GUARDED_BY(init_mu) = nullptr;
 };
 
 // Holds samples and their associated stack traces with a soft limit of
@@ -224,7 +224,7 @@ void SampleRecorder<T>::SetMaxSamples(int32_t max) {
 }
 
 }  // namespace profiling_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_PROFILING_INTERNAL_SAMPLE_RECORDER_H_
+#endif  // Y_ABSL_PROFILING_INTERNAL_SAMPLE_RECORDER_H_

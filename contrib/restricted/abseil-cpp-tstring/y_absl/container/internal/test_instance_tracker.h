@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_CONTAINER_INTERNAL_TEST_INSTANCE_TRACKER_H_
-#define ABSL_CONTAINER_INTERNAL_TEST_INSTANCE_TRACKER_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_TEST_INSTANCE_TRACKER_H_
+#define Y_ABSL_CONTAINER_INTERNAL_TEST_INSTANCE_TRACKER_H_
 
 #include <cstdlib>
 #include <ostream>
@@ -21,7 +21,7 @@
 #include "y_absl/types/compare.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace test_internal {
 
 // A type that counts number of occurrences of the type, the live occurrences of
@@ -268,7 +268,7 @@ class MovableOnlyInstance : public BaseCountedInstance {
 };
 
 }  // namespace test_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_TEST_INSTANCE_TRACKER_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_TEST_INSTANCE_TRACKER_H_

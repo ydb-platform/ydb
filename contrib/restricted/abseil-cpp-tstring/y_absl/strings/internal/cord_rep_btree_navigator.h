@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_NAVIGATOR_H_
-#define ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_NAVIGATOR_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_NAVIGATOR_H_
+#define Y_ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_NAVIGATOR_H_
 
 #include <cassert>
 #include <iostream>
@@ -22,7 +22,7 @@
 #include "y_absl/strings/internal/cord_rep_btree.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 // CordRepBtreeNavigator is a bi-directional navigator allowing callers to
@@ -191,7 +191,7 @@ inline CordRepBtreeNavigator::Position CordRepBtreeNavigator::Seek(
   assert(btree() != nullptr);
   int height = height_;
   CordRepBtree* edge = node_[height];
-  if (ABSL_PREDICT_FALSE(offset >= edge->length)) return {nullptr, 0};
+  if (Y_ABSL_PREDICT_FALSE(offset >= edge->length)) return {nullptr, 0};
   CordRepBtree::Position index = edge->IndexOf(offset);
   index_[height] = static_cast<uint8_t>(index.index);
   while (--height >= 0) {
@@ -206,7 +206,7 @@ inline CordRepBtreeNavigator::Position CordRepBtreeNavigator::Seek(
 inline CordRepBtreeNavigator::Position CordRepBtreeNavigator::InitOffset(
     CordRepBtree* tree, size_t offset) {
   assert(tree != nullptr);
-  if (ABSL_PREDICT_FALSE(offset >= tree->length)) return {nullptr, 0};
+  if (Y_ABSL_PREDICT_FALSE(offset >= tree->length)) return {nullptr, 0};
   height_ = tree->height();
   node_[height_] = tree;
   return Seek(offset);
@@ -259,7 +259,7 @@ inline CordRep* CordRepBtreeNavigator::PreviousUp() {
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_NAVIGATOR_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CORD_REP_BTREE_NAVIGATOR_H_

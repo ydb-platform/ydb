@@ -42,8 +42,8 @@
 // pointing to the item just after the one that was erased (or end() if none
 // exists).
 
-#ifndef ABSL_CONTAINER_INTERNAL_BTREE_H_
-#define ABSL_CONTAINER_INTERNAL_BTREE_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_BTREE_H_
+#define Y_ABSL_CONTAINER_INTERNAL_BTREE_H_
 
 #include <algorithm>
 #include <cassert>
@@ -71,7 +71,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // A helper class that indicates if the Compare parameter is a key-compare-to
@@ -1028,9 +1028,9 @@ struct btree_iterator {
 
   // Accessors for the key/value the iterator is pointing at.
   reference operator*() const {
-    ABSL_HARDENING_ASSERT(node != nullptr);
-    ABSL_HARDENING_ASSERT(node->start() <= position);
-    ABSL_HARDENING_ASSERT(node->finish() > position);
+    Y_ABSL_HARDENING_ASSERT(node != nullptr);
+    Y_ABSL_HARDENING_ASSERT(node->start() <= position);
+    Y_ABSL_HARDENING_ASSERT(node->finish() > position);
     return node->value(position);
   }
   pointer operator->() const { return &operator*(); }
@@ -2635,7 +2635,7 @@ int btree<P>::internal_verify(const node_type *node, const key_type *lo,
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_BTREE_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_BTREE_H_

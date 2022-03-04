@@ -33,8 +33,8 @@
 // Regularity Profile. For more information regarding archetypes, see
 // "conformance_archetypes.h".
 
-#ifndef ABSL_TYPES_INTERNAL_CONFORMANCE_PROFILE_H_
-#define ABSL_TYPES_INTERNAL_CONFORMANCE_PROFILE_H_
+#ifndef Y_ABSL_TYPES_INTERNAL_CONFORMANCE_PROFILE_H_
+#define Y_ABSL_TYPES_INTERNAL_CONFORMANCE_PROFILE_H_
 
 #include <set>
 #include <type_traits>
@@ -53,7 +53,7 @@
 // TODO(calabrese) Add support for extending profiles.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace types_internal {
 
 // Converts an enum to its underlying integral value.
@@ -318,44 +318,44 @@ void ExpectModelOfImpl(ConformanceErrors* errors, Enum min_support,
   }
 }
 
-#define ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM(description, name) \
+#define Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM(description, name) \
   enum class name { maybe, yes, nothrow, trivial };                   \
                                                                       \
   constexpr const char* PropertyName(name v) { return description; }  \
   static_assert(true, "")  // Force a semicolon when using this macro.
 
-ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for default construction",
+Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for default construction",
                                            default_constructible);
-ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for move construction",
+Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for move construction",
                                            move_constructible);
-ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for copy construction",
+Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for copy construction",
                                            copy_constructible);
-ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for move assignment",
+Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for move assignment",
                                            move_assignable);
-ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for copy assignment",
+Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for copy assignment",
                                            copy_assignable);
-ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for destruction",
+Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM("support for destruction",
                                            destructible);
 
-#undef ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM
+#undef Y_ABSL_INTERNAL_SPECIAL_MEMBER_FUNCTION_ENUM
 
-#define ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM(description, name)     \
+#define Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM(description, name)     \
   enum class name { maybe, yes, nothrow };                           \
                                                                      \
   constexpr const char* PropertyName(name v) { return description; } \
   static_assert(true, "")  // Force a semicolon when using this macro.
 
-ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for ==", equality_comparable);
-ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for !=", inequality_comparable);
-ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for <", less_than_comparable);
-ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for <=", less_equal_comparable);
-ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for >=",
+Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for ==", equality_comparable);
+Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for !=", inequality_comparable);
+Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for <", less_than_comparable);
+Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for <=", less_equal_comparable);
+Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for >=",
                                       greater_equal_comparable);
-ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for >", greater_than_comparable);
+Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for >", greater_than_comparable);
 
-ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for swap", swappable);
+Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM("support for swap", swappable);
 
-#undef ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM
+#undef Y_ABSL_INTERNAL_INTRINSIC_FUNCTION_ENUM
 
 enum class hashable { maybe, yes };
 
@@ -366,7 +366,7 @@ constexpr const char* PropertyName(hashable v) {
 template <class T>
 using AlwaysFalse = std::false_type;
 
-#define ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(name, property)   \
+#define Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(name, property)   \
   template <class T>                                                        \
   constexpr property property##_support_of() {                              \
     return std::is_##property<T>::value                                     \
@@ -385,24 +385,24 @@ using AlwaysFalse = std::false_type;
                         property##_support_of<T>());                        \
   }
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(DefaultConstructible,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(DefaultConstructible,
                                                   default_constructible);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(MoveConstructible,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(MoveConstructible,
                                                   move_constructible);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(CopyConstructible,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(CopyConstructible,
                                                   copy_constructible);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(MoveAssignable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(MoveAssignable,
                                                   move_assignable);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(CopyAssignable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(CopyAssignable,
                                                   copy_assignable);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(Destructible, destructible);
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER(Destructible, destructible);
 
-#undef ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER
+#undef Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_SPECIAL_MEMBER
 
 void BoolFunction(bool) noexcept;
 
@@ -452,7 +452,7 @@ struct IsNothrowOpable {
 // support a specific comparison operation has and a function for reporting an
 // error if a given type's support for that operation does not meet the expected
 // requirements.
-#define ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(name, property, op)      \
+#define Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(name, property, op)      \
   template <class T,                                                           \
             class Result = std::integral_constant<                             \
                 bool, noexcept((BoolFunction)(std::declval<const T&>() op      \
@@ -480,25 +480,25 @@ struct IsNothrowOpable {
 //
 // Generate the necessary support-checking and error reporting functions for
 // each of the comparison operators.
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(EqualityComparable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(EqualityComparable,
                                               equality_comparable, ==);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(InequalityComparable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(InequalityComparable,
                                               inequality_comparable, !=);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(LessThanComparable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(LessThanComparable,
                                               less_than_comparable, <);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(LessEqualComparable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(LessEqualComparable,
                                               less_equal_comparable, <=);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(GreaterEqualComparable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(GreaterEqualComparable,
                                               greater_equal_comparable, >=);
 
-ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(GreaterThanComparable,
+Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON(GreaterThanComparable,
                                               greater_than_comparable, >);
 
-#undef ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON
+#undef Y_ABSL_INTERNAL_PESSIMISTIC_MODEL_OF_COMPARISON
 //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -692,7 +692,7 @@ struct SyntacticConformanceProfileOf {
       conservative_hashable_support_of<T, ShouldCheckHashability>::Invoke()>;
 };
 
-#define ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL(type, name)     \
+#define Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL(type, name)     \
   template <default_constructible DefaultConstructibleValue,                   \
             move_constructible MoveConstructibleValue,                         \
             copy_constructible CopyConstructibleValue,                         \
@@ -714,28 +714,28 @@ struct SyntacticConformanceProfileOf {
       GreaterEqualComparableValue, GreaterThanComparableValue, SwappableValue, \
       HashableValue>::name
 
-#define ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(type)           \
-  ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL(type,            \
+#define Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(type)           \
+  Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL(type,            \
                                                          type##_support); \
-  ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL(bool, is_##type)
+  Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL(bool, is_##type)
 
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(default_constructible);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(move_constructible);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(copy_constructible);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(move_assignable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(copy_assignable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(destructible);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(equality_comparable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(inequality_comparable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(less_than_comparable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(less_equal_comparable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(greater_equal_comparable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(greater_than_comparable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(swappable);
-ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(hashable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(default_constructible);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(move_constructible);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(copy_constructible);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(move_assignable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(copy_assignable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(destructible);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(equality_comparable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(inequality_comparable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(less_than_comparable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(less_equal_comparable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(greater_equal_comparable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(greater_than_comparable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(swappable);
+Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF(hashable);
 
-#undef ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF
-#undef ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL
+#undef Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF
+#undef Y_ABSL_INTERNAL_CONFORMANCE_TESTING_DATA_MEMBER_DEF_IMPL
 
 // Retrieve the enum with the minimum underlying value.
 // Note: std::min is not constexpr in C++11, which is why this is necessary.
@@ -925,7 +925,7 @@ struct IsProfile : IsProfileImpl<T>::type {};
 struct RegularityDomain {};
 
 }  // namespace types_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TYPES_INTERNAL_CONFORMANCE_PROFILE_H_
+#endif  // Y_ABSL_TYPES_INTERNAL_CONFORMANCE_PROFILE_H_

@@ -19,7 +19,7 @@
 #include "y_absl/profiling/internal/exponential_biased.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace profiling_internal {
 
 int64_t PeriodicSamplerBase::GetExponentialBiased(int period) noexcept {
@@ -30,13 +30,13 @@ bool PeriodicSamplerBase::SubtleConfirmSample() noexcept {
   int current_period = period();
 
   // Deal with period case 0 (always off) and 1 (always on)
-  if (ABSL_PREDICT_FALSE(current_period < 2)) {
+  if (Y_ABSL_PREDICT_FALSE(current_period < 2)) {
     stride_ = 0;
     return current_period == 1;
   }
 
   // Check if this is the first call to Sample()
-  if (ABSL_PREDICT_FALSE(stride_ == 1)) {
+  if (Y_ABSL_PREDICT_FALSE(stride_ == 1)) {
     stride_ = static_cast<uint64_t>(-GetExponentialBiased(current_period));
     if (static_cast<int64_t>(stride_) < -1) {
       ++stride_;
@@ -49,5 +49,5 @@ bool PeriodicSamplerBase::SubtleConfirmSample() noexcept {
 }
 
 }  // namespace profiling_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

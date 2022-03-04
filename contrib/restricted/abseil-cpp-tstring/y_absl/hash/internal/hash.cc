@@ -15,7 +15,7 @@
 #include "y_absl/hash/internal/hash.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 uint64_t MixingHashState::CombineLargeContiguousImpl32(
@@ -44,7 +44,7 @@ uint64_t MixingHashState::CombineLargeContiguousImpl64(
                                std::integral_constant<int, 8>{});
 }
 
-ABSL_CONST_INIT const void* const MixingHashState::kSeed = &kSeed;
+Y_ABSL_CONST_INIT const void* const MixingHashState::kSeed = &kSeed;
 
 // The salt array used by LowLevelHash. This array is NOT the mechanism used to
 // make y_absl::Hash non-deterministic between program invocations.  See `Seed()`
@@ -65,5 +65,5 @@ uint64_t MixingHashState::LowLevelHashImpl(const unsigned char* data,
 }
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

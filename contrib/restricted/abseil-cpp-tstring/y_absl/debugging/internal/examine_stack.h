@@ -14,13 +14,13 @@
 // limitations under the License.
 //
 
-#ifndef ABSL_DEBUGGING_INTERNAL_EXAMINE_STACK_H_
-#define ABSL_DEBUGGING_INTERNAL_EXAMINE_STACK_H_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_EXAMINE_STACK_H_
+#define Y_ABSL_DEBUGGING_INTERNAL_EXAMINE_STACK_H_
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 // Returns the program counter from signal context, or nullptr if
@@ -36,7 +36,7 @@ void DumpPCAndFrameSizesAndStackTrace(
     void (*writerfn)(const char*, void*), void* writerfn_arg);
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_INTERNAL_EXAMINE_STACK_H_
+#endif  // Y_ABSL_DEBUGGING_INTERNAL_EXAMINE_STACK_H_

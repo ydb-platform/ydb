@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#ifndef ABSL_STATUS_STATUS_PAYLOAD_PRINTER_H_
-#define ABSL_STATUS_STATUS_PAYLOAD_PRINTER_H_
+#ifndef Y_ABSL_STATUS_STATUS_PAYLOAD_PRINTER_H_
+#define Y_ABSL_STATUS_STATUS_PAYLOAD_PRINTER_H_
 
 #include <util/generic/string.h>
 
@@ -21,7 +21,7 @@
 #include "y_absl/types/optional.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace status_internal {
 
 // By default, `Status::ToString` and `operator<<(Status)` print a payload by
@@ -45,7 +45,7 @@ void SetStatusPayloadPrinter(StatusPayloadPrinter);
 StatusPayloadPrinter GetStatusPayloadPrinter();
 
 }  // namespace status_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STATUS_STATUS_PAYLOAD_PRINTER_H_
+#endif  // Y_ABSL_STATUS_STATUS_PAYLOAD_PRINTER_H_

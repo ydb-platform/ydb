@@ -20,8 +20,8 @@
 // conversion of smart pointers. This file is an extension to the C++
 // standard <memory> library header file.
 
-#ifndef ABSL_MEMORY_MEMORY_H_
-#define ABSL_MEMORY_MEMORY_H_
+#ifndef Y_ABSL_MEMORY_MEMORY_H_
+#define Y_ABSL_MEMORY_MEMORY_H_
 
 #include <cstddef>
 #include <limits>
@@ -34,7 +34,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // Function Template: WrapUnique()
@@ -622,7 +622,7 @@ using GetIsNothrow = typename Alloc::is_nothrow;
 
 }  // namespace memory_internal
 
-// ABSL_ALLOCATOR_NOTHROW is a build time configuration macro for user to
+// Y_ABSL_ALLOCATOR_NOTHROW is a build time configuration macro for user to
 // specify whether the default allocation function can throw or never throws.
 // If the allocation function never throws, user should define it to a non-zero
 // value (e.g. via `-DABSL_ALLOCATOR_NOTHROW`).
@@ -632,7 +632,7 @@ using GetIsNothrow = typename Alloc::is_nothrow;
 // allocator_is_nothrow<Alloc> is a traits class that derives from
 // Alloc::is_nothrow if present, otherwise std::false_type. It's specialized
 // for Alloc = std::allocator<T> for any type T according to the state of
-// ABSL_ALLOCATOR_NOTHROW.
+// Y_ABSL_ALLOCATOR_NOTHROW.
 //
 // default_allocator_is_nothrow is a class that derives from std::true_type
 // when the default allocator (global operator new) never throws, and
@@ -646,7 +646,7 @@ struct allocator_is_nothrow
     : memory_internal::ExtractOrT<memory_internal::GetIsNothrow, Alloc,
                                   std::false_type> {};
 
-#if defined(ABSL_ALLOCATOR_NOTHROW) && ABSL_ALLOCATOR_NOTHROW
+#if defined(Y_ABSL_ALLOCATOR_NOTHROW) && Y_ABSL_ALLOCATOR_NOTHROW
 template <typename T>
 struct allocator_is_nothrow<std::allocator<T>> : std::true_type {};
 struct default_allocator_is_nothrow : std::true_type {};
@@ -659,16 +659,16 @@ template <typename Allocator, typename Iterator, typename... Args>
 void ConstructRange(Allocator& alloc, Iterator first, Iterator last,
                     const Args&... args) {
   for (Iterator cur = first; cur != last; ++cur) {
-    ABSL_INTERNAL_TRY {
+    Y_ABSL_INTERNAL_TRY {
       std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur),
                                                   args...);
     }
-    ABSL_INTERNAL_CATCH_ANY {
+    Y_ABSL_INTERNAL_CATCH_ANY {
       while (cur != first) {
         --cur;
         std::allocator_traits<Allocator>::destroy(alloc, std::addressof(*cur));
       }
-      ABSL_INTERNAL_RETHROW;
+      Y_ABSL_INTERNAL_RETHROW;
     }
   }
 }
@@ -678,21 +678,21 @@ void CopyRange(Allocator& alloc, Iterator destination, InputIterator first,
                InputIterator last) {
   for (Iterator cur = destination; first != last;
        static_cast<void>(++cur), static_cast<void>(++first)) {
-    ABSL_INTERNAL_TRY {
+    Y_ABSL_INTERNAL_TRY {
       std::allocator_traits<Allocator>::construct(alloc, std::addressof(*cur),
                                                   *first);
     }
-    ABSL_INTERNAL_CATCH_ANY {
+    Y_ABSL_INTERNAL_CATCH_ANY {
       while (cur != destination) {
         --cur;
         std::allocator_traits<Allocator>::destroy(alloc, std::addressof(*cur));
       }
-      ABSL_INTERNAL_RETHROW;
+      Y_ABSL_INTERNAL_RETHROW;
     }
   }
 }
 }  // namespace memory_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_MEMORY_MEMORY_H_
+#endif  // Y_ABSL_MEMORY_MEMORY_H_

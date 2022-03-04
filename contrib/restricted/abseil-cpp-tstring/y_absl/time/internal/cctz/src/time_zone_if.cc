@@ -19,7 +19,7 @@
 #include "time_zone_libc.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
@@ -41,5 +41,5 @@ TimeZoneIf::~TimeZoneIf() {}
 
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

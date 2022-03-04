@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#ifndef ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
-#define ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
+#ifndef Y_ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
+#define Y_ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
 
 #include <util/generic/string.h>
 
@@ -22,16 +22,16 @@
 #ifndef SWIG
 // Disabled for SWIG as it doesn't parse attributes correctly.
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 // Returned Status objects may not be ignored. Codesearch doesn't handle ifdefs
 // as part of a class definitions (b/6995610), so we use a forward declaration.
-class ABSL_MUST_USE_RESULT Status;
-ABSL_NAMESPACE_END
+class Y_ABSL_MUST_USE_RESULT Status;
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 #endif  // !SWIG
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 enum class StatusCode : int;
 
@@ -63,7 +63,7 @@ struct StatusRep {
 y_absl::StatusCode MapToLocalCode(int value);
 }  // namespace status_internal
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
+#endif  // Y_ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_

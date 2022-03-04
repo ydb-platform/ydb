@@ -15,8 +15,8 @@
 // This file contains internal parts of the Abseil symbolizer.
 // Do not depend on the anything in this file, it may change at anytime.
 
-#ifndef ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_
-#define ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_
+#define Y_ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_
 
 #ifdef __cplusplus
 
@@ -26,11 +26,11 @@
 #include "y_absl/base/config.h"
 #include "y_absl/strings/string_view.h"
 
-#ifdef ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE
-#error ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE cannot be directly set
+#ifdef Y_ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE
+#error Y_ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE cannot be directly set
 #elif defined(__ELF__) && defined(__GLIBC__) && !defined(__native_client__) \
       && !defined(__asmjs__) && !defined(__wasm__)
-#define ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE 1
+#define Y_ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE 1
 
 #include <elf.h>
 #include <link.h>  // For ElfW() macro.
@@ -38,7 +38,7 @@
 #include <util/generic/string.h>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 // Iterates over all sections, invoking callback on each with the section name
@@ -57,25 +57,25 @@ bool GetSectionHeaderByName(int fd, const char *name, size_t name_len,
                             ElfW(Shdr) *out);
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE
+#endif  // Y_ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE
 
-#ifdef ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE
-#error ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE cannot be directly set
+#ifdef Y_ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE
+#error Y_ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE cannot be directly set
 #elif defined(__APPLE__)
-#define ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE 1
+#define Y_ABSL_INTERNAL_HAVE_DARWIN_SYMBOLIZE 1
 #endif
 
-#ifdef ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE
-#error ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE cannot be directly set
+#ifdef Y_ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE
+#error Y_ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE cannot be directly set
 #elif defined(__EMSCRIPTEN__)
-#define ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE 1
+#define Y_ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE 1
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
 struct SymbolDecoratorArgs {
@@ -135,7 +135,7 @@ bool GetFileMappingHint(const void** start, const void** end, uint64_t* offset,
                         const char** filename);
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // __cplusplus
@@ -150,4 +150,4 @@ extern "C"
     YAbslInternalGetFileMappingHint(const void** start, const void** end,
                                    uint64_t* offset, const char** filename);
 
-#endif  // ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_
+#endif  // Y_ABSL_DEBUGGING_INTERNAL_SYMBOLIZE_H_

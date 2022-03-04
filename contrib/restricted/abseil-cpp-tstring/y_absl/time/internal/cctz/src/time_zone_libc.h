@@ -12,8 +12,8 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-#ifndef ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_LIBC_H_
-#define ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_LIBC_H_
+#ifndef Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_LIBC_H_
+#define Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_LIBC_H_
 
 #include <util/generic/string.h>
 
@@ -21,7 +21,7 @@
 #include "time_zone_if.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
@@ -49,7 +49,7 @@ class TimeZoneLibC : public TimeZoneIf {
 
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_LIBC_H_
+#endif  // Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_LIBC_H_

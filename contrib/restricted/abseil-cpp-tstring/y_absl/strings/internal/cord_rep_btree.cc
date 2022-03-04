@@ -29,7 +29,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 constexpr size_t CordRepBtree::kMaxCapacity;  // NOLINT: needed for c++ < c++17
@@ -262,19 +262,19 @@ struct StackOperations {
       case CordRepBtree::kPopped:
         tree = edge_type == kBack ? CordRepBtree::New(tree, result.tree)
                                   : CordRepBtree::New(result.tree, tree);
-        if (ABSL_PREDICT_FALSE(tree->height() > CordRepBtree::kMaxHeight)) {
+        if (Y_ABSL_PREDICT_FALSE(tree->height() > CordRepBtree::kMaxHeight)) {
           tree = CordRepBtree::Rebuild(tree);
-          ABSL_RAW_CHECK(tree->height() <= CordRepBtree::kMaxHeight,
+          Y_ABSL_RAW_CHECK(tree->height() <= CordRepBtree::kMaxHeight,
                          "Max height exceeded");
         }
         return tree;
       case CordRepBtree::kCopied:
         CordRep::Unref(tree);
-        ABSL_FALLTHROUGH_INTENDED;
+        Y_ABSL_FALLTHROUGH_INTENDED;
       case CordRepBtree::kSelf:
         return result.tree;
     }
-    ABSL_INTERNAL_UNREACHABLE;
+    Y_ABSL_INTERNAL_UNREACHABLE;
     return result.tree;
   }
 
@@ -390,12 +390,12 @@ void CordRepBtree::DestroyNonLeaf(CordRepBtree* tree, size_t begin,
 bool CordRepBtree::IsValid(const CordRepBtree* tree, bool shallow) {
 #define NODE_CHECK_VALID(x)                                           \
   if (!(x)) {                                                         \
-    ABSL_RAW_LOG(ERROR, "CordRepBtree::CheckValid() FAILED: %s", #x); \
+    Y_ABSL_RAW_LOG(ERROR, "CordRepBtree::CheckValid() FAILED: %s", #x); \
     return false;                                                     \
   }
 #define NODE_CHECK_EQ(x, y)                                                    \
   if ((x) != (y)) {                                                            \
-    ABSL_RAW_LOG(ERROR,                                                        \
+    Y_ABSL_RAW_LOG(ERROR,                                                        \
                  "CordRepBtree::CheckValid() FAILED: %s != %s (%s vs %s)", #x, \
                  #y, y_absl::StrCat(x).c_str(), y_absl::StrCat(y).c_str());        \
     return false;                                                              \
@@ -435,7 +435,7 @@ bool CordRepBtree::IsValid(const CordRepBtree* tree, bool shallow) {
 CordRepBtree* CordRepBtree::AssertValid(CordRepBtree* tree, bool shallow) {
   if (!IsValid(tree, shallow)) {
     Dump(tree, "CordRepBtree validation failed:", false, std::cout);
-    ABSL_RAW_LOG(FATAL, "CordRepBtree::CheckValid() FAILED");
+    Y_ABSL_RAW_LOG(FATAL, "CordRepBtree::CheckValid() FAILED");
   }
   return tree;
 }
@@ -444,7 +444,7 @@ const CordRepBtree* CordRepBtree::AssertValid(const CordRepBtree* tree,
                                               bool shallow) {
   if (!IsValid(tree, shallow)) {
     Dump(tree, "CordRepBtree validation failed:", false, std::cout);
-    ABSL_RAW_LOG(FATAL, "CordRepBtree::CheckValid() FAILED");
+    Y_ABSL_RAW_LOG(FATAL, "CordRepBtree::CheckValid() FAILED");
   }
   return tree;
 }
@@ -568,7 +568,7 @@ y_absl::string_view CordRepBtree::AddData<kFront>(y_absl::string_view data,
 template <EdgeType edge_type>
 CordRepBtree* CordRepBtree::AddData(CordRepBtree* tree, y_absl::string_view data,
                                     size_t extra) {
-  if (ABSL_PREDICT_FALSE(data.empty())) return tree;
+  if (Y_ABSL_PREDICT_FALSE(data.empty())) return tree;
 
   const size_t original_data_size = data.size();
   int depth = tree->height();
@@ -803,10 +803,10 @@ CordRep* CordRepBtree::RemoveSuffix(CordRepBtree* tree, size_t n) {
   assert(tree != nullptr);
   assert(n <= tree->length);
   const size_t len = tree->length;
-  if (ABSL_PREDICT_FALSE(n == 0)) {
+  if (Y_ABSL_PREDICT_FALSE(n == 0)) {
     return tree;
   }
-  if (ABSL_PREDICT_FALSE(n >= len)) {
+  if (Y_ABSL_PREDICT_FALSE(n >= len)) {
     CordRepBtree::Unref(tree);
     return nullptr;
   }
@@ -865,7 +865,7 @@ CordRep* CordRepBtree::RemoveSuffix(CordRepBtree* tree, size_t n) {
 CordRep* CordRepBtree::SubTree(size_t offset, size_t n) {
   assert(n <= this->length);
   assert(offset <= this->length - n);
-  if (ABSL_PREDICT_FALSE(n == 0)) return nullptr;
+  if (Y_ABSL_PREDICT_FALSE(n == 0)) return nullptr;
 
   CordRepBtree* node = this;
   int height = node->height();
@@ -942,7 +942,7 @@ bool CordRepBtree::IsFlat(size_t offset, const size_t n,
                           y_absl::string_view* fragment) const {
   assert(n <= this->length);
   assert(offset <= this->length - n);
-  if (ABSL_PREDICT_FALSE(n == 0)) return false;
+  if (Y_ABSL_PREDICT_FALSE(n == 0)) return false;
   int height = this->height();
   const CordRepBtree* node = this;
   for (;;) {
@@ -1022,7 +1022,7 @@ CordRepBtree* CordRepBtree::CreateSlow(CordRep* rep) {
 }
 
 CordRepBtree* CordRepBtree::AppendSlow(CordRepBtree* tree, CordRep* rep) {
-  if (ABSL_PREDICT_TRUE(rep->IsBtree())) {
+  if (Y_ABSL_PREDICT_TRUE(rep->IsBtree())) {
     return MergeTrees(tree, rep->btree());
   }
   auto consume = [&tree](CordRep* r, size_t offset, size_t length) {
@@ -1034,7 +1034,7 @@ CordRepBtree* CordRepBtree::AppendSlow(CordRepBtree* tree, CordRep* rep) {
 }
 
 CordRepBtree* CordRepBtree::PrependSlow(CordRepBtree* tree, CordRep* rep) {
-  if (ABSL_PREDICT_TRUE(rep->IsBtree())) {
+  if (Y_ABSL_PREDICT_TRUE(rep->IsBtree())) {
     return MergeTrees(rep->btree(), tree);
   }
   auto consume = [&tree](CordRep* r, size_t offset, size_t length) {
@@ -1124,5 +1124,5 @@ CordRepBtree* CordRepBtree::Rebuild(CordRepBtree* tree) {
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

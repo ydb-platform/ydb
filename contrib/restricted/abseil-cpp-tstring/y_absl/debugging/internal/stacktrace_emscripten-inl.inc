@@ -17,8 +17,8 @@
 // Note:  The glibc implementation may cause a call to malloc.
 // This can cause a deadlock in HeapProfiler.
 
-#ifndef ABSL_DEBUGGING_INTERNAL_STACKTRACE_EMSCRIPTEN_INL_H_
-#define ABSL_DEBUGGING_INTERNAL_STACKTRACE_EMSCRIPTEN_INL_H_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_EMSCRIPTEN_INL_H_
+#define Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_EMSCRIPTEN_INL_H_
 
 #error #include <emscripten.h>
 
@@ -49,7 +49,7 @@ static __thread int recursive = 0;
 static std::atomic<bool> disable_stacktraces(true);  // Disabled until healthy.
 // Waiting until static initializers run seems to be late enough.
 // This file is included into stacktrace.cc so this will only run once.
-ABSL_ATTRIBUTE_UNUSED static int stacktraces_enabler = []() {
+Y_ABSL_ATTRIBUTE_UNUSED static int stacktraces_enabler = []() {
   // Check if we can even create stacktraces. If not, bail early and leave
   // disable_stacktraces set as-is.
   // clang-format off
@@ -100,11 +100,11 @@ static int UnwindImpl(void **result, int *sizes, int max_depth, int skip_count,
 }
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() { return true; }
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_EMSCRIPTEN_INL_H_
+#endif  // Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_EMSCRIPTEN_INL_H_

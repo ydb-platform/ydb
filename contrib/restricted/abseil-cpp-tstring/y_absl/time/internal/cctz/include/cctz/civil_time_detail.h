@@ -12,8 +12,8 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-#ifndef ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_DETAIL_H_
-#define ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_DETAIL_H_
+#ifndef Y_ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_DETAIL_H_
+#define Y_ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_DETAIL_H_
 
 #include <cstdint>
 #include <limits>
@@ -34,7 +34,7 @@
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
@@ -618,11 +618,11 @@ std::ostream& operator<<(std::ostream& os, weekday wd);
 }  // namespace detail
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #undef CONSTEXPR_M
 #undef CONSTEXPR_F
 #undef CONSTEXPR_D
 
-#endif  // ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_DETAIL_H_
+#endif  // Y_ABSL_TIME_INTERNAL_CCTZ_CIVIL_TIME_DETAIL_H_

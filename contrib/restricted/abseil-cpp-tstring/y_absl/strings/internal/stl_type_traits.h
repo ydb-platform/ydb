@@ -22,8 +22,8 @@
 //
 // IWYU pragma: private, include "y_absl/strings/str_split.h"
 
-#ifndef ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_
-#define ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_
+#define Y_ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_
 
 #include <array>
 #include <bitset>
@@ -40,7 +40,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 template <typename C, template <typename...> class T>
@@ -243,6 +243,6 @@ struct IsStrictlyBaseOfAndConvertibleToSTLContainer
                         IsConvertibleToSTLContainer<C>> {};
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
-#endif  // ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_STL_TYPE_TRAITS_H_

@@ -22,7 +22,7 @@
 #include "y_absl/strings/str_cat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 BadStatusOrAccess::BadStatusOrAccess(y_absl::Status status)
     : status_(std::move(status)) {}
@@ -71,26 +71,26 @@ void Helper::HandleInvalidStatusCtorArg(y_absl::Status* status) {
   const char* kMessage =
       "An OK status is not a valid constructor argument to StatusOr<T>";
 #ifdef NDEBUG
-  ABSL_INTERNAL_LOG(ERROR, kMessage);
+  Y_ABSL_INTERNAL_LOG(ERROR, kMessage);
 #else
-  ABSL_INTERNAL_LOG(FATAL, kMessage);
+  Y_ABSL_INTERNAL_LOG(FATAL, kMessage);
 #endif
   // In optimized builds, we will fall back to InternalError.
   *status = y_absl::InternalError(kMessage);
 }
 
 void Helper::Crash(const y_absl::Status& status) {
-  ABSL_INTERNAL_LOG(
+  Y_ABSL_INTERNAL_LOG(
       FATAL,
       y_absl::StrCat("Attempting to fetch value instead of handling error ",
                    status.ToString()));
 }
 
 void ThrowBadStatusOrAccess(y_absl::Status status) {
-#ifdef ABSL_HAVE_EXCEPTIONS
+#ifdef Y_ABSL_HAVE_EXCEPTIONS
   throw y_absl::BadStatusOrAccess(std::move(status));
 #else
-  ABSL_INTERNAL_LOG(
+  Y_ABSL_INTERNAL_LOG(
       FATAL,
       y_absl::StrCat("Attempting to fetch value instead of handling error ",
                    status.ToString()));
@@ -99,5 +99,5 @@ void ThrowBadStatusOrAccess(y_absl::Status status) {
 }
 
 }  // namespace internal_statusor
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

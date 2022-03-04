@@ -32,8 +32,8 @@
 //   // v[0] == "a", v[1] == "b", v[2] == "c"
 //
 // See StrSplit() below for more information.
-#ifndef ABSL_STRINGS_STR_SPLIT_H_
-#define ABSL_STRINGS_STR_SPLIT_H_
+#ifndef Y_ABSL_STRINGS_STR_SPLIT_H_
+#define Y_ABSL_STRINGS_STR_SPLIT_H_
 
 #include <algorithm>
 #include <cstddef>
@@ -50,7 +50,7 @@
 #include "y_absl/strings/strip.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 //------------------------------------------------------------------------------
 // Delimiters
@@ -542,7 +542,7 @@ StrSplit(StringType&& text, Delimiter d, Predicate p) {
       std::move(text), DelimiterType(d), std::move(p));
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_STR_SPLIT_H_
+#endif  // Y_ABSL_STRINGS_STR_SPLIT_H_

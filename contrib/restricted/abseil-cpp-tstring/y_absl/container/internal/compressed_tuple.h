@@ -29,8 +29,8 @@
 //
 // https://en.cppreference.com/w/cpp/language/ebo
 
-#ifndef ABSL_CONTAINER_INTERNAL_COMPRESSED_TUPLE_H_
-#define ABSL_CONTAINER_INTERNAL_COMPRESSED_TUPLE_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_COMPRESSED_TUPLE_H_
+#define Y_ABSL_CONTAINER_INTERNAL_COMPRESSED_TUPLE_H_
 
 #include <initializer_list>
 #include <tuple>
@@ -42,13 +42,13 @@
 #if defined(_MSC_VER) && !defined(__NVCC__)
 // We need to mark these classes with this declspec to ensure that
 // CompressedTuple happens.
-#define ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC __declspec(empty_bases)
+#define Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC __declspec(empty_bases)
 #else
-#define ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC
+#define Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 template <typename... Ts>
@@ -113,7 +113,7 @@ struct Storage {
 };
 
 template <typename T, size_t I>
-struct ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC Storage<T, I, true> : T {
+struct Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC Storage<T, I, true> : T {
   constexpr Storage() = default;
 
   template <typename V>
@@ -127,10 +127,10 @@ struct ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC Storage<T, I, true> : T {
 };
 
 template <typename D, typename I, bool ShouldAnyUseBase>
-struct ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl;
+struct Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl;
 
 template <typename... Ts, size_t... I, bool ShouldAnyUseBase>
-struct ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl<
+struct Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl<
     CompressedTuple<Ts...>, y_absl::index_sequence<I...>, ShouldAnyUseBase>
     // We use the dummy identity function through std::integral_constant to
     // convince MSVC of accepting and expanding I in that context. Without it
@@ -146,7 +146,7 @@ struct ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl<
 };
 
 template <typename... Ts, size_t... I>
-struct ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl<
+struct Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTupleImpl<
     CompressedTuple<Ts...>, y_absl::index_sequence<I...>, false>
     // We use the dummy identity function as above...
     : Storage<Ts, std::integral_constant<size_t, I>::value, false>... {
@@ -218,7 +218,7 @@ struct TupleItemsMoveConstructible
 //
 // https://en.cppreference.com/w/cpp/language/ebo
 template <typename... Ts>
-class ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple
+class Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple
     : private internal_compressed_tuple::CompressedTupleImpl<
           CompressedTuple<Ts...>, y_absl::index_sequence_for<Ts...>,
           internal_compressed_tuple::ShouldAnyUseBase<Ts...>()> {
@@ -279,12 +279,12 @@ class ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple
 // Explicit specialization for a zero-element tuple
 // (needed to avoid ambiguous overloads for the default constructor).
 template <>
-class ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple<> {};
+class Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple<> {};
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#undef ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC
+#undef Y_ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC
 
-#endif  // ABSL_CONTAINER_INTERNAL_COMPRESSED_TUPLE_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_COMPRESSED_TUPLE_H_

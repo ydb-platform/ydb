@@ -18,27 +18,27 @@
 //
 // This header file defines the `y_absl::bad_optional_access` type.
 
-#ifndef ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_
-#define ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_
+#ifndef Y_ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_
+#define Y_ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_
 
 #include <stdexcept>
 
 #include "y_absl/base/config.h"
 
-#ifdef ABSL_USES_STD_OPTIONAL
+#ifdef Y_ABSL_USES_STD_OPTIONAL
 
 #include <optional>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 using std::bad_optional_access;
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#else  // ABSL_USES_STD_OPTIONAL
+#else  // Y_ABSL_USES_STD_OPTIONAL
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // bad_optional_access
@@ -67,12 +67,12 @@ class bad_optional_access : public std::exception {
 namespace optional_internal {
 
 // throw delegator
-[[noreturn]] ABSL_DLL void throw_bad_optional_access();
+[[noreturn]] Y_ABSL_DLL void throw_bad_optional_access();
 
 }  // namespace optional_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USES_STD_OPTIONAL
+#endif  // Y_ABSL_USES_STD_OPTIONAL
 
-#endif  // ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_
+#endif  // Y_ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_

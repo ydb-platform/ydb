@@ -29,7 +29,7 @@
 #include <sys/syscall.h>
 #endif
 
-#ifdef ABSL_HAVE_SEMAPHORE_H
+#ifdef Y_ABSL_HAVE_SEMAPHORE_H
 #include <semaphore.h>
 #endif
 
@@ -50,7 +50,7 @@
 
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 static void MaybeBecomeIdle() {
@@ -65,7 +65,7 @@ static void MaybeBecomeIdle() {
   }
 }
 
-#if ABSL_WAITER_MODE == ABSL_WAITER_MODE_FUTEX
+#if Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_FUTEX
 
 Waiter::Waiter() {
   futex_.store(0, std::memory_order_relaxed);
@@ -99,7 +99,7 @@ bool Waiter::Wait(KernelTimeout t) {
       } else if (err == -ETIMEDOUT) {
         return false;
       } else {
-        ABSL_RAW_LOG(FATAL, "Futex operation failed with error %d\n", err);
+        Y_ABSL_RAW_LOG(FATAL, "Futex operation failed with error %d\n", err);
       }
     }
     first_pass = false;
@@ -116,19 +116,19 @@ void Waiter::Post() {
 void Waiter::Poke() {
   // Wake one thread waiting on the futex.
   const int err = Futex::Wake(&futex_, 1);
-  if (ABSL_PREDICT_FALSE(err < 0)) {
-    ABSL_RAW_LOG(FATAL, "Futex operation failed with error %d\n", err);
+  if (Y_ABSL_PREDICT_FALSE(err < 0)) {
+    Y_ABSL_RAW_LOG(FATAL, "Futex operation failed with error %d\n", err);
   }
 }
 
-#elif ABSL_WAITER_MODE == ABSL_WAITER_MODE_CONDVAR
+#elif Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_CONDVAR
 
 class PthreadMutexHolder {
  public:
   explicit PthreadMutexHolder(pthread_mutex_t *mu) : mu_(mu) {
     const int err = pthread_mutex_lock(mu_);
     if (err != 0) {
-      ABSL_RAW_LOG(FATAL, "pthread_mutex_lock failed: %d", err);
+      Y_ABSL_RAW_LOG(FATAL, "pthread_mutex_lock failed: %d", err);
     }
   }
 
@@ -138,7 +138,7 @@ class PthreadMutexHolder {
   ~PthreadMutexHolder() {
     const int err = pthread_mutex_unlock(mu_);
     if (err != 0) {
-      ABSL_RAW_LOG(FATAL, "pthread_mutex_unlock failed: %d", err);
+      Y_ABSL_RAW_LOG(FATAL, "pthread_mutex_unlock failed: %d", err);
     }
   }
 
@@ -149,12 +149,12 @@ class PthreadMutexHolder {
 Waiter::Waiter() {
   const int err = pthread_mutex_init(&mu_, 0);
   if (err != 0) {
-    ABSL_RAW_LOG(FATAL, "pthread_mutex_init failed: %d", err);
+    Y_ABSL_RAW_LOG(FATAL, "pthread_mutex_init failed: %d", err);
   }
 
   const int err2 = pthread_cond_init(&cv_, 0);
   if (err2 != 0) {
-    ABSL_RAW_LOG(FATAL, "pthread_cond_init failed: %d", err2);
+    Y_ABSL_RAW_LOG(FATAL, "pthread_cond_init failed: %d", err2);
   }
 
   waiter_count_ = 0;
@@ -164,12 +164,12 @@ Waiter::Waiter() {
 Waiter::~Waiter() {
   const int err = pthread_mutex_destroy(&mu_);
   if (err != 0) {
-    ABSL_RAW_LOG(FATAL, "pthread_mutex_destroy failed: %d", err);
+    Y_ABSL_RAW_LOG(FATAL, "pthread_mutex_destroy failed: %d", err);
   }
 
   const int err2 = pthread_cond_destroy(&cv_);
   if (err2 != 0) {
-    ABSL_RAW_LOG(FATAL, "pthread_cond_destroy failed: %d", err2);
+    Y_ABSL_RAW_LOG(FATAL, "pthread_cond_destroy failed: %d", err2);
   }
 }
 
@@ -191,7 +191,7 @@ bool Waiter::Wait(KernelTimeout t) {
     if (!t.has_timeout()) {
       const int err = pthread_cond_wait(&cv_, &mu_);
       if (err != 0) {
-        ABSL_RAW_LOG(FATAL, "pthread_cond_wait failed: %d", err);
+        Y_ABSL_RAW_LOG(FATAL, "pthread_cond_wait failed: %d", err);
       }
     } else {
       const int err = pthread_cond_timedwait(&cv_, &mu_, &abs_timeout);
@@ -200,7 +200,7 @@ bool Waiter::Wait(KernelTimeout t) {
         return false;
       }
       if (err != 0) {
-        ABSL_RAW_LOG(FATAL, "pthread_cond_timedwait failed: %d", err);
+        Y_ABSL_RAW_LOG(FATAL, "pthread_cond_timedwait failed: %d", err);
       }
     }
     first_pass = false;
@@ -225,24 +225,24 @@ void Waiter::Poke() {
 void Waiter::InternalCondVarPoke() {
   if (waiter_count_ != 0) {
     const int err = pthread_cond_signal(&cv_);
-    if (ABSL_PREDICT_FALSE(err != 0)) {
-      ABSL_RAW_LOG(FATAL, "pthread_cond_signal failed: %d", err);
+    if (Y_ABSL_PREDICT_FALSE(err != 0)) {
+      Y_ABSL_RAW_LOG(FATAL, "pthread_cond_signal failed: %d", err);
     }
   }
 }
 
-#elif ABSL_WAITER_MODE == ABSL_WAITER_MODE_SEM
+#elif Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_SEM
 
 Waiter::Waiter() {
   if (sem_init(&sem_, 0, 0) != 0) {
-    ABSL_RAW_LOG(FATAL, "sem_init failed with errno %d\n", errno);
+    Y_ABSL_RAW_LOG(FATAL, "sem_init failed with errno %d\n", errno);
   }
   wakeups_.store(0, std::memory_order_relaxed);
 }
 
 Waiter::~Waiter() {
   if (sem_destroy(&sem_) != 0) {
-    ABSL_RAW_LOG(FATAL, "sem_destroy failed with errno %d\n", errno);
+    Y_ABSL_RAW_LOG(FATAL, "sem_destroy failed with errno %d\n", errno);
   }
 }
 
@@ -274,12 +274,12 @@ bool Waiter::Wait(KernelTimeout t) {
       if (!t.has_timeout()) {
         if (sem_wait(&sem_) == 0) break;
         if (errno == EINTR) continue;
-        ABSL_RAW_LOG(FATAL, "sem_wait failed: %d", errno);
+        Y_ABSL_RAW_LOG(FATAL, "sem_wait failed: %d", errno);
       } else {
         if (sem_timedwait(&sem_, &abs_timeout) == 0) break;
         if (errno == EINTR) continue;
         if (errno == ETIMEDOUT) return false;
-        ABSL_RAW_LOG(FATAL, "sem_timedwait failed: %d", errno);
+        Y_ABSL_RAW_LOG(FATAL, "sem_timedwait failed: %d", errno);
       }
     }
     first_pass = false;
@@ -296,11 +296,11 @@ void Waiter::Post() {
 
 void Waiter::Poke() {
   if (sem_post(&sem_) != 0) {  // Wake any semaphore waiter.
-    ABSL_RAW_LOG(FATAL, "sem_post failed with errno %d\n", errno);
+    Y_ABSL_RAW_LOG(FATAL, "sem_post failed with errno %d\n", errno);
   }
 }
 
-#elif ABSL_WAITER_MODE == ABSL_WAITER_MODE_WIN32
+#elif Y_ABSL_WAITER_MODE == Y_ABSL_WAITER_MODE_WIN32
 
 class Waiter::WinHelper {
  public:
@@ -318,7 +318,7 @@ class Waiter::WinHelper {
                 "`mu_storage_` does not have the same alignment as SRWLOCK");
 
   static_assert(sizeof(CONDITION_VARIABLE) == sizeof(void *),
-                "`ABSL_CONDITION_VARIABLE_STORAGE` does not have the same size "
+                "`Y_ABSL_CONDITION_VARIABLE_STORAGE` does not have the same size "
                 "as `CONDITION_VARIABLE`");
   static_assert(
       alignof(CONDITION_VARIABLE) == alignof(void *),
@@ -384,14 +384,14 @@ bool Waiter::Wait(KernelTimeout t) {
     // No wakeups available, time to wait.
     if (!SleepConditionVariableSRW(cv, mu, t.InMillisecondsFromNow(), 0)) {
       // GetLastError() returns a Win32 DWORD, but we assign to
-      // unsigned long to simplify the ABSL_RAW_LOG case below.  The uniform
+      // unsigned long to simplify the Y_ABSL_RAW_LOG case below.  The uniform
       // initialization guarantees this is not a narrowing conversion.
       const unsigned long err{GetLastError()};  // NOLINT(runtime/int)
       if (err == ERROR_TIMEOUT) {
         --waiter_count_;
         return false;
       } else {
-        ABSL_RAW_LOG(FATAL, "SleepConditionVariableSRW failed: %lu", err);
+        Y_ABSL_RAW_LOG(FATAL, "SleepConditionVariableSRW failed: %lu", err);
       }
     }
     first_pass = false;
@@ -420,9 +420,9 @@ void Waiter::InternalCondVarPoke() {
 }
 
 #else
-#error Unknown ABSL_WAITER_MODE
+#error Unknown Y_ABSL_WAITER_MODE
 #endif
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

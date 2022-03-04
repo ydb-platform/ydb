@@ -43,8 +43,8 @@
 // the visitor pattern are a good example of when this class should be used.
 //
 // This class is trivial to copy and should be passed by value.
-#ifndef ABSL_FUNCTIONAL_FUNCTION_REF_H_
-#define ABSL_FUNCTIONAL_FUNCTION_REF_H_
+#ifndef Y_ABSL_FUNCTIONAL_FUNCTION_REF_H_
+#define Y_ABSL_FUNCTIONAL_FUNCTION_REF_H_
 
 #include <cassert>
 #include <functional>
@@ -55,7 +55,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // FunctionRef
 //
@@ -100,7 +100,7 @@ class FunctionRef<R(Args...)> {
   // Constructs a FunctionRef from any invokable type.
   template <typename F, typename = EnableIfCompatible<const F&>>
   // NOLINTNEXTLINE(runtime/explicit)
-  FunctionRef(const F& f ABSL_ATTRIBUTE_LIFETIME_BOUND)
+  FunctionRef(const F& f Y_ABSL_ATTRIBUTE_LIFETIME_BOUND)
       : invoker_(&y_absl::functional_internal::InvokeObject<F, R, Args...>) {
     y_absl::functional_internal::AssertNonNull(f);
     ptr_.obj = &f;
@@ -136,7 +136,7 @@ class FunctionRef<R(Args...)> {
   y_absl::functional_internal::Invoker<R, Args...> invoker_;
 };
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_FUNCTIONAL_FUNCTION_REF_H_
+#endif  // Y_ABSL_FUNCTIONAL_FUNCTION_REF_H_

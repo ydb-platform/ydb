@@ -18,8 +18,8 @@
 //    https://www.linux-foundation.org/spec/ELF/ppc64/PPC-elf64abi-1.9.html#STACK
 // Linux has similar code: http://patchwork.ozlabs.org/linuxppc/patch?id=8882
 
-#ifndef ABSL_DEBUGGING_INTERNAL_STACKTRACE_POWERPC_INL_H_
-#define ABSL_DEBUGGING_INTERNAL_STACKTRACE_POWERPC_INL_H_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_POWERPC_INL_H_
+#define Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_POWERPC_INL_H_
 
 #if defined(__linux__)
 #include <asm/ptrace.h>   // for PT_NIP.
@@ -66,8 +66,8 @@ static inline void *StacktracePowerPCGetLR(void **sp) {
 // checks (the strictness of which is controlled by the boolean parameter
 // "STRICT_UNWINDING") to reduce the chance that a bad pointer is returned.
 template<bool STRICT_UNWINDING, bool IS_WITH_CONTEXT>
-ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
-ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
 static void **NextStackFrame(void **old_sp, const void *uc) {
   void **new_sp = (void **) *old_sp;
   enum { kStackAlignment = 16 };
@@ -157,13 +157,13 @@ static void **NextStackFrame(void **old_sp, const void *uc) {
 }
 
 // This ensures that y_absl::GetStackTrace sets up the Link Register properly.
-ABSL_ATTRIBUTE_NOINLINE static void AbslStacktracePowerPCDummyFunction() {
-  ABSL_BLOCK_TAIL_CALL_OPTIMIZATION();
+Y_ABSL_ATTRIBUTE_NOINLINE static void AbslStacktracePowerPCDummyFunction() {
+  Y_ABSL_BLOCK_TAIL_CALL_OPTIMIZATION();
 }
 
 template <bool IS_STACK_FRAMES, bool IS_WITH_CONTEXT>
-ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
-ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
 static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
                       const void *ucp, int *min_dropped_frames) {
   void **sp;
@@ -241,13 +241,13 @@ static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
 }
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() {
   return true;
 }
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_POWERPC_INL_H_
+#endif  // Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_POWERPC_INL_H_

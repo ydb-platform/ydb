@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#ifndef ABSL_SYNCHRONIZATION_INTERNAL_FUTEX_H_
-#define ABSL_SYNCHRONIZATION_INTERNAL_FUTEX_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_INTERNAL_FUTEX_H_
+#define Y_ABSL_SYNCHRONIZATION_INTERNAL_FUTEX_H_
 
 #include "y_absl/base/config.h"
 
@@ -38,21 +38,21 @@
 #include "y_absl/base/optimization.h"
 #include "y_absl/synchronization/internal/kernel_timeout.h"
 
-#ifdef ABSL_INTERNAL_HAVE_FUTEX
-#error ABSL_INTERNAL_HAVE_FUTEX may not be set on the command line
+#ifdef Y_ABSL_INTERNAL_HAVE_FUTEX
+#error Y_ABSL_INTERNAL_HAVE_FUTEX may not be set on the command line
 #elif defined(__BIONIC__)
 // Bionic supports all the futex operations we need even when some of the futex
 // definitions are missing.
-#define ABSL_INTERNAL_HAVE_FUTEX
+#define Y_ABSL_INTERNAL_HAVE_FUTEX
 #elif defined(__linux__) && defined(FUTEX_CLOCK_REALTIME)
 // FUTEX_CLOCK_REALTIME requires Linux >= 2.6.28.
-#define ABSL_INTERNAL_HAVE_FUTEX
+#define Y_ABSL_INTERNAL_HAVE_FUTEX
 #endif
 
-#ifdef ABSL_INTERNAL_HAVE_FUTEX
+#ifdef Y_ABSL_INTERNAL_HAVE_FUTEX
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 // Some Android headers are missing these definitions even though they
@@ -104,7 +104,7 @@ class FutexImpl {
       err = syscall(SYS_futex, reinterpret_cast<int32_t *>(v),
                     FUTEX_WAIT | FUTEX_PRIVATE_FLAG, val, nullptr);
     }
-    if (ABSL_PREDICT_FALSE(err != 0)) {
+    if (Y_ABSL_PREDICT_FALSE(err != 0)) {
       err = -errno;
     }
     return err;
@@ -116,7 +116,7 @@ class FutexImpl {
     int err = syscall(SYS_futex, reinterpret_cast<int32_t *>(v),
                       FUTEX_WAIT_BITSET | FUTEX_PRIVATE_FLAG, val, abstime,
                       nullptr, bits);
-    if (ABSL_PREDICT_FALSE(err != 0)) {
+    if (Y_ABSL_PREDICT_FALSE(err != 0)) {
       err = -errno;
     }
     return err;
@@ -125,7 +125,7 @@ class FutexImpl {
   static int Wake(std::atomic<int32_t> *v, int32_t count) {
     int err = syscall(SYS_futex, reinterpret_cast<int32_t *>(v),
                       FUTEX_WAKE | FUTEX_PRIVATE_FLAG, count);
-    if (ABSL_PREDICT_FALSE(err < 0)) {
+    if (Y_ABSL_PREDICT_FALSE(err < 0)) {
       err = -errno;
     }
     return err;
@@ -136,7 +136,7 @@ class FutexImpl {
     int err = syscall(SYS_futex, reinterpret_cast<int32_t *>(v),
                       FUTEX_WAKE_BITSET | FUTEX_PRIVATE_FLAG, count, nullptr,
                       nullptr, bits);
-    if (ABSL_PREDICT_FALSE(err < 0)) {
+    if (Y_ABSL_PREDICT_FALSE(err < 0)) {
       err = -errno;
     }
     return err;
@@ -146,9 +146,9 @@ class FutexImpl {
 class Futex : public FutexImpl {};
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_INTERNAL_HAVE_FUTEX
+#endif  // Y_ABSL_INTERNAL_HAVE_FUTEX
 
-#endif  // ABSL_SYNCHRONIZATION_INTERNAL_FUTEX_H_
+#endif  // Y_ABSL_SYNCHRONIZATION_INTERNAL_FUTEX_H_

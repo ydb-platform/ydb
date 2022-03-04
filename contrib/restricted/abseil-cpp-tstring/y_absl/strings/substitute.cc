@@ -23,7 +23,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace substitute_internal {
 
 void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
@@ -35,7 +35,7 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
     if (format[i] == '$') {
       if (i + 1 >= format.size()) {
 #ifndef NDEBUG
-        ABSL_RAW_LOG(FATAL,
+        Y_ABSL_RAW_LOG(FATAL,
                      "Invalid y_absl::Substitute() format string: \"%s\".",
                      y_absl::CEscape(format).c_str());
 #endif
@@ -44,7 +44,7 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
         int index = format[i + 1] - '0';
         if (static_cast<size_t>(index) >= num_args) {
 #ifndef NDEBUG
-          ABSL_RAW_LOG(
+          Y_ABSL_RAW_LOG(
               FATAL,
               "Invalid y_absl::Substitute() format string: asked for \"$"
               "%d\", but only %d args were given.  Full format string was: "
@@ -60,7 +60,7 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
         ++i;  // Skip next char.
       } else {
 #ifndef NDEBUG
-        ABSL_RAW_LOG(FATAL,
+        Y_ABSL_RAW_LOG(FATAL,
                      "Invalid y_absl::Substitute() format string: \"%s\".",
                      y_absl::CEscape(format).c_str());
 #endif
@@ -168,5 +168,5 @@ Arg::Arg(Dec dec) {
 }
 
 }  // namespace substitute_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

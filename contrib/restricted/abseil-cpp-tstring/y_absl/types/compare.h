@@ -27,8 +27,8 @@
 // (`std::weak_equality`, etc.) and are designed to be drop-in replacements
 // for code compliant with C++20.
 
-#ifndef ABSL_TYPES_COMPARE_H_
-#define ABSL_TYPES_COMPARE_H_
+#ifndef Y_ABSL_TYPES_COMPARE_H_
+#define Y_ABSL_TYPES_COMPARE_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -39,7 +39,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace compare_internal {
 
 using value_type = int8_t;
@@ -82,28 +82,28 @@ enum class ncmp : value_type { unordered = -127 };
 
 // Define macros to allow for creation or emulation of C++17 inline variables
 // based on whether the feature is supported. Note: we can't use
-// ABSL_INTERNAL_INLINE_CONSTEXPR here because the variables here are of
+// Y_ABSL_INTERNAL_INLINE_CONSTEXPR here because the variables here are of
 // incomplete types so they need to be defined after the types are complete.
 #ifdef __cpp_inline_variables
 
 // A no-op expansion that can be followed by a semicolon at class level.
-#define ABSL_COMPARE_INLINE_BASECLASS_DECL(name) static_assert(true, "")
+#define Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(name) static_assert(true, "")
 
-#define ABSL_COMPARE_INLINE_SUBCLASS_DECL(type, name) \
+#define Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(type, name) \
   static const type name
 
-#define ABSL_COMPARE_INLINE_INIT(type, name, init) \
+#define Y_ABSL_COMPARE_INLINE_INIT(type, name, init) \
   inline constexpr type type::name(init)
 
 #else  // __cpp_inline_variables
 
-#define ABSL_COMPARE_INLINE_BASECLASS_DECL(name) \
-  ABSL_CONST_INIT static const T name
+#define Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(name) \
+  Y_ABSL_CONST_INIT static const T name
 
 // A no-op expansion that can be followed by a semicolon at class level.
-#define ABSL_COMPARE_INLINE_SUBCLASS_DECL(type, name) static_assert(true, "")
+#define Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(type, name) static_assert(true, "")
 
-#define ABSL_COMPARE_INLINE_INIT(type, name, init) \
+#define Y_ABSL_COMPARE_INLINE_INIT(type, name, init) \
   template <typename T>                            \
   const T compare_internal::type##_base<T>::name(init)
 
@@ -114,39 +114,39 @@ enum class ncmp : value_type { unordered = -127 };
 // aren't available in C++11).
 template <typename T>
 struct weak_equality_base {
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(nonequivalent);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(nonequivalent);
 };
 
 template <typename T>
 struct strong_equality_base {
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(equal);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(nonequal);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(nonequivalent);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(equal);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(nonequal);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(nonequivalent);
 };
 
 template <typename T>
 struct partial_ordering_base {
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(less);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(greater);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(unordered);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(less);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(greater);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(unordered);
 };
 
 template <typename T>
 struct weak_ordering_base {
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(less);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(greater);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(less);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(greater);
 };
 
 template <typename T>
 struct strong_ordering_base {
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(less);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(equal);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
-  ABSL_COMPARE_INLINE_BASECLASS_DECL(greater);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(less);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(equal);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(equivalent);
+  Y_ABSL_COMPARE_INLINE_BASECLASS_DECL(greater);
 };
 
 }  // namespace compare_internal
@@ -158,8 +158,8 @@ class weak_equality
   friend struct compare_internal::weak_equality_base<weak_equality>;
 
  public:
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_equality, equivalent);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_equality, nonequivalent);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_equality, equivalent);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_equality, nonequivalent);
 
   // Comparisons
   friend constexpr bool operator==(
@@ -190,9 +190,9 @@ class weak_equality
  private:
   compare_internal::value_type value_;
 };
-ABSL_COMPARE_INLINE_INIT(weak_equality, equivalent,
+Y_ABSL_COMPARE_INLINE_INIT(weak_equality, equivalent,
                          compare_internal::eq::equivalent);
-ABSL_COMPARE_INLINE_INIT(weak_equality, nonequivalent,
+Y_ABSL_COMPARE_INLINE_INIT(weak_equality, nonequivalent,
                          compare_internal::eq::nonequivalent);
 
 class strong_equality
@@ -202,10 +202,10 @@ class strong_equality
   friend struct compare_internal::strong_equality_base<strong_equality>;
 
  public:
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, equal);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, nonequal);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, equivalent);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, nonequivalent);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, equal);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, nonequal);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, equivalent);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_equality, nonequivalent);
 
   // Conversion
   constexpr operator weak_equality() const noexcept {  // NOLINT
@@ -241,12 +241,12 @@ class strong_equality
  private:
   compare_internal::value_type value_;
 };
-ABSL_COMPARE_INLINE_INIT(strong_equality, equal, compare_internal::eq::equal);
-ABSL_COMPARE_INLINE_INIT(strong_equality, nonequal,
+Y_ABSL_COMPARE_INLINE_INIT(strong_equality, equal, compare_internal::eq::equal);
+Y_ABSL_COMPARE_INLINE_INIT(strong_equality, nonequal,
                          compare_internal::eq::nonequal);
-ABSL_COMPARE_INLINE_INIT(strong_equality, equivalent,
+Y_ABSL_COMPARE_INLINE_INIT(strong_equality, equivalent,
                          compare_internal::eq::equivalent);
-ABSL_COMPARE_INLINE_INIT(strong_equality, nonequivalent,
+Y_ABSL_COMPARE_INLINE_INIT(strong_equality, nonequivalent,
                          compare_internal::eq::nonequivalent);
 
 class partial_ordering
@@ -265,10 +265,10 @@ class partial_ordering
   }
 
  public:
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, less);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, equivalent);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, greater);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, unordered);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, less);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, equivalent);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, greater);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, unordered);
 
   // Conversion
   constexpr operator weak_equality() const noexcept {  // NOLINT
@@ -336,12 +336,12 @@ class partial_ordering
  private:
   compare_internal::value_type value_;
 };
-ABSL_COMPARE_INLINE_INIT(partial_ordering, less, compare_internal::ord::less);
-ABSL_COMPARE_INLINE_INIT(partial_ordering, equivalent,
+Y_ABSL_COMPARE_INLINE_INIT(partial_ordering, less, compare_internal::ord::less);
+Y_ABSL_COMPARE_INLINE_INIT(partial_ordering, equivalent,
                          compare_internal::eq::equivalent);
-ABSL_COMPARE_INLINE_INIT(partial_ordering, greater,
+Y_ABSL_COMPARE_INLINE_INIT(partial_ordering, greater,
                          compare_internal::ord::greater);
-ABSL_COMPARE_INLINE_INIT(partial_ordering, unordered,
+Y_ABSL_COMPARE_INLINE_INIT(partial_ordering, unordered,
                          compare_internal::ncmp::unordered);
 
 class weak_ordering
@@ -353,9 +353,9 @@ class weak_ordering
   friend struct compare_internal::weak_ordering_base<weak_ordering>;
 
  public:
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_ordering, less);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_ordering, equivalent);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_ordering, greater);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_ordering, less);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_ordering, equivalent);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(weak_ordering, greater);
 
   // Conversions
   constexpr operator weak_equality() const noexcept {  // NOLINT
@@ -428,10 +428,10 @@ class weak_ordering
  private:
   compare_internal::value_type value_;
 };
-ABSL_COMPARE_INLINE_INIT(weak_ordering, less, compare_internal::ord::less);
-ABSL_COMPARE_INLINE_INIT(weak_ordering, equivalent,
+Y_ABSL_COMPARE_INLINE_INIT(weak_ordering, less, compare_internal::ord::less);
+Y_ABSL_COMPARE_INLINE_INIT(weak_ordering, equivalent,
                          compare_internal::eq::equivalent);
-ABSL_COMPARE_INLINE_INIT(weak_ordering, greater,
+Y_ABSL_COMPARE_INLINE_INIT(weak_ordering, greater,
                          compare_internal::ord::greater);
 
 class strong_ordering
@@ -443,10 +443,10 @@ class strong_ordering
   friend struct compare_internal::strong_ordering_base<strong_ordering>;
 
  public:
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, less);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, equal);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, equivalent);
-  ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, greater);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, less);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, equal);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, equivalent);
+  Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL(strong_ordering, greater);
 
   // Conversions
   constexpr operator weak_equality() const noexcept {  // NOLINT
@@ -527,16 +527,16 @@ class strong_ordering
  private:
   compare_internal::value_type value_;
 };
-ABSL_COMPARE_INLINE_INIT(strong_ordering, less, compare_internal::ord::less);
-ABSL_COMPARE_INLINE_INIT(strong_ordering, equal, compare_internal::eq::equal);
-ABSL_COMPARE_INLINE_INIT(strong_ordering, equivalent,
+Y_ABSL_COMPARE_INLINE_INIT(strong_ordering, less, compare_internal::ord::less);
+Y_ABSL_COMPARE_INLINE_INIT(strong_ordering, equal, compare_internal::eq::equal);
+Y_ABSL_COMPARE_INLINE_INIT(strong_ordering, equivalent,
                          compare_internal::eq::equivalent);
-ABSL_COMPARE_INLINE_INIT(strong_ordering, greater,
+Y_ABSL_COMPARE_INLINE_INIT(strong_ordering, greater,
                          compare_internal::ord::greater);
 
-#undef ABSL_COMPARE_INLINE_BASECLASS_DECL
-#undef ABSL_COMPARE_INLINE_SUBCLASS_DECL
-#undef ABSL_COMPARE_INLINE_INIT
+#undef Y_ABSL_COMPARE_INLINE_BASECLASS_DECL
+#undef Y_ABSL_COMPARE_INLINE_SUBCLASS_DECL
+#undef Y_ABSL_COMPARE_INLINE_INIT
 
 namespace compare_internal {
 // We also provide these comparator adapter functions for internal y_absl use.
@@ -594,7 +594,7 @@ constexpr y_absl::weak_ordering do_three_way_comparison(const Compare &compare,
 }
 
 }  // namespace compare_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TYPES_COMPARE_H_
+#endif  // Y_ABSL_TYPES_COMPARE_H_

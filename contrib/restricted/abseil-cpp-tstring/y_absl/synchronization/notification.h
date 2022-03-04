@@ -47,8 +47,8 @@
 //  * Y receives a `true` return value from either `HasBeenNotified()` or
 //    `WaitForNotificationWithTimeout()`.
 
-#ifndef ABSL_SYNCHRONIZATION_NOTIFICATION_H_
-#define ABSL_SYNCHRONIZATION_NOTIFICATION_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_NOTIFICATION_H_
+#define Y_ABSL_SYNCHRONIZATION_NOTIFICATION_H_
 
 #include <atomic>
 
@@ -57,7 +57,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // Notification
@@ -117,7 +117,7 @@ class Notification {
   std::atomic<bool> notified_yet_;  // written under mutex_
 };
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_SYNCHRONIZATION_NOTIFICATION_H_
+#endif  // Y_ABSL_SYNCHRONIZATION_NOTIFICATION_H_

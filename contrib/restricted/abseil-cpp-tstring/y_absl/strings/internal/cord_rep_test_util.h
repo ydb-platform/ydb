@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_CORD_REP_TEST_UTIL_H_
-#define ABSL_STRINGS_INTERNAL_CORD_REP_TEST_UTIL_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CORD_REP_TEST_UTIL_H_
+#define Y_ABSL_STRINGS_INTERNAL_CORD_REP_TEST_UTIL_H_
 
 #include <cassert>
 #include <memory>
@@ -29,7 +29,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cordrep_testing {
 
 inline cord_internal::CordRepSubstring* MakeSubstring(
@@ -166,7 +166,7 @@ inline void CordToString(cord_internal::CordRep* rep, TString& s) {
   } else if (rep->tag == cord_internal::EXTERNAL) {
     s.append(rep->external()->base + offset, length);
   } else {
-    ABSL_RAW_LOG(FATAL, "Unsupported tag %d", rep->tag);
+    Y_ABSL_RAW_LOG(FATAL, "Unsupported tag %d", rep->tag);
   }
 }
 
@@ -214,7 +214,7 @@ class AutoUnref {
 };
 
 }  // namespace cordrep_testing
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_CORD_REP_TEST_UTIL_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CORD_REP_TEST_UTIL_H_

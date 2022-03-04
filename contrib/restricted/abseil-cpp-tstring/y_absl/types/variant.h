@@ -39,18 +39,18 @@
 // abstraction and is designed to be a drop-in replacement for code compliant
 // with C++17.
 
-#ifndef ABSL_TYPES_VARIANT_H_
-#define ABSL_TYPES_VARIANT_H_
+#ifndef Y_ABSL_TYPES_VARIANT_H_
+#define Y_ABSL_TYPES_VARIANT_H_
 
 #include "y_absl/base/config.h"
 #include "y_absl/utility/utility.h"
 
-#ifdef ABSL_USES_STD_VARIANT
+#ifdef Y_ABSL_USES_STD_VARIANT
 
 #include <variant>  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 using std::bad_variant_access;
 using std::get;
 using std::get_if;
@@ -63,10 +63,10 @@ using std::variant_npos;
 using std::variant_size;
 using std::variant_size_v;
 using std::visit;
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#else  // ABSL_USES_STD_VARIANT
+#else  // Y_ABSL_USES_STD_VARIANT
 
 #include <functional>
 #include <new>
@@ -79,7 +79,7 @@ ABSL_NAMESPACE_END
 #include "y_absl/types/internal/variant.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // y_absl::variant
@@ -803,7 +803,7 @@ operator>=(const variant<Types...>& a, const variant<Types...>& b) {
                    a.index());
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 namespace std {
@@ -821,10 +821,10 @@ struct hash<y_absl::variant<T...>>
 
 }  // namespace std
 
-#endif  // ABSL_USES_STD_VARIANT
+#endif  // Y_ABSL_USES_STD_VARIANT
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace variant_internal {
 
 // Helper visitor for converting a variant<Ts...>` into another type (mostly
@@ -860,7 +860,7 @@ To ConvertVariantTo(Variant&& variant) {
                      std::forward<Variant>(variant));
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TYPES_VARIANT_H_
+#endif  // Y_ABSL_TYPES_VARIANT_H_

@@ -15,8 +15,8 @@
 // This file contains common things needed by numbers_test.cc,
 // numbers_legacy_test.cc and numbers_benchmark.cc.
 
-#ifndef ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_
-#define ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_
+#define Y_ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_
 
 #include <array>
 #include <cstdint>
@@ -26,7 +26,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 template <typename IntType>
@@ -178,7 +178,7 @@ inline const std::array<uint64_test_case, 34>& strtouint64_test_cases() {
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_NUMBERS_TEST_COMMON_H_

@@ -19,7 +19,7 @@
 #include <util/generic/string.h>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 namespace {
@@ -158,12 +158,12 @@ const uint32_t* LargePowerOfFiveData(int i) {
 int LargePowerOfFiveSize(int i) { return 2 * i; }
 }  // namespace
 
-ABSL_DLL const uint32_t kFiveToNth[14] = {
+Y_ABSL_DLL const uint32_t kFiveToNth[14] = {
     1,     5,      25,      125,     625,      3125,      15625,
     78125, 390625, 1953125, 9765625, 48828125, 244140625, 1220703125,
 };
 
-ABSL_DLL const uint32_t kTenToNth[10] = {
+Y_ABSL_DLL const uint32_t kTenToNth[10] = {
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
 };
 
@@ -355,5 +355,5 @@ template class BigUnsigned<4>;
 template class BigUnsigned<84>;
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

@@ -20,7 +20,7 @@
 #include <util/generic/string.h>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 TString FlagsToString(Flags v) {
@@ -33,17 +33,17 @@ TString FlagsToString(Flags v) {
   return s;
 }
 
-#define ABSL_INTERNAL_X_VAL(id) \
+#define Y_ABSL_INTERNAL_X_VAL(id) \
   constexpr y_absl::FormatConversionChar FormatConversionCharInternal::id;
-ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_X_VAL, )
-#undef ABSL_INTERNAL_X_VAL
+Y_ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(Y_ABSL_INTERNAL_X_VAL, )
+#undef Y_ABSL_INTERNAL_X_VAL
 // NOLINTNEXTLINE(readability-redundant-declaration)
 constexpr y_absl::FormatConversionChar FormatConversionCharInternal::kNone;
 
-#define ABSL_INTERNAL_CHAR_SET_CASE(c) \
+#define Y_ABSL_INTERNAL_CHAR_SET_CASE(c) \
   constexpr FormatConversionCharSet FormatConversionCharSetInternal::c;
-ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(ABSL_INTERNAL_CHAR_SET_CASE, )
-#undef ABSL_INTERNAL_CHAR_SET_CASE
+Y_ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(Y_ABSL_INTERNAL_CHAR_SET_CASE, )
+#undef Y_ABSL_INTERNAL_CHAR_SET_CASE
 
 // NOLINTNEXTLINE(readability-redundant-declaration)
 constexpr FormatConversionCharSet FormatConversionCharSetInternal::kStar;
@@ -71,5 +71,5 @@ bool FormatSinkImpl::PutPaddedString(string_view value, int width,
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

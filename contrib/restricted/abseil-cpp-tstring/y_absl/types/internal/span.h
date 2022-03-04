@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#ifndef ABSL_TYPES_INTERNAL_SPAN_H_
-#define ABSL_TYPES_INTERNAL_SPAN_H_
+#ifndef Y_ABSL_TYPES_INTERNAL_SPAN_H_
+#define Y_ABSL_TYPES_INTERNAL_SPAN_H_
 
 #include <algorithm>
 #include <cstddef>
@@ -26,7 +26,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 namespace span_internal {
 // A constexpr min function
@@ -122,7 +122,7 @@ template <typename From, typename To>
 using EnableIfConvertibleTo =
     typename std::enable_if<IsConvertible<From, To>::value>::type;
 }  // namespace span_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TYPES_INTERNAL_SPAN_H_
+#endif  // Y_ABSL_TYPES_INTERNAL_SPAN_H_

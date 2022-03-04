@@ -18,27 +18,27 @@
 //
 // This header file defines the `y_absl::bad_any_cast` type.
 
-#ifndef ABSL_TYPES_BAD_ANY_CAST_H_
-#define ABSL_TYPES_BAD_ANY_CAST_H_
+#ifndef Y_ABSL_TYPES_BAD_ANY_CAST_H_
+#define Y_ABSL_TYPES_BAD_ANY_CAST_H_
 
 #include <typeinfo>
 
 #include "y_absl/base/config.h"
 
-#ifdef ABSL_USES_STD_ANY
+#ifdef Y_ABSL_USES_STD_ANY
 
 #include <any>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 using std::bad_any_cast;
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#else  // ABSL_USES_STD_ANY
+#else  // Y_ABSL_USES_STD_ANY
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // bad_any_cast
@@ -67,9 +67,9 @@ namespace any_internal {
 [[noreturn]] void ThrowBadAnyCast();
 
 }  // namespace any_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USES_STD_ANY
+#endif  // Y_ABSL_USES_STD_ANY
 
-#endif  // ABSL_TYPES_BAD_ANY_CAST_H_
+#endif  // Y_ABSL_TYPES_BAD_ANY_CAST_H_

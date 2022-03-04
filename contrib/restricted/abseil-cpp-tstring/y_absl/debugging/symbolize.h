@@ -49,13 +49,13 @@
 //     return 0;
 //  }
 //
-#ifndef ABSL_DEBUGGING_SYMBOLIZE_H_
-#define ABSL_DEBUGGING_SYMBOLIZE_H_
+#ifndef Y_ABSL_DEBUGGING_SYMBOLIZE_H_
+#define Y_ABSL_DEBUGGING_SYMBOLIZE_H_
 
 #include "y_absl/debugging/internal/symbolize.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // InitializeSymbolizer()
 //
@@ -93,7 +93,7 @@ void InitializeSymbolizer(const char* argv0);
 //  }
 bool Symbolize(const void *pc, char *out, int out_size);
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_SYMBOLIZE_H_
+#endif  // Y_ABSL_DEBUGGING_SYMBOLIZE_H_

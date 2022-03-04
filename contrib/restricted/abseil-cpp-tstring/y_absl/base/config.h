@@ -29,24 +29,24 @@
 // Example:
 //
 // Suppose a programmer wants to write a program that uses the 'mmap()' system
-// call. The Abseil macro for that feature (`ABSL_HAVE_MMAP`) allows you to
+// call. The Abseil macro for that feature (`Y_ABSL_HAVE_MMAP`) allows you to
 // selectively include the `mmap.h` header and bracket code using that feature
 // in the macro:
 //
 //   #include "y_absl/base/config.h"
 //
-//   #ifdef ABSL_HAVE_MMAP
+//   #ifdef Y_ABSL_HAVE_MMAP
 //   #include "sys/mman.h"
-//   #endif  //ABSL_HAVE_MMAP
+//   #endif  //Y_ABSL_HAVE_MMAP
 //
 //   ...
-//   #ifdef ABSL_HAVE_MMAP
+//   #ifdef Y_ABSL_HAVE_MMAP
 //   void *ptr = mmap(...);
 //   ...
-//   #endif  // ABSL_HAVE_MMAP
+//   #endif  // Y_ABSL_HAVE_MMAP
 
-#ifndef ABSL_BASE_CONFIG_H_
-#define ABSL_BASE_CONFIG_H_
+#ifndef Y_ABSL_BASE_CONFIG_H_
+#define Y_ABSL_BASE_CONFIG_H_
 
 // Included for the __GLIBC__ macro (or similar macros on other systems).
 #include <limits.h>
@@ -67,12 +67,12 @@
 #include "y_absl/base/policy_checks.h"
 
 // Abseil long-term support (LTS) releases will define
-// `ABSL_LTS_RELEASE_VERSION` to the integer representing the date string of the
-// LTS release version, and will define `ABSL_LTS_RELEASE_PATCH_LEVEL` to the
+// `Y_ABSL_LTS_RELEASE_VERSION` to the integer representing the date string of the
+// LTS release version, and will define `Y_ABSL_LTS_RELEASE_PATCH_LEVEL` to the
 // integer representing the patch-level for that release.
 //
 // For example, for LTS release version "20300401.2", this would give us
-// ABSL_LTS_RELEASE_VERSION == 20300401 && ABSL_LTS_RELEASE_PATCH_LEVEL == 2
+// Y_ABSL_LTS_RELEASE_VERSION == 20300401 && Y_ABSL_LTS_RELEASE_PATCH_LEVEL == 2
 //
 // These symbols will not be defined in non-LTS code.
 //
@@ -80,11 +80,11 @@
 // these symbols to assert a minimum version requirement, we recommend you do it
 // as
 //
-// #if defined(ABSL_LTS_RELEASE_VERSION) && ABSL_LTS_RELEASE_VERSION < 20300401
+// #if defined(Y_ABSL_LTS_RELEASE_VERSION) && Y_ABSL_LTS_RELEASE_VERSION < 20300401
 // #error Project foo requires Abseil LTS version >= 20300401
 // #endif
 //
-// The `defined(ABSL_LTS_RELEASE_VERSION)` part of the check excludes
+// The `defined(Y_ABSL_LTS_RELEASE_VERSION)` part of the check excludes
 // live-at-head clients from the minimum version assertion.
 //
 // See https://abseil.io/about/releases for more information on Abseil release
@@ -92,18 +92,18 @@
 //
 // LTS releases can be obtained from
 // https://github.com/abseil/abseil-cpp/releases.
-#define ABSL_LTS_RELEASE_VERSION 20211102
-#define ABSL_LTS_RELEASE_PATCH_LEVEL 0
+#define Y_ABSL_LTS_RELEASE_VERSION 20211102
+#define Y_ABSL_LTS_RELEASE_PATCH_LEVEL 0
 
 // Helper macro to convert a CPP variable to a string literal.
-#define ABSL_INTERNAL_DO_TOKEN_STR(x) #x
-#define ABSL_INTERNAL_TOKEN_STR(x) ABSL_INTERNAL_DO_TOKEN_STR(x)
+#define Y_ABSL_INTERNAL_DO_TOKEN_STR(x) #x
+#define Y_ABSL_INTERNAL_TOKEN_STR(x) Y_ABSL_INTERNAL_DO_TOKEN_STR(x)
 
 // -----------------------------------------------------------------------------
 // Abseil namespace annotations
 // -----------------------------------------------------------------------------
 
-// ABSL_NAMESPACE_BEGIN/ABSL_NAMESPACE_END
+// Y_ABSL_NAMESPACE_BEGIN/Y_ABSL_NAMESPACE_END
 //
 // An annotation placed at the beginning/end of each `namespace y_absl` scope.
 // This is used to inject an inline namespace.
@@ -111,11 +111,11 @@
 // The proper way to write Abseil code in the `y_absl` namespace is:
 //
 // namespace y_absl {
-// ABSL_NAMESPACE_BEGIN
+// Y_ABSL_NAMESPACE_BEGIN
 //
 // void Foo();  // y_absl::Foo().
 //
-// ABSL_NAMESPACE_END
+// Y_ABSL_NAMESPACE_END
 // }  // namespace y_absl
 //
 // Users of Abseil should not use these macros, because users of Abseil should
@@ -123,43 +123,43 @@
 // not support forward declarations of its own types, nor does it support
 // user-provided specialization of Abseil templates.  Code that violates these
 // rules may be broken without warning.)
-#if !defined(ABSL_OPTION_USE_INLINE_NAMESPACE) || \
-    !defined(ABSL_OPTION_INLINE_NAMESPACE_NAME)
+#if !defined(Y_ABSL_OPTION_USE_INLINE_NAMESPACE) || \
+    !defined(Y_ABSL_OPTION_INLINE_NAMESPACE_NAME)
 #error options.h is misconfigured.
 #endif
 
-// Check that ABSL_OPTION_INLINE_NAMESPACE_NAME is neither "head" nor ""
-#if defined(__cplusplus) && ABSL_OPTION_USE_INLINE_NAMESPACE == 1
+// Check that Y_ABSL_OPTION_INLINE_NAMESPACE_NAME is neither "head" nor ""
+#if defined(__cplusplus) && Y_ABSL_OPTION_USE_INLINE_NAMESPACE == 1
 
-#define ABSL_INTERNAL_INLINE_NAMESPACE_STR \
-  ABSL_INTERNAL_TOKEN_STR(ABSL_OPTION_INLINE_NAMESPACE_NAME)
+#define Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR \
+  Y_ABSL_INTERNAL_TOKEN_STR(Y_ABSL_OPTION_INLINE_NAMESPACE_NAME)
 
-static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != '\0',
-              "options.h misconfigured: ABSL_OPTION_INLINE_NAMESPACE_NAME must "
+static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != '\0',
+              "options.h misconfigured: Y_ABSL_OPTION_INLINE_NAMESPACE_NAME must "
               "not be empty.");
-static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
-                  ABSL_INTERNAL_INLINE_NAMESPACE_STR[1] != 'e' ||
-                  ABSL_INTERNAL_INLINE_NAMESPACE_STR[2] != 'a' ||
-                  ABSL_INTERNAL_INLINE_NAMESPACE_STR[3] != 'd' ||
-                  ABSL_INTERNAL_INLINE_NAMESPACE_STR[4] != '\0',
-              "options.h misconfigured: ABSL_OPTION_INLINE_NAMESPACE_NAME must "
+static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
+                  Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[1] != 'e' ||
+                  Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[2] != 'a' ||
+                  Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[3] != 'd' ||
+                  Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[4] != '\0',
+              "options.h misconfigured: Y_ABSL_OPTION_INLINE_NAMESPACE_NAME must "
               "be changed to a new, unique identifier name.");
 
 #endif
 
-#if ABSL_OPTION_USE_INLINE_NAMESPACE == 0
-#define ABSL_NAMESPACE_BEGIN
-#define ABSL_NAMESPACE_END
-#define ABSL_INTERNAL_C_SYMBOL(x) x
-#elif ABSL_OPTION_USE_INLINE_NAMESPACE == 1
-#define ABSL_NAMESPACE_BEGIN \
-  inline namespace ABSL_OPTION_INLINE_NAMESPACE_NAME {
-#define ABSL_NAMESPACE_END }
-#define ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v) x##_##v
-#define ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, v) \
-  ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v)
-#define ABSL_INTERNAL_C_SYMBOL(x) \
-  ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, ABSL_OPTION_INLINE_NAMESPACE_NAME)
+#if Y_ABSL_OPTION_USE_INLINE_NAMESPACE == 0
+#define Y_ABSL_NAMESPACE_BEGIN
+#define Y_ABSL_NAMESPACE_END
+#define Y_ABSL_INTERNAL_C_SYMBOL(x) x
+#elif Y_ABSL_OPTION_USE_INLINE_NAMESPACE == 1
+#define Y_ABSL_NAMESPACE_BEGIN \
+  inline namespace Y_ABSL_OPTION_INLINE_NAMESPACE_NAME {
+#define Y_ABSL_NAMESPACE_END }
+#define Y_ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v) x##_##v
+#define Y_ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, v) \
+  Y_ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v)
+#define Y_ABSL_INTERNAL_C_SYMBOL(x) \
+  Y_ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, Y_ABSL_OPTION_INLINE_NAMESPACE_NAME)
 #else
 #error options.h is misconfigured.
 #endif
@@ -168,7 +168,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Compiler Feature Checks
 // -----------------------------------------------------------------------------
 
-// ABSL_HAVE_BUILTIN()
+// Y_ABSL_HAVE_BUILTIN()
 //
 // Checks whether the compiler supports a Clang Feature Checking Macro, and if
 // so, checks whether it supports the provided builtin function "x" where x
@@ -178,106 +178,106 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Note: Use this macro to avoid an extra level of #ifdef __has_builtin check.
 // http://releases.llvm.org/3.3/tools/clang/docs/LanguageExtensions.html
 #ifdef __has_builtin
-#define ABSL_HAVE_BUILTIN(x) __has_builtin(x)
+#define Y_ABSL_HAVE_BUILTIN(x) __has_builtin(x)
 #else
-#define ABSL_HAVE_BUILTIN(x) 0
+#define Y_ABSL_HAVE_BUILTIN(x) 0
 #endif
 
 #if defined(__is_identifier)
-#define ABSL_INTERNAL_HAS_KEYWORD(x) !(__is_identifier(x))
+#define Y_ABSL_INTERNAL_HAS_KEYWORD(x) !(__is_identifier(x))
 #else
-#define ABSL_INTERNAL_HAS_KEYWORD(x) 0
+#define Y_ABSL_INTERNAL_HAS_KEYWORD(x) 0
 #endif
 
 #ifdef __has_feature
-#define ABSL_HAVE_FEATURE(f) __has_feature(f)
+#define Y_ABSL_HAVE_FEATURE(f) __has_feature(f)
 #else
-#define ABSL_HAVE_FEATURE(f) 0
+#define Y_ABSL_HAVE_FEATURE(f) 0
 #endif
 
 // Portable check for GCC minimum version:
 // https://gcc.gnu.org/onlinedocs/cpp/Common-Predefined-Macros.html
 #if defined(__GNUC__) && defined(__GNUC_MINOR__)
-#define ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(x, y) \
+#define Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(x, y) \
   (__GNUC__ > (x) || __GNUC__ == (x) && __GNUC_MINOR__ >= (y))
 #else
-#define ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(x, y) 0
+#define Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(x, y) 0
 #endif
 
 #if defined(__clang__) && defined(__clang_major__) && defined(__clang_minor__)
-#define ABSL_INTERNAL_HAVE_MIN_CLANG_VERSION(x, y) \
+#define Y_ABSL_INTERNAL_HAVE_MIN_CLANG_VERSION(x, y) \
   (__clang_major__ > (x) || __clang_major__ == (x) && __clang_minor__ >= (y))
 #else
-#define ABSL_INTERNAL_HAVE_MIN_CLANG_VERSION(x, y) 0
+#define Y_ABSL_INTERNAL_HAVE_MIN_CLANG_VERSION(x, y) 0
 #endif
 
-// ABSL_HAVE_TLS is defined to 1 when __thread should be supported.
+// Y_ABSL_HAVE_TLS is defined to 1 when __thread should be supported.
 // We assume __thread is supported on Linux when compiled with Clang or compiled
 // against libstdc++ with _GLIBCXX_HAVE_TLS defined.
-#ifdef ABSL_HAVE_TLS
-#error ABSL_HAVE_TLS cannot be directly set
+#ifdef Y_ABSL_HAVE_TLS
+#error Y_ABSL_HAVE_TLS cannot be directly set
 #elif defined(__linux__) && (defined(__clang__) || defined(_GLIBCXX_HAVE_TLS))
-#define ABSL_HAVE_TLS 1
+#define Y_ABSL_HAVE_TLS 1
 #endif
 
-// ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
+// Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
 //
 // Checks whether `std::is_trivially_destructible<T>` is supported.
 //
 // Notes: All supported compilers using libc++ support this feature, as does
 // gcc >= 4.8.1 using libstdc++, and Visual Studio.
-#ifdef ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
-#error ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE cannot be directly set
+#ifdef Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
+#error Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE cannot be directly set
 #elif defined(_LIBCPP_VERSION) || defined(_MSC_VER) || \
     (!defined(__clang__) && defined(__GLIBCXX__) &&    \
-     ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(4, 8))
-#define ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE 1
+     Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(4, 8))
+#define Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE 1
 #endif
 
-// ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
+// Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
 //
 // Checks whether `std::is_trivially_default_constructible<T>` and
 // `std::is_trivially_copy_constructible<T>` are supported.
 
-// ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
+// Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
 //
 // Checks whether `std::is_trivially_copy_assignable<T>` is supported.
 
 // Notes: Clang with libc++ supports these features, as does gcc >= 7.4 with
 // libstdc++, or gcc >= 8.2 with libc++, and Visual Studio (but not NVCC).
-#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE)
-#error ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE cannot be directly set
-#elif defined(ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE)
-#error ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE cannot directly set
+#if defined(Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE)
+#error Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE cannot be directly set
+#elif defined(Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE)
+#error Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE cannot directly set
 #elif (defined(__clang__) && defined(_LIBCPP_VERSION)) ||                    \
     (!defined(__clang__) &&                                                  \
-     ((ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(7, 4) && defined(__GLIBCXX__)) || \
-      (ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(8, 2) &&                          \
+     ((Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(7, 4) && defined(__GLIBCXX__)) || \
+      (Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(8, 2) &&                          \
        defined(_LIBCPP_VERSION)))) ||                                        \
     (defined(_MSC_VER) && !defined(__NVCC__))
-#define ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE 1
-#define ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE 1
+#define Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE 1
+#define Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE 1
 #endif
 
-// ABSL_HAVE_SOURCE_LOCATION_CURRENT
+// Y_ABSL_HAVE_SOURCE_LOCATION_CURRENT
 //
 // Indicates whether `y_absl::SourceLocation::current()` will return useful
 // information in some contexts.
-#ifndef ABSL_HAVE_SOURCE_LOCATION_CURRENT
-#if ABSL_INTERNAL_HAS_KEYWORD(__builtin_LINE) && \
-    ABSL_INTERNAL_HAS_KEYWORD(__builtin_FILE)
-#define ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
-#elif ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(5, 0)
-#define ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
+#ifndef Y_ABSL_HAVE_SOURCE_LOCATION_CURRENT
+#if Y_ABSL_INTERNAL_HAS_KEYWORD(__builtin_LINE) && \
+    Y_ABSL_INTERNAL_HAS_KEYWORD(__builtin_FILE)
+#define Y_ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
+#elif Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(5, 0)
+#define Y_ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
 #endif
 #endif
 
-// ABSL_HAVE_THREAD_LOCAL
+// Y_ABSL_HAVE_THREAD_LOCAL
 //
 // Checks whether C++11's `thread_local` storage duration specifier is
 // supported.
-#ifdef ABSL_HAVE_THREAD_LOCAL
-#error ABSL_HAVE_THREAD_LOCAL cannot be directly set
+#ifdef Y_ABSL_HAVE_THREAD_LOCAL
+#error Y_ABSL_HAVE_THREAD_LOCAL cannot be directly set
 #elif defined(__APPLE__)
 // Notes:
 // * Xcode's clang did not support `thread_local` until version 8, and
@@ -285,14 +285,14 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // * Xcode 9.3 started disallowing `thread_local` for 32-bit iOS simulator
 //   targeting iOS 9.x.
 // * Xcode 10 moves the deployment target check for iOS < 9.0 to link time
-//   making ABSL_HAVE_FEATURE unreliable there.
+//   making Y_ABSL_HAVE_FEATURE unreliable there.
 //
-#if ABSL_HAVE_FEATURE(cxx_thread_local) && \
+#if Y_ABSL_HAVE_FEATURE(cxx_thread_local) && \
     !(TARGET_OS_IPHONE && __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_9_0)
-#define ABSL_HAVE_THREAD_LOCAL 1
+#define Y_ABSL_HAVE_THREAD_LOCAL 1
 #endif
 #else  // !defined(__APPLE__)
-#define ABSL_HAVE_THREAD_LOCAL 1
+#define Y_ABSL_HAVE_THREAD_LOCAL 1
 #endif
 
 // There are platforms for which TLS should not be used even though the compiler
@@ -314,12 +314,12 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #if defined(__ANDROID__) && defined(__clang__) && defined(__NDK_MAJOR__) && \
     defined(__NDK_MINOR__) &&                                               \
     ((__NDK_MAJOR__ < 12) || ((__NDK_MAJOR__ == 12) && (__NDK_MINOR__ < 1)))
-#undef ABSL_HAVE_TLS
-#undef ABSL_HAVE_THREAD_LOCAL
+#undef Y_ABSL_HAVE_TLS
+#undef Y_ABSL_HAVE_THREAD_LOCAL
 #endif
 #endif  // defined(__ANDROID__) && defined(__clang__)
 
-// ABSL_HAVE_INTRINSIC_INT128
+// Y_ABSL_HAVE_INTRINSIC_INT128
 //
 // Checks whether the __int128 compiler extension for a 128-bit integral type is
 // supported.
@@ -332,55 +332,55 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // * On Nvidia's nvcc:
 //   * nvcc also defines __GNUC__ and __SIZEOF_INT128__, but not all versions
 //     actually support __int128.
-#ifdef ABSL_HAVE_INTRINSIC_INT128
-#error ABSL_HAVE_INTRINSIC_INT128 cannot be directly set
+#ifdef Y_ABSL_HAVE_INTRINSIC_INT128
+#error Y_ABSL_HAVE_INTRINSIC_INT128 cannot be directly set
 #elif defined(__SIZEOF_INT128__)
 #if (defined(__clang__) && !defined(_WIN32)) || \
     (defined(__CUDACC__) && __CUDACC_VER_MAJOR__ >= 9) ||                \
     (defined(__GNUC__) && !defined(__clang__) && !defined(__CUDACC__))
-#define ABSL_HAVE_INTRINSIC_INT128 1
+#define Y_ABSL_HAVE_INTRINSIC_INT128 1
 #elif defined(__CUDACC__)
 // __CUDACC_VER__ is a full version number before CUDA 9, and is defined to a
 // string explaining that it has been removed starting with CUDA 9. We use
 // nested #ifs because there is no short-circuiting in the preprocessor.
 // NOTE: `__CUDACC__` could be undefined while `__CUDACC_VER__` is defined.
 #if __CUDACC_VER__ >= 70000
-#define ABSL_HAVE_INTRINSIC_INT128 1
+#define Y_ABSL_HAVE_INTRINSIC_INT128 1
 #endif  // __CUDACC_VER__ >= 70000
 #endif  // defined(__CUDACC__)
-#endif  // ABSL_HAVE_INTRINSIC_INT128
+#endif  // Y_ABSL_HAVE_INTRINSIC_INT128
 
-// ABSL_HAVE_EXCEPTIONS
+// Y_ABSL_HAVE_EXCEPTIONS
 //
 // Checks whether the compiler both supports and enables exceptions. Many
 // compilers support a "no exceptions" mode that disables exceptions.
 //
-// Generally, when ABSL_HAVE_EXCEPTIONS is not defined:
+// Generally, when Y_ABSL_HAVE_EXCEPTIONS is not defined:
 //
 // * Code using `throw` and `try` may not compile.
 // * The `noexcept` specifier will still compile and behave as normal.
 // * The `noexcept` operator may still return `false`.
 //
 // For further details, consult the compiler's documentation.
-#ifdef ABSL_HAVE_EXCEPTIONS
-#error ABSL_HAVE_EXCEPTIONS cannot be directly set.
-#elif ABSL_INTERNAL_HAVE_MIN_CLANG_VERSION(3, 6)
+#ifdef Y_ABSL_HAVE_EXCEPTIONS
+#error Y_ABSL_HAVE_EXCEPTIONS cannot be directly set.
+#elif Y_ABSL_INTERNAL_HAVE_MIN_CLANG_VERSION(3, 6)
 // Clang >= 3.6
-#if ABSL_HAVE_FEATURE(cxx_exceptions)
-#define ABSL_HAVE_EXCEPTIONS 1
-#endif  // ABSL_HAVE_FEATURE(cxx_exceptions)
+#if Y_ABSL_HAVE_FEATURE(cxx_exceptions)
+#define Y_ABSL_HAVE_EXCEPTIONS 1
+#endif  // Y_ABSL_HAVE_FEATURE(cxx_exceptions)
 #elif defined(__clang__)
 // Clang < 3.6
 // http://releases.llvm.org/3.6.0/tools/clang/docs/ReleaseNotes.html#the-exceptions-macro
-#if defined(__EXCEPTIONS) && ABSL_HAVE_FEATURE(cxx_exceptions)
-#define ABSL_HAVE_EXCEPTIONS 1
-#endif  // defined(__EXCEPTIONS) && ABSL_HAVE_FEATURE(cxx_exceptions)
+#if defined(__EXCEPTIONS) && Y_ABSL_HAVE_FEATURE(cxx_exceptions)
+#define Y_ABSL_HAVE_EXCEPTIONS 1
+#endif  // defined(__EXCEPTIONS) && Y_ABSL_HAVE_FEATURE(cxx_exceptions)
 // Handle remaining special cases and default to exceptions being supported.
 #elif !(defined(__GNUC__) && (__GNUC__ < 5) && !defined(__EXCEPTIONS)) && \
-    !(ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(5, 0) &&                        \
+    !(Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(5, 0) &&                        \
       !defined(__cpp_exceptions)) &&                                      \
     !(defined(_MSC_VER) && !defined(_CPPUNWIND))
-#define ABSL_HAVE_EXCEPTIONS 1
+#define Y_ABSL_HAVE_EXCEPTIONS 1
 #endif
 
 // -----------------------------------------------------------------------------
@@ -404,51 +404,51 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Note that since Android defines both __ANDROID__ and __linux__, one
 // may probe for either Linux or Android by simply testing for __linux__.
 
-// ABSL_HAVE_MMAP
+// Y_ABSL_HAVE_MMAP
 //
 // Checks whether the platform has an mmap(2) implementation as defined in
 // POSIX.1-2001.
-#ifdef ABSL_HAVE_MMAP
-#error ABSL_HAVE_MMAP cannot be directly set
+#ifdef Y_ABSL_HAVE_MMAP
+#error Y_ABSL_HAVE_MMAP cannot be directly set
 #elif defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || \
     defined(_AIX) || defined(__ros__) || defined(__native_client__) ||    \
     defined(__asmjs__) || defined(__wasm__) || defined(__Fuchsia__) ||    \
     defined(__sun) || defined(__ASYLO__) || defined(__myriad2__) ||       \
     defined(__HAIKU__)
-#define ABSL_HAVE_MMAP 1
+#define Y_ABSL_HAVE_MMAP 1
 #endif
 
-// ABSL_HAVE_PTHREAD_GETSCHEDPARAM
+// Y_ABSL_HAVE_PTHREAD_GETSCHEDPARAM
 //
 // Checks whether the platform implements the pthread_(get|set)schedparam(3)
 // functions as defined in POSIX.1-2001.
-#ifdef ABSL_HAVE_PTHREAD_GETSCHEDPARAM
-#error ABSL_HAVE_PTHREAD_GETSCHEDPARAM cannot be directly set
+#ifdef Y_ABSL_HAVE_PTHREAD_GETSCHEDPARAM
+#error Y_ABSL_HAVE_PTHREAD_GETSCHEDPARAM cannot be directly set
 #elif defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || \
     defined(_AIX) || defined(__ros__)
-#define ABSL_HAVE_PTHREAD_GETSCHEDPARAM 1
+#define Y_ABSL_HAVE_PTHREAD_GETSCHEDPARAM 1
 #endif
 
-// ABSL_HAVE_SCHED_GETCPU
+// Y_ABSL_HAVE_SCHED_GETCPU
 //
 // Checks whether sched_getcpu is available.
-#ifdef ABSL_HAVE_SCHED_GETCPU
-#error ABSL_HAVE_SCHED_GETCPU cannot be directly set
+#ifdef Y_ABSL_HAVE_SCHED_GETCPU
+#error Y_ABSL_HAVE_SCHED_GETCPU cannot be directly set
 #elif defined(__linux__)
-#define ABSL_HAVE_SCHED_GETCPU 1
+#define Y_ABSL_HAVE_SCHED_GETCPU 1
 #endif
 
-// ABSL_HAVE_SCHED_YIELD
+// Y_ABSL_HAVE_SCHED_YIELD
 //
 // Checks whether the platform implements sched_yield(2) as defined in
 // POSIX.1-2001.
-#ifdef ABSL_HAVE_SCHED_YIELD
-#error ABSL_HAVE_SCHED_YIELD cannot be directly set
+#ifdef Y_ABSL_HAVE_SCHED_YIELD
+#error Y_ABSL_HAVE_SCHED_YIELD cannot be directly set
 #elif defined(__linux__) || defined(__ros__) || defined(__native_client__)
-#define ABSL_HAVE_SCHED_YIELD 1
+#define Y_ABSL_HAVE_SCHED_YIELD 1
 #endif
 
-// ABSL_HAVE_SEMAPHORE_H
+// Y_ABSL_HAVE_SEMAPHORE_H
 //
 // Checks whether the platform supports the <semaphore.h> header and sem_init(3)
 // family of functions as standardized in POSIX.1-2001.
@@ -457,24 +457,24 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // explicitly deprecated and will cause build failures if enabled for those
 // platforms.  We side-step the issue by not defining it here for Apple
 // platforms.
-#ifdef ABSL_HAVE_SEMAPHORE_H
-#error ABSL_HAVE_SEMAPHORE_H cannot be directly set
+#ifdef Y_ABSL_HAVE_SEMAPHORE_H
+#error Y_ABSL_HAVE_SEMAPHORE_H cannot be directly set
 #elif defined(__linux__) || defined(__ros__)
-#define ABSL_HAVE_SEMAPHORE_H 1
+#define Y_ABSL_HAVE_SEMAPHORE_H 1
 #endif
 
-// ABSL_HAVE_ALARM
+// Y_ABSL_HAVE_ALARM
 //
 // Checks whether the platform supports the <signal.h> header and alarm(2)
 // function as standardized in POSIX.1-2001.
-#ifdef ABSL_HAVE_ALARM
-#error ABSL_HAVE_ALARM cannot be directly set
+#ifdef Y_ABSL_HAVE_ALARM
+#error Y_ABSL_HAVE_ALARM cannot be directly set
 #elif defined(__GOOGLE_GRTE_VERSION__)
 // feature tests for Google's GRTE
-#define ABSL_HAVE_ALARM 1
+#define Y_ABSL_HAVE_ALARM 1
 #elif defined(__GLIBC__)
 // feature test for glibc
-#define ABSL_HAVE_ALARM 1
+#define Y_ABSL_HAVE_ALARM 1
 #elif defined(_MSC_VER)
 // feature tests for Microsoft's library
 #elif defined(__MINGW32__)
@@ -489,11 +489,11 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #elif defined(__native_client__)
 #else
 // other standard libraries
-#define ABSL_HAVE_ALARM 1
+#define Y_ABSL_HAVE_ALARM 1
 #endif
 
-// ABSL_IS_LITTLE_ENDIAN
-// ABSL_IS_BIG_ENDIAN
+// Y_ABSL_IS_LITTLE_ENDIAN
+// Y_ABSL_IS_BIG_ENDIAN
 //
 // Checks the endianness of the platform.
 //
@@ -501,21 +501,21 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Clang (since 3.2); see
 // https://gcc.gnu.org/onlinedocs/cpp/Common-Predefined-Macros.html.
 // Otherwise, if _WIN32, assume little endian. Otherwise, bail with an error.
-#if defined(ABSL_IS_BIG_ENDIAN)
-#error "ABSL_IS_BIG_ENDIAN cannot be directly set."
+#if defined(Y_ABSL_IS_BIG_ENDIAN)
+#error "Y_ABSL_IS_BIG_ENDIAN cannot be directly set."
 #endif
-#if defined(ABSL_IS_LITTLE_ENDIAN)
-#error "ABSL_IS_LITTLE_ENDIAN cannot be directly set."
+#if defined(Y_ABSL_IS_LITTLE_ENDIAN)
+#error "Y_ABSL_IS_LITTLE_ENDIAN cannot be directly set."
 #endif
 
 #if (defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
      __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-#define ABSL_IS_LITTLE_ENDIAN 1
+#define Y_ABSL_IS_LITTLE_ENDIAN 1
 #elif defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && \
     __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#define ABSL_IS_BIG_ENDIAN 1
+#define Y_ABSL_IS_BIG_ENDIAN 1
 #elif defined(_WIN32)
-#define ABSL_IS_LITTLE_ENDIAN 1
+#define Y_ABSL_IS_LITTLE_ENDIAN 1
 #else
 #error "y_absl endian detection needs to be set up for your compiler"
 #endif
@@ -536,61 +536,61 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
    __ENVIRONMENT_WATCH_OS_VERSION_MIN_REQUIRED__ < 50000) || \
   (defined(__ENVIRONMENT_TV_OS_VERSION_MIN_REQUIRED__) && \
    __ENVIRONMENT_TV_OS_VERSION_MIN_REQUIRED__ < 120000))
-#define ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE 1
+#define Y_ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE 1
 #else
-#define ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE 0
+#define Y_ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE 0
 #endif
 
-// ABSL_HAVE_STD_ANY
+// Y_ABSL_HAVE_STD_ANY
 //
 // Checks whether C++17 std::any is available by checking whether <any> exists.
-#ifdef ABSL_HAVE_STD_ANY
-#error "ABSL_HAVE_STD_ANY cannot be directly set."
+#ifdef Y_ABSL_HAVE_STD_ANY
+#error "Y_ABSL_HAVE_STD_ANY cannot be directly set."
 #endif
 
 #ifdef __has_include
 #if __has_include(<any>) && defined(__cplusplus) && __cplusplus >= 201703L && \
-    !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
-#define ABSL_HAVE_STD_ANY 1
+    !Y_ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
+#define Y_ABSL_HAVE_STD_ANY 1
 #endif
 #endif
 
-// ABSL_HAVE_STD_OPTIONAL
+// Y_ABSL_HAVE_STD_OPTIONAL
 //
 // Checks whether C++17 std::optional is available.
-#ifdef ABSL_HAVE_STD_OPTIONAL
-#error "ABSL_HAVE_STD_OPTIONAL cannot be directly set."
+#ifdef Y_ABSL_HAVE_STD_OPTIONAL
+#error "Y_ABSL_HAVE_STD_OPTIONAL cannot be directly set."
 #endif
 
 #ifdef __has_include
 #if __has_include(<optional>) && defined(__cplusplus) && \
-    __cplusplus >= 201703L && !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
-#define ABSL_HAVE_STD_OPTIONAL 1
+    __cplusplus >= 201703L && !Y_ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
+#define Y_ABSL_HAVE_STD_OPTIONAL 1
 #endif
 #endif
 
-// ABSL_HAVE_STD_VARIANT
+// Y_ABSL_HAVE_STD_VARIANT
 //
 // Checks whether C++17 std::variant is available.
-#ifdef ABSL_HAVE_STD_VARIANT
-#error "ABSL_HAVE_STD_VARIANT cannot be directly set."
+#ifdef Y_ABSL_HAVE_STD_VARIANT
+#error "Y_ABSL_HAVE_STD_VARIANT cannot be directly set."
 #endif
 
 #ifdef __has_include
 #if __has_include(<variant>) && defined(__cplusplus) && \
-    __cplusplus >= 201703L && !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
-#define ABSL_HAVE_STD_VARIANT 1
+    __cplusplus >= 201703L && !Y_ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
+#define Y_ABSL_HAVE_STD_VARIANT 1
 #endif
 #endif
 
-// ABSL_HAVE_STD_STRING_VIEW
+// Y_ABSL_HAVE_STD_STRING_VIEW
 //
 // Checks whether C++17 std::string_view is available.
-#ifdef ABSL_HAVE_STD_STRING_VIEW
-#error "ABSL_HAVE_STD_STRING_VIEW cannot be directly set."
+#ifdef Y_ABSL_HAVE_STD_STRING_VIEW
+#error "Y_ABSL_HAVE_STD_STRING_VIEW cannot be directly set."
 #endif
 
-#define ABSL_HAVE_STD_STRING_VIEW 1
+#define Y_ABSL_HAVE_STD_STRING_VIEW 1
 
 // For MSVC, `__has_include` is supported in VS 2017 15.3, which is later than
 // the support for <optional>, <any>, <string_view>, <variant>. So we use
@@ -602,70 +602,70 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #if defined(_MSC_VER) && _MSC_VER >= 1910 &&         \
     ((defined(_MSVC_LANG) && _MSVC_LANG > 201402) || \
      (defined(__cplusplus) && __cplusplus > 201402))
-// #define ABSL_HAVE_STD_ANY 1
-#define ABSL_HAVE_STD_OPTIONAL 1
-#define ABSL_HAVE_STD_VARIANT 1
-#define ABSL_HAVE_STD_STRING_VIEW 1
+// #define Y_ABSL_HAVE_STD_ANY 1
+#define Y_ABSL_HAVE_STD_OPTIONAL 1
+#define Y_ABSL_HAVE_STD_VARIANT 1
+#define Y_ABSL_HAVE_STD_STRING_VIEW 1
 #endif
 
-// ABSL_USES_STD_ANY
+// Y_ABSL_USES_STD_ANY
 //
 // Indicates whether y_absl::any is an alias for std::any.
-#if !defined(ABSL_OPTION_USE_STD_ANY)
+#if !defined(Y_ABSL_OPTION_USE_STD_ANY)
 #error options.h is misconfigured.
-#elif ABSL_OPTION_USE_STD_ANY == 0 || \
-    (ABSL_OPTION_USE_STD_ANY == 2 && !defined(ABSL_HAVE_STD_ANY))
-#undef ABSL_USES_STD_ANY
-#elif ABSL_OPTION_USE_STD_ANY == 1 || \
-    (ABSL_OPTION_USE_STD_ANY == 2 && defined(ABSL_HAVE_STD_ANY))
-#define ABSL_USES_STD_ANY 1
+#elif Y_ABSL_OPTION_USE_STD_ANY == 0 || \
+    (Y_ABSL_OPTION_USE_STD_ANY == 2 && !defined(Y_ABSL_HAVE_STD_ANY))
+#undef Y_ABSL_USES_STD_ANY
+#elif Y_ABSL_OPTION_USE_STD_ANY == 1 || \
+    (Y_ABSL_OPTION_USE_STD_ANY == 2 && defined(Y_ABSL_HAVE_STD_ANY))
+#define Y_ABSL_USES_STD_ANY 1
 #else
 #error options.h is misconfigured.
 #endif
 
-// ABSL_USES_STD_OPTIONAL
+// Y_ABSL_USES_STD_OPTIONAL
 //
 // Indicates whether y_absl::optional is an alias for std::optional.
-#if !defined(ABSL_OPTION_USE_STD_OPTIONAL)
+#if !defined(Y_ABSL_OPTION_USE_STD_OPTIONAL)
 #error options.h is misconfigured.
-#elif ABSL_OPTION_USE_STD_OPTIONAL == 0 || \
-    (ABSL_OPTION_USE_STD_OPTIONAL == 2 && !defined(ABSL_HAVE_STD_OPTIONAL))
-#undef ABSL_USES_STD_OPTIONAL
-#elif ABSL_OPTION_USE_STD_OPTIONAL == 1 || \
-    (ABSL_OPTION_USE_STD_OPTIONAL == 2 && defined(ABSL_HAVE_STD_OPTIONAL))
-#define ABSL_USES_STD_OPTIONAL 1
+#elif Y_ABSL_OPTION_USE_STD_OPTIONAL == 0 || \
+    (Y_ABSL_OPTION_USE_STD_OPTIONAL == 2 && !defined(Y_ABSL_HAVE_STD_OPTIONAL))
+#undef Y_ABSL_USES_STD_OPTIONAL
+#elif Y_ABSL_OPTION_USE_STD_OPTIONAL == 1 || \
+    (Y_ABSL_OPTION_USE_STD_OPTIONAL == 2 && defined(Y_ABSL_HAVE_STD_OPTIONAL))
+#define Y_ABSL_USES_STD_OPTIONAL 1
 #else
 #error options.h is misconfigured.
 #endif
 
-// ABSL_USES_STD_VARIANT
+// Y_ABSL_USES_STD_VARIANT
 //
 // Indicates whether y_absl::variant is an alias for std::variant.
-#if !defined(ABSL_OPTION_USE_STD_VARIANT)
+#if !defined(Y_ABSL_OPTION_USE_STD_VARIANT)
 #error options.h is misconfigured.
-#elif ABSL_OPTION_USE_STD_VARIANT == 0 || \
-    (ABSL_OPTION_USE_STD_VARIANT == 2 && !defined(ABSL_HAVE_STD_VARIANT))
-#undef ABSL_USES_STD_VARIANT
-#elif ABSL_OPTION_USE_STD_VARIANT == 1 || \
-    (ABSL_OPTION_USE_STD_VARIANT == 2 && defined(ABSL_HAVE_STD_VARIANT))
-#define ABSL_USES_STD_VARIANT 1
+#elif Y_ABSL_OPTION_USE_STD_VARIANT == 0 || \
+    (Y_ABSL_OPTION_USE_STD_VARIANT == 2 && !defined(Y_ABSL_HAVE_STD_VARIANT))
+#undef Y_ABSL_USES_STD_VARIANT
+#elif Y_ABSL_OPTION_USE_STD_VARIANT == 1 || \
+    (Y_ABSL_OPTION_USE_STD_VARIANT == 2 && defined(Y_ABSL_HAVE_STD_VARIANT))
+#define Y_ABSL_USES_STD_VARIANT 1
 #else
 #error options.h is misconfigured.
 #endif
 
-// ABSL_USES_STD_STRING_VIEW
+// Y_ABSL_USES_STD_STRING_VIEW
 //
 // Indicates whether y_absl::string_view is an alias for std::string_view.
-#if !defined(ABSL_OPTION_USE_STD_STRING_VIEW)
+#if !defined(Y_ABSL_OPTION_USE_STD_STRING_VIEW)
 #error options.h is misconfigured.
-#elif ABSL_OPTION_USE_STD_STRING_VIEW == 0 || \
-    (ABSL_OPTION_USE_STD_STRING_VIEW == 2 &&  \
-     !defined(ABSL_HAVE_STD_STRING_VIEW))
-#undef ABSL_USES_STD_STRING_VIEW
-#elif ABSL_OPTION_USE_STD_STRING_VIEW == 1 || \
-    (ABSL_OPTION_USE_STD_STRING_VIEW == 2 &&  \
-     defined(ABSL_HAVE_STD_STRING_VIEW))
-#define ABSL_USES_STD_STRING_VIEW 1
+#elif Y_ABSL_OPTION_USE_STD_STRING_VIEW == 0 || \
+    (Y_ABSL_OPTION_USE_STD_STRING_VIEW == 2 &&  \
+     !defined(Y_ABSL_HAVE_STD_STRING_VIEW))
+#undef Y_ABSL_USES_STD_STRING_VIEW
+#elif Y_ABSL_OPTION_USE_STD_STRING_VIEW == 1 || \
+    (Y_ABSL_OPTION_USE_STD_STRING_VIEW == 2 &&  \
+     defined(Y_ABSL_HAVE_STD_STRING_VIEW))
+#define Y_ABSL_USES_STD_STRING_VIEW 1
 #else
 #error options.h is misconfigured.
 #endif
@@ -675,34 +675,34 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // struct can throw. This defeats some of variant_test and
 // variant_exception_safety_test.
 #if defined(_MSC_VER) && _MSC_VER >= 1700 && defined(_DEBUG)
-#define ABSL_INTERNAL_MSVC_2017_DBG_MODE
+#define Y_ABSL_INTERNAL_MSVC_2017_DBG_MODE
 #endif
 
-// ABSL_INTERNAL_MANGLED_NS
-// ABSL_INTERNAL_MANGLED_BACKREFERENCE
+// Y_ABSL_INTERNAL_MANGLED_NS
+// Y_ABSL_INTERNAL_MANGLED_BACKREFERENCE
 //
 // Internal macros for building up mangled names in our internal fork of CCTZ.
 // This implementation detail is only needed and provided for the MSVC build.
 //
-// These macros both expand to string literals.  ABSL_INTERNAL_MANGLED_NS is
+// These macros both expand to string literals.  Y_ABSL_INTERNAL_MANGLED_NS is
 // the mangled spelling of the `y_absl` namespace, and
-// ABSL_INTERNAL_MANGLED_BACKREFERENCE is a back-reference integer representing
+// Y_ABSL_INTERNAL_MANGLED_BACKREFERENCE is a back-reference integer representing
 // the proper count to skip past the CCTZ fork namespace names.  (This number
 // is one larger when there is an inline namespace name to skip.)
 #if defined(_MSC_VER)
-#if ABSL_OPTION_USE_INLINE_NAMESPACE == 0
-#define ABSL_INTERNAL_MANGLED_NS "y_absl"
-#define ABSL_INTERNAL_MANGLED_BACKREFERENCE "5"
+#if Y_ABSL_OPTION_USE_INLINE_NAMESPACE == 0
+#define Y_ABSL_INTERNAL_MANGLED_NS "y_absl"
+#define Y_ABSL_INTERNAL_MANGLED_BACKREFERENCE "5"
 #else
-#define ABSL_INTERNAL_MANGLED_NS \
-  ABSL_INTERNAL_TOKEN_STR(ABSL_OPTION_INLINE_NAMESPACE_NAME) "@y_absl"
-#define ABSL_INTERNAL_MANGLED_BACKREFERENCE "6"
+#define Y_ABSL_INTERNAL_MANGLED_NS \
+  Y_ABSL_INTERNAL_TOKEN_STR(Y_ABSL_OPTION_INLINE_NAMESPACE_NAME) "@y_absl"
+#define Y_ABSL_INTERNAL_MANGLED_BACKREFERENCE "6"
 #endif
 #endif
 
-#undef ABSL_INTERNAL_HAS_KEYWORD
+#undef Y_ABSL_INTERNAL_HAS_KEYWORD
 
-// ABSL_DLL
+// Y_ABSL_DLL
 //
 // When building Abseil as a DLL, this macro expands to `__declspec(dllexport)`
 // so we can annotate symbols appropriately as being exported. When used in
@@ -710,58 +710,58 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // that consumers know the symbol is defined inside the DLL. In all other cases,
 // the macro expands to nothing.
 #if defined(_MSC_VER)
-#if defined(ABSL_BUILD_DLL)
-#define ABSL_DLL __declspec(dllexport)
-#elif defined(ABSL_CONSUME_DLL)
-#define ABSL_DLL __declspec(dllimport)
+#if defined(Y_ABSL_BUILD_DLL)
+#define Y_ABSL_DLL __declspec(dllexport)
+#elif defined(Y_ABSL_CONSUME_DLL)
+#define Y_ABSL_DLL __declspec(dllimport)
 #else
-#define ABSL_DLL
+#define Y_ABSL_DLL
 #endif
 #else
-#define ABSL_DLL
+#define Y_ABSL_DLL
 #endif  // defined(_MSC_VER)
 
-// ABSL_HAVE_MEMORY_SANITIZER
+// Y_ABSL_HAVE_MEMORY_SANITIZER
 //
 // MemorySanitizer (MSan) is a detector of uninitialized reads. It consists of
 // a compiler instrumentation module and a run-time library.
-#ifdef ABSL_HAVE_MEMORY_SANITIZER
-#error "ABSL_HAVE_MEMORY_SANITIZER cannot be directly set."
+#ifdef Y_ABSL_HAVE_MEMORY_SANITIZER
+#error "Y_ABSL_HAVE_MEMORY_SANITIZER cannot be directly set."
 #elif defined(__SANITIZE_MEMORY__)
-#define ABSL_HAVE_MEMORY_SANITIZER 1
-#elif !defined(__native_client__) && ABSL_HAVE_FEATURE(memory_sanitizer)
-#define ABSL_HAVE_MEMORY_SANITIZER 1
+#define Y_ABSL_HAVE_MEMORY_SANITIZER 1
+#elif !defined(__native_client__) && Y_ABSL_HAVE_FEATURE(memory_sanitizer)
+#define Y_ABSL_HAVE_MEMORY_SANITIZER 1
 #endif
 
-// ABSL_HAVE_THREAD_SANITIZER
+// Y_ABSL_HAVE_THREAD_SANITIZER
 //
 // ThreadSanitizer (TSan) is a fast data race detector.
-#ifdef ABSL_HAVE_THREAD_SANITIZER
-#error "ABSL_HAVE_THREAD_SANITIZER cannot be directly set."
+#ifdef Y_ABSL_HAVE_THREAD_SANITIZER
+#error "Y_ABSL_HAVE_THREAD_SANITIZER cannot be directly set."
 #elif defined(__SANITIZE_THREAD__)
-#define ABSL_HAVE_THREAD_SANITIZER 1
-#elif ABSL_HAVE_FEATURE(thread_sanitizer)
-#define ABSL_HAVE_THREAD_SANITIZER 1
+#define Y_ABSL_HAVE_THREAD_SANITIZER 1
+#elif Y_ABSL_HAVE_FEATURE(thread_sanitizer)
+#define Y_ABSL_HAVE_THREAD_SANITIZER 1
 #endif
 
-// ABSL_HAVE_ADDRESS_SANITIZER
+// Y_ABSL_HAVE_ADDRESS_SANITIZER
 //
 // AddressSanitizer (ASan) is a fast memory error detector.
-#ifdef ABSL_HAVE_ADDRESS_SANITIZER
-#error "ABSL_HAVE_ADDRESS_SANITIZER cannot be directly set."
+#ifdef Y_ABSL_HAVE_ADDRESS_SANITIZER
+#error "Y_ABSL_HAVE_ADDRESS_SANITIZER cannot be directly set."
 #elif defined(__SANITIZE_ADDRESS__)
-#define ABSL_HAVE_ADDRESS_SANITIZER 1
-#elif ABSL_HAVE_FEATURE(address_sanitizer)
-#define ABSL_HAVE_ADDRESS_SANITIZER 1
+#define Y_ABSL_HAVE_ADDRESS_SANITIZER 1
+#elif Y_ABSL_HAVE_FEATURE(address_sanitizer)
+#define Y_ABSL_HAVE_ADDRESS_SANITIZER 1
 #endif
 
-// ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
+// Y_ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
 //
 // Class template argument deduction is a language feature added in C++17.
-#ifdef ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
-#error "ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION cannot be directly set."
+#ifdef Y_ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
+#error "Y_ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION cannot be directly set."
 #elif defined(__cpp_deduction_guides)
-#define ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION 1
+#define Y_ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION 1
 #endif
 
-#endif  // ABSL_BASE_CONFIG_H_
+#endif  // Y_ABSL_BASE_CONFIG_H_

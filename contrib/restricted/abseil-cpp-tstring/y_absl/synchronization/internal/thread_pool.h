@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_SYNCHRONIZATION_INTERNAL_THREAD_POOL_H_
-#define ABSL_SYNCHRONIZATION_INTERNAL_THREAD_POOL_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_INTERNAL_THREAD_POOL_H_
+#define Y_ABSL_SYNCHRONIZATION_INTERNAL_THREAD_POOL_H_
 
 #include <cassert>
 #include <cstddef>
@@ -26,7 +26,7 @@
 #include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 // A simple ThreadPool implementation for tests.
@@ -61,7 +61,7 @@ class ThreadPool {
   }
 
  private:
-  bool WorkAvailable() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  bool WorkAvailable() const Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     return !queue_.empty();
   }
 
@@ -82,12 +82,12 @@ class ThreadPool {
   }
 
   y_absl::Mutex mu_;
-  std::queue<std::function<void()>> queue_ ABSL_GUARDED_BY(mu_);
+  std::queue<std::function<void()>> queue_ Y_ABSL_GUARDED_BY(mu_);
   std::vector<std::thread> threads_;
 };
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_SYNCHRONIZATION_INTERNAL_THREAD_POOL_H_
+#endif  // Y_ABSL_SYNCHRONIZATION_INTERNAL_THREAD_POOL_H_

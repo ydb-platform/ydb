@@ -34,11 +34,11 @@ EM_JS(bool, HaveOffsetConverter, (),
 // clang-format on
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 void InitializeSymbolizer(const char*) {
   if (!HaveOffsetConverter()) {
-    ABSL_RAW_LOG(INFO,
+    Y_ABSL_RAW_LOG(INFO,
                  "Symbolization unavailable. Rebuild with -sWASM=1 "
                  "and -sUSE_OFFSET_CONVERTER=1.");
   }
@@ -68,5 +68,5 @@ bool Symbolize(const void* pc, char* out, int out_size) {
   return true;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

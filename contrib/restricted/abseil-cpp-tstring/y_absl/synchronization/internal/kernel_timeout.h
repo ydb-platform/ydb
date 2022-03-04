@@ -22,8 +22,8 @@
 // components that are friends of this class. Higher-level components
 // should build APIs based on y_absl::Time and y_absl::Duration.
 
-#ifndef ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_
-#define ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_
+#define Y_ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_
 
 #include <time.h>
 
@@ -35,7 +35,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
 class Futex;
@@ -129,7 +129,7 @@ inline struct timespec KernelTimeout::MakeAbsTimespec() {
   int64_t n = ns_;
   static const int64_t kNanosPerSecond = 1000 * 1000 * 1000;
   if (n == 0) {
-    ABSL_RAW_LOG(
+    Y_ABSL_RAW_LOG(
         ERROR, "Tried to create a timespec from a non-timeout; never do this.");
     // But we'll try to continue sanely.  no-timeout ~= saturated timeout.
     n = (std::numeric_limits<int64_t>::max)();
@@ -150,7 +150,7 @@ inline struct timespec KernelTimeout::MakeAbsTimespec() {
 }
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_
+#endif  // Y_ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_

@@ -22,7 +22,7 @@
 #ifndef LEAK_SANITIZER
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 bool HaveLeakSanitizer() { return false; }
 bool LeakCheckerIsActive() { return false; }
 void DoIgnoreLeak(const void*) { }
@@ -30,22 +30,22 @@ void RegisterLivePointers(const void*, size_t) { }
 void UnRegisterLivePointers(const void*, size_t) { }
 LeakCheckDisabler::LeakCheckDisabler() { }
 LeakCheckDisabler::~LeakCheckDisabler() { }
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #else
 
 #include <sanitizer/lsan_interface.h>
 
-#if ABSL_HAVE_ATTRIBUTE_WEAK
-extern "C" ABSL_ATTRIBUTE_WEAK int __lsan_is_turned_off();
+#if Y_ABSL_HAVE_ATTRIBUTE_WEAK
+extern "C" Y_ABSL_ATTRIBUTE_WEAK int __lsan_is_turned_off();
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 bool HaveLeakSanitizer() { return true; }
 
-#if ABSL_HAVE_ATTRIBUTE_WEAK
+#if Y_ABSL_HAVE_ATTRIBUTE_WEAK
 bool LeakCheckerIsActive() {
   return !(&__lsan_is_turned_off && __lsan_is_turned_off());
 }
@@ -63,7 +63,7 @@ void UnRegisterLivePointers(const void* ptr, size_t size) {
 }
 LeakCheckDisabler::LeakCheckDisabler() { __lsan_disable(); }
 LeakCheckDisabler::~LeakCheckDisabler() { __lsan_enable(); }
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // LEAK_SANITIZER

@@ -27,8 +27,8 @@
 // This library supports std::unordered_{set,map}, dense_hash_{set,map} and
 // y_absl::{flat,node,string}_hash_{set,map}.
 
-#ifndef ABSL_CONTAINER_INTERNAL_HASHTABLE_DEBUG_H_
-#define ABSL_CONTAINER_INTERNAL_HASHTABLE_DEBUG_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_HASHTABLE_DEBUG_H_
+#define Y_ABSL_CONTAINER_INTERNAL_HASHTABLE_DEBUG_H_
 
 #include <cstddef>
 #include <algorithm>
@@ -38,7 +38,7 @@
 #include "y_absl/container/internal/hashtable_debug_hooks.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // Returns the number of probes required to lookup `key`.  Returns 0 for a
@@ -104,7 +104,7 @@ size_t LowerBoundAllocatedByteSize(size_t num_elements) {
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_HASHTABLE_DEBUG_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_HASHTABLE_DEBUG_H_

@@ -19,13 +19,13 @@
 #if !(WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP)) || \
     WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 // UWP doesn't have access to win32 APIs.
-#define ABSL_INTERNAL_HAVE_SYMBOLIZE_WIN32
+#define Y_ABSL_INTERNAL_HAVE_SYMBOLIZE_WIN32
 #endif
 #endif
 
-#if defined(ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE)
+#if defined(Y_ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE)
 #include "y_absl/debugging/symbolize_elf.inc"
-#elif defined(ABSL_INTERNAL_HAVE_SYMBOLIZE_WIN32)
+#elif defined(Y_ABSL_INTERNAL_HAVE_SYMBOLIZE_WIN32)
 // The Windows Symbolizer only works if PDB files containing the debug info
 // are available to the program at runtime.
 #include "y_absl/debugging/symbolize_win32.inc"

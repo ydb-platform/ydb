@@ -12,41 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_BASE_INTERNAL_PER_THREAD_TLS_H_
-#define ABSL_BASE_INTERNAL_PER_THREAD_TLS_H_
+#ifndef Y_ABSL_BASE_INTERNAL_PER_THREAD_TLS_H_
+#define Y_ABSL_BASE_INTERNAL_PER_THREAD_TLS_H_
 
 // This header defines two macros:
 //
 // If the platform supports thread-local storage:
 //
-// * ABSL_PER_THREAD_TLS_KEYWORD is the C keyword needed to declare a
+// * Y_ABSL_PER_THREAD_TLS_KEYWORD is the C keyword needed to declare a
 //   thread-local variable
-// * ABSL_PER_THREAD_TLS is 1
+// * Y_ABSL_PER_THREAD_TLS is 1
 //
 // Otherwise:
 //
-// * ABSL_PER_THREAD_TLS_KEYWORD is empty
-// * ABSL_PER_THREAD_TLS is 0
+// * Y_ABSL_PER_THREAD_TLS_KEYWORD is empty
+// * Y_ABSL_PER_THREAD_TLS is 0
 //
 // Microsoft C supports thread-local storage.
 // GCC supports it if the appropriate version of glibc is available,
-// which the programmer can indicate by defining ABSL_HAVE_TLS
+// which the programmer can indicate by defining Y_ABSL_HAVE_TLS
 
-#include "y_absl/base/port.h"  // For ABSL_HAVE_TLS
+#include "y_absl/base/port.h"  // For Y_ABSL_HAVE_TLS
 
-#if defined(ABSL_PER_THREAD_TLS)
-#error ABSL_PER_THREAD_TLS cannot be directly set
-#elif defined(ABSL_PER_THREAD_TLS_KEYWORD)
-#error ABSL_PER_THREAD_TLS_KEYWORD cannot be directly set
-#elif defined(ABSL_HAVE_TLS)
-#define ABSL_PER_THREAD_TLS_KEYWORD __thread
-#define ABSL_PER_THREAD_TLS 1
+#if defined(Y_ABSL_PER_THREAD_TLS)
+#error Y_ABSL_PER_THREAD_TLS cannot be directly set
+#elif defined(Y_ABSL_PER_THREAD_TLS_KEYWORD)
+#error Y_ABSL_PER_THREAD_TLS_KEYWORD cannot be directly set
+#elif defined(Y_ABSL_HAVE_TLS)
+#define Y_ABSL_PER_THREAD_TLS_KEYWORD __thread
+#define Y_ABSL_PER_THREAD_TLS 1
 #elif defined(_MSC_VER)
-#define ABSL_PER_THREAD_TLS_KEYWORD __declspec(thread)
-#define ABSL_PER_THREAD_TLS 1
+#define Y_ABSL_PER_THREAD_TLS_KEYWORD __declspec(thread)
+#define Y_ABSL_PER_THREAD_TLS 1
 #else
-#define ABSL_PER_THREAD_TLS_KEYWORD
-#define ABSL_PER_THREAD_TLS 0
+#define Y_ABSL_PER_THREAD_TLS_KEYWORD
+#define Y_ABSL_PER_THREAD_TLS 0
 #endif
 
-#endif  // ABSL_BASE_INTERNAL_PER_THREAD_TLS_H_
+#endif  // Y_ABSL_BASE_INTERNAL_PER_THREAD_TLS_H_

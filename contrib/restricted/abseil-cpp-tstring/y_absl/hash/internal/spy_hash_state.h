@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_
-#define ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_
+#ifndef Y_ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_
+#define Y_ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_
 
 #include <ostream>
 #include <util/generic/string.h>
@@ -25,7 +25,7 @@
 #include "y_absl/strings/str_join.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 // SpyHashState is an implementation of the HashState API that simply
@@ -225,7 +225,7 @@ void AbslHashValue(SpyHashStateImpl<T>, const U&);
 using SpyHashState = SpyHashStateImpl<void>;
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_
+#endif  // Y_ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_

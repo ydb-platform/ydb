@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_BASE_LOG_SEVERITY_H_
-#define ABSL_BASE_LOG_SEVERITY_H_
+#ifndef Y_ABSL_BASE_LOG_SEVERITY_H_
+#define Y_ABSL_BASE_LOG_SEVERITY_H_
 
 #include <array>
 #include <ostream>
@@ -22,7 +22,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // y_absl::LogSeverity
 //
@@ -115,7 +115,7 @@ constexpr y_absl::LogSeverity NormalizeLogSeverity(int s) {
 // unspecified; do not rely on it.
 std::ostream& operator<<(std::ostream& os, y_absl::LogSeverity s);
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_LOG_SEVERITY_H_
+#endif  // Y_ABSL_BASE_LOG_SEVERITY_H_

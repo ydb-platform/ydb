@@ -18,8 +18,8 @@
 // -----------------------------------------------------------------------------
 //
 // This file contains various functions for stripping substrings from a string.
-#ifndef ABSL_STRINGS_STRIP_H_
-#define ABSL_STRINGS_STRIP_H_
+#ifndef Y_ABSL_STRINGS_STRIP_H_
+#define Y_ABSL_STRINGS_STRIP_H_
 
 #include <cstddef>
 #include <util/generic/string.h>
@@ -30,7 +30,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // ConsumePrefix()
 //
@@ -68,7 +68,7 @@ inline bool ConsumeSuffix(y_absl::string_view* str, y_absl::string_view expected
 // Returns a view into the input string 'str' with the given 'prefix' removed,
 // but leaving the original string intact. If the prefix does not match at the
 // start of the string, returns the original string instead.
-ABSL_MUST_USE_RESULT inline y_absl::string_view StripPrefix(
+Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripPrefix(
     y_absl::string_view str, y_absl::string_view prefix) {
   if (y_absl::StartsWith(str, prefix)) str.remove_prefix(prefix.size());
   return str;
@@ -79,13 +79,13 @@ ABSL_MUST_USE_RESULT inline y_absl::string_view StripPrefix(
 // Returns a view into the input string 'str' with the given 'suffix' removed,
 // but leaving the original string intact. If the suffix does not match at the
 // end of the string, returns the original string instead.
-ABSL_MUST_USE_RESULT inline y_absl::string_view StripSuffix(
+Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripSuffix(
     y_absl::string_view str, y_absl::string_view suffix) {
   if (y_absl::EndsWith(str, suffix)) str.remove_suffix(suffix.size());
   return str;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_STRIP_H_
+#endif  // Y_ABSL_STRINGS_STRIP_H_

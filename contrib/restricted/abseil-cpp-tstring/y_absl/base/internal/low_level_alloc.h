@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 
-#ifndef ABSL_BASE_INTERNAL_LOW_LEVEL_ALLOC_H_
-#define ABSL_BASE_INTERNAL_LOW_LEVEL_ALLOC_H_
+#ifndef Y_ABSL_BASE_INTERNAL_LOW_LEVEL_ALLOC_H_
+#define Y_ABSL_BASE_INTERNAL_LOW_LEVEL_ALLOC_H_
 
 // A simple thread-safe memory allocator that does not depend on
 // mutexes or thread-specific data.  It is intended to be used
@@ -34,20 +34,20 @@
 // LowLevelAlloc requires that the platform support low-level
 // allocation of virtual memory. Platforms lacking this cannot use
 // LowLevelAlloc.
-#ifdef ABSL_LOW_LEVEL_ALLOC_MISSING
-#error ABSL_LOW_LEVEL_ALLOC_MISSING cannot be directly set
-#elif !defined(ABSL_HAVE_MMAP) && !defined(_WIN32)
-#define ABSL_LOW_LEVEL_ALLOC_MISSING 1
+#ifdef Y_ABSL_LOW_LEVEL_ALLOC_MISSING
+#error Y_ABSL_LOW_LEVEL_ALLOC_MISSING cannot be directly set
+#elif !defined(Y_ABSL_HAVE_MMAP) && !defined(_WIN32)
+#define Y_ABSL_LOW_LEVEL_ALLOC_MISSING 1
 #endif
 
 // Using LowLevelAlloc with kAsyncSignalSafe isn't supported on Windows or
 // asm.js / WebAssembly.
 // See https://kripken.github.io/emscripten-site/docs/porting/pthreads.html
 // for more information.
-#ifdef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
-#error ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING cannot be directly set
+#ifdef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#error Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING cannot be directly set
 #elif defined(_WIN32) || defined(__asmjs__) || defined(__wasm__)
-#define ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING 1
+#define Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING 1
 #endif
 
 #include <cstddef>
@@ -55,7 +55,7 @@
 #include "y_absl/base/port.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 class LowLevelAlloc {
@@ -68,18 +68,18 @@ class LowLevelAlloc {
   // Returns 0 if passed request==0.
   // Does not return 0 under other circumstances; it crashes if memory
   // is not available.
-  static void *Alloc(size_t request) ABSL_ATTRIBUTE_SECTION(malloc_hook);
+  static void *Alloc(size_t request) Y_ABSL_ATTRIBUTE_SECTION(malloc_hook);
   static void *AllocWithArena(size_t request, Arena *arena)
-      ABSL_ATTRIBUTE_SECTION(malloc_hook);
+      Y_ABSL_ATTRIBUTE_SECTION(malloc_hook);
 
   // Deallocates a region of memory that was previously allocated with
   // Alloc().   Does nothing if passed 0.   "s" must be either 0,
   // or must have been returned from a call to Alloc() and not yet passed to
   // Free() since that call to Alloc().  The space is returned to the arena
   // from which it was allocated.
-  static void Free(void *s) ABSL_ATTRIBUTE_SECTION(malloc_hook);
+  static void Free(void *s) Y_ABSL_ATTRIBUTE_SECTION(malloc_hook);
 
-  // ABSL_ATTRIBUTE_SECTION(malloc_hook) for Alloc* and Free
+  // Y_ABSL_ATTRIBUTE_SECTION(malloc_hook) for Alloc* and Free
   // are to put all callers of MallocHook::Invoke* in this module
   // into special section,
   // so that MallocHook::GetCallerStackTrace can function accurately.
@@ -93,7 +93,7 @@ class LowLevelAlloc {
     // Set in the DefaultArena.
     kCallMallocHook = 0x0001,
 
-#ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
+#ifndef Y_ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
     // Make calls to Alloc(), Free() be async-signal-safe. Not set in
     // DefaultArena(). Not supported on all platforms.
     kAsyncSignalSafe = 0x0002,
@@ -120,7 +120,7 @@ class LowLevelAlloc {
 };
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_LOW_LEVEL_ALLOC_H_
+#endif  // Y_ABSL_BASE_INTERNAL_LOW_LEVEL_ALLOC_H_

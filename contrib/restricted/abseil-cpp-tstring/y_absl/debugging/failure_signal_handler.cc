@@ -29,7 +29,7 @@
 #include <TargetConditionals.h>
 #endif
 
-#ifdef ABSL_HAVE_MMAP
+#ifdef Y_ABSL_HAVE_MMAP
 #include <sys/mman.h>
 #endif
 
@@ -49,18 +49,18 @@
 #include "y_absl/debugging/stacktrace.h"
 
 #ifndef _WIN32
-#define ABSL_HAVE_SIGACTION
+#define Y_ABSL_HAVE_SIGACTION
 // Apple WatchOS and TVOS don't allow sigaltstack
 #if !(defined(TARGET_OS_WATCH) && TARGET_OS_WATCH) && \
     !(defined(TARGET_OS_TV) && TARGET_OS_TV)
-#define ABSL_HAVE_SIGALTSTACK
+#define Y_ABSL_HAVE_SIGALTSTACK
 #endif
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
-ABSL_CONST_INIT static FailureSignalHandlerOptions fsh_options;
+Y_ABSL_CONST_INIT static FailureSignalHandlerOptions fsh_options;
 
 // Resets the signal handler for signo to the default action for that
 // signal, then raises the signal.
@@ -72,7 +72,7 @@ static void RaiseToDefaultHandler(int signo) {
 struct FailureSignalData {
   const int signo;
   const char* const as_string;
-#ifdef ABSL_HAVE_SIGACTION
+#ifdef Y_ABSL_HAVE_SIGACTION
   struct sigaction previous_action;
   // StructSigaction is used to silence -Wmissing-field-initializers.
   using StructSigaction = struct sigaction;
@@ -83,7 +83,7 @@ struct FailureSignalData {
 #endif
 };
 
-ABSL_CONST_INIT static FailureSignalData failure_signal_data[] = {
+Y_ABSL_CONST_INIT static FailureSignalData failure_signal_data[] = {
     {SIGSEGV, "SIGSEGV", FSD_PREVIOUS_INIT},
     {SIGILL, "SIGILL", FSD_PREVIOUS_INIT},
     {SIGFPE, "SIGFPE", FSD_PREVIOUS_INIT},
@@ -101,7 +101,7 @@ static void RaiseToPreviousHandler(int signo) {
   // Search for the previous handler.
   for (const auto& it : failure_signal_data) {
     if (it.signo == signo) {
-#ifdef ABSL_HAVE_SIGACTION
+#ifdef Y_ABSL_HAVE_SIGACTION
       sigaction(signo, &it.previous_action, nullptr);
 #else
       signal(signo, it.previous_handler);
@@ -128,7 +128,7 @@ const char* FailureSignalToString(int signo) {
 
 }  // namespace debugging_internal
 
-#ifdef ABSL_HAVE_SIGALTSTACK
+#ifdef Y_ABSL_HAVE_SIGALTSTACK
 
 static bool SetupAlternateStackOnce() {
 #if defined(__wasm__) || defined (__asjms__)
@@ -138,8 +138,8 @@ static bool SetupAlternateStackOnce() {
 #endif
   size_t stack_size =
       (std::max<size_t>(SIGSTKSZ, 65536) + page_mask) & ~page_mask;
-#if defined(ABSL_HAVE_ADDRESS_SANITIZER) || \
-    defined(ABSL_HAVE_MEMORY_SANITIZER) || defined(ABSL_HAVE_THREAD_SANITIZER)
+#if defined(Y_ABSL_HAVE_ADDRESS_SANITIZER) || \
+    defined(Y_ABSL_HAVE_MEMORY_SANITIZER) || defined(Y_ABSL_HAVE_THREAD_SANITIZER)
   // Account for sanitizer instrumentation requiring additional stack space.
   stack_size *= 5;
 #endif
@@ -148,7 +148,7 @@ static bool SetupAlternateStackOnce() {
   memset(&sigstk, 0, sizeof(sigstk));
   sigstk.ss_size = stack_size;
 
-#ifdef ABSL_HAVE_MMAP
+#ifdef Y_ABSL_HAVE_MMAP
 #ifndef MAP_STACK
 #define MAP_STACK 0
 #endif
@@ -158,31 +158,31 @@ static bool SetupAlternateStackOnce() {
   sigstk.ss_sp = mmap(nullptr, sigstk.ss_size, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
   if (sigstk.ss_sp == MAP_FAILED) {
-    ABSL_RAW_LOG(FATAL, "mmap() for alternate signal stack failed");
+    Y_ABSL_RAW_LOG(FATAL, "mmap() for alternate signal stack failed");
   }
 #else
   sigstk.ss_sp = malloc(sigstk.ss_size);
   if (sigstk.ss_sp == nullptr) {
-    ABSL_RAW_LOG(FATAL, "malloc() for alternate signal stack failed");
+    Y_ABSL_RAW_LOG(FATAL, "malloc() for alternate signal stack failed");
   }
 #endif
 
   if (sigaltstack(&sigstk, nullptr) != 0) {
-    ABSL_RAW_LOG(FATAL, "sigaltstack() failed with errno=%d", errno);
+    Y_ABSL_RAW_LOG(FATAL, "sigaltstack() failed with errno=%d", errno);
   }
   return true;
 }
 
 #endif
 
-#ifdef ABSL_HAVE_SIGACTION
+#ifdef Y_ABSL_HAVE_SIGACTION
 
 // Sets up an alternate stack for signal handlers once.
 // Returns the appropriate flag for sig_action.sa_flags
 // if the system supports using an alternate stack.
 static int MaybeSetupAlternateStack() {
-#ifdef ABSL_HAVE_SIGALTSTACK
-  ABSL_ATTRIBUTE_UNUSED static const bool kOnce = SetupAlternateStackOnce();
+#ifdef Y_ABSL_HAVE_SIGALTSTACK
+  Y_ABSL_ATTRIBUTE_UNUSED static const bool kOnce = SetupAlternateStackOnce();
   return SA_ONSTACK;
 #else
   return 0;
@@ -202,7 +202,7 @@ static void InstallOneFailureHandler(FailureSignalData* data,
     act.sa_flags |= MaybeSetupAlternateStack();
   }
   act.sa_sigaction = handler;
-  ABSL_RAW_CHECK(sigaction(data->signo, &act, &data->previous_action) == 0,
+  Y_ABSL_RAW_CHECK(sigaction(data->signo, &act, &data->previous_action) == 0,
                  "sigaction() failed");
 }
 
@@ -211,7 +211,7 @@ static void InstallOneFailureHandler(FailureSignalData* data,
 static void InstallOneFailureHandler(FailureSignalData* data,
                                      void (*handler)(int)) {
   data->previous_handler = signal(data->signo, handler);
-  ABSL_RAW_CHECK(data->previous_handler != SIG_ERR, "signal() failed");
+  Y_ABSL_RAW_CHECK(data->previous_handler != SIG_ERR, "signal() failed");
 }
 
 #endif
@@ -259,7 +259,7 @@ static void WriterFnWrapper(const char* data, void* arg) {
 // Convenient wrapper around DumpPCAndFrameSizesAndStackTrace() for signal
 // handlers. "noinline" so that GetStackFrames() skips the top-most stack
 // frame for this function.
-ABSL_ATTRIBUTE_NOINLINE static void WriteStackTrace(
+Y_ABSL_ATTRIBUTE_NOINLINE static void WriteStackTrace(
     void* ucontext, bool symbolize_stacktrace,
     void (*writerfn)(const char*, void*), void* writerfn_arg) {
   constexpr int kNumStackFrames = 32;
@@ -300,7 +300,7 @@ static void PortableSleepForSeconds(int seconds) {
 #endif
 }
 
-#ifdef ABSL_HAVE_ALARM
+#ifdef Y_ABSL_HAVE_ALARM
 // AbslFailureSignalHandler() installs this as a signal handler for
 // SIGALRM, then sets an alarm to be delivered to the program after a
 // set amount of time. If AbslFailureSignalHandler() hangs for more than
@@ -314,9 +314,9 @@ static void ImmediateAbortSignalHandler(int) {
 // y_absl::base_internal::GetTID() returns pid_t on most platforms, but
 // returns y_absl::base_internal::pid_t on Windows.
 using GetTidType = decltype(y_absl::base_internal::GetTID());
-ABSL_CONST_INIT static std::atomic<GetTidType> failed_tid(0);
+Y_ABSL_CONST_INIT static std::atomic<GetTidType> failed_tid(0);
 
-#ifndef ABSL_HAVE_SIGACTION
+#ifndef Y_ABSL_HAVE_SIGACTION
 static void AbslFailureSignalHandler(int signo) {
   void* ucontext = nullptr;
 #else
@@ -328,7 +328,7 @@ static void AbslFailureSignalHandler(int signo, siginfo_t*, void* ucontext) {
   if (!failed_tid.compare_exchange_strong(
           previous_failed_tid, static_cast<intptr_t>(this_tid),
           std::memory_order_acq_rel, std::memory_order_relaxed)) {
-    ABSL_RAW_LOG(
+    Y_ABSL_RAW_LOG(
         ERROR,
         "Signal %d raised at PC=%p while already in AbslFailureSignalHandler()",
         signo, y_absl::debugging_internal::GetProgramCounter(ucontext));
@@ -347,11 +347,11 @@ static void AbslFailureSignalHandler(int signo, siginfo_t*, void* ucontext) {
   // signal was received by doing this as early as possible, i.e. after
   // verifying that this is not a recursive signal handler invocation.
   int my_cpu = -1;
-#ifdef ABSL_HAVE_SCHED_GETCPU
+#ifdef Y_ABSL_HAVE_SCHED_GETCPU
   my_cpu = sched_getcpu();
 #endif
 
-#ifdef ABSL_HAVE_ALARM
+#ifdef Y_ABSL_HAVE_ALARM
   // Set an alarm to abort the program in case this code hangs or deadlocks.
   if (fsh_options.alarm_on_failure_secs > 0) {
     alarm(0);  // Cancel any existing alarms.
@@ -384,5 +384,5 @@ void InstallFailureSignalHandler(const FailureSignalHandlerOptions& options) {
   }
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

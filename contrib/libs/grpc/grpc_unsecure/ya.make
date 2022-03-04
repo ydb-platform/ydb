@@ -23,7 +23,7 @@ PEERDIR(
 
 ADDINCL(
     GLOBAL contrib/libs/grpc/include
-    contrib/libs/c-ares
+    contrib/libs/c-ares/include
     ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
     contrib/libs/grpc
     contrib/libs/grpc/src/core/ext/upb-generated

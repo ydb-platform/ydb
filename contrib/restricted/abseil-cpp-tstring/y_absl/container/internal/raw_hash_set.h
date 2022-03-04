@@ -99,8 +99,8 @@
 // are `kEmpty`, and these ensure that we always see at least one empty slot and
 // can stop an unsuccessful search.
 
-#ifndef ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_
-#define ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_
+#define Y_ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_
 
 #include <algorithm>
 #include <cmath>
@@ -129,7 +129,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 template <typename AllocType>
@@ -200,7 +200,7 @@ constexpr bool IsNoThrowSwappable(std::false_type /* is_swappable */) {
 
 template <typename T>
 uint32_t TrailingZeros(T x) {
-  ABSL_INTERNAL_ASSUME(x != 0);
+  Y_ABSL_INTERNAL_ASSUME(x != 0);
   return countr_zero(x);
 }
 
@@ -301,7 +301,7 @@ static_assert(ctrl_t::kDeleted == static_cast<ctrl_t>(-2),
 
 // A single block of empty control bytes for tables without any slots allocated.
 // This enables removing a branch in the hot path of find().
-ABSL_DLL extern const ctrl_t kEmptyGroup[16];
+Y_ABSL_DLL extern const ctrl_t kEmptyGroup[16];
 inline ctrl_t* EmptyGroup() {
   return const_cast<ctrl_t*>(kEmptyGroup);
 }
@@ -331,7 +331,7 @@ inline bool IsFull(ctrl_t c) { return c >= static_cast<ctrl_t>(0); }
 inline bool IsDeleted(ctrl_t c) { return c == ctrl_t::kDeleted; }
 inline bool IsEmptyOrDeleted(ctrl_t c) { return c < ctrl_t::kSentinel; }
 
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
+#if Y_ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
 
 // https://github.com/abseil/abseil-cpp/issues/209
 // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87853
@@ -365,7 +365,7 @@ struct GroupSse2Impl {
 
   // Returns a bitmask representing the positions of empty slots.
   BitMask<uint32_t, kWidth> MatchEmpty() const {
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3
+#if Y_ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3
     // This only works because ctrl_t::kEmpty is -128.
     return BitMask<uint32_t, kWidth>(
         _mm_movemask_epi8(_mm_sign_epi8(ctrl, ctrl)));
@@ -391,7 +391,7 @@ struct GroupSse2Impl {
   void ConvertSpecialToEmptyAndFullToDeleted(ctrl_t* dst) const {
     auto msbs = _mm_set1_epi8(static_cast<char>(-128));
     auto x126 = _mm_set1_epi8(126);
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3
+#if Y_ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSSE3
     auto res = _mm_or_si128(_mm_shuffle_epi8(x126, ctrl), msbs);
 #else
     auto zero = _mm_setzero_si128();
@@ -403,7 +403,7 @@ struct GroupSse2Impl {
 
   __m128i ctrl;
 };
-#endif  // ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
+#endif  // Y_ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
 
 struct GroupPortableImpl {
   static constexpr size_t kWidth = 8;
@@ -457,7 +457,7 @@ struct GroupPortableImpl {
   uint64_t ctrl;
 };
 
-#if ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
+#if Y_ABSL_INTERNAL_RAW_HASH_SET_HAVE_SSE2
 using Group = GroupSse2Impl;
 #else
 using Group = GroupPortableImpl;
@@ -534,13 +534,13 @@ size_t SelectBucketCountForIterRange(InputIter first, InputIter last,
 }
 
 inline void AssertIsFull(ctrl_t* ctrl) {
-  ABSL_HARDENING_ASSERT((ctrl != nullptr && IsFull(*ctrl)) &&
+  Y_ABSL_HARDENING_ASSERT((ctrl != nullptr && IsFull(*ctrl)) &&
                         "Invalid operation on iterator. The element might have "
                         "been erased, or the table might have rehashed.");
 }
 
 inline void AssertIsValid(ctrl_t* ctrl) {
-  ABSL_HARDENING_ASSERT((ctrl == nullptr || IsFull(*ctrl)) &&
+  Y_ABSL_HARDENING_ASSERT((ctrl == nullptr || IsFull(*ctrl)) &&
                         "Invalid operation on iterator. The element might have "
                         "been erased, or the table might have rehashed.");
 }
@@ -804,7 +804,7 @@ class raw_hash_set {
     iterator(ctrl_t* ctrl, slot_type* slot) : ctrl_(ctrl), slot_(slot) {
       // This assumption helps the compiler know that any non-end iterator is
       // not equal to any end iterator.
-      ABSL_INTERNAL_ASSUME(ctrl != nullptr);
+      Y_ABSL_INTERNAL_ASSUME(ctrl != nullptr);
     }
 
     void skip_empty_or_deleted() {
@@ -813,7 +813,7 @@ class raw_hash_set {
         ctrl_ += shift;
         slot_ += shift;
       }
-      if (ABSL_PREDICT_FALSE(*ctrl_ == ctrl_t::kSentinel)) ctrl_ = nullptr;
+      if (Y_ABSL_PREDICT_FALSE(*ctrl_ == ctrl_t::kSentinel)) ctrl_ = nullptr;
     }
 
     ctrl_t* ctrl_ = nullptr;
@@ -1070,7 +1070,7 @@ class raw_hash_set {
   size_t capacity() const { return capacity_; }
   size_t max_size() const { return (std::numeric_limits<size_t>::max)(); }
 
-  ABSL_ATTRIBUTE_REINITIALIZES void clear() {
+  Y_ABSL_ATTRIBUTE_REINITIALIZES void clear() {
     // Iterating over this container is O(bucket_count()). When bucket_count()
     // is much greater than size(), iteration becomes prohibitively expensive.
     // For clear() it is more important to reuse the allocated array when the
@@ -1466,12 +1466,12 @@ class raw_hash_set {
     while (true) {
       Group g{ctrl_ + seq.offset()};
       for (int i : g.Match(H2(hash))) {
-        if (ABSL_PREDICT_TRUE(PolicyTraits::apply(
+        if (Y_ABSL_PREDICT_TRUE(PolicyTraits::apply(
                 EqualElement<K>{key, eq_ref()},
                 PolicyTraits::element(slots_ + seq.offset(i)))))
           return iterator_at(seq.offset(i));
       }
-      if (ABSL_PREDICT_TRUE(g.MatchEmpty())) return end();
+      if (Y_ABSL_PREDICT_TRUE(g.MatchEmpty())) return end();
       seq.next();
       assert(seq.index() <= capacity_ && "full table!");
     }
@@ -1707,7 +1707,7 @@ class raw_hash_set {
     infoz().RecordRehash(total_probe_length);
   }
 
-  void drop_deletes_without_resize() ABSL_ATTRIBUTE_NOINLINE {
+  void drop_deletes_without_resize() Y_ABSL_ATTRIBUTE_NOINLINE {
     assert(IsValidCapacity(capacity_));
     assert(!is_small(capacity_));
     // Algorithm:
@@ -1747,7 +1747,7 @@ class raw_hash_set {
       };
 
       // Element doesn't move.
-      if (ABSL_PREDICT_TRUE(probe_index(new_i) == probe_index(i))) {
+      if (Y_ABSL_PREDICT_TRUE(probe_index(new_i) == probe_index(i))) {
         SetCtrl(i, H2(hash), capacity_, ctrl_, slots_, sizeof(slot_type));
         continue;
       }
@@ -1833,11 +1833,11 @@ class raw_hash_set {
     while (true) {
       Group g{ctrl_ + seq.offset()};
       for (int i : g.Match(H2(hash))) {
-        if (ABSL_PREDICT_TRUE(PolicyTraits::element(slots_ + seq.offset(i)) ==
+        if (Y_ABSL_PREDICT_TRUE(PolicyTraits::element(slots_ + seq.offset(i)) ==
                               elem))
           return true;
       }
-      if (ABSL_PREDICT_TRUE(g.MatchEmpty())) return false;
+      if (Y_ABSL_PREDICT_TRUE(g.MatchEmpty())) return false;
       seq.next();
       assert(seq.index() <= capacity_ && "full table!");
     }
@@ -1865,21 +1865,21 @@ class raw_hash_set {
     while (true) {
       Group g{ctrl_ + seq.offset()};
       for (int i : g.Match(H2(hash))) {
-        if (ABSL_PREDICT_TRUE(PolicyTraits::apply(
+        if (Y_ABSL_PREDICT_TRUE(PolicyTraits::apply(
                 EqualElement<K>{key, eq_ref()},
                 PolicyTraits::element(slots_ + seq.offset(i)))))
           return {seq.offset(i), false};
       }
-      if (ABSL_PREDICT_TRUE(g.MatchEmpty())) break;
+      if (Y_ABSL_PREDICT_TRUE(g.MatchEmpty())) break;
       seq.next();
       assert(seq.index() <= capacity_ && "full table!");
     }
     return {prepare_insert(hash), true};
   }
 
-  size_t prepare_insert(size_t hash) ABSL_ATTRIBUTE_NOINLINE {
+  size_t prepare_insert(size_t hash) Y_ABSL_ATTRIBUTE_NOINLINE {
     auto target = find_first_non_full(ctrl_, hash, capacity_);
-    if (ABSL_PREDICT_FALSE(growth_left() == 0 &&
+    if (Y_ABSL_PREDICT_FALSE(growth_left() == 0 &&
                            !IsDeleted(ctrl_[target.offset]))) {
       rehash_and_grow_if_necessary();
       target = find_first_non_full(ctrl_, hash, capacity_);
@@ -2028,7 +2028,7 @@ struct HashtableDebugAccess<Set, y_absl::void_t<typename Set::raw_hash_set>> {
 
 }  // namespace hashtable_debug_internal
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_

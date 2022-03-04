@@ -20,8 +20,8 @@
 // converting numbers to strings, use `StrCat()` or `StrAppend()` in str_cat.h,
 // which automatically detect and convert most number values appropriately.
 
-#ifndef ABSL_STRINGS_NUMBERS_H_
-#define ABSL_STRINGS_NUMBERS_H_
+#ifndef Y_ABSL_STRINGS_NUMBERS_H_
+#define Y_ABSL_STRINGS_NUMBERS_H_
 
 #if defined(__SSE4_2__) && !defined(__CUDACC__)
 #define _Y__SSE4_2__
@@ -59,7 +59,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // SimpleAtoi()
 //
@@ -70,7 +70,7 @@ ABSL_NAMESPACE_BEGIN
 // encountered, this function returns `false`, leaving `out` in an unspecified
 // state.
 template <typename int_type>
-ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out);
 
 // SimpleAtof()
 //
@@ -81,7 +81,7 @@ ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out);
 // allowed formats for `str`, except SimpleAtof() is locale-independent and will
 // always use the "C" locale. If any errors are encountered, this function
 // returns `false`, leaving `out` in an unspecified state.
-ABSL_MUST_USE_RESULT bool SimpleAtof(y_absl::string_view str, float* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtof(y_absl::string_view str, float* out);
 
 // SimpleAtod()
 //
@@ -92,7 +92,7 @@ ABSL_MUST_USE_RESULT bool SimpleAtof(y_absl::string_view str, float* out);
 // allowed formats for `str`, except SimpleAtod is locale-independent and will
 // always use the "C" locale. If any errors are encountered, this function
 // returns `false`, leaving `out` in an unspecified state.
-ABSL_MUST_USE_RESULT bool SimpleAtod(y_absl::string_view str, double* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtod(y_absl::string_view str, double* out);
 
 // SimpleAtob()
 //
@@ -102,7 +102,7 @@ ABSL_MUST_USE_RESULT bool SimpleAtod(y_absl::string_view str, double* out);
 // are interpreted as boolean `false`: "false", "f", "no", "n", "0". If any
 // errors are encountered, this function returns `false`, leaving `out` in an
 // unspecified state.
-ABSL_MUST_USE_RESULT bool SimpleAtob(y_absl::string_view str, bool* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtob(y_absl::string_view str, bool* out);
 
 // SimpleHexAtoi()
 //
@@ -115,28 +115,28 @@ ABSL_MUST_USE_RESULT bool SimpleAtob(y_absl::string_view str, bool* out);
 // by this function. If any errors are encountered, this function returns
 // `false`, leaving `out` in an unspecified state.
 template <typename int_type>
-ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str, int_type* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str, int_type* out);
 
 // Overloads of SimpleHexAtoi() for 128 bit integers.
-ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
                                                y_absl::int128* out);
-ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
                                                y_absl::uint128* out);
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 // End of public API.  Implementation details follow.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace numbers_internal {
 
 // Digit conversion.
-ABSL_DLL extern const char kHexChar[17];  // 0123456789abcdef
-ABSL_DLL extern const char
+Y_ABSL_DLL extern const char kHexChar[17];  // 0123456789abcdef
+Y_ABSL_DLL extern const char
     kHexTable[513];  // 000102030405060708090a0b0c0d0e0f1011...
-ABSL_DLL extern const char
+Y_ABSL_DLL extern const char
     two_ASCII_digits[100][2];  // 00, 01, 02, 03...
 
 // Writes a two-character representation of 'i' to 'buf'. 'i' must be in the
@@ -207,7 +207,7 @@ char* FastIntToBuffer(int_type i, char* buffer) {
 // Implementation of SimpleAtoi, generalized to support arbitrary base (used
 // with base different from 10 elsewhere in Abseil implementation).
 template <typename int_type>
-ABSL_MUST_USE_RESULT bool safe_strtoi_base(y_absl::string_view s, int_type* out,
+Y_ABSL_MUST_USE_RESULT bool safe_strtoi_base(y_absl::string_view s, int_type* out,
                                            int base) {
   static_assert(sizeof(*out) == 4 || sizeof(*out) == 8,
                 "SimpleAtoi works only with 32-bit or 64-bit integers.");
@@ -273,36 +273,36 @@ inline size_t FastHexToBufferZeroPad16(uint64_t val, char* out) {
 }  // namespace numbers_internal
 
 template <typename int_type>
-ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out) {
+Y_ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out) {
   return numbers_internal::safe_strtoi_base(str, out, 10);
 }
 
-ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
+Y_ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
                                             y_absl::int128* out) {
   return numbers_internal::safe_strto128_base(str, out, 10);
 }
 
-ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
+Y_ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
                                             y_absl::uint128* out) {
   return numbers_internal::safe_strtou128_base(str, out, 10);
 }
 
 template <typename int_type>
-ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str, int_type* out) {
+Y_ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str, int_type* out) {
   return numbers_internal::safe_strtoi_base(str, out, 16);
 }
 
-ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
                                                y_absl::int128* out) {
   return numbers_internal::safe_strto128_base(str, out, 16);
 }
 
-ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
                                                y_absl::uint128* out) {
   return numbers_internal::safe_strtou128_base(str, out, 16);
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_NUMBERS_H_
+#endif  // Y_ABSL_STRINGS_NUMBERS_H_

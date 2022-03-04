@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 
-#ifndef ABSL_BASE_INTERNAL_UNALIGNED_ACCESS_H_
-#define ABSL_BASE_INTERNAL_UNALIGNED_ACCESS_H_
+#ifndef Y_ABSL_BASE_INTERNAL_UNALIGNED_ACCESS_H_
+#define Y_ABSL_BASE_INTERNAL_UNALIGNED_ACCESS_H_
 
 #include <string.h>
 
@@ -32,7 +32,7 @@
 // (namespaces, inline) which are absent or incompatible in C.
 #if defined(__cplusplus)
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 inline uint16_t UnalignedLoad16(const void *p) {
@@ -60,23 +60,23 @@ inline void UnalignedStore32(void *p, uint32_t v) { memcpy(p, &v, sizeof v); }
 inline void UnalignedStore64(void *p, uint64_t v) { memcpy(p, &v, sizeof v); }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#define ABSL_INTERNAL_UNALIGNED_LOAD16(_p) \
+#define Y_ABSL_INTERNAL_UNALIGNED_LOAD16(_p) \
   (y_absl::base_internal::UnalignedLoad16(_p))
-#define ABSL_INTERNAL_UNALIGNED_LOAD32(_p) \
+#define Y_ABSL_INTERNAL_UNALIGNED_LOAD32(_p) \
   (y_absl::base_internal::UnalignedLoad32(_p))
-#define ABSL_INTERNAL_UNALIGNED_LOAD64(_p) \
+#define Y_ABSL_INTERNAL_UNALIGNED_LOAD64(_p) \
   (y_absl::base_internal::UnalignedLoad64(_p))
 
-#define ABSL_INTERNAL_UNALIGNED_STORE16(_p, _val) \
+#define Y_ABSL_INTERNAL_UNALIGNED_STORE16(_p, _val) \
   (y_absl::base_internal::UnalignedStore16(_p, _val))
-#define ABSL_INTERNAL_UNALIGNED_STORE32(_p, _val) \
+#define Y_ABSL_INTERNAL_UNALIGNED_STORE32(_p, _val) \
   (y_absl::base_internal::UnalignedStore32(_p, _val))
-#define ABSL_INTERNAL_UNALIGNED_STORE64(_p, _val) \
+#define Y_ABSL_INTERNAL_UNALIGNED_STORE64(_p, _val) \
   (y_absl::base_internal::UnalignedStore64(_p, _val))
 
 #endif  // defined(__cplusplus), end of unaligned API
 
-#endif  // ABSL_BASE_INTERNAL_UNALIGNED_ACCESS_H_
+#endif  // Y_ABSL_BASE_INTERNAL_UNALIGNED_ACCESS_H_

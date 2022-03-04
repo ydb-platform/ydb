@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_LOOKUP_TEST_H_
-#define ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_LOOKUP_TEST_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_LOOKUP_TEST_H_
+#define Y_ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_LOOKUP_TEST_H_
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -21,7 +21,7 @@
 #include "y_absl/container/internal/hash_policy_testing.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 template <class UnordMap>
@@ -111,7 +111,7 @@ REGISTER_TYPED_TEST_CASE_P(LookupTest, At, OperatorBracket, Count, Find,
                            EqualRange);
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_LOOKUP_TEST_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_LOOKUP_TEST_H_

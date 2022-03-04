@@ -14,7 +14,7 @@
 
 #include "y_absl/base/internal/unscaledcycleclock.h"
 
-#if ABSL_USE_UNSCALED_CYCLECLOCK
+#if Y_ABSL_USE_UNSCALED_CYCLECLOCK
 
 #if defined(_WIN32)
 #include <intrin.h>
@@ -32,7 +32,7 @@
 #include "y_absl/base/internal/sysinfo.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 #if defined(__i386__)
@@ -148,7 +148,7 @@ double UnscaledCycleClock::Frequency() {
 #endif
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USE_UNSCALED_CYCLECLOCK
+#endif  // Y_ABSL_USE_UNSCALED_CYCLECLOCK

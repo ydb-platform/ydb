@@ -33,8 +33,8 @@
 //   } else {
 //     LOG(ERROR) << result.status();
 //   }
-#ifndef ABSL_STATUS_STATUSOR_H_
-#define ABSL_STATUS_STATUSOR_H_
+#ifndef Y_ABSL_STATUS_STATUSOR_H_
+#define Y_ABSL_STATUS_STATUSOR_H_
 
 #include <exception>
 #include <initializer_list>
@@ -52,7 +52,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // BadStatusOrAccess
 //
@@ -106,7 +106,7 @@ class BadStatusOrAccess : public std::exception {
 
 // Returned StatusOr objects may not be ignored.
 template <typename T>
-class ABSL_MUST_USE_RESULT StatusOr;
+class Y_ABSL_MUST_USE_RESULT StatusOr;
 
 // y_absl::StatusOr<T>
 //
@@ -482,7 +482,7 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   // else {
   //    // Handle error
   // }
-  ABSL_MUST_USE_RESULT bool ok() const { return this->status_.ok(); }
+  Y_ABSL_MUST_USE_RESULT bool ok() const { return this->status_.ok(); }
 
   // StatusOr<T>::status()
   //
@@ -518,10 +518,10 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   //
   // The `std::move` on statusor instead of on the whole expression enables
   // warnings about possible uses of the statusor object after the move.
-  const T& value() const& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T& value() & ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  const T&& value() const&& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T&& value() && ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T& value() const& Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  T& value() & Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T&& value() const&& Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  T&& value() && Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
 
   // StatusOr<T>:: operator*()
   //
@@ -533,10 +533,10 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   // `y_absl::StatusOr<T>`. Alternatively, see the `value()` member function for a
   // similar API that guarantees crashing or throwing an exception if there is
   // no current value.
-  const T& operator*() const& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T& operator*() & ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  const T&& operator*() const&& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T&& operator*() && ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T& operator*() const& Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  T& operator*() & Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T&& operator*() const&& Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  T&& operator*() && Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
 
   // StatusOr<T>::operator->()
   //
@@ -545,8 +545,8 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   // REQUIRES: `this->ok() == true`, otherwise the behavior is undefined.
   //
   // Use `this->ok()` to verify that there is a current value.
-  const T* operator->() const ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T* operator->() ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T* operator->() const Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  T* operator->() Y_ABSL_ATTRIBUTE_LIFETIME_BOUND;
 
   // StatusOr<T>::value_or()
   //
@@ -764,7 +764,7 @@ void StatusOr<T>::IgnoreError() const {
   // no-op
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STATUS_STATUSOR_H_
+#endif  // Y_ABSL_STATUS_STATUSOR_H_

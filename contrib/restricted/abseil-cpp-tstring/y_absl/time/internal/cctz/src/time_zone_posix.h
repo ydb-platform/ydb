@@ -49,8 +49,8 @@
 //     }
 //   }
 
-#ifndef ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_
-#define ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_
+#ifndef Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_
+#define Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_
 
 #include <cstdint>
 #include <util/generic/string.h>
@@ -58,7 +58,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
@@ -126,7 +126,7 @@ bool ParsePosixSpec(const TString& spec, PosixTimeZone* res);
 
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_
+#endif  // Y_ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_

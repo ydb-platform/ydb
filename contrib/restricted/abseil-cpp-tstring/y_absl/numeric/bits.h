@@ -31,8 +31,8 @@
 // When using a standard library that implements these functions, we use the
 // standard library's implementation.
 
-#ifndef ABSL_NUMERIC_BITS_H_
-#define ABSL_NUMERIC_BITS_H_
+#ifndef Y_ABSL_NUMERIC_BITS_H_
+#define Y_ABSL_NUMERIC_BITS_H_
 
 #include <cstdint>
 #include <limits>
@@ -48,19 +48,19 @@
 #include "y_absl/numeric/internal/bits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 #if !(defined(__cpp_lib_bitops) && __cpp_lib_bitops >= 201907L)
 // rotating
 template <class T>
-ABSL_MUST_USE_RESULT constexpr
+Y_ABSL_MUST_USE_RESULT constexpr
     typename std::enable_if<std::is_unsigned<T>::value, T>::type
     rotl(T x, int s) noexcept {
   return numeric_internal::RotateLeft(x, s);
 }
 
 template <class T>
-ABSL_MUST_USE_RESULT constexpr
+Y_ABSL_MUST_USE_RESULT constexpr
     typename std::enable_if<std::is_unsigned<T>::value, T>::type
     rotr(T x, int s) noexcept {
   return numeric_internal::RotateRight(x, s);
@@ -72,14 +72,14 @@ ABSL_MUST_USE_RESULT constexpr
 // not be marked as constexpr due to constraints of the compiler/available
 // intrinsics.
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_CLZ inline
+Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline
     typename std::enable_if<std::is_unsigned<T>::value, int>::type
     countl_zero(T x) noexcept {
   return numeric_internal::CountLeadingZeroes(x);
 }
 
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_CLZ inline
+Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline
     typename std::enable_if<std::is_unsigned<T>::value, int>::type
     countl_one(T x) noexcept {
   // Avoid integer promotion to a wider type
@@ -87,14 +87,14 @@ ABSL_INTERNAL_CONSTEXPR_CLZ inline
 }
 
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_CTZ inline
+Y_ABSL_INTERNAL_CONSTEXPR_CTZ inline
     typename std::enable_if<std::is_unsigned<T>::value, int>::type
     countr_zero(T x) noexcept {
   return numeric_internal::CountTrailingZeroes(x);
 }
 
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_CTZ inline
+Y_ABSL_INTERNAL_CONSTEXPR_CTZ inline
     typename std::enable_if<std::is_unsigned<T>::value, int>::type
     countr_one(T x) noexcept {
   // Avoid integer promotion to a wider type
@@ -102,7 +102,7 @@ ABSL_INTERNAL_CONSTEXPR_CTZ inline
 }
 
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline
+Y_ABSL_INTERNAL_CONSTEXPR_POPCOUNT inline
     typename std::enable_if<std::is_unsigned<T>::value, int>::type
     popcount(T x) noexcept {
   return numeric_internal::Popcount(x);
@@ -130,7 +130,7 @@ has_single_bit(T x) noexcept {
 // Returns: If x == 0, 0; otherwise one plus the base-2 logarithm of x, with any
 // fractional part discarded.
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_CLZ inline
+Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline
     typename std::enable_if<std::is_unsigned<T>::value, T>::type
     bit_width(T x) noexcept {
   return std::numeric_limits<T>::digits - countl_zero(x);
@@ -139,7 +139,7 @@ ABSL_INTERNAL_CONSTEXPR_CLZ inline
 // Returns: If x == 0, 0; otherwise the maximal value y such that
 // has_single_bit(y) is true and y <= x.
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_CLZ inline
+Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline
     typename std::enable_if<std::is_unsigned<T>::value, T>::type
     bit_floor(T x) noexcept {
   return x == 0 ? 0 : T{1} << (bit_width(x) - 1);
@@ -149,7 +149,7 @@ ABSL_INTERNAL_CONSTEXPR_CLZ inline
 //
 // Preconditions: N is representable as a value of type T.
 template <class T>
-ABSL_INTERNAL_CONSTEXPR_CLZ inline
+Y_ABSL_INTERNAL_CONSTEXPR_CLZ inline
     typename std::enable_if<std::is_unsigned<T>::value, T>::type
     bit_ceil(T x) {
   // If T is narrower than unsigned, T{1} << bit_width will be promoted.  We
@@ -171,7 +171,7 @@ using std::has_single_bit;
 
 #endif
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_NUMERIC_BITS_H_
+#endif  // Y_ABSL_NUMERIC_BITS_H_

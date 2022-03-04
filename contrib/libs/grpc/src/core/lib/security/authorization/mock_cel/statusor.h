@@ -28,7 +28,7 @@ namespace mock_cel {
 // Once gRPC imports the CEL library, this file will be removed.
 
 template <typename T>
-class ABSL_MUST_USE_RESULT StatusOr;
+class Y_ABSL_MUST_USE_RESULT StatusOr;
 
 template <typename T>
 class StatusOr {

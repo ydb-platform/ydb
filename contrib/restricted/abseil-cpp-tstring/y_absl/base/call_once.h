@@ -22,8 +22,8 @@
 // fix, so that (for example) non-const references may be passed to the invoked
 // function.
 
-#ifndef ABSL_BASE_CALL_ONCE_H_
-#define ABSL_BASE_CALL_ONCE_H_
+#ifndef Y_ABSL_BASE_CALL_ONCE_H_
+#define Y_ABSL_BASE_CALL_ONCE_H_
 
 #include <algorithm>
 #include <atomic>
@@ -41,7 +41,7 @@
 #include "y_absl/base/port.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 class once_flag;
 
@@ -143,7 +143,7 @@ enum {
 };
 
 template <typename Callable, typename... Args>
-ABSL_ATTRIBUTE_NOINLINE
+Y_ABSL_ATTRIBUTE_NOINLINE
 void CallOnceImpl(std::atomic<uint32_t>* control,
                   base_internal::SchedulingMode scheduling_mode, Callable&& fn,
                   Args&&... args) {
@@ -154,7 +154,7 @@ void CallOnceImpl(std::atomic<uint32_t>* control,
         old_control != kOnceRunning &&
         old_control != kOnceWaiter &&
         old_control != kOnceDone) {
-      ABSL_RAW_LOG(FATAL, "Unexpected value for control word: 0x%lx",
+      Y_ABSL_RAW_LOG(FATAL, "Unexpected value for control word: 0x%lx",
                    static_cast<unsigned long>(old_control));  // NOLINT
     }
   }
@@ -173,7 +173,7 @@ void CallOnceImpl(std::atomic<uint32_t>* control,
   uint32_t old_control = kOnceInit;
   if (control->compare_exchange_strong(old_control, kOnceRunning,
                                        std::memory_order_relaxed) ||
-      base_internal::SpinLockWait(control, ABSL_ARRAYSIZE(trans), trans,
+      base_internal::SpinLockWait(control, Y_ABSL_ARRAYSIZE(trans), trans,
                                   scheduling_mode) == kOnceInit) {
     base_internal::invoke(std::forward<Callable>(fn),
                           std::forward<Args>(args)...);
@@ -193,7 +193,7 @@ template <typename Callable, typename... Args>
 void LowLevelCallOnce(y_absl::once_flag* flag, Callable&& fn, Args&&... args) {
   std::atomic<uint32_t>* once = base_internal::ControlWord(flag);
   uint32_t s = once->load(std::memory_order_acquire);
-  if (ABSL_PREDICT_FALSE(s != base_internal::kOnceDone)) {
+  if (Y_ABSL_PREDICT_FALSE(s != base_internal::kOnceDone)) {
     base_internal::CallOnceImpl(once, base_internal::SCHEDULE_KERNEL_ONLY,
                                 std::forward<Callable>(fn),
                                 std::forward<Args>(args)...);
@@ -206,14 +206,14 @@ template <typename Callable, typename... Args>
 void call_once(y_absl::once_flag& flag, Callable&& fn, Args&&... args) {
   std::atomic<uint32_t>* once = base_internal::ControlWord(&flag);
   uint32_t s = once->load(std::memory_order_acquire);
-  if (ABSL_PREDICT_FALSE(s != base_internal::kOnceDone)) {
+  if (Y_ABSL_PREDICT_FALSE(s != base_internal::kOnceDone)) {
     base_internal::CallOnceImpl(
         once, base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL,
         std::forward<Callable>(fn), std::forward<Args>(args)...);
   }
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_CALL_ONCE_H_
+#endif  // Y_ABSL_BASE_CALL_ONCE_H_

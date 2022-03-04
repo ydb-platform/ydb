@@ -16,8 +16,8 @@
 // File: hash.h
 // -----------------------------------------------------------------------------
 //
-#ifndef ABSL_HASH_INTERNAL_HASH_H_
-#define ABSL_HASH_INTERNAL_HASH_H_
+#ifndef Y_ABSL_HASH_INTERNAL_HASH_H_
+#define Y_ABSL_HASH_INTERNAL_HASH_H_
 
 #include <algorithm>
 #include <array>
@@ -53,7 +53,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 // Internal detail: Large buffers are hashed in smaller chunks.  This function
@@ -502,7 +502,7 @@ AbslHashValue(H hash_state, const std::vector<T, Allocator>& vector) {
                     vector.size());
 }
 
-#if defined(ABSL_IS_BIG_ENDIAN) && \
+#if defined(Y_ABSL_IS_BIG_ENDIAN) && \
     (defined(__GLIBCXX__) || defined(__GLIBCPP__))
 // AbslHashValue for hashing std::vector<bool>
 //
@@ -620,7 +620,7 @@ AbslHashValue(H hash_state, const y_absl::variant<T...>& v) {
 // It does not expose the raw bytes, and a fallback to std::hash<> is most
 // likely faster.
 
-#if defined(ABSL_IS_BIG_ENDIAN) && \
+#if defined(Y_ABSL_IS_BIG_ENDIAN) && \
     (defined(__GLIBCXX__) || defined(__GLIBCPP__))
 // AbslHashValue for hashing std::bitset
 //
@@ -662,11 +662,11 @@ hash_range_or_bytes(H hash_state, const T* data, size_t size) {
   return hash_state;
 }
 
-#if defined(ABSL_INTERNAL_LEGACY_HASH_NAMESPACE) && \
-    ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
-#define ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_ 1
+#if defined(Y_ABSL_INTERNAL_LEGACY_HASH_NAMESPACE) && \
+    Y_ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
+#define Y_ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_ 1
 #else
-#define ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_ 0
+#define Y_ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_ 0
 #endif
 
 // HashSelect
@@ -705,18 +705,18 @@ struct HashSelect {
   };
 
   struct LegacyHashProbe {
-#if ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_
+#if Y_ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_
     template <typename H, typename T>
     static auto Invoke(H state, const T& value) -> y_absl::enable_if_t<
         std::is_convertible<
-            decltype(ABSL_INTERNAL_LEGACY_HASH_NAMESPACE::hash<T>()(value)),
+            decltype(Y_ABSL_INTERNAL_LEGACY_HASH_NAMESPACE::hash<T>()(value)),
             size_t>::value,
         H> {
       return hash_internal::hash_bytes(
           std::move(state),
-          ABSL_INTERNAL_LEGACY_HASH_NAMESPACE::hash<T>{}(value));
+          Y_ABSL_INTERNAL_LEGACY_HASH_NAMESPACE::hash<T>{}(value));
     }
-#endif  // ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_
+#endif  // Y_ABSL_HASH_INTERNAL_SUPPORT_LEGACY_HASH_
   };
 
   struct StdHashProbe {
@@ -757,14 +757,14 @@ struct is_hashable
     : std::integral_constant<bool, HashSelect::template Apply<T>::value> {};
 
 // MixingHashState
-class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
+class Y_ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   // y_absl::uint128 is not an alias or a thin wrapper around the intrinsic.
   // We use the intrinsic when available to improve performance.
-#ifdef ABSL_HAVE_INTRINSIC_INT128
+#ifdef Y_ABSL_HAVE_INTRINSIC_INT128
   using uint128 = __uint128_t;
-#else   // ABSL_HAVE_INTRINSIC_INT128
+#else   // Y_ABSL_HAVE_INTRINSIC_INT128
   using uint128 = y_absl::uint128;
-#endif  // ABSL_HAVE_INTRINSIC_INT128
+#endif  // Y_ABSL_HAVE_INTRINSIC_INT128
 
   static constexpr uint64_t kMul =
       sizeof(size_t) == 4 ? uint64_t{0xcc9e2d51}
@@ -853,7 +853,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
                                                  size_t len) {
     uint64_t low_mem = y_absl::base_internal::UnalignedLoad64(p);
     uint64_t high_mem = y_absl::base_internal::UnalignedLoad64(p + len - 8);
-#ifdef ABSL_IS_LITTLE_ENDIAN
+#ifdef Y_ABSL_IS_LITTLE_ENDIAN
     uint64_t most_significant = high_mem;
     uint64_t least_significant = low_mem;
 #else
@@ -867,7 +867,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   static uint64_t Read4To8(const unsigned char* p, size_t len) {
     uint32_t low_mem = y_absl::base_internal::UnalignedLoad32(p);
     uint32_t high_mem = y_absl::base_internal::UnalignedLoad32(p + len - 4);
-#ifdef ABSL_IS_LITTLE_ENDIAN
+#ifdef Y_ABSL_IS_LITTLE_ENDIAN
     uint32_t most_significant = high_mem;
     uint32_t least_significant = low_mem;
 #else
@@ -883,7 +883,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
     unsigned char mem0 = p[0];
     unsigned char mem1 = p[len / 2];
     unsigned char mem2 = p[len - 1];
-#ifdef ABSL_IS_LITTLE_ENDIAN
+#ifdef Y_ABSL_IS_LITTLE_ENDIAN
     unsigned char significant2 = mem2;
     unsigned char significant1 = mem1;
     unsigned char significant0 = mem0;
@@ -897,7 +897,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
                                  (significant2 << ((len - 1) * 8)));
   }
 
-  ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Mix(uint64_t state, uint64_t v) {
+  Y_ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Mix(uint64_t state, uint64_t v) {
 #if defined(__aarch64__)
     // On AArch64, calculating a 128-bit product is inefficient, because it
     // requires a sequence of two instructions to calculate the upper and lower
@@ -920,9 +920,9 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   // values for both the seed and salt parameters.
   static uint64_t LowLevelHashImpl(const unsigned char* data, size_t len);
 
-  ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Hash64(const unsigned char* data,
+  Y_ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Hash64(const unsigned char* data,
                                                       size_t len) {
-#ifdef ABSL_HAVE_INTRINSIC_INT128
+#ifdef Y_ABSL_HAVE_INTRINSIC_INT128
     return LowLevelHashImpl(data, len);
 #else
     return hash_internal::CityHash64(reinterpret_cast<const char*>(data), len);
@@ -945,7 +945,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   //
   // On other platforms this is still going to be non-deterministic but most
   // probably per-build and not per-process.
-  ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Seed() {
+  Y_ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Seed() {
 #if (!defined(__clang__) || __clang_major__ > 11) && \
     !defined(__apple_build_version__)
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&kSeed));
@@ -968,7 +968,7 @@ inline uint64_t MixingHashState::CombineContiguousImpl(
   // multiplicative hash.
   uint64_t v;
   if (len > 8) {
-    if (ABSL_PREDICT_FALSE(len > PiecewiseChunkSize())) {
+    if (Y_ABSL_PREDICT_FALSE(len > PiecewiseChunkSize())) {
       return CombineLargeContiguousImpl32(state, first, len);
     }
     v = hash_internal::CityHash32(reinterpret_cast<const char*>(first), len);
@@ -991,7 +991,7 @@ inline uint64_t MixingHashState::CombineContiguousImpl(
   // for small ones we just use a multiplicative hash.
   uint64_t v;
   if (len > 16) {
-    if (ABSL_PREDICT_FALSE(len > PiecewiseChunkSize())) {
+    if (Y_ABSL_PREDICT_FALSE(len > PiecewiseChunkSize())) {
       return CombineLargeContiguousImpl64(state, first, len);
     }
     v = Hash64(first, len);
@@ -1090,7 +1090,7 @@ H PiecewiseCombiner::finalize(H state) {
 }
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_HASH_INTERNAL_HASH_H_
+#endif  // Y_ABSL_HASH_INTERNAL_HASH_H_

@@ -19,10 +19,10 @@
 #include "y_absl/base/internal/atomic_hook.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace status_internal {
 
-ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES
+Y_ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES
 static y_absl::base_internal::AtomicHook<StatusPayloadPrinter> storage;
 
 void SetStatusPayloadPrinter(StatusPayloadPrinter printer) {
@@ -34,5 +34,5 @@ StatusPayloadPrinter GetStatusPayloadPrinter() {
 }
 
 }  // namespace status_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

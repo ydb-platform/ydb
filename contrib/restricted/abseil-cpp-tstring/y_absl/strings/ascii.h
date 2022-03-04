@@ -49,8 +49,8 @@
 //   numerical values greater than 127) then the functions return the same value
 //   as the input character.
 
-#ifndef ABSL_STRINGS_ASCII_H_
-#define ABSL_STRINGS_ASCII_H_
+#ifndef Y_ABSL_STRINGS_ASCII_H_
+#define Y_ABSL_STRINGS_ASCII_H_
 
 #include <algorithm>
 #include <util/generic/string.h>
@@ -60,17 +60,17 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace ascii_internal {
 
 // Declaration for an array of bitfields holding character information.
-ABSL_DLL extern const unsigned char kPropertyBits[256];
+Y_ABSL_DLL extern const unsigned char kPropertyBits[256];
 
 // Declaration for the array of characters to upper-case characters.
-ABSL_DLL extern const char kToUpper[256];
+Y_ABSL_DLL extern const char kToUpper[256];
 
 // Declaration for the array of characters to lower-case characters.
-ABSL_DLL extern const char kToLower[256];
+Y_ABSL_DLL extern const char kToLower[256];
 
 }  // namespace ascii_internal
 
@@ -168,7 +168,7 @@ inline char ascii_tolower(unsigned char c) {
 void AsciiStrToLower(TString* s);
 
 // Creates a lowercase string from a given y_absl::string_view.
-ABSL_MUST_USE_RESULT inline TString AsciiStrToLower(y_absl::string_view s) {
+Y_ABSL_MUST_USE_RESULT inline TString AsciiStrToLower(y_absl::string_view s) {
   TString result(s);
   y_absl::AsciiStrToLower(&result);
   return result;
@@ -186,7 +186,7 @@ inline char ascii_toupper(unsigned char c) {
 void AsciiStrToUpper(TString* s);
 
 // Creates an uppercase string from a given y_absl::string_view.
-ABSL_MUST_USE_RESULT inline TString AsciiStrToUpper(y_absl::string_view s) {
+Y_ABSL_MUST_USE_RESULT inline TString AsciiStrToUpper(y_absl::string_view s) {
   TString result(s);
   y_absl::AsciiStrToUpper(&result);
   return result;
@@ -194,7 +194,7 @@ ABSL_MUST_USE_RESULT inline TString AsciiStrToUpper(y_absl::string_view s) {
 
 // Returns y_absl::string_view with whitespace stripped from the beginning of the
 // given string_view.
-ABSL_MUST_USE_RESULT inline y_absl::string_view StripLeadingAsciiWhitespace(
+Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripLeadingAsciiWhitespace(
     y_absl::string_view str) {
   auto it = std::find_if_not(str.begin(), str.end(), y_absl::ascii_isspace);
   return str.substr(it - str.begin());
@@ -208,7 +208,7 @@ inline void StripLeadingAsciiWhitespace(TString* str) {
 
 // Returns y_absl::string_view with whitespace stripped from the end of the given
 // string_view.
-ABSL_MUST_USE_RESULT inline y_absl::string_view StripTrailingAsciiWhitespace(
+Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripTrailingAsciiWhitespace(
     y_absl::string_view str) {
   auto it = std::find_if_not(str.rbegin(), str.rend(), y_absl::ascii_isspace);
   return str.substr(0, str.rend() - it);
@@ -222,7 +222,7 @@ inline void StripTrailingAsciiWhitespace(TString* str) {
 
 // Returns y_absl::string_view with whitespace stripped from both ends of the
 // given string_view.
-ABSL_MUST_USE_RESULT inline y_absl::string_view StripAsciiWhitespace(
+Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripAsciiWhitespace(
     y_absl::string_view str) {
   return StripTrailingAsciiWhitespace(StripLeadingAsciiWhitespace(str));
 }
@@ -236,7 +236,7 @@ inline void StripAsciiWhitespace(TString* str) {
 // Removes leading, trailing, and consecutive internal whitespace.
 void RemoveExtraAsciiWhitespace(TString*);
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_ASCII_H_
+#endif  // Y_ABSL_STRINGS_ASCII_H_

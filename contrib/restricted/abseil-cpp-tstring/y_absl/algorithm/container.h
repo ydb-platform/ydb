@@ -37,8 +37,8 @@
 // to which the function is applied, `Pred` indicates the predicate object type
 // to be used by the function and `T` indicates the applicable element type.
 
-#ifndef ABSL_ALGORITHM_CONTAINER_H_
-#define ABSL_ALGORITHM_CONTAINER_H_
+#ifndef Y_ABSL_ALGORITHM_CONTAINER_H_
+#define Y_ABSL_ALGORITHM_CONTAINER_H_
 
 #include <algorithm>
 #include <cassert>
@@ -55,7 +55,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_algorithm_internal {
 
 // NOTE: it is important to defer to ADL lookup for building with C++ modules,
@@ -1768,7 +1768,7 @@ OutputIt c_partial_sum(const InputSequence& input, OutputIt output_first,
                           output_first, std::forward<BinaryOp>(op));
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_ALGORITHM_CONTAINER_H_
+#endif  // Y_ABSL_ALGORITHM_CONTAINER_H_

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
-#define ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
+#define Y_ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
 
 #include <algorithm>
 #include <initializer_list>
@@ -28,7 +28,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // A common base class for btree_set, btree_map, btree_multiset, and
@@ -177,7 +177,7 @@ class btree_container {
   }
 
   // Utility routines.
-  ABSL_ATTRIBUTE_REINITIALIZES void clear() { tree_.clear(); }
+  Y_ABSL_ATTRIBUTE_REINITIALIZES void clear() { tree_.clear(); }
   void swap(btree_container &other) { tree_.swap(other.tree_); }
   void verify() const { tree_.verify(); }
 
@@ -677,7 +677,7 @@ class btree_multimap_container : public btree_multiset_container<Tree> {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_

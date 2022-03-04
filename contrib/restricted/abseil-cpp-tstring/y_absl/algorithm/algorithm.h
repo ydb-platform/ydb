@@ -19,8 +19,8 @@
 // This header file contains Google extensions to the standard <algorithm> C++
 // header.
 
-#ifndef ABSL_ALGORITHM_ALGORITHM_H_
-#define ABSL_ALGORITHM_ALGORITHM_H_
+#ifndef Y_ABSL_ALGORITHM_ALGORITHM_H_
+#define Y_ABSL_ALGORITHM_ALGORITHM_H_
 
 #include <algorithm>
 #include <iterator>
@@ -29,7 +29,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 namespace algorithm_internal {
 
@@ -153,7 +153,7 @@ ForwardIterator rotate(ForwardIterator first, ForwardIterator middle,
                    ForwardIterator>());
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_ALGORITHM_ALGORITHM_H_
+#endif  // Y_ABSL_ALGORITHM_ALGORITHM_H_

@@ -48,7 +48,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 using ::y_absl::cord_internal::CordRep;
 using ::y_absl::cord_internal::CordRepBtree;
@@ -92,7 +92,7 @@ static constexpr uint64_t min_length[] = {
     0xffffffffffffffffull,  // Avoid overflow
 };
 
-static const int kMinLengthSize = ABSL_ARRAYSIZE(min_length);
+static const int kMinLengthSize = Y_ABSL_ARRAYSIZE(min_length);
 
 static inline bool btree_enabled() {
   return cord_internal::cord_btree_enabled.load(
@@ -505,7 +505,7 @@ void Cord::InlineRep::GetAppendRegion(char** region, size_t* size,
 static bool RepMemoryUsageDataEdge(const CordRep* rep,
                                    size_t* total_mem_usage) {
   size_t maybe_sub_size = 0;
-  if (ABSL_PREDICT_FALSE(rep->IsSubstring())) {
+  if (Y_ABSL_PREDICT_FALSE(rep->IsSubstring())) {
     maybe_sub_size = sizeof(cord_internal::CordRepSubstring);
     rep = rep->substring()->child;
   }
@@ -549,7 +549,7 @@ void Cord::InlineRep::AssignSlow(const Cord::InlineRep& src) {
   assert(&src != this);
   assert(is_tree() || src.is_tree());
   auto constexpr method = CordzUpdateTracker::kAssignCord;
-  if (ABSL_PREDICT_TRUE(!is_tree())) {
+  if (Y_ABSL_PREDICT_TRUE(!is_tree())) {
     EmplaceTree(CordRep::Ref(src.as_tree()), src.data_, method);
     return;
   }
@@ -935,7 +935,7 @@ static CordRep* RemoveSuffixFrom(CordRep* node, size_t n) {
 }
 
 void Cord::RemovePrefix(size_t n) {
-  ABSL_INTERNAL_CHECK(n <= size(),
+  Y_ABSL_INTERNAL_CHECK(n <= size(),
                       y_absl::StrCat("Requested prefix size ", n,
                                    " exceeds Cord's size ", size()));
   CordRep* tree = contents_.tree();
@@ -958,7 +958,7 @@ void Cord::RemovePrefix(size_t n) {
 }
 
 void Cord::RemoveSuffix(size_t n) {
-  ABSL_INTERNAL_CHECK(n <= size(),
+  Y_ABSL_INTERNAL_CHECK(n <= size(),
                       y_absl::StrCat("Requested suffix size ", n,
                                    " exceeds Cord's size ", size()));
   CordRep* tree = contents_.tree();
@@ -1085,7 +1085,7 @@ class CordForest {
       CordRep* node = pending.back();
       pending.pop_back();
       CheckNode(node);
-      if (ABSL_PREDICT_FALSE(!node->IsConcat())) {
+      if (Y_ABSL_PREDICT_FALSE(!node->IsConcat())) {
         AddNode(node);
         continue;
       }
@@ -1119,7 +1119,7 @@ class CordForest {
       root_length_ -= node->length;
       if (root_length_ == 0) break;
     }
-    ABSL_INTERNAL_CHECK(sum != nullptr, "Failed to locate sum node");
+    Y_ABSL_INTERNAL_CHECK(sum != nullptr, "Failed to locate sum node");
     return VerifyTree(sum);
   }
 
@@ -1178,11 +1178,11 @@ class CordForest {
   }
 
   static void CheckNode(CordRep* node) {
-    ABSL_INTERNAL_CHECK(node->length != 0u, "");
+    Y_ABSL_INTERNAL_CHECK(node->length != 0u, "");
     if (node->IsConcat()) {
-      ABSL_INTERNAL_CHECK(node->concat()->left != nullptr, "");
-      ABSL_INTERNAL_CHECK(node->concat()->right != nullptr, "");
-      ABSL_INTERNAL_CHECK(node->length == (node->concat()->left->length +
+      Y_ABSL_INTERNAL_CHECK(node->concat()->left != nullptr, "");
+      Y_ABSL_INTERNAL_CHECK(node->concat()->right != nullptr, "");
+      Y_ABSL_INTERNAL_CHECK(node->length == (node->concat()->left->length +
                                            node->concat()->right->length),
                           "");
     }
@@ -1510,7 +1510,7 @@ Cord::ChunkIterator& Cord::ChunkIterator::AdvanceStack() {
 }
 
 Cord Cord::ChunkIterator::AdvanceAndReadBytes(size_t n) {
-  ABSL_HARDENING_ASSERT(bytes_remaining_ >= n &&
+  Y_ABSL_HARDENING_ASSERT(bytes_remaining_ >= n &&
                         "Attempted to iterate past `end()`");
   Cord subcord;
   auto constexpr method = CordzUpdateTracker::kCordReader;
@@ -1712,7 +1712,7 @@ void Cord::ChunkIterator::AdvanceBytesSlowPath(size_t n) {
 }
 
 char Cord::operator[](size_t i) const {
-  ABSL_HARDENING_ASSERT(i < size());
+  Y_ABSL_HARDENING_ASSERT(i < size());
   size_t offset = i;
   const CordRep* rep = contents_.tree();
   if (rep == nullptr) {
@@ -1901,7 +1901,7 @@ static void DumpNode(CordRep* rep, bool include_data, std::ostream* os,
       indents.pop_back();
     }
   }
-  ABSL_INTERNAL_CHECK(indents.empty(), "");
+  Y_ABSL_INTERNAL_CHECK(indents.empty(), "");
 }
 
 static TString ReportError(CordRep* root, CordRep* node) {
@@ -1919,17 +1919,17 @@ static bool VerifyNode(CordRep* root, CordRep* start_node,
     CordRep* node = worklist.back();
     worklist.pop_back();
 
-    ABSL_INTERNAL_CHECK(node != nullptr, ReportError(root, node));
+    Y_ABSL_INTERNAL_CHECK(node != nullptr, ReportError(root, node));
     if (node != root) {
-      ABSL_INTERNAL_CHECK(node->length != 0, ReportError(root, node));
+      Y_ABSL_INTERNAL_CHECK(node->length != 0, ReportError(root, node));
     }
 
     if (node->IsConcat()) {
-      ABSL_INTERNAL_CHECK(node->concat()->left != nullptr,
+      Y_ABSL_INTERNAL_CHECK(node->concat()->left != nullptr,
                           ReportError(root, node));
-      ABSL_INTERNAL_CHECK(node->concat()->right != nullptr,
+      Y_ABSL_INTERNAL_CHECK(node->concat()->right != nullptr,
                           ReportError(root, node));
-      ABSL_INTERNAL_CHECK((node->length == node->concat()->left->length +
+      Y_ABSL_INTERNAL_CHECK((node->length == node->concat()->left->length +
                                                node->concat()->right->length),
                           ReportError(root, node));
       if (full_validation) {
@@ -1937,16 +1937,16 @@ static bool VerifyNode(CordRep* root, CordRep* start_node,
         worklist.push_back(node->concat()->left);
       }
     } else if (node->IsFlat()) {
-      ABSL_INTERNAL_CHECK(node->length <= node->flat()->Capacity(),
+      Y_ABSL_INTERNAL_CHECK(node->length <= node->flat()->Capacity(),
                           ReportError(root, node));
     } else if (node->IsExternal()) {
-      ABSL_INTERNAL_CHECK(node->external()->base != nullptr,
+      Y_ABSL_INTERNAL_CHECK(node->external()->base != nullptr,
                           ReportError(root, node));
     } else if (node->IsSubstring()) {
-      ABSL_INTERNAL_CHECK(
+      Y_ABSL_INTERNAL_CHECK(
           node->substring()->start < node->substring()->child->length,
           ReportError(root, node));
-      ABSL_INTERNAL_CHECK(node->substring()->start + node->length <=
+      Y_ABSL_INTERNAL_CHECK(node->substring()->start + node->length <=
                               node->substring()->child->length,
                           ReportError(root, node));
     }
@@ -2032,7 +2032,7 @@ size_t CordTestAccess::FlatTagToLength(uint8_t tag) {
   return cord_internal::TagToLength(tag);
 }
 uint8_t CordTestAccess::LengthToTag(size_t s) {
-  ABSL_INTERNAL_CHECK(s <= kMaxFlatLength, y_absl::StrCat("Invalid length ", s));
+  Y_ABSL_INTERNAL_CHECK(s <= kMaxFlatLength, y_absl::StrCat("Invalid length ", s));
   return cord_internal::AllocatedSizeToTag(s + cord_internal::kFlatOverhead);
 }
 size_t CordTestAccess::SizeofCordRepConcat() { return sizeof(CordRepConcat); }
@@ -2043,5 +2043,5 @@ size_t CordTestAccess::SizeofCordRepSubstring() {
   return sizeof(CordRepSubstring);
 }
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

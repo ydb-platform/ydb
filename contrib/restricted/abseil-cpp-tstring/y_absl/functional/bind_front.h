@@ -27,14 +27,14 @@
 // partial function application. (See
 // https://en.wikipedia.org/wiki/Partial_application).
 
-#ifndef ABSL_FUNCTIONAL_BIND_FRONT_H_
-#define ABSL_FUNCTIONAL_BIND_FRONT_H_
+#ifndef Y_ABSL_FUNCTIONAL_BIND_FRONT_H_
+#define Y_ABSL_FUNCTIONAL_BIND_FRONT_H_
 
 #include "y_absl/functional/internal/front_binder.h"
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // bind_front()
 //
@@ -178,7 +178,7 @@ constexpr functional_internal::bind_front_t<F, BoundArgs...> bind_front(
       y_absl::forward<BoundArgs>(args)...);
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_FUNCTIONAL_BIND_FRONT_H_
+#endif  // Y_ABSL_FUNCTIONAL_BIND_FRONT_H_

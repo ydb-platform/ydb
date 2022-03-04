@@ -41,13 +41,13 @@
 // handler installed (which would be triggered if Abseil's failure signal
 // handler sets `call_previous_handler` to `true`).
 
-#ifndef ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
-#define ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
+#ifndef Y_ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
+#define Y_ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // FailureSignalHandlerOptions
 //
@@ -115,7 +115,7 @@ namespace debugging_internal {
 const char* FailureSignalToString(int signo);
 }  // namespace debugging_internal
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_
+#endif  // Y_ABSL_DEBUGGING_FAILURE_SIGNAL_HANDLER_H_

@@ -24,11 +24,11 @@
 // The parentheses macros are used when wanting to require a rescan before
 // expansion of parenthesized text appearing after a function-style macro name.
 
-#ifndef ABSL_TYPES_INTERNAL_PARENTHESES_H_
-#define ABSL_TYPES_INTERNAL_PARENTHESES_H_
+#ifndef Y_ABSL_TYPES_INTERNAL_PARENTHESES_H_
+#define Y_ABSL_TYPES_INTERNAL_PARENTHESES_H_
 
-#define ABSL_INTERNAL_LPAREN (
+#define Y_ABSL_INTERNAL_LPAREN (
 
-#define ABSL_INTERNAL_RPAREN )
+#define Y_ABSL_INTERNAL_RPAREN )
 
-#endif  // ABSL_TYPES_INTERNAL_PARENTHESES_H_
+#endif  // Y_ABSL_TYPES_INTERNAL_PARENTHESES_H_

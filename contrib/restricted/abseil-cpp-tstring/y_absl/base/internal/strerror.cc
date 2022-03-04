@@ -25,7 +25,7 @@
 #include "y_absl/base/internal/errno_saver.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 namespace {
 
@@ -84,5 +84,5 @@ TString StrError(int errnum) {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

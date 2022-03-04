@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_CORDZ_FUNCTIONS_H_
-#define ABSL_STRINGS_CORDZ_FUNCTIONS_H_
+#ifndef Y_ABSL_STRINGS_CORDZ_FUNCTIONS_H_
+#define Y_ABSL_STRINGS_CORDZ_FUNCTIONS_H_
 
 #include <stdint.h>
 
@@ -22,7 +22,7 @@
 #include "y_absl/base/optimization.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 // Returns the current sample rate. This represents the average interval
@@ -41,19 +41,19 @@ void set_cordz_mean_interval(int32_t mean_interval);
 // Hashtablez is turned off completely in opensource builds.
 // MSVC's static atomics are dynamically initialized in debug mode, which breaks
 // sampling.
-#if defined(ABSL_HAVE_THREAD_LOCAL) && !defined(_MSC_VER)  && \
-    !defined(ABSL_BUILD_DLL) && !defined(ABSL_CONSUME_DLL) && \
+#if defined(Y_ABSL_HAVE_THREAD_LOCAL) && !defined(_MSC_VER)  && \
+    !defined(Y_ABSL_BUILD_DLL) && !defined(Y_ABSL_CONSUME_DLL) && \
     !defined(__ANDROID__) && !defined(__APPLE__)
-#define ABSL_INTERNAL_CORDZ_ENABLED 1
+#define Y_ABSL_INTERNAL_CORDZ_ENABLED 1
 #endif
 
-#ifdef ABSL_INTERNAL_CORDZ_ENABLED
+#ifdef Y_ABSL_INTERNAL_CORDZ_ENABLED
 
 // cordz_next_sample is the number of events until the next sample event. If
 // the value is 1 or less, the code will check on the next event if cordz is
 // enabled, and if so, will sample the Cord. cordz is only enabled when we can
 // use thread locals.
-ABSL_CONST_INIT extern thread_local int64_t cordz_next_sample;
+Y_ABSL_CONST_INIT extern thread_local int64_t cordz_next_sample;
 
 // Determines if the next sample should be profiled. If it is, the value pointed
 // at by next_sample will be set with the interval until the next sample.
@@ -61,7 +61,7 @@ bool cordz_should_profile_slow();
 
 // Returns true if the next cord should be sampled.
 inline bool cordz_should_profile() {
-  if (ABSL_PREDICT_TRUE(cordz_next_sample > 1)) {
+  if (Y_ABSL_PREDICT_TRUE(cordz_next_sample > 1)) {
     cordz_next_sample--;
     return false;
   }
@@ -71,15 +71,15 @@ inline bool cordz_should_profile() {
 // Sets the interval until the next sample (for testing only)
 void cordz_set_next_sample_for_testing(int64_t next_sample);
 
-#else  // ABSL_INTERNAL_CORDZ_ENABLED
+#else  // Y_ABSL_INTERNAL_CORDZ_ENABLED
 
 inline bool cordz_should_profile() { return false; }
 inline void cordz_set_next_sample_for_testing(int64_t) {}
 
-#endif  // ABSL_INTERNAL_CORDZ_ENABLED
+#endif  // Y_ABSL_INTERNAL_CORDZ_ENABLED
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_CORDZ_FUNCTIONS_H_
+#endif  // Y_ABSL_STRINGS_CORDZ_FUNCTIONS_H_

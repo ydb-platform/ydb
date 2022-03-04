@@ -22,8 +22,8 @@
 // It is closely based on a version of wyhash, but does not maintain or
 // guarantee future compatibility with it.
 
-#ifndef ABSL_HASH_INTERNAL_LOW_LEVEL_HASH_H_
-#define ABSL_HASH_INTERNAL_LOW_LEVEL_HASH_H_
+#ifndef Y_ABSL_HASH_INTERNAL_LOW_LEVEL_HASH_H_
+#define Y_ABSL_HASH_INTERNAL_LOW_LEVEL_HASH_H_
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -31,7 +31,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
 // Hash function for a byte array. A 64-bit seed and a set of five 64-bit
@@ -44,7 +44,7 @@ uint64_t LowLevelHash(const void* data, size_t len, uint64_t seed,
                       const uint64_t salt[5]);
 
 }  // namespace hash_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_HASH_INTERNAL_LOW_LEVEL_HASH_H_
+#endif  // Y_ABSL_HASH_INTERNAL_LOW_LEVEL_HASH_H_

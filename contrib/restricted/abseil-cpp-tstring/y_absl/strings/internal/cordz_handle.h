@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_CORDZ_HANDLE_H_
-#define ABSL_STRINGS_CORDZ_HANDLE_H_
+#ifndef Y_ABSL_STRINGS_CORDZ_HANDLE_H_
+#define Y_ABSL_STRINGS_CORDZ_HANDLE_H_
 
 #include <atomic>
 #include <vector>
@@ -24,7 +24,7 @@
 #include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 // This base class allows multiple types of object (CordzInfo and
@@ -87,7 +87,7 @@ class CordzHandle {
                 y_absl::base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL) {}
 
     y_absl::base_internal::SpinLock mutex;
-    std::atomic<CordzHandle*> dq_tail ABSL_GUARDED_BY(mutex){nullptr};
+    std::atomic<CordzHandle*> dq_tail Y_ABSL_GUARDED_BY(mutex){nullptr};
 
     // Returns true if this delete queue is empty. This method does not acquire
     // the lock, but does a 'load acquire' observation on the delete queue tail.
@@ -97,18 +97,18 @@ class CordzHandle {
     // 'being constructed' snapshot instance. Practically, this means that any
     // such discovery (`find`, 'first' or 'next', etc) must have proper 'happens
     // before / after' semantics and atomic fences.
-    bool IsEmpty() const ABSL_NO_THREAD_SAFETY_ANALYSIS {
+    bool IsEmpty() const Y_ABSL_NO_THREAD_SAFETY_ANALYSIS {
       return dq_tail.load(std::memory_order_acquire) == nullptr;
     }
   };
 
   void ODRCheck() const {
 #ifndef NDEBUG
-    ABSL_RAW_CHECK(queue_ == &global_queue_, "ODR violation in Cord");
+    Y_ABSL_RAW_CHECK(queue_ == &global_queue_, "ODR violation in Cord");
 #endif
   }
 
-  ABSL_CONST_INIT static Queue global_queue_;
+  Y_ABSL_CONST_INIT static Queue global_queue_;
   Queue* const queue_ = &global_queue_;
   const bool is_snapshot_;
 
@@ -125,7 +125,7 @@ class CordzSnapshot : public CordzHandle {
 };
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_CORDZ_HANDLE_H_
+#endif  // Y_ABSL_STRINGS_CORDZ_HANDLE_H_

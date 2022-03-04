@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_
-#define ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_
+#define Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_
 
 #include "y_absl/strings/internal/str_format/extension.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 bool ConvertFloatImpl(float v, const FormatConversionSpecImpl &conv,
@@ -31,7 +31,7 @@ bool ConvertFloatImpl(long double v, const FormatConversionSpecImpl &conv,
                       FormatSinkImpl *sink);
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_

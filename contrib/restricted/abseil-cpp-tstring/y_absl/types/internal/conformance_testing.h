@@ -17,8 +17,8 @@
 // -----------------------------------------------------------------------------
 //
 
-#ifndef ABSL_TYPES_INTERNAL_CONFORMANCE_TESTING_H_
-#define ABSL_TYPES_INTERNAL_CONFORMANCE_TESTING_H_
+#ifndef Y_ABSL_TYPES_INTERNAL_CONFORMANCE_TESTING_H_
+#define Y_ABSL_TYPES_INTERNAL_CONFORMANCE_TESTING_H_
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -50,7 +50,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace types_internal {
 
 // Returns true if the compiler incorrectly greedily instantiates constexpr
@@ -155,7 +155,7 @@ TString PrepareGivenContext(const Decls&... decls) {
 // Function objects that perform a check for each comparison operator         //
 ////////////////////////////////////////////////////////////////////////////////
 
-#define ABSL_INTERNAL_EXPECT_OP(name, op)                                   \
+#define Y_ABSL_INTERNAL_EXPECT_OP(name, op)                                   \
   struct Expect##name {                                                     \
     template <class T>                                                      \
     void operator()(y_absl::string_view test_name, y_absl::string_view context, \
@@ -206,14 +206,14 @@ TString PrepareGivenContext(const Decls&... decls) {
     ConformanceErrors* errors;                                              \
   }
 
-ABSL_INTERNAL_EXPECT_OP(Eq, ==);
-ABSL_INTERNAL_EXPECT_OP(Ne, !=);
-ABSL_INTERNAL_EXPECT_OP(Lt, <);
-ABSL_INTERNAL_EXPECT_OP(Le, <=);
-ABSL_INTERNAL_EXPECT_OP(Ge, >=);
-ABSL_INTERNAL_EXPECT_OP(Gt, >);
+Y_ABSL_INTERNAL_EXPECT_OP(Eq, ==);
+Y_ABSL_INTERNAL_EXPECT_OP(Ne, !=);
+Y_ABSL_INTERNAL_EXPECT_OP(Lt, <);
+Y_ABSL_INTERNAL_EXPECT_OP(Le, <=);
+Y_ABSL_INTERNAL_EXPECT_OP(Ge, >=);
+Y_ABSL_INTERNAL_EXPECT_OP(Gt, >);
 
-#undef ABSL_INTERNAL_EXPECT_OP
+#undef Y_ABSL_INTERNAL_EXPECT_OP
 
 // A function object that verifies that two objects hash to the same value by
 // way of the std::hash specialization.
@@ -1159,7 +1159,7 @@ struct ExpectConformanceOf {
   template <class Fun,
             y_absl::enable_if_t<std::is_same<
                 ResultOfGeneratorT<GeneratorType<Fun>>, T>::value>** = nullptr>
-  ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...,
+  Y_ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...,
                                            EquivalenceClassType<Fun>>
   initializer(GeneratorType<Fun> fun) && {
     return {
@@ -1173,7 +1173,7 @@ struct ExpectConformanceOf {
                               y_absl::conjunction<std::is_convertible<
                                   TestNames, y_absl::string_view>...>::value>** =
                 nullptr>
-  ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...>
+  Y_ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...>
   due_to(TestNames&&... test_names) && {
     (InsertEach)(&expected_failed_tests,
                  y_absl::AsciiStrToLower(y_absl::string_view(test_names))...);
@@ -1186,7 +1186,7 @@ struct ExpectConformanceOf {
                               y_absl::conjunction<std::is_convertible<
                                   TestNames, y_absl::string_view>...>::value>** =
                 nullptr>
-  ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...>
+  Y_ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...>
   due_to(TestNames&&... test_names) && {
     // TODO(calabrese) Instead have DUE_TO only exist via a CRTP base.
     // This would produce better errors messages than the static_assert.
@@ -1205,7 +1205,7 @@ struct ExpectConformanceOf {
   template <class Fun,
             y_absl::enable_if_t<std::is_same<
                 ResultOfGeneratorT<GeneratorType<Fun>>, T>::value>** = nullptr>
-  ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...,
+  Y_ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...,
                                            EquivalenceClassType<Fun>>
   dont_class_directly_stateful_initializer(GeneratorType<Fun> fun) && {
     return {
@@ -1220,7 +1220,7 @@ struct ExpectConformanceOf {
       class... Funs,
       y_absl::void_t<y_absl::enable_if_t<std::is_same<
           ResultOfGeneratorT<GeneratorType<Funs>>, T>::value>...>** = nullptr>
-  ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...,
+  Y_ABSL_MUST_USE_RESULT ExpectConformanceOf<ExpectSuccess, T, EqClasses...,
                                            EquivalenceClassType<Funs...>>
   equivalence_class(GeneratorType<Funs>... funs) && {
     return {{std::tuple_cat(
@@ -1234,7 +1234,7 @@ struct ExpectConformanceOf {
   template <
       class ProfRange,
       y_absl::enable_if_t<IsProfileOrProfileRange<ProfRange>::value>** = nullptr>
-  ABSL_MUST_USE_RESULT ::testing::AssertionResult with_strict_profile(
+  Y_ABSL_MUST_USE_RESULT ::testing::AssertionResult with_strict_profile(
       ProfRange /*profile*/) {
     ConformanceErrors test_result =
         (ExpectRegularityImpl<
@@ -1250,7 +1250,7 @@ struct ExpectConformanceOf {
   // refined that a profile suggests, such as a type having a noexcept copy
   // constructor when all that is required is that the copy constructor exists).
   template <class Prof, y_absl::enable_if_t<IsProfile<Prof>::value>** = nullptr>
-  ABSL_MUST_USE_RESULT ::testing::AssertionResult with_loose_profile(
+  Y_ABSL_MUST_USE_RESULT ::testing::AssertionResult with_loose_profile(
       Prof /*profile*/) {
     ConformanceErrors test_result =
         (ExpectRegularityImpl<
@@ -1285,20 +1285,20 @@ struct EquivalenceClassMaker {
 // A top-level macro that begins the builder pattern.
 //
 // The argument here takes the datatype to be tested.
-#define ABSL_INTERNAL_ASSERT_CONFORMANCE_OF(...)                            \
+#define Y_ABSL_INTERNAL_ASSERT_CONFORMANCE_OF(...)                            \
   GTEST_AMBIGUOUS_ELSE_BLOCKER_                                             \
-  if ABSL_INTERNAL_LPAREN                                                   \
+  if Y_ABSL_INTERNAL_LPAREN                                                   \
   const ::testing::AssertionResult gtest_ar =                               \
-      ABSL_INTERNAL_LPAREN ::y_absl::types_internal::ExpectConformanceOfType< \
+      Y_ABSL_INTERNAL_LPAREN ::y_absl::types_internal::ExpectConformanceOfType< \
           __VA_ARGS__>()
 
 // Akin to ASSERT_CONFORMANCE_OF except that it expects failure and tries to
 // match text.
-#define ABSL_INTERNAL_ASSERT_NONCONFORMANCE_OF(...)                            \
+#define Y_ABSL_INTERNAL_ASSERT_NONCONFORMANCE_OF(...)                            \
   GTEST_AMBIGUOUS_ELSE_BLOCKER_                                                \
-  if ABSL_INTERNAL_LPAREN                                                      \
+  if Y_ABSL_INTERNAL_LPAREN                                                      \
   const ::testing::AssertionResult gtest_ar =                                  \
-      ABSL_INTERNAL_LPAREN ::y_absl::types_internal::ExpectNonconformanceOfType< \
+      Y_ABSL_INTERNAL_LPAREN ::y_absl::types_internal::ExpectNonconformanceOfType< \
           __VA_ARGS__>()
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1319,7 +1319,7 @@ struct EquivalenceClassMaker {
 // preprocessing so that it can be used in error reports.
 #define INITIALIZER(...)                         \
   initializer(::y_absl::types_internal::Generator( \
-      [] { return __VA_ARGS__; }, ABSL_INTERNAL_STRINGIZE(__VA_ARGS__)))
+      [] { return __VA_ARGS__; }, Y_ABSL_INTERNAL_STRINGIZE(__VA_ARGS__)))
 
 // Specify a value to be tested.
 //
@@ -1328,7 +1328,7 @@ struct EquivalenceClassMaker {
 // during preprocessing so that it can be used in error reports.
 #define STATEFUL_INITIALIZER(...)                         \
   stateful_initializer(::y_absl::types_internal::Generator( \
-      [&] { return __VA_ARGS__; }, ABSL_INTERNAL_STRINGIZE(__VA_ARGS__)))
+      [&] { return __VA_ARGS__; }, Y_ABSL_INTERNAL_STRINGIZE(__VA_ARGS__)))
 
 // Used in the builder-pattern.
 //
@@ -1337,8 +1337,8 @@ struct EquivalenceClassMaker {
 // knows that they are supposed to represent the same logical value (the values
 // compare the same, hash the same, etc.).
 #define EQUIVALENCE_CLASS(...)                    \
-  equivalence_class(ABSL_INTERNAL_TRANSFORM_ARGS( \
-      ABSL_INTERNAL_PREPEND_EQ_MAKER, __VA_ARGS__))
+  equivalence_class(Y_ABSL_INTERNAL_TRANSFORM_ARGS( \
+      Y_ABSL_INTERNAL_PREPEND_EQ_MAKER, __VA_ARGS__))
 
 // An invocation of this or WITH_STRICT_PROFILE must end the builder-pattern.
 // It takes a Profile as its argument.
@@ -1353,7 +1353,7 @@ struct EquivalenceClassMaker {
 #define WITH_LOOSE_PROFILE(...)                                      \
   with_loose_profile(                                                \
       ::y_absl::types_internal::MakeLooseProfileRangeT<__VA_ARGS__>()) \
-      ABSL_INTERNAL_RPAREN ABSL_INTERNAL_RPAREN;                     \
+      Y_ABSL_INTERNAL_RPAREN Y_ABSL_INTERNAL_RPAREN;                     \
   else GTEST_FATAL_FAILURE_(gtest_ar.failure_message())  // NOLINT
 
 // An invocation of this or WITH_STRICT_PROFILE must end the builder-pattern.
@@ -1371,16 +1371,16 @@ struct EquivalenceClassMaker {
 #define WITH_STRICT_PROFILE(...)                                      \
   with_strict_profile(                                                \
       ::y_absl::types_internal::MakeStrictProfileRangeT<__VA_ARGS__>()) \
-      ABSL_INTERNAL_RPAREN ABSL_INTERNAL_RPAREN;                      \
+      Y_ABSL_INTERNAL_RPAREN Y_ABSL_INTERNAL_RPAREN;                      \
   else GTEST_FATAL_FAILURE_(gtest_ar.failure_message())  // NOLINT
 
 // Internal macro that is used in the internals of the EDSL when forming
 // equivalence classes.
-#define ABSL_INTERNAL_PREPEND_EQ_MAKER(arg) \
+#define Y_ABSL_INTERNAL_PREPEND_EQ_MAKER(arg) \
   ::y_absl::types_internal::EquivalenceClassMaker().arg
 
 }  // namespace types_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TYPES_INTERNAL_CONFORMANCE_TESTING_H_
+#endif  // Y_ABSL_TYPES_INTERNAL_CONFORMANCE_TESTING_H_

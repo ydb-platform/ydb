@@ -50,26 +50,26 @@
 // Abseil has also released an `y_absl::variant` type (a C++11 compatible version
 // of the C++17 `std::variant`), which is generally preferred for use over
 // `y_absl::any`.
-#ifndef ABSL_TYPES_ANY_H_
-#define ABSL_TYPES_ANY_H_
+#ifndef Y_ABSL_TYPES_ANY_H_
+#define Y_ABSL_TYPES_ANY_H_
 
 #include "y_absl/base/config.h"
 #include "y_absl/utility/utility.h"
 
-#ifdef ABSL_USES_STD_ANY
+#ifdef Y_ABSL_USES_STD_ANY
 
 #include <any>  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 using std::any;
 using std::any_cast;
 using std::bad_any_cast;
 using std::make_any;
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#else  // ABSL_USES_STD_ANY
+#else  // Y_ABSL_USES_STD_ANY
 
 #include <algorithm>
 #include <cstddef>
@@ -87,14 +87,14 @@ ABSL_NAMESPACE_END
 
 // NOTE: This macro is an implementation detail that is undefined at the bottom
 // of the file. It is not intended for expansion directly from user code.
-#ifdef ABSL_ANY_DETAIL_HAS_RTTI
-#error ABSL_ANY_DETAIL_HAS_RTTI cannot be directly set
+#ifdef Y_ABSL_ANY_DETAIL_HAS_RTTI
+#error Y_ABSL_ANY_DETAIL_HAS_RTTI cannot be directly set
 #elif !defined(__GNUC__) || defined(__GXX_RTTI)
-#define ABSL_ANY_DETAIL_HAS_RTTI 1
+#define Y_ABSL_ANY_DETAIL_HAS_RTTI 1
 #endif  // !defined(__GNUC__) || defined(__GXX_RTTI)
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 class any;
 
@@ -348,7 +348,7 @@ class any {
   // returns `false`.
   bool has_value() const noexcept { return obj_ != nullptr; }
 
-#if ABSL_ANY_DETAIL_HAS_RTTI
+#if Y_ABSL_ANY_DETAIL_HAS_RTTI
   // Returns: typeid(T) if *this has a contained object of type T, otherwise
   // typeid(void).
   const std::type_info& type() const noexcept {
@@ -358,7 +358,7 @@ class any {
 
     return typeid(void);
   }
-#endif  // ABSL_ANY_DETAIL_HAS_RTTI
+#endif  // Y_ABSL_ANY_DETAIL_HAS_RTTI
 
  private:
   // Tagged type-erased abstraction for holding a cloneable object.
@@ -367,9 +367,9 @@ class any {
     virtual ~ObjInterface() = default;
     virtual std::unique_ptr<ObjInterface> Clone() const = 0;
     virtual const void* ObjTypeId() const noexcept = 0;
-#if ABSL_ANY_DETAIL_HAS_RTTI
+#if Y_ABSL_ANY_DETAIL_HAS_RTTI
     virtual const std::type_info& Type() const noexcept = 0;
-#endif  // ABSL_ANY_DETAIL_HAS_RTTI
+#endif  // Y_ABSL_ANY_DETAIL_HAS_RTTI
   };
 
   // Hold a value of some queryable type, with an ability to Clone it.
@@ -386,9 +386,9 @@ class any {
 
     const void* ObjTypeId() const noexcept final { return IdForType<T>(); }
 
-#if ABSL_ANY_DETAIL_HAS_RTTI
+#if Y_ABSL_ANY_DETAIL_HAS_RTTI
     const std::type_info& Type() const noexcept final { return typeid(T); }
-#endif  // ABSL_ANY_DETAIL_HAS_RTTI
+#endif  // Y_ABSL_ANY_DETAIL_HAS_RTTI
 
     T value;
   };
@@ -518,11 +518,11 @@ T* any_cast(any* operand) noexcept {
              : nullptr;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#undef ABSL_ANY_DETAIL_HAS_RTTI
+#undef Y_ABSL_ANY_DETAIL_HAS_RTTI
 
-#endif  // ABSL_USES_STD_ANY
+#endif  // Y_ABSL_USES_STD_ANY
 
-#endif  // ABSL_TYPES_ANY_H_
+#endif  // Y_ABSL_TYPES_ANY_H_

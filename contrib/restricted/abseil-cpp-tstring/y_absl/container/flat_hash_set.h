@@ -26,8 +26,8 @@
 //
 // In most cases, your default choice for a hash set should be a set of type
 // `flat_hash_set`.
-#ifndef ABSL_CONTAINER_FLAT_HASH_SET_H_
-#define ABSL_CONTAINER_FLAT_HASH_SET_H_
+#ifndef Y_ABSL_CONTAINER_FLAT_HASH_SET_H_
+#define Y_ABSL_CONTAINER_FLAT_HASH_SET_H_
 
 #include <type_traits>
 #include <utility>
@@ -40,7 +40,7 @@
 #include "y_absl/memory/memory.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <typename T>
 struct FlatHashSetPolicy;
@@ -498,7 +498,7 @@ struct IsUnorderedContainer<y_absl::flat_hash_set<Key, Hash, KeyEqual, Allocator
 
 }  // namespace container_algorithm_internal
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_FLAT_HASH_SET_H_
+#endif  // Y_ABSL_CONTAINER_FLAT_HASH_SET_H_

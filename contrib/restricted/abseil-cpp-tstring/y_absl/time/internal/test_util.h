@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_TIME_INTERNAL_TEST_UTIL_H_
-#define ABSL_TIME_INTERNAL_TEST_UTIL_H_
+#ifndef Y_ABSL_TIME_INTERNAL_TEST_UTIL_H_
+#define Y_ABSL_TIME_INTERNAL_TEST_UTIL_H_
 
 #include <util/generic/string.h>
 
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 
 // Loads the named timezone, but dies on any failure.
 y_absl::TimeZone LoadTimeZone(const TString& name);
 
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_TIME_INTERNAL_TEST_UTIL_H_
+#endif  // Y_ABSL_TIME_INTERNAL_TEST_UTIL_H_

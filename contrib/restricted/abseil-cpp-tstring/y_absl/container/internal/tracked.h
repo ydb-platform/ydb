@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_CONTAINER_INTERNAL_TRACKED_H_
-#define ABSL_CONTAINER_INTERNAL_TRACKED_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_TRACKED_H_
+#define Y_ABSL_CONTAINER_INTERNAL_TRACKED_H_
 
 #include <stddef.h>
 
@@ -23,7 +23,7 @@
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // A class that tracks its copies and moves so that it can be queried in tests.
@@ -77,7 +77,7 @@ class Tracked {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_TRACKED_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_TRACKED_H_

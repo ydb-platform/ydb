@@ -17,8 +17,8 @@
 // When a thread terminates, its ThreadIdentity object may be reused for a
 // thread created later.
 
-#ifndef ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_
-#define ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_
+#ifndef Y_ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_
+#define Y_ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -35,7 +35,7 @@
 #include "y_absl/base/optimization.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 struct SynchLocksHeld;
 struct SynchWaitParams;
@@ -187,51 +187,51 @@ void ClearCurrentThreadIdentity();
 
 // May be chosen at compile time via: -DABSL_FORCE_THREAD_IDENTITY_MODE=<mode
 // index>
-#ifdef ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
-#error ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC cannot be directly set
+#ifdef Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
+#error Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC cannot be directly set
 #else
-#define ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC 0
+#define Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC 0
 #endif
 
-#ifdef ABSL_THREAD_IDENTITY_MODE_USE_TLS
-#error ABSL_THREAD_IDENTITY_MODE_USE_TLS cannot be directly set
+#ifdef Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS
+#error Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS cannot be directly set
 #else
-#define ABSL_THREAD_IDENTITY_MODE_USE_TLS 1
+#define Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS 1
 #endif
 
-#ifdef ABSL_THREAD_IDENTITY_MODE_USE_CPP11
-#error ABSL_THREAD_IDENTITY_MODE_USE_CPP11 cannot be directly set
+#ifdef Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#error Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11 cannot be directly set
 #else
-#define ABSL_THREAD_IDENTITY_MODE_USE_CPP11 2
+#define Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11 2
 #endif
 
-#ifdef ABSL_THREAD_IDENTITY_MODE
-#error ABSL_THREAD_IDENTITY_MODE cannot be directly set
-#elif defined(ABSL_FORCE_THREAD_IDENTITY_MODE)
-#define ABSL_THREAD_IDENTITY_MODE ABSL_FORCE_THREAD_IDENTITY_MODE
+#ifdef Y_ABSL_THREAD_IDENTITY_MODE
+#error Y_ABSL_THREAD_IDENTITY_MODE cannot be directly set
+#elif defined(Y_ABSL_FORCE_THREAD_IDENTITY_MODE)
+#define Y_ABSL_THREAD_IDENTITY_MODE Y_ABSL_FORCE_THREAD_IDENTITY_MODE
 #elif defined(_WIN32) && !defined(__MINGW32__)
-#define ABSL_THREAD_IDENTITY_MODE ABSL_THREAD_IDENTITY_MODE_USE_CPP11
-#elif defined(__APPLE__) && defined(ABSL_HAVE_THREAD_LOCAL)
-#define ABSL_THREAD_IDENTITY_MODE ABSL_THREAD_IDENTITY_MODE_USE_CPP11
-#elif ABSL_PER_THREAD_TLS && defined(__GOOGLE_GRTE_VERSION__) &&        \
+#define Y_ABSL_THREAD_IDENTITY_MODE Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#elif defined(__APPLE__) && defined(Y_ABSL_HAVE_THREAD_LOCAL)
+#define Y_ABSL_THREAD_IDENTITY_MODE Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#elif Y_ABSL_PER_THREAD_TLS && defined(__GOOGLE_GRTE_VERSION__) &&        \
     (__GOOGLE_GRTE_VERSION__ >= 20140228L)
 // Support for async-safe TLS was specifically added in GRTEv4.  It's not
 // present in the upstream eglibc.
 // Note:  Current default for production systems.
-#define ABSL_THREAD_IDENTITY_MODE ABSL_THREAD_IDENTITY_MODE_USE_TLS
+#define Y_ABSL_THREAD_IDENTITY_MODE Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS
 #else
-#define ABSL_THREAD_IDENTITY_MODE \
-  ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
+#define Y_ABSL_THREAD_IDENTITY_MODE \
+  Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
 #endif
 
-#if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
-    ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_CPP11
+#if Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
+    Y_ABSL_THREAD_IDENTITY_MODE == Y_ABSL_THREAD_IDENTITY_MODE_USE_CPP11
 
-#if ABSL_PER_THREAD_TLS
-ABSL_CONST_INIT extern ABSL_PER_THREAD_TLS_KEYWORD ThreadIdentity*
+#if Y_ABSL_PER_THREAD_TLS
+Y_ABSL_CONST_INIT extern Y_ABSL_PER_THREAD_TLS_KEYWORD ThreadIdentity*
     thread_identity_ptr;
-#elif defined(ABSL_HAVE_THREAD_LOCAL)
-ABSL_CONST_INIT extern thread_local ThreadIdentity* thread_identity_ptr;
+#elif defined(Y_ABSL_HAVE_THREAD_LOCAL)
+Y_ABSL_CONST_INIT extern thread_local ThreadIdentity* thread_identity_ptr;
 #else
 #error Thread-local storage not detected on this platform
 #endif
@@ -242,24 +242,24 @@ ABSL_CONST_INIT extern thread_local ThreadIdentity* thread_identity_ptr;
 // inlined. In the other cases we opt to have the function not be inlined. Note
 // that `CurrentThreadIdentityIfPresent` is declared above so we can exclude
 // this entire inline definition.
-#if !defined(__APPLE__) && !defined(ABSL_BUILD_DLL) && \
-    !defined(ABSL_CONSUME_DLL)
-#define ABSL_INTERNAL_INLINE_CURRENT_THREAD_IDENTITY_IF_PRESENT 1
+#if !defined(__APPLE__) && !defined(Y_ABSL_BUILD_DLL) && \
+    !defined(Y_ABSL_CONSUME_DLL)
+#define Y_ABSL_INTERNAL_INLINE_CURRENT_THREAD_IDENTITY_IF_PRESENT 1
 #endif
 
-#ifdef ABSL_INTERNAL_INLINE_CURRENT_THREAD_IDENTITY_IF_PRESENT
+#ifdef Y_ABSL_INTERNAL_INLINE_CURRENT_THREAD_IDENTITY_IF_PRESENT
 inline ThreadIdentity* CurrentThreadIdentityIfPresent() {
   return thread_identity_ptr;
 }
 #endif
 
-#elif ABSL_THREAD_IDENTITY_MODE != \
-    ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
-#error Unknown ABSL_THREAD_IDENTITY_MODE
+#elif Y_ABSL_THREAD_IDENTITY_MODE != \
+    Y_ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
+#error Unknown Y_ABSL_THREAD_IDENTITY_MODE
 #endif
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_
+#endif  // Y_ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_

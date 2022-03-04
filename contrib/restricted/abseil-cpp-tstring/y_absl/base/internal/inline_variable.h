@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_BASE_INTERNAL_INLINE_VARIABLE_EMULATION_H_
-#define ABSL_BASE_INTERNAL_INLINE_VARIABLE_EMULATION_H_
+#ifndef Y_ABSL_BASE_INTERNAL_INLINE_VARIABLE_EMULATION_H_
+#define Y_ABSL_BASE_INTERNAL_INLINE_VARIABLE_EMULATION_H_
 
 #include <type_traits>
 
@@ -24,7 +24,7 @@
 //   inline variables based on whether or not the feature is supported.
 
 ////////////////////////////////////////////////////////////////////////////////
-// Macro: ABSL_INTERNAL_INLINE_CONSTEXPR(type, name, init)
+// Macro: Y_ABSL_INTERNAL_INLINE_CONSTEXPR(type, name, init)
 //
 // Description:
 //   Expands to the equivalent of an inline constexpr instance of the specified
@@ -44,7 +44,7 @@
 // Usage:
 //
 //   // Equivalent to: `inline constexpr size_t variant_npos = -1;`
-//   ABSL_INTERNAL_INLINE_CONSTEXPR(size_t, variant_npos, -1);
+//   Y_ABSL_INTERNAL_INLINE_CONSTEXPR(size_t, variant_npos, -1);
 //
 // Differences in implementation:
 //   For a direct, language-level inline variable, decltype(name) will be the
@@ -67,15 +67,15 @@
 //   appropriate place for pointer types, reference types, function pointer
 //   types, etc..
 #if defined(__clang__)
-#define ABSL_INTERNAL_EXTERN_DECL(type, name) \
+#define Y_ABSL_INTERNAL_EXTERN_DECL(type, name) \
   extern const ::y_absl::internal::identity_t<type> name;
 #else  // Otherwise, just define the macro to do nothing.
-#define ABSL_INTERNAL_EXTERN_DECL(type, name)
+#define Y_ABSL_INTERNAL_EXTERN_DECL(type, name)
 #endif  // defined(__clang__)
 
 // See above comment at top of file for details.
-#define ABSL_INTERNAL_INLINE_CONSTEXPR(type, name, init) \
-  ABSL_INTERNAL_EXTERN_DECL(type, name)                  \
+#define Y_ABSL_INTERNAL_INLINE_CONSTEXPR(type, name, init) \
+  Y_ABSL_INTERNAL_EXTERN_DECL(type, name)                  \
   inline constexpr ::y_absl::internal::identity_t<type> name = init
 
 #else
@@ -86,7 +86,7 @@
 //   identity_t is used here so that the const and name are in the
 //   appropriate place for pointer types, reference types, function pointer
 //   types, etc..
-#define ABSL_INTERNAL_INLINE_CONSTEXPR(var_type, name, init)                  \
+#define Y_ABSL_INTERNAL_INLINE_CONSTEXPR(var_type, name, init)                  \
   template <class /*AbslInternalDummy*/ = void>                               \
   struct AbslInternalInlineVariableHolder##name {                             \
     static constexpr ::y_absl::internal::identity_t<var_type> kInstance = init; \
@@ -104,4 +104,4 @@
 
 #endif  // __cpp_inline_variables
 
-#endif  // ABSL_BASE_INTERNAL_INLINE_VARIABLE_EMULATION_H_
+#endif  // Y_ABSL_BASE_INTERNAL_INLINE_VARIABLE_EMULATION_H_

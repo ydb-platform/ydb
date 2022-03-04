@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_CHARCONV_BIGINT_H_
-#define ABSL_STRINGS_INTERNAL_CHARCONV_BIGINT_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CHARCONV_BIGINT_H_
+#define Y_ABSL_STRINGS_INTERNAL_CHARCONV_BIGINT_H_
 
 #include <algorithm>
 #include <cstdint>
@@ -26,7 +26,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // The largest power that 5 that can be raised to, and still fit in a uint32_t.
@@ -34,9 +34,9 @@ constexpr int kMaxSmallPowerOfFive = 13;
 // The largest power that 10 that can be raised to, and still fit in a uint32_t.
 constexpr int kMaxSmallPowerOfTen = 9;
 
-ABSL_DLL extern const uint32_t
+Y_ABSL_DLL extern const uint32_t
     kFiveToNth[kMaxSmallPowerOfFive + 1];
-ABSL_DLL extern const uint32_t kTenToNth[kMaxSmallPowerOfTen + 1];
+Y_ABSL_DLL extern const uint32_t kTenToNth[kMaxSmallPowerOfTen + 1];
 
 // Large, fixed-width unsigned integer.
 //
@@ -417,7 +417,7 @@ extern template class BigUnsigned<4>;
 extern template class BigUnsigned<84>;
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_CHARCONV_BIGINT_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CHARCONV_BIGINT_H_

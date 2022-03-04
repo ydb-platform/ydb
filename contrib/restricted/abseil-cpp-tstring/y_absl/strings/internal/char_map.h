@@ -17,8 +17,8 @@
 // A fast, bit-vector map for 8-bit unsigned characters.
 // This class is useful for non-character purposes as well.
 
-#ifndef ABSL_STRINGS_INTERNAL_CHAR_MAP_H_
-#define ABSL_STRINGS_INTERNAL_CHAR_MAP_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_CHAR_MAP_H_
+#define Y_ABSL_STRINGS_INTERNAL_CHAR_MAP_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -28,7 +28,7 @@
 #include "y_absl/base/port.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 class Charmap {
@@ -53,7 +53,7 @@ class Charmap {
 
   // Returns true if and only if a character exists in both maps.
   bool IntersectsWith(const Charmap& c) const {
-    for (size_t i = 0; i < ABSL_ARRAYSIZE(m_); ++i) {
+    for (size_t i = 0; i < Y_ABSL_ARRAYSIZE(m_); ++i) {
       if ((m_[i] & c.m_[i]) != 0) return true;
     }
     return false;
@@ -150,7 +150,7 @@ constexpr Charmap GraphCharmap() { return PrintCharmap() & ~SpaceCharmap(); }
 constexpr Charmap PunctCharmap() { return GraphCharmap() & ~AlnumCharmap(); }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_CHAR_MAP_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_CHAR_MAP_H_

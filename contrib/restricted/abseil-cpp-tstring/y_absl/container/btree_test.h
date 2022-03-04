@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_CONTAINER_BTREE_TEST_H_
-#define ABSL_CONTAINER_BTREE_TEST_H_
+#ifndef Y_ABSL_CONTAINER_BTREE_TEST_H_
+#define Y_ABSL_CONTAINER_BTREE_TEST_H_
 
 #include <algorithm>
 #include <cassert>
@@ -29,7 +29,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
 // Like remove_const but propagates the removal through std::pair.
@@ -160,7 +160,7 @@ std::vector<V> GenerateValuesWithSeed(int n, int maxval, int seed) {
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_BTREE_TEST_H_
+#endif  // Y_ABSL_CONTAINER_BTREE_TEST_H_

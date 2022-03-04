@@ -25,7 +25,7 @@
 #include "y_absl/base/optimization.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace profiling_internal {
 
 // The algorithm generates a random number between 0 and 1 and applies the
@@ -39,7 +39,7 @@ namespace profiling_internal {
 // log_2(q) * (-log_e(2) * 1/m) = x
 // In the code, q is actually in the range 1 to 2**26, hence the -26 below
 int64_t ExponentialBiased::GetSkipCount(int64_t mean) {
-  if (ABSL_PREDICT_FALSE(!initialized_)) {
+  if (Y_ABSL_PREDICT_FALSE(!initialized_)) {
     Initialize();
   }
 
@@ -78,7 +78,7 @@ void ExponentialBiased::Initialize() {
   // bunch to mush the bits around. We use a global_rand to handle the case
   // where the same thread (by memory address) gets created and destroyed
   // repeatedly.
-  ABSL_CONST_INIT static std::atomic<uint32_t> global_rand(0);
+  Y_ABSL_CONST_INIT static std::atomic<uint32_t> global_rand(0);
   uint64_t r = reinterpret_cast<uint64_t>(this) +
                global_rand.fetch_add(1, std::memory_order_relaxed);
   for (int i = 0; i < 20; ++i) {
@@ -89,5 +89,5 @@ void ExponentialBiased::Initialize() {
 }
 
 }  // namespace profiling_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

@@ -33,8 +33,8 @@
 // The CPU is not required to maintain the ordering of a cycle counter read
 // with respect to surrounding instructions.
 
-#ifndef ABSL_BASE_INTERNAL_UNSCALEDCYCLECLOCK_H_
-#define ABSL_BASE_INTERNAL_UNSCALEDCYCLECLOCK_H_
+#ifndef Y_ABSL_BASE_INTERNAL_UNSCALEDCYCLECLOCK_H_
+#define Y_ABSL_BASE_INTERNAL_UNSCALEDCYCLECLOCK_H_
 
 #include <cstdint>
 
@@ -48,9 +48,9 @@
 #if defined(__i386__) || defined(__x86_64__) || defined(__aarch64__) || \
     defined(__powerpc__) || defined(__ppc__) || defined(__riscv) ||     \
     defined(_M_IX86) || defined(_M_X64)
-#define ABSL_HAVE_UNSCALED_CYCLECLOCK_IMPLEMENTATION 1
+#define Y_ABSL_HAVE_UNSCALED_CYCLECLOCK_IMPLEMENTATION 1
 #else
-#define ABSL_HAVE_UNSCALED_CYCLECLOCK_IMPLEMENTATION 0
+#define Y_ABSL_HAVE_UNSCALED_CYCLECLOCK_IMPLEMENTATION 0
 #endif
 
 // The following platforms often disable access to the hardware
@@ -62,31 +62,31 @@
 #if defined(__native_client__) ||                      \
     (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || \
     (defined(__ANDROID__) && defined(__aarch64__))
-#define ABSL_USE_UNSCALED_CYCLECLOCK_DEFAULT 0
+#define Y_ABSL_USE_UNSCALED_CYCLECLOCK_DEFAULT 0
 #else
-#define ABSL_USE_UNSCALED_CYCLECLOCK_DEFAULT 1
+#define Y_ABSL_USE_UNSCALED_CYCLECLOCK_DEFAULT 1
 #endif
 
 // UnscaledCycleClock is an optional internal feature.
-// Use "#if ABSL_USE_UNSCALED_CYCLECLOCK" to test for its presence.
+// Use "#if Y_ABSL_USE_UNSCALED_CYCLECLOCK" to test for its presence.
 // Can be overridden at compile-time via -DABSL_USE_UNSCALED_CYCLECLOCK=0|1
-#if !defined(ABSL_USE_UNSCALED_CYCLECLOCK)
-#define ABSL_USE_UNSCALED_CYCLECLOCK               \
-  (ABSL_HAVE_UNSCALED_CYCLECLOCK_IMPLEMENTATION && \
-   ABSL_USE_UNSCALED_CYCLECLOCK_DEFAULT)
+#if !defined(Y_ABSL_USE_UNSCALED_CYCLECLOCK)
+#define Y_ABSL_USE_UNSCALED_CYCLECLOCK               \
+  (Y_ABSL_HAVE_UNSCALED_CYCLECLOCK_IMPLEMENTATION && \
+   Y_ABSL_USE_UNSCALED_CYCLECLOCK_DEFAULT)
 #endif
 
-#if ABSL_USE_UNSCALED_CYCLECLOCK
+#if Y_ABSL_USE_UNSCALED_CYCLECLOCK
 
 // This macro can be used to test if UnscaledCycleClock::Frequency()
 // is NominalCPUFrequency() on a particular platform.
 #if (defined(__i386__) || defined(__x86_64__) || defined(__riscv) || \
      defined(_M_IX86) || defined(_M_X64))
-#define ABSL_INTERNAL_UNSCALED_CYCLECLOCK_FREQUENCY_IS_CPU_FREQUENCY
+#define Y_ABSL_INTERNAL_UNSCALED_CYCLECLOCK_FREQUENCY_IS_CPU_FREQUENCY
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 class UnscaledCycleClockWrapperForGetCurrentTime;
 }  // namespace time_internal
@@ -116,9 +116,9 @@ class UnscaledCycleClock {
 };
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USE_UNSCALED_CYCLECLOCK
+#endif  // Y_ABSL_USE_UNSCALED_CYCLECLOCK
 
-#endif  // ABSL_BASE_INTERNAL_UNSCALEDCYCLECLOCK_H_
+#endif  // Y_ABSL_BASE_INTERNAL_UNSCALEDCYCLECLOCK_H_

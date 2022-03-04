@@ -49,8 +49,8 @@
 //    * `y_absl::Span` has an explicit mutable-reference constructor
 //
 // For more information, see the class comments below.
-#ifndef ABSL_TYPES_SPAN_H_
-#define ABSL_TYPES_SPAN_H_
+#ifndef Y_ABSL_TYPES_SPAN_H_
+#define Y_ABSL_TYPES_SPAN_H_
 
 #include <algorithm>
 #include <cassert>
@@ -68,7 +68,7 @@
 #include "y_absl/types/internal/span.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 //------------------------------------------------------------------------------
 // Span
@@ -244,7 +244,7 @@ class Span {
   template <typename LazyT = T,
             typename = EnableIfConstView<LazyT>>
   Span(std::initializer_list<value_type> v
-           ABSL_ATTRIBUTE_LIFETIME_BOUND) noexcept  // NOLINT(runtime/explicit)
+           Y_ABSL_ATTRIBUTE_LIFETIME_BOUND) noexcept  // NOLINT(runtime/explicit)
       : Span(v.begin(), v.size()) {}
 
   // Accessors
@@ -275,14 +275,14 @@ class Span {
   // Returns a reference to the i'th element of this span.
   constexpr reference operator[](size_type i) const noexcept {
     // MSVC 2015 accepts this as constexpr, but not ptr_[i]
-    return ABSL_HARDENING_ASSERT(i < size()), *(data() + i);
+    return Y_ABSL_HARDENING_ASSERT(i < size()), *(data() + i);
   }
 
   // Span::at()
   //
   // Returns a reference to the i'th element of this span.
   constexpr reference at(size_type i) const {
-    return ABSL_PREDICT_TRUE(i < size())  //
+    return Y_ABSL_PREDICT_TRUE(i < size())  //
                ? *(data() + i)
                : (base_internal::ThrowStdOutOfRange(
                       "Span::at failed bounds check"),
@@ -294,7 +294,7 @@ class Span {
   // Returns a reference to the first element of this span. The span must not
   // be empty.
   constexpr reference front() const noexcept {
-    return ABSL_HARDENING_ASSERT(size() > 0), *data();
+    return Y_ABSL_HARDENING_ASSERT(size() > 0), *data();
   }
 
   // Span::back()
@@ -302,7 +302,7 @@ class Span {
   // Returns a reference to the last element of this span. The span must not
   // be empty.
   constexpr reference back() const noexcept {
-    return ABSL_HARDENING_ASSERT(size() > 0), *(data() + size() - 1);
+    return Y_ABSL_HARDENING_ASSERT(size() > 0), *(data() + size() - 1);
   }
 
   // Span::begin()
@@ -367,7 +367,7 @@ class Span {
   //
   // Removes the first `n` elements from the span.
   void remove_prefix(size_type n) noexcept {
-    ABSL_HARDENING_ASSERT(size() >= n);
+    Y_ABSL_HARDENING_ASSERT(size() >= n);
     ptr_ += n;
     len_ -= n;
   }
@@ -376,7 +376,7 @@ class Span {
   //
   // Removes the last `n` elements from the span.
   void remove_suffix(size_type n) noexcept {
-    ABSL_HARDENING_ASSERT(size() >= n);
+    Y_ABSL_HARDENING_ASSERT(size() >= n);
     len_ -= n;
   }
 
@@ -664,7 +664,7 @@ constexpr Span<T> MakeSpan(T* ptr, size_t size) noexcept {
 
 template <int&... ExplicitArgumentBarrier, typename T>
 Span<T> MakeSpan(T* begin, T* end) noexcept {
-  return ABSL_HARDENING_ASSERT(begin <= end), Span<T>(begin, end - begin);
+  return Y_ABSL_HARDENING_ASSERT(begin <= end), Span<T>(begin, end - begin);
 }
 
 template <int&... ExplicitArgumentBarrier, typename C>
@@ -709,7 +709,7 @@ constexpr Span<const T> MakeConstSpan(T* ptr, size_t size) noexcept {
 
 template <int&... ExplicitArgumentBarrier, typename T>
 Span<const T> MakeConstSpan(T* begin, T* end) noexcept {
-  return ABSL_HARDENING_ASSERT(begin <= end), Span<const T>(begin, end - begin);
+  return Y_ABSL_HARDENING_ASSERT(begin <= end), Span<const T>(begin, end - begin);
 }
 
 template <int&... ExplicitArgumentBarrier, typename C>
@@ -721,6 +721,6 @@ template <int&... ExplicitArgumentBarrier, typename T, size_t N>
 constexpr Span<const T> MakeConstSpan(const T (&array)[N]) noexcept {
   return Span<const T>(array, N);
 }
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
-#endif  // ABSL_TYPES_SPAN_H_
+#endif  // Y_ABSL_TYPES_SPAN_H_

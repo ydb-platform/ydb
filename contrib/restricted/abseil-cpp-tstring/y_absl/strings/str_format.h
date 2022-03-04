@@ -67,8 +67,8 @@
 // In addition, the `str_format` library provides extension points for
 // augmenting formatting to new types.  See "StrFormat Extensions" below.
 
-#ifndef ABSL_STRINGS_STR_FORMAT_H_
-#define ABSL_STRINGS_STR_FORMAT_H_
+#ifndef Y_ABSL_STRINGS_STR_FORMAT_H_
+#define Y_ABSL_STRINGS_STR_FORMAT_H_
 
 #include <cstdio>
 #include <util/generic/string.h>
@@ -80,7 +80,7 @@
 #include "y_absl/strings/internal/str_format/parser.h"  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // UntypedFormatSpec
 //
@@ -335,7 +335,7 @@ using ParsedFormat = str_format_internal::ExtendedParsedFormat<
 //
 // Returns an empty string in case of error.
 template <typename... Args>
-ABSL_MUST_USE_RESULT TString StrFormat(const FormatSpec<Args...>& format,
+Y_ABSL_MUST_USE_RESULT TString StrFormat(const FormatSpec<Args...>& format,
                                            const Args&... args) {
   return str_format_internal::FormatPack(
       str_format_internal::UntypedFormatSpecImpl::Extract(format),
@@ -372,7 +372,7 @@ TString& StrAppendFormat(TString* dst,
 //
 //   std::cout << StreamFormat("%12.6f", 3.14);
 template <typename... Args>
-ABSL_MUST_USE_RESULT str_format_internal::Streamable StreamFormat(
+Y_ABSL_MUST_USE_RESULT str_format_internal::Streamable StreamFormat(
     const FormatSpec<Args...>& format, const Args&... args) {
   return str_format_internal::Streamable(
       str_format_internal::UntypedFormatSpecImpl::Extract(format),
@@ -558,7 +558,7 @@ using FormatArg = str_format_internal::FormatArgImpl;
 //     return std::move(out);
 //   }
 //
-ABSL_MUST_USE_RESULT inline bool FormatUntyped(
+Y_ABSL_MUST_USE_RESULT inline bool FormatUntyped(
     FormatRawSink raw_sink, const UntypedFormatSpec& format,
     y_absl::Span<const FormatArg> args) {
   return str_format_internal::FormatUntyped(
@@ -806,7 +806,7 @@ struct FormatConvertResult {
   bool value;
 };
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_STR_FORMAT_H_
+#endif  // Y_ABSL_STRINGS_STR_FORMAT_H_

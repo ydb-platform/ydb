@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_DEBUGGING_INTERNAL_STACKTRACE_RISCV_INL_H_
-#define ABSL_DEBUGGING_INTERNAL_STACKTRACE_RISCV_INL_H_
+#ifndef Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_RISCV_INL_H_
+#define Y_ABSL_DEBUGGING_INTERNAL_STACKTRACE_RISCV_INL_H_
 
 // Generate stack trace for riscv
 
@@ -42,7 +42,7 @@ static const uintptr_t kUnknownFrameSize = 0;
 // Returns the address of the VDSO __kernel_rt_sigreturn function, if present.
 static const unsigned char *GetKernelRtSigreturnAddress() {
   constexpr uintptr_t kImpossibleAddress = 0;
-  ABSL_CONST_INIT static std::atomic<uintptr_t> memoized(kImpossibleAddress);
+  Y_ABSL_CONST_INIT static std::atomic<uintptr_t> memoized(kImpossibleAddress);
   uintptr_t address = memoized.load(std::memory_order_relaxed);
   if (address != kImpossibleAddress) {
     return reinterpret_cast<const unsigned char *>(address);
@@ -50,7 +50,7 @@ static const unsigned char *GetKernelRtSigreturnAddress() {
 
   address = reinterpret_cast<uintptr_t>(nullptr);
 
-#if ABSL_HAVE_VDSO_SUPPORT
+#if Y_ABSL_HAVE_VDSO_SUPPORT
   y_absl::debugging_internal::VDSOSupport vdso;
   if (vdso.IsPresent()) {
     y_absl::debugging_internal::VDSOSupport::SymbolInfo symbol_info;
@@ -94,8 +94,8 @@ static inline uintptr_t ComputeStackFrameSize(const T *low, const T *high) {
 // strictness of which is controlled by the boolean parameter
 // "STRICT_UNWINDING") to reduce the chance that a bad pointer is returned.
 template <bool STRICT_UNWINDING, bool WITH_CONTEXT>
-ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
-ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
 static void ** NextStackFrame(void **old_frame_pointer, const void *uc) {
   //               .
   //               .
@@ -167,8 +167,8 @@ static void ** NextStackFrame(void **old_frame_pointer, const void *uc) {
 }
 
 template <bool IS_STACK_FRAMES, bool IS_WITH_CONTEXT>
-ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
-ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_ADDRESS  // May read random elements from stack.
+Y_ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY   // May read random elements from stack.
 static int UnwindImpl(void **result, int *sizes, int max_depth, int skip_count,
                       const void *ucp, int *min_dropped_frames) {
 #if defined(__GNUC__)
@@ -224,11 +224,11 @@ static int UnwindImpl(void **result, int *sizes, int max_depth, int skip_count,
 }
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() { return true; }
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif

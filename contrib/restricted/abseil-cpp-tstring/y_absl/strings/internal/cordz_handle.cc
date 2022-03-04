@@ -15,16 +15,16 @@
 
 #include <atomic>
 
-#include "y_absl/base/internal/raw_logging.h"  // For ABSL_RAW_CHECK
+#include "y_absl/base/internal/raw_logging.h"  // For Y_ABSL_RAW_CHECK
 #include "y_absl/base/internal/spinlock.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
 using ::y_absl::base_internal::SpinLockHolder;
 
-ABSL_CONST_INIT CordzHandle::Queue CordzHandle::global_queue_(y_absl::kConstInit);
+Y_ABSL_CONST_INIT CordzHandle::Queue CordzHandle::global_queue_(y_absl::kConstInit);
 
 CordzHandle::CordzHandle(bool is_snapshot) : is_snapshot_(is_snapshot) {
   if (is_snapshot) {
@@ -113,7 +113,7 @@ bool CordzHandle::DiagnosticsHandleIsSafeToInspect(
     if (p == handle) return !snapshot_found;
     if (p == this) snapshot_found = true;
   }
-  ABSL_ASSERT(snapshot_found);  // Assert that 'this' is in delete queue.
+  Y_ABSL_ASSERT(snapshot_found);  // Assert that 'this' is in delete queue.
   return true;
 }
 
@@ -135,5 +135,5 @@ CordzHandle::DiagnosticsGetSafeToInspectDeletedHandles() {
 }
 
 }  // namespace cord_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

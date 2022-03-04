@@ -16,14 +16,14 @@
 // barrier.h
 // -----------------------------------------------------------------------------
 
-#ifndef ABSL_SYNCHRONIZATION_BARRIER_H_
-#define ABSL_SYNCHRONIZATION_BARRIER_H_
+#ifndef Y_ABSL_SYNCHRONIZATION_BARRIER_H_
+#define Y_ABSL_SYNCHRONIZATION_BARRIER_H_
 
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Barrier
 //
@@ -70,10 +70,10 @@ class Barrier {
 
  private:
   Mutex lock_;
-  int num_to_block_ ABSL_GUARDED_BY(lock_);
-  int num_to_exit_ ABSL_GUARDED_BY(lock_);
+  int num_to_block_ Y_ABSL_GUARDED_BY(lock_);
+  int num_to_exit_ Y_ABSL_GUARDED_BY(lock_);
 };
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
-#endif  // ABSL_SYNCHRONIZATION_BARRIER_H_
+#endif  // Y_ABSL_SYNCHRONIZATION_BARRIER_H_

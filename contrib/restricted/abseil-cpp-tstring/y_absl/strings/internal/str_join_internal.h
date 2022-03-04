@@ -28,8 +28,8 @@
 //
 // IWYU pragma: private, include "y_absl/strings/str_join.h"
 
-#ifndef ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
-#define ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
+#define Y_ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
 
 #include <cstring>
 #include <iterator>
@@ -43,7 +43,7 @@
 #include "y_absl/strings/str_cat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 //
@@ -308,7 +308,7 @@ TString JoinRange(const Range& range, y_absl::string_view separator) {
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_

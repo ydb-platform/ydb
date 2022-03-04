@@ -48,8 +48,8 @@
 // error codes (of type `y_absl::StatusCode`) enumerated in this header file.
 // These canonical codes are understood across the codebase and will be
 // accepted across all API and RPC boundaries.
-#ifndef ABSL_STATUS_STATUS_H_
-#define ABSL_STATUS_STATUS_H_
+#ifndef Y_ABSL_STATUS_STATUS_H_
+#define Y_ABSL_STATUS_STATUS_H_
 
 #include <iostream>
 #include <util/generic/string.h>
@@ -62,7 +62,7 @@
 #include "y_absl/types/optional.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // y_absl::StatusCode
 //
@@ -420,7 +420,7 @@ inline StatusToStringMode& operator^=(StatusToStringMode& lhs,
 //
 // Returned Status objects may not be ignored. status_internal.h has a forward
 // declaration of the form
-// class ABSL_MUST_USE_RESULT Status;
+// class Y_ABSL_MUST_USE_RESULT Status;
 class Status final {
  public:
   // Constructors
@@ -471,7 +471,7 @@ class Status final {
   //
   // Returns `true` if `this->ok()`. Prefer checking for an OK status using this
   // member function.
-  ABSL_MUST_USE_RESULT bool ok() const;
+  Y_ABSL_MUST_USE_RESULT bool ok() const;
 
   // Status::code()
   //
@@ -687,22 +687,22 @@ std::ostream& operator<<(std::ostream& os, const Status& x);
 //
 // These convenience functions return `true` if a given status matches the
 // `y_absl::StatusCode` error code of its associated function.
-ABSL_MUST_USE_RESULT bool IsAborted(const Status& status);
-ABSL_MUST_USE_RESULT bool IsAlreadyExists(const Status& status);
-ABSL_MUST_USE_RESULT bool IsCancelled(const Status& status);
-ABSL_MUST_USE_RESULT bool IsDataLoss(const Status& status);
-ABSL_MUST_USE_RESULT bool IsDeadlineExceeded(const Status& status);
-ABSL_MUST_USE_RESULT bool IsFailedPrecondition(const Status& status);
-ABSL_MUST_USE_RESULT bool IsInternal(const Status& status);
-ABSL_MUST_USE_RESULT bool IsInvalidArgument(const Status& status);
-ABSL_MUST_USE_RESULT bool IsNotFound(const Status& status);
-ABSL_MUST_USE_RESULT bool IsOutOfRange(const Status& status);
-ABSL_MUST_USE_RESULT bool IsPermissionDenied(const Status& status);
-ABSL_MUST_USE_RESULT bool IsResourceExhausted(const Status& status);
-ABSL_MUST_USE_RESULT bool IsUnauthenticated(const Status& status);
-ABSL_MUST_USE_RESULT bool IsUnavailable(const Status& status);
-ABSL_MUST_USE_RESULT bool IsUnimplemented(const Status& status);
-ABSL_MUST_USE_RESULT bool IsUnknown(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsAborted(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsAlreadyExists(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsCancelled(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsDataLoss(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsDeadlineExceeded(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsFailedPrecondition(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsInternal(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsInvalidArgument(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsNotFound(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsOutOfRange(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsPermissionDenied(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsResourceExhausted(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsUnauthenticated(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsUnavailable(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsUnimplemented(const Status& status);
+Y_ABSL_MUST_USE_RESULT bool IsUnknown(const Status& status);
 
 // AbortedError()
 // AlreadyExistsError()
@@ -876,7 +876,7 @@ inline Status OkStatus() { return Status(); }
 // message-less kCancelled errors are common in the infrastructure.
 inline Status CancelledError() { return Status(y_absl::StatusCode::kCancelled); }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STATUS_STATUS_H_
+#endif  // Y_ABSL_STATUS_STATUS_H_

@@ -15,12 +15,12 @@
 // Functions for directly invoking mmap() via syscall, avoiding the case where
 // mmap() has been locally overridden.
 
-#ifndef ABSL_BASE_INTERNAL_DIRECT_MMAP_H_
-#define ABSL_BASE_INTERNAL_DIRECT_MMAP_H_
+#ifndef Y_ABSL_BASE_INTERNAL_DIRECT_MMAP_H_
+#define Y_ABSL_BASE_INTERNAL_DIRECT_MMAP_H_
 
 #include "y_absl/base/config.h"
 
-#if ABSL_HAVE_MMAP
+#if Y_ABSL_HAVE_MMAP
 
 #include <sys/mman.h>
 
@@ -66,7 +66,7 @@ extern "C" void* __mmap2(void*, size_t, int, int, int, size_t);
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // Platform specific logic extracted from
@@ -137,7 +137,7 @@ inline int DirectMunmap(void* start, size_t length) {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #else  // !__linux__
@@ -146,7 +146,7 @@ ABSL_NAMESPACE_END
 // actual mmap()/munmap() methods.
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 inline void* DirectMmap(void* start, size_t length, int prot, int flags, int fd,
@@ -159,11 +159,11 @@ inline int DirectMunmap(void* start, size_t length) {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // __linux__
 
-#endif  // ABSL_HAVE_MMAP
+#endif  // Y_ABSL_HAVE_MMAP
 
-#endif  // ABSL_BASE_INTERNAL_DIRECT_MMAP_H_
+#endif  // Y_ABSL_BASE_INTERNAL_DIRECT_MMAP_H_

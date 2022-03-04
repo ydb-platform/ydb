@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_BASE_INTERNAL_STRERROR_H_
-#define ABSL_BASE_INTERNAL_STRERROR_H_
+#ifndef Y_ABSL_BASE_INTERNAL_STRERROR_H_
+#define Y_ABSL_BASE_INTERNAL_STRERROR_H_
 
 #include <util/generic/string.h>
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 // A portable and thread-safe alternative to C89's `strerror`.
@@ -33,7 +33,7 @@ namespace base_internal {
 TString StrError(int errnum);
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_BASE_INTERNAL_STRERROR_H_
+#endif  // Y_ABSL_BASE_INTERNAL_STRERROR_H_

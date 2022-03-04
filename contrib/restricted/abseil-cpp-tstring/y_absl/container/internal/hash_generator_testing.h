@@ -15,8 +15,8 @@
 // Generates random values for testing. Specialized only for the few types we
 // care about.
 
-#ifndef ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_
-#define ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_
+#ifndef Y_ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_
+#define Y_ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_
 
 #include <stdint.h>
 
@@ -35,7 +35,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 namespace hash_internal {
 namespace generator_internal {
@@ -176,7 +176,7 @@ struct UniqueGenerator {
 
 }  // namespace hash_internal
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_
+#endif  // Y_ABSL_CONTAINER_INTERNAL_HASH_GENERATOR_TESTING_H_

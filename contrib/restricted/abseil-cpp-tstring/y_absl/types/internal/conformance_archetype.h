@@ -31,8 +31,8 @@
 // a Conformance Profile as a template argument and its instantiations are a
 // minimum-conforming model of that profile.
 
-#ifndef ABSL_TYPES_INTERNAL_CONFORMANCE_ARCHETYPE_H_
-#define ABSL_TYPES_INTERNAL_CONFORMANCE_ARCHETYPE_H_
+#ifndef Y_ABSL_TYPES_INTERNAL_CONFORMANCE_ARCHETYPE_H_
+#define Y_ABSL_TYPES_INTERNAL_CONFORMANCE_ARCHETYPE_H_
 
 #include <cstddef>
 #include <functional>
@@ -43,7 +43,7 @@
 #include "y_absl/types/internal/conformance_profile.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace types_internal {
 
 // A minimum-conforming implementation of a type with properties specified in
@@ -915,7 +915,7 @@ struct ExceptionalBool {
 //
 // NOTE: Non-nothrow operators throw via their result's conversion to bool even
 // though the operation itself is noexcept.
-#define ABSL_TYPES_INTERNAL_OP(enum_name, op)                                \
+#define Y_ABSL_TYPES_INTERNAL_OP(enum_name, op)                                \
   template <class Prof>                                                      \
   y_absl::enable_if_t<!PropertiesOfT<Prof>::is_##enum_name, bool> operator op( \
       const Archetype<Prof>&, const Archetype<Prof>&) = delete;              \
@@ -934,14 +934,14 @@ struct ExceptionalBool {
                                                 rhs.archetype_state);        \
   }
 
-ABSL_TYPES_INTERNAL_OP(equality_comparable, ==);
-ABSL_TYPES_INTERNAL_OP(inequality_comparable, !=);
-ABSL_TYPES_INTERNAL_OP(less_than_comparable, <);
-ABSL_TYPES_INTERNAL_OP(less_equal_comparable, <=);
-ABSL_TYPES_INTERNAL_OP(greater_equal_comparable, >=);
-ABSL_TYPES_INTERNAL_OP(greater_than_comparable, >);
+Y_ABSL_TYPES_INTERNAL_OP(equality_comparable, ==);
+Y_ABSL_TYPES_INTERNAL_OP(inequality_comparable, !=);
+Y_ABSL_TYPES_INTERNAL_OP(less_than_comparable, <);
+Y_ABSL_TYPES_INTERNAL_OP(less_equal_comparable, <=);
+Y_ABSL_TYPES_INTERNAL_OP(greater_equal_comparable, >=);
+Y_ABSL_TYPES_INTERNAL_OP(greater_than_comparable, >);
 
-#undef ABSL_TYPES_INTERNAL_OP
+#undef Y_ABSL_TYPES_INTERNAL_OP
 
 // Base class for std::hash specializations when an Archetype doesn't support
 // hashing.
@@ -962,7 +962,7 @@ struct EnabledHash {
 };
 
 }  // namespace types_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 namespace std {
@@ -975,4 +975,4 @@ struct hash<::y_absl::types_internal::Archetype<Prof>>
 
 }  // namespace std
 
-#endif  // ABSL_TYPES_INTERNAL_CONFORMANCE_ARCHETYPE_H_
+#endif  // Y_ABSL_TYPES_INTERNAL_CONFORMANCE_ARCHETYPE_H_

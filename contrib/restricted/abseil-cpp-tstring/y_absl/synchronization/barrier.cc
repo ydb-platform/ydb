@@ -18,7 +18,7 @@
 #include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Return whether int *arg is zero.
 static bool IsZero(void *arg) {
@@ -30,7 +30,7 @@ bool Barrier::Block() {
 
   this->num_to_block_--;
   if (this->num_to_block_ < 0) {
-    ABSL_RAW_LOG(
+    Y_ABSL_RAW_LOG(
         FATAL,
         "Block() called too many times.  num_to_block_=%d out of total=%d",
         this->num_to_block_, this->num_to_exit_);
@@ -40,7 +40,7 @@ bool Barrier::Block() {
 
   // Determine which thread can safely delete this Barrier object
   this->num_to_exit_--;
-  ABSL_RAW_CHECK(this->num_to_exit_ >= 0, "barrier underflow");
+  Y_ABSL_RAW_CHECK(this->num_to_exit_ >= 0, "barrier underflow");
 
   // If num_to_exit_ == 0 then all other threads in the barrier have
   // exited the Wait() and have released the Mutex so this thread is
@@ -48,5 +48,5 @@ bool Barrier::Block() {
   return this->num_to_exit_ == 0;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

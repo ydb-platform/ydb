@@ -35,8 +35,8 @@
 // you want to refer to is not in scope, you may use a member pointer
 // (e.g. &MyClass::mutex_) to refer to a mutex in some (unknown) object.
 
-#ifndef ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_
-#define ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_
+#ifndef Y_ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_
+#define Y_ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_
 
 #if defined(__clang__)
 #define THREAD_ANNOTATION_ATTRIBUTE__(x)   __attribute__((x))
@@ -249,7 +249,7 @@
 // Disables warnings for a single read operation.  This can be used to avoid
 // warnings when it is known that the read is not actually involved in a race,
 // but the compiler cannot confirm that.
-#define TS_UNCHECKED_READ(x) thread_safety_analysis::ts_unchecked_read(x)
+#define Y_TS_UNCHECKED_READ(x) thread_safety_analysis::y_ts_unchecked_read(x)
 
 
 namespace thread_safety_analysis {
@@ -257,15 +257,15 @@ namespace thread_safety_analysis {
 // Takes a reference to a guarded data member, and returns an unguarded
 // reference.
 template <typename T>
-inline const T& ts_unchecked_read(const T& v) NO_THREAD_SAFETY_ANALYSIS {
+inline const T& y_ts_unchecked_read(const T& v) NO_THREAD_SAFETY_ANALYSIS {
   return v;
 }
 
 template <typename T>
-inline T& ts_unchecked_read(T& v) NO_THREAD_SAFETY_ANALYSIS {
+inline T& y_ts_unchecked_read(T& v) NO_THREAD_SAFETY_ANALYSIS {
   return v;
 }
 
 }  // namespace thread_safety_analysis
 
-#endif  // ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_
+#endif  // Y_ABSL_BASE_INTERNAL_THREAD_ANNOTATIONS_H_

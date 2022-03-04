@@ -50,8 +50,8 @@
 //
 // -----------------------------------------------------------------------------
 
-#ifndef ABSL_STRINGS_STR_CAT_H_
-#define ABSL_STRINGS_STR_CAT_H_
+#ifndef Y_ABSL_STRINGS_STR_CAT_H_
+#define Y_ABSL_STRINGS_STR_CAT_H_
 
 #include <array>
 #include <cstdint>
@@ -64,7 +64,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 namespace strings_internal {
 // AlphaNumBuffer allows a way to pass a string to StrCat without having to do
@@ -327,21 +327,21 @@ void AppendPieces(TString* dest,
 
 }  // namespace strings_internal
 
-ABSL_MUST_USE_RESULT inline TString StrCat() { return TString(); }
+Y_ABSL_MUST_USE_RESULT inline TString StrCat() { return TString(); }
 
-ABSL_MUST_USE_RESULT inline TString StrCat(const AlphaNum& a) {
+Y_ABSL_MUST_USE_RESULT inline TString StrCat(const AlphaNum& a) {
   return TString(a.data(), a.size());
 }
 
-ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b);
-ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b,
+Y_ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b);
+Y_ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b,
                                         const AlphaNum& c);
-ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b,
+Y_ABSL_MUST_USE_RESULT TString StrCat(const AlphaNum& a, const AlphaNum& b,
                                         const AlphaNum& c, const AlphaNum& d);
 
 // Support 5 or more arguments
 template <typename... AV>
-ABSL_MUST_USE_RESULT inline TString StrCat(
+Y_ABSL_MUST_USE_RESULT inline TString StrCat(
     const AlphaNum& a, const AlphaNum& b, const AlphaNum& c, const AlphaNum& d,
     const AlphaNum& e, const AV&... args) {
   return strings_internal::CatPieces(
@@ -405,7 +405,7 @@ SixDigits(double d) {
   return result;
 }
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_STR_CAT_H_
+#endif  // Y_ABSL_STRINGS_STR_CAT_H_

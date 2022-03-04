@@ -14,7 +14,7 @@
 
 #include "y_absl/strings/string_view.h"
 
-#ifndef ABSL_USES_STD_STRING_VIEW
+#ifndef Y_ABSL_USES_STD_STRING_VIEW
 
 #include <algorithm>
 #include <climits>
@@ -24,7 +24,7 @@
 #include "y_absl/strings/internal/memutil.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 namespace {
 void WritePadding(std::ostream& o, size_t pad) {
@@ -214,17 +214,17 @@ string_view::size_type string_view::find_last_not_of(
 // MSVC to choose only one definition for the symbol it decorates. See details
 // at https://msdn.microsoft.com/en-us/library/34h23df8(v=vs.100).aspx
 #ifdef _MSC_VER
-#define ABSL_STRING_VIEW_SELECTANY __declspec(selectany)
+#define Y_ABSL_STRING_VIEW_SELECTANY __declspec(selectany)
 #else
-#define ABSL_STRING_VIEW_SELECTANY
+#define Y_ABSL_STRING_VIEW_SELECTANY
 #endif
 
-ABSL_STRING_VIEW_SELECTANY
+Y_ABSL_STRING_VIEW_SELECTANY
 constexpr string_view::size_type string_view::npos;
-ABSL_STRING_VIEW_SELECTANY
+Y_ABSL_STRING_VIEW_SELECTANY
 constexpr string_view::size_type string_view::kMaxSize;
 
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_USES_STD_STRING_VIEW
+#endif  // Y_ABSL_USES_STD_STRING_VIEW

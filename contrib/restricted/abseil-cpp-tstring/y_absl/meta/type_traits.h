@@ -32,8 +32,8 @@
 // features is brittle and not guaranteed. Neither the standard library nor
 // Abseil provides any guarantee that APIs are stable in the face of template
 // metaprogramming. Use with caution.
-#ifndef ABSL_META_TYPE_TRAITS_H_
-#define ABSL_META_TYPE_TRAITS_H_
+#ifndef Y_ABSL_META_TYPE_TRAITS_H_
+#define Y_ABSL_META_TYPE_TRAITS_H_
 
 #include <cstddef>
 #include <functional>
@@ -44,19 +44,19 @@
 // MSVC constructibility traits do not detect destructor properties and so our
 // implementations should not use them as a source-of-truth.
 #if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
-#define ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION 1
+#define Y_ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION 1
 #endif
 
 // Defines the default alignment. `__STDCPP_DEFAULT_NEW_ALIGNMENT__` is a C++17
 // feature.
 #if defined(__STDCPP_DEFAULT_NEW_ALIGNMENT__)
-#define ABSL_INTERNAL_DEFAULT_NEW_ALIGNMENT __STDCPP_DEFAULT_NEW_ALIGNMENT__
+#define Y_ABSL_INTERNAL_DEFAULT_NEW_ALIGNMENT __STDCPP_DEFAULT_NEW_ALIGNMENT__
 #else  // defined(__STDCPP_DEFAULT_NEW_ALIGNMENT__)
-#define ABSL_INTERNAL_DEFAULT_NEW_ALIGNMENT alignof(std::max_align_t)
+#define Y_ABSL_INTERNAL_DEFAULT_NEW_ALIGNMENT alignof(std::max_align_t)
 #endif  // defined(__STDCPP_DEFAULT_NEW_ALIGNMENT__)
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 // Defined and documented later on in this file.
 template <typename T>
@@ -300,7 +300,7 @@ template <typename T>
 struct is_trivially_destructible
     : std::integral_constant<bool, __has_trivial_destructor(T) &&
                                    std::is_destructible<T>::value> {
-#ifdef ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
+#ifdef Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
  private:
   static constexpr bool compliant = std::is_trivially_destructible<T>::value ==
                                     is_trivially_destructible::value;
@@ -310,7 +310,7 @@ struct is_trivially_destructible
   static_assert(compliant || !std::is_trivially_destructible<T>::value,
                 "Not compliant with std::is_trivially_destructible; "
                 "Standard: true, Implementation: false");
-#endif  // ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
+#endif  // Y_ABSL_HAVE_STD_IS_TRIVIALLY_DESTRUCTIBLE
 };
 
 // is_trivially_default_constructible()
@@ -350,9 +350,9 @@ struct is_trivially_default_constructible
     : std::integral_constant<bool, __has_trivial_constructor(T) &&
                                    std::is_default_constructible<T>::value &&
                                    is_trivially_destructible<T>::value> {
-#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
+#if defined(Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
     !defined(                                            \
-        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
+        Y_ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
  private:
   static constexpr bool compliant =
       std::is_trivially_default_constructible<T>::value ==
@@ -363,7 +363,7 @@ struct is_trivially_default_constructible
   static_assert(compliant || !std::is_trivially_default_constructible<T>::value,
                 "Not compliant with std::is_trivially_default_constructible; "
                 "Standard: true, Implementation: false");
-#endif  // ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
+#endif  // Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
 };
 
 // is_trivially_move_constructible()
@@ -385,9 +385,9 @@ struct is_trivially_move_constructible
           std::is_object<T>::value && !std::is_array<T>::value,
           type_traits_internal::IsTriviallyMoveConstructibleObject<T>,
           std::is_reference<T>>::type::type {
-#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
+#if defined(Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
     !defined(                                            \
-        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
+        Y_ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
  private:
   static constexpr bool compliant =
       std::is_trivially_move_constructible<T>::value ==
@@ -398,7 +398,7 @@ struct is_trivially_move_constructible
   static_assert(compliant || !std::is_trivially_move_constructible<T>::value,
                 "Not compliant with std::is_trivially_move_constructible; "
                 "Standard: true, Implementation: false");
-#endif  // ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
+#endif  // Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
 };
 
 // is_trivially_copy_constructible()
@@ -420,9 +420,9 @@ struct is_trivially_copy_constructible
           std::is_object<T>::value && !std::is_array<T>::value,
           type_traits_internal::IsTriviallyCopyConstructibleObject<T>,
           std::is_lvalue_reference<T>>::type::type {
-#if defined(ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
+#if defined(Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE) && \
     !defined(                                            \
-        ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
+        Y_ABSL_META_INTERNAL_STD_CONSTRUCTION_TRAITS_DONT_CHECK_DESTRUCTION)
  private:
   static constexpr bool compliant =
       std::is_trivially_copy_constructible<T>::value ==
@@ -433,7 +433,7 @@ struct is_trivially_copy_constructible
   static_assert(compliant || !std::is_trivially_copy_constructible<T>::value,
                 "Not compliant with std::is_trivially_copy_constructible; "
                 "Standard: true, Implementation: false");
-#endif  // ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
+#endif  // Y_ABSL_HAVE_STD_IS_TRIVIALLY_CONSTRUCTIBLE
 };
 
 // is_trivially_move_assignable()
@@ -459,7 +459,7 @@ struct is_trivially_move_assignable
           std::is_move_assignable<type_traits_internal::SingleMemberUnion<T>>,
           type_traits_internal::IsTriviallyMoveAssignableReference<T>>::type::
           type {
-#ifdef ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
+#ifdef Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
  private:
   static constexpr bool compliant =
       std::is_trivially_move_assignable<T>::value ==
@@ -470,7 +470,7 @@ struct is_trivially_move_assignable
   static_assert(compliant || !std::is_trivially_move_assignable<T>::value,
                 "Not compliant with std::is_trivially_move_assignable; "
                 "Standard: true, Implementation: false");
-#endif  // ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
+#endif  // Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
 };
 
 // is_trivially_copy_assignable()
@@ -493,7 +493,7 @@ struct is_trivially_copy_assignable
     : std::integral_constant<
           bool, __has_trivial_assign(typename std::remove_reference<T>::type) &&
                     y_absl::is_copy_assignable<T>::value> {
-#ifdef ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
+#ifdef Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
  private:
   static constexpr bool compliant =
       std::is_trivially_copy_assignable<T>::value ==
@@ -504,7 +504,7 @@ struct is_trivially_copy_assignable
   static_assert(compliant || !std::is_trivially_copy_assignable<T>::value,
                 "Not compliant with std::is_trivially_copy_assignable; "
                 "Standard: true, Implementation: false");
-#endif  // ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
+#endif  // Y_ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
 };
 
 #if defined(__cpp_lib_remove_cvref) && __cpp_lib_remove_cvref >= 201711L
@@ -664,15 +664,15 @@ namespace type_traits_internal {
 //
 #if defined(_MSC_VER) || (defined(_LIBCPP_VERSION) && \
                           _LIBCPP_VERSION < 4000 && _LIBCPP_STD_VER > 11)
-#define ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_ 0
+#define Y_ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_ 0
 #else
-#define ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_ 1
+#define Y_ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_ 1
 #endif
 
-#if !ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
+#if !Y_ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
 template <typename Key, typename = size_t>
 struct IsHashable : std::true_type {};
-#else   // ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
+#else   // Y_ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
 template <typename Key, typename = void>
 struct IsHashable : std::false_type {};
 
@@ -682,7 +682,7 @@ struct IsHashable<
     y_absl::enable_if_t<std::is_convertible<
         decltype(std::declval<std::hash<Key>&>()(std::declval<Key const&>())),
         std::size_t>::value>> : std::true_type {};
-#endif  // !ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
+#endif  // !Y_ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
 
 struct AssertHashEnabledHelper {
  private:
@@ -791,7 +791,7 @@ using swap_internal::Swap;
 using swap_internal::StdSwapIsUnconstrained;
 
 }  // namespace type_traits_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_META_TYPE_TRAITS_H_
+#endif  // Y_ABSL_META_TYPE_TRAITS_H_

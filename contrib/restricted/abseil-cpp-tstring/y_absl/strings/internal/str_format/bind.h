@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_
-#define ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_
+#define Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_
 
 #include <array>
 #include <cstdio>
@@ -27,7 +27,7 @@
 #include "y_absl/types/span.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 
 class UntypedFormatSpec;
 
@@ -88,7 +88,7 @@ class FormatSpecTemplate
   using Base = typename MakeDependent<UntypedFormatSpec, Args...>::type;
 
  public:
-#ifdef ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+#ifdef Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
   // Honeypot overload for when the string is not constexpr.
   // We use the 'unavailable' attribute to give a better compiler error than
@@ -126,12 +126,12 @@ class FormatSpecTemplate
       __attribute__((enable_if(ValidFormatImpl<Args...>(s), "bad format trap")))
       : Base(s) {}
 
-#else  // ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+#else  // Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
   FormatSpecTemplate(const char* s) : Base(s) {}  // NOLINT
   FormatSpecTemplate(string_view s) : Base(s) {}  // NOLINT
 
-#endif  // ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
+#endif  // Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
   template <
       FormatConversionCharSet... C,
@@ -147,7 +147,7 @@ class Streamable {
   Streamable(const UntypedFormatSpecImpl& format,
              y_absl::Span<const FormatArgImpl> args)
       : format_(format) {
-    if (args.size() <= ABSL_ARRAYSIZE(few_args_)) {
+    if (args.size() <= Y_ABSL_ARRAYSIZE(few_args_)) {
       for (size_t i = 0; i < args.size(); ++i) {
         few_args_[i] = args[i];
       }
@@ -211,7 +211,7 @@ class StreamedWrapper {
 };
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_

@@ -17,15 +17,15 @@
 // precise values are computed across the full range of doubles. We can't rely
 // on the pow() function, because not all standard libraries ship a version
 // that is precise.
-#ifndef ABSL_STRINGS_INTERNAL_POW10_HELPER_H_
-#define ABSL_STRINGS_INTERNAL_POW10_HELPER_H_
+#ifndef Y_ABSL_STRINGS_INTERNAL_POW10_HELPER_H_
+#define Y_ABSL_STRINGS_INTERNAL_POW10_HELPER_H_
 
 #include <vector>
 
 #include "y_absl/base/config.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+Y_ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
 // Computes the precise value of 10^exp. (I.e. the nearest representable
@@ -34,7 +34,7 @@ namespace strings_internal {
 double Pow10(int exp);
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
-#endif  // ABSL_STRINGS_INTERNAL_POW10_HELPER_H_
+#endif  // Y_ABSL_STRINGS_INTERNAL_POW10_HELPER_H_

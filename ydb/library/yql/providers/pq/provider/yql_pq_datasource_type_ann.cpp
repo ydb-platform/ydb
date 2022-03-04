@@ -85,6 +85,10 @@ public:
             return TStatus::Error;
         }
 
+        if (!NCommon::ValidateFormat(read.Format().Ref().Content(), ctx)) {
+            return TStatus::Error;
+        }
+
         if (!NCommon::ValidateCompression(read.Compression().Ref().Content(), ctx)) {
             return TStatus::Error;
         }

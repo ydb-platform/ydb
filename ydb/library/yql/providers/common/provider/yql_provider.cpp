@@ -13,12 +13,32 @@
 #include <util/folder/path.h>
 #include <util/generic/is_in.h>
 #include <util/generic/utility.h>
+#include <util/string/join.h>
 
 
 namespace NYql {
 namespace NCommon {
 
 using namespace NNodes;
+
+namespace {
+    std::array<std::string_view, 6> Formats = {
+        "csv_with_names"sv,
+        "tsv_with_names"sv,
+        "json_list"sv,
+        "json"sv,
+        "raw"sv,
+        "json_each_row"sv
+    };
+    std::array<std::string_view, 6> Compressions = {
+        "gzip"sv,
+        "zstd"sv,
+        "lz4"sv,
+        "brotli"sv,
+        "bzip2"sv,
+        "xz"sv
+    };
+} // namespace
 
 bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
     if (Mode) {
@@ -1050,23 +1070,22 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
 }
 
 bool ValidateCompression(TStringBuf compression, TExprContext& ctx) {
-    if (compression.empty() ||
-        IsIn({
-            "gzip"sv,
-            "zstd"sv,
-            "lz4"sv,
-            "brotli"sv,
-            "bzip2"sv,
-            "xz"sv
-        }, compression))
-    {
+    if (compression.empty() || IsIn(Compressions, compression)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
-        << ". Use one of: gzip, zstd, lz4, brotli, bzip2, xz"));
+        << ". Use one of: " << JoinSeq(", ", Compressions)));
     return false;
 }
 
+bool ValidateFormat(TStringBuf format, TExprContext& ctx) {
+    if (format.empty() || IsIn(Formats, format)) {
+        return true;
+    }
+    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
+        << ". Use one of: " << JoinSeq(", ", Formats)));
+    return false;
+}
 
 } // namespace NCommon
 } // namespace NYql

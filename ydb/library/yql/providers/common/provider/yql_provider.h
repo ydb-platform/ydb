@@ -122,5 +122,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
 
 bool ValidateCompression(TStringBuf compression, TExprContext& ctx);
 
+bool ValidateFormat(TStringBuf format, TExprContext& ctx);
+
 } // namespace NCommon
 } // namespace NYql

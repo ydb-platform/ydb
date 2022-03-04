@@ -58,7 +58,7 @@ namespace NActors {
             auto now = Now();
 
             for (auto& pending : PendingRequests) {
-                if (pending.Deadline > now) {
+                if (pending.Request && pending.Deadline > now) {
                     LOG_ERROR_IC("ICN06", "Unknown nodeId: %u", pending.Request->Get()->Record.GetNodeId());
                     auto reply = new TEvLocalNodeInfo;
                     reply->NodeId = pending.Request->Get()->Record.GetNodeId();
@@ -144,7 +144,7 @@ namespace NActors {
                     node.Address, node.Host, node.ResolveHost, node.Port, node.Location);
 
                 for (auto& pending : PendingRequests) {
-                    if (pending.Request->Get()->Record.GetNodeId() == node.NodeId) {
+                    if (pending.Request && pending.Request->Get()->Record.GetNodeId() == node.NodeId) {
                         LOG_DEBUG_IC("ICN05", "Pending nodeId: %u discovered", node.NodeId);
                         RegisterWithSameMailbox(
                             CreateResolveActor(node.NodeId, NodeTable[node.NodeId], pending.Request->Sender, SelfId(), pending.Deadline));

@@ -20,7 +20,7 @@ ADDINCL(
 )
 
 SRCS(
-    wrapper.cpp
+    parser.cpp
     thread_inits.c
     comp_factory.cpp
 )

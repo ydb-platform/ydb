@@ -101,7 +101,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(yql-parser-pg_wrapper PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/wrapper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/thread_inits.c
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/comp_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/access/brin/brin.c

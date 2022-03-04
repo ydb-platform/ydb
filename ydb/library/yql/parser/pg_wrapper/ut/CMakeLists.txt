@@ -20,7 +20,7 @@ target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
   yql-parser-pg_wrapper
 )
 target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/wrapper_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
 )
 add_test(
   NAME

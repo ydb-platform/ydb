@@ -6,7 +6,7 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 SRCS(
-    wrapper_ut.cpp
+    parser_ut.cpp
 )
 
 END()

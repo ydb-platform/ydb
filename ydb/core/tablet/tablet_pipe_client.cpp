@@ -315,7 +315,7 @@ namespace NTabletPipe {
         void HandleConnect(TEvents::TEvUndelivered::TPtr& ev, const TActorContext &ctx) {
             const auto* msg = ev->Get();
             if (msg->SourceType != TEvTabletPipe::TEvConnect::EventType || ev->Cookie != ConnectCookie) {
-                BLOG_D("ignored unexpected TEvUndelivered of event " << msg->SourceType << " with cookie " << ev->Cookie);
+                BLOG_D("ignored unexpected TEvUndelivered for event " << msg->SourceType << " with cookie " << ev->Cookie);
                 return;
             }
 
@@ -324,7 +324,13 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
+            const auto* msg = ev->Get();
+            if (msg->SourceType == TEvTabletPipe::TEvConnect::EventType) {
+                // We have connected already, ignore undelivered notifications from older attempts
+                BLOG_D("ignored unexpected TEvUndelivered for event " << msg->SourceType << " with cookie " << ev->Cookie);
+                return;
+            }
+
             BLOG_D("pipe event not delivered, drop pipe");
             return NotifyDisconnect(ctx);
         }

@@ -255,6 +255,7 @@ namespace NActors {
 
         void ReestablishConnection(TDisconnectReason reason);
         void DestroySession(TDisconnectReason reason);
+        void PassAway() override;
 
         TDeque<TIntrusivePtr<TRopeAlignedBuffer>> Buffers;
 

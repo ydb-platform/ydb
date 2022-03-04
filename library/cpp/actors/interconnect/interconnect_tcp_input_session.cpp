@@ -430,6 +430,11 @@ namespace NActors {
         Socket.Reset();
     }
 
+    void TInputSessionTCP::PassAway() {
+        Metrics->SetClockSkewMicrosec(0);
+        TActorBootstrapped::PassAway();
+    }
+
     void TInputSessionTCP::HandleCheckDeadPeer() {
         const TInstant now = TActivationContext::Now();
         if (now >= LastReceiveTimestamp + DeadPeerTimeout) {

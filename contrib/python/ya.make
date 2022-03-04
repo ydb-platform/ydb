@@ -1180,6 +1180,7 @@ RECURSE(
     xmltodict
     xxhash
     yandex-pgmigrate
+    yandexcloud
     yappi
     yarl
     yfinance

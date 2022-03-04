@@ -360,6 +360,7 @@ RECURSE(
     yajl
     yaml
     yaml-cpp
+    yandex-cloud-api-protos
     zeromq
     zlib
     zlib-ng-develop

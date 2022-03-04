@@ -15,3 +15,19 @@ target_sources(libs-base64-plain32 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/base64/plain32/codec_plain.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/base64/plain32/lib.c
 )
+set_property(
+  SOURCE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/base64/plain32/codec_plain.c
+  APPEND
+  PROPERTY
+  COMPILE_OPTIONS
+  -std=c11
+)
+set_property(
+  SOURCE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/base64/plain32/lib.c
+  APPEND
+  PROPERTY
+  COMPILE_OPTIONS
+  -std=c11
+)

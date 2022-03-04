@@ -15,3 +15,21 @@ target_sources(libs-base64-ssse3 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/base64/ssse3/codec_ssse3.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/base64/ssse3/lib.c
 )
+set_property(
+  SOURCE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/base64/ssse3/codec_ssse3.c
+  APPEND
+  PROPERTY
+  COMPILE_OPTIONS
+  -mssse3
+  -std=c11
+)
+set_property(
+  SOURCE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/base64/ssse3/lib.c
+  APPEND
+  PROPERTY
+  COMPILE_OPTIONS
+  -mssse3
+  -std=c11
+)

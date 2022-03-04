@@ -1,0 +1,14 @@
+service: cc
+title: Third party components
+arcanum:
+  review:
+    disabling_policy: denied
+    groups:
+      - name: reviewers
+        roles: [ "cc:developer" ]
+    rules:
+      - reviewers:
+          - name: reviewers
+            assign: 0
+            ship: 1
+            

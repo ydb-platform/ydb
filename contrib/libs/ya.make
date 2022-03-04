@@ -324,6 +324,7 @@ RECURSE(
     tbb
     tcmalloc
     tcmalloc/dynamic
+    tdlib
     tensorboard
     termbox
     tf

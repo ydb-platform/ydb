@@ -14,7 +14,7 @@ std::pair<NYql::NDq::IDqSourceActor*, NActors::IActor*> CreateClickHouseReadActo
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    IDqSourceActor::ICallbacks* callback,
+    const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq

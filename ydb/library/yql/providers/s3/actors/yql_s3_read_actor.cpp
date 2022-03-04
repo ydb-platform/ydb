@@ -93,11 +93,11 @@ using TPathList = std::vector<TPath>;
         const TString& url,
         const TString& token,
         TPathList&& paths,
-        ICallbacks* callbacks,
+        const NActors::TActorId& computeActorId,
         const std::shared_ptr<NS3::TRetryConfig>& retryConfig
     )   : Gateway(std::move(gateway))
         , InputIndex(inputIndex)
-        , Callbacks(callbacks)
+        , ComputeActorId(computeActorId)
         , ActorSystem(TActivationContext::ActorSystem())
         , Url(url)
         , Headers(MakeHeader(token))
@@ -171,7 +171,7 @@ private:
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         ++IsDoneCounter;
         Blocks.emplace(std::move(result->Get()->Result));
-        Callbacks->OnNewSourceDataArrived(InputIndex);
+        Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
     }
 
     void HandleRetry(TEvPrivate::TEvRetryEvent::TPtr& ev) {
@@ -190,7 +190,7 @@ private:
             return;
         }
         ++IsDoneCounter;
-        Callbacks->OnSourceError(InputIndex, result->Get()->Error, true);
+        Send(ComputeActorId, new TEvSourceError(InputIndex, result->Get()->Error, true));
     }
 
     // IActor & IDqSourceActor
@@ -208,7 +208,7 @@ private:
     const IHTTPGateway::TPtr Gateway;
 
     const ui64 InputIndex;
-    ICallbacks *const Callbacks;
+    const NActors::TActorId ComputeActorId;
 
     TActorSystem* const ActorSystem;
 
@@ -229,7 +229,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    NYql::NDq::IDqSourceActor::ICallbacks* callback,
+    const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
 {
@@ -254,7 +254,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-    const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), params.GetUrl(), authToken, std::move(paths), callback, retryConfig);
+    const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), params.GetUrl(), authToken, std::move(paths), computeActorId, retryConfig);
     return {actor, actor};
 }
 

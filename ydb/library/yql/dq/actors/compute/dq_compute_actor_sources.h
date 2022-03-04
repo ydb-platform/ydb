@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -26,8 +27,10 @@ namespace NYql::NDq {
 // Protocol:
 // 1. CA starts source actor.
 // 2. CA calls IDqSourceActor::GetSourceData(batch, FreeSpace).
-// 3. Source actor calls ICallbacks::OnNewSourceDataArrived() when it has data to process.
+// 3. Source actor sends TEvNewSourceDataArrived when it has data to process.
 // 4. CA calls IDqSourceActor::GetSourceData(batch, FreeSpace) to get data when it is ready to process it.
+//
+// In case of error source actor sends TEvSourceError
 //
 // Checkpointing:
 // 1. InjectCheckpoint event arrives to CA.
@@ -36,11 +39,23 @@ namespace NYql::NDq {
 // 3. ...
 // 5. CA calls IDqSourceActor::CommitState() to apply all side effects.
 struct IDqSourceActor {
-    struct ICallbacks {
-        virtual void OnNewSourceDataArrived(ui64 inputIndex) = 0;
-        virtual void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) = 0;
+    struct TEvNewSourceDataArrived : public NActors::TEventLocal<TEvNewSourceDataArrived, TDqComputeEvents::EvNewSourceDataArrived> {
+        const ui64 InputIndex;
+        explicit TEvNewSourceDataArrived(ui64 inputIndex)
+            : InputIndex(inputIndex)
+        {}
+    };
 
-        virtual ~ICallbacks() = default;
+    struct TEvSourceError : public NActors::TEventLocal<TEvSourceError, TDqComputeEvents::EvSourceError> {
+        TEvSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal)
+            : InputIndex(inputIndex)
+            , Issues(issues)
+            , IsFatal(isFatal)
+        {}
+
+        const ui64 InputIndex;
+        const TIssues Issues;
+        const bool IsFatal;
     };
 
     virtual ui64 GetInputIndex() const = 0;
@@ -69,7 +84,7 @@ struct IDqSourceActorFactory : public TThrRefBase {
         TTxId TxId;
         const THashMap<TString, TString>& SecureParams;
         const THashMap<TString, TString>& TaskParams;
-        IDqSourceActor::ICallbacks* Callback;
+        const NActors::TActorId& ComputeActorId;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     };

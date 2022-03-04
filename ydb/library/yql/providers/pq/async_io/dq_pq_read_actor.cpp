@@ -99,7 +99,7 @@ public:
         NPq::NProto::TDqReadTaskParams&& readParams,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        ICallbacks* callbacks,
+        const NActors::TActorId& computeActorId,
         i64 bufferSize,
         bool rangesMode)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
@@ -113,7 +113,7 @@ public:
         , SourceParams(std::move(sourceParams))
         , ReadParams(std::move(readParams))
         , StartingMessageTimestamp(TInstant::Now())
-        , Callbacks(callbacks)
+        , ComputeActorId(computeActorId)
     {
         Y_UNUSED(HolderFactory);
     }
@@ -219,13 +219,12 @@ public:
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvSourceDataReady, Handle);
+        HFunc(TEvPrivate::TEvSourceDataReady, Handle);
     )
 
-    void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
+    void Handle(TEvPrivate::TEvSourceDataReady::TPtr&, const TActorContext& ctx) {
         SubscribedOnEvent = false;
-        Y_UNUSED(ev);
-        Callbacks->OnNewSourceDataArrived(InputIndex);
+        ctx.Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
     }
 
     // IActor & IDqSourceActor
@@ -364,7 +363,7 @@ private:
     NThreading::TFuture<void> EventFuture;
     THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
     TInstant StartingMessageTimestamp;
-    ICallbacks* const Callbacks;
+    const NActors::TActorId ComputeActorId;
     std::queue<std::pair<ui64, NYdb::NPersQueue::TDeferredCommit>> DeferredCommits;
     NYdb::NPersQueue::TDeferredCommit CurrentDeferredCommit;
     bool SubscribedOnEvent = false;
@@ -378,7 +377,7 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
     const THashMap<TString, TString>& taskParams,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IDqSourceActor::ICallbacks* callbacks,
+    const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 bufferSize,
     bool rangesMode
@@ -402,7 +401,7 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
         std::move(readTaskParamsMsg),
         std::move(driver),
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
-        callbacks,
+        computeActorId,
         bufferSize,
         rangesMode
     );
@@ -425,7 +424,7 @@ void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver drive
             args.TaskParams,
             driver,
             credentialsFactory,
-            args.Callback,
+            args.ComputeActorId,
             args.HolderFactory,
             PQReadDefaultFreeSpace,
             rangesMode);

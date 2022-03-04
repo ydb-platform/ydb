@@ -78,12 +78,12 @@ public:
         bool secure,
         const TString& path,
         ::NYdb::TDriver driver,
-        ICallbacks* callbacks,
+        const NActors::TActorId& computeActorId,
         const TVector<TString>& columns, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
         ui64 maxRowsInRequest, ui64 maxBytesInRequest, const TString& keyFrom, const TString& keyTo
     )
         : InputIndex(inputIndex)
-        , Callbacks(callbacks)
+        , ComputeActorId(computeActorId)
         , ActorSystem(TActivationContext::ActorSystem())
         , Path(path), Columns(columns), KeyColumnTypes(keyColumnTypes)
         , MaxRows(maxRowsInRequest), MaxBytes(maxBytesInRequest)
@@ -183,7 +183,7 @@ private:
         RequestsDone = res.IsEos() || RangeFinished(LastReadKey, EndKey, KeyColumnTypes);
         SendRequest();
         if (notify)
-            Callbacks->OnNewSourceDataArrived(InputIndex);
+            Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
     }
 
     void ProcessError(const ::NYdb::NClickhouseInternal::TScanResult& res) {
@@ -192,7 +192,7 @@ private:
             RequestsDone = true;
             while(!Blocks.empty())
                 Blocks.pop();
-            Callbacks->OnSourceError(InputIndex, res.GetIssues(), true);
+            Send(ComputeActorId, new TEvSourceError(InputIndex, res.GetIssues(), true));
         } else {
             WakeUpTime = TMonotonic::Now() + Min(TDuration::Seconds(3), TDuration::MilliSeconds(0x30U * (1U << ++Retried)));
             ActorSystem->Schedule(WakeUpTime, new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));
@@ -203,7 +203,7 @@ private:
     static constexpr auto MaxQueueVolume = 4_MB;
 
     const ui64 InputIndex;
-    ICallbacks *const Callbacks;
+    const NActors::TActorId ComputeActorId;
 
     TActorSystem* const ActorSystem;
 
@@ -234,7 +234,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateYdbReadActor(
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    NYql::NDq::IDqSourceActor::ICallbacks* callback,
+    const NActors::TActorId& computeActorId,
     ::NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
@@ -261,7 +261,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateYdbReadActor(
 
     ui64 maxRowsInRequest = 0ULL;
     ui64 maxBytesInRequest = 0ULL;
-    const auto actor = new TYdbReadActor(inputIndex, params.GetDatabase(), params.GetEndpoint(), credentialsProviderFactory, params.GetSecure(), params.GetTable(), std::move(driver), callback, columns, keyColumnTypes, maxRowsInRequest, maxBytesInRequest, keyFrom, keyTo);
+    const auto actor = new TYdbReadActor(inputIndex, params.GetDatabase(), params.GetEndpoint(), credentialsProviderFactory, params.GetSecure(), params.GetTable(), std::move(driver), computeActorId, columns, keyColumnTypes, maxRowsInRequest, maxBytesInRequest, keyFrom, keyTo);
     return {actor, actor};
 }
 

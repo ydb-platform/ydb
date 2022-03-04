@@ -24,7 +24,7 @@ TFakeActor::TFakeActor(TSourcePromises& sourcePromises, TSinkPromises& sinkPromi
     : TActor<TFakeActor>(&TFakeActor::StateFunc)
     , MemoryInfo("test")
     , HolderFactory(Alloc.Ref(), MemoryInfo)
-    , SourceCallbacks(*this)
+    , SourceEvents(*this)
     , SinkCallbacks(*this)
     , SourcePromises(sourcePromises)
     , SinkPromises(sinkPromises)
@@ -64,10 +64,6 @@ void TFakeActor::Terminate() {
         DqSinkActor = nullptr;
         DqSinkActorAsActor = nullptr;
     }
-}
-
-TFakeActor::TSourceCallbacks& TFakeActor::GetSourceCallbacks() {
-    return SourceCallbacks;
 }
 
 TFakeActor::TSinkCallbacks& TFakeActor::GetSinkCallbacks() {

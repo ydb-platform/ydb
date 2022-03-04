@@ -63,7 +63,6 @@ struct TSinkInfo {
 };
 
 class TDqWorker: public TRichActor<TDqWorker>
-               , IDqSourceActor::ICallbacks
                , IDqSinkActor::ICallbacks
                , ITaskRunnerActor::ICallbacks
 {
@@ -140,6 +139,9 @@ private:
         HFunc(TEvError, OnErrorFromPipe);
         HFunc(TEvContinueRun, OnContinueRun);
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup);
+
+        hFunc(IDqSourceActor::TEvNewSourceDataArrived, OnNewSourceDataArrived);
+        hFunc(IDqSourceActor::TEvSourceError, OnSourceError);
     })
 
     TString ParseStatus(const TString& input, bool* retriableFlag, bool* fallbackFlag) {
@@ -350,7 +352,7 @@ private:
                                 .TxId = TraceId,
                                 .SecureParams = secureParams,
                                 .TaskParams = taskParams,
-                                .Callback = this,
+                                .ComputeActorId = SelfId(),
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory
                             });
@@ -735,21 +737,21 @@ private:
     }
 
     /*____________________ SourceActorEvents __________________*/
-    void OnNewSourceDataArrived(ui64 inputIndex) override {
+    void OnNewSourceDataArrived(const IDqSourceActor::TEvNewSourceDataArrived::TPtr& ev) {
         try {
             if (!TaskRunnerPrepared) {
                 return;
             }
-            auto& source = SourcesMap[inputIndex];
+            auto& source = SourcesMap[ev->Get()->InputIndex];
             source.HasData = true;
             Send(SelfId(), new TEvContinueRun());
         } catch (...) {
             OnError();
         }
     }
-    void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) override {
-        Y_UNUSED(inputIndex);
-        OnError(issues.ToString(), !isFatal, !isFatal);
+    void OnSourceError(const IDqSourceActor::TEvSourceError::TPtr& ev) {
+        Y_UNUSED(ev->Get()->InputIndex);
+        OnError(ev->Get()->Issues.ToString(), !ev->Get()->IsFatal, !ev->Get()->IsFatal);
     }
     void OnSourcePushFinished(TEvSourcePushFinished::TPtr& ev, const TActorContext& ctx) {
         auto index = ev->Get()->Index;

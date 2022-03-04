@@ -65,7 +65,7 @@ void TPqIoTestFixture::InitSource(
             taskParams,
             Driver,
             nullptr,
-            &actor.GetSourceCallbacks(),
+            actor.SelfId(),
             actor.GetHolderFactory(),
             freeSpace);
 

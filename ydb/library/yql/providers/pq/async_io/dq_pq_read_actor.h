@@ -30,7 +30,7 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
     const THashMap<TString, TString>& taskParams,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IDqSourceActor::ICallbacks* callback,
+    const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     i64 bufferSize = PQReadDefaultFreeSpace,
     bool rangesMode = true

@@ -68,15 +68,15 @@ struct TSinkPromises {
 NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id = 0);
 
 class TFakeActor : public NActors::TActor<TFakeActor> {
-    struct TSourceCallbacks : public IDqSourceActor::ICallbacks {
-        explicit TSourceCallbacks(TFakeActor& parent) : Parent(parent) {}
+    struct TSourceEvents {
+        explicit TSourceEvents(TFakeActor& parent) : Parent(parent) {}
 
-        void OnNewSourceDataArrived(ui64) override {
+        void OnNewSourceDataArrived(ui64) {
             Parent.SourcePromises.NewSourceDataArrived.SetValue();
             Parent.SourcePromises.NewSourceDataArrived = NThreading::NewPromise();
         }
 
-        void OnSourceError(ui64, const TIssues& issues, bool isFatal) override {
+        void OnSourceError(ui64, const TIssues& issues, bool isFatal) {
             Y_UNUSED(isFatal);
             Parent.SourcePromises.FatalError.SetValue(issues);
             Parent.SourcePromises.FatalError = NThreading::NewPromise<TIssues>();
@@ -116,7 +116,6 @@ public:
     void InitSource(IDqSourceActor* dqSource, IActor* dqSourceAsActor);
     void Terminate();
 
-    TSourceCallbacks& GetSourceCallbacks();
     TSinkCallbacks& GetSinkCallbacks();
     NKikimr::NMiniKQL::THolderFactory& GetHolderFactory();
 
@@ -127,6 +126,8 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvExecute, Handle);
+        hFunc(IDqSourceActor::TEvNewSourceDataArrived, Handle);
+        hFunc(IDqSourceActor::TEvSourceError, Handle);
     )
 
     void Handle(TEvPrivate::TEvExecute::TPtr& ev) {
@@ -139,6 +140,13 @@ private:
         ev->Get()->Promise.SetValue();
     }
 
+    void Handle(const IDqSourceActor::TEvNewSourceDataArrived::TPtr& ev) {
+        SourceEvents.OnNewSourceDataArrived(ev->Get()->InputIndex);
+    }
+
+    void Handle(const IDqSourceActor::TEvSourceError::TPtr& ev) {
+        SourceEvents.OnSourceError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
+    }
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::NMiniKQL::TMemoryUsageInfo MemoryInfo;
@@ -150,7 +158,7 @@ private:
     std::optional<NActors::TActorId> DqSinkActorId;
     IActor* DqSinkActorAsActor = nullptr;
 
-    TSourceCallbacks SourceCallbacks;
+    TSourceEvents SourceEvents;
     TSinkCallbacks SinkCallbacks;
 
     TSourcePromises& SourcePromises;

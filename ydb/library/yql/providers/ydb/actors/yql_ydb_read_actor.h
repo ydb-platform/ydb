@@ -14,7 +14,7 @@ std::pair<NYql::NDq::IDqSourceActor*, NActors::IActor*> CreateYdbReadActor(
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    NYql::NDq::IDqSourceActor::ICallbacks* callback,
+    const NActors::TActorId& computeActorId,
     ::NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
 

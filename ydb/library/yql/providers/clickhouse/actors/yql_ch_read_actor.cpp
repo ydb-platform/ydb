@@ -51,10 +51,10 @@ public:
         IHTTPGateway::TPtr gateway,
         TString&& url,
         TString&& query,
-        ICallbacks* callbacks
+        const NActors::TActorId& computeActorId
     )   : Gateway(std::move(gateway))
         , InputIndex(inputIndex)
-        , Callbacks(callbacks)
+        , ComputeActorId(computeActorId)
         , ActorSystem(TActivationContext::ActorSystem())
         , Url(std::move(url))
         , Query(std::move(query))
@@ -106,11 +106,11 @@ private:
 
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         Result.emplace(std::move(result->Get()->Result));
-        Callbacks->OnNewSourceDataArrived(InputIndex);
+        Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
     }
 
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
-        Callbacks->OnSourceError(InputIndex, result->Get()->Error, true);
+        Send(ComputeActorId, new TEvSourceError(InputIndex, result->Get()->Error, true));
     }
 
     // IActor & IDqSourceActor
@@ -122,7 +122,7 @@ private:
     const IHTTPGateway::TPtr Gateway;
 
     const ui64 InputIndex;
-    ICallbacks *const Callbacks;
+    const NActors::TActorId ComputeActorId;
 
     TActorSystem* const ActorSystem;
 
@@ -136,7 +136,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateClickHouseReadActor(
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    NYql::NDq::IDqSourceActor::ICallbacks* callback,
+    const NActors::TActorId& computeActorId,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
@@ -157,7 +157,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateClickHouseReadActor(
 
     TStringBuilder url;
     url << params.GetScheme() << token.substr(one + 1u, two - one - 1u) << ':' << token.substr(two + 1u) << '@' << params.GetEndpoint() << "/?default_format=Native";
-    const auto actor = new TClickHouseReadActor(inputIndex, std::move(gateway), std::move(url), params.GetQuery() + part, callback);
+    const auto actor = new TClickHouseReadActor(inputIndex, std::move(gateway), std::move(url), params.GetQuery() + part, computeActorId);
     return {actor, actor};
 }
 

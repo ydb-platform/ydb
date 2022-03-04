@@ -8,7 +8,7 @@ namespace NYql::NDq {
 void RegisterClickHouseReadActorFactory(TDqSourceFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, IHTTPGateway::TPtr gateway) {
     factory.Register<NCH::TSource>("ClickHouseSource",
         [credentialsFactory, gateway](NCH::TSource&& settings, IDqSourceActorFactory::TArguments&& args) {
-                return CreateClickHouseReadActor(gateway, std::move(settings), args.InputIndex, args.SecureParams, args.TaskParams, args.Callback, credentialsFactory);
+                return CreateClickHouseReadActor(gateway, std::move(settings), args.InputIndex, args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory);
         });
 }
 

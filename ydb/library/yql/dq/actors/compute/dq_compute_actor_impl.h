@@ -60,7 +60,6 @@ template<typename TDerived>
 class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public TDqComputeActorChannels::ICallbacks
                           , public TDqComputeActorCheckpoints::ICallbacks
-                          , public IDqSourceActor::ICallbacks
                           , public IDqSinkActor::ICallbacks
 {
 protected:
@@ -200,6 +199,8 @@ protected:
                 FFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
                 hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleExecuteBase);
                 hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
+                hFunc(IDqSourceActor::TEvNewSourceDataArrived, OnNewSourceDataArrived);
+                hFunc(IDqSourceActor::TEvSourceError, OnSourceError);
                 default: {
                     CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                     InternalError(TIssuesIds::DEFAULT_ERROR, "Unexpected event");
@@ -1184,7 +1185,7 @@ protected:
                     .TxId = TxId,
                     .SecureParams = secureParams,
                     .TaskParams = taskParams,
-                    .Callback = this,
+                    .ComputeActorId = this->SelfId(),
                     .TypeEnv = typeEnv,
                     .HolderFactory = holderFactory
                 });
@@ -1244,19 +1245,19 @@ protected:
         }
     }
 
-    void OnNewSourceDataArrived(ui64 inputIndex) override {
-        Y_VERIFY(SourcesMap.FindPtr(inputIndex));
+    void OnNewSourceDataArrived(const IDqSourceActor::TEvNewSourceDataArrived::TPtr& ev) {
+        Y_VERIFY(SourcesMap.FindPtr(ev->Get()->InputIndex));
         ContinueExecute();
     }
 
-    void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) override {
-        if (!isFatal) {
-            SourcesMap.at(inputIndex).IssuesBuffer.Push(issues);
+    void OnSourceError(const IDqSourceActor::TEvSourceError::TPtr& ev) {
+        if (!ev->Get()->IsFatal) {
+            SourcesMap.at(ev->Get()->InputIndex).IssuesBuffer.Push(ev->Get()->Issues);
             return;
         }
 
-        TString desc = issues.ToString();
-        CA_LOG_E("Source[" << inputIndex << "] fatal error: " << desc);
+        TString desc = ev->Get()->Issues.ToString();
+        CA_LOG_E("Source[" << ev->Get()->InputIndex << "] fatal error: " << desc);
         InternalError(TIssuesIds::DEFAULT_ERROR, desc);
     }
 

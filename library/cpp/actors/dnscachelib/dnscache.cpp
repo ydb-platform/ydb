@@ -2,7 +2,7 @@
 #include "probes.h"
 #include "timekeeper.h"
 
-#include <contrib/libs/c-ares/include/ares.h>
+#include <ares.h>
 #include <util/system/guard.h>
 #include <util/datetime/systime.h>
 
@@ -440,6 +440,19 @@ TString TDnsCache::THost::AddrsV6ToString() const {
         first = false;
     }
     return ss.Str();
+}
+
+TDnsCache::TAresLibInit::TAresLibInit() {
+#ifdef _win_
+    const auto res = ares_library_init(ARES_LIB_INIT_ALL);
+    Y_VERIFY(res == 0);
+#endif
+}
+
+TDnsCache::TAresLibInit::~TAresLibInit() {
+#ifdef _win_
+    ares_library_cleanup();
+#endif
 }
 
 TDnsCache::TAresLibInit TDnsCache::InitAresLib;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <contrib/libs/c-ares/include/ares.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
 #include <util/network/address.h>
@@ -130,18 +129,8 @@ private:
     void* Channel;
 
     struct TAresLibInit {
-        TAresLibInit() {
-#ifdef _win_
-            const auto res = ares_library_init(ARES_LIB_INIT_ALL);
-            Y_VERIFY(res == 0);
-#endif
-        }
-
-        ~TAresLibInit() {
-#ifdef _win_
-            ares_library_cleanup();
-#endif
-        }
+        TAresLibInit();
+        ~TAresLibInit();
     };
 
     static TAresLibInit InitAresLib;

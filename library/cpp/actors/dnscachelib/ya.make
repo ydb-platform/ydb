@@ -21,4 +21,8 @@ PEERDIR(
     library/cpp/lwtrace
 )
 
+IF (NOT EXPORT_CMAKE)
+ADDINCL(contrib/libs/c-ares/include)
+ENDIF()
+
 END()

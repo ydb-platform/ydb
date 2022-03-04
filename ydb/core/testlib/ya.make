@@ -102,7 +102,6 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/ydb
     ydb/services/yq
-    ydb/library/yql/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

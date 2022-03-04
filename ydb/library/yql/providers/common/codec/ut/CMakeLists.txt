@@ -23,6 +23,7 @@ target_link_libraries(ydb-library-yql-providers-common-codec-ut PUBLIC
   providers-common-codec
   cpp-testing-unittest
   udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_sources(ydb-library-yql-providers-common-codec-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/codec/yql_json_codec_ut.cpp

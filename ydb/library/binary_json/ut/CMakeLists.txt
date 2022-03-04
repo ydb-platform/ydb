@@ -27,6 +27,7 @@ target_link_libraries(ydb-library-binary_json-ut PUBLIC
   yql-minikql-invoke_builtins
   udf-service-exception_policy
   core-issue-protos
+  yql-sql-pg_dummy
 )
 target_sources(ydb-library-binary_json-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/container_ut.cpp

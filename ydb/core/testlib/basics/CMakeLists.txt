@@ -34,6 +34,7 @@ target_link_libraries(core-testlib-basics PUBLIC
   ydb-core-util
   yql-minikql-invoke_builtins
   udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_sources(core-testlib-basics PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/basics/appdata.cpp

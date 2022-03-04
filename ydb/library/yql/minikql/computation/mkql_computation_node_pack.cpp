@@ -435,6 +435,16 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         }
     }
 
+    case TType::EKind::Pg: {
+        auto pgType = static_cast<const TPgType*>(type);
+        if (!OptionalUsageMask.IsNextEmptyOptional()) {
+            return PGUnpackImpl(pgType, buf);
+        }
+        else {
+            return NUdf::TUnboxedValuePod();
+        }
+    }
+
     case TType::EKind::List: {
         auto listType = static_cast<const TListType*>(type);
         auto itemType = listType->GetItemType();
@@ -674,6 +684,15 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
         break;
     }
 
+    case TType::EKind::Pg: {
+        auto pgType = static_cast<const TPgType*>(type);
+        OptionalUsageMask.SetNextEmptyOptional(!value);
+        if (value) {
+            PGPackImpl(pgType, value, Buffer);
+        }
+        break;
+    }
+
     case TType::EKind::List: {
         auto listType = static_cast<const TListType*>(type);
         auto itemType = listType->GetItemType();
@@ -854,6 +873,9 @@ bool TValuePacker::HasOptionalFields(const TType* type) {
         return false;
 
     case TType::EKind::Optional:
+        return true;
+
+    case TType::EKind::Pg:
         return true;
 
     case TType::EKind::List:

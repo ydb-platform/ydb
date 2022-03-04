@@ -23,6 +23,7 @@ target_link_libraries(ydb-library-yql-dq-runtime-ut PUBLIC
   yql-dq-runtime
   cpp-testing-unittest
   udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_sources(ydb-library-yql-dq-runtime-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp

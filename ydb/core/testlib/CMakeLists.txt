@@ -84,7 +84,6 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-services-rate_limiter
   ydb-services-ydb
   ydb-services-yq
-  yql-sql-pg_dummy
 )
 target_sources(ydb-core-testlib PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actor_helpers.cpp

@@ -25,6 +25,7 @@ target_link_libraries(ydb-library-yql-udfs-common-topfreq-ut PUBLIC
   yql-minikql-comp_nodes
   yql-minikql-computation
   udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_sources(ydb-library-yql-udfs-common-topfreq-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf_ut.cpp

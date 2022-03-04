@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-client-metadata-ut PUBLIC
   cpp-testing-unittest_main
   core-client-metadata
   udf-service-stub
+  yql-sql-pg_dummy
 )
 target_sources(ydb-core-client-metadata-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/metadata/ut/functions_metadata_ut.cpp

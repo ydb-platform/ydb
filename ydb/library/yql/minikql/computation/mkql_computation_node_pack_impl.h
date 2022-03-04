@@ -1,7 +1,10 @@
 #pragma once
 
 #include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/pack_num.h>
+#include <ydb/library/yql/public/udf/udf_value.h>
+
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
 #include <library/cpp/packedtypes/zigzag.h>
@@ -94,6 +97,8 @@ T GetRawData(TStringBuf& buf) {
 
 } // NDetails
 
+void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf);
+NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf);
 
 }
 }

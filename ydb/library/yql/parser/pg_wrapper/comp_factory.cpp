@@ -1,6 +1,7 @@
 #include "comp_factory.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
@@ -657,3 +658,106 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
 } // namespace NCommon
 } // NYql
 
+namespace NKikimr {
+namespace NMiniKQL {
+
+using namespace NYql;
+
+void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+    switch (type->GetTypeId()) {
+    case BOOLOID: {
+        const auto x = DatumGetBool(ScalarDatumFromPod(value)) != 0;
+        NDetails::PutRawData(x, buf);
+        break;
+    }
+    case INT2OID: {
+        const auto x = DatumGetInt16(ScalarDatumFromPod(value));
+        NDetails::PackInt16(x, buf);
+        break;
+    }
+    case INT4OID: {
+        const auto x = DatumGetInt32(ScalarDatumFromPod(value));
+        NDetails::PackInt32(x, buf);
+        break;
+    }
+    case INT8OID: {
+        const auto x = DatumGetInt64(ScalarDatumFromPod(value));
+        NDetails::PackInt64(x, buf);
+        break;
+    }
+    case FLOAT8OID: {
+        const auto x = DatumGetFloat8(ScalarDatumFromPod(value));
+        NDetails::PutRawData(x, buf);
+        break;
+    }
+    case TEXTOID: {
+        const auto x = (const text*)PointerDatumFromPod(value);
+        ui32 len = VARSIZE_ANY_EXHDR(x);
+        NDetails::PackUInt32(len, buf);
+        auto off = buf.Size();
+        buf.Advance(len + 1);
+        text_to_cstring_buffer(x, buf.Data() + off, len + 1);
+        buf.EraseBack(1);
+        break;
+    }
+    case CSTRINGOID: {
+        const auto x = (const char*)PointerDatumFromPod(value);
+        const auto len = strlen(x);
+        NDetails::PackUInt32(len, buf);
+        buf.Append(x, len);
+        break;
+    }
+    default:
+        throw yexception() << "PG type is not supported: " << type->GetName();
+    }
+}
+
+NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
+    switch (type->GetTypeId()) {
+    case BOOLOID: {
+        const auto x = NDetails::GetRawData<bool>(buf);
+        return ScalarDatumToPod(BoolGetDatum(x));
+    }
+    case INT2OID: {
+        const auto x = NDetails::UnpackInt16(buf);
+        return ScalarDatumToPod(Int16GetDatum(x));
+    }
+    case INT4OID: {
+        const auto x = NDetails::UnpackInt32(buf);
+        return ScalarDatumToPod(Int32GetDatum(x));
+    }
+    case INT8OID: {
+        const auto x = NDetails::UnpackInt64(buf);
+        return ScalarDatumToPod(Int64GetDatum(x));
+    }
+    case FLOAT8OID: {
+        const auto x = NDetails::GetRawData<double>(buf);
+        return ScalarDatumToPod(Float8GetDatum(x));
+    }
+    case TEXTOID: {
+        SET_MEMORY_CONTEXT;
+        auto size = NDetails::UnpackUInt32(buf);
+        MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
+        const char* ptr = buf.data();
+        buf.Skip(size);
+        auto ret = cstring_to_text_with_len(ptr, size);
+        return PointerDatumToPod((Datum)ret);
+    }
+    case CSTRINGOID: {
+        SET_MEMORY_CONTEXT;
+        auto size = NDetails::UnpackUInt32(buf);
+        MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
+        const char* ptr = buf.data();
+        buf.Skip(size);
+        char* ret = (char*)palloc(size + 1);
+        memcpy(ret, ptr, size);
+        ret[size] = '\0';
+        return PointerDatumToPod((Datum)ret);
+    }
+    default:
+        throw yexception() << "PG type is not supported: " << type->GetName();
+    }
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

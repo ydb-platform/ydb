@@ -584,6 +584,8 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
 
+    SavedExprRoot_ = ExprRoot_;
+
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
@@ -724,6 +726,8 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     TFuture<void> openSession = OpenSession(username);
     if (!openSession.Initialized())
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+
+    SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());

@@ -29,8 +29,8 @@ public:
     TMaybe<i32> GetFirstOffset() const;
     TMaybe<i32> GetLastOffset() const;
 
-    TCoFrameBound GetFirst(bool& isPreceding) const;
-    TCoFrameBound GetLast(bool& isPreceding) const;
+    TCoFrameBound GetFirst() const;
+    TCoFrameBound GetLast() const;
 
     bool IsNonEmpty() const { return NeverEmpty; }
     bool IsCompact() const { return Compact; }
@@ -41,7 +41,7 @@ private:
     TMaybe<i32> FirstOffset;
     TExprNode::TPtr Last;
     TMaybe<i32> LastOffset;
-    bool NeverEmpty = true;
+    bool NeverEmpty = false;
     bool Compact = false;
 };
 

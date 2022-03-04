@@ -2568,6 +2568,10 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
                 auto type = fb->Head().Content();
                 if (type == "currentRow") {
                     if (fb->ChildrenSize() == 1) {
+                        if (!node.IsCallable("WinOnRange")) {
+                            ctx.AddError(TIssue(ctx.GetPosition(fb->Pos()), TStringBuilder() << "currentRow should only be used for RANGE"));
+                            return {};
+                        }
                         frameBound = fb;
                         continue;
                     }
@@ -2697,6 +2701,16 @@ TMaybe<i32> TWindowFrameSettings::GetFirstOffset() const {
 TMaybe<i32> TWindowFrameSettings::GetLastOffset() const {
     YQL_ENSURE(Type == FrameByRows);
     return LastOffset;
+}
+
+TCoFrameBound TWindowFrameSettings::GetFirst() const {
+    YQL_ENSURE(First);
+    return TCoFrameBound(First);
+}
+
+TCoFrameBound TWindowFrameSettings::GetLast() const {
+    YQL_ENSURE(Last);
+    return TCoFrameBound(Last);
 }
 
 TExprNode::TPtr ZipWithSessionParamsLambda(TPositionHandle pos, const TExprNode::TPtr& partitionKeySelector,

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/parser/pg_query_wrapper)
+UNITTEST_FOR(ydb/library/yql/parser/pg_wrapper)
 
 OWNER(g:yql)
 

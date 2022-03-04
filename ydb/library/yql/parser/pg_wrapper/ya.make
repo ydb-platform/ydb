@@ -7,15 +7,15 @@ YQL_LAST_ABI_VERSION()
 ADDINCL(
     contrib/libs/libiconv/include
     contrib/libs/lz4
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/bootstrap
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/parser
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/replication
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/replication/logical
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/utils/adt
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/utils/misc
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/backend/utils/sort
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/common
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/include
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/bootstrap
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/parser
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/replication
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/replication/logical
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/adt
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/misc
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/utils/sort
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/common
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
     contrib/libs/postgresql/src/port
 )
 

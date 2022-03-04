@@ -9,13 +9,13 @@
 
 add_library(yql-sql-pg)
 target_include_directories(yql-sql-pg PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_query_wrapper/postgresql/src/include
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 target_link_libraries(yql-sql-pg PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-yql-ast
-  yql-parser-pg_query_wrapper
+  yql-parser-pg_wrapper
   yql-sql-settings
 )
 target_sources(yql-sql-pg PRIVATE

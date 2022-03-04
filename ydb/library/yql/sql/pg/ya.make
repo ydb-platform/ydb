@@ -4,12 +4,12 @@ OWNER(g:yql)
 
 PEERDIR(
     ydb/library/yql/ast
-    ydb/library/yql/parser/pg_query_wrapper
+    ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/sql/settings
 )
 
 ADDINCL(
-    ydb/library/yql/parser/pg_query_wrapper/postgresql/src/include
+    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
 )
 
 SRCS(

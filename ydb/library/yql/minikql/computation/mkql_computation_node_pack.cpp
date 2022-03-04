@@ -1,4 +1,5 @@
 #include "mkql_computation_node_pack.h"
+#include "mkql_computation_node_pack_impl.h"
 #include "mkql_computation_node_holders.h"
 #include "presort.h"
 
@@ -7,7 +8,6 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <library/cpp/packedtypes/zigzag.h>
 #include <library/cpp/resource/resource.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 
@@ -28,91 +28,6 @@ namespace NMiniKQL {
 #ifndef MKQL_DISABLE_CODEGEN
 using namespace llvm;
 #endif
-
-namespace NDetails {
-
-void PackUInt64(ui64 val, TBuffer& buf) {
-    size_t off = buf.Size();
-    buf.Advance(MAX_PACKED64_SIZE);
-    buf.EraseBack(MAX_PACKED64_SIZE - Pack64(val, buf.Data() + off));
-}
-
-void PackInt64(i64 val, TBuffer& buf) {
-    PackUInt64(ZigZagEncode(val), buf);
-}
-
-void PackUInt32(ui32 val, TBuffer& buf) {
-    size_t off = buf.Size();
-    buf.Advance(MAX_PACKED32_SIZE);
-    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, buf.Data() + off));
-}
-
-void PackInt32(i32 val, TBuffer& buf) {
-    PackUInt32(ZigZagEncode(val), buf);
-}
-
-void PackUInt16(ui16 val, TBuffer& buf) {
-    size_t off = buf.Size();
-    buf.Advance(MAX_PACKED32_SIZE);
-    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, buf.Data() + off));
-}
-
-void PackInt16(i16 val, TBuffer& buf) {
-    PackUInt16(ZigZagEncode(val), buf);
-}
-
-ui64 UnpackUInt64(TStringBuf& buf) {
-    ui64 res = 0;
-    size_t read = Unpack64(buf.data(), buf.length(), res);
-    MKQL_ENSURE(read, "Bad ui64 packed data");
-    buf.Skip(read);
-    return res;
-}
-
-i64 UnpackInt64(TStringBuf& buf) {
-    return ZigZagDecode(UnpackUInt64(buf));
-}
-
-ui32 UnpackUInt32(TStringBuf& buf) {
-    ui32 res = 0;
-    size_t read = Unpack32(buf.data(), buf.length(), res);
-    MKQL_ENSURE(read, "Bad ui32 packed data");
-    buf.Skip(read);
-    return res;
-}
-
-i32 UnpackInt32(TStringBuf& buf) {
-    return ZigZagDecode(UnpackUInt32(buf));
-}
-
-ui16 UnpackUInt16(TStringBuf& buf) {
-    ui32 res = 0;
-    size_t read = Unpack32(buf.data(), buf.length(), res);
-    MKQL_ENSURE(read, "Bad ui32 packed data");
-    buf.Skip(read);
-    MKQL_ENSURE(res <= Max<ui16>(), "Corrupted data");
-    return res;
-}
-
-i16 UnpackInt16(TStringBuf& buf) {
-    return ZigZagDecode(UnpackUInt16(buf));
-}
-
-template <typename T>
-void PutRawData(T val, TBuffer& buf) {
-    buf.Append(reinterpret_cast<const char*>(&val), sizeof(T));
-}
-
-template <typename T>
-T GetRawData(TStringBuf& buf) {
-    MKQL_ENSURE(sizeof(T) <= buf.size(), "Bad packed data. Buffer too small");
-    T val = 0;
-    memcpy(&val, buf.data(), sizeof(T));
-    buf.Skip(sizeof(T));
-    return val;
-}
-
-} // NDetails
 
 namespace {
 #ifndef MKQL_DISABLE_CODEGEN

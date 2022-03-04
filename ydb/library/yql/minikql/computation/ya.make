@@ -20,7 +20,9 @@ SRCS(
     mkql_computation_node_impl.cpp
     mkql_computation_node_list.h
     mkql_computation_node_pack.cpp
+    mkql_computation_node_pack_impl.cpp
     mkql_computation_node_pack.h
+    mkql_computation_node_pack_impl.h
     mkql_custom_list.cpp
     mkql_custom_list.h
     mkql_validate.cpp

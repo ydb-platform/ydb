@@ -1569,7 +1569,10 @@ private:
                         auto* protoChannel = protoOutput->MutableChannels(outputChannelIndex);
 
                         ui64 dstTaskId = TasksGraph.GetChannel(outputChannelId).DstTask;
-                        YQL_ENSURE(dstTaskId); // result channel not allowed here
+
+                        if (dstTaskId == 0) {
+                            continue;
+                        }
 
                         auto& dstTask = TasksGraph.GetTask(dstTaskId);
                         if (dstTask.ComputeActorId) {

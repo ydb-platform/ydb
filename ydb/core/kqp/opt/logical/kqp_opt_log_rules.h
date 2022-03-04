@@ -50,4 +50,7 @@ NYql::NNodes::TExprBase KqpDeleteOverLookup(const NYql::NNodes::TExprBase& node,
 
 NYql::NNodes::TExprBase KqpExcessUpsertInputColumns(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
 
+NYql::NNodes::TExprBase KqpDropTakeOverLookupTable(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 } // namespace NKikimr::NKqp::NOpt

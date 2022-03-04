@@ -44,6 +44,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend));
         AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
+        AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
 
         AddHandler(1, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
         AddHandler(1, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
@@ -169,6 +170,12 @@ protected:
     TMaybeNode<TExprBase> ExcessUpsertInputColumns(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpExcessUpsertInputColumns(node, ctx);
         DumpAppliedRule("ExcessUpsertInputColumns", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> DropTakeOverLookupTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpDropTakeOverLookupTable(node, ctx, KqpCtx);
+        DumpAppliedRule("DropTakeOverLookupTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

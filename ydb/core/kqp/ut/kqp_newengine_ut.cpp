@@ -66,6 +66,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         auto explainResult = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
         UNIT_ASSERT_C(explainResult.GetAst().Contains("KqpLookupTable"), explainResult.GetAst());
+        UNIT_ASSERT_C(!explainResult.GetAst().Contains("Take"), explainResult.GetAst());
 
         auto params = kikimr.GetTableClient().GetParamsBuilder()
             .AddParam("$key").Uint64(302).Build()

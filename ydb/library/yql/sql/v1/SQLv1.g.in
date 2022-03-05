@@ -1161,6 +1161,7 @@ DISCARD: D I S C A R D;
 DISTINCT: D I S T I N C T;
 DO: D O;
 DROP: D R O P;
+// TODO: fix sql formatter and drop EACH
 EACH: E A C H;
 ELSE: E L S E;
 ERROR: E R R O R;

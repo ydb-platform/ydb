@@ -1427,7 +1427,6 @@ class GnuCompiler(Compiler):
                 '-Wimport-preprocessor-directive-pedantic',
                 '-Wno-undefined-var-template',
                 '-Wno-return-std-move',
-                '-Wno-address-of-packed-member',
                 '-Wno-defaulted-function-deleted',
                 '-Wno-pessimizing-move',
                 '-Wno-range-loop-construct',
@@ -2456,7 +2455,6 @@ class MSVCCompiler(MSVC, Compiler):
 
             c_warnings.extend((
                 '-Wno-bitwise-op-parentheses',
-                '-Wno-extern-initializer',
                 '-Wno-format',
                 '-Wno-logical-op-parentheses',
                 '-Wno-macro-redefined',

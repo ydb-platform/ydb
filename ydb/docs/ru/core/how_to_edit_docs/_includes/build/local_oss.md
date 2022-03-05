@@ -2,7 +2,7 @@
 
 Сборка документации осуществляется утилитой [YFM-Docs](https://github.com/yandex-cloud/yfm-docs).
 
-Порядок установки YFM-Docs описан на [вводной странице документации по этой утилите](https://ydocs.tech/ru/tools/docs/).
+Порядок установки YFM-Docs описан на [вводной странице документации по этой утилите]{% if lang == "en" %}(https://ydocs.tech/en/tools/docs/){% endif %}{% if lang == "ru" %}(https://ydocs.tech/ru/tools/docs/){% endif %}.
 
 Для сборки OpenSource документации {{ ydb-short-name }} нужно выполнить команду:
 

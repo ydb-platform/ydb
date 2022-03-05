@@ -4,6 +4,6 @@
 
 * через опции командной строки `--access-key` и `--secret-key`;
 * через переменные окружения `AWS_ACCESS_KEY_ID` и `AWS_SECRET_ACCESS_KEY`;
-* через файл `~/.aws/credentials`, создаваемый и используемый [AWS CLI](https://aws.amazon.com/ru/cli/).
+* через файл `~/.aws/credentials`, создаваемый и используемый [AWS CLI]{% if lang == "en" %}(https://aws.amazon.com/cli/){% endif %}{% if lang == "ru" %}(https://aws.amazon.com/ru/cli/){% endif %}.
 
 Настройки применяются в порядке, описанном выше. Например, если одновременно использовать все три варианта передачи значения access_key или secret_key, то будут использованы значения, переданные через опции командной строки.

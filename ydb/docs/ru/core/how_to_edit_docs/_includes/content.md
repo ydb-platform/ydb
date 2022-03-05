@@ -2,7 +2,7 @@
 
 ## Введение {#intro}
 
-Исходный код документации создается в формате [Markdown](https://ru.wikipedia.org/wiki/Markdown), с расширениями [YFM (Yandex Flavoured Markdown)](https://ydocs.tech/ru/). Эффективным способом быстро изучить эти форматы является знакомство с исходным кодом имеющейся документации {{ ydb-short-name }}.
+Исходный код документации создается в формате [Markdown]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Markdown){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Markdown){% endif %}, с расширениями [YFM (Yandex Flavoured Markdown)]{% if lang == "en" %}(https://ydocs.tech/en/){% endif %}{% if lang == "ru" %}(https://ydocs.tech/ru/){% endif %}. Эффективным способом быстро изучить эти форматы является знакомство с исходным кодом имеющейся документации {{ ydb-short-name }}.
 
 Кроме описанных здесь формальных правил, всегда действует неявное дополнение: если на какую-то тему правило формально не описано, необходимо посмотреть как уже сделано ранее в других местах документации, и сделать по аналогии.
 
@@ -281,8 +281,8 @@ Github репозиторий {{ ydb-short-name }}: [https://github.com/ydb-plat
 Указываемый в квадратных скобках текст показывается в браузере пока не загружена сама картинка. Он может повторять имя файла из ссылки без расширения. 
 
 Желательные форматы для изображений:
-- Диаграммы: [.SVG](https://ru.wikipedia.org/wiki/SVG)
-- Скриншоты: [.PNG](https://ru.wikipedia.org/wiki/PNG)
+- Диаграммы: [.SVG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Scalable_Vector_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/SVG){% endif %}
+- Скриншоты: [.PNG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Portable_Network_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/PNG){% endif %}
 
 Так как картинка является частью какой-то статьи, то размещение картинки без статьи невозможно. Если текста статьи пока нет, то необходимо определить тематический каталог размещения и имя файла будущей статьи, в тексте указать только ссылку на картинку (не забыть про то что [текст статьи размещается в подкаталоге `_includes`](#articles)!), и не включать саму статью в TOC до тех пор, пока он не будет готова к публикации.
 

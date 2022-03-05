@@ -197,7 +197,7 @@
       └─────────┘
       ```
 
-      Подробнее о командах {{ ydb-short-name }} CLI читайте в [документации](https://cloud.yandex.ru/docs/ydb/oss/public/reference/ydb-cli/commands/).
+      Подробнее о командах {{ ydb-short-name }} CLI читайте в [документации](../../../reference/ydb-cli/index.md).
 
 {% endlist %}
 

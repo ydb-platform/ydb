@@ -47,7 +47,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   - `Uint32`;
   - `Uint64`;
   - `DyNumber`.
-* Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи](https://ru.wikipedia.org/wiki/Unix-время) заданная в:
+* Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %} заданная в:
   - секундах;
   - миллисекундах;
   - микросекундах;
@@ -60,7 +60,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 Управление настройками TTL в настоящий момент возможно с использованием:
 
 * [YQL](../../yql/reference/index.md)
-* [Консольного клиента {{ ydb-short-name }}]{% if audience != "external" %}(https://cloud.yandex.ru/docs/ydb/quickstart/yql-api/ydb-cli){% else %}(../../quickstart/yql-api/ydb-cli.md){% endif %}.
+* [Консольного клиента {{ ydb-short-name }}](../../reference/ydb-cli/index.md).
 * {{ ydb-short-name }} {% if oss %}C++ и{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md)
 
 {% note info %}

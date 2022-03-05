@@ -4,7 +4,7 @@
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. К служебным данным относятся данные первичного и [вторичных индексов](https://cloud.yandex.ru/docs/ydb/oss/public/develop/concepts/secondary_indexes).
+`resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. К служебным данным относятся данные первичного и [вторичных индексов](../../concepts/secondary_indexes.md).
 `resources.storage.limit_bytes`<br/>`IGAUGE`, байты  | Ограничение на размер пользовательских и служебных данных, которые база данных может сохранить в распределенном сетевом хранилище.
 
 ### Метрики API {#api}
@@ -16,9 +16,9 @@
 `api.grpc.request.inflight_count`<br/>`IGAUGE`, штуки | Количество запросов, которые одновременно обрабатываются базой данных в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
 `api.grpc.request.inflight_bytes`<br/>`IGAUGE`, байты | Размер запросов, которые одновременно обрабатываются базой данных в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
 `api.grpc.response.bytes`<br/>`RATE`, байты | Размер ответов, которые отправлены базой данный в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
-`api.grpc.response.count`<br/>`RATE`, штуки | Количество ответов, которые отправлены базой в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.<br/>- _status_ – статус выполнения запроса, подробнее статусы описаны в разделе [Обработка ошибок](https://cloud.yandex.ru/docs/ydb/oss/public/reference/ydb-sdk/error_handling).
+`api.grpc.response.count`<br/>`RATE`, штуки | Количество ответов, которые отправлены базой в определенный период времени.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.<br/>- _status_ – статус выполнения запроса, подробнее статусы описаны в разделе [Обработка ошибок](../../reference/ydb-sdk/error_handling.md).
 `api.grpc.response.dropped_count`<br/>`RATE`, штуки | Количество ответов, отправка которых была прекращена на на транспортном (gRPC) уровне из-за ошибки.<br/>Метки:<br/>- _api_service_ – название сервиса gRPC API, например `table`.<br/>- _method_ – название метода сервиса gRPC API, например `ExecuteDataQuery`.
-`api.grpc.response.issues`<br/>`RATE`, штуки | Количество ошибок определенного типа, возникших при выполнении запросов в определенный период времени.<br/>Метки:<br/>- _issue_type_ – тип ошибки, единственное значение – `optimistic_locks_invalidation`, подробнее инвалидация блокировок описана в разделе [Транзакции и запросы к {{ ydb-short-name }}](https://cloud.yandex.ru/docs/ydb/oss/public/develop/concepts/transactions).
+`api.grpc.response.issues`<br/>`RATE`, штуки | Количество ошибок определенного типа, возникших при выполнении запросов в определенный период времени.<br/>Метки:<br/>- _issue_type_ – тип ошибки, единственное значение – `optimistic_locks_invalidation`, подробнее инвалидация блокировок описана в разделе [Транзакции и запросы к {{ ydb-short-name }}](../../concepts/transactions.md).
 
 ### Метрики сессий {#sessions}
 

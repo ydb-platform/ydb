@@ -1,12 +1,12 @@
 # Развертывание {{ ydb-short-name }} в {{ managed-k8s-name }}
 
-Чтобы с помощью [{{ k8s }}](https://kubernetes.io/) создать кластер [{{ ydb-short-name }}](https://cloud.yandex.ru/docs/ydb/), выполните следующие действия.
+Чтобы с помощью [{{ k8s }}](https://kubernetes.io/) создать кластер [{{ ydb-short-name }}]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/ydb/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/ydb/){% endif %}, выполните следующие действия.
 
 ## Перед началом работы {#before-begin}
 
 1. Создайте кластер {{ k8s }}.
 
-    Вы можете использовать уже работающий кластер {{ k8s }} или [создать](https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-create) новый.
+    Вы можете использовать уже работающий кластер {{ k8s }} или [создать]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-create){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-create){% endif %} новый.
 
     {% note warning %}
 
@@ -15,7 +15,7 @@
     {% endnote %}
 
 1. Установите {{ k8s }} CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl).
-1. [Настройте](https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials) конфигурацию kubectl.
+1. [Настройте]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials){% endif %} конфигурацию kubectl.
 1. Установите менеджер пакетов {{ k8s }} [Нelm 3](https://helm.sh/docs/intro/install/).
 1. Добавьте в Helm репозиторий для {{ yandex-cloud }}:
 

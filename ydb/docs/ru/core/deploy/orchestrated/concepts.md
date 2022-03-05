@@ -9,7 +9,7 @@
 1. Установлена утилита kubectl и настроен доступ к кластеру.
 1. Поддерживается динамическое предоставление томов в кластере ([Dynamic Volume Provisioning](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/)).
 
-Подробнее о Helm читайте в [документации](https://helm.sh/ru/docs/).
+Подробнее о Helm читайте в [документации]{% if lang == "en" %}(https://helm.sh/docs/){% endif %}{% if lang == "ru" %}(https://helm.sh/ru/docs/){% endif %}.
 
 Helm-чарт устанавливает в кластер {{ k8s }} контроллер, который реализует необходимую логику для развертывания компонентов {{ ydb-short-name }}. Контроллер построен по паттерну [Оператор](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/).
 

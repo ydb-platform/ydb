@@ -1,6 +1,6 @@
 # Развертывание {{ ydb-short-name }} в AWS EKS
 
-Чтобы с помощью [{{ k8s }}](https://kubernetes.io/) создать кластер [{{ ydb-short-name }}](https://cloud.yandex.ru/docs/ydb/), выполните следующие действия.
+Чтобы с помощью [{{ k8s }}](https://kubernetes.io/) создать кластер [{{ ydb-short-name }}]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/ydb/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/ydb/){% endif %}, выполните следующие действия.
 
 ## Перед началом работы {#before-begin}
 

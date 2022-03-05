@@ -23,7 +23,7 @@ namespace NYql::NDqs {
         TEvDqFailure() = default;
         explicit TEvDqFailure(const TIssues& issues, bool retriable = false, bool needFallback = false);
         explicit TEvDqFailure(const TIssue& issue, bool retriable = false, bool needFallback = false);
-        TEvDqFailure(const TString& error, TIssueCode, bool retriable = false, bool needFallback = false);
+        TEvDqFailure(const TString& error, bool retriable, bool needFallback);
     };
 
     struct TEvQueryResponse

@@ -111,7 +111,14 @@ private:
         if (ydbStatusId == Ydb::StatusIds::BAD_REQUEST) {
             retry = false;
         }
-        OnError(issues, retry, false); // TODO: check fallback
+        auto fallback = false;
+        for (auto it = issues.begin(); it < issues.end(); it++) {
+            if (it->GetCode() == TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR) {
+                fallback = true;
+                break;
+            }
+        }
+        OnError(issues, retry, fallback);
     }
 
     void OnComputeActorState(NDq::TEvDqCompute::TEvState::TPtr& ev) {

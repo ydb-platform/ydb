@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/yql/minikql/computation
     ydb/library/yql/utils/actors
     ydb/core/protos
+    ydb/library/yql/providers/dq/api/protos
 )
 
 YQL_LAST_ABI_VERSION()

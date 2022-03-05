@@ -1,5 +1,6 @@
 #include "events.h"
 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 namespace NYql::NDqs {
@@ -18,8 +19,12 @@ namespace NYql::NDqs {
     {
     }
 
-    TEvDqFailure::TEvDqFailure(const TString& error, TIssueCode issueCode, bool retriable, bool needFallback) 
-        : TEvDqFailure(TIssue(error).SetCode(issueCode, TSeverityIds::S_ERROR), retriable, needFallback) {
+    TEvDqFailure::TEvDqFailure(const TString& error, bool retriable, bool needFallback) 
+        : TEvDqFailure(
+            TIssue(error).SetCode(
+                needFallback ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR : TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR), 
+            retriable, 
+            needFallback) {
     }
 
     TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {

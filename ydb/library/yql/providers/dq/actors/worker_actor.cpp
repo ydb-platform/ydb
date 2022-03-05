@@ -136,7 +136,7 @@ private:
         HFunc(TEvTaskRunFinished, OnRunFinished);
         HFunc(TEvSourcePushFinished, OnSourcePushFinished);
 
-        HFunc(TEvError, OnErrorFromPipe);
+        HFunc(TEvDqFailure, OnErrorFromPipe)
         HFunc(TEvContinueRun, OnContinueRun);
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup);
 
@@ -144,138 +144,18 @@ private:
         hFunc(IDqSourceActor::TEvSourceError, OnSourceError);
     })
 
-    TString ParseStatus(const TString& input, bool* retriableFlag, bool* fallbackFlag) {
-        TString result;
-        for (TStringBuf line: StringSplitter(input).SplitByString("\n").SkipEmpty()) {
-            if (line.StartsWith("Counter1:")) {
-                TVector<TString> parts;
-                Split(TString(line), " ", parts);
-                if (parts.size() >= 3) {
-                    auto name = parts[1];
-                    i64 value;
-                    if (TryFromString<i64>(parts[2], value)) {
-                        Stat.AddCounter(name, TDuration::MilliSeconds(value));
-                    }
-                }
-            } else if (line.StartsWith("Counter:")) {
-                TVector<TString> parts;
-                Split(TString(line), " ", parts);
-                // name sum min max avg count
-                if (parts.size() >= 7) {
-                    auto name = parts[1];
-                    TCounters::TEntry entry;
-                    if (
-                        TryFromString<i64>(parts[2], entry.Sum) &&
-                        TryFromString<i64>(parts[3], entry.Min) &&
-                        TryFromString<i64>(parts[4], entry.Max) &&
-                        TryFromString<i64>(parts[5], entry.Avg) &&
-                        TryFromString<i64>(parts[6], entry.Count))
-                    {
-                        Stat.AddCounter(name, entry);
-                    }
-                }
-            } else if (line.Contains("mlockall failed")) {
-                // skip
-            } else {
-                if (fallbackFlag && !*fallbackFlag) {
-                    if (line.Contains("FindColumnInfo(): requirement memberType->GetKind() == TType::EKind::Data")) {
-                    // temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Unsupported builtin function:")) {
-                        // temporary workaround for YQL-11791
-                        *fallbackFlag = true;
-                    } else if (line.Contains("embedded:Len")) {
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Container killed by OOM")) {
-                        // temporary workaround for YQL-12066
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Expected data or optional of data, actual:")) {
-                        // temporary workaround for YQL-12835
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Cannot create Skiff writer for ")) {
-                        // temporary workaround for YQL-12986
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Skiff format expected")) {
-                        // temporary workaround for YQL-12986
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Pattern nodes can not get computation node by index:")) {
-                        // temporary workaround for YQL-12987
-                        *fallbackFlag = true;
-                    } else if (line.Contains("contrib/libs/protobuf/src/google/protobuf/messagext.cc") && line.Contains("Message size") && line.Contains("exceeds")) {
-                        // temporary workaround for YQL-12988
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Cannot start container")) {
-                        // temporary workaround for YQL-14221
-                        *retriableFlag = true;
-                        *fallbackFlag = true;
-                    } else if (line.Contains("Cannot execl")) {
-                        // YQL-14099
-                        *retriableFlag = true;
-                        *fallbackFlag = true;
-                    } else {
-                        for (const auto& part : FallbackOn) {
-                            if (line.Contains(part)) {
-                                *fallbackFlag = true;
-                            }
-                        }
-                    }
-                }
-
-                result += line;
-                result += "\n";
-            }
-        }
-        return result;
+    void OnErrorFromPipe(TEvDqFailure::TPtr& ev, const TActorContext&) {
+        SendFailure(ev->Release());
     }
 
-    void OnError(TString message = "", bool retriable = false, bool fallback = false, TMaybe<TEvError::TStatus> status = Nothing()) {
+    void SendFailure(THolder<TEvDqFailure> ev) {
         if (!Executer) {
             // Posible Error on Undelivered before OnDqTask
-            YQL_LOG(ERROR) << "Error " << message;
+            YQL_LOG(ERROR) << "Error " << ev->Record.ShortUtf8DebugString();
             return;
         }
-
-        int exitCode = -1;
-        TString stderrStr;
-
-        if (status) {
-            exitCode = status->ExitCode;
-            stderrStr = TStringBuilder{}
-                << "ExitCode: " << exitCode << "\n"
-                << "StageId: " << StageId << "\n"
-                << ParseStatus(status->Stderr, &retriable, &fallback);
-        }
-
-        if (message.Empty() && (status.Empty() || exitCode == 0)) {
-            message = CurrentExceptionMessage();
-        }
-
-        auto issueCode = fallback
-            ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
-            : TIssuesIds::DQ_GATEWAY_ERROR;
-
-        TIssue issue = TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR);
-        if (status && exitCode != 0) {
-            issue = TIssue(stderrStr).SetCode(issueCode, TSeverityIds::S_ERROR);
-            TStringBuf message = stderrStr;
-            auto parsedPos = TryParseTerminationMessage(message);
-            if (message.size() < stderrStr.size()) {
-                issue.AddSubIssue(
-                    MakeIntrusive<TIssue>(
-                        YqlIssue(parsedPos.GetOrElse(TPosition()),
-                                 TIssuesIds::DQ_GATEWAY_ERROR,
-                                 TString{message})));
-            }
-        }
-
-        auto req = MakeHolder<TEvDqFailure>(issue, retriable, fallback);
-        Stat.FlushCounters(req->Record);
-        Send(Executer, req.Release());
-    }
-
-    void OnErrorFromPipe(TEvError::TPtr& ev, const TActorContext& )
-    {
-        OnError(ev->Get()->Message, ev->Get()->Retriable, ev->Get()->Fallback, ev->Get()->Status);
+        Stat.FlushCounters(ev->Record);
+        Send(Executer, std::move(ev));
     }
 
     void OnContinueRun(TEvContinueRun::TPtr&, const TActorContext& ctx) {
@@ -308,12 +188,6 @@ private:
         PingTimeout = TDuration::MilliSeconds(Settings->PingTimeoutMs.Get().GetOrElse(0));
         if (PingTimeout) {
             PingPeriod = Max(PingTimeout/4, TDuration::MilliSeconds(1000));
-        }
-        if (Settings->_FallbackOnRuntimeErrors.Get()) {
-            TString parts = Settings->_FallbackOnRuntimeErrors.Get().GetOrElse("");
-            for (const auto& it : StringSplitter(parts).Split(',')) {
-                FallbackOn.insert(TString(it.Token()));
-            }
         }
 
         NActors::IActor* actor;
@@ -403,7 +277,7 @@ private:
                 Schedule(PingPeriod, new TEvents::TEvWakeup);
             }
         } catch (...) {
-            OnError();
+            SendFailure(MakeHolder<TEvDqFailure>(CurrentExceptionMessage(), false, false));
         }
     }
 
@@ -456,7 +330,7 @@ private:
 
             Run(ctx);
         } catch (...) {
-            OnError();
+            SendFailure(MakeHolder<TEvDqFailure>(CurrentExceptionMessage(), false, false));
         }
     }
 
@@ -480,7 +354,7 @@ private:
             return;
         }
         if (responseType == ERROR) {
-            Send(SelfId(), new TEvError(ev->Get()->Record.GetErrorMessage(), {}));
+            Send(SelfId(), MakeHolder<TEvDqFailure>(ev->Get()->Record.GetErrorMessage(), false, false));
             return;
         }
         Y_VERIFY (responseType == FINISH || responseType == CONTINUE);
@@ -516,7 +390,7 @@ private:
                 channel.PingStartTime = now;
             } else if ((now - channel.PingStartTime) > PingTimeout) {
                 Stat.AddCounter("PingTimeout", static_cast<ui64>(1));
-                OnError("PingTimeout " + TimeoutInfo(channel.ActorID, now, channel.PingStartTime), true, true);
+                SendFailure(MakeHolder<TEvDqFailure>("PingTimeout " + TimeoutInfo(channel.ActorID, now, channel.PingStartTime), true, true));
             }
         }
 
@@ -559,7 +433,7 @@ private:
                         ? 0
                         : maybeChannel->second.Retries
                 ) + " " + JobDebugInfo(ev->Sender);
-            OnError(message, /*retriable = */ true, /*fallback =*/ true);
+            SendFailure(MakeHolder<TEvDqFailure>(message, /*retriable = */ true, /*fallback =*/ true));
         } else if (ev->Get()->SourceType == TEvPullDataRequest::EventType) {
             TActivationContext::Schedule(TDuration::MilliSeconds(100),
                 new IEventHandle(maybeChannel->second.ActorID, SelfId(), new TEvPullDataRequest(INPUT_SIZE), IEventHandle::FlagTrackDelivery)
@@ -629,7 +503,7 @@ private:
                     } else if (channel.Requested && !channel.Finished) {
                         if (PullRequestTimeout && (now - channel.RequestTime) > PullRequestTimeout) {
                             Stat.AddCounter("ReadTimeout", static_cast<ui64>(1));
-                            OnError("PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime), false, true);
+                            SendFailure(MakeHolder<TEvDqFailure>("PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime), false, true));
                         }
                     }
                 }
@@ -746,12 +620,12 @@ private:
             source.HasData = true;
             Send(SelfId(), new TEvContinueRun());
         } catch (...) {
-            OnError();
+            SendFailure(MakeHolder<TEvDqFailure>(CurrentExceptionMessage(), false, false));
         }
     }
     void OnSourceError(const IDqSourceActor::TEvSourceError::TPtr& ev) {
         Y_UNUSED(ev->Get()->InputIndex);
-        OnError(ev->Get()->Issues.ToString(), !ev->Get()->IsFatal, !ev->Get()->IsFatal);
+        SendFailure(MakeHolder<TEvDqFailure>(ev->Get()->Issues.ToString(), !ev->Get()->IsFatal, !ev->Get()->IsFatal));
     }
     void OnSourcePushFinished(TEvSourcePushFinished::TPtr& ev, const TActorContext& ctx) {
         auto index = ev->Get()->Index;
@@ -767,14 +641,14 @@ private:
 
     void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
         Y_UNUSED(outputIndex);
-        OnError(issues.ToString(), !isFatal, !isFatal);
+        SendFailure(MakeHolder<TEvDqFailure>(issues.ToString(), !isFatal, !isFatal));
     }
 
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
         Y_UNUSED(state);
         Y_UNUSED(outputIndex);
         Y_UNUSED(checkpoint);
-        OnError("Unimplemented");
+        SendFailure(MakeHolder<TEvDqFailure>("Unimplemented", false, false));
     }
 
     void SinkSend(
@@ -827,7 +701,6 @@ private:
     NYql::TCounters Stat;
 
     TVector<Yql::DqsProto::TWorkerInfo> AllWorkers;
-    THashSet<TString> FallbackOn;
 };
 
 NActors::IActor* CreateWorkerActor(

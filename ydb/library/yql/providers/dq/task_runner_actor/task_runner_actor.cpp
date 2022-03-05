@@ -1,6 +1,10 @@
 #include "task_runner_actor.h"
 
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
+#include "ydb/library/yql/providers/dq/actors/events.h"
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
@@ -57,7 +61,9 @@ public:
         , Factory(factory)
         , Invoker(invoker)
         , Local(Invoker->IsLocal())
-    { }
+        , Settings(MakeIntrusive<TDqConfiguration>())
+        , StageId(0) {
+    }
 
     ~TTaskRunnerActor() { }
 
@@ -72,6 +78,146 @@ public:
     })
 
 private:
+    struct TRunResult {
+        bool Retriable;
+        bool Fallback;
+        TString FilteredStderr;
+        NDqProto::TDqFailure MetricContainer;
+
+        TRunResult() : Retriable(false), Fallback(false), FilteredStderr(), MetricContainer() {
+        }
+    };
+
+    static TRunResult ParseStderr(const TString& input, TIntrusivePtr<TDqConfiguration> settings) {
+        THashSet<TString> fallbackOn;
+        if (settings->_FallbackOnRuntimeErrors.Get()) {
+            TString parts = settings->_FallbackOnRuntimeErrors.Get().GetOrElse("");
+            for (const auto& it : StringSplitter(parts).Split(',')) {
+                fallbackOn.insert(TString(it.Token()));
+            }
+        }
+
+        TRunResult result;
+        NYql::TCounters stat;
+        for (TStringBuf line: StringSplitter(input).SplitByString("\n").SkipEmpty()) {
+            if (line.StartsWith("Counter1:")) {
+                TVector<TString> parts;
+                Split(TString(line), " ", parts);
+                if (parts.size() >= 3) {
+                    auto name = parts[1];
+                    i64 value;
+                    if (TryFromString<i64>(parts[2], value)) {
+                        stat.AddCounter(name, TDuration::MilliSeconds(value));
+                    }
+                }
+            } else if (line.StartsWith("Counter:")) {
+                TVector<TString> parts;
+                Split(TString(line), " ", parts);
+                // name sum min max avg count
+                if (parts.size() >= 7) {
+                    auto name = parts[1];
+                    TCounters::TEntry entry;
+                    if (
+                        TryFromString<i64>(parts[2], entry.Sum) &&
+                        TryFromString<i64>(parts[3], entry.Min) &&
+                        TryFromString<i64>(parts[4], entry.Max) &&
+                        TryFromString<i64>(parts[5], entry.Avg) &&
+                        TryFromString<i64>(parts[6], entry.Count))
+                    {
+                        stat.AddCounter(name, entry);
+                    }
+                }
+            } else if (line.Contains("mlockall failed")) {
+                // skip
+            } else {
+                if (!result.Fallback) {
+                    if (line.Contains("FindColumnInfo(): requirement memberType->GetKind() == TType::EKind::Data")) {
+                    // temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
+                        result.Fallback = true;
+                    } else if (line.Contains("Unsupported builtin function:")) {
+                        // temporary workaround for YQL-11791
+                        result.Fallback = true;
+                    } else if (line.Contains("embedded:Len")) {
+                        result.Fallback = true;
+                    } else if (line.Contains("Container killed by OOM")) {
+                        // temporary workaround for YQL-12066
+                        result.Fallback = true;
+                    } else if (line.Contains("Expected data or optional of data, actual:")) {
+                        // temporary workaround for YQL-12835
+                        result.Fallback = true;
+                    } else if (line.Contains("Cannot create Skiff writer for ")) {
+                        // temporary workaround for YQL-12986
+                        result.Fallback = true;
+                    } else if (line.Contains("Skiff format expected")) {
+                        // temporary workaround for YQL-12986
+                        result.Fallback = true;
+                    } else if (line.Contains("Pattern nodes can not get computation node by index:")) {
+                        // temporary workaround for YQL-12987
+                        result.Fallback = true;
+                    } else if (line.Contains("contrib/libs/protobuf/src/google/protobuf/messagext.cc") && line.Contains("Message size") && line.Contains("exceeds")) {
+                        // temporary workaround for YQL-12988
+                        result.Fallback = true;
+                    } else if (line.Contains("Cannot start container")) {
+                        // temporary workaround for YQL-14221
+                        result.Retriable = true;
+                        result.Fallback = true;
+                    } else if (line.Contains("Cannot execl")) {
+                        // YQL-14099
+                        result.Retriable = true;
+                        result.Fallback = true;
+                    } else {
+                        for (const auto& part : fallbackOn) {
+                            if (line.Contains(part)) {
+                                result.Fallback = true;
+                            }
+                        }
+                    }
+                }
+
+                result.FilteredStderr += line;
+                result.FilteredStderr += "\n";
+            }
+        }
+        stat.FlushCounters(result.MetricContainer);
+        return result;
+    }
+    
+    static THolder<IEventBase> StatusToError(
+        const TEvError::TStatus& status, 
+        TIntrusivePtr<TDqConfiguration> settings,
+        ui64 stageId,
+        TString message = CurrentExceptionMessage()) {
+        // stderr always affects retriable/fallback flags
+        auto runResult = ParseStderr(status.Stderr, settings);
+        auto stderrStr = TStringBuilder{}
+            << "ExitCode: " << status.ExitCode << "\n"
+            << "StageId: " << stageId << "\n"
+            << runResult.FilteredStderr;
+        auto issueCode = runResult.Fallback
+            ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
+            : TIssuesIds::DQ_GATEWAY_ERROR;
+        TIssue issue;
+        if (status.ExitCode == 0) {
+            // if exit code is 0, then problem lies in our code => passing message produced by it
+            issue = TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR);
+        } else {
+            // if exit code is not 0, then problem is in their code => passing stderr
+            issue = TIssue(stderrStr).SetCode(issueCode, TSeverityIds::S_ERROR);
+            TStringBuf terminationMessage = stderrStr;
+            auto parsedPos = TryParseTerminationMessage(terminationMessage);
+            if (terminationMessage.size() < stderrStr.size()) {
+                issue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.GetOrElse(TPosition()), TIssuesIds::DQ_GATEWAY_ERROR, TString{terminationMessage})));
+            }
+        }
+
+        if (settings->EnableComputeActor.Get().GetOrElse(false)) {
+            return MakeHolder<NDq::TEvDq::TEvAbortExecution>(runResult.Retriable ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::BAD_REQUEST, TVector<TIssue>{issue});
+        }
+        auto dqFailure = MakeHolder<TEvDqFailure>(issue, runResult.Retriable, runResult.Fallback);
+        dqFailure->Record.MutableMetric()->Swap(runResult.MetricContainer.MutableMetric());
+        return dqFailure;
+    }
+
     void PassAway() override {
         if (TaskRunner) {
             Invoker->Invoke([taskRunner=std::move(TaskRunner)] () {
@@ -96,7 +242,7 @@ private:
         auto channelId = ev->Get()->ChannelId;
         auto cookie = ev->Cookie;
         auto data = ev->Get()->Data;
-        Invoker->Invoke([hasData, selfId, cookie, askFreeSpace, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo] () mutable {
+        Invoker->Invoke([hasData, selfId, cookie, askFreeSpace, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
             try {
                 ui64 freeSpace = 0;
                 if (hasData) {
@@ -124,7 +270,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvError(CurrentExceptionMessage(), {status.ExitCode, status.Stderr}),
+                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -146,7 +292,7 @@ private:
             strings.emplace_back(row.AsStringRef());
         }
 
-        Invoker->Invoke([strings=std::move(strings),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index]() mutable {
+        Invoker->Invoke([strings=std::move(strings),taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto source = taskRunner->GetSource(index);
@@ -167,7 +313,7 @@ private:
                     new IEventHandle(
                         parentId,
                         selfId,
-                        new TEvError(CurrentExceptionMessage(), {status.ExitCode, status.Stderr}),
+                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -181,7 +327,7 @@ private:
         auto cookie = ev->Cookie;
         auto wasFinished = ev->Get()->WasFinished;
         auto toPop = ev->Get()->Size;
-        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner]() {
+        Invoker->Invoke([cookie,selfId,channelId=ev->Get()->ChannelId, actorSystem, replyTo, wasFinished, toPop, taskRunner=TaskRunner, settings=Settings, stageId=StageId]() {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto channel = taskRunner->GetOutputChannel(channelId);
@@ -237,7 +383,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvError(CurrentExceptionMessage(), {status.ExitCode, status.Stderr}),
+                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -265,7 +411,7 @@ private:
         auto selfId = SelfId();
         auto* actorSystem = ctx.ExecutorThread.ActorSystem;
 
-        Invoker->Invoke([taskRunner=TaskRunner, selfId, actorSystem, ev=std::move(ev)] {
+        Invoker->Invoke([taskRunner=TaskRunner, selfId, actorSystem, ev=std::move(ev), settings=Settings, stageId=StageId] {
             auto cookie = ev->Cookie;
             auto replyTo = ev->Sender;
 
@@ -305,7 +451,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvError(CurrentExceptionMessage(), {status.ExitCode, status.Stderr}),
+                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -334,12 +480,19 @@ private:
             TaskRunner = Factory->GetOld(ev->Get()->Task, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
-            Send(replyTo, new TEvError(message, /*retriable = */ true, /*fallback=*/ true), 0, cookie);
+            Send(replyTo, MakeHolder<TEvDqFailure>(message, /*retriable = */ true, /*fallback=*/ true), 0, cookie);
             return;
         }
 
         auto* actorSystem = ctx.ExecutorThread.ActorSystem;
-        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem](){
+        {
+            Yql::DqsProto::TTaskMeta taskMeta;
+            ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
+            Settings->Dispatch(taskMeta.GetSettings());
+            Settings->FreezeDefaults();
+            StageId = taskMeta.GetStageId();
+        }
+        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto result = taskRunner->Prepare();
@@ -361,7 +514,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(replyTo, selfId, new TEvError(CurrentExceptionMessage(), {status.ExitCode, status.Stderr}), 0, cookie));
+                    new IEventHandle(replyTo, selfId, StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(), 0, cookie));
             }
         });
     }
@@ -377,7 +530,7 @@ private:
 
         auto sourcesMap = Sources;
 
-        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap, sourcesMap, memLimit=ev->Get()->MemLimit]() mutable {
+        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap, sourcesMap, memLimit=ev->Get()->MemLimit, settings=Settings, stageId=StageId]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 // guard.GetMutex()->SetLimit(memLimit);
@@ -414,7 +567,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvError(CurrentExceptionMessage(), {status.ExitCode, status.Stderr}),
+                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -430,6 +583,8 @@ private:
     bool Local;
     THashSet<ui32> Inputs;
     THashSet<ui32> Sources;
+    TIntrusivePtr<TDqConfiguration> Settings;
+    ui64 StageId;
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {

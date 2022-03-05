@@ -87,7 +87,7 @@ private:
             TFailureInjector::Reach("full_result_fail_on_finish", [] { throw yexception() << "full_result_fail_on_finish"; });
             FullResultWriter->Finish();
             if (ErrorMessage) {
-                Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, false, false));
+                Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, false, true));
             } else {
                 Send(AggregatorID, MakeHolder<TEvDqFailure>().Release());
             }
@@ -126,7 +126,7 @@ private:
             Send(AggregatorID, MakeHolder<TEvFullResultWriterAck>(ackRecord));
         } catch (...) {
             ErrorMessage = CurrentExceptionMessage();
-            Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, false, false));
+            Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, false, true));
         }
 
         if (ErrorMessage) {

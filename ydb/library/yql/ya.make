@@ -23,8 +23,6 @@ RECURSE(
     providers
     public
     sql
-    sql/pg
-    sql/pg_dummy
     udfs
     utils
 )

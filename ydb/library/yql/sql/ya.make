@@ -21,3 +21,14 @@ SRCS(
 )
 
 END()
+
+IF (OPENSOURCE)
+    RECURSE(
+        pg_dummy
+    )
+ELSE()
+    RECURSE(
+        pg
+        pg_dummy
+    )
+ENDIF()

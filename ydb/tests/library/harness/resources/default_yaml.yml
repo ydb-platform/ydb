@@ -188,7 +188,6 @@ net_classifier_config:
   cms_config_timeout_seconds: 30
 yandex_query_config:
   enabled: false
-  enable_dynamic_nameservice: false
   common:
     use_bearer_for_ydb: true
     ids_prefix: "pt"

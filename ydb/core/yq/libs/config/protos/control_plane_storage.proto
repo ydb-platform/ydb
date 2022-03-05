@@ -8,6 +8,12 @@ import "ydb/core/yq/libs/config/protos/storage.proto";
 
 ////////////////////////////////////////////////////////////
 
+message TQueryMapping {
+    map<string, string> CloudIdToTenantName  = 1;
+    map<string, string> ScopeToTenantName = 2;
+    repeated string CommonTenantName        = 3;
+}
+
 message TControlPlaneStorageConfig {
     bool Enabled = 1;
     NYq.NConfig.TYdbStorageConfig Storage = 2; // TODO: remove
@@ -33,4 +39,5 @@ message TControlPlaneStorageConfig {
     repeated string AvailableConnection = 22;
     repeated string AvailableBinding = 23;
     string ResultSetsTtl = 24;
+    TQueryMapping Mapping = 25;
 }

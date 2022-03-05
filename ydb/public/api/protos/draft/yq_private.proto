@@ -97,7 +97,8 @@ message PingTaskRequest {
     YandexQuery.StateLoadMode state_load_mode = 18;
     YandexQuery.StreamingDisposition disposition = 19;
     Ydb.Operations.OperationParams operation_params = 15;
-    string scope = 100; //TODO remove
+    string scope = 100;
+    string tenant = 104;
     google.protobuf.Timestamp started_at = 101;
     google.protobuf.Timestamp finished_at = 102;
     google.protobuf.Timestamp deadline = 103;

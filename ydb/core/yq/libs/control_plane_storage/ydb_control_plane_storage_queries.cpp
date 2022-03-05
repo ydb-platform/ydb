@@ -14,6 +14,8 @@
 #include <ydb/public/api/protos/yq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
+#include <util/digest/multi.h>
+
 namespace {
 
 YandexQuery::IamAuth::IdentityCase GetIamAuth(const YandexQuery::Connection& connection) {
@@ -37,6 +39,33 @@ YandexQuery::IamAuth::IdentityCase GetIamAuth(const YandexQuery::Connection& con
 }
 
 namespace NYq {
+
+TString TYdbControlPlaneStorageActor::AssignTenantName(const TString& cloudId, const TString& scope) {
+    const auto& mapping = Config.Proto.GetMapping();
+
+    if (scope) {
+        const auto it = mapping.GetScopeToTenantName().find(scope);
+        if (it != mapping.GetScopeToTenantName().end()) {
+            return it->second;
+        }
+    }
+
+    if (cloudId) {
+        const auto it = mapping.GetCloudIdToTenantName().find(cloudId);
+        if (it != mapping.GetCloudIdToTenantName().end()) {
+            return it->second;
+        }
+    }
+
+    auto size = mapping.CommonTenantNameSize();
+
+    if (size) {
+        auto index = MultiHash(cloudId, scope) % size;
+        return mapping.GetCommonTenantName(index);
+    } else {
+        return TenantName;
+    }
+}
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
 {
@@ -201,6 +230,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         response->second.After.ConstructInPlace().CopyFrom(query);
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
+        writeQueryBuilder.AddString("tenant", AssignTenantName(cloudId, scope));
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddString("name", query.content().name());
@@ -234,10 +264,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             // insert pending small
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
-                "(`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`,\n"
+                "(`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,  `" QUERY_TYPE_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`,\n"
                 "`" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "    ($scope, $query_id, $query_type, $zero_timestamp, 0, $now, \"\", \"\");"
+                "    ($tenant, $scope, $query_id, $query_type, $zero_timestamp, 0, $now, \"\", \"\");"
             );
         }
 
@@ -245,10 +275,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         writeQueryBuilder.AddText(
             "INSERT INTO `" QUERIES_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`, `" STATUS_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, "
             "`" EXECUTE_MODE_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" AUTOMATIC_COLUMN_NAME "`, "
-            "`" REVISION_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" LAST_JOB_ID_COLUMN_NAME "`, `" GENERATION_COLUMN_NAME "`, `" META_REVISION_COLUMN_NAME "`)\n"
+            "`" REVISION_COLUMN_NAME "`, `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" LAST_JOB_ID_COLUMN_NAME "`, `" GENERATION_COLUMN_NAME "`, `" META_REVISION_COLUMN_NAME "`, "
+            "`" TENANT_COLUMN_NAME "`)\n"
             "VALUES ($scope, $query_id, $name, $status, $query_type, "
             "$execute_mode, $user,  $visibility, $automatic, "
-            "$revision, $query, $internal, $job_id, 0, 0);"
+            "$revision, $query, $internal, $job_id, 0, 0, $tenant);"
         );
 
         const auto write = writeQueryBuilder.Build();
@@ -863,6 +894,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         response->second.CloudId = internal.cloud_id();
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(write)");
+        writeQueryBuilder.AddString("tenant", AssignTenantName(internal.cloud_id(), scope));
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
         writeQueryBuilder.AddUint64("max_count_jobs", Config.Proto.GetMaxCountJobs());
@@ -912,10 +944,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             // insert pending small
             writeQueryBuilder.AddText(
                 "INSERT INTO `" PENDING_SMALL_TABLE_NAME "`\n"
-                "   (`" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, \n"
+                "   (`" TENANT_COLUMN_NAME "`, `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, \n"
                 "   `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`)\n"
                 "VALUES\n"
-                "   ($scope, $query_id, $zero_timestamp, 0, $now, $query_type, \"\", \"\");\n"
+                "   ($tenant, $scope, $query_id, $zero_timestamp, 0, $now, $query_type, \"\", \"\");\n"
             );
         }
 
@@ -932,7 +964,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         );
         writeQueryBuilder.AddText(
             "   `" QUERY_TYPE_COLUMN_NAME "` = $query_type, `" QUERY_COLUMN_NAME "` = $query,\n"
-            "   `" RESULT_ID_COLUMN_NAME "` = $result_id, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
+            "   `" RESULT_ID_COLUMN_NAME "` = $result_id, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1,\n"
+            "   `" TENANT_COLUMN_NAME "` = $tenant\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;"
         );
 
@@ -1044,8 +1077,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
     queryBuilder.AddText(
         "DELETE FROM `" JOBS_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "$tenant = (SELECT `" TENANT_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id);\n"
         "DELETE FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         "DELETE FROM `" QUERIES_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;"
     );
@@ -1155,7 +1190,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
     readQueryBuilder.AddString("query_id", queryId);
 
     readQueryBuilder.AddText(
-        "$selected = SELECT `" QUERY_COLUMN_NAME "`, `" LAST_JOB_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
+        "$selected = SELECT `" QUERY_COLUMN_NAME "`, `" LAST_JOB_ID_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`, `" TENANT_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         "$job_id = SELECT `" LAST_JOB_ID_COLUMN_NAME "` FROM $selected;\n"
         "SELECT * FROM $selected;"
@@ -1171,6 +1206,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         auto now = TInstant::Now();
         YandexQuery::Query query;
         YandexQuery::Internal::QueryInternal queryInternal;
+        TString tenantName;
         {
             TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
@@ -1184,6 +1220,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
             if (!queryInternal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                 ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
             }
+            tenantName = *parser.ColumnParser(TENANT_COLUMN_NAME).GetOptionalString();
         }
 
         YandexQuery::Job job;
@@ -1262,6 +1299,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         response->second.CloudId = queryInternal.cloud_id();
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ControlQuery(write)");
+        writeQueryBuilder.AddString("tenant", tenantName);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("job", job.SerializeAsString());
         writeQueryBuilder.AddString("job_id", jobId);
@@ -1278,7 +1316,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
             "UPDATE `" QUERIES_TABLE_NAME "` SET `" QUERY_COLUMN_NAME "` = $query, `" REVISION_COLUMN_NAME "` = $revision, `" STATUS_COLUMN_NAME "` = $status, `" INTERNAL_COLUMN_NAME "` = $internal, `" META_REVISION_COLUMN_NAME "` = `" META_REVISION_COLUMN_NAME "` + 1\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" HOST_NAME_COLUMN_NAME "` = \"\"\n"
-            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;"
+            "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;"
         );
 
         const auto writeQuery = writeQueryBuilder.Build();

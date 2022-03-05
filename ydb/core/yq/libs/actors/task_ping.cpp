@@ -78,6 +78,7 @@ public:
         const auto& req = Ev->Record;
         OperationId = req.query_id().value();
         OwnerId = req.owner_id();
+        TenantName = req.tenant();
         Scope = req.scope();
         Deadline = NProtoInterop::CastFromProto(req.deadline());
         LOG_D("Request CP::PingTask with size: " << req.ByteSize() << " bytes");
@@ -100,7 +101,7 @@ private:
     )
 
     std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
-        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(Scope, OperationId, OwnerId, Deadline);
+        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(TenantName, Scope, OperationId, OwnerId, Deadline);
         const auto& req = Ev->Record;
         ui64 issuesByteSize = 0;
         ui64 transientIssuesByteSize = 0;
@@ -224,6 +225,7 @@ private:
 
     TString OperationId;
     TString OwnerId;
+    TString TenantName;
     TString Scope;
     TInstant Deadline;
     NYql::TIssues Issues;

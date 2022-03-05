@@ -22,6 +22,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl) {
 
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
+    readQueryBuilder.AddString("tenant", request->TenantName);
     readQueryBuilder.AddString("scope", request->Scope);
     readQueryBuilder.AddString("query_id", request->QueryId);
     readQueryBuilder.AddText(
@@ -32,7 +33,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         "SELECT `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
         "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $last_job_id;\n"
         "SELECT `" OWNER_COLUMN_NAME "` FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-        "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "   WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
@@ -204,6 +205,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         }
 
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "HardPingTask(write)");
+        writeQueryBuilder.AddString("tenant", request->TenantName);
         writeQueryBuilder.AddString("scope", request->Scope);
         writeQueryBuilder.AddString("job_id", jobId);
         writeQueryBuilder.AddString("job", job.SerializeAsString());
@@ -217,7 +219,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             // delete pending
             writeQueryBuilder.AddText(
                 "DELETE FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-                "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+                "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
         } else {
             // update pending small
@@ -225,7 +227,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             const TString updateResignQueryFlag = request->ResignQuery ? ", `" IS_RESIGN_QUERY_COLUMN_NAME "` = true" : "";
             writeQueryBuilder.AddText(
                 "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now " + updateResignQueryFlag + "\n"
-                "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+                "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
         }
 
@@ -277,13 +279,14 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
     const TString& tablePathPrefix) {
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "SoftPingTask(read)");
+    readQueryBuilder.AddString("tenant", request->TenantName);
     readQueryBuilder.AddString("scope", request->Scope);
     readQueryBuilder.AddString("query_id", request->QueryId);
     readQueryBuilder.AddText(
         "SELECT `" INTERNAL_COLUMN_NAME "`\n"
         "FROM `" QUERIES_TABLE_NAME "` WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" SCOPE_COLUMN_NAME "` = $scope;\n"
         "SELECT `" OWNER_COLUMN_NAME "`\n"
-        "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" SCOPE_COLUMN_NAME "` = $scope;\n"
+        "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
@@ -317,6 +320,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "SoftPingTask(write)");
         writeQueryBuilder.AddTimestamp("now", request->ResignQuery ? TInstant::Zero() : TInstant::Now());
+        writeQueryBuilder.AddString("tenant", request->TenantName);
         writeQueryBuilder.AddString("scope", request->Scope);
         writeQueryBuilder.AddString("query_id", request->QueryId);
         writeQueryBuilder.AddString("owner", request->Owner);
@@ -324,7 +328,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         const TString updateResignQueryFlag = request->ResignQuery ? ", `" IS_RESIGN_QUERY_COLUMN_NAME "` = true" : "";
         writeQueryBuilder.AddText(
             "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now " + updateResignQueryFlag + "\n"
-            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+            "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
 
         const auto writeQuery = writeQueryBuilder.Build();

@@ -48,7 +48,8 @@ NActors::IActor* CreatePendingFetcher(
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NYql::IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const NMonitoring::TDynamicCounterPtr& clientCounters
+    const NMonitoring::TDynamicCounterPtr& clientCounters,
+    const TString& tenantName
     );
 
 NActors::IActor* CreateRunActor(
@@ -77,6 +78,7 @@ NActors::IActor* CreateResultWriter(
     );
 
 NActors::IActor* CreatePingerActor(
+    const TString& tenantName,
     const TScope& scope,
     const TString& userId,
     const TString& id,

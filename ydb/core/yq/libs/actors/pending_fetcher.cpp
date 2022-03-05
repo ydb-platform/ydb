@@ -140,7 +140,8 @@ public:
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-        const NMonitoring::TDynamicCounterPtr& clientCounters
+        const NMonitoring::TDynamicCounterPtr& clientCounters,
+        const TString& tenantName
         )
         : YqSharedResources(yqSharedResources)
         , CommonConfig(commonConfig)
@@ -165,6 +166,7 @@ public:
                 .EnableSsl(PrivateApiConfig.GetSecureTaskService())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             ClientCounters)
+        , TenantName(tenantName)
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -260,10 +262,11 @@ private:
     }
 
     void GetPendingTask() {
-        LOG_D("Request Private::GetTask" << ", Owner: " << Guid << ", Host: " << HostName());
+        LOG_D("Request Private::GetTask" << ", Owner: " << Guid << ", Host: " << HostName() << ", Tenant: " << TenantName);
         Yq::Private::GetTaskRequest request;
         request.set_owner_id(Guid);
         request.set_host(HostName());
+        request.set_tenant(TenantName);
         const auto actorSystem = NActors::TActivationContext::ActorSystem();
         const auto selfId = SelfId();
         Client
@@ -361,7 +364,8 @@ private:
             task.query_name(),
             NProtoInterop::CastFromProto(task.deadline()),
             ClientCounters,
-            createdAt);
+            createdAt,
+            TenantName);
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
@@ -418,6 +422,7 @@ private:
 
     TMap<TString, TQueryCountersInfo> CountersMap;
     TMap<TActorId, TString> RunActorMap;
+    TString TenantName;
 };
 
 
@@ -436,7 +441,8 @@ NActors::IActor* CreatePendingFetcher(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const NMonitoring::TDynamicCounterPtr& clientCounters)
+    const NMonitoring::TDynamicCounterPtr& clientCounters,
+    const TString& tenantName)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -453,7 +459,8 @@ NActors::IActor* CreatePendingFetcher(
         credentialsFactory,
         s3Gateway,
         std::move(pqCmConnections),
-        clientCounters);
+        clientCounters,
+        tenantName);
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

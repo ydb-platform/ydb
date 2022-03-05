@@ -97,6 +97,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
         .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(RESULT_SETS_EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(META_REVISION_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .Build();
@@ -129,7 +130,8 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem*
         .AddNullableColumn(IS_RESIGN_QUERY_COLUMN_NAME, EPrimitiveType::Bool)
         .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(OWNER_COLUMN_NAME, EPrimitiveType::String)
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
+        .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
+        .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 
     return YdbConnection->Client.RetryOperation(
@@ -675,8 +677,9 @@ NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TCommonConfig& common,
     const NMonitoring::TDynamicCounterPtr& counters,
     const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
-    return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory);
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TString& tenantName) {
+    return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory, tenantName);
 }
 
 } // NYq

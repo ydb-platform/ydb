@@ -59,7 +59,8 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& queryName,
         const TInstant& deadline,
         const NMonitoring::TDynamicCounterPtr& clientCounters,
-        TInstant createdAt
+        TInstant createdAt,
+        const TString& tenantName
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -109,6 +110,7 @@ struct TRunActorParams { // TODO2 : Change name
 
     const NMonitoring::TDynamicCounterPtr ClientCounters;
     const TInstant CreatedAt;
+    const TString TenantName;
 };
 
 } /* NYq */

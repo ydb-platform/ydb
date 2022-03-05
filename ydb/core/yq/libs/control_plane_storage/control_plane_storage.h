@@ -43,6 +43,7 @@ NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TCommonConfig& common,
     const NMonitoring::TDynamicCounterPtr& counters,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TString& tenantName);
 
 } // namespace NYq

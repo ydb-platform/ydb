@@ -45,7 +45,8 @@ TRunActorParams::TRunActorParams(
     const TString& queryName,
     const TInstant& deadline,
     const NMonitoring::TDynamicCounterPtr& clientCounters,
-    TInstant createdAt
+    TInstant createdAt,
+    const TString& tenantName
     )
     : Driver(driver)
     , S3Gateway(s3Gateway)
@@ -88,6 +89,7 @@ TRunActorParams::TRunActorParams(
     , Deadline(deadline)
     , ClientCounters(clientCounters)
     , CreatedAt(createdAt)
+    , TenantName(tenantName)
     {
     }
 

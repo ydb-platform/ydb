@@ -142,6 +142,7 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
 
 public:
     TPingerActor(
+        const TString& tenantName,
         const TScope& scope,
         const TString& userId,
         const TString& id,
@@ -153,6 +154,7 @@ public:
         const ::NYq::NCommon::TServiceCounters& queryCounters,
         TInstant createdAt)
         : Config(config)
+        , TenantName(tenantName)
         , Scope(scope)
         , UserId(userId)
         , Id(id)
@@ -384,6 +386,7 @@ private:
     void Ping(Yq::Private::PingTaskRequest request, ui64 cookie) {
         QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
         // Fill ids
+        request.set_tenant(TenantName);
         request.set_scope(Scope.ToString());
         request.set_owner_id(OwnerId);
         request.mutable_query_id()->set_value(Id);
@@ -419,6 +422,7 @@ private:
 
     TConfig Config;
 
+    const TString TenantName;
     const TScope Scope;
     const TString UserId;
     const TString Id;
@@ -442,6 +446,7 @@ private:
 };
 
 IActor* CreatePingerActor(
+    const TString& tenantName,
     const TScope& scope,
     const TString& userId,
     const TString& id,
@@ -454,6 +459,7 @@ IActor* CreatePingerActor(
     TInstant createdAt)
 {
     return new TPingerActor(
+        tenantName,
         scope,
         userId,
         id,

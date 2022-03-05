@@ -973,14 +973,17 @@ struct TEvControlPlaneStorage {
     struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, EvGetTaskRequest> {
         explicit TEvGetTaskRequest(
             const TString& owner,
-            const TString& hostName)
+            const TString& hostName,
+            const TString& tenantName)
             : Owner(owner)
             , HostName(hostName)
+            , TenantName(tenantName)
         {
         }
 
         TString Owner;
         TString HostName;
+        TString TenantName;
     };
 
     struct TTask {
@@ -1023,8 +1026,9 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
-        explicit TEvPingTaskRequest(const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
-            : Scope(scope)
+        explicit TEvPingTaskRequest(const TString& tenantName, const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
+            : TenantName(tenantName)
+            , Scope(scope)
             , QueryId(queryId)
             , Owner(owner)
             , Deadline(deadline)
@@ -1032,6 +1036,7 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        const TString TenantName;
         const TString Scope;
         const TString QueryId;
         const TString Owner;

@@ -184,6 +184,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     static constexpr int64_t InitialRevision = 1;
 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
+    TString TenantName;
 
 public:
     TYdbControlPlaneStorageActor(
@@ -191,12 +192,14 @@ public:
         const NConfig::TCommonConfig& common,
         const NMonitoring::TDynamicCounterPtr& counters,
         const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
-        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory)
+        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+        const TString& tenantName)
         : Counters(counters)
         , FinalStatusCounters(counters)
         , Config(config, common)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
+        , TenantName(tenantName)
     {
     }
 
@@ -837,6 +840,8 @@ private:
         std::shared_ptr<TResponseTasks> responseTasks,
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW());
+
+    TString AssignTenantName(const TString& cloudId, const TString& scope);
 };
 
 }

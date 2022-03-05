@@ -962,12 +962,14 @@ public:
 class TGetTaskBuilder {
     TString Owner;
     TString HostName;
+    TString TenantName;
 
 public:
     TGetTaskBuilder()
     {
         SetOwner("owner");
         SetHostName("localhost");
+        SetTenantName("/root/tenant");
     }
 
     TGetTaskBuilder& SetOwner(const TString& owner)
@@ -982,13 +984,20 @@ public:
         return *this;
     }
 
+    TGetTaskBuilder& SetTenantName(const TString& tenantName)
+    {
+        TenantName = tenantName;
+        return *this;
+    }
+
     std::unique_ptr<TEvControlPlaneStorage::TEvGetTaskRequest> Build()
     {
-        return std::make_unique<TEvControlPlaneStorage::TEvGetTaskRequest>(Owner, HostName);
+        return std::make_unique<TEvControlPlaneStorage::TEvGetTaskRequest>(Owner, HostName, TenantName);
     }
 };
 
 class TPingTaskBuilder {
+    TString TenantName;
     TString Scope;
     TString QueryId;
     TString ResultId;
@@ -1012,6 +1021,13 @@ public:
     TPingTaskBuilder()
     {
         SetDeadline(TInstant::Now() + TDuration::Minutes(5));
+        SetTenantName("/root/tenant");
+    }
+
+    TPingTaskBuilder& SetTenantName(const TString& tenantName)
+    {
+        TenantName = tenantName;
+        return *this;
     }
 
     TPingTaskBuilder& SetScope(const TString& scope)
@@ -1124,7 +1140,7 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
-        auto request = std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(Scope, QueryId, Owner, Deadline, ResultId);
+        auto request = std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(TenantName, Scope, QueryId, Owner, Deadline, ResultId);
         request->Status = Status;
         request->Issues = Issues;
         request->TransientIssues = TransientIssues;
@@ -1143,7 +1159,7 @@ public:
 };
 
 class TNodesHealthCheckBuilder {
-    TString Tenant;
+    TString TenantName;
     ui32 NodeId = 0;
     TString HostName;
     TString InstanceId;
@@ -1155,9 +1171,9 @@ public:
     TNodesHealthCheckBuilder()
     {}
 
-    TNodesHealthCheckBuilder& SetTenant(const TString& tenant)
+    TNodesHealthCheckBuilder& SetTenantName(const TString& tenantName)
     {
-        Tenant = tenant;
+        TenantName = tenantName;
         return *this;
     }
 
@@ -1200,7 +1216,7 @@ public:
     std::unique_ptr<TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build()
     {
         Yq::Private::NodesHealthCheckRequest request;
-        request.set_tenant(Tenant);
+        request.set_tenant(TenantName);
         auto& node = *request.mutable_node();
         node.set_node_id(NodeId);
         node.set_instance_id(InstanceId);

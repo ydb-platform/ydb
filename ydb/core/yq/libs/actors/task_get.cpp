@@ -86,10 +86,11 @@ public:
         const auto& req = Ev->Record;
         OwnerId = req.owner_id();
         Host = req.host();
+        Tenant = req.tenant();
         LOG_D("Request CP::GetTask with size: " << req.ByteSize() << " bytes");
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
         ctx.Send(NYq::ControlPlaneStorageServiceActorId(),
-            new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(OwnerId, Host));
+            new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(OwnerId, Host, Tenant));
     }
 
     static TString GetServiceAccountId(const YandexQuery::IamAuth& auth) {
@@ -217,6 +218,7 @@ private:
     NYql::TIssues Issues;
     TString OwnerId;
     TString Host;
+    TString Tenant;
 
     THolder<TEvents::TEvGetTaskResponse> Res = MakeHolder<TEvents::TEvGetTaskResponse>();
 };

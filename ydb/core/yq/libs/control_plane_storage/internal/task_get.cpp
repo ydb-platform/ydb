@@ -21,6 +21,7 @@ struct TTaskInternal {
     TString HostName;
     TMaybe<YandexQuery::Job> Job;
     TInstant Deadline;
+    TString TenantName;
 };
 
 std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal) {
@@ -31,6 +32,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal) {
     const auto& owner = taskInternal.Owner;
 
     TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(write)");
+    queryBuilder.AddString("tenant", taskInternal.TenantName);
     queryBuilder.AddString("scope", task.Scope);
     queryBuilder.AddString("query_id", task.QueryId);
     queryBuilder.AddString("query", task.Query.SerializeAsString());
@@ -53,7 +55,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal) {
         "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now,\n"
         "`" RETRY_COUNTER_COLUMN_NAME "` = $retry_counter, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "` = $retry_counter_update_time, `" IS_RESIGN_QUERY_COLUMN_NAME "` = false,\n"
         "`" HOST_NAME_COLUMN_NAME "` = $host, `" OWNER_COLUMN_NAME "` = $owner\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     const auto query = queryBuilder.Build();
@@ -73,6 +75,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
     const auto& task = taskInternal.Task;
 
     TSqlQueryBuilder queryBuilder(taskInternal.TablePathPrefix, "GetTask(read)");
+    queryBuilder.AddString("tenant", taskInternal.TenantName);
     queryBuilder.AddString("scope", task.Scope);
     queryBuilder.AddString("query_id", task.QueryId);
     queryBuilder.AddTimestamp("from", taskLeaseTimestamp);
@@ -83,7 +86,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         "SELECT `" LAST_SEEN_AT_COLUMN_NAME "`\n"
         "FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" LAST_SEEN_AT_COLUMN_NAME "` < $from;\n"
+        "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" LAST_SEEN_AT_COLUMN_NAME "` < $from;\n"
     );
 
     auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks](const TVector<TResultSet>& resultSets) mutable {
@@ -141,6 +144,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     TEvControlPlaneStorage::TEvGetTaskRequest& request = *ev->Get();
     const TString owner = request.Owner;
     const TString hostName = request.HostName;
+    const TString tenantName = request.TenantName;
     const ui64 tasksBatchSize = Config.Proto.GetTasksBatchSize();
     const ui64 numTasksProportion = Config.Proto.GetNumTasksProportion();
 
@@ -161,13 +165,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "GetTask(read stale ro)");
     const auto taskLeaseTimestamp = TInstant::Now() - Config.TaskLeaseTtl;
+    queryBuilder.AddString("tenant", tenantName);
     queryBuilder.AddTimestamp("from", taskLeaseTimestamp);
     queryBuilder.AddUint64("tasks_limit", tasksBatchSize);
     queryBuilder.AddText(
         "SELECT `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,\n"
         "`" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" IS_RESIGN_QUERY_COLUMN_NAME "`\n"
         "FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-        "WHERE `" LAST_SEEN_AT_COLUMN_NAME "` < $from ORDER BY `" QUERY_ID_COLUMN_NAME "` DESC LIMIT $tasks_limit;\n"
+        "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" LAST_SEEN_AT_COLUMN_NAME "` < $from ORDER BY `" QUERY_ID_COLUMN_NAME "` DESC LIMIT $tasks_limit;\n"
     );
 
     auto responseTasks = std::make_shared<TResponseTasks>();
@@ -184,6 +189,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             TTaskInternal& taskInternal = tasks.emplace_back();
             taskInternal.Owner = owner;
             taskInternal.HostName = hostName;
+            taskInternal.TenantName = tenantName;
             taskInternal.TablePathPrefix = YdbConnection->TablePathPrefix;
 
             auto& task = taskInternal.Task;

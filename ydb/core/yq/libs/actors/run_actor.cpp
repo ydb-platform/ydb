@@ -107,6 +107,7 @@ public:
         LogReceivedParams();
         Pinger = Register(
             CreatePingerActor(
+                Params.TenantName,
                 Params.Scope,
                 Params.UserId,
                 Params.QueryId,

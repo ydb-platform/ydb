@@ -67,7 +67,8 @@ void Init(
                 protoConfig.GetCommon(),
                 appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneStorage"),
                 yqSharedResources,
-                credentialsProviderFactory);
+                credentialsProviderFactory,
+                tenant);
         actorRegistrator(NYq::ControlPlaneStorageServiceActorId(), controlPlaneStorage);
     }
 
@@ -204,7 +205,8 @@ void Init(
             credentialsFactory,
             httpGateway,
             std::move(pqCmConnections),
-            clientCounters
+            clientCounters,
+            tenant
             );
 
         actorRegistrator(MakePendingFetcherId(nodeId), fetcher);

@@ -33,93 +33,6 @@ TRuntimeNode BuildNativeParseCall(TRuntimeNode input, TType* inputItemType, TTyp
         });
 }
 
-TRuntimeNode BuildClickHouseInputCall(
-    TType* outputType,
-    TType* itemType,
-    const TString& cluster,
-    TStringBuf table,
-    TStringBuf timezone,
-    const TClickHouseState::TPtr& state,
-    NCommon::TMkqlBuildContext& ctx)
-{
-    TStringBuf db, dbTable;
-    if (!table.TrySplit(".", db, dbTable)) {
-        db = "default";
-        dbTable = table;
-    }
-
-    auto structType = AS_TYPE(TStructType, itemType);
-    auto endpoint = state->Configuration->Endpoints.FindPtr(cluster);
-    Y_ENSURE(endpoint);
-
-    const auto host = endpoint->first;
-    const auto colonPos = host.rfind(':');
-    YQL_ENSURE(colonPos != TString::npos, "Missing port: " << host);
-
-    const auto hostWithoutPort = host.substr(0, colonPos);
-    const auto port = FromString<ui16>(host.substr(colonPos + 1));
-    const bool secure = endpoint->second;
-
-    TString typeConfig;
-    TStringOutput stream(typeConfig);
-    NJson::TJsonWriter writer(&stream, NJson::TJsonWriterConfig());
-
-    writer.OpenMap();
-
-    writer.Write("db", db);
-    writer.Write("table", dbTable);
-    writer.Write("secure", secure);
-    writer.Write("host", hostWithoutPort);
-    writer.Write("port", port);
-    writer.Write("token", TString("cluster:default_") + cluster);
-
-    writer.OpenArray("columns");
-    for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-        writer.Write(structType->GetMemberName(i));
-    }
-    writer.CloseArray();
-
-    writer.CloseMap();
-    writer.Flush();
-
-    const auto voidType = ctx.ProgramBuilder.NewVoid().GetStaticType();
-    TCallableTypeBuilder callbackTypeBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "", voidType);
-    const auto callbackType = callbackTypeBuilder.Build();
-
-    const auto strType = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto argsType = ctx.ProgramBuilder.NewTupleType({ strType });
-    const auto userType = ctx.ProgramBuilder.NewTupleType({ argsType });
-    const auto retType = ctx.ProgramBuilder.NewStreamType(itemType);
-
-    TCallableTypeBuilder funcTypeBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "UDF", retType);
-    funcTypeBuilder.Add(strType);
-
-    const auto funcType = funcTypeBuilder.Build();
-
-    TCallableBuilder callbackBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "DqNotify", callbackType);
-    auto callback = TRuntimeNode(callbackBuilder.Build(), false);
-
-    auto flow = ctx.ProgramBuilder.ToFlow(
-        ctx.ProgramBuilder.Apply(
-            ctx.ProgramBuilder.TypedUdf("ClickHouse.remoteSource", funcType,
-                ctx.ProgramBuilder.NewVoid(), userType, typeConfig),
-                TArrayRef<const TRuntimeNode>({ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(timezone)})
-    ));
-
-    if (!AS_TYPE(TFlowType, outputType)->GetItemType()->IsSameType(*itemType)) {
-        flow = ctx.ProgramBuilder.ExpandMap(flow,
-            [&](TRuntimeNode item) {
-                TRuntimeNode::TList fields;
-                fields.reserve(structType->GetMembersCount());
-                auto i = 0U;
-                std::generate_n(std::back_inserter(fields), structType->GetMembersCount(), [&](){ return ctx.ProgramBuilder.Member(item, structType->GetMemberName(i++)); });
-                return fields;
-            });
-    }
-
-    return flow;
-}
-
 }
 
 void RegisterDqClickHouseMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TClickHouseState::TPtr& state) {
@@ -130,20 +43,6 @@ void RegisterDqClickHouseMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compi
                 const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *wrapper.Input().Ref().GetTypeAnn(), ctx.ProgramBuilder);
                 const auto outputItemType = NCommon::BuildType(wrapper.RowType().Ref(), *wrapper.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
                 return BuildNativeParseCall(input, inputItemType, outputItemType, state->Timezones[wrapper.DataSource().Cast<TClDataSource>().Cluster().Value()], ctx);
-            }
-
-            return TRuntimeNode();
-        });
-
-    compiler.ChainCallable(TDqReadWideWrap::CallableName(),
-        [state](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
-            if (const auto wrapper = TDqReadWrapBase(&node); wrapper.Input().Maybe<TClReadTable>().IsValid()) {
-                const auto clRead = wrapper.Input().Cast<TClReadTable>();
-                const auto readType = clRead.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
-                const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *GetSeqItemType(readType), ctx.ProgramBuilder);
-                const auto cluster = clRead.DataSource().Cluster().StringValue();
-                const auto outputType = NCommon::BuildType(wrapper.Ref(), *wrapper.Ref().GetTypeAnn(), ctx.ProgramBuilder);
-                return BuildClickHouseInputCall(outputType, inputItemType, cluster, clRead.Table(), clRead.Timezone(), state, ctx);
             }
 
             return TRuntimeNode();

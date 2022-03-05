@@ -51,6 +51,9 @@ private:
     THashSet<NActors::TActorId> NotYetAcknowledged;
 };
 
+// Class for storing all variables that are needed to make coordinator know
+// when it can inject zero checkpoint after its initialization process.
+// If there is no need to inject zero checkpoint this struct can be freed.
 class TPendingInitCoordinator {
 public:
     explicit TPendingInitCoordinator(size_t actorsCount)

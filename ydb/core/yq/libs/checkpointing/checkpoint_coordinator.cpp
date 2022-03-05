@@ -150,12 +150,13 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpo
         return;
     }
 
-    Y_VERIFY(PendingInit);
-    PendingInit->OnNewCheckpointCoordinatorAck();
+    if (PendingInit) {
+        PendingInit->OnNewCheckpointCoordinatorAck();
 
-    if (PendingInit->CanInjectCheckpoint()) {
-        auto checkpointId = *PendingInit->CheckpointId;
-        InjectCheckpoint(checkpointId);
+        if (PendingInit->CanInjectCheckpoint()) {
+            auto checkpointId = *PendingInit->CheckpointId;
+            InjectCheckpoint(checkpointId);
+        }
     }
 }
 

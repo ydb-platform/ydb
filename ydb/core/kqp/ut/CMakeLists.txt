@@ -45,6 +45,7 @@ target_sources(ydb-core-kqp-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_locks_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_merge_connection_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_mvcc_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_newengine_inplace_update_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_newengine_effects_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_newengine_flowcontrol_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/kqp_newengine_ut.cpp

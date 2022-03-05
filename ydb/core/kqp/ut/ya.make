@@ -33,6 +33,7 @@ SRCS(
     kqp_locks_ut.cpp
     kqp_merge_connection_ut.cpp
     kqp_mvcc_ut.cpp
+    kqp_newengine_inplace_update_ut.cpp
     kqp_newengine_effects_ut.cpp
     kqp_newengine_flowcontrol_ut.cpp
     kqp_newengine_ut.cpp

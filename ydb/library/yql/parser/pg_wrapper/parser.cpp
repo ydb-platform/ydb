@@ -46,6 +46,7 @@ extern "C" {
 
 extern "C" {
 
+extern void destroy_timezone_hashtable();
 const char *progname;
 
 #define STDERR_BUFFER_LEN 4096
@@ -230,6 +231,7 @@ static struct TGlobalInit {
 
 void PGParse(const TString& input, IPGParseEvents& events) {
     pg_thread_init();
+
     MemoryContext ctx = NULL;
     PgQueryInternalParsetreeAndError parsetree_and_error;
 
@@ -289,3 +291,12 @@ TString PrintPGTree(const List* raw) {
 
 }
 
+extern "C" void setup_pg_thread_cleanup() {
+    struct TThreadCleanup {
+        ~TThreadCleanup() {
+            destroy_timezone_hashtable();
+        }
+    };
+
+    static thread_local TThreadCleanup ThreadCleanup;
+};

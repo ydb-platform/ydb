@@ -15,6 +15,7 @@ extern "C" {
 #include "catalog/pg_type_d.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
+#include "lib/stringinfo.h"
 #include "thread_inits.h"
 #undef Abs
 #undef Min
@@ -371,6 +372,10 @@ private:
     const TComputationNodePtrVector ArgNodes;
 };
 
+inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
+    return desc.ElementTypeId ? desc.ElementTypeId : desc.TypeId;
+}
+
 class TPgCast : public TMutableComputationNode<TPgCast> {
     typedef TMutableComputationNode<TPgCast> TBaseComputation;
 public:
@@ -382,6 +387,8 @@ public:
         , Arg(arg)
         , TargetTypeDesc(NPg::LookupType(targetId))
     {
+        TypeIOParam = MakeTypeIOParam(TargetTypeDesc);
+
         Zero(FInfo1);
         Zero(FInfo2);
         if (SourceId == 0 || SourceId == TargetId) {
@@ -419,9 +426,9 @@ public:
         fmgr_info(funcId, &FInfo1);
         Y_ENSURE(!FInfo1.fn_retset);
         Y_ENSURE(FInfo1.fn_addr);
-        Y_ENSURE(FInfo1.fn_nargs == 1);
+        Y_ENSURE(FInfo1.fn_nargs >= 1 && FInfo1.fn_nargs <= 3);
         Func1Lookup = NPg::LookupProc(funcId);
-        Y_ENSURE(Func1Lookup.ArgTypes.size() == 1);
+        Y_ENSURE(Func1Lookup.ArgTypes.size() >= 1 && Func1Lookup.ArgTypes.size() <= 3);
         if (Func1Lookup.ArgTypes[0] == CSTRINGOID && sourceTypeDesc.Category == 'S') {
             ConvertArgToCString = true;
         }
@@ -471,6 +478,8 @@ public:
         }
 
         callInfo1.args[0] = argDatum;
+        callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
+        callInfo1.args[2] = { Int32GetDatum(-1), false };
 
         PG_TRY();
         {
@@ -537,7 +546,7 @@ private:
     struct TState : public TComputationValue<TState> {
         TState(TMemoryUsageInfo* memInfo, const FmgrInfo* finfo1, const FmgrInfo* finfo2)
             : TComputationValue(memInfo)
-            , CallInfo1(1, finfo1)
+            , CallInfo1(3, finfo1)
             , CallInfo2(1, finfo2)
         {
         }
@@ -565,6 +574,7 @@ private:
     bool ConvertArgToCString = false;
     bool ConvertResFromCString = false;
     bool ConvertResFromCString2 = false;
+    ui32 TypeIOParam = 0;
 };
 
 TComputationNodeFactory GetPgFactory() {
@@ -632,24 +642,50 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     case INT8OID:
         ret = ToString(DatumGetInt64(ScalarDatumFromPod(value)));
         break;
+    case FLOAT4OID:
+        ret = ::FloatToString(DatumGetFloat4(ScalarDatumFromPod(value)));
+        break;
     case FLOAT8OID:
         ret = ::FloatToString(DatumGetFloat8(ScalarDatumFromPod(value)));
         break;
-    default:
-        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
-        if (typeInfo.TypeLen == -1) {
-            auto datum = (const text *)PointerDatumFromPod(value);
-            ui32 len = VARSIZE_ANY_EXHDR(datum);
-            if (len) {
-                ret = TString::Uninitialized(len);
-                text_to_cstring_buffer(datum, ret.begin(), len + 1);
-            }
-        } else if (typeInfo.TypeLen == -2) {
-            auto str = (const char*)PointerDatumFromPod(value);
-            ret = str;
-        } else {
-            throw yexception() << "Unsupported pg type: " << type->GetName();
+    case VARCHAROID:
+    case TEXTOID: {
+        const auto x = (const text*)PointerDatumFromPod(value);
+        ui32 len = VARSIZE_ANY_EXHDR(x);
+        if (len) {
+            ret = TString::Uninitialized(len);
+            text_to_cstring_buffer(x, ret.begin(), len + 1);
         }
+        break;
+    }
+    case CSTRINGOID: {
+        auto str = (const char*)PointerDatumFromPod(value);
+        ret = str;
+        break;
+    }
+    default:
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        FmgrInfo finfo;
+        Zero(finfo);
+        fmgr_info(typeInfo.OutFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs == 1);
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 1;
+        callInfo->isnull = false;
+        callInfo->args[0] = { value.IsBoxed() ? PointerDatumFromPod(value) : ScalarDatumFromPod(value), false };
+        auto str = (char*)finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_DEFER {
+            pfree(str);
+        };
+
+        ret = str;
     }
 
     writer.OnStringScalar(ret);
@@ -685,11 +721,17 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         NDetails::PackInt64(x, buf);
         break;
     }
+    case FLOAT4OID: {
+        const auto x = DatumGetFloat4(ScalarDatumFromPod(value));
+        NDetails::PutRawData(x, buf);
+        break;
+    }
     case FLOAT8OID: {
         const auto x = DatumGetFloat8(ScalarDatumFromPod(value));
         NDetails::PutRawData(x, buf);
         break;
     }
+    case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
         ui32 len = VARSIZE_ANY_EXHDR(x);
@@ -708,7 +750,34 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         break;
     }
     default:
-        throw yexception() << "PG type is not supported: " << type->GetName();
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        Y_ENSURE(typeInfo.SendFuncId);
+        FmgrInfo finfo;
+        Zero(finfo);
+        fmgr_info(typeInfo.SendFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs == 1);
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 1;
+        callInfo->isnull = false;
+        callInfo->args[0] = { value.IsBoxed() ? PointerDatumFromPod(value) : ScalarDatumFromPod(value), false };
+        auto x = (text*)finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_DEFER{
+            pfree(x);
+        };
+
+        ui32 len = VARSIZE_ANY_EXHDR(x);
+        NDetails::PackUInt32(len, buf);
+        auto off = buf.Size();
+        buf.Advance(len + 1);
+        text_to_cstring_buffer(x, buf.Data() + off, len + 1);
+        buf.EraseBack(1);
     }
 }
 
@@ -730,10 +799,15 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         const auto x = NDetails::UnpackInt64(buf);
         return ScalarDatumToPod(Int64GetDatum(x));
     }
+    case FLOAT4OID: {
+        const auto x = NDetails::GetRawData<float>(buf);
+        return ScalarDatumToPod(Float4GetDatum(x));
+    }
     case FLOAT8OID: {
         const auto x = NDetails::GetRawData<double>(buf);
         return ScalarDatumToPod(Float8GetDatum(x));
     }
+    case VARCHAROID:
     case TEXTOID: {
         SET_MEMORY_CONTEXT;
         auto size = NDetails::UnpackUInt32(buf);
@@ -755,7 +829,38 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         return PointerDatumToPod((Datum)ret);
     }
     default:
-        throw yexception() << "PG type is not supported: " << type->GetName();
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        auto size = NDetails::UnpackUInt32(buf);
+        MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
+        StringInfoData stringInfo;
+        stringInfo.data = (char*)buf.data();
+        stringInfo.len = size;
+        stringInfo.maxlen = size;
+        stringInfo.cursor = 0;
+
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        auto typeIOParam = MakeTypeIOParam(typeInfo);
+        Y_ENSURE(typeInfo.ReceiveFuncId);
+        FmgrInfo finfo;
+        Zero(finfo);
+        fmgr_info(typeInfo.ReceiveFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)&stringInfo, false };
+        callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
+
+        auto x = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        buf.Skip(stringInfo.cursor);
+        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
     }
 }
 

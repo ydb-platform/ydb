@@ -423,6 +423,8 @@ AllocSetContextCreateInternal(MemoryContext parent,
 	else
 		freeListIndex = -1;
 
+        freeListIndex = -1;
+
 	/*
 	 * If a suitable freelist entry exists, just recycle that context.
 	 */

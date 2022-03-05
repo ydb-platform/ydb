@@ -197,6 +197,11 @@ typedef struct
 
 static __thread HTAB *timezone_cache = NULL;
 
+void destroy_timezone_hashtable() 
+{
+        hash_destroy(timezone_cache);
+        timezone_cache = NULL;
+}
 
 static bool
 init_timezone_hashtable(void)

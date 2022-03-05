@@ -229,6 +229,8 @@ struct TLazyTypeInfo {
     TString ElementType;
     TString InFunc;
     TString OutFunc;
+    TString SendFunc;
+    TString ReceiveFunc;
 };
 
 class TTypesParser : public TParser {
@@ -262,6 +264,10 @@ public:
             LastLazyTypeInfo.InFunc = value; // resolve later
         } else if (key == "typoutput") {
             LastLazyTypeInfo.OutFunc = value; // resolve later
+        } else if (key == "typsend") {
+            LastLazyTypeInfo.SendFunc = value; // resolve later
+        } else if (key == "typreceive") {
+            LastLazyTypeInfo.ReceiveFunc = value; // resolve later
         } else if (key == "typbyval") {
             if (value == "f") {
                 LastType.PassByValue = false;
@@ -275,6 +281,10 @@ public:
 
     void OnFinish() override {
         Y_ENSURE(!LastType.Name.empty());
+        if (LastType.TypeLen < 0 || LastType.TypeLen > 8) {
+            Y_ENSURE(!LastType.PassByValue);
+        }
+
         Types[LastType.TypeId] = LastType;
         if (LastType.ArrayTypeId) {
             Types[LastType.ArrayTypeId] = LastType;
@@ -456,17 +466,52 @@ struct TCatalog {
             ProcByName[v.Name].push_back(k);
         }
 
+        const ui32 cstringId = 2275;
+        const ui32 byteaId = 17;
+        const ui32 internalId = 2281;
         for (const auto&[k, v] : lazyTypeInfos) {
+            auto typePtr = Types.FindPtr(k);
+            Y_ENSURE(typePtr);
+
             auto inFuncIdPtr = ProcByName.FindPtr(v.InFunc);
             Y_ENSURE(inFuncIdPtr);
             Y_ENSURE(inFuncIdPtr->size() == 1);
+            auto inFuncPtr = Procs.FindPtr(inFuncIdPtr->at(0));
+            Y_ENSURE(inFuncPtr);
+            Y_ENSURE(inFuncPtr->ArgTypes.size() >= 1); // may have mods
+            Y_ENSURE(inFuncPtr->ArgTypes[0] == cstringId);
+            typePtr->InFuncId = inFuncIdPtr->at(0);
+
             auto outFuncIdPtr = ProcByName.FindPtr(v.OutFunc);
             Y_ENSURE(outFuncIdPtr);
             Y_ENSURE(outFuncIdPtr->size() == 1);
-            auto typePtr = Types.FindPtr(k);
-            Y_ENSURE(typePtr);
-            typePtr->InFuncId = inFuncIdPtr->at(0);
+            auto outFuncPtr = Procs.FindPtr(outFuncIdPtr->at(0));
+            Y_ENSURE(outFuncPtr);
+            Y_ENSURE(outFuncPtr->ArgTypes.size() == 1);
+            Y_ENSURE(outFuncPtr->ResultType == cstringId);
             typePtr->OutFuncId = outFuncIdPtr->at(0);
+
+            if (v.ReceiveFunc != "-") {
+                auto receiveFuncIdPtr = ProcByName.FindPtr(v.ReceiveFunc);
+                Y_ENSURE(receiveFuncIdPtr);
+                Y_ENSURE(receiveFuncIdPtr->size() == 1);
+                auto receiveFuncPtr = Procs.FindPtr(receiveFuncIdPtr->at(0));
+                Y_ENSURE(receiveFuncPtr);
+                Y_ENSURE(receiveFuncPtr->ArgTypes.size() >= 1);
+                Y_ENSURE(receiveFuncPtr->ArgTypes[0] == internalId); // mutable StringInfo
+                typePtr->ReceiveFuncId = receiveFuncIdPtr->at(0);
+            }
+
+            if (v.SendFunc != "-") {
+                auto sendFuncIdPtr = ProcByName.FindPtr(v.SendFunc);
+                Y_ENSURE(sendFuncIdPtr);
+                Y_ENSURE(sendFuncIdPtr->size() == 1);
+                auto sendFuncPtr = Procs.FindPtr(sendFuncIdPtr->at(0));
+                Y_ENSURE(sendFuncPtr);
+                Y_ENSURE(sendFuncPtr->ArgTypes.size() == 1);
+                Y_ENSURE(sendFuncPtr->ResultType == byteaId);
+                typePtr->SendFuncId = sendFuncIdPtr->at(0);
+            }
         }
 
         Casts = ParseCasts(castData, TypeByName, ProcByName, Procs);

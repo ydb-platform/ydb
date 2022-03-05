@@ -137,7 +137,7 @@ def fix_line(line, all_lines, pos):
            return line
 
     if not "=" in line:
-        line2=line  
+        line2=line
         if "//" in line2: line2 = line2[:line2.find("//")]
         if "/*" in line2: line2 = line2[:line2.find("/*")]
 
@@ -295,11 +295,16 @@ def get_vars():
 
 def write_thread_inits():
     with open("thread_inits.c","w") as f:
-        print("#include \"thread_inits.h\"", file=f)
-        print("static __thread int pg_thread_init_flag;", file=f)
-        print("void pg_thread_init(void) {", file=f)
-        print("    if (pg_thread_init_flag) return;", file=f)
-        print("    pg_thread_init_flag=1;", file=f)
+        print("""#include "thread_inits.h"
+static __thread int pg_thread_init_flag;
+
+void pg_thread_init(void) {
+    if (pg_thread_init_flag) return;
+    pg_thread_init_flag=1;
+    setup_pg_thread_cleanup();
+    pg_timezone_initialize();
+""", file=f)
+
         for a in sorted(thread_funcs):
             print("    " + a + "();", file=f)
         print("}", file=f)

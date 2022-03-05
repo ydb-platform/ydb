@@ -39,6 +39,8 @@ struct TTypeDesc {
     char Category = '\0';
     ui32 InFuncId = 0;
     ui32 OutFuncId = 0;
+    ui32 SendFuncId = 0;
+    ui32 ReceiveFuncId = 0;
     i32 TypeLen = 0;
 };
 

@@ -135,7 +135,7 @@ private:
         auto clusterType = shard.SolomonCluster().StringValue();
         if (State_->Configuration->ClusterConfigs.at(clusterType).GetClusterType() == TSolomonClusterConfig::SCT_MONITORING) {
             if (shard.Service().StringValue() != "custom") {
-                ctx.AddError(TIssue(ctx.GetPosition(shard.SolomonCluster().Pos()), TStringBuilder() << "It is not allowed to write into Monitoring service '" << shard.Service().StringValue() << "' use 'custom' instead"));
+                ctx.AddError(TIssue(ctx.GetPosition(shard.SolomonCluster().Pos()), TStringBuilder() << "It is not allowed to write into Monitoring service '" << shard.Service().StringValue() << "'. Use service 'custom' instead"));
                 return TStatus::Error;
             }
         }

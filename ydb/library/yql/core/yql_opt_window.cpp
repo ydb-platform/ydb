@@ -162,8 +162,6 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
 
     TVector<const TItemExprType*> lagQueueStructItems;
     for (auto& winOn : frames->ChildrenList()) {
-        YQL_ENSURE(winOn->IsCallable("WinOnRows"));
-
         TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
 
         ui64 frameOutpace = 0;
@@ -2183,6 +2181,8 @@ TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNo
             continue;
         }
 
+        YQL_ENSURE(winOn->IsCallable("WinOnRows"));
+
         TExprNodeList nonAggregates = { winOn->ChildPtr(0) };
         TExprNodeList aggregates = { winOn->ChildPtr(0) };
 
@@ -2450,8 +2450,8 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
 
         TExprNodeList newFrames;
         for (auto frameNode : calc.Frames().Ref().Children()) {
-            YQL_ENSURE(frameNode->IsCallable("WinOnRows"));
-            TExprNodeList winOnRowsArgs = { frameNode->ChildPtr(0) };
+            YQL_ENSURE(TCoWinOnBase::Match(frameNode.Get()));
+            TExprNodeList winOnArgs = { frameNode->ChildPtr(0) };
             for (ui32 i = 1; i < frameNode->ChildrenSize(); ++i) {
                 auto kvTuple = frameNode->ChildPtr(i);
                 YQL_ENSURE(kvTuple->IsList());
@@ -2484,9 +2484,9 @@ TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode:
                     traits = ctx.NewCallable(traits->Pos(), traits->Content(), std::move(args));
                 }
 
-                winOnRowsArgs.push_back(ctx.NewList(kvTuple->Pos(), {columnName, traits}));
+                winOnArgs.push_back(ctx.NewList(kvTuple->Pos(), {columnName, traits}));
             }
-            newFrames.push_back(ctx.NewCallable(frameNode->Pos(), "WinOnRows", std::move(winOnRowsArgs)));
+            newFrames.push_back(ctx.ChangeChildren(*frameNode, std::move(winOnArgs)));
         }
 
         fixedCalcs.push_back(

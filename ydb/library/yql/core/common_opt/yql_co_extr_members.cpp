@@ -586,7 +586,7 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
 
         TExprNodeList newFrames;
         for (const auto& winOnRows : calc.Frames().Ref().ChildrenList()) {
-            YQL_ENSURE(winOnRows->IsCallable("WinOnRows"));
+            YQL_ENSURE(TCoWinOnBase::Match(winOnRows.Get()));
 
             TExprNodeList newFrameItems;
             newFrameItems.push_back(winOnRows->ChildPtr(0));

@@ -513,8 +513,8 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
         for (auto winOn: winList.Children()) {
-            if (!winOn->IsCallable("WinOnRows")) {
-                ctx.AddError(TIssue(ctx.GetPosition(winOn->Pos()), "Expected window params based in callable WinOnRows"));
+            if (!TCoWinOnBase::Match(winOn.Get())) {
+                ctx.AddError(TIssue(ctx.GetPosition(winOn->Pos()), "Expected WinOnRows/WinOnGroups/WinOnRange"));
                 return IGraphTransformer::TStatus::Error;
             }
 

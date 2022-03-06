@@ -90,7 +90,7 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
 TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprContext& ctx) {
 
     for (const auto &frameNode : frames.Ref().Children()) {
-        YQL_ENSURE(frameNode->IsCallable("WinOnRows"));
+        YQL_ENSURE(TCoWinOnBase::Match(frameNode.Get()));
 
         auto frameSpec = frameNode->Child(0);
         if (frameSpec->Type() == TExprNode::List) {

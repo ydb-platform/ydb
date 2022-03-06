@@ -14,21 +14,23 @@
 
 Момент времени, когда строка таблицы может быть удалена, определяется по следующей формуле:
 
-```
+```text
 expiration_time = valueof(ttl_column) + expire_after_seconds
 ```
 
 {% note info %}
 
-Не гарантируется, что удаление произойдет именно в `expiration_time` — оно может случиться позже. Если важно исключить из выборки логически устаревшие, но пока еще физически неудаленные строки, нужно использовать фильтрацию уровня запроса.
+Не гарантируется, что удаление произойдет именно в `expiration_time` — оно может случиться позже. Если важно исключить из выборки логически устаревшие, но пока еще физически не удаленные строки, нужно использовать фильтрацию уровня запроса.
 
 {% endnote %}
 
 Непосредственно удалением данных занимается фоновая операция удаления — *Background Removal Operation* (*BRO*), состоящая из 2 стадий:
+
 1. Проверка значений в TTL-колонке.
-2. Удаление устаревших данных.
+1. Удаление устаревших данных.
 
 *BRO* обладает следующими свойствами:
+
 * Единицей параллельности является [партиция таблицы](../datamodel.md#partitioning).
 * Для таблиц со [вторичными индексами](../secondary_indexes.md) стадия удаления является [распределенной транзакцией](../transactions.md#distributed-tx).
 
@@ -41,17 +43,17 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 ## Ограничения {#restrictions}
 
 * TTL-колонка должна быть одного из следующих типов:
-  - `Date`;
-  - `Datetime`;
-  - `Timestamp`;
-  - `Uint32`;
-  - `Uint64`;
-  - `DyNumber`.
+  * `Date`;
+  * `Datetime`;
+  * `Timestamp`;
+  * `Uint32`;
+  * `Uint64`;
+  * `DyNumber`.
 * Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %} заданная в:
-  - секундах;
-  - миллисекундах;
-  - микросекундах;
-  - наносекундах.
+  * секундах;
+  * миллисекундах;
+  * микросекундах;
+  * наносекундах.
 * Нельзя указать несколько TTL-колонок.
 * Нельзя удалить TTL-колонку. Если это все же требуется, сначала нужно [выключить TTL](#disable) на таблице.
 
@@ -59,9 +61,9 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 Управление настройками TTL в настоящий момент возможно с использованием:
 
-* [YQL](../../yql/reference/index.md)
+* [YQL](../../yql/reference/index.md).
 * [Консольного клиента {{ ydb-short-name }}](../../reference/ydb-cli/index.md).
-* {{ ydb-short-name }} {% if oss %}C++ и{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md)
+* {{ ydb-short-name }} {% if oss %}C++ и{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md).
 
 {% note info %}
 
@@ -76,17 +78,21 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 {% list tabs %}
 
 - YQL
+
   ```yql
   ALTER TABLE `mytable` SET (TTL = Interval("PT1H") ON created_at);
   ```
 
 - CLI
+
   ```bash
   $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column created_at --expire-after 3600 mytable
   ```
 
 {% if oss == true %}
+
 - C++
+
   ```c++
   session.AlterTable(
       "mytable",
@@ -96,9 +102,11 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
           .EndAlterTtlSettings()
   );
   ```
+
 {% endif %}
 
 - Python
+
   ```python
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
@@ -118,6 +126,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 {% list tabs %}
 
 - YQL
+
   ```yql
   CREATE TABLE `mytable` (
       id Uint64,
@@ -129,7 +138,9 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   ```
 
 {% if oss == true %}
+
 - C++
+
   ```c++
   session.CreateTable(
       "mytable",
@@ -141,9 +152,11 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
           .Build()
   );
   ```
+
 {% endif %}
 
 - Python
+
   ```python
   session.create_table(
       'mytable',
@@ -162,17 +175,21 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 {% list tabs %}
 
 - YQL
+
   ```yql
   ALTER TABLE `mytable` RESET (TTL);
   ```
 
 - CLI
+
   ```bash
   $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl drop mytable
   ```
 
 {% if oss == true %}
+
 - C++
+
   ```c++
   session.AlterTable(
       "mytable",
@@ -182,9 +199,11 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
           .EndAlterTtlSettings()
   );
   ```
+
 {% endif %}
 
 - Python
+
   ```python
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
@@ -198,19 +217,24 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 {% list tabs %}
 
 - CLI
+
   ```bash
   $ {{ ydb-cli }} -e <endpoint> -d <database> scheme describe mytable
   ```
 
 {% if oss == true %}
+
 - C++
+
   ```c++
   auto desc = session.DescribeTable("mytable").GetValueSync().GetTableDescription();
   auto ttl = desc.GetTtlSettings();
   ```
+
 {% endif %}
 
 - Python
+
   ```python
   desc = session.describe_table('mytable')
   ttl = desc.ttl_settings

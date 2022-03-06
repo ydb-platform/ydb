@@ -37,7 +37,7 @@ private:
         }
 
         if (!State_->IsRtmrMode()) {
-            const TTypeAnnotationNode* inputItemType;
+            const TTypeAnnotationNode* inputItemType = nullptr;
             if (!EnsureNewSeqType<true, true, true>(write.Input().Pos(), *write.Input().Ref().GetTypeAnn(), ctx, &inputItemType)) {
                 return TStatus::Error;
             }
@@ -55,31 +55,48 @@ private:
             for (auto* structItem : structType->GetItems()) {
                 const auto itemName = structItem->GetName();
                 const auto* itemType = structItem->GetItemType();
-                YQL_ENSURE(
-                    itemType->GetKind() != ETypeAnnotationKind::Optional,
-                    "Optional types are not supported in monitoring sink. FieldName: " << itemName);
+                if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+                    ctx.AddError(TIssue(ctx.GetPosition(write.Input().Pos()), TStringBuilder() << "Optional types are not supported in writing into Monitoring. FieldName: " << itemName));
+                    return TStatus::Error;
+                }
 
                 const auto dataType = NUdf::GetDataTypeInfo(itemType->Cast<TDataExprType>()->GetSlot());
 
                 if (dataType.Features & NUdf::DateType || dataType.Features & NUdf::TzDateType) {
-                    YQL_ENSURE(!hasTimestampMember, "Multiple timestamps were provided for monitoing sink");
+                    if (hasTimestampMember) {
+                        ctx.AddError(TIssue(ctx.GetPosition(write.Input().Pos()), "Multiple timestamps should not used when writing into Monitoring"));
+                        return TStatus::Error;
+                    }
                     hasTimestampMember = true;
                 } else if (dataType.Features & NUdf::StringType) {
                     labelMembers++;
                 } else if (dataType.Features & NUdf::NumericType) {
                     sensorMembers++;
                 } else {
-                    YQL_ENSURE(false, "Ivalid data type for monitoing sink: " << dataType.Name);
+                    ctx.AddError(TIssue(ctx.GetPosition(write.Input().Pos()), TStringBuilder() << "Field " << itemName << " of type " << dataType.Name << " could not be written into Monitoring"));
+                    return TStatus::Error;
                 }
             }
 
-            YQL_ENSURE(hasTimestampMember, "Timestamp wasn't provided for monitoing sink");
-            YQL_ENSURE(sensorMembers != 0, "No sensors were provided for monitoing sink");
+            if (!hasTimestampMember) {
+                ctx.AddError(TIssue(ctx.GetPosition(write.Input().Pos()), "Timestamp wasn't provided for Monitoring"));
+                return TStatus::Error;
+            }
 
-            YQL_ENSURE(labelMembers <= SolomonMaxLabelsCount,
-                "Max labels count is " << SolomonMaxLabelsCount << " but " << labelMembers << " were provided");
-            YQL_ENSURE(sensorMembers <= SolomonMaxSensorsCount,
-                "Max sensors count is " << SolomonMaxSensorsCount << " but " << sensorMembers << " were provided");
+            if (!sensorMembers) {
+                ctx.AddError(TIssue(ctx.GetPosition(write.Input().Pos()), "No sensors were provided for Monitoring"));
+                return TStatus::Error;
+            }
+
+            if (labelMembers > SolomonMaxLabelsCount) {
+                ctx.AddError(TIssue(ctx.GetPosition(write.Input().Pos()), TStringBuilder() << "Max labels count is " << SolomonMaxLabelsCount << " but " << labelMembers << " were provided"));
+                return TStatus::Error;
+            }
+
+            if (sensorMembers > SolomonMaxSensorsCount) {
+                ctx.AddError(TIssue(ctx.GetPosition(write.Input().Pos()), TStringBuilder() << "Max sensors count is " << SolomonMaxSensorsCount << " but " << sensorMembers << " were provided"));
+                return TStatus::Error;
+            }
         }
 
         input.Ptr()->SetTypeAnn(write.World().Ref().GetTypeAnn());
@@ -117,7 +134,10 @@ private:
 
         auto clusterType = shard.SolomonCluster().StringValue();
         if (State_->Configuration->ClusterConfigs.at(clusterType).GetClusterType() == TSolomonClusterConfig::SCT_MONITORING) {
-            YQL_ENSURE(shard.Service().StringValue() ==  "custom", "Monitoring allows writing only to 'custom' service");
+            if (shard.Service().StringValue() != "custom") {
+                ctx.AddError(TIssue(ctx.GetPosition(shard.SolomonCluster().Pos()), TStringBuilder() << "It is not allowed to write into Monitoring service '" << shard.Service().StringValue() << "' use 'custom' instead"));
+                return TStatus::Error;
+            }
         }
 
         input.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());

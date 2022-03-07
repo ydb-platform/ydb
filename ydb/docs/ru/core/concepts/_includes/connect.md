@@ -79,7 +79,7 @@
 Примеры:
 
 * `/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr` — база данных {{ yandex-cloud }} с идентификатором `etn01q3ko8sh271beftr` в облаке `b1g8skpbljhs03malf3s`, развернутая в регионе `ru-central1`.
-* `/local` — база данных по умолчанию при самостоятельном развертывании [с использованием Docker](../../getting_started/ydb_docker.md).
+* `/local` — база данных по умолчанию при самостоятельном развертывании [с использованием Docker](../../getting_started/self_hosted/ydb_docker.md).
 
 {% include [overlay/database_example.md](connect_overlay/database_example.md) %}
 

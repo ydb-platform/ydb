@@ -8,9 +8,9 @@
 
 {{ ydb-short-name }} может быть развернута самостоятельно тремя способами:
 
-* [С использованием Docker](../ydb_docker.md)
-* [В Kubernetes](../../deploy/orchestrated/concepts.md)
-* [Локально из скачанного исполняемого файла](../ydb_local.md)
+* [С использованием Docker](../self_hosted/ydb_docker.md).
+* [В Kubernetes](../../deploy/orchestrated/concepts.md).
+* [Локально из скачанного исполняемого файла](../self_hosted/ydb_local.md).
 
 ## Продолжение знакомства с YDB {#next}
 

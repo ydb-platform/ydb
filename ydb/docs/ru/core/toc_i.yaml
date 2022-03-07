@@ -13,6 +13,7 @@ items:
 - { name: Рекомендации,                            include: { mode: link, path: best_practices/toc_p.yaml } }
 - { name: Обслуживание,                            include: { mode: link, path: maintenance/toc_p.yaml } }
 - { name: Диагностика,                             include: { mode: link, path: troubleshooting/toc_p.yaml } }
+- { name: Администрирование,                       include: { mode: link, path: deploy/toc_p.yaml } }
 
 # References  
 - { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }

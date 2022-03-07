@@ -12,21 +12,13 @@ items:
 - name: YDB SDK
   href: sdk.md
 - name: Самостоятельное развертывание
-  items:
-  - name: Docker
-    href: ydb_docker.md
-  - name: Запуск локального кластера
-    href: ydb_local.md
-    # when: audience == "tech"
-  - name: Создание конфигурации кластера
-    include: { mode: link, path: ../deploy/configuration/toc_i.yaml }
-    # when: audience == "tech"
-  - name: Kubernetes
-    include: { mode: link, path: ../deploy/orchestrated/toc_p.yaml }
-  - name: Вручную
-    include: { mode: link, path: ../deploy/manual/toc_p.yaml }
-  - name: Production checklist
-    href: ../deploy/production_checklist.md
+  include: { mode: link, path: self_hosted/toc_p.yaml }
 - name: Полезные ссылки
   href: useful_links.md
+#- name: Deprecated ydb_docker.md
+#  href: ydb_docker.md
+#  hidden: true
+#- name: Deprecated ydb_local.md
+#  href: ydb_local.md
+#  hidden: true
 

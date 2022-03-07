@@ -1,0 +1,9 @@
+items:
+- name: Развертывание кластера YDB
+  include: { mode: link, path: manual/toc_p.yaml }
+- include: { mode: link, path: configuration/toc_p.yaml }
+- name: Kubernetes
+  include: { mode: link, path: ../deploy/orchestrated/toc_p.yaml }
+- name: Production checklist
+  href: production_checklist.md
+

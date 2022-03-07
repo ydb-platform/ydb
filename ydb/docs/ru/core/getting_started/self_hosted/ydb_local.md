@@ -1,0 +1,1 @@
+{% include [ydb_local.md](_includes/ydb_local.md) %}

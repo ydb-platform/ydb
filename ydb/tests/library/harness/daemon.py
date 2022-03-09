@@ -55,13 +55,16 @@ class SeveralDaemonErrors(RuntimeError):
 
 
 class Daemon(object):
-    def __init__(self, command, cwd, timeout, stdin_file=None, stdout_file=None, stderr_file=None, stderr_on_error_lines=0):
+    def __init__(self, command, cwd, timeout, stdin_file=None, stdout_file=None,
+                 stderr_file=None, stderr_on_error_lines=0, core_pattern=None):
+
         self.__cwd = cwd
         self.__timeout = timeout
         self.__command = tuple(command)
         self.__stderr_on_error_lines = stderr_on_error_lines
         self.__daemon = None
         self.__killed = False
+        self.__core_pattern = core_pattern
         self.logger = logger.getChild(self.__class__.__name__)
         if stdout_file is None:
             self.__stdout_file = tempfile.NamedTemporaryFile(dir=self.__cwd, prefix="stdout_", delete=False)
@@ -104,7 +107,8 @@ class Daemon(object):
             stdin=self.__stdin_file,
             stdout=self.__stdout_file,
             stderr=stderr_stream,
-            wait=False
+            wait=False,
+            core_pattern=self.__core_pattern
         )
         wait_for(self.is_alive, self.__timeout)
 

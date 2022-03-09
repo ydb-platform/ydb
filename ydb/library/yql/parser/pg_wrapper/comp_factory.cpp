@@ -648,6 +648,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     case FLOAT8OID:
         ret = ::FloatToString(DatumGetFloat8(ScalarDatumFromPod(value)));
         break;
+    case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
@@ -731,6 +732,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         NDetails::PutRawData(x, buf);
         break;
     }
+    case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
@@ -807,6 +809,7 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         const auto x = NDetails::GetRawData<double>(buf);
         return ScalarDatumToPod(Float8GetDatum(x));
     }
+    case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
         SET_MEMORY_CONTEXT;

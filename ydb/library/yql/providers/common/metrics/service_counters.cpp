@@ -35,7 +35,7 @@ TServiceCounters::TServiceCounters(
 
 void TServiceCounters::InitUptimeCounter() {
     UptimePublicCounter = PublicCounters->GetNamedCounter("name", "query.uptime_seconds", false);
-    UptimeRootCounter = RootCounters->GetNamedCounter("name", "uptime_seconds", false);
+    UptimeRootCounter = RootCounters->GetNamedCounter("sensor", "UptimeSeconds", false);
 }
 
 void TServiceCounters::SetUptimePublicAndServiceCounter(i64 val) const {

@@ -151,7 +151,7 @@ public:
         const TActorId parent,
         const NConfig::TPingerConfig& config,
         TInstant deadline,
-        const ::NYq::NCommon::TServiceCounters& queryCounters,
+        const ::NYql::NCommon::TServiceCounters& queryCounters,
         TInstant createdAt)
         : Config(config)
         , TenantName(tenantName)
@@ -435,7 +435,7 @@ private:
     const TActorId Parent;
     const TInstant Deadline;
 
-    const ::NYq::NCommon::TServiceCounters QueryCounters;
+    const ::NYql::NCommon::TServiceCounters QueryCounters;
     const TInstant CreatedAt;
 
     std::deque<TForwardPingReqInfo> ForwardRequests;
@@ -455,7 +455,7 @@ IActor* CreatePingerActor(
     const TActorId parent,
     const NConfig::TPingerConfig& config,
     TInstant deadline,
-    const ::NYq::NCommon::TServiceCounters& queryCounters,
+    const ::NYql::NCommon::TServiceCounters& queryCounters,
     TInstant createdAt)
 {
     return new TPingerActor(

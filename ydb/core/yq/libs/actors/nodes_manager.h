@@ -25,7 +25,7 @@ IActor* CreateYqlNodesManager(
     const NYql::NDqs::TWorkerManagerCounters& workerManagerCounters,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,

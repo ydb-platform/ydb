@@ -3,7 +3,7 @@
 #include <util/generic/string.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NYq {
+namespace NYql {
 namespace NCommon {
 
 struct TServiceCounters {

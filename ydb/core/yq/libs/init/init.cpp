@@ -168,7 +168,7 @@ void Init(
         actorRegistrator(NYql::NDqs::MakeWorkerManagerActorID(nodeId), resman);
     }
 
-    ::NYq::NCommon::TServiceCounters serviceCounters(appData->Counters);
+    ::NYql::NCommon::TServiceCounters serviceCounters(appData->Counters);
 
     if (protoConfig.GetNodesManager().GetEnabled()) {
         auto nodesManager = CreateYqlNodesManager(

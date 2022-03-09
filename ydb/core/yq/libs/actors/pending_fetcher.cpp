@@ -136,7 +136,7 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-        const ::NYq::NCommon::TServiceCounters& serviceCounters,
+        const ::NYql::NCommon::TServiceCounters& serviceCounters,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
@@ -318,7 +318,7 @@ private:
         const TString cloudId = task.sensor_labels().at("cloud_id");
         const TString queryId = task.query_id().value();
 
-        ::NYq::NCommon::TServiceCounters queryCounters(ServiceCounters);
+        ::NYql::NCommon::TServiceCounters queryCounters(ServiceCounters);
         auto publicCountersParent = ServiceCounters.PublicCounters;
 
         if (cloudId && folderId) {
@@ -395,7 +395,7 @@ private:
     TIntrusivePtr<IRandomProvider> RandomProvider;
     NKikimr::NMiniKQL::TComputationNodeFactory DqCompFactory;
     TIntrusivePtr<IDqGateway> DqGateway;
-    ::NYq::NCommon::TServiceCounters ServiceCounters;
+    ::NYql::NCommon::TServiceCounters ServiceCounters;
 
     IModuleResolver::TPtr ModuleResolver;
 
@@ -437,7 +437,7 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYql::NCommon::TServiceCounters& serviceCounters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,

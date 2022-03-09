@@ -87,7 +87,7 @@ class TRunActor : public NActors::TActorBootstrapped<TRunActor> {
 public:
     explicit TRunActor(
         const NActors::TActorId& fetcherId
-        , const ::NYq::NCommon::TServiceCounters& queryCounters
+        , const ::NYql::NCommon::TServiceCounters& queryCounters
         , TRunActorParams&& params)
         : FetcherId(fetcherId)
         , Params(std::move(params))
@@ -1292,7 +1292,7 @@ private:
     NActors::TActorId ControlId;
     NActors::TActorId CheckpointCoordinatorId;
     TString SessionId;
-    ::NYq::NCommon::TServiceCounters QueryCounters;
+    ::NYql::NCommon::TServiceCounters QueryCounters;
     const NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
     bool EnableCheckpointCoordinator = false;
     bool RetryNeeded = false;
@@ -1326,7 +1326,7 @@ private:
 
 IActor* CreateRunActor(
     const NActors::TActorId& fetcherId,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYql::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
 ) {
     return new TRunActor(fetcherId, serviceCounters, std::move(params));

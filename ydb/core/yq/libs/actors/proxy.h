@@ -44,7 +44,7 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYql::NCommon::TServiceCounters& serviceCounters,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     NYql::IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
@@ -54,7 +54,7 @@ NActors::IActor* CreatePendingFetcher(
 
 NActors::IActor* CreateRunActor(
     const NActors::TActorId& fetcherId,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYql::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params);
 
 struct TResultId {
@@ -87,7 +87,7 @@ NActors::IActor* CreatePingerActor(
     const NActors::TActorId parent,
     const NConfig::TPingerConfig& config,
     TInstant deadline,
-    const ::NYq::NCommon::TServiceCounters& queryCounters,
+    const ::NYql::NCommon::TServiceCounters& queryCounters,
     TInstant createdAt);
 
 TString MakeInternalError(const TString& text);

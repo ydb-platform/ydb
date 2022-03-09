@@ -57,7 +57,7 @@ public:
         const NDqs::TWorkerManagerCounters& workerManagerCounters,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
-        const ::NYq::NCommon::TServiceCounters& serviceCounters,
+        const ::NYql::NCommon::TServiceCounters& serviceCounters,
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const ui32& icPort,
         const TString& tenant,
@@ -255,7 +255,7 @@ private:
     NDqs::TWorkerManagerCounters WorkerManagerCounters;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
-    ::NYq::NCommon::TServiceCounters ServiceCounters;
+    ::NYql::NCommon::TServiceCounters ServiceCounters;
     NConfig::TPrivateApiConfig PrivateApiConfig;
     TString Tenant;
     ui64 MkqlInitialMemoryLimit;
@@ -293,7 +293,7 @@ IActor* CreateYqlNodesManager(
     const NDqs::TWorkerManagerCounters& workerManagerCounters,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,

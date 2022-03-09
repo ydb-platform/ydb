@@ -1,6 +1,6 @@
 #include "service_counters.h"
 
-namespace NYq {
+namespace NYql {
 namespace NCommon {
 
 TServiceCounters::TServiceCounters(

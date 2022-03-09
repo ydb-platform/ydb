@@ -13,7 +13,7 @@ THolder<NActors::IActor> MakeTaskController(
     const NActors::TActorId& executerId,
     const NActors::TActorId& resultId,
     const TDqConfiguration::TPtr& settings,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const TDuration& pingPeriod = TDuration::Zero(),
     const TDuration& aggrPeriod = TDuration::Seconds(1));
 

@@ -50,7 +50,7 @@ public:
         const NActors::TActorId& executerId,
         const NActors::TActorId& resultId,
         const TDqConfiguration::TPtr& settings,
-        const NYq::NCommon::TServiceCounters& serviceCounters,
+        const NYql::NCommon::TServiceCounters& serviceCounters,
         const TDuration& pingPeriod,
         const TDuration& aggrPeriod
     )
@@ -548,7 +548,7 @@ private:
     TDqConfiguration::TPtr Settings;
     bool Finished = false;
     TCounters TaskStat;
-    NYq::NCommon::TServiceCounters ServiceCounters;
+    NYql::NCommon::TServiceCounters ServiceCounters;
     TDuration PingPeriod = TDuration::Zero();
     TDuration AggrPeriod = TDuration::Zero();
     TIssues Issues;
@@ -562,7 +562,7 @@ THolder<NActors::IActor> MakeTaskController(
     const NActors::TActorId& executerId,
     const NActors::TActorId& resultId,
     const TDqConfiguration::TPtr& settings,
-    const NYq::NCommon::TServiceCounters& serviceCounters,
+    const NYql::NCommon::TServiceCounters& serviceCounters,
     const TDuration& pingPeriod,
     const TDuration& aggrPeriod
 ) {

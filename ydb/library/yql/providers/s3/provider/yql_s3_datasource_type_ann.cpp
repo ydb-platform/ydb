@@ -15,21 +15,14 @@ using namespace NNodes;
 
 namespace {
 
-std::pair<TStringBuf, TStringBuf> GetFormatAndCompression(const TExprNode& settings) {
-    TStringBuf compression;
-    TStringBuf format;
+TStringBuf GetCompression(const TExprNode& settings) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
         const auto& child = *settings.Child(i);
         if (child.Head().IsAtom("compression") && child.Tail().IsCallable({"String", "Utf8"}))
             if (const auto& comp = child.Tail().Head().Content(); !comp.empty())
-                compression = comp;
-        if (child.Head().IsAtom("format"))
-            if (const auto& form = child.Tail().Head().Content(); !form.empty())
-                format = form;
-        if (compression && format)
-            break;
+                return comp;
     }
-    return std::make_pair(format, compression);
+    return ""sv;
 }
 
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
@@ -131,7 +124,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormat(input->Child(TS3Object::idx_Format)->Content(), ctx)) {
             return TStatus::Error;
         }
 
@@ -139,14 +132,7 @@ public:
             return TStatus::Error;
         }
 
-        const auto formatAndCompression = GetFormatAndCompression(*input->Child(TS3Object::idx_Settings)); // used for win32 build
-        const auto& format = formatAndCompression.first;
-        const auto& compression = formatAndCompression.second;
-
-        if (!NCommon::ValidateFormat(format, ctx)) {
-            return TStatus::Error;
-        }
-
+        const auto compression = GetCompression(*input->Child(TS3Object::idx_Settings));
         if (!NCommon::ValidateCompression(compression, ctx)) {
             return TStatus::Error;
         }

@@ -365,7 +365,7 @@ private:
         auto& entry = Requests[TKeyType(url, headers, data, retryPolicy)];
         StraightInFlight->Set(Requests.size());
         if (const auto& easy = entry.lock())
-            if (easy->AddCallback(std::move(callback)))
+            if (easy->AddCallback(callback))
                 return;
 
         InFlight->Inc();

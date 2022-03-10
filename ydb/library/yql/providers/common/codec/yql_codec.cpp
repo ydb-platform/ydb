@@ -1509,6 +1509,10 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         return ReadSkiffData(type, nativeYtTypeFlags, buf);
     }
 
+    if (type->IsPg()) {
+        return ReadSkiffPg(static_cast<TPgType*>(type), buf);
+    }
+
     if (type->IsOptional()) {
         auto marker = buf.Read();
         if (!marker) {

@@ -41,6 +41,19 @@ NUdf::TUnboxedValue ReadYsonValuePg(NKikimr::NMiniKQL::TPgType* type, char cmd, 
     throw yexception() << "PG types are not supported";
 }
 
+NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NCommon::TInputBuf& buf) {
+    Y_UNUSED(type);
+    Y_UNUSED(buf);
+    throw yexception() << "PG types are not supported";
+}
+
+void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    Y_UNUSED(buf);
+    throw yexception() << "PG types are not supported";
+}
+
 } // namespace NCommon
 } // NYql
 

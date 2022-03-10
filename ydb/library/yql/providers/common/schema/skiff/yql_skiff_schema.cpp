@@ -84,8 +84,24 @@ struct TSkiffTypeLoader {
         ythrow yexception() << "Unsupported data type" << NUdf::GetDataTypeInfo(*slot).Name;
     }
 
-    TMaybe<TType> LoadPgType(const TString& /*pgType*/, ui32 /*level*/) {
-        ythrow yexception() << "Unsupported PG type";
+    TMaybe<TType> LoadPgType(const TString& pgType, ui32 /*level*/) {
+        TType itemType;
+        if (pgType == "bool") {
+            itemType = NYT::TNode()("wire_type", "boolean");
+        } else if (pgType == "int2" || pgType == "int4" || pgType == "int8") {
+            itemType = NYT::TNode()("wire_type", "int64");
+        } else  if (pgType == "float4" || pgType == "float8") {
+            itemType = NYT::TNode()("wire_type", "double");
+        } else {
+            itemType = NYT::TNode()("wire_type", "string32");
+        }
+
+        return NYT::TNode()
+            ("wire_type", "variant8")
+            ("children", NYT::TNode()
+                .Add(NYT::TNode()("wire_type", "nothing"))
+                .Add(std::move(itemType))
+                );
     }
 
     TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& /*paramTwo*/, ui32 /*level*/) {

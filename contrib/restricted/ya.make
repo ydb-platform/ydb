@@ -44,6 +44,7 @@ RECURSE(
     mlir
     mpg123
     murmurhash
+    netcdf-c
     nfs_ganesha
     noc
     openal-soft

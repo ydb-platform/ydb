@@ -12,11 +12,10 @@
 
 ## Установка {#install}
 
-Создайте рабочую директорию, и запустите в ней команды скачивания архива с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками, а также набора скриптов и вспомогательных файлов для запуска и остановки сервера:
+Создайте рабочую директорию. Запустите в ней скрипт скачивания архива с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками, а также набора скриптов и вспомогательных файлов для запуска и остановки сервера:
 
 ```bash
-curl https://binaries.ydb.tech/ydbd-main-linux-amd64.tar.gz | tar -xz
-curl https://binaries.ydb.tech/local_scripts/linux.tar.gz | tar -xz
+curl https://binaries.ydb.tech/local_scripts/install.sh | bash
 ```
 
 {% include [wget_auth_overlay.md](wget_auth_overlay.md) %}

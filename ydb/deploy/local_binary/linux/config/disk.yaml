@@ -1,7 +1,7 @@
 static_erasure: none
 host_configs:
 - drive:
-  - path: SectorMap:1:64
+  - path: ydb.data
     type: SSD
   host_config_id: 1
 hosts:
@@ -66,18 +66,20 @@ blob_storage_config:
       - fail_domains:
         - vdisk_locations:
           - node_id: 1
-            path: SectorMap:1:64
+            path: ydb.data
             pdisk_category: SSD
 channel_profile_config:
   profile:
   - channel:
     - erasure_species: none
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: none
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     - erasure_species: none
-      pdisk_category: 1
+      pdisk_category: 0
       storage_pool_kind: ssd
     profile_id: 0
+table_service_config:
+  sql_version: 1

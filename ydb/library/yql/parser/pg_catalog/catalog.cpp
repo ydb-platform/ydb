@@ -289,6 +289,7 @@ public:
         if (LastType.ArrayTypeId) {
             auto arrayType = LastType;
             arrayType.Name = "_" + arrayType.Name;
+            arrayType.ElementTypeId = arrayType.TypeId;
             arrayType.TypeId = LastType.ArrayTypeId;
             Types[LastType.ArrayTypeId] = arrayType;
         }

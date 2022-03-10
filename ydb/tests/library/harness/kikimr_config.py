@@ -113,7 +113,7 @@ class KikimrConfigGenerator(object):
             auth_config_path=None,
             disable_mvcc=False,
             enable_public_api_external_blobs=False,
-            node_kind=None
+            node_kind=None,
     ):
         self._version = version
         self.use_log_files = use_log_files
@@ -139,8 +139,6 @@ class KikimrConfigGenerator(object):
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
 
-        if binary_path is None:
-            binary_path = kikimr_driver_path()
         self.__binary_path = binary_path
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
         if nodes is None:
@@ -318,9 +316,15 @@ class KikimrConfigGenerator(object):
     def output_path(self):
         return self.__output_path
 
+    def set_binary_path(self, binary_path):
+        self.__binary_path = binary_path
+        return self
+
     @property
     def binary_path(self):
-        return self.__binary_path
+        if self.__binary_path is not None:
+            return self.__binary_path
+        return kikimr_driver_path()
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:

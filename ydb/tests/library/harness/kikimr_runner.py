@@ -47,7 +47,8 @@ def join(a, b):
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_idx, config_path, port_allocator, cluster_name, configurator,
-                 udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None):
+                 udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
+                 binary_path=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_idx
@@ -56,6 +57,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__cluster_name = cluster_name
         self.__configurator = configurator
         self.__common_udfs_dir = udfs_dir
+        self.__binary_path = binary_path
 
         self.__encryption_key = encryption_key
         self._tenant_affiliation = tenant_affiliation if tenant_affiliation is not None else 'dynamic'
@@ -77,6 +79,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         )
         self.__cms_config_cache_file_name = self.__cms_config_cache_file.name
         daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240)
+        self.__binary_path = None
 
     @property
     def cwd(self):
@@ -95,12 +98,22 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return self.__cwd
 
     @property
+    def binary_path(self):
+        if self.__binary_path:
+            return self.__binary_path
+        return self.__configurator.binary_path
+
+    @property
     def cms_config_cache_file_name(self):
         return self.__cms_config_cache_file_name
 
     @property
     def command(self):
         return self.__make_run_command()
+
+    def set_binary_path(self, binary_path):
+        self.__binary_path = binary_path
+        return self.__binary_path
 
     def format_pdisk(self, pdisk_path, disk_size, **kwargs):
         logger.debug("Formatting pdisk %s on node %s, disk_size %s" % (pdisk_path, self, disk_size))
@@ -112,7 +125,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             out.write(b'\0')
 
     def __make_run_command(self):
-        command = [self.__configurator.binary_path, "server"]
+        command = [self.binary_path, "server"]
+
         if self.__common_udfs_dir is not None:
             command.append("--udfs-dir={}".format(self.__common_udfs_dir))
 
@@ -227,6 +241,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slot_index_allocator = itertools.count(1)
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
+        self.__initialy_prepared = False
 
     @property
     def config(self):
@@ -282,14 +297,19 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.stop()
             raise
 
-    def __run(self):
-        self.__client = None
+    def prepare(self):
+        if self.__initialy_prepared:
+            return
 
+        self.__initialy_prepared = True
+        self.__client = None
         self.__instantiate_udfs_dir()
         self.__write_configs()
-
         for _ in self.__configurator.all_node_ids():
             self.__register_node()
+
+    def __run(self):
+        self.prepare()
 
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)

@@ -943,7 +943,16 @@ void TBlobStorageController::RenderGroupDetail(IOutputStream &out, TGroupId grou
 
         if (TGroupInfo *group = FindGroup(groupId)) {
             RenderVSlotTable(out, [&] {
+                std::vector<const TVSlotInfo*> donors;
                 for (const TVSlotInfo *slot : group->VDisksInGroup) {
+                    RenderVSlotRow(out, *slot);
+                    for (const auto& [vslotId, vdiskId] : slot->Donors) {
+                        if (const auto *x = FindVSlot(vslotId)) {
+                            donors.push_back(x);
+                        }
+                    }
+                }
+                for (const TVSlotInfo *slot : donors) {
                     RenderVSlotRow(out, *slot);
                 }
             });
@@ -979,7 +988,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
         TABLE_CLASS("table") {
             TABLEHEAD() {
                 TABLER() {
-                    TAG_ATTRS(TTableH, {{"colspan", "8"}}) { out << "VDisk attributes"; }
+                    TAG_ATTRS(TTableH, {{"colspan", "10"}}) { out << "VDisk attributes"; }
                     TAG_ATTRS(TTableH, {{"colspan", "1"}}) { out << "Current"; }
                     TAG_ATTRS(TTableH, {{"colspan", "1"}}) { out << "Maximum"; }
                 }
@@ -993,6 +1002,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Status"; }
                     TABLEH() { out << "IsReady"; }
                     TABLEH() { out << "LastSeenReady"; }
+                    TABLEH() { out << "Donors"; }
 
                     TABLEH() { out << "Data Size"; }
 
@@ -1008,7 +1018,7 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
 
 void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo& vslot) {
     HTML(out) {
-        TAG_ATTRS(TTableR, {{"title", vslot.Metrics.DebugString()}}) {
+        TAG_ATTRS(TTableR, {{"title", vslot.Metrics.DebugString()}, {"id", vslot.GetVDiskId().ToString()}}) {
             TABLED() {
                 out << vslot.GetVDiskId();
             }
@@ -1028,6 +1038,21 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
             TABLED() {
                 if (vslot.LastSeenReady != TInstant::Zero()) {
                     out << vslot.LastSeenReady;
+                }
+            }
+            TABLED() {
+                if (vslot.AcceptorVSlotId != TVSlotId()) {
+                    if (const auto *x = FindVSlot(vslot.AcceptorVSlotId)) {
+                        out << "<strong>donor for <a href='#" << x->GetVDiskId() << "'>" << vslot.AcceptorVSlotId << "</a></strong>";
+                    } else {
+                        out << "?";
+                    }
+                } else {
+                    bool first = true;
+                    for (const auto& [vslotId, vdiskId] : vslot.Donors) {
+                        out << (std::exchange(first, false) ? "" : "<br/>");
+                        out << "<a href='#" << vdiskId.ToString() << "'>" << vdiskId << "</a> at " << vslotId;
+                    }
                 }
             }
             RenderResourceValues(out, vslot.GetResourceCurrentValues());
@@ -1055,6 +1080,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Seen operational"; }
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
+                    TABLEH() { out << "Donors"; }
                 }
             }
             TABLEBODY() {
@@ -1116,6 +1142,13 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             const auto& status = group.Status;
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
+            TABLED() {
+                ui32 numDonors = 0;
+                for (const auto& vdisk : group.VDisksInGroup) {
+                    numDonors += vdisk->Donors.size();
+                }
+                out << numDonors;
+            }
         }
     }
 }

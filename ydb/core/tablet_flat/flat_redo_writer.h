@@ -181,7 +181,8 @@ namespace NRedo {
             TEvRemoveTx ev{ { ERedo::RemoveTx, 0, 0x8000, size },
                             table, 0, txId };
 
-            return Push(TString(NUtil::NBin::ToByte(&ev), size), size);
+            void* evBegin = &ev;
+            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
         }
 
         TWriter& EvCommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
@@ -191,7 +192,8 @@ namespace NRedo {
             TEvCommitTx ev{ { ERedo::CommitTx, 0, 0x8000, size },
                             table, 0, txId, rowVersion.Step, rowVersion.TxId };
 
-            return Push(TString(NUtil::NBin::ToByte(&ev), size), size);
+            void* evBegin = &ev;
+            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
         }
 
         TWriter& Join(TWriter &log)

@@ -7,6 +7,7 @@ PEERDIR(
     ydb/library/yql/sql/settings
     ydb/library/yql/providers/common/codec
     ydb/library/yql/minikql/computation
+    ydb/library/yql/core
 )
 
 SRCS(

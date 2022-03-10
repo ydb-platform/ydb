@@ -4,8 +4,11 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/core/yql_pg_utils.h>
+#include <library/cpp/yson/detail.h>
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
@@ -80,8 +83,21 @@ NUdf::TUnboxedValuePod PointerDatumToPod(Datum datum) {
     return NUdf::TUnboxedValuePod(std::move(ref));
 }
 
-Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value) {
-    return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
+Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value, bool isVar) {
+    if (value.IsBoxed()) {
+        return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
+    }
+
+    // temporary palloc, should be handled by LeakGuard
+    const auto& ref = value.AsStringRef();
+    if (isVar) {
+        return (Datum)cstring_to_text_with_len(ref.Data(), ref.Size());
+    } else {
+        auto ret = (char*)palloc(ref.Size() + 1);
+        memcpy(ret, ref.Data(), ref.Size());
+        ret[ref.Size()] = '\0';
+        return (Datum)ret;
+    }
 }
 
 struct TPAllocLeakGuard {
@@ -199,10 +215,7 @@ struct TMkqlPgAdapter {
 };
 
 #define SET_MEMORY_CONTEXT \
-    CurrentMemoryContext = ErrorContext = TMkqlPgAdapter::Instance(); \
-    Y_DEFER { \
-        CurrentMemoryContext = ErrorContext = nullptr; \
-    };
+    CurrentMemoryContext = ErrorContext = TMkqlPgAdapter::Instance();
 
 class TPgConst : public TMutableComputationNode<TPgConst> {
     typedef TMutableComputationNode<TPgConst> TBaseComputation;
@@ -292,9 +305,18 @@ public:
         Y_ENSURE(!FInfo.fn_retset);
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(FInfo.fn_nargs == ArgNodes.size());
+        ArgDesc.reserve(ProcDesc.ArgTypes.size());
+        for (const auto& x : ProcDesc.ArgTypes) {
+            ArgDesc.emplace_back(NPg::LookupType(x));
+        }
+
+        Y_ENSURE(ArgDesc.size() == ArgNodes.size());
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+
         auto& state = GetState(compCtx);
         auto& callInfo = state.CallInfo.Ref();
         callInfo.isnull = false;
@@ -308,14 +330,14 @@ public:
 
                 argDatum.isnull = true;
             } else {
-                argDatum.value = value.IsBoxed() ? PointerDatumFromPod(value) : ScalarDatumFromPod(value);
+                argDatum.value = ArgDesc[i].PassByValue ?
+                    ScalarDatumFromPod(value) :
+                    PointerDatumFromPod(value, ArgDesc[i].TypeLen == -1);
             }
 
             callInfo.args[i] = argDatum;
         }
 
-        SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
         PG_TRY();
         {
             auto ret = FInfo.fn_addr(&callInfo);
@@ -370,6 +392,7 @@ private:
     const NPg::TProcDesc ProcDesc;
     const NPg::TTypeDesc RetTypeDesc;
     const TComputationNodePtrVector ArgNodes;
+    TVector<NPg::TTypeDesc> ArgDesc;
 };
 
 inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
@@ -385,6 +408,7 @@ public:
         , SourceId(sourceId)
         , TargetId(targetId)
         , Arg(arg)
+        , SourceTypeDesc(NPg::LookupType(SourceId))
         , TargetTypeDesc(NPg::LookupType(targetId))
     {
         TypeIOParam = MakeTypeIOParam(TargetTypeDesc);
@@ -395,15 +419,14 @@ public:
             return;
         }
 
-        const auto& sourceTypeDesc = NPg::LookupType(SourceId);
         ui32 funcId;
         ui32 funcId2 = 0;
         if (!NPg::HasCast(SourceId, TargetId)) {
-            if (sourceTypeDesc.Category == 'S') {
+            if (SourceTypeDesc.Category == 'S') {
                 funcId = TargetTypeDesc.InFuncId;
             } else {
                 Y_ENSURE(TargetTypeDesc.Category == 'S');
-                funcId = sourceTypeDesc.OutFuncId;
+                funcId = SourceTypeDesc.OutFuncId;
             }
         } else {
             const auto& cast = NPg::LookupCast(SourceId, TargetId);
@@ -416,7 +439,7 @@ public:
                     break;
                 }
                 case NPg::ECastMethod::InOut: {
-                    funcId = sourceTypeDesc.OutFuncId;
+                    funcId = SourceTypeDesc.OutFuncId;
                     funcId2 = TargetTypeDesc.InFuncId;
                     break;
                 }
@@ -429,7 +452,7 @@ public:
         Y_ENSURE(FInfo1.fn_nargs >= 1 && FInfo1.fn_nargs <= 3);
         Func1Lookup = NPg::LookupProc(funcId);
         Y_ENSURE(Func1Lookup.ArgTypes.size() >= 1 && Func1Lookup.ArgTypes.size() <= 3);
-        if (Func1Lookup.ArgTypes[0] == CSTRINGOID && sourceTypeDesc.Category == 'S') {
+        if (Func1Lookup.ArgTypes[0] == CSTRINGOID && SourceTypeDesc.Category == 'S') {
             ConvertArgToCString = true;
         }
 
@@ -464,12 +487,14 @@ public:
             return value.Release();
         }
 
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
         auto& state = GetState(compCtx);
         auto& callInfo1 = state.CallInfo1.Ref();
         callInfo1.isnull = false;
-        NullableDatum argDatum = { value.IsBoxed() ? PointerDatumFromPod(value) : ScalarDatumFromPod(value), false };
-        SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        NullableDatum argDatum = { SourceTypeDesc.PassByValue ?
+            ScalarDatumFromPod(value) :
+            PointerDatumFromPod(value, SourceTypeDesc.TypeLen == -1), false };
         if (ConvertArgToCString) {
             argDatum.value = (Datum)text_to_cstring((const text*)argDatum.value);
             Y_DEFER {
@@ -568,6 +593,7 @@ private:
     const ui32 SourceId;
     const ui32 TargetId;
     IComputationNode* const Arg;
+    const NPg::TTypeDesc SourceTypeDesc;
     const NPg::TTypeDesc TargetTypeDesc;
     FmgrInfo FInfo1, FInfo2;
     NPg::TProcDesc Func1Lookup, Func2Lookup;
@@ -607,7 +633,12 @@ TComputationNodeFactory GetPgFactory() {
                 auto inputType = callable.GetInput(0).GetStaticType();
                 ui32 sourceId = 0;
                 if (!inputType->IsNull()) {
-                    sourceId = AS_TYPE(TPgType, inputType)->GetTypeId();
+                    if (inputType->IsData() || inputType->IsOptional()) {
+                        bool isOptional;
+                        sourceId = *ConvertToPgType(*UnpackOptionalData(inputType, isOptional)->GetDataSlot());
+                    } else {
+                        sourceId = AS_TYPE(TPgType, inputType)->GetTypeId();
+                    }
                 }
 
                 auto returnType = callable.GetType()->GetReturnType();
@@ -620,6 +651,108 @@ TComputationNodeFactory GetPgFactory() {
 }
 
 namespace NCommon {
+
+void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::TUnboxedValuePod& value) {
+    using namespace NYson::NDetail;
+    if (!value) {
+        buf.Write(EntitySymbol);
+        return;
+    }
+
+    switch (type->GetTypeId()) {
+    case BOOLOID:
+        buf.Write(DatumGetBool(ScalarDatumFromPod(value)) ? TrueMarker : FalseMarker);
+        break;
+    case INT2OID:
+        buf.Write(Int64Marker);
+        buf.WriteVarI64(DatumGetInt16(ScalarDatumFromPod(value)));
+        break;
+    case INT4OID:
+        buf.Write(Int64Marker);
+        buf.WriteVarI64(DatumGetInt32(ScalarDatumFromPod(value)));
+        break;
+    case INT8OID:
+        buf.Write(Int64Marker);
+        buf.WriteVarI64(DatumGetInt64(ScalarDatumFromPod(value)));
+        break;
+    case FLOAT4OID: {
+        buf.Write(DoubleMarker);
+        double val = DatumGetFloat4(ScalarDatumFromPod(value));
+        buf.WriteMany((const char*)&val, sizeof(val));
+        break;
+    }
+    case FLOAT8OID: {
+        buf.Write(DoubleMarker);
+        double val = DatumGetFloat8(ScalarDatumFromPod(value));
+        buf.WriteMany((const char*)&val, sizeof(val));
+        break;
+    }
+    case BYTEAOID:
+    case VARCHAROID:
+    case TEXTOID: {
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        const auto x = (const text*)PointerDatumFromPod(value, true);
+        ui32 len = VARSIZE_ANY_EXHDR(x);
+        TString s;
+        if (len) {
+            s = TString::Uninitialized(len);
+            text_to_cstring_buffer(x, s.begin(), len + 1);
+        }
+
+        buf.Write(StringMarker);
+        buf.WriteVarI32(len);
+        buf.WriteMany(s);
+        break;
+    }
+    case CSTRINGOID: {
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        auto s = (const char*)PointerDatumFromPod(value, false);
+        auto len = strlen(s);
+        buf.Write(StringMarker);
+        buf.WriteVarI32(len);
+        buf.WriteMany(s, len);
+        break;
+    }
+    default:
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        Y_ENSURE(typeInfo.SendFuncId);
+        FmgrInfo finfo;
+        Zero(finfo);
+        fmgr_info(typeInfo.SendFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs == 1);
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 1;
+        callInfo->isnull = false;
+        callInfo->args[0] = { typeInfo.PassByValue ?
+            ScalarDatumFromPod(value):
+            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
+        auto x = (text*)finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_DEFER {
+            pfree(x);
+        };
+
+        ui32 len = VARSIZE_ANY_EXHDR(x);
+        TString s;
+        if (len) {
+            s = TString::Uninitialized(len);
+            text_to_cstring_buffer(x, s.begin(), len + 1);
+        }
+
+        buf.Write(StringMarker);
+        buf.WriteVarI32(len);
+        buf.WriteMany(s);
+        break;
+    }
+}
 
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions) {
@@ -651,7 +784,9 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        const auto x = (const text*)PointerDatumFromPod(value);
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        const auto x = (const text*)PointerDatumFromPod(value, true);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         if (len) {
             ret = TString::Uninitialized(len);
@@ -660,7 +795,9 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         break;
     }
     case CSTRINGOID: {
-        auto str = (const char*)PointerDatumFromPod(value);
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        auto str = (const char*)PointerDatumFromPod(value, false);
         ret = str;
         break;
     }
@@ -679,7 +816,9 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         callInfo->flinfo = &finfo;
         callInfo->nargs = 1;
         callInfo->isnull = false;
-        callInfo->args[0] = { value.IsBoxed() ? PointerDatumFromPod(value) : ScalarDatumFromPod(value), false };
+        callInfo->args[0] = { typeInfo.PassByValue ?
+            ScalarDatumFromPod(value):
+            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
         auto str = (char*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER {
@@ -692,7 +831,145 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     writer.OnStringScalar(ret);
 }
 
+NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
+    using namespace NYson::NDetail;
+    if (cmd == EntitySymbol) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    switch (type->GetTypeId()) {
+    case BOOLOID: {
+        YQL_ENSURE(cmd == FalseMarker || cmd == TrueMarker, "Expected either true or false, but got: " << TString(cmd).Quote());
+        return ScalarDatumToPod(BoolGetDatum(cmd == TrueMarker));
+    }
+    case INT2OID: {
+        CHECK_EXPECTED(cmd, Int64Marker);
+        auto x = i16(buf.ReadVarI64());
+        return ScalarDatumToPod(Int16GetDatum(x));
+    }
+    case INT4OID: {
+        CHECK_EXPECTED(cmd, Int64Marker);
+        auto x = i32(buf.ReadVarI64());
+        return ScalarDatumToPod(Int32GetDatum(x));
+    }
+    case INT8OID: {
+        CHECK_EXPECTED(cmd, Int64Marker);
+        auto x = buf.ReadVarI64();
+        return ScalarDatumToPod(Int64GetDatum(x));
+    }
+    case FLOAT4OID: {
+        CHECK_EXPECTED(cmd, DoubleMarker);
+        double x;
+        buf.ReadMany((char*)&x, sizeof(x));
+        return ScalarDatumToPod(Float4GetDatum(x));
+    }
+    case FLOAT8OID: {
+        CHECK_EXPECTED(cmd, DoubleMarker);
+        double x;
+        buf.ReadMany((char*)&x, sizeof(x));
+        return ScalarDatumToPod(Float8GetDatum(x));
+    }
+    case BYTEAOID:
+    case VARCHAROID:
+    case TEXTOID: {
+        CHECK_EXPECTED(cmd, StringMarker);
+        auto s = buf.ReadYtString();
+        SET_MEMORY_CONTEXT;
+        auto ret = cstring_to_text_with_len(s.Data(), s.Size());
+        return PointerDatumToPod((Datum)ret);
+    }
+    case CSTRINGOID: {
+        CHECK_EXPECTED(cmd, StringMarker);
+        auto s = buf.ReadYtString();
+        SET_MEMORY_CONTEXT;
+        auto ret = (char*)palloc(s.Size() + 1);
+        memcpy(ret, s.Data(), s.Size());
+        ret[s.Size()] = '\0';
+        return PointerDatumToPod((Datum)ret);
+    }
+    default:
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        auto s = buf.ReadYtString();
+        StringInfoData stringInfo;
+        stringInfo.data = (char*)s.Data();
+        stringInfo.len = s.Size();
+        stringInfo.maxlen = s.Size();
+        stringInfo.cursor = 0;
+
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        auto typeIOParam = MakeTypeIOParam(typeInfo);
+        Y_ENSURE(typeInfo.ReceiveFuncId);
+        FmgrInfo finfo;
+        Zero(finfo);
+        fmgr_info(typeInfo.ReceiveFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)&stringInfo, false };
+        callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
+
+        auto x = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_ENSURE(stringInfo.cursor == stringInfo.len);
+        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+    }
+}
+
 } // namespace NCommon
+
+TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {
+    switch (slot) {
+    case NUdf::EDataSlot::Bool:
+        return BOOLOID;
+    case NUdf::EDataSlot::Int16:
+        return INT2OID;
+    case NUdf::EDataSlot::Int32:
+        return INT4OID;
+    case NUdf::EDataSlot::Int64:
+        return INT8OID;
+    case NUdf::EDataSlot::Float:
+        return FLOAT4OID;
+    case NUdf::EDataSlot::Double:
+        return FLOAT8OID;
+    case NUdf::EDataSlot::String:
+        return BYTEAOID;
+    case NUdf::EDataSlot::Utf8:
+        return TEXTOID;
+    default:
+        return Nothing();
+    }
+}
+
+TMaybe<NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {
+    switch (typeId) {
+    case BOOLOID:
+        return NUdf::EDataSlot::Bool;
+    case INT2OID:
+        return NUdf::EDataSlot::Int16;
+    case INT4OID:
+        return NUdf::EDataSlot::Int32;
+    case INT8OID:
+        return NUdf::EDataSlot::Int64;
+    case FLOAT4OID:
+        return NUdf::EDataSlot::Float;
+    case FLOAT8OID:
+        return NUdf::EDataSlot::Double;
+    case BYTEAOID:
+        return NUdf::EDataSlot::String;
+    case TEXTOID:
+        return NUdf::EDataSlot::Utf8;
+    }
+
+    return Nothing();
+}
+
 } // NYql
 
 namespace NKikimr {
@@ -735,7 +1012,9 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        const auto x = (const text*)PointerDatumFromPod(value);
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        const auto x = (const text*)PointerDatumFromPod(value, true);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         NDetails::PackUInt32(len, buf);
         auto off = buf.Size();
@@ -745,7 +1024,9 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         break;
     }
     case CSTRINGOID: {
-        const auto x = (const char*)PointerDatumFromPod(value);
+        SET_MEMORY_CONTEXT;
+        TPAllocLeakGuard leakGuard;
+        const auto x = (const char*)PointerDatumFromPod(value, false);
         const auto len = strlen(x);
         NDetails::PackUInt32(len, buf);
         buf.Append(x, len);
@@ -767,7 +1048,9 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         callInfo->flinfo = &finfo;
         callInfo->nargs = 1;
         callInfo->isnull = false;
-        callInfo->args[0] = { value.IsBoxed() ? PointerDatumFromPod(value) : ScalarDatumFromPod(value), false };
+        callInfo->args[0] = { typeInfo.PassByValue ?
+            ScalarDatumFromPod(value) :
+            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER{
@@ -826,7 +1109,7 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
         const char* ptr = buf.data();
         buf.Skip(size);
-        char* ret = (char*)palloc(size + 1);
+        auto ret = (char*)palloc(size + 1);
         memcpy(ret, ptr, size);
         ret[size] = '\0';
         return PointerDatumToPod((Datum)ret);
@@ -869,3 +1152,4 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
 
 } // namespace NMiniKQL
 } // namespace NKikimr
+

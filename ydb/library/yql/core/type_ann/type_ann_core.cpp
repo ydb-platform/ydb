@@ -12,6 +12,7 @@
 #include <ydb/library/yql/core/yql_callable_transform.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
+#include <ydb/library/yql/core/yql_pg_utils.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
@@ -8786,6 +8787,40 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
     };
 
+    bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, TPositionHandle pos, TExprContext& ctx) {
+        pgType = 0;
+        if (type->GetKind() == ETypeAnnotationKind::Null) {
+            return true;
+        }
+
+        if (type->GetKind() == ETypeAnnotationKind::Data || type->GetKind() == ETypeAnnotationKind::Optional) {
+            const TTypeAnnotationNode* unpacked = RemoveOptionalType(type);
+            if (unpacked->GetKind() != ETypeAnnotationKind::Data) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos),
+                    "Nested optional type is not compatible to PG"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto slot = unpacked->Cast<TDataExprType>()->GetSlot();
+            auto convertedTypeId = ConvertToPgType(slot);
+            if (!convertedTypeId) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos),
+                    TStringBuilder() << "Type is not compatible to PG: " << slot));
+                return false;
+            }
+
+            pgType = *convertedTypeId;
+            return true;
+        } else if (type->GetKind() != ETypeAnnotationKind::Pg) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Expected PG type, but got: " << type->GetKind()));
+            return false;
+        } else {
+            pgType = type->Cast<TPgExprType>()->GetId();
+            return true;
+        }
+    }
+
     IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         bool isResolved = input->Content() == "PgResolvedCall";
         if (!EnsureMinArgsCount(*input, isResolved ? 2 : 1, ctx.Expr)) {
@@ -8808,18 +8843,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             TVector<ui32> argTypes;
             for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
                 auto type = input->Child(i)->GetTypeAnn();
-                if (type->GetKind() == ETypeAnnotationKind::Null) {
-                    argTypes.push_back(0);
-                    continue;
-                }
-
-                if (type->GetKind() != ETypeAnnotationKind::Pg) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Expected PG type for argument " << (i - (isResolved ? 2 : 1) + 1) << ", but got: " << type->GetKind() << " for function: " << name));
+                ui32 argType;
+                if (!ExtractPgType(type, argType, input->Child(i)->Pos(), ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                argTypes.push_back(type->Cast<TPgExprType>()->GetId());
+                argTypes.push_back(argType);
             }
 
             if (isResolved) {
@@ -8932,18 +8961,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TVector<ui32> argTypes;
         for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
             auto type = input->Child(i)->GetTypeAnn();
-            if (type->GetKind() == ETypeAnnotationKind::Null) {
-                argTypes.push_back(0);
-                continue;
-            }
-
-            if (type->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Expected PG type for argument " << (i - (isResolved ? 2 : 1) + 1) << ", but got: " << type->GetKind() << " for function: " << name));
+            ui32 argType;
+            if (!ExtractPgType(type, argType, input->Child(i)->Pos(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            argTypes.push_back(type->Cast<TPgExprType>()->GetId());
+            argTypes.push_back(argType);
         }
 
         if (isResolved) {
@@ -9513,14 +9536,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto type = input->Tail().GetTypeAnn();
         ui32 inputTypeId = 0;
-        if (type->GetKind() != ETypeAnnotationKind::Null) {
-            if (type->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Expected PG type for cast argument, but got: " << type->GetKind()));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            inputTypeId = type->Cast<TPgExprType>()->GetId();
+        if (!ExtractPgType(type, inputTypeId, input->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (inputTypeId != 0 && inputTypeId != targetTypeId) {

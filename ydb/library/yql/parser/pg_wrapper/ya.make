@@ -32,6 +32,8 @@ PEERDIR(
     library/cpp/resource
     ydb/library/yql/minikql/computation
     ydb/library/yql/parser/pg_catalog
+    ydb/library/yql/core
+    library/cpp/yson
 
     contrib/libs/icu
     contrib/libs/libc_compat

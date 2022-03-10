@@ -18,6 +18,7 @@ target_link_libraries(yql-sql-pg_dummy PUBLIC
   yql-sql-settings
   providers-common-codec
   yql-minikql-computation
+  library-yql-core
 )
 target_sources(yql-sql-pg_dummy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg_dummy/pg_sql_dummy.cpp

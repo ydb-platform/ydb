@@ -2287,6 +2287,9 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
         case TType::EKind::Null:
             return EValueRepresentation::Embedded;
 
+        case TType::EKind::Pg:
+            return EValueRepresentation::Any;
+
         default:
             Y_FAIL("Unsupported type.");
     }

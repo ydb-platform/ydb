@@ -1237,6 +1237,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         return holderFactory.GetEmptyContainer();
     }
 
+    case TType::EKind::Pg: {
+        auto pgType = static_cast<TPgType*>(type);
+        return ReadYsonValuePg(pgType, cmd, buf);
+    }
+
     default:
         YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
     }
@@ -1975,6 +1980,12 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, const NUdf::TUnbo
     case TType::EKind::EmptyDict: {
         buf.Write(BeginListSymbol);
         buf.Write(EndListSymbol);
+        break;
+    }
+
+    case TType::EKind::Pg: {
+        auto pgType = static_cast<TPgType*>(type);
+        WriteYsonValueInTableFormatPg(buf, pgType, value);
         break;
     }
 

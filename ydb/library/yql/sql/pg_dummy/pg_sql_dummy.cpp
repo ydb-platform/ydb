@@ -1,6 +1,7 @@
 #include <ydb/library/yql/sql/pg_sql.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
+#include <ydb/library/yql/core/yql_pg_utils.h>
 
 namespace NSQLTranslationPG {
 
@@ -26,6 +27,20 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     throw yexception() << "PG types are not supported";
 }
 
+void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value) {
+    Y_UNUSED(buf);
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
+NUdf::TUnboxedValue ReadYsonValuePg(NKikimr::NMiniKQL::TPgType* type, char cmd, TInputBuf& buf) {
+    Y_UNUSED(type);
+    Y_UNUSED(cmd);
+    Y_UNUSED(buf);
+    throw yexception() << "PG types are not supported";
+}
+
 } // namespace NCommon
 } // NYql
 
@@ -47,3 +62,17 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
 
 } // namespace NMiniKQL
 } // namespace NKikimr
+
+namespace NYql {
+
+TMaybe<ui32> ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
+    return Nothing();
+}
+
+TMaybe<NKikimr::NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {
+    Y_UNUSED(typeId);
+    return Nothing();
+}
+
+} // NYql

@@ -93,6 +93,8 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   library-cpp-resource
   yql-minikql-computation
   yql-parser-pg_catalog
+  library-yql-core
+  library-cpp-yson
   contrib-libs-icu
   contrib-libs-libc_compat
   Iconv::Iconv

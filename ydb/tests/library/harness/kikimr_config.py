@@ -154,6 +154,7 @@ class KikimrConfigGenerator(object):
             else:
                 self.n_to_select = min(5, nodes)
         self.__use_in_memory_pdisks = use_in_memory_pdisks or os.getenv('YDB_USE_IN_MEMORY_PDISKS') == 'true'
+        self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
         self.domain_name = domain_name
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
@@ -410,6 +411,8 @@ class KikimrConfigGenerator(object):
                 if self.__use_in_memory_pdisks:
                     pdisk_size_gb = disk_size / (1024*1024*1024)
                     pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb)
+                elif self.__pdisks_directory:
+                    pdisk_path = os.path.join(self.__pdisks_directory, str(pdisk_id))
                 else:
                     tmp_file = tempfile.NamedTemporaryFile(prefix="pdisk{}".format(pdisk_id), suffix=".data", dir=self._pdisk_store_path)
                     pdisk_path = tmp_file.name

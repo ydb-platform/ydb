@@ -170,7 +170,7 @@ private:
         TVector<NDqProto::TData> chunks;
         for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
             NDqProto::TData data;
-            auto hasData = channel->Pop(data, remain);
+            hasData = channel->Pop(data, remain);
             dataSize = data.GetRaw().size();
             isFinished = !hasData && channel->IsFinished();
 

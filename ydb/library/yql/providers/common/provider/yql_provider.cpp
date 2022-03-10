@@ -22,10 +22,11 @@ namespace NCommon {
 using namespace NNodes;
 
 namespace {
-    std::array<std::string_view, 5> Formats = {
+    std::array<std::string_view, 6> Formats = {
         "csv_with_names"sv,
         "tsv_with_names"sv,
         "json_list"sv,
+        "json"sv,
         "raw"sv,
         "json_each_row"sv
     };

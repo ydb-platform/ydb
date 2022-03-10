@@ -958,20 +958,17 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 3 : 2);
 
-        uint64_t totalDurationUs = 0;
         uint64_t totalCpuTimeUs = 0;
 
         if (UseNewEngine) {
             auto& phase0 = stats.query_phases(0);
             UNIT_ASSERT(phase0.table_access().size() == 0);
-            totalDurationUs += phase0.duration_us();
             totalCpuTimeUs += phase0.cpu_time_us();
         }
 
         auto& phase0 = stats.query_phases(UseNewEngine ? 1 : 0);
         UNIT_ASSERT(phase0.duration_us() > 0);
         UNIT_ASSERT(phase0.cpu_time_us() > 0);
-        totalDurationUs += phase0.duration_us();
         totalCpuTimeUs += phase0.cpu_time_us();
 
         UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 1);
@@ -984,7 +981,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto& phase1 = stats.query_phases(UseNewEngine ? 2 : 1);
         UNIT_ASSERT(phase1.duration_us() > 0);
         UNIT_ASSERT(phase1.cpu_time_us() > 0);
-        totalDurationUs += phase1.duration_us();
         totalCpuTimeUs += phase1.cpu_time_us();
         UNIT_ASSERT_VALUES_EQUAL(phase1.table_access().size(), UseNewEngine ? 1 : 2);
         if (!UseNewEngine) {
@@ -999,7 +995,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(phase1.table_access(0).updates().bytes() > 0);
         UNIT_ASSERT(!phase1.table_access(0).has_deletes());
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.total_duration_us(), totalDurationUs);
         UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
     }
 

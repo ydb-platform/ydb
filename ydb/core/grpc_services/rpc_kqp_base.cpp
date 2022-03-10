@@ -9,13 +9,11 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
     const auto& kqpStats = kqpResponse.GetQueryStats();
 
     uint64_t totalCpuTimeUs = 0;
-    uint64_t totalDurationUs = 0;
 
     for (auto& exec : kqpStats.GetExecutions()) {
         auto durationUs = exec.GetDurationUs();
         auto cpuTimeUs = exec.GetCpuTimeUs();
 
-        totalDurationUs += durationUs;
         totalCpuTimeUs += cpuTimeUs;
 
         auto& toPhase = *queryStats.add_query_phases();
@@ -64,7 +62,7 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
 
     queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs());
     queryStats.set_total_cpu_time_us(totalCpuTimeUs);
-    queryStats.set_total_duration_us(totalDurationUs);
+    queryStats.set_total_duration_us(kqpStats.GetDurationUs());
 
     queryStats.set_query_plan(kqpResponse.GetQueryPlan());
 }

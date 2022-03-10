@@ -5,6 +5,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/sql_types/simple_types.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -3119,14 +3120,36 @@ TNodePtr BuildDataType(TPosition pos, const TString& typeName) {
     return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, typeName, TNodeFlags::Default)});
 }
 
+TMaybe<TString> LookupSimpleType(const TStringBuf& alias, bool flexibleTypes) {
+    if (auto sqlAlias = LookupSimpleTypeBySqlAlias(alias, flexibleTypes)) {
+        return TString(*sqlAlias);
+    }
+
+    TString normalized = to_lower(TString(alias));
+    TString pgType;
+    if (normalized.StartsWith("_pg")) {
+        pgType = normalized.substr(3);
+    } else if (normalized.StartsWith("pg")) {
+        pgType = normalized.substr(2);
+    } else {
+        return {};
+    }
+
+    if (NPg::HasType(pgType)) {
+        return normalized;
+    }
+
+    return {};
+}
+
 TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly) {
-    auto found = LookupSimpleTypeBySqlAlias(typeName, ctx.FlexibleTypes);
+    auto found = LookupSimpleType(typeName, ctx.FlexibleTypes);
     if (!found) {
         ctx.Error(pos) << "Unknown simple type '" << typeName << "'";
         return {};
     }
 
-    auto type = ToString(*found);
+    auto type = *found;
     if (type == "Void" || type == "Unit" || type == "Generic" || type == "EmptyList" || type == "EmptyDict") {
         if (dataOnly) {
             ctx.Error(pos) << "Only data types are allowed here, but got: '" << typeName << "'";
@@ -3134,6 +3157,16 @@ TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, 
         }
         type += "Type";
         return new TCallNodeImpl(pos, type, {});
+    }
+
+    if (type.StartsWith("_pg") || type.StartsWith("pg")) {
+        TString pgType;
+        if (type.StartsWith("_pg")) {
+            pgType = "_" + type.substr(3);
+        } else {
+            pgType = type.substr(2);
+        }
+        return new TCallNodeImpl(pos, "PgType", { BuildQuotedAtom(pos, pgType, TNodeFlags::Default) });
     }
 
     return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, type, TNodeFlags::Default) });

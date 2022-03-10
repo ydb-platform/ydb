@@ -9,7 +9,6 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h>
-#include <ydb/library/yql/core/sql_types/simple_types.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
@@ -4239,7 +4238,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     } else {
         const bool flexibleTypes = Ctx.FlexibleTypes;
         bool columnOrType = false;
-        if (auto simpleType = LookupSimpleTypeBySqlAlias(name, flexibleTypes); simpleType && typePossible && suffixIsEmpty) {
+        if (auto simpleType = LookupSimpleType(name, flexibleTypes); simpleType && typePossible && suffixIsEmpty) {
             auto columnRefsState = Ctx.GetColumnReferenceState();
             if (tail.Count > 0 || columnRefsState == EColumnRefState::Deny || !flexibleTypes) {
                 // a type

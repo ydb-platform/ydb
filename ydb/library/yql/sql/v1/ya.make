@@ -21,6 +21,7 @@ PEERDIR(
     ydb/library/yql/parser/proto_ast/gen/v1
     ydb/library/yql/parser/proto_ast/gen/v1_ansi
     ydb/library/yql/parser/proto_ast/gen/v1_proto
+    ydb/library/yql/parser/pg_catalog
 )
 
 SRCS(

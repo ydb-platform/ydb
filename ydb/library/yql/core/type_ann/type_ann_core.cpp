@@ -9561,7 +9561,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto typeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
+        auto type = TString(input->Child(0)->Content());
+        if (!NPg::HasType(type)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
+                TStringBuilder() << "Unknown type: '" << type << "'"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto typeId = NPg::LookupType(type).TypeId;
         input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(ctx.Expr.MakeType<TPgExprType>(typeId)));
         return IGraphTransformer::TStatus::Ok;
     }

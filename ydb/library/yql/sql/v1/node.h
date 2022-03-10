@@ -1210,6 +1210,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
     TNodePtr BuildDataType(TPosition pos, const TString& typeName);
+    TMaybe<TString> LookupSimpleType(const TStringBuf& alias, bool flexibleTypes);
     TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly);
     TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
     TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);

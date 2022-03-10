@@ -1179,7 +1179,7 @@ private:
     }
 
     void Visit(const TPgExprType& type) final {
-        Out_ << "pg_" << type.GetName();
+        Out_ << "pg" << type.GetName();
     }
 
     void Visit(const TWorldExprType& type) final {

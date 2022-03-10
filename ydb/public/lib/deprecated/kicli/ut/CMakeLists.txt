@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-public-lib-deprecated-kicli-ut)
-target_compile_options(ydb-public-lib-deprecated-kicli-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-public-lib-deprecated-kicli-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli
-)
-target_link_libraries(ydb-public-lib-deprecated-kicli-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  lib-deprecated-kicli
-  ydb-core-client
-  ydb-core-testlib
-)
-target_sources(ydb-public-lib-deprecated-kicli-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/deprecated/kicli/cpp_ut.cpp
-)
-add_test(
-  NAME
-  ydb-public-lib-deprecated-kicli-ut
-  COMMAND
-  ydb-public-lib-deprecated-kicli-ut
-)
-target_link_flags(ydb-public-lib-deprecated-kicli-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-public-lib-deprecated-kicli-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

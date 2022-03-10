@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-scheme-ut)
-target_include_directories(ydb-core-scheme-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme
-)
-target_link_libraries(ydb-core-scheme-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-scheme
-)
-target_sources(ydb-core-scheme-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_borders_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/scheme/scheme_tablecell_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-scheme-ut
-  COMMAND
-  ydb-core-scheme-ut
-)
-target_link_flags(ydb-core-scheme-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-scheme-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

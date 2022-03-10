@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-control-ut)
-target_include_directories(ydb-core-control-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/control
-)
-target_link_libraries(ydb-core-control-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-control
-  cpp-actors-core
-  cpp-actors-interconnect
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-mind
-  ydb-core-mon
-)
-target_sources(ydb-core-control-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-control-ut
-  COMMAND
-  ydb-core-control-ut
-)
-target_link_flags(ydb-core-control-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-control-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

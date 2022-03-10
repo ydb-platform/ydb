@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-yq-libs-hmac-ut)
-target_include_directories(ydb-core-yq-libs-hmac-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/hmac
-)
-target_link_libraries(ydb-core-yq-libs-hmac-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yq-libs-hmac
-)
-target_sources(ydb-core-yq-libs-hmac-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/hmac/ut/hmac_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-yq-libs-hmac-ut
-  COMMAND
-  ydb-core-yq-libs-hmac-ut
-)
-target_link_flags(ydb-core-yq-libs-hmac-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-yq-libs-hmac-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

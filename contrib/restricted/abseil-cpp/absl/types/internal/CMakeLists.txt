@@ -6,9 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(absl-types-internal INTERFACE)
-target_link_libraries(absl-types-internal INTERFACE
-  contrib-libs-cxxsupp
-  yutil
-)
+if (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-persqueue-ut_slow)
-target_compile_options(ydb-core-persqueue-ut_slow PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-persqueue-ut_slow PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue
-)
-target_link_libraries(ydb-core-persqueue-ut_slow PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-persqueue
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-)
-target_sources(ydb-core-persqueue-ut_slow PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_ut_slow.cpp
-)
-add_test(
-  NAME
-  ydb-core-persqueue-ut_slow
-  COMMAND
-  ydb-core-persqueue-ut_slow
-)
-target_link_flags(ydb-core-persqueue-ut_slow
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-persqueue-ut_slow)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

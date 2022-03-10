@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-ast-ut)
-target_include_directories(ydb-library-yql-ast-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast
-)
-target_link_libraries(ydb-library-yql-ast-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-yql-ast
-)
-target_sources(ydb-library-yql-ast-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_check_args_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_expr_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_type_string_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-ast-ut
-  COMMAND
-  ydb-library-yql-ast-ut
-)
-target_link_flags(ydb-library-yql-ast-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-ast-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

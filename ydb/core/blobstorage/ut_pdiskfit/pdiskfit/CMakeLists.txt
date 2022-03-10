@@ -6,31 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(pdiskfit)
-target_link_libraries(pdiskfit PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  library-cpp-getopt
-  cpp-string_utils-parse_size
-  ydb-core-blobstorage
-  blobstorage-ut_pdiskfit-lib
-  ydb-core-mon
-)
-target_sources(pdiskfit PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/pdiskfit/pdiskfit.cpp
-)
-target_link_flags(pdiskfit
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(pdiskfit)
+if (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

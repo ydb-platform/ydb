@@ -6,47 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-schemeshard-ut_filestore_reboots)
-target_compile_options(ydb-core-tx-schemeshard-ut_filestore_reboots PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-schemeshard-ut_filestore_reboots PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
-)
-target_link_libraries(ydb-core-tx-schemeshard-ut_filestore_reboots PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-schemeshard
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-  ydb-core-tx
-  tx-schemeshard-ut_helpers
-  udf-service-exception_policy
-)
-target_sources(ydb-core-tx-schemeshard-ut_filestore_reboots PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_filestore_reboots.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-schemeshard-ut_filestore_reboots
-  COMMAND
-  ydb-core-tx-schemeshard-ut_filestore_reboots
-)
-target_link_flags(ydb-core-tx-schemeshard-ut_filestore_reboots
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-schemeshard-ut_filestore_reboots)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

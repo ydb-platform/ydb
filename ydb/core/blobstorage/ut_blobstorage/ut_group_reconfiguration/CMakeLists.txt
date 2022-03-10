@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ut_group_reconfiguration)
-target_include_directories(ut_group_reconfiguration PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
-)
-target_link_libraries(ut_group_reconfiguration PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-ut_blobstorage-lib
-)
-target_sources(ut_group_reconfiguration PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/race.cpp
-)
-add_test(
-  NAME
-  ut_group_reconfiguration
-  COMMAND
-  ut_group_reconfiguration
-)
-target_link_flags(ut_group_reconfiguration
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ut_group_reconfiguration)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

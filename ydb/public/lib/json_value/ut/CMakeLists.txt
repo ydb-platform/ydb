@@ -6,40 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-public-lib-json_value-ut)
-target_include_directories(ydb-public-lib-json_value-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/json_value
-)
-target_link_libraries(ydb-public-lib-json_value-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  public-lib-json_value
-  library-cpp-json
-  cpp-testing-unittest
-  cpp-client-ydb_proto
-)
-target_sources(ydb-public-lib-json_value-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/json_value/ydb_json_value_ut.cpp
-)
-add_test(
-  NAME
-  ydb-public-lib-json_value-ut
-  COMMAND
-  ydb-public-lib-json_value-ut
-)
-target_link_flags(ydb-public-lib-json_value-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-public-lib-json_value-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

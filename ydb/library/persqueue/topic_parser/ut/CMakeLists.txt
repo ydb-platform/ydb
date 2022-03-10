@@ -6,39 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-persqueue-topic_parser-ut)
-target_include_directories(ydb-library-persqueue-topic_parser-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser
-)
-target_link_libraries(ydb-library-persqueue-topic_parser-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-persqueue-topic_parser
-  library-cpp-getopt
-  library-cpp-svnversion
-)
-target_sources(ydb-library-persqueue-topic_parser-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/ut/topic_names_converter_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-persqueue-topic_parser-ut
-  COMMAND
-  ydb-library-persqueue-topic_parser-ut
-)
-target_link_flags(ydb-library-persqueue-topic_parser-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-persqueue-topic_parser-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-kqp-node-ut)
-target_compile_options(ydb-core-kqp-node-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-kqp-node-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/node
-)
-target_link_libraries(ydb-core-kqp-node-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-kqp-node
-  kqp-ut-common
-)
-target_sources(ydb-core-kqp-node-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/node/kqp_node_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-kqp-node-ut
-  COMMAND
-  ydb-core-kqp-node-ut
-)
-target_link_flags(ydb-core-kqp-node-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-kqp-node-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

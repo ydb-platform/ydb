@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-vdisk-hullop-ut)
-target_include_directories(ydb-core-blobstorage-vdisk-hullop-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop
-)
-target_link_libraries(ydb-core-blobstorage-vdisk-hullop-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-vdisk-hullop
-  library-cpp-getopt
-  library-cpp-svnversion
-  core-blobstorage-pdisk
-)
-target_sources(ydb-core-blobstorage-vdisk-hullop-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactdeferredqueue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_readbatch_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_delayedresp_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-vdisk-hullop-ut
-  COMMAND
-  ydb-core-blobstorage-vdisk-hullop-ut
-)
-target_link_flags(ydb-core-blobstorage-vdisk-hullop-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-vdisk-hullop-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

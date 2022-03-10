@@ -6,43 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-public-udf-ut)
-target_compile_options(ydb-library-yql-public-udf-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-library-yql-public-udf-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf
-)
-target_link_libraries(ydb-library-yql-public-udf-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-public-udf
-  udf-service-exception_policy
-)
-target_sources(ydb-library-yql-public-udf-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_counter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_value_builder_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-public-udf-ut
-  COMMAND
-  ydb-library-yql-public-udf-ut
-)
-target_link_flags(ydb-library-yql-public-udf-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-public-udf-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

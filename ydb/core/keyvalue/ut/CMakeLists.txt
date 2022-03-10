@@ -6,46 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-keyvalue-ut)
-target_compile_options(ydb-core-keyvalue-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-keyvalue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue
-)
-target_link_libraries(ydb-core-keyvalue-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-keyvalue
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-)
-target_sources(ydb-core-keyvalue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collector_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_read_request_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-keyvalue-ut
-  COMMAND
-  ydb-core-keyvalue-ut
-)
-target_link_flags(ydb-core-keyvalue-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-keyvalue-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

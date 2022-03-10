@@ -1,0 +1,43 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(client-extensions-discovery_mutator-ut)
+target_include_directories(client-extensions-discovery_mutator-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator
+)
+target_link_libraries(client-extensions-discovery_mutator-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  client-extensions-discovery_mutator
+  cpp-client-ydb_table
+)
+target_sources(client-extensions-discovery_mutator-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator_ut.cpp
+)
+add_test(
+  NAME
+  client-extensions-discovery_mutator-ut
+  COMMAND
+  client-extensions-discovery_mutator-ut
+)
+target_link_flags(client-extensions-discovery_mutator-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(client-extensions-discovery_mutator-ut)

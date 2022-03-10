@@ -6,39 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-http_proxy-authorization-ut)
-target_include_directories(ydb-library-http_proxy-authorization-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization
-)
-target_link_libraries(ydb-library-http_proxy-authorization-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-http_proxy-authorization
-  library-http_proxy-error
-)
-target_sources(ydb-library-http_proxy-authorization-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/auth_helpers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/signature_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-http_proxy-authorization-ut
-  COMMAND
-  ydb-library-http_proxy-authorization-ut
-)
-target_link_flags(ydb-library-http_proxy-authorization-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-http_proxy-authorization-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

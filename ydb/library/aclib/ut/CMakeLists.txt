@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-aclib-ut)
-target_include_directories(ydb-library-aclib-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/aclib
-)
-target_link_libraries(ydb-library-aclib-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-aclib
-)
-target_sources(ydb-library-aclib-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/aclib/aclib_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-aclib-ut
-  COMMAND
-  ydb-library-aclib-ut
-)
-target_link_flags(ydb-library-aclib-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-aclib-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

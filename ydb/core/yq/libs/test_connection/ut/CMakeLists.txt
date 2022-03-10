@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-yq-libs-test_connection-ut)
-target_compile_options(ydb-core-yq-libs-test_connection-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-yq-libs-test_connection-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_proxy
-)
-target_link_libraries(ydb-core-yq-libs-test_connection-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yq-libs-control_plane_proxy
-  cpp-testing-unittest
-)
-target_sources(ydb-core-yq-libs-test_connection-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/ut/test_connection_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-yq-libs-test_connection-ut
-  COMMAND
-  ydb-core-yq-libs-test_connection-ut
-)
-target_link_flags(ydb-core-yq-libs-test_connection-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-yq-libs-test_connection-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

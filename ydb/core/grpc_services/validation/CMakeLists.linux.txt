@@ -1,0 +1,34 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(validation)
+target_link_libraries(validation PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  contrib-libs-protoc
+  api-protos-annotations
+)
+target_sources(validation PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/validation/helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/validation/main.cpp
+)
+target_link_flags(validation
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(validation)

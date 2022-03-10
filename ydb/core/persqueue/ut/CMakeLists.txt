@@ -6,50 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-persqueue-ut)
-target_compile_options(ydb-core-persqueue-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-persqueue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue
-)
-target_link_libraries(ydb-core-persqueue-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-persqueue
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-  ydb_persqueue_core-ut-ut_utils
-)
-target_sources(ydb-core-persqueue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/internals_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/pq_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/type_codecs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/user_info_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-persqueue-ut
-  COMMAND
-  ydb-core-persqueue-ut
-)
-target_link_flags(ydb-core-persqueue-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-persqueue-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

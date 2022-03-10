@@ -6,39 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-storagepoolmon-ut)
-target_link_libraries(ydb-core-blobstorage-storagepoolmon-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-cpp-getopt
-  library-cpp-svnversion
-  core-blobstorage-storagepoolmon
-  ydb-core-testlib
-  core-testlib-actors
-  core-testlib-basics
-)
-target_sources(ydb-core-blobstorage-storagepoolmon-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/storagepoolmon/ut/storagepoolmon_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-storagepoolmon-ut
-  COMMAND
-  ydb-core-blobstorage-storagepoolmon-ut
-)
-target_link_flags(ydb-core-blobstorage-storagepoolmon-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-storagepoolmon-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

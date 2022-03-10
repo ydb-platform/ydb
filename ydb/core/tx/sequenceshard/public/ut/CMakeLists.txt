@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-sequenceshard-public-ut)
-target_compile_options(ydb-core-tx-sequenceshard-public-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-sequenceshard-public-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/public
-)
-target_link_libraries(ydb-core-tx-sequenceshard-public-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  tx-sequenceshard-public
-)
-add_test(
-  NAME
-  ydb-core-tx-sequenceshard-public-ut
-  COMMAND
-  ydb-core-tx-sequenceshard-public-ut
-)
-target_link_flags(ydb-core-tx-sequenceshard-public-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-sequenceshard-public-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

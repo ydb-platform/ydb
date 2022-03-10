@@ -6,48 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-cms-ut)
-target_compile_options(ydb-core-cms-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-cms-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms
-)
-target_link_libraries(ydb-core-cms-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-cms
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-testlib
-)
-target_sources(ydb-core-cms-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cluster_info_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_tenants_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/cms_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/downtime_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/ut_helpers.cpp
-)
-add_test(
-  NAME
-  ydb-core-cms-ut
-  COMMAND
-  ydb-core-cms-ut
-)
-target_link_flags(ydb-core-cms-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-cms-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

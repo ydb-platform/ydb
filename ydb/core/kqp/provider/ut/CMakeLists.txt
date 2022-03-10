@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-kqp-provider-ut)
-target_compile_options(ydb-core-kqp-provider-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-kqp-provider-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider
-)
-target_link_libraries(ydb-core-kqp-provider-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-kqp-provider
-  core-client-minikql_result_lib
-  kqp-ut-common
-)
-target_sources(ydb-core-kqp-provider-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_gateway_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-kqp-provider-ut
-  COMMAND
-  ydb-core-kqp-provider-ut
-)
-target_link_flags(ydb-core-kqp-provider-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-kqp-provider-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-security-ut)
-target_compile_options(ydb-core-security-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-security-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/security
-)
-target_link_libraries(ydb-core-security-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-security
-  ydb-core-testlib
-)
-target_sources(ydb-core-security-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/security/ticket_parser_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-security-ut
-  COMMAND
-  ydb-core-security-ut
-)
-target_link_flags(ydb-core-security-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-security-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

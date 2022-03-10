@@ -1,0 +1,37 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-library-naming_conventions-ut)
+target_include_directories(ydb-library-naming_conventions-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions
+)
+target_link_libraries(ydb-library-naming_conventions-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-library-naming_conventions
+)
+target_sources(ydb-library-naming_conventions-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions/ut/naming_conventions_ut.cpp
+)
+add_test(
+  NAME
+  ydb-library-naming_conventions-ut
+  COMMAND
+  ydb-library-naming_conventions-ut
+)
+target_link_flags(ydb-library-naming_conventions-ut
+  PUBLIC
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+)
+vcs_info(ydb-library-naming_conventions-ut)

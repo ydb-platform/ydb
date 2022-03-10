@@ -6,45 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-dq-runtime-ut)
-target_compile_options(ydb-library-yql-dq-runtime-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-library-yql-dq-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime
-)
-target_link_libraries(ydb-library-yql-dq-runtime-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-dq-runtime
-  cpp-testing-unittest
-  udf-service-exception_policy
-  yql-sql-pg_dummy
-)
-target_sources(ydb-library-yql-dq-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_channel_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/runtime/ut/ut_helper.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-dq-runtime-ut
-  COMMAND
-  ydb-library-yql-dq-runtime-ut
-)
-target_link_flags(ydb-library-yql-dq-runtime-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-dq-runtime-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

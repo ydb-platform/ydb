@@ -6,50 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-mind-ut_fat)
-target_compile_options(ydb-core-mind-ut_fat PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-mind-ut_fat PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind
-)
-target_link_libraries(ydb-core-mind-ut_fat PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-mind
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-base
-  core-blobstorage-base
-  core-blobstorage-crypto
-  core-blobstorage-nodewarden
-  core-blobstorage-pdisk
-  blobstorage-vdisk-common
-  ydb-core-testlib
-)
-target_sources(ydb-core-mind-ut_fat PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/ut_fat/blobstorage_node_warden_ut_fat.cpp
-)
-add_test(
-  NAME
-  ydb-core-mind-ut_fat
-  COMMAND
-  ydb-core-mind-ut_fat
-)
-target_link_flags(ydb-core-mind-ut_fat
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-mind-ut_fat)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

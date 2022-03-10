@@ -6,29 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(btree_benchmark)
-target_link_libraries(btree_benchmark PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  testing-benchmark-main
-  cpp-threading-skip_list
-  ydb-core-util
-)
-target_sources(btree_benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
-)
-target_link_flags(btree_benchmark
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(btree_benchmark)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

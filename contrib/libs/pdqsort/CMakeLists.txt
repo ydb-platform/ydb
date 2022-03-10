@@ -6,5 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(contrib-libs-pdqsort INTERFACE)
+if (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

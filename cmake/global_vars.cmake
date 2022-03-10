@@ -6,7 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-set(COMMON_PROTOC_FLAGS -I=${CMAKE_SOURCE_DIR} -I=${CMAKE_BINARY_DIR})
-set(YASM_FLAGS -f elf64 -D UNIX -D _x86_64_ -D_YASM_ -g dwarf2)
-set(BISON_FLAGS -v)
-set(RAGEL_FLAGS -L -I ${CMAKE_SOURCE_DIR}/)
+if(UNIX)
+  set(COMMON_PROTOC_FLAGS -I=${CMAKE_SOURCE_DIR} -I=${CMAKE_BINARY_DIR})
+  set(YASM_FLAGS -f elf64 -D UNIX -D _x86_64_ -D_YASM_ -g dwarf2)
+  set(BISON_FLAGS -v)
+  set(RAGEL_FLAGS -L -I ${CMAKE_SOURCE_DIR}/)
+endif()
+
+if(APPLE)
+  set(COMMON_PROTOC_FLAGS -I=${CMAKE_SOURCE_DIR} -I=${CMAKE_BINARY_DIR})
+  set(YASM_FLAGS -f macho64 -D DARWIN -D UNIX -D _x86_64_ -D_YASM_)
+  set(BISON_FLAGS -v)
+  set(RAGEL_FLAGS -L -I ${CMAKE_SOURCE_DIR}/)
+endif()
+

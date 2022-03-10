@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-kesus-tablet-ut)
-target_compile_options(ydb-core-kesus-tablet-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-kesus-tablet-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet
-)
-target_link_libraries(ydb-core-kesus-tablet-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-kesus-tablet
-  cpp-testing-gmock_in_unittest
-  ydb-core-testlib
-)
-target_sources(ydb-core-kesus-tablet-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/tablet_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_resource_tree_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/ut_helpers.cpp
-)
-add_test(
-  NAME
-  ydb-core-kesus-tablet-ut
-  COMMAND
-  ydb-core-kesus-tablet-ut
-)
-target_link_flags(ydb-core-kesus-tablet-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-kesus-tablet-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

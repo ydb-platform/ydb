@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-ut_blobstorage-ut_osiris)
-target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_osiris PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
-)
-target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_osiris PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-ut_blobstorage-lib
-)
-target_sources(ydb-core-blobstorage-ut_blobstorage-ut_osiris PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/osiris.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-ut_blobstorage-ut_osiris
-  COMMAND
-  ydb-core-blobstorage-ut_blobstorage-ut_osiris
-)
-target_link_flags(ydb-core-blobstorage-ut_blobstorage-ut_osiris
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_osiris)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

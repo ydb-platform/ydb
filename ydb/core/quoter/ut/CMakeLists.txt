@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-quoter-ut)
-target_compile_options(ydb-core-quoter-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-quoter-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter
-)
-target_link_libraries(ydb-core-quoter-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-quoter
-  cpp-testing-gmock_in_unittest
-  ydb-core-testlib
-)
-target_sources(ydb-core-quoter-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/kesus_quoter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/quoter_service_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/quoter/ut_helpers.cpp
-)
-add_test(
-  NAME
-  ydb-core-quoter-ut
-  COMMAND
-  ydb-core-quoter-ut
-)
-target_link_flags(ydb-core-quoter-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-quoter-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,28 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(enum_parser)
-target_link_libraries(enum_parser PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-getopt-small
-  tools-enum_parser-parse_enum
-)
-target_sources(enum_parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/tools/enum_parser/enum_parser/main.cpp
-)
-target_link_flags(enum_parser
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(enum_parser)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

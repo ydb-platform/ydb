@@ -6,48 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-vdisk-huge-ut)
-target_include_directories(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge
-)
-target_link_libraries(ydb-core-blobstorage-vdisk-huge-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-vdisk-huge
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-base
-  ydb-core-blobstorage
-  core-blobstorage-groupinfo
-  ydb-core-erasure
-)
-target_sources(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ctx_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/top_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-vdisk-huge-ut
-  COMMAND
-  ydb-core-blobstorage-vdisk-huge-ut
-)
-target_link_flags(ydb-core-blobstorage-vdisk-huge-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-vdisk-huge-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

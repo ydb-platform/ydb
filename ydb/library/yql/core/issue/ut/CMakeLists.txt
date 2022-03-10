@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-core-issue-ut)
-target_include_directories(ydb-library-yql-core-issue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/issue
-)
-target_link_libraries(ydb-library-yql-core-issue-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-core-issue
-)
-target_sources(ydb-library-yql-core-issue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/issue/yql_issue_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-core-issue-ut
-  COMMAND
-  ydb-library-yql-core-issue-ut
-)
-target_link_flags(ydb-library-yql-core-issue-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-core-issue-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

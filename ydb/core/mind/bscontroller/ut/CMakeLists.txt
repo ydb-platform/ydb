@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-mind-bscontroller-ut)
-target_include_directories(ydb-core-mind-bscontroller-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller
-)
-target_link_libraries(ydb-core-mind-bscontroller-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-mind-bscontroller
-  cpp-actors-util
-  ydb-core-yql_testlib
-)
-target_sources(ydb-core-mind-bscontroller-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/grouper_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_mapper_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/mv_object_map_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-mind-bscontroller-ut
-  COMMAND
-  ydb-core-mind-bscontroller-ut
-)
-target_link_flags(ydb-core-mind-bscontroller-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-mind-bscontroller-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-nodewarden-ut_sequence)
-target_compile_options(ydb-core-blobstorage-nodewarden-ut_sequence PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-blobstorage-nodewarden-ut_sequence PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-blobstorage-base
-  core-blobstorage-crypto
-  core-blobstorage-nodewarden
-  core-blobstorage-pdisk
-  ydb-core-testlib
-)
-target_sources(ydb-core-blobstorage-nodewarden-ut_sequence PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/ut_sequence/dsproxy_config_retrieval.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-nodewarden-ut_sequence
-  COMMAND
-  ydb-core-blobstorage-nodewarden-ut_sequence
-)
-target_link_flags(ydb-core-blobstorage-nodewarden-ut_sequence
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-nodewarden-ut_sequence)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,43 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-services-persqueue_cluster_discovery-ut)
-target_compile_options(ydb-services-persqueue_cluster_discovery-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-services-persqueue_cluster_discovery-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_cluster_discovery
-)
-target_link_libraries(ydb-services-persqueue_cluster_discovery-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-persqueue_cluster_discovery
-  cpp-actors-http
-  ydb-core-testlib
-  api-grpc
-)
-target_sources(ydb-services-persqueue_cluster_discovery-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_cluster_discovery/cluster_discovery_service_ut.cpp
-)
-add_test(
-  NAME
-  ydb-services-persqueue_cluster_discovery-ut
-  COMMAND
-  ydb-services-persqueue_cluster_discovery-ut
-)
-target_link_flags(ydb-services-persqueue_cluster_discovery-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-services-persqueue_cluster_discovery-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,48 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-mind-hive-ut)
-target_compile_options(ydb-core-mind-hive-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-mind-hive-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive
-)
-target_link_libraries(ydb-core-mind-hive-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-mind-hive
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-base
-  ydb-core-mind
-  ydb-core-testlib
-)
-target_sources(ydb-core-mind-hive-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/sequencer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_impl_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-mind-hive-ut
-  COMMAND
-  ydb-core-mind-hive-ut
-)
-target_link_flags(ydb-core-mind-hive-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-mind-hive-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,39 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-vdisk-query-ut)
-target_include_directories(ydb-core-blobstorage-vdisk-query-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query
-)
-target_link_libraries(ydb-core-blobstorage-vdisk-query-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-vdisk-query
-  blobstorage-vdisk-huge
-  ydb-core-protos
-)
-target_sources(ydb-core-blobstorage-vdisk-query-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_spacetracker_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-vdisk-query-ut
-  COMMAND
-  ydb-core-blobstorage-vdisk-query-ut
-)
-target_link_flags(ydb-core-blobstorage-vdisk-query-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-vdisk-query-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -1,0 +1,45 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-library-yql-public-issue-ut)
+target_include_directories(ydb-library-yql-public-issue-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue
+)
+target_link_libraries(ydb-library-yql-public-issue-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  yql-public-issue
+)
+target_sources(ydb-library-yql-public-issue-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_manager_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_utils_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_warning_ut.cpp
+)
+add_test(
+  NAME
+  ydb-library-yql-public-issue-ut
+  COMMAND
+  ydb-library-yql-public-issue-ut
+)
+target_link_flags(ydb-library-yql-public-issue-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-library-yql-public-issue-ut)

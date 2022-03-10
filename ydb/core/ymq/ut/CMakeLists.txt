@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-ymq-ut)
-target_link_libraries(ydb-core-ymq-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-ymq-base
-  core-ymq-http
-  library-http_proxy-error
-)
-target_sources(ydb-core-ymq-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/queue_id_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/ut/params_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-ymq-ut
-  COMMAND
-  ydb-core-ymq-ut
-)
-target_link_flags(ydb-core-ymq-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-ymq-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

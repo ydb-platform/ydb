@@ -6,34 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-schlab-ut)
-target_link_libraries(ydb-library-schlab-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-schlab-schoot
-)
-target_sources(ydb-library-schlab-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/schlab/ut/schlab_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-schlab-ut
-  COMMAND
-  ydb-library-schlab-ut
-)
-target_link_flags(ydb-library-schlab-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-schlab-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

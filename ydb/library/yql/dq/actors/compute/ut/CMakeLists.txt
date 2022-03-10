@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-dq-actors-compute-ut)
-target_include_directories(ydb-library-yql-dq-actors-compute-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute
-)
-target_link_libraries(ydb-library-yql-dq-actors-compute-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  dq-actors-compute
-  cpp-testing-unittest
-)
-target_sources(ydb-library-yql-dq-actors-compute-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_compute_issues_buffer_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-dq-actors-compute-ut
-  COMMAND
-  ydb-library-yql-dq-actors-compute-ut
-)
-target_link_flags(ydb-library-yql-dq-actors-compute-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-dq-actors-compute-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

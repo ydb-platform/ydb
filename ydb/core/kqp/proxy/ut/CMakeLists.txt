@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-kqp-proxy-ut)
-target_compile_options(ydb-core-kqp-proxy-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-kqp-proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/proxy
-)
-target_link_libraries(ydb-core-kqp-proxy-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-kqp-proxy
-  kqp-ut-common
-)
-target_sources(ydb-core-kqp-proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/proxy/kqp_proxy_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-kqp-proxy-ut
-  COMMAND
-  ydb-core-kqp-proxy-ut
-)
-target_link_flags(ydb-core-kqp-proxy-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-kqp-proxy-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-services-ydb-sdk_credprovider_ut)
-target_compile_options(ydb-services-ydb-sdk_credprovider_ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-services-ydb-sdk_credprovider_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb
-)
-target_link_libraries(ydb-services-ydb-sdk_credprovider_ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-ydb
-  ydb-core-testlib
-  public-lib-yson_value
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-)
-target_sources(ydb-services-ydb-sdk_credprovider_ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/sdk_credprovider_ut/dummy_provider_ut.cpp
-)
-add_test(
-  NAME
-  ydb-services-ydb-sdk_credprovider_ut
-  COMMAND
-  ydb-services-ydb-sdk_credprovider_ut
-)
-target_link_flags(ydb-services-ydb-sdk_credprovider_ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-services-ydb-sdk_credprovider_ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut)
-target_include_directories(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat
-)
-target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  vdisk-hulldb-compstrat
-  ydb-core-base
-  blobstorage-vdisk-common
-  blobstorage-vdisk-hulldb
-  vdisk-hulldb-test
-)
-target_sources(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-vdisk-hulldb-compstrat-ut
-  COMMAND
-  ydb-core-blobstorage-vdisk-hulldb-compstrat-ut
-)
-target_link_flags(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-vdisk-hulldb-compstrat-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,39 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-balance_coverage-ut)
-target_include_directories(ydb-core-tx-balance_coverage-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/balance_coverage
-)
-target_link_libraries(ydb-core-tx-balance_coverage-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-balance_coverage
-  cpp-testing-unittest
-  ydb-core-testlib
-)
-target_sources(ydb-core-tx-balance_coverage-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/balance_coverage/balance_coverage_builder_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-balance_coverage-ut
-  COMMAND
-  ydb-core-tx-balance_coverage-ut
-)
-target_link_flags(ydb-core-tx-balance_coverage-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-balance_coverage-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

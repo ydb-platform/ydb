@@ -6,46 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-wrappers-ut)
-target_compile_options(ydb-core-wrappers-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-wrappers-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers
-)
-target_link_libraries(ydb-core-wrappers-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-wrappers
-  cpp-actors-core
-  cpp-digest-md5
-  cpp-testing-unittest
-  ydb-core-protos
-  core-testlib-basics
-  core-wrappers-ut_helpers
-)
-target_sources(ydb-core-wrappers-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-wrappers-ut
-  COMMAND
-  ydb-core-wrappers-ut
-)
-target_link_flags(ydb-core-wrappers-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-wrappers-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

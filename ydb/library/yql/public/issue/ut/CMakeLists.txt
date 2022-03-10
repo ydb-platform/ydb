@@ -6,40 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-public-issue-ut)
-target_include_directories(ydb-library-yql-public-issue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue
-)
-target_link_libraries(ydb-library-yql-public-issue-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-public-issue
-)
-target_sources(ydb-library-yql-public-issue-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_manager_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_issue_utils_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/yql_warning_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-public-issue-ut
-  COMMAND
-  ydb-library-yql-public-issue-ut
-)
-target_link_flags(ydb-library-yql-public-issue-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-public-issue-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

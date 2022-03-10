@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-naming_conventions-ut)
-target_include_directories(ydb-library-naming_conventions-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions
-)
-target_link_libraries(ydb-library-naming_conventions-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-naming_conventions
-)
-target_sources(ydb-library-naming_conventions-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/naming_conventions/ut/naming_conventions_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-naming_conventions-ut
-  COMMAND
-  ydb-library-naming_conventions-ut
-)
-target_link_flags(ydb-library-naming_conventions-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-naming_conventions-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

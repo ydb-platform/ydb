@@ -6,54 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-minikql-ut)
-target_compile_options(ydb-library-yql-minikql-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-library-yql-minikql-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql
-)
-target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-yql-minikql
-  yql-minikql-computation
-  yql-minikql-invoke_builtins
-  udf-service-exception_policy
-)
-target_sources(ydb-library-yql-minikql-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_alloc_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_cast_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_printer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_node_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_opt_literal_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_stats_registry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_ops_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_string_util_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/pack_num_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/watermark_tracker_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-minikql-ut
-  COMMAND
-  ydb-library-yql-minikql-ut
-)
-target_link_flags(ydb-library-yql-minikql-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-minikql-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

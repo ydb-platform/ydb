@@ -6,34 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-security-ut)
-target_link_libraries(ydb-library-security-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-security
-)
-target_sources(ydb-library-security-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/security/ut/util_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-security-ut
-  COMMAND
-  ydb-library-security-ut
-)
-target_link_flags(ydb-library-security-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-security-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

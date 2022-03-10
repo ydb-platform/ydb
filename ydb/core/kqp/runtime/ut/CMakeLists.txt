@@ -6,43 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-kqp-runtime-ut)
-target_compile_options(ydb-core-kqp-runtime-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-kqp-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime
-)
-target_link_libraries(ydb-core-kqp-runtime-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-kqp-runtime
-  cpp-testing-unittest
-  core-testlib-basics
-  udf-service-exception_policy
-)
-target_sources(ydb-core-kqp-runtime-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/runtime/kqp_scan_data_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-kqp-runtime-ut
-  COMMAND
-  ydb-core-kqp-runtime-ut
-)
-target_link_flags(ydb-core-kqp-runtime-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-kqp-runtime-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

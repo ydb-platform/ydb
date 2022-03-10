@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(yql-providers-common-structured_token-ut)
-target_include_directories(yql-providers-common-structured_token-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token
-)
-target_link_libraries(yql-providers-common-structured_token-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  providers-common-structured_token
-)
-target_sources(yql-providers-common-structured_token-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/structured_token/ut/yql_structured_token_ut.cpp
-)
-add_test(
-  NAME
-  yql-providers-common-structured_token-ut
-  COMMAND
-  yql-providers-common-structured_token-ut
-)
-target_link_flags(yql-providers-common-structured_token-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(yql-providers-common-structured_token-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

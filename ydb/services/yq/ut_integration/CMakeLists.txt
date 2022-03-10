@@ -6,54 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-services-yq-ut_integration)
-target_compile_options(ydb-services-yq-ut_integration PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-services-yq-ut_integration PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/yq
-)
-target_link_libraries(ydb-services-yq-ut_integration PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-yq
-  library-cpp-getopt
-  cpp-grpc-client
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-  yq-libs-control_plane_storage
-  yq-libs-db_schema
-  yq-libs-private_client
-  ydb-services-ydb
-  providers-common-db_id_async_resolver
-  clickhouse_client_udf
-  library-yql-utils
-  yql-sql-pg_dummy
-)
-target_sources(ydb-services-yq-ut_integration PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/yq/ut_integration/ut_utils.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/yq/ut_integration/yq_ut.cpp
-)
-add_test(
-  NAME
-  ydb-services-yq-ut_integration
-  COMMAND
-  ydb-services-yq-ut_integration
-)
-target_link_flags(ydb-services-yq-ut_integration
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-services-yq-ut_integration)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

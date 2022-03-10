@@ -6,45 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-client-server-ut)
-target_compile_options(ydb-core-client-server-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-client-server-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/server
-)
-target_link_libraries(ydb-core-client-server-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-client-server
-  cpp-testing-gmock_in_unittest
-  ydb-core-persqueue
-  ydb-core-tablet_flat
-  ydb-core-testlib
-  core-testlib-actors
-)
-target_sources(ydb-core-client-server-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metarequest_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-client-server-ut
-  COMMAND
-  ydb-core-client-server-ut
-)
-target_link_flags(ydb-core-client-server-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-client-server-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

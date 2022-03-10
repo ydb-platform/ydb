@@ -6,50 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-actorlib_impl-ut)
-target_compile_options(ydb-core-actorlib_impl-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-actorlib_impl-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl
-)
-target_link_libraries(ydb-core-actorlib_impl-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-actorlib_impl
-  cpp-actors-core
-  cpp-actors-interconnect
-  library-cpp-getopt
-  library-cpp-svnversion
-  core-testlib-actors
-  core-testlib-basics
-)
-target_sources(ydb-core-actorlib_impl-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_activity_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_bootstrapped_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_tracker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/test_interconnect_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/test_protocols_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-actorlib_impl-ut
-  COMMAND
-  ydb-core-actorlib_impl-ut
-)
-target_link_flags(ydb-core-actorlib_impl-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-actorlib_impl-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

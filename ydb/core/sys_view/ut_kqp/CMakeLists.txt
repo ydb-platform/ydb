@@ -6,47 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-sys_view-ut_kqp)
-target_compile_options(ydb-core-sys_view-ut_kqp PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-sys_view-ut_kqp PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view
-)
-target_link_libraries(ydb-core-sys_view-ut_kqp PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-sys_view
-  cpp-testing-unittest
-  cpp-yson-node
-  kqp-ut-common
-  ydb-core-testlib
-  cpp-client-draft
-)
-target_sources(ydb-core-sys_view-ut_kqp PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_kqp.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_counters.cpp
-)
-add_test(
-  NAME
-  ydb-core-sys_view-ut_kqp
-  COMMAND
-  ydb-core-sys_view-ut_kqp
-)
-target_link_flags(ydb-core-sys_view-ut_kqp
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-sys_view-ut_kqp)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

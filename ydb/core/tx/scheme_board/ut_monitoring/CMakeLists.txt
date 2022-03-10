@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-scheme_board-ut_monitoring)
-target_compile_options(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board
-)
-target_link_libraries(ydb-core-tx-scheme_board-ut_monitoring PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-scheme_board
-  cpp-actors-core
-  cpp-testing-unittest
-  core-testlib-basics
-)
-target_sources(ydb-core-tx-scheme_board-ut_monitoring PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/monitoring_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/ut_helpers.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-scheme_board-ut_monitoring
-  COMMAND
-  ydb-core-tx-scheme_board-ut_monitoring
-)
-target_link_flags(ydb-core-tx-scheme_board-ut_monitoring
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-scheme_board-ut_monitoring)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

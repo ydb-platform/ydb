@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-base-ut)
-target_include_directories(ydb-core-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/base
-)
-target_link_libraries(ydb-core-base-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-base
-  library-cpp-getopt
-  library-cpp-svnversion
-)
-target_sources(ydb-core-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/shared_data_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-base-ut
-  COMMAND
-  ydb-core-base-ut
-)
-target_link_flags(ydb-core-base-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-base-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

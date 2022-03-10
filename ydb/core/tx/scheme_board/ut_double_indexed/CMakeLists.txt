@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-scheme_board-ut_double_indexed)
-target_include_directories(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board
-)
-target_link_libraries(ydb-core-tx-scheme_board-ut_double_indexed PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-scheme_board
-  cpp-testing-unittest
-)
-target_sources(ydb-core-tx-scheme_board-ut_double_indexed PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/double_indexed_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-scheme_board-ut_double_indexed
-  COMMAND
-  ydb-core-tx-scheme_board-ut_double_indexed
-)
-target_link_flags(ydb-core-tx-scheme_board-ut_double_indexed
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-scheme_board-ut_double_indexed)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

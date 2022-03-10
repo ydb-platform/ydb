@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-dynumber-ut)
-target_include_directories(ydb-library-dynumber-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/dynumber
-)
-target_link_libraries(ydb-library-dynumber-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-dynumber
-)
-target_sources(ydb-library-dynumber-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/dynumber/ut/dynumber_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-dynumber-ut
-  COMMAND
-  ydb-library-dynumber-ut
-)
-target_link_flags(ydb-library-dynumber-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-dynumber-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

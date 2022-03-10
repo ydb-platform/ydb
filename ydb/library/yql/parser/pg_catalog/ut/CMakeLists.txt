@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-parser-pg_catalog-ut)
-target_include_directories(ydb-library-yql-parser-pg_catalog-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog
-)
-target_link_libraries(ydb-library-yql-parser-pg_catalog-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-parser-pg_catalog
-)
-target_sources(ydb-library-yql-parser-pg_catalog-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_catalog/ut/catalog_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-parser-pg_catalog-ut
-  COMMAND
-  ydb-library-yql-parser-pg_catalog-ut
-)
-target_link_flags(ydb-library-yql-parser-pg_catalog-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-parser-pg_catalog-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

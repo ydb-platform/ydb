@@ -6,11 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(contrib-libs-linuxvdso)
-target_link_libraries(contrib-libs-linuxvdso PUBLIC
-  libs-linuxvdso-original
-)
-target_sources(contrib-libs-linuxvdso PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/linuxvdso/interface.cpp
-)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

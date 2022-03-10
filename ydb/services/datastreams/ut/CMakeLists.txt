@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-services-datastreams-ut)
-target_compile_options(ydb-services-datastreams-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-services-datastreams-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams
-)
-target_link_libraries(ydb-services-datastreams-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-datastreams
-  library-cpp-getopt
-  cpp-grpc-client
-  library-cpp-svnversion
-  ydb-core-testlib
-)
-target_sources(ydb-services-datastreams-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/datastreams/datastreams_ut.cpp
-)
-add_test(
-  NAME
-  ydb-services-datastreams-ut
-  COMMAND
-  ydb-services-datastreams-ut
-)
-target_link_flags(ydb-services-datastreams-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-services-datastreams-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

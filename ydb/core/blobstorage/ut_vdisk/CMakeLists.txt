@@ -6,51 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-ut_vdisk)
-target_compile_options(ydb-core-blobstorage-ut_vdisk PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-blobstorage-ut_vdisk PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage
-)
-target_link_libraries(ydb-core-blobstorage-ut_vdisk PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-blobstorage
-  cpp-actors-protos
-  library-cpp-codecs
-  ydb-core-base
-  core-blobstorage-groupinfo
-  blobstorage-ut_vdisk-lib
-  ydb-core-erasure
-  ydb-core-scheme
-  udf-service-stub
-)
-target_sources(ydb-core-blobstorage-ut_vdisk PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/gen_restarts.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/huge_migration_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/mon_reregister_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/vdisk_test.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-ut_vdisk
-  COMMAND
-  ydb-core-blobstorage-ut_vdisk
-)
-target_link_flags(ydb-core-blobstorage-ut_vdisk
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-ut_vdisk)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

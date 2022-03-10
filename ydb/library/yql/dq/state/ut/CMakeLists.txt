@@ -6,40 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-dq-state-ut)
-target_compile_options(ydb-library-yql-dq-state-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-library-yql-dq-state-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/state
-)
-target_link_libraries(ydb-library-yql-dq-state-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-dq-state
-)
-target_sources(ydb-library-yql-dq-state-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/state/ut/dq_state_load_plan_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-dq-state-ut
-  COMMAND
-  ydb-library-yql-dq-state-ut
-)
-target_link_flags(ydb-library-yql-dq-state-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-dq-state-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

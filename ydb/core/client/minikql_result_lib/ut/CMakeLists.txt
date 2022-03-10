@@ -6,43 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-client-minikql_result_lib-ut)
-target_compile_options(ydb-core-client-minikql_result_lib-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-client-minikql_result_lib-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib
-)
-target_link_libraries(ydb-core-client-minikql_result_lib-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-client-minikql_result_lib
-  cpp-testing-unittest
-  ydb-core-testlib
-)
-target_sources(ydb-core-client-minikql_result_lib-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/converter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_result_lib/objects_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-client-minikql_result_lib-ut
-  COMMAND
-  ydb-core-client-minikql_result_lib-ut
-)
-target_link_flags(ydb-core-client-minikql_result_lib-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-client-minikql_result_lib-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -1,0 +1,42 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-driver_lib-run-ut)
+target_include_directories(ydb-core-driver_lib-run-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run
+)
+target_link_libraries(ydb-core-driver_lib-run-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  run
+)
+target_sources(ydb-core-driver_lib-run-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/run/version_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-driver_lib-run-ut
+  COMMAND
+  ydb-core-driver_lib-run-ut
+)
+target_link_flags(ydb-core-driver_lib-run-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-core-driver_lib-run-ut)

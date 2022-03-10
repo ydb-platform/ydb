@@ -6,40 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-testlib-actors-ut)
-target_include_directories(ydb-core-testlib-actors-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors
-)
-target_link_libraries(ydb-core-testlib-actors-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-testlib-actors
-  library-cpp-getopt
-  library-cpp-svnversion
-  cpp-regex-pcre
-)
-target_sources(ydb-core-testlib-actors-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-testlib-actors-ut
-  COMMAND
-  ydb-core-testlib-actors-ut
-)
-target_link_flags(ydb-core-testlib-actors-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-testlib-actors-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

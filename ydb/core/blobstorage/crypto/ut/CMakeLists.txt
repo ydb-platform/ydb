@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-crypto-ut)
-target_include_directories(ydb-core-blobstorage-crypto-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto
-)
-target_link_libraries(ydb-core-blobstorage-crypto-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-blobstorage-crypto
-)
-target_sources(ydb-core-blobstorage-crypto-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto_rope_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_vec_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-crypto-ut
-  COMMAND
-  ydb-core-blobstorage-crypto-ut
-)
-target_link_flags(ydb-core-blobstorage-crypto-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-crypto-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

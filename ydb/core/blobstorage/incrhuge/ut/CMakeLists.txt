@@ -6,39 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-incrhuge-ut)
-target_link_libraries(ydb-core-blobstorage-incrhuge-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  cpp-actors-protos
-  ydb-core-blobstorage
-  core-blobstorage-incrhuge
-  core-blobstorage-pdisk
-)
-target_sources(ydb-core-blobstorage-incrhuge-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_basic_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_id_dict_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/ut/incrhuge_log_merger_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-incrhuge-ut
-  COMMAND
-  ydb-core-blobstorage-incrhuge-ut
-)
-target_link_flags(ydb-core-blobstorage-incrhuge-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-incrhuge-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

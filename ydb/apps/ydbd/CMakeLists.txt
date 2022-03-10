@@ -6,64 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydbd)
-target_compile_options(ydbd PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydbd PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-malloc-tcmalloc
-  contrib-libs-tcmalloc
-  library-cpp-cpuid_check
-  yql-sql-pg_dummy
-  run
-  ydb-core-protos
-  ydb-core-security
-  libs-audit-mock
-  library-folder_service-mock
-  ydb-library-keys
-  ydb-library-pdisk_io
-  ydb-library-security
-  client-ydb_persqueue_public-codecs
-  clickhouse_client_udf
-  datetime_udf
-  datetime2_udf
-  digest_udf
-  histogram_udf
-  hyperloglog_udf
-  hyperscan_udf
-  ip_udf
-  json_udf
-  json2_udf
-  math_udf
-  pire_udf
-  re2_udf
-  set_udf
-  stat_udf
-  string_udf
-  top_udf
-  topfreq_udf
-  unicode_udf
-  url_udf
-  yson2_udf
-  dsv_udf
-)
-target_sources(ydbd PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/sqs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/main.cpp
-)
-target_link_flags(ydbd
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydbd)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

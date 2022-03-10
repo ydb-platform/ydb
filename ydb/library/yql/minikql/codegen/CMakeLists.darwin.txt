@@ -1,0 +1,27 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(yql-minikql-codegen)
+target_link_libraries(yql-minikql-codegen PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  libs-cxxsupp-builtins
+  contrib-libs-re2
+  llvm12-lib-IR
+  lib-ExecutionEngine-MCJIT
+  llvm12-lib-Linker
+  lib-Target-X86
+  Target-X86-AsmParser
+  Target-X86-Disassembler
+  lib-Transforms-IPO
+  lib-Transforms-ObjCARC
+)
+target_sources(yql-minikql-codegen PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/codegen.cpp
+)

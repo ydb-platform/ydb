@@ -6,45 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-groupinfo-ut)
-target_include_directories(ydb-core-blobstorage-groupinfo-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo
-)
-target_link_libraries(ydb-core-blobstorage-groupinfo-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-blobstorage-groupinfo
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-base
-  core-blobstorage-base
-  ydb-core-erasure
-)
-target_sources(ydb-core-blobstorage-groupinfo-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-groupinfo-ut
-  COMMAND
-  ydb-core-blobstorage-groupinfo-ut
-)
-target_link_flags(ydb-core-blobstorage-groupinfo-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-groupinfo-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

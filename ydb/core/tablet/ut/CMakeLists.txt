@@ -6,51 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tablet-ut)
-target_compile_options(ydb-core-tablet-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tablet-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet
-)
-target_link_libraries(ydb-core-tablet-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-tablet
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-)
-target_sources(ydb-core-tablet-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/pipe_tracker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/resource_broker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_aggregator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_metrics_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipe_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipecache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_req_blockbs_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_resolver_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-tablet-ut
-  COMMAND
-  ydb-core-tablet-ut
-)
-target_link_flags(ydb-core-tablet-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tablet-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

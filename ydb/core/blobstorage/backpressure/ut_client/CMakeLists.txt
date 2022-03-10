@@ -6,43 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-backpressure-ut_client)
-target_compile_options(ydb-core-blobstorage-backpressure-ut_client PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_link_libraries(ydb-core-blobstorage-backpressure-ut_client PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  actors-interconnect-mock
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-vdisk
-  blobstorage-vdisk-common
-  core-tx-scheme_board
-  udf-service-stub
-)
-target_sources(ydb-core-blobstorage-backpressure-ut_client PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/ut_client/backpressure_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-backpressure-ut_client
-  COMMAND
-  ydb-core-blobstorage-backpressure-ut_client
-)
-target_link_flags(ydb-core-blobstorage-backpressure-ut_client
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-backpressure-ut_client)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

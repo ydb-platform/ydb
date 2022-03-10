@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-public-lib-ydb_cli-common-ut)
-target_include_directories(ydb-public-lib-ydb_cli-common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common
-)
-target_link_libraries(ydb-public-lib-ydb_cli-common-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  common
-)
-target_sources(ydb-public-lib-ydb_cli-common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path_ut.cpp
-)
-add_test(
-  NAME
-  ydb-public-lib-ydb_cli-common-ut
-  COMMAND
-  ydb-public-lib-ydb_cli-common-ut
-)
-target_link_flags(ydb-public-lib-ydb_cli-common-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-public-lib-ydb_cli-common-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

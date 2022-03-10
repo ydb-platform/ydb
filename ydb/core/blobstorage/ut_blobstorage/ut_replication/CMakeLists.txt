@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(core-blobstorage-ut_blobstorage-ut_replication)
-target_include_directories(core-blobstorage-ut_blobstorage-ut_replication PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
-)
-target_link_libraries(core-blobstorage-ut_blobstorage-ut_replication PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-ut_blobstorage-lib
-)
-target_sources(core-blobstorage-ut_blobstorage-ut_replication PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/replication.cpp
-)
-add_test(
-  NAME
-  core-blobstorage-ut_blobstorage-ut_replication
-  COMMAND
-  core-blobstorage-ut_blobstorage-ut_replication
-)
-target_link_flags(core-blobstorage-ut_blobstorage-ut_replication
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(core-blobstorage-ut_blobstorage-ut_replication)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-kesus-proxy-ut)
-target_compile_options(ydb-core-kesus-proxy-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-kesus-proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy
-)
-target_link_libraries(ydb-core-kesus-proxy-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-kesus-proxy
-  ydb-core-testlib
-)
-target_sources(ydb-core-kesus-proxy-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/proxy_actor_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/proxy/ut_helpers.cpp
-)
-add_test(
-  NAME
-  ydb-core-kesus-proxy-ut
-  COMMAND
-  ydb-core-kesus-proxy-ut
-)
-target_link_flags(ydb-core-kesus-proxy-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-kesus-proxy-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

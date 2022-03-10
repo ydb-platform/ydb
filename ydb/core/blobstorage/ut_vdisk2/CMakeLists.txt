@@ -6,41 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-ut_vdisk2)
-target_link_libraries(ydb-core-blobstorage-ut_vdisk2 PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  cpp-testing-unittest
-  core-blobstorage-backpressure
-  core-blobstorage-groupinfo
-  blobstorage-pdisk-mock
-  core-blobstorage-vdisk
-  blobstorage-vdisk-common
-  core-tx-scheme_board
-  udf-service-stub
-)
-target_sources(ydb-core-blobstorage-ut_vdisk2 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk2/huge.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-ut_vdisk2
-  COMMAND
-  ydb-core-blobstorage-ut_vdisk2
-)
-target_link_flags(ydb-core-blobstorage-ut_vdisk2
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-ut_vdisk2)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

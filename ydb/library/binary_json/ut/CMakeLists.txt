@@ -6,51 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-binary_json-ut)
-target_compile_options(ydb-library-binary_json-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-library-binary_json-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json
-)
-target_link_libraries(ydb-library-binary_json-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-library-binary_json
-  library-yql-minikql
-  yql-minikql-computation
-  yql-minikql-dom
-  yql-minikql-invoke_builtins
-  udf-service-exception_policy
-  core-issue-protos
-  yql-sql-pg_dummy
-)
-target_sources(ydb-library-binary_json-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/container_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/identity_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/entry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/test_base.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/binary_json/ut/valid_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-binary_json-ut
-  COMMAND
-  ydb-library-binary_json-ut
-)
-target_link_flags(ydb-library-binary_json-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-binary_json-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

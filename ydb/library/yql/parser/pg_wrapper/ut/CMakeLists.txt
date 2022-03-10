@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-parser-pg_wrapper-ut)
-target_include_directories(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper
-)
-target_link_libraries(ydb-library-yql-parser-pg_wrapper-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-parser-pg_wrapper
-)
-target_sources(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/ut/parser_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-parser-pg_wrapper-ut
-  COMMAND
-  ydb-library-yql-parser-pg_wrapper-ut
-)
-target_link_flags(ydb-library-yql-parser-pg_wrapper-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-parser-pg_wrapper-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

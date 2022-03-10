@@ -6,37 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-ut_blobstorage-ut_scrub)
-target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
-)
-target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_scrub PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-ut_blobstorage-lib
-)
-target_sources(ydb-core-blobstorage-ut_blobstorage-ut_scrub PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/scrub.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-ut_blobstorage-ut_scrub
-  COMMAND
-  ydb-core-blobstorage-ut_blobstorage-ut_scrub
-)
-target_link_flags(ydb-core-blobstorage-ut_blobstorage-ut_scrub
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_scrub)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

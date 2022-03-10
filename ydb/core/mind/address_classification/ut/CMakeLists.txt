@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-mind-address_classification-ut)
-target_compile_options(ydb-core-mind-address_classification-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-mind-address_classification-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/address_classification
-)
-target_link_libraries(ydb-core-mind-address_classification-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-mind-address_classification
-  cpp-actors-http
-  ydb-core-testlib
-)
-target_sources(ydb-core-mind-address_classification-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/mind/address_classification/net_classifier_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-mind-address_classification-ut
-  COMMAND
-  ydb-core-mind-address_classification-ut
-)
-target_link_flags(ydb-core-mind-address_classification-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-mind-address_classification-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

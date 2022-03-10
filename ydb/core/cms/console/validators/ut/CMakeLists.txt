@@ -6,40 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-cms-console-validators-ut)
-target_include_directories(ydb-core-cms-console-validators-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators
-)
-target_link_libraries(ydb-core-cms-console-validators-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  cms-console-validators
-  cpp-testing-unittest
-)
-target_sources(ydb-core-cms-console-validators-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/registry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-cms-console-validators-ut
-  COMMAND
-  ydb-core-cms-console-validators-ut
-)
-target_link_flags(ydb-core-cms-console-validators-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-cms-console-validators-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

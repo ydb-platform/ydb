@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-utils-log-ut)
-target_include_directories(ydb-library-yql-utils-log-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log
-)
-target_link_libraries(ydb-library-yql-utils-log-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yql-utils-log
-)
-target_sources(ydb-library-yql-utils-log-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/log_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/tls_backend_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-utils-log-ut
-  COMMAND
-  ydb-library-yql-utils-log-ut
-)
-target_link_flags(ydb-library-yql-utils-log-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-utils-log-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

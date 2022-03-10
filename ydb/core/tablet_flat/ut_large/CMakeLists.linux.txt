@@ -1,0 +1,46 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-tablet_flat-ut_large)
+target_include_directories(ydb-core-tablet_flat-ut_large PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat
+)
+target_link_libraries(ydb-core-tablet_flat-ut_large PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-tablet_flat
+  ydb-core-scheme
+  test-libs-exec
+  test-libs-table
+  udf-service-exception_policy
+)
+target_sources(ydb-core-tablet_flat-ut_large PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut_large.cpp
+)
+add_test(
+  NAME
+  ydb-core-tablet_flat-ut_large
+  COMMAND
+  ydb-core-tablet_flat-ut_large
+)
+target_link_flags(ydb-core-tablet_flat-ut_large
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-core-tablet_flat-ut_large)

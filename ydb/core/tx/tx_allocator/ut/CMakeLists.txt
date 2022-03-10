@@ -6,45 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-tx_allocator-ut)
-target_compile_options(ydb-core-tx-tx_allocator-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-tx_allocator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator
-)
-target_link_libraries(ydb-core-tx-tx_allocator-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-tx_allocator
-  cpp-testing-unittest
-  ydb-core-mind
-  ydb-core-testlib
-  ydb-core-tx
-)
-target_sources(ydb-core-tx-tx_allocator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/tx_allocator/txallocator_ut_helpers.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-tx_allocator-ut
-  COMMAND
-  ydb-core-tx-tx_allocator-ut
-)
-target_link_flags(ydb-core-tx-tx_allocator-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-tx_allocator-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

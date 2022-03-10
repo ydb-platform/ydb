@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-erasure-ut_rope)
-target_include_directories(ydb-core-erasure-ut_rope PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/erasure
-)
-target_link_libraries(ydb-core-erasure-ut_rope PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-erasure
-  cpp-digest-crc32c
-)
-target_sources(ydb-core-erasure-ut_rope PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/erasure/erasure_rope_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-erasure-ut_rope
-  COMMAND
-  ydb-core-erasure-ut_rope
-)
-target_link_flags(ydb-core-erasure-ut_rope
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-erasure-ut_rope)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

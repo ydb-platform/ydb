@@ -6,43 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-base-ut)
-target_include_directories(ydb-core-blobstorage-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base
-)
-target_link_libraries(ydb-core-blobstorage-base-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-blobstorage-base
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-erasure
-  ydb-core-protos
-)
-target_sources(ydb-core-blobstorage-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/bufferwithgaps_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/base/ptr_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-base-ut
-  COMMAND
-  ydb-core-blobstorage-base-ut
-)
-target_link_flags(ydb-core-blobstorage-base-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-base-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

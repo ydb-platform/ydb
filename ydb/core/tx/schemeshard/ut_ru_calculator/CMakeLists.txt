@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-schemeshard-ut_ru_calculator)
-target_include_directories(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
-)
-target_link_libraries(ydb-core-tx-schemeshard-ut_ru_calculator PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-schemeshard
-  cpp-testing-unittest
-)
-target_sources(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_ru_calculator.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-schemeshard-ut_ru_calculator
-  COMMAND
-  ydb-core-tx-schemeshard-ut_ru_calculator
-)
-target_link_flags(ydb-core-tx-schemeshard-ut_ru_calculator
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-schemeshard-ut_ru_calculator)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

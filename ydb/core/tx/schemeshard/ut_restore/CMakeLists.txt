@@ -6,46 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-schemeshard-ut_restore)
-target_compile_options(ydb-core-tx-schemeshard-ut_restore PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-schemeshard-ut_restore PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
-)
-target_link_libraries(ydb-core-tx-schemeshard-ut_restore PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-schemeshard
-  contrib-libs-double-conversion
-  cpp-string_utils-quote
-  kqp-ut-common
-  tx-schemeshard-ut_helpers
-  core-wrappers-ut_helpers
-  ydb-core-ydb_convert
-)
-target_sources(ydb-core-tx-schemeshard-ut_restore PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_restore.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-schemeshard-ut_restore
-  COMMAND
-  ydb-core-tx-schemeshard-ut_restore
-)
-target_link_flags(ydb-core-tx-schemeshard-ut_restore
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-schemeshard-ut_restore)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

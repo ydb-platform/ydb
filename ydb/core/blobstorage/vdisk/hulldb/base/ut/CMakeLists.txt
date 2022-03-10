@@ -6,46 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-vdisk-hulldb-base-ut)
-target_include_directories(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base
-)
-target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-base-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  vdisk-hulldb-base
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-base
-  blobstorage-vdisk-common
-  blobstorage-vdisk-hulldb
-)
-target_sources(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-vdisk-hulldb-base-ut
-  COMMAND
-  ydb-core-blobstorage-vdisk-hulldb-base-ut
-)
-target_link_flags(ydb-core-blobstorage-vdisk-hulldb-base-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-vdisk-hulldb-base-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

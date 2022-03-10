@@ -6,48 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-pdisk-ut)
-target_include_directories(ydb-core-blobstorage-pdisk-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk
-)
-target_link_libraries(ydb-core-blobstorage-pdisk-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-blobstorage-pdisk
-  library-cpp-getopt
-  library-cpp-svnversion
-  core-blobstorage-lwtrace_probes
-  core-testlib-actors
-)
-target_sources(ydb-core-blobstorage-pdisk-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_crypto_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_actions.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_run.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_yard.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-pdisk-ut
-  COMMAND
-  ydb-core-blobstorage-pdisk-ut
-)
-target_link_flags(ydb-core-blobstorage-pdisk-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-pdisk-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

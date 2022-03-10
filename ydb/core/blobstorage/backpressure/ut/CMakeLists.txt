@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-backpressure-ut)
-target_include_directories(ydb-core-blobstorage-backpressure-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure
-)
-target_link_libraries(ydb-core-blobstorage-backpressure-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-blobstorage-backpressure
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-base
-  ydb-core-blobstorage
-)
-target_sources(ydb-core-blobstorage-backpressure-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_server_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-backpressure-ut
-  COMMAND
-  ydb-core-blobstorage-backpressure-ut
-)
-target_link_flags(ydb-core-blobstorage-backpressure-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-backpressure-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

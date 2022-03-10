@@ -6,67 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-util-ut)
-target_include_directories(ydb-core-util-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/util
-)
-target_link_libraries(ydb-core-util-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-util
-  library-cpp-getopt
-  library-cpp-svnversion
-  cpp-threading-future
-)
-target_sources(ydb-core-util-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/address_classifier_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/bits_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_cow_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/circular_queue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/fast_tls_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/fragmented_buffer_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/hazard_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/hyperlog_counter_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/interval_set_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/intrusive_fixed_hash_set_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/intrusive_heap_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/intrusive_stack_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/lf_stack_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/log_priority_mute_checker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/lz4_data_generator_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/operation_queue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/operation_queue_priority_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/page_map_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/queue_inplace_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/queue_oneone_inplace_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/simple_cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/time_series_vec_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/token_bucket_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/ulid_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/wildcard_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-util-ut
-  COMMAND
-  ydb-core-util-ut
-)
-target_link_flags(ydb-core-util-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-util-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,48 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-engine-ut)
-target_compile_options(ydb-core-engine-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-engine-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine
-)
-target_link_libraries(ydb-core-engine-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-malloc-jemalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-engine
-  core-engine-minikql
-  kqp-ut-common
-  test-libs-table
-  mkql_proto-ut-helpers
-  udf-service-exception_policy
-)
-target_sources(ydb-core-engine-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/engine/mkql_proto_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-engine-ut
-  COMMAND
-  ydb-core-engine-ut
-)
-target_link_flags(ydb-core-engine-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-engine-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

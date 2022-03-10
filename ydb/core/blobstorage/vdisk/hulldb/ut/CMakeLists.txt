@@ -6,42 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-vdisk-hulldb-ut)
-target_include_directories(ydb-core-blobstorage-vdisk-hulldb-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb
-)
-target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  blobstorage-vdisk-hulldb
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-base
-  ydb-core-blobstorage
-  ydb-core-erasure
-)
-target_sources(ydb-core-blobstorage-vdisk-hulldb-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/hullds_cache_block_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-vdisk-hulldb-ut
-  COMMAND
-  ydb-core-blobstorage-vdisk-hulldb-ut
-)
-target_link_flags(ydb-core-blobstorage-vdisk-hulldb-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-vdisk-hulldb-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

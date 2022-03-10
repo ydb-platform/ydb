@@ -6,50 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-datashard-ut_read_iterator)
-target_compile_options(ydb-core-tx-datashard-ut_read_iterator PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-datashard-ut_read_iterator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard
-)
-target_link_libraries(ydb-core-tx-datashard-ut_read_iterator PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-datashard
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  kqp-ut-common
-  ydb-core-testlib
-  ydb-core-tx
-  udf-service-exception_policy
-  public-lib-yson_value
-  cpp-client-ydb_result
-)
-target_sources(ydb-core-tx-datashard-ut_read_iterator PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_ut_read_iterator.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-datashard-ut_read_iterator
-  COMMAND
-  ydb-core-tx-datashard-ut_read_iterator
-)
-target_link_flags(ydb-core-tx-datashard-ut_read_iterator
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-datashard-ut_read_iterator)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,42 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
-
-add_library(boost-libs-iostreams)
-target_compile_options(boost-libs-iostreams PRIVATE
-  -DBOOST_ATOMIC_STATIC_LINK=1
-  -DBOOST_All_STATIC_LINK=1
-  -DBOOST_CHRONO_STATIC_LINK=1
-  -DBOOST_SYSTEM_STATIC_LINK=1
-  -DBOOST_TIMER_STATIC_LINK=1
-  -DBOOST_ALL_NO_LIB=1
-  -DBOOST_ATOMIC_SOURCE
-  -DBOOST_COROUTINES_SOURCE
-  -DBOOST_DISABLE_ASSERTS
-  -DBOOST_SPIRIT_USE_PHOENIX_V3=1
-  -DBOOST_SYSTEM_NO_DEPRECATED
-  -DBOOST_THREAD_BUILD_LIB=1
-  -DBOOST_THREAD_DONT_USE_CHRONO=1
-  -DBOOST_THREAD_NO_LIB=1
-  -DBOOST_THREAD_USE_LIB=1
-  -DDATE_TIME_INLINE
-  -DBOOST_THREAD_DONT_USE_CHRONO
-  -DBOOST_THREAD_POSIX
-  -DBOOST_IOSTREAMS_USE_DEPRECATED
-)
-target_include_directories(boost-libs-iostreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/boost/predef
-)
-target_link_libraries(boost-libs-iostreams PUBLIC
-  contrib-libs-cxxsupp
-  contrib-restricted-boost
-  ZLIB::ZLIB
-  contrib-libs-libbz2
-)
-target_sources(boost-libs-iostreams PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/libs/iostreams/src/file_descriptor.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/libs/iostreams/src/gzip.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/libs/iostreams/src/mapped_file.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/libs/iostreams/src/zlib.cpp
-)
+if (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -1,0 +1,53 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-client-minikql_compile-ut)
+target_compile_options(ydb-core-client-minikql_compile-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(ydb-core-client-minikql_compile-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile
+)
+target_link_libraries(ydb-core-client-minikql_compile-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  cpp-malloc-jemalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  core-client-minikql_compile
+  cpp-testing-unittest
+  cpp-threading-future
+  core-client-scheme_cache_lib
+  core-client-server
+  ydb-core-tablet
+  ydb-core-testlib
+  library-yql-minikql
+  udf-service-exception_policy
+)
+target_sources(ydb-core-client-minikql_compile-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql_compile_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-client-minikql_compile-ut
+  COMMAND
+  ydb-core-client-minikql_compile-ut
+)
+target_link_flags(ydb-core-client-minikql_compile-ut
+  PUBLIC
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+vcs_info(ydb-core-client-minikql_compile-ut)

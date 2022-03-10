@@ -6,48 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-columnshard-ut)
-target_compile_options(ydb-core-tx-columnshard-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-columnshard-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard
-)
-target_link_libraries(ydb-core-tx-columnshard-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-columnshard
-  library-cpp-getopt
-  cpp-regex-pcre
-  library-cpp-svnversion
-  ydb-core-testlib
-  ydb-core-tx
-  public-lib-yson_value
-)
-target_sources(ydb-core-tx-columnshard-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_ut_common.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/ut_columnshard_read_write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/ut_columnshard_schema.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-columnshard-ut
-  COMMAND
-  ydb-core-tx-columnshard-ut
-)
-target_link_flags(ydb-core-tx-columnshard-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-columnshard-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

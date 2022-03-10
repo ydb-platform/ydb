@@ -6,52 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-services-persqueue_v1-ut)
-target_compile_options(ydb-services-persqueue_v1-ut PRIVATE
-  -DACTORLIB_HUGE_PB_SIZE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-services-persqueue_v1-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1
-)
-target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-services-persqueue_v1
-  library-cpp-getopt
-  library-cpp-svnversion
-  ydb-core-testlib
-  ydb-library-aclib
-  library-persqueue-topic_parser
-  api-grpc
-  ydb_persqueue_core-ut-ut_utils
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_table
-)
-target_sources(ydb-services-persqueue_v1-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_common_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/ut/rate_limiter_test_setup.cpp
-)
-add_test(
-  NAME
-  ydb-services-persqueue_v1-ut
-  COMMAND
-  ydb-services-persqueue_v1-ut
-)
-target_link_flags(ydb-services-persqueue_v1-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-services-persqueue_v1-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

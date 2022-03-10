@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-public-lib-operation_id-ut)
-target_include_directories(ydb-public-lib-operation_id-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/operation_id
-)
-target_link_libraries(ydb-public-lib-operation_id-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  public-lib-operation_id
-  cpp-testing-unittest
-)
-target_sources(ydb-public-lib-operation_id-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/operation_id/operation_id_ut.cpp
-)
-add_test(
-  NAME
-  ydb-public-lib-operation_id-ut
-  COMMAND
-  ydb-public-lib-operation_id-ut
-)
-target_link_flags(ydb-public-lib-operation_id-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-public-lib-operation_id-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

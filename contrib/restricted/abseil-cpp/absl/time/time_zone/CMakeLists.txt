@@ -6,28 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(absl-time-time_zone)
-target_compile_options(absl-time-time_zone PRIVATE
-  -DNOMINMAX
-)
-target_include_directories(absl-time-time_zone PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
-)
-target_include_directories(absl-time-time_zone PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
-)
-target_link_libraries(absl-time-time_zone PUBLIC
-  contrib-libs-cxxsupp
-)
-target_sources(absl-time-time_zone PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_fixed.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_format.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_if.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_impl.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_info.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_libc.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/time_zone_posix.cc
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/time/internal/cctz/src/zone_info_source.cc
-)
+if (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -6,57 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-tx-schemeshard-ut_user_attributes)
-target_compile_options(ydb-core-tx-schemeshard-ut_user_attributes PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-tx-schemeshard-ut_user_attributes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
-)
-target_link_libraries(ydb-core-tx-schemeshard-ut_user_attributes PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  core-tx-schemeshard
-  cpp-http-io
-  cpp-http-server
-  library-cpp-svnversion
-  cpp-testing-unittest
-  ydb-core-base
-  core-blockstore-core
-  core-engine-minikql
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  ydb-core-testlib
-  ydb-core-tx
-  core-tx-datashard
-  tx-schemeshard-ut_helpers
-  ydb-core-util
-  yql-public-issue
-)
-target_sources(ydb-core-tx-schemeshard-ut_user_attributes PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_user_attributes.cpp
-)
-add_test(
-  NAME
-  ydb-core-tx-schemeshard-ut_user_attributes
-  COMMAND
-  ydb-core-tx-schemeshard-ut_user_attributes
-)
-target_link_flags(ydb-core-tx-schemeshard-ut_user_attributes
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-tx-schemeshard-ut_user_attributes)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

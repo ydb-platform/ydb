@@ -6,38 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-backup-ut)
-target_include_directories(ydb-library-backup-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/backup
-)
-target_link_libraries(ydb-library-backup-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  kikimr_backup
-  cpp-string_utils-quote
-)
-target_sources(ydb-library-backup-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/backup/ut/ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-backup-ut
-  COMMAND
-  ydb-library-backup-ut
-)
-target_link_flags(ydb-library-backup-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-backup-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

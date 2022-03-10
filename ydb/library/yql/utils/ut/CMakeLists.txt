@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-library-yql-utils-ut)
-target_include_directories(ydb-library-yql-utils-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils
-)
-target_link_libraries(ydb-library-yql-utils-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  library-yql-utils
-)
-target_sources(ydb-library-yql-utils-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/fp_bits_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/md5_stream_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/multi_resource_lock_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/parse_double_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/range_walker_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/retry_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/url_builder_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/utf8_ut.cpp
-)
-add_test(
-  NAME
-  ydb-library-yql-utils-ut
-  COMMAND
-  ydb-library-yql-utils-ut
-)
-target_link_flags(ydb-library-yql-utils-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-library-yql-utils-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

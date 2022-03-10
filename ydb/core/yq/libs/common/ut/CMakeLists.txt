@@ -6,44 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-yq-libs-common-ut)
-target_compile_options(ydb-core-yq-libs-common-ut PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-target_include_directories(ydb-core-yq-libs-common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common
-)
-target_link_libraries(ydb-core-yq-libs-common-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  yq-libs-common
-  udf-service-stub
-  ydb-services-ydb
-)
-target_sources(ydb-core-yq-libs-common-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common/cache_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common/entity_id_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/common/rows_proto_splitter_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-yq-libs-common-ut
-  COMMAND
-  ydb-core-yq-libs-common-ut
-)
-target_link_flags(ydb-core-yq-libs-common-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-yq-libs-common-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

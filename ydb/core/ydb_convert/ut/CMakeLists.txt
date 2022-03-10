@@ -6,39 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-ydb_convert-ut)
-target_include_directories(ydb-core-ydb_convert-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert
-)
-target_link_libraries(ydb-core-ydb_convert-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-ydb_convert
-  cpp-testing-unittest
-  ydb-core-testlib
-)
-target_sources(ydb-core-ydb_convert-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/ydb_convert_ut.cpp
-)
-add_test(
-  NAME
-  ydb-core-ydb_convert-ut
-  COMMAND
-  ydb-core-ydb_convert-ut
-)
-target_link_flags(ydb-core-ydb_convert-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-ydb_convert-ut)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

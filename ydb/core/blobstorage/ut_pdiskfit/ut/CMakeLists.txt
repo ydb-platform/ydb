@@ -6,35 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-
-add_executable(ydb-core-blobstorage-ut_pdiskfit-ut)
-target_link_libraries(ydb-core-blobstorage-ut_pdiskfit-ut PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lfalloc
-  library-cpp-cpuid_check
-  cpp-testing-unittest_main
-  ydb-core-blobstorage
-  blobstorage-ut_pdiskfit-lib
-)
-target_sources(ydb-core-blobstorage-ut_pdiskfit-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/ut/main.cpp
-)
-add_test(
-  NAME
-  ydb-core-blobstorage-ut_pdiskfit-ut
-  COMMAND
-  ydb-core-blobstorage-ut_pdiskfit-ut
-)
-target_link_flags(ydb-core-blobstorage-ut_pdiskfit-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-vcs_info(ydb-core-blobstorage-ut_pdiskfit-ut)
+if (UNIX)
+  include(CMakeLists.linux.txt)
+endif()

@@ -60,7 +60,7 @@ For development purposes we test that YDB could be built and run under latest ve
 
 ## Getting started in 5 minutes
 
-1. Install YDB using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md), build it from source or [use Docker container](ydb/docs/en/core/getting_started/ydb_docker.md).
+1. Install YDB using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md), [build it from source](BUILD.md) or [use Docker container](ydb/docs/en/core/getting_started/ydb_docker.md).
 1. Install [command line interace](docs/en/core/reference/ydb-cli/index.m) tool to work with scheme and run queries.
 1. Start [local cluster](ydb/docs/ru/core/getting_started/ydb_local.md) or container and run [YQL query](ydb/docs/en/core/yql/reference/index.md) via [YDB CLI](docs/en/core/reference/ydb-cli/index.md).
 1. Access [Embedded UI](ydb/docs/en/core/maintenance/embedded_monitoring/ydb_monitoring.md) via browser for schema navigation, query execution and other database development related tasks.
@@ -69,19 +69,7 @@ For development purposes we test that YDB could be built and run under latest ve
 
 
 ## How to build
-
-### Prerequisites
-
-In order to build `ydbd` you should have following tools installed on your system:
-
-1. Git command line tool
-1. Python
-
-### Build process
-
-1. `git clone https://github.com/ydb-platform/ydb.git`
-1. `cd ydb/apps/ydbd`
-1. `../../../ya make -r`
+    [Build howto.](BUILD.md)
 
 ## How to deploy
 

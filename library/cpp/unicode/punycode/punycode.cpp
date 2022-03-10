@@ -1,6 +1,6 @@
 #include "punycode.h"
-#include <contrib/libs/libidn/idna.h>
-#include <contrib/libs/libidn/punycode.h>
+#include <contrib/libs/libidn/lib/idna.h>
+#include <contrib/libs/libidn/lib/punycode.h>
 #include <util/charset/wide.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>

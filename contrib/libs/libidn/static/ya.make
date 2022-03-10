@@ -24,7 +24,8 @@ NO_RUNTIME()
 NO_COMPILER_WARNINGS()
 
 ADDINCL(
-    contrib/libs/libidn
+    contrib/libs/libidn/lib
+    contrib/libs/libidn/lib/gl
 )
 
 CFLAGS(
@@ -46,27 +47,27 @@ ENDIF()
 SRCDIR(contrib/libs/libidn)
 
 SRCS(
-    idn-free.c
-    idna.c
-    nfkc.c
-    pr29.c
-    profiles.c
-    punycode.c
-    rfc3454.c
-    strerror-idna.c
-    strerror-pr29.c
-    strerror-punycode.c
-    strerror-stringprep.c
-    strerror-tld.c
-    stringprep.c
-    tld.c
-    tlds.c
-    toutf8.c
-    version.c
-    strverscmp.c
-    striconv.c
-    c-strcasecmp.c
-    c-ctype.c
+    lib/idn-free.c
+    lib/idna.c
+    lib/nfkc.c
+    lib/pr29.c
+    lib/profiles.c
+    lib/punycode.c
+    lib/rfc3454.c
+    lib/strerror-idna.c
+    lib/strerror-pr29.c
+    lib/strerror-punycode.c
+    lib/strerror-stringprep.c
+    lib/strerror-tld.c
+    lib/stringprep.c
+    lib/tld.c
+    lib/tlds.c
+    lib/toutf8.c
+    lib/version.c
+    lib/gl/strverscmp.c
+    lib/gl/striconv.c
+    lib/gl/c-strcasecmp.c
+    lib/gl/c-ctype.c
 )
 
 END()

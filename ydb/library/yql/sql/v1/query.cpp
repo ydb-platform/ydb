@@ -356,13 +356,19 @@ public:
 
                 auto type = Y("ListType", Y("DataType", Q("String")));
                 auto key = Y("Key", Q(Y(Q("table"), Y("EvaluateExpr",
-                    Y("EnsureType", Y("Coalesce", arg.Expr, Y("List", type)), type)))));
+                    Y("EnsureType", Y("Coalesce", arg.Expr,
+                    Y("List", type)), type)))));
                 if (!arg.View.empty()) {
                     key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, arg.View)))));
                 }
                 each = L(each, key);
             }
-
+            if (ctx.PragmaUseTablePrefixForEach) {
+                TStringBuf prefixPath = ctx.GetPrefixPath(Service, Cluster);
+                if (prefixPath) {
+                    each = L(each, BuildQuotedAtom(Pos, TString(prefixPath)));
+                }
+            }
             return each;
         }
         else if (func == "folder") {

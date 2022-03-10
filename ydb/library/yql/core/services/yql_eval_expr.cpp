@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/yql_paths.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -797,7 +798,15 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
         if (node->IsCallable("MrTableEach") || node->IsCallable("MrTableEachStrict")) {
             TExprNode::TListType keys;
+            TStringBuf prefix;
+            if (node->TailPtr()->IsAtom()) {
+                prefix = node->TailPtr()->Content();
+            }
             for (const auto& eachKey : node->Children()) {
+                if (eachKey->IsAtom()) {
+                    continue;
+                }
+
                 if (!eachKey->IsCallable("Key")) {
                     ctx.AddError(TIssue(ctx.GetPosition(eachKey->Pos()), TStringBuilder() << "Expected Key"));
                     return nullptr;
@@ -834,7 +843,9 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Expected literal string as table name"));
                         return nullptr;
                     }
-
+                    if (prefix) {
+                        name = ctx.ChangeChild(*name, 0, ctx.NewAtom(node->Pos(), BuildTablePath(prefix, name->Child(0)->Content())));
+                    }
                     keys.push_back(ctx.ReplaceNode(TExprNode::TPtr(eachKey), *list, std::move(name)));
                 }
             }

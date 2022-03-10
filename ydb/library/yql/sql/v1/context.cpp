@@ -226,18 +226,27 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    auto* clusterPrefix = cluster.GetLiteral() ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral()) : nullptr;
+    TStringBuf prefixPath = GetPrefixPath(service, cluster);
+    if (prefixPath) {
+        return AddTablePathPrefix(*this, prefixPath, path);
+    }
+    return path.Build();
+}
+
+TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {
+    auto* clusterPrefix = cluster.GetLiteral()
+                            ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral())
+                            : nullptr;
     if (clusterPrefix && !clusterPrefix->empty()) {
-        return AddTablePathPrefix(*this, *clusterPrefix, path);
+        return *clusterPrefix;
     } else {
         auto* providerPrefix = ProviderPathPrefixes.FindPtr(service);
         if (providerPrefix && !providerPrefix->empty()) {
-            return AddTablePathPrefix(*this, *providerPrefix, path);
+            return *providerPrefix;
         } else if (!PathPrefix.empty()) {
-            return AddTablePathPrefix(*this, PathPrefix, path);
+            return PathPrefix;
         }
-
-        return path.Build();
+        return {};
     }
 }
 

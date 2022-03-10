@@ -9335,6 +9335,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "autocommit") {
             Ctx.PragmaAutoCommit = true;
             Ctx.IncrementMonCounter("sql_pragma", "AutoCommit");
+        } else if (normalizedPragma == "usetableprefixforeach") {
+            Ctx.PragmaUseTablePrefixForEach = true;
+            Ctx.IncrementMonCounter("sql_pragma", "UseTablePrefixForEach");
         } else if (normalizedPragma == "tablepathprefix") {
             TString value;
             TMaybe<TString> arg;

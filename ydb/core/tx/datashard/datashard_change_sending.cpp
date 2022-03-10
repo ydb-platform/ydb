@@ -63,6 +63,20 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                     << ", it->Order: " << it->Order
                     << ", it->BodySize: " << it->BodySize);
 
+                const auto schemaVersion = basic.GetValue<Schema::ChangeRecords::SchemaVersion>();
+                TUserTable::TCPtr schema;
+
+                if (schemaVersion) {
+                    const auto tableId = TPathId(
+                        basic.GetValue<Schema::ChangeRecords::TableOwnerId>(),
+                        basic.GetValue<Schema::ChangeRecords::TablePathId>()
+                    );
+                    const auto snapshotKey = TSchemaSnapshotKey(tableId, schemaVersion);
+                    if (const auto* snapshot = Self->GetSchemaSnapshotManager().FindSnapshot(snapshotKey)) {
+                        schema = snapshot->Schema;
+                    }
+                }
+                
                 RecordsToSend[recipient].emplace_back(TChangeRecordBuilder(details.GetValue<Schema::ChangeRecordDetails::Kind>())
                     .WithOrder(it->Order)
                     .WithGroup(basic.GetValue<Schema::ChangeRecords::Group>())
@@ -72,7 +86,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                         basic.GetValue<Schema::ChangeRecords::PathOwnerId>(),
                         basic.GetValue<Schema::ChangeRecords::LocalPathId>()
                     ))
-                    .WithSchemaVersion(basic.GetValue<Schema::ChangeRecords::SchemaVersion>())
+                    .WithSchema(schema)
                     .WithBody(details.GetValue<Schema::ChangeRecordDetails::Body>())
                     .Build());
 

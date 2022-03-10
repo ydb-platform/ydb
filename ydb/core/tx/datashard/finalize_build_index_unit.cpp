@@ -31,8 +31,15 @@ public:
         auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        auto tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion());
+        const auto version = params.GetTableSchemaVersion();
+        Y_VERIFY(version);
+
+        auto tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         DataShard.AddUserTable(pathId, tableInfo);
+
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
 
         ui64 step = params.GetSnapshotStep();
         ui64 txId = params.GetSnapshotTxId();

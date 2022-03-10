@@ -19,6 +19,9 @@ target_link_libraries(core-tx-datashard PUBLIC
   cpp-actors-core
   cpp-containers-flat_hash
   cpp-html-pcdata
+  library-cpp-json
+  cpp-json-yson
+  cpp-string_utils-base64
   cpp-string_utils-quote
   ydb-core-actorlib_impl
   ydb-core-base
@@ -249,6 +252,9 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   cpp-actors-core
   cpp-containers-flat_hash
   cpp-html-pcdata
+  library-cpp-json
+  cpp-json-yson
+  cpp-string_utils-base64
   cpp-string_utils-quote
   ydb-core-actorlib_impl
   ydb-core-base

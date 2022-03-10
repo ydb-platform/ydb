@@ -124,6 +124,7 @@ void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& stre
     }
 
     CdcStreams.emplace(streamPathId, TCdcStream(streamDesc));
+    JsonCdcStreamCount += ui32(streamDesc.GetFormat() == TCdcStream::EFormat::ECdcStreamFormatJson);
 
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
@@ -163,6 +164,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
         return;
     }
 
+    JsonCdcStreamCount -= ui32(it->second.Format == TCdcStream::EFormat::ECdcStreamFormatJson);
     CdcStreams.erase(it);
 
     NKikimrSchemeOp::TTableDescription schema;
@@ -184,6 +186,10 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
 
 bool TUserTable::HasCdcStreams() const {
     return !CdcStreams.empty();
+}
+
+bool TUserTable::NeedSchemaSnapshots() const {
+    return JsonCdcStreamCount > 0;
 }
 
 void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
@@ -275,6 +281,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     for (const auto& streamDesc : descr.GetCdcStreams()) {
         Y_VERIFY(streamDesc.HasPathId());
         CdcStreams.emplace(TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId()), TCdcStream(streamDesc));
+        JsonCdcStreamCount += ui32(streamDesc.GetFormat() == TCdcStream::EFormat::ECdcStreamFormatJson);
     }
 }
 

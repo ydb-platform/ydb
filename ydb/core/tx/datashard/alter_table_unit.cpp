@@ -136,9 +136,12 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
 
     const auto& alterTableTx = schemeTx.GetAlterTable();
 
+    const auto version = alterTableTx.GetTableSchemaVersion();
+    Y_VERIFY(version);
+
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                "Trying to ALTER TABLE at " << DataShard.TabletID()
-               << " version " << alterTableTx.GetTableSchemaVersion());
+               << " version " << version);
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
     if (alterTableTx.HasPathId()) {
@@ -148,8 +151,11 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
-
     DataShard.AddUserTable(tableId, info);
+
+    if (info->NeedSchemaSnapshots()) {
+        DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+    }
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

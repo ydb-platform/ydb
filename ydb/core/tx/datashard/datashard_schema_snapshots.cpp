@@ -83,6 +83,16 @@ const TSchemaSnapshot* TSchemaSnapshotManager::FindSnapshot(const TSchemaSnapsho
     return Snapshots.FindPtr(key);
 }
 
+void TSchemaSnapshotManager::RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key) {
+    auto it = Snapshots.find(key);
+    if (it == Snapshots.end()) {
+        return;
+    }
+
+    Snapshots.erase(it);
+    PersistRemoveSnapshot(db, key);
+}
+
 bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
@@ -93,7 +103,7 @@ bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
     return true;
 }
 
-bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key, NIceDb::TNiceDb& db) {
+bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key) {
     auto refIt = References.find(key);
 
     if (refIt == References.end() || refIt->second <= 0) {
@@ -113,7 +123,6 @@ bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key, NIc
         return false;
     }
 
-    PersistRemoveSnapshot(db, key);
     return true;
 }
 

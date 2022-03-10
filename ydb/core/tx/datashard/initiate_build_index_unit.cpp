@@ -33,6 +33,9 @@ public:
         auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
+        const auto version = params.GetTableSchemaVersion();
+        Y_VERIFY(version);
+
         TUserTable::TPtr tableInfo;
         if (params.HasIndexDescription()) {
             const auto& indexDesc = params.GetIndexDescription();
@@ -44,13 +47,17 @@ public:
                 ));
             }
 
-            tableInfo = DataShard.AlterTableAddIndex(ctx, txc, pathId, params.GetTableSchemaVersion(), indexDesc);
+            tableInfo = DataShard.AlterTableAddIndex(ctx, txc, pathId, version, indexDesc);
         } else {
-            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion());
+            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
         Y_VERIFY(tableInfo);
         DataShard.AddUserTable(pathId, tableInfo);
+
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
 
         ui64 step = tx->GetStep();
         ui64 txId = tx->GetTxId();

@@ -47,7 +47,7 @@ private:
     bool CreateScheme(TTransactionContext &txc);
     bool ReadEverything(TTransactionContext &txc);
 private:
-    TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> ChangeRecords;
+    TVector<NMiniKQL::IChangeCollector::TChange> ChangeRecords;
 };
 
 class TDataShard::TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

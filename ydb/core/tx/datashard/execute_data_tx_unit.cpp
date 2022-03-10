@@ -240,12 +240,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         if (op->IsImmediate() && !op->IsReadOnly())
             DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
 
-        if (auto changes = tx->GetDataTx()->GetCollectedChanges()) {
-            op->ChangeRecords().reserve(changes.size());
-            for (const auto& change : changes) {
-                op->ChangeRecords().emplace_back(change.Order(), change.PathId(), change.BodySize());
-            }
-        }
+        op->ChangeRecords() = std::move(tx->GetDataTx()->GetCollectedChanges());
     }
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,

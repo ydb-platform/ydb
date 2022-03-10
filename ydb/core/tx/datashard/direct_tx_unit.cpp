@@ -38,12 +38,7 @@ public:
             return EExecutionStatus::Restart;
         }
 
-        if (auto changes = tx->GetCollectedChanges()) {
-            op->ChangeRecords().reserve(changes.size());
-            for (const auto& change : changes) {
-                op->ChangeRecords().emplace_back(change.Order(), change.PathId(), change.BodySize());
-            }
-        }
+        op->ChangeRecords() = std::move(tx->GetCollectedChanges());
 
         DataShard.SysLocksTable().ApplyLocks();
         Pipeline.AddCommittingOp(op);

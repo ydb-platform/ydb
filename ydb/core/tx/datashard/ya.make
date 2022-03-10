@@ -207,6 +207,9 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/containers/flat_hash
     library/cpp/html/pcdata
+    library/cpp/json
+    library/cpp/json/yson
+    library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base

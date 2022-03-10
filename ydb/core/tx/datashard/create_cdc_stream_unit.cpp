@@ -44,19 +44,13 @@ public:
         auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
         DataShard.AddUserTable(pathId, tableInfo);
 
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
+
         AddSender.Reset(new TEvChangeExchange::TEvAddSender(
             pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
         ));
-
-        /* TODO(ilnaz)
-        if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatJson) {
-            auto& manager = DataShard.GetSchemaSnapshotManager();
-
-            const auto key = TSchemaSnapshotKey(pathId.OwnerId, pathId.LocalPathId, version);
-            manager.AddSnapshot(txc.DB, key, TSchemaSnapshot(tableInfo, op->GetStep(), op->GetTxId()));
-            manager.AcquireReference(key);
-        }
-        */
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

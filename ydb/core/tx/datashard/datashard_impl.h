@@ -653,9 +653,22 @@ class TDataShard
             struct LocalPathId : Column<6, NScheme::NTypeIds::Uint64> {};
             struct BodySize    : Column<7, NScheme::NTypeIds::Uint64> {};
             struct SchemaVersion : Column<8, NScheme::NTypeIds::Uint64> {};
+            struct TableOwnerId :  Column<9, NScheme::NTypeIds::Uint64> {};
+            struct TablePathId :   Column<10, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<Order>;
-            using TColumns = TableColumns<Order, Group, PlanStep, TxId, PathOwnerId, LocalPathId, BodySize, SchemaVersion>;
+            using TColumns = TableColumns<
+                Order,
+                Group,
+                PlanStep,
+                TxId,
+                PathOwnerId,
+                LocalPathId,
+                BodySize,
+                SchemaVersion,
+                TableOwnerId,
+                TablePathId
+            >;
         };
 
         struct ChangeRecordDetails : Table<18> {
@@ -1377,7 +1390,8 @@ public:
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
                                     const NKikimrSchemeOp::TTableDescription& tableScheme);
     static THashMap<TPathId, TPathId> GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move);
-    TUserTable::TPtr MoveUserTable(const TActorContext& ctx, TTransactionContext& txc, const NKikimrTxDataShard::TMoveTable& move);
+    TUserTable::TPtr MoveUserTable(TOperation::TPtr op, const NKikimrTxDataShard::TMoveTable& move,
+        const TActorContext& ctx, TTransactionContext& txc);
     void DropUserTable(TTransactionContext& txc, ui64 tableId);
 
     ui32 GetLastLocalTid() const { return LastLocalTid; }
@@ -1387,12 +1401,12 @@ public:
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
     void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
-    void EnqueueChangeRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records);
+    void EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChange>&& records);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
     const TActorId& GetChangeSender() const { return OutChangeSender; }
-    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>& changeRecords);
+    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records);
 
 
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
@@ -1405,6 +1419,8 @@ public:
 
     TSchemaSnapshotManager& GetSchemaSnapshotManager() { return SchemaSnapshotManager; }
     const TSchemaSnapshotManager& GetSchemaSnapshotManager() const { return SchemaSnapshotManager; }
+    void AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersion, ui64 step, ui64 txId,
+        TTransactionContext& txc, const TActorContext& ctx);
 
     template <typename... Args>
     bool PromoteCompleteEdge(Args&&... args) {
@@ -2046,6 +2062,26 @@ private:
         }
     };
 
+    struct TEnqueuedRecord {
+        ui64 BodySize;
+        TPathId TableId;
+        ui64 SchemaVersion;
+        bool SchemaSnapshotAcquired;
+
+        explicit TEnqueuedRecord(ui64 bodySize, const TPathId& tableId, ui64 schemaVersion)
+            : BodySize(bodySize)
+            , TableId(tableId)
+            , SchemaVersion(schemaVersion)
+            , SchemaSnapshotAcquired(false)
+        {
+        }
+
+        explicit TEnqueuedRecord(const NMiniKQL::IChangeCollector::TChange& record)
+            : TEnqueuedRecord(record.BodySize(), record.TableId(), record.SchemaVersion())
+        {
+        }
+    };
+
     using TRequestedRecord = TEvChangeExchange::TEvRequestRecords::TRecordInfo;
 
     // split/merge
@@ -2058,7 +2094,7 @@ private:
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;
-    THashMap<ui64, ui64> ChangesQueue; // order to size
+    THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
     ui64 ChangesQueueBytes = 0;
     TActorId OutChangeSender;
 

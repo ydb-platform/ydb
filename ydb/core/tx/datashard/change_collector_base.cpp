@@ -143,12 +143,19 @@ void TBaseChangeCollector::Persist(
         .WithStep(WriteVersion.Step)
         .WithTxId(WriteVersion.TxId)
         .WithPathId(pathId)
+        .WithTableId(tableId.PathId)
         .WithSchemaVersion(userTable->GetTableSchemaVersion())
         .WithBody(body.SerializeAsString())
         .Build();
 
     Self->PersistChangeRecord(db, record);
-    Collected.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
+    Collected.emplace_back(
+        record.GetOrder(),
+        record.GetPathId(),
+        record.GetBody().size(),
+        record.GetTableId(),
+        record.GetSchemaVersion()
+    );
 }
 
 } // NDataShard

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/base/pathid.h>
+
 #include <util/generic/fwd.h>
 
 #include <tuple>
@@ -88,6 +90,10 @@ struct TSchemaSnapshotKey
     TSchemaSnapshotKey(ui64 ownerId, ui64 pathId, ui64 version)
         : TSnapshotTableKey(ownerId, pathId)
         , Version(version)
+    { }
+
+    TSchemaSnapshotKey(const TPathId& pathId, ui64 version)
+        : TSchemaSnapshotKey(pathId.OwnerId, pathId.LocalPathId, version)
     { }
 
     auto ToTuple() const {

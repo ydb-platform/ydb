@@ -5,10 +5,10 @@
 #include "datashard_locks.h"
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
-#include "change_exchange.h"
 #include "execution_unit_kind.h"
 
 #include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/engine/minikql/change_collector_iface.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
@@ -435,7 +435,7 @@ struct TOutputOpData {
     using TResultPtr = THolder<TEvDataShard::TEvProposeTransactionResult>;
     using TDelayedAcks = TVector<THolder<IEventHandle>>;
     using TOutReadSets = TMap<std::pair<ui64, ui64>, TString>; // source:target -> body
-    using TChangeRecord = TEvChangeExchange::TEvEnqueueRecords::TRecordInfo;
+    using TChangeRecord = NMiniKQL::IChangeCollector::TChange;
 
     TResultPtr Result;
     // ACKs to send on successful operation completion.

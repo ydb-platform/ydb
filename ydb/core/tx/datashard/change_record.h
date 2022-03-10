@@ -1,5 +1,9 @@
 #pragma once
 
+#include "datashard_user_table.h"
+
+#include <library/cpp/json/json_value.h>
+
 #include <ydb/core/base/pathid.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
@@ -30,13 +34,16 @@ public:
     ui64 GetStep() const { return Step; }
     ui64 GetTxId() const { return TxId; }
     const TPathId& GetPathId() const { return PathId; }
-    ui64 GetSchemaVersion() const { return SchemaVersion; }
     EKind GetKind() const { return Kind; }
     const TString& GetBody() const { return Body; }
     i64 GetSeqNo() const;
     TConstArrayRef<TCell> GetKey() const;
 
+    const TPathId& GetTableId() const { return TableId; }
+    ui64 GetSchemaVersion() const { return SchemaVersion; }
+
     void SerializeTo(NKikimrChangeExchange::TChangeRecord& record) const;
+    void SerializeTo(NJson::TJsonValue& key, NJson::TJsonValue& value) const;
 
     TString ToString() const;
     void Out(IOutputStream& out) const;
@@ -47,9 +54,12 @@ private:
     ui64 Step;
     ui64 TxId;
     TPathId PathId;
-    ui64 SchemaVersion;
     EKind Kind;
     TString Body;
+
+    ui64 SchemaVersion;
+    TPathId TableId;
+    TUserTable::TCPtr Schema;
 
     mutable TMaybe<TOwnedCellVec> Key;
 
@@ -66,7 +76,10 @@ public:
     TChangeRecordBuilder& WithStep(ui64 step);
     TChangeRecordBuilder& WithTxId(ui64 txId);
     TChangeRecordBuilder& WithPathId(const TPathId& pathId);
+
+    TChangeRecordBuilder& WithTableId(const TPathId& tableId);
     TChangeRecordBuilder& WithSchemaVersion(ui64 version);
+    TChangeRecordBuilder& WithSchema(TUserTable::TCPtr schema);
 
     TChangeRecordBuilder& WithBody(const TString& body);
     TChangeRecordBuilder& WithBody(TString&& body);

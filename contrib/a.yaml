@@ -5,7 +5,7 @@ arcanum:
     disabling_policy: denied
     groups:
       - name: reviewers
-        roles: [ "cc:developer" ]
+        roles: [ "cc:duty", "cc:developer" ]
     rules:
       - reviewers:
           - name: reviewers

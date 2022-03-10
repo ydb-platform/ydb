@@ -1800,8 +1800,11 @@
         },
         {
             "Name": "TCoToFlow",
-            "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "ToFlow"}
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "ToFlow"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TCoFromFlow",

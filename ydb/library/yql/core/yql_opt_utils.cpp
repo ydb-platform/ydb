@@ -1307,27 +1307,6 @@ bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ct
     return ctx.AddWarning(issue);
 }
 
-TExprNode::TPtr DuplicateIndependentStreams(TExprNode::TPtr lambda, const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx) {
-    TNodeOnNodeOwnedMap replaces;
-    const auto isStream = [] (const TTypeAnnotationNode* type) {
-        YQL_ENSURE(type, "Expect type annotated lambda in DuplicateIndependentStreams");
-        return type->GetKind() == ETypeAnnotationKind::Stream || type->GetKind() == ETypeAnnotationKind::Flow;
-    };
-    VisitExpr(lambda->TailPtr(), [&](const TExprNode::TPtr& node) {
-        if (stopTraverse(node.Get())) {
-            return false;
-        }
-        if (auto scope = node->GetDependencyScope(); scope.has_value() && scope.value().second == nullptr
-            && isStream(node->GetTypeAnn()) && node->IsCallable() && (node->ChildrenSize() == 0 || !isStream(node->Head().GetTypeAnn()))) {
-
-            replaces[node.Get()] = ctx.ShallowCopy(*node);
-            return false;
-        }
-        return true;
-    });
-    return ctx.ReplaceNodes(std::move(lambda), replaces);
-}
-
 IGraphTransformer::TStatus LocalUnorderedOptimize(TExprNode::TPtr input, TExprNode::TPtr& output, const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx) {
     output = input;
     TProcessedNodesSet processedNodes;

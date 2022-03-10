@@ -5690,6 +5690,16 @@ TExprNode::TPtr ExpandAggrCompare(const TExprNode::TPtr& node, TExprContext& ctx
     return node;
 }
 
+TExprNode::TPtr DropToFlowDeps(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->ChildrenSize() == 1) {
+        return node;
+    }
+    YQL_CLOG(DEBUG, CorePeepHole) << __FUNCTION__;
+    auto children = node->ChildrenList();
+    children.resize(1);
+    return ctx.ChangeChildren(*node, std::move(children));
+}
+
 ui64 ToDate(ui64 now)      { return std::min<ui64>(NUdf::MAX_DATE - 1U, now / 86400000000ull); }
 ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now / 1000000ull); }
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
@@ -5759,7 +5769,8 @@ struct TPeepHoleRules {
         {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
-        {"RangeFor", &ExpandRangeFor}
+        {"RangeFor", &ExpandRangeFor},
+        {"ToFlow", &DropToFlowDeps}
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {

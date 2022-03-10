@@ -3120,7 +3120,7 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus ToFlowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3128,8 +3128,21 @@ namespace NTypeAnnImpl {
         if (!EnsureNewSeqType<true>(input->Head(), ctx.Expr, &itemType)) {
             return IGraphTransformer::TStatus::Error;
         }
+        const auto kind = input->Head().GetTypeAnn()->GetKind();
 
-        if (ETypeAnnotationKind::Flow == input->Head().GetTypeAnn()->GetKind()) {
+        if (ETypeAnnotationKind::Flow == kind || ETypeAnnotationKind::Stream == kind) {
+            if (!EnsureMaxArgsCount(*input, 1, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+                if (!EnsureDependsOn(*input->Child(i), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
+        }
+
+        if (ETypeAnnotationKind::Flow == kind) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }

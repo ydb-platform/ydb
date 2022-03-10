@@ -221,13 +221,15 @@ public:
     TKqpTransactionInfo GetInfo() const;
 
     void ForceOldEngine() {
-        YQL_ENSURE(DeferredEffects.Empty());
-        YQL_ENSURE(!ForceNewEngineSettings.ForcedNewEngine.has_value());
+        auto engine = DeferredEffects.GetEngine();
+        YQL_ENSURE(!engine || engine == TKqpTransactionInfo::EEngine::OldEngine);
+        YQL_ENSURE(!ForceNewEngineSettings.ForcedNewEngine || *ForceNewEngineSettings.ForcedNewEngine == false);
         ForceNewEngineSettings.ForcedNewEngine = false;
     }
 
     void ForceNewEngine(ui32 percent, ui32 level) {
-        YQL_ENSURE(DeferredEffects.Empty());
+        auto engine = DeferredEffects.GetEngine();
+        YQL_ENSURE(!engine || engine == TKqpTransactionInfo::EEngine::NewEngine);
         YQL_ENSURE(!ForceNewEngineSettings.ForcedNewEngine.has_value());
         ForceNewEngineSettings.ForcedNewEngine = true;
         ForceNewEngineSettings.ForceNewEnginePercent = percent;

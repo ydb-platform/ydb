@@ -1036,6 +1036,9 @@ private:
                     QueryState->NewEngineCompatibleQuery = (bool) QueryState->QueryCompileResult->PreparedQueryNewEngine
                         && newEngineCompatibleTx;
 
+                    // select engine according to deferred effects
+                    auto effectsEngine = KqpHost->GetTransactionInfo(QueryState->TxId)->TxEngine;
+
                     if (newEngineCompatibleTx) {
                         if (QueryState->ForceNewEngineState.ForceNewEngineLevel == 0) {
                             if (QueryState->InteractiveTx || !QueryState->QueryTraits) {
@@ -1064,11 +1067,10 @@ private:
                                 QueryState->NewEngineCompatibleQuery = false;
                                 // but Tx is still NE Compatible, i.e. RO-queries can be executed with NewEngine
                             }
+
                             if (commit) {
-                                // select engine according to deferred effects
-                                auto engine = KqpHost->GetTransactionInfo(QueryState->TxId)->TxEngine;
-                                if (engine) {
-                                    if (*engine == TKqpTransactionInfo::EEngine::NewEngine) {
+                                if (effectsEngine) {
+                                    if (*effectsEngine == TKqpTransactionInfo::EEngine::NewEngine) {
                                         QueryState->NewEngineCompatibleQuery = true;
                                     } else {
                                         QueryState->NewEngineCompatibleQuery = false;
@@ -1090,19 +1092,22 @@ private:
                         << ", query: " << QueryState->NewEngineCompatibleQuery
                         << ", interactive: " << QueryState->InteractiveTx
                         << ", preparedNewEngine: " << (bool) QueryState->QueryCompileResult->PreparedQueryNewEngine
+                        << ", effects: " << (effectsEngine ? (int) *effectsEngine : -1)
                         << ", forcedNewEngine: " << (QueryState->ForceNewEngineState.ForcedNewEngine
                             ? ToString(*QueryState->ForceNewEngineState.ForcedNewEngine)
                             : "<none>")
                         << ", traits: " << (QueryState->QueryCompileResult->QueryTraits
                             ? QueryState->QueryCompileResult->QueryTraits->ToString()
-                            : "<none>"));
+                            : "<none>")
+                        << ", commit: " << commit
+                        << ", text: " << queryRequest.GetQuery());
 
                     if (newEngineCompatibleTx) {
                         if (QueryState->NewEngineCompatibleQuery) {
                             if (QueryState->ForceNewEngineState.ForcedNewEngine && *QueryState->ForceNewEngineState.ForcedNewEngine) {
                                 preparedQuery = QueryState->QueryCompileResult->PreparedQueryNewEngine;
                                 LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, "Force NewEngine query execution (as part of tx)");
-                            } else if (QueryState->ForceNewEngineState.ForceNewEnginePercent >= RandomNumber((ui32) 100)) {
+                            } else if (!effectsEngine && QueryState->ForceNewEngineState.ForceNewEnginePercent >= RandomNumber((ui32) 100)) {
                                 preparedQuery = QueryState->QueryCompileResult->PreparedQueryNewEngine;
                                 QueryState->ForceNewEngineState.ForcedNewEngine = true;
 
@@ -1120,19 +1125,8 @@ private:
                             }
                         } else {
                             if (!QueryState->ForceNewEngineState.ForcedNewEngine.has_value()) {
-                                if (QueryState->ForceNewEngineState.ForceNewEnginePercent >= RandomNumber((ui32) 100)) {
-                                    QueryState->ForceNewEngineState.ForcedNewEngine = true;
-
-                                    KqpHost->ForceTxNewEngine(
-                                        QueryState->TxId,
-                                        QueryState->ForceNewEngineState.ForceNewEnginePercent,
-                                        QueryState->ForceNewEngineState.ForceNewEngineLevel
-                                    );
-                                    LOG_INFO_S(ctx, NKikimrServices::KQP_WORKER, "Force NewEngine query execution (new tx)");
-                                } else {
-                                    QueryState->ForceNewEngineState.ForcedNewEngine = false;
-                                    KqpHost->ForceTxOldEngine(QueryState->TxId);
-                                }
+                                QueryState->ForceNewEngineState.ForcedNewEngine = false;
+                                KqpHost->ForceTxOldEngine(QueryState->TxId);
                             }
 
                             preparedQuery = QueryState->QueryCompileResult->PreparedQuery;

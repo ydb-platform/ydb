@@ -279,7 +279,7 @@ private:
             if (RecompileWithNewEngine &&
                 KqpCompileResult->PreparedQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_V1)
             {
-                LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "About to recompile with NewEngine"
+                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "About to recompile with NewEngine"
                     << ", self: " << ctx.SelfID);
 
                 RecompileStartTime = now;

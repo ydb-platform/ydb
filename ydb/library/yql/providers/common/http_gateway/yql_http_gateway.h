@@ -58,6 +58,16 @@ public:
         TString data = {},
         IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()
     ) = 0;
+
+    using TOnNewDataPart = std::function<void(TContent&&)>;
+    using TOnDowloadFinsh = std::function<void(std::optional<TIssues>)>;
+
+    virtual void Download(
+        TString url,
+        THeaders headers,
+        std::size_t expectedSize,
+        TOnNewDataPart onNewData,
+        TOnDowloadFinsh onFinish) = 0;
 };
 
 }

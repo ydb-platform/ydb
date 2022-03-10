@@ -8,6 +8,7 @@ RECURSE(
     abseil-cpp-tstring
     alsa-lib
     avahi
+    aviso-fes
     aws
     blis
     boost

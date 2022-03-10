@@ -9,6 +9,5 @@ arcanum:
     rules:
       - reviewers:
           - name: reviewers
-            assign: 0
+            assign: 1
             ship: 1
-            

@@ -878,5 +878,6 @@ message TActivity {
         BLOCKSTORE_STATS_SERVICE = 563;
         YQ_AUDIT_ACTOR = 564;
         YQ_AUDIT_EVENT_SENDER_ACTOR = 565;
+        BLOCKSTORE_USER_STATS = 566;
     };
 };

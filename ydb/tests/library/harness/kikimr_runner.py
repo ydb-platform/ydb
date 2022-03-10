@@ -410,6 +410,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if saved_exceptions:
             raise daemon.SeveralDaemonErrors(saved_exceptions)
 
+    def restart_nodes(self):
+        for node in self.nodes.values():
+            node.stop()
+            node.start()
+
     @property
     def config_path(self):
         if self.__config_path is None:

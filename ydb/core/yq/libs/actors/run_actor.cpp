@@ -1143,7 +1143,7 @@ private:
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce" });
+        sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs" });
         try {
             AddTableBindingsFromBindings(Params.Bindings, YqConnections, sqlSettings);
         } catch (const std::exception& e) {

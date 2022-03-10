@@ -2074,8 +2074,19 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         return;
     }
 
+    auto MaskResult = [](const NKikimrClient::TPersQueuePartitionResponse& resp) {
+            if (resp.HasCmdReadResult()) {
+                auto res = resp;
+                for (auto& rr : *res.MutableCmdReadResult()->MutableResult()) {
+                    rr.SetData(TStringBuilder() << "... " << rr.GetData().size() << " bytes ...");
+                }
+                return res;
+            }
+            return resp;
+        };
+
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " initDone " << InitDone << " event " << result);
+                        << " initDone " << InitDone << " event " << MaskResult(result));
 
 
     if (!InitDone) {

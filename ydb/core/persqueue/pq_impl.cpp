@@ -121,9 +121,12 @@ private:
             return;
         }
 
+
         Y_VERIFY(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
 
         const auto& res = record.GetPartitionResponse().GetCmdReadResult();
+
+        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() ? res.GetReadFromTimestampMs() : 0;
 
         Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -148,14 +151,26 @@ private:
         partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + res.GetWaitQuotaTimeMs());
 
         for (ui32 i = 0; i < res.ResultSize(); ++i) {
-            if (!res.GetResult(i).HasPartNo() || res.GetResult(i).GetPartNo() == 0) {
+            bool isNewMsg = !res.GetResult(i).HasPartNo() || res.GetResult(i).GetPartNo() == 0;
+            if (!isStart) {
+                Y_VERIFY(partResp->ResultSize() > 0);
+                auto& back = partResp->GetResult(partResp->ResultSize() - 1);
+                bool lastMsgIsNotFull = back.GetPartNo() + 1 < back.GetTotalParts();
+                bool trancate = lastMsgIsNotFull && isNewMsg;
+                if (trancate) {
+                    partResp->MutableResult()->RemoveLast();
+                    if (partResp->GetResult().empty()) isStart = false;
+                }
+            }
+
+            if (isNewMsg) {
                 if (!isStart && res.GetResult(i).HasTotalParts() && res.GetResult(i).GetTotalParts() + i > res.ResultSize()) //last blob is not full
                     break;
                 partResp->AddResult()->CopyFrom(res.GetResult(i));
                 isStart = false;
             } else { //glue to last res
-                Y_VERIFY(partResp->GetResult(partResp->ResultSize() - 1).GetSeqNo() == res.GetResult(i).GetSeqNo());
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
+                Y_VERIFY(rr->GetSeqNo() == res.GetResult(i).GetSeqNo());
                 (*rr->MutableData()) += res.GetResult(i).GetData();
                 rr->SetPartitionKey(res.GetResult(i).GetPartitionKey());
                 rr->SetExplicitHash(res.GetResult(i).GetExplicitHash());
@@ -166,27 +181,40 @@ private:
                 }
             }
         }
-        const auto& lastRes = partResp->GetResult(partResp->ResultSize() - 1);
-        if (!lastRes.HasPartNo() || lastRes.GetPartNo() + 1 == lastRes.GetTotalParts()) { //last res is full, can answer
-            ctx.Send(Sender, Response.Release());
-            Die(ctx);
-            return;
+        if (!partResp->GetResult().empty()) {
+            const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);
+            if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) { //last res is not full
+                Request.SetRequestId(TMP_REQUEST_MARKER);
+
+                auto read = Request.MutablePartitionRequest()->MutableCmdRead();
+                read->SetOffset(lastRes.GetOffset());
+                read->SetPartNo(lastRes.GetPartNo() + 1);
+                read->SetCount(1);
+                read->ClearBytes();
+                read->ClearTimeoutMs();
+                read->ClearMaxTimeLagMs();
+                read->SetReadTimestampMs(res.GetReadFromTimestampMs());
+
+                THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+                req->Record = Request;
+                ctx.Send(Tablet, req.Release());
+                return;
+            }
         }
-        //not full answer - need uprequest
 
-        Request.SetRequestId(TMP_REQUEST_MARKER);
+        //filter old messages
+        ::google::protobuf::RepeatedPtrField<NKikimrClient::TCmdReadResult::TResult> records;
+        records.Swap(partResp->MutableResult());
+        partResp->ClearResult();
+        for (auto & rec : records) {
+            if (rec.GetWriteTimestampMS() >= readFromTimestampMs) {
+                auto result = partResp->AddResult();
+                result->CopyFrom(rec);
+            }
+        }
 
-        auto read = Request.MutablePartitionRequest()->MutableCmdRead();
-        read->SetOffset(lastRes.GetOffset());
-        read->SetPartNo(lastRes.GetPartNo() + 1);
-        read->SetCount(1);
-        read->ClearBytes();
-        read->ClearTimeoutMs();
-        read->ClearMaxTimeLagMs();
-        read->ClearReadTimestampMs();
-        THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-        req->Record = Request;
-        ctx.Send(Tablet, req.Release());
+        ctx.Send(Sender, Response.Release());
+        Die(ctx);
     }
 
     STFUNC(StateFunc) {

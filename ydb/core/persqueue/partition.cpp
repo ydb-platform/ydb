@@ -419,7 +419,7 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
     }
     for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
         const auto& consumer = config.GetReadRules(i);
-        auto& userInfo = UsersInfoStorage.GetOrCreate(consumer, ctx);
+        auto& userInfo = UsersInfoStorage.GetOrCreate(consumer, ctx, 0);
         userInfo.HasReadRule = true;
         ui64 rrGen = i < config.ReadRuleGenerationsSize() ? config.GetReadRuleGenerations(i) : 0;
         if (userInfo.ReadRuleGeneration != rrGen) {
@@ -2317,6 +2317,7 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetWaitQuotaTimeMs(WaitQuotaTime.MilliSeconds());
     readResult->SetMaxOffset(endOffset);
     readResult->SetRealReadOffset(Offset);
+    readResult->SetReadFromTimestampMs(ReadTimestampMs);
     Y_VERIFY(endOffset <= (ui64)Max<i64>(), "Max offset is too big: %" PRIu64, endOffset);
 
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "FormAnswer " << Blobs.size());
@@ -2340,7 +2341,7 @@ TReadAnswer TReadInfo::FormAnswer(
         ui16 internalPartsCount = blobs[pos].InternalPartsCount;
         const TString& blobValue = blobs[pos].Value;
 
-        if (blobValue.empty()) { // this is ok. Means that someone requested too much data
+        if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
             LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, "Not full answer here!");
             ui64 answerSize = answer->Response.ByteSize();
             if (userInfo && Destination != 0) {
@@ -2385,24 +2386,20 @@ TReadAnswer TReadInfo::FormAnswer(
                 psize = size;
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
-                bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
-                    ReadTimestampMs > res.WriteTimestamp.MilliSeconds();
-                if (!messageSkippingBehaviour) {
-                    size += res.GetBlobSize();
-                    Y_VERIFY(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu32 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
-                             pos, i, Offset, PartNo, offset, res.GetPartNo());
+                size += res.GetBlobSize();
+                Y_VERIFY(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu32 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
+                         pos, i, Offset, PartNo, offset, res.GetPartNo());
 
-                    if (userInfo) {
-                        userInfo->AddTimestampToCache(
-                                                      Offset, res.WriteTimestamp, res.CreateTimestamp,
-                                                      Destination != 0, ctx.Now()
-                                                      );
-                    }
+                if (userInfo) {
+                    userInfo->AddTimestampToCache(
+                                                  Offset, res.WriteTimestamp, res.CreateTimestamp,
+                                                  Destination != 0, ctx.Now()
+                                              );
+                }
 
-                    AddResultBlob(readResult, res, Offset);
-                    if (res.IsLastPart()) {
-                        ++cnt;
-                    }
+                AddResultBlob(readResult, res, Offset);
+                if (res.IsLastPart()) {
+                    ++cnt;
                 }
 
                 if (res.IsLastPart()) {
@@ -2532,6 +2529,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(const ui64 startOffse
 
 TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount, ui32* rsize, ui64* insideHeadOffset)
 {
+    Y_UNUSED(readTimestampMs);
     ui32& count = *rcount;
     ui32& size = *rsize;
     TVector<TClientBlob> res;
@@ -2551,11 +2549,11 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
         ui16 pno = Head.Batches[pos].GetPartNo();
         for (; i < blobs.size(); ++i) {
 
+            ui64 curOffset = offset;
+
             Y_VERIFY(pno == blobs[i].GetPartNo());
-            bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
-                readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
             bool skip = offset < startOffset || offset == startOffset &&
-                blobs[i].GetPartNo() < partNo || messageSkippingBehaviour;
+                blobs[i].GetPartNo() < partNo;
             if (blobs[i].IsLastPart()) {
                 ++offset;
                 pno = 0;
@@ -2572,8 +2570,8 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
                 break;
             size += blobs[i].GetBlobSize();
             res.push_back(blobs[i]);
-            if (!firstAddedBlobOffset && AppData()->PQConfig.GetTopicsAreFirstClassCitizen())
-                firstAddedBlobOffset = offset > 0 ? offset - 1 : 0;
+            if (!firstAddedBlobOffset)
+                firstAddedBlobOffset = curOffset;
         }
         if (i < blobs.size()) // already got limit
             break;
@@ -2852,7 +2850,6 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     for (const auto& user : UpdateUserInfoTimestamp) {
         Y_VERIFY(user != ReadingForUser);
     }
-
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
                 << " user " << user << " send read request for offset " << userInfo.Offset << " initiated " << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset << " ReadingTimestamp " << ReadingTimestamp);
 
@@ -2882,12 +2879,13 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         ProcessTimestampRead(ctx);
         return;
     }
-    Y_VERIFY(userInfo->ReadScheduled);
-    userInfo->ReadScheduled = false;
-    Y_VERIFY(ReadingForUser != "");
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
                 << " user " << ReadingForUser << " readTimeStamp done, result " << userInfo->WriteTimestamp.MilliSeconds()
                 << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset);
+
+    Y_VERIFY(userInfo->ReadScheduled);
+    userInfo->ReadScheduled = false;
+    Y_VERIFY(ReadingForUser != "");
 
     if (!userInfo->ActualTimestamps) {
         LOG_INFO_S(
@@ -3407,7 +3405,7 @@ void TPartition::HandleSetOffsetResponse(NKikimrClient::TResponse& response, con
         userInfo->Session = "";
         userInfo->Generation = userInfo->Step = 0;
         userInfo->Offset = 0;
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
                     << " user " << user << " drop done; " << (userInfo->UserActs.empty() ? "dropping state" : "preserve state for existed init"));
 
         while (!userInfo->UserActs.empty() && userInfo->UserActs.front()->Type != TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
@@ -3889,7 +3887,6 @@ void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const T
             session = "";
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
                 << " user " << ev->ClientId << " reinit request with generation " << readRuleGeneration);
-
         }
 
         Y_VERIFY(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
@@ -4598,7 +4595,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     ui64 insideHeadOffset{0};
     info.Cached = GetReadRequestFromHead(info.Offset, info.PartNo, info.Count, info.Size, info.ReadTimestampMs, &count, &size, &insideHeadOffset);
-    info.CachedOffset = Head.Offset > 0 ? Head.Offset : insideHeadOffset;
+    info.CachedOffset = insideHeadOffset;
 
     if (info.Destination != 0) {
         ++userInfo.ActiveReads;

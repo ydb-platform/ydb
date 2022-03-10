@@ -517,7 +517,7 @@ public:
     void ParseDeprecated(const TString& key, const TString& data, const TActorContext& ctx);
     void Parse(const TString& key, const TString& data, const TActorContext& ctx);
 
-    TUserInfo& GetOrCreate(const TString& user, const TActorContext& ctx);
+    TUserInfo& GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration = {});
     TUserInfo* GetIfExists(const TString& user);
 
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& config) {
@@ -555,6 +555,7 @@ private:
     TString DbId;
     TString FolderId;
     TString StreamName;
+    ui64 CurReadRuleGeneration;
 };
 
 } //NPQ

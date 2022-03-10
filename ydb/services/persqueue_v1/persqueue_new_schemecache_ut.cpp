@@ -18,6 +18,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/join.h>
+#include <util/generic/overloaded.h>
 
 #include <grpc++/client_context.h>
 
@@ -42,6 +43,7 @@ namespace NKikimr::NPersQueueTests {
     using namespace NNetClassifier;
     using namespace NYdb::NPersQueue;
     using namespace NPersQueue;
+
 
     Y_UNIT_TEST_SUITE(TPersQueueNewSchemeCacheTest) {
 
@@ -137,6 +139,166 @@ namespace NKikimr::NPersQueueTests {
 
             testReadFromTopic("/Root/account2/topic2");
             testReadFromTopic("account2/topic2");
+        }
+
+        void TestReadAtTimestampImpl(ui32 maxMessagesCount, std::function<TString(ui32)> generateMessage) {
+            TTestServer server(false);
+            server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+            server.StartServer();
+            server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE});
+            PrepareForGrpcNoDC(*server.AnnoyingClient);
+            NYdb::TDriverConfig driverCfg;
+
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
+
+            auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
+            auto persqueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
+
+            TString topic = "account2/topic2";
+            server.EnableLogs({ NKikimrServices::PQ_READ_PROXY});
+
+            NYdb::NPersQueue::TWriteSessionSettings writeSessionSettings;
+            writeSessionSettings.ClusterDiscoveryMode(NYdb::NPersQueue::EClusterDiscoveryMode::Off)
+                            .Path(topic)
+                            .MessageGroupId(topic)
+                            .Codec(NYdb::NPersQueue::ECodec::RAW);
+
+            {
+                auto res = persqueueClient->AddReadRule("/Root/" + topic,
+                                    NYdb::NPersQueue::TAddReadRuleSettings().ReadRule(NYdb::NPersQueue::TReadRuleSettings().ConsumerName("userx")));
+                res.Wait();
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+            }
+
+            TVector<TInstant> ts;
+            TVector<ui32> firstOffset;
+
+            auto writeSession = persqueueClient->CreateWriteSession(writeSessionSettings);
+            TMaybe<TContinuationToken> continuationToken = Nothing();
+            ui32 messagesAcked = 0;
+            auto processEvent = [&](TWriteSessionEvent::TEvent& event) {
+                std::visit(TOverloaded {
+                        [&](const TWriteSessionEvent::TAcksEvent& event) {
+                            //! Acks just confirm that message was received and saved by server successfully.
+                            //! Here we just count acked messages to check, that everything written is confirmed.
+                            Cerr << "GOT ACK " << TInstant::Now() << "\n";
+                            Sleep(TDuration::MilliSeconds(3));
+                            for (const auto& ack : event.Acks) {
+                                Y_UNUSED(ack);
+                                messagesAcked++;
+                            }
+                        },
+                        [&](TWriteSessionEvent::TReadyToAcceptEvent& event) {
+                            continuationToken = std::move(event.ContinuationToken);
+                        },
+                        [&](const TSessionClosedEvent&) {
+                            UNIT_ASSERT(false);
+                        }
+                }, event);
+                };
+
+            for (auto& event: writeSession->GetEvents(true)) {
+                processEvent(event);
+            }
+            UNIT_ASSERT(continuationToken.Defined());
+
+            for (ui32 i = 0; i < maxMessagesCount; ++i) {
+                TString message = generateMessage(i);
+                Cerr << "WRITTEN message " << i << "\n";
+                writeSession->Write(std::move(*continuationToken), std::move(message));
+                //! Continue token is no longer valid once used.
+                continuationToken = Nothing();
+                while (messagesAcked <= i || !continuationToken.Defined()) {
+                    for (auto& event: writeSession->GetEvents(true)) {
+                        processEvent(event);
+                    }
+                }
+            }
+
+            //TODO check skip inside big blob
+            ui32 tsIt = 0;
+            while (true) {
+                std::shared_ptr<NYdb::NPersQueue::IReadSession> reader;
+                TInstant curTs = tsIt == 0 ? TInstant::Zero() : (ts[tsIt]);
+                auto settings = NYdb::NPersQueue::TReadSessionSettings()
+                        .AppendTopics(topic)
+                        .ConsumerName("userx")
+                        .StartingMessageTimestamp(curTs)
+                        .ReadOnlyOriginal(true);
+
+                TMap<TString, ui32> map;
+                ui32 messagesReceived = 0;
+                settings.EventHandlers_.SimpleDataHandlers([&](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) mutable {
+                        for (const auto& msg : event.GetMessages()) {
+                            Cerr << "TS: " << curTs << " Got message: " << msg.DebugString(false) << Endl;
+                            Cout.Flush();
+                            auto count = ++map[msg.GetData()];
+                            UNIT_ASSERT(count == 1);
+                            if (tsIt == 0) {
+                                if (ts.empty()) {
+                                    ts.push_back(TInstant::Zero());
+                                    firstOffset.push_back(0);
+                                }
+
+                                ts.push_back(msg.GetWriteTime() - TDuration::MilliSeconds(1));
+                                ts.push_back(msg.GetWriteTime());
+                                ts.push_back(msg.GetWriteTime() + TDuration::MilliSeconds(1));
+                                firstOffset.push_back(msg.GetOffset());
+                                firstOffset.push_back(msg.GetOffset());
+                                firstOffset.push_back(msg.GetOffset() + 1);
+
+                                Cerr << "GOT MESSAGE TIMESTAMP " << ts.back() << "\n";
+                            } else {
+                                Cerr << "WAITING FIRST MESSAGE " << firstOffset[tsIt] << " got " << msg.GetOffset() << "\n";
+
+                                UNIT_ASSERT(messagesReceived > 0 || msg.GetOffset() == firstOffset[tsIt]);
+                            }
+                            messagesReceived = msg.GetOffset() + 1;
+                        }
+                        if (messagesReceived >= maxMessagesCount) {
+                            Cerr << "Closing session. Got " << messagesReceived << " messages" << Endl;
+                            reader->Close(TDuration::Seconds(0));
+                            Cerr << "Session closed" << Endl;
+                        }
+                    }, false);
+                reader = CreateReader(*ydbDriver, settings);
+
+                Cout << "Created reader\n";
+
+                Cout.Flush();
+                while (messagesReceived < maxMessagesCount) Sleep(TDuration::MilliSeconds(10));
+
+                if (tsIt == 0) {
+                    for (ui32 i = 0; i < ts.size(); ++i) {
+                        Cout << "TS " << ts[i] << " OFFSET " << firstOffset[i] << "\n";
+                    }
+                }
+
+
+                tsIt++;
+                if (tsIt == ts.size()) break;
+                if (firstOffset[tsIt] >= messagesReceived) break;
+            }
+        }
+
+
+        Y_UNIT_TEST(TestReadAtTimestamp) {
+            auto generate1 = [](ui32 messageId) {
+                Y_UNUSED(messageId);
+                TString message = "Hello___" + CreateGuidAsString() + TString(1024*1024, 'a');
+                return message;
+            };
+
+            TestReadAtTimestampImpl(10, generate1);
+
+            auto generate2 = [](ui32 messageId) {
+                Y_UNUSED(messageId);
+                TString message = "Hello___" + CreateGuidAsString() + TString(1024*10240, 'a');
+                return message;
+            };
+
+            TestReadAtTimestampImpl(3, generate2);
+
         }
 
         Y_UNIT_TEST(TestWriteStat1stClass) {
@@ -544,5 +706,8 @@ namespace NKikimr::NPersQueueTests {
             }
 
         }
+
+
+
     }
 }

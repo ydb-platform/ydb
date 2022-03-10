@@ -49,6 +49,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , DbId(dbId)
     , FolderId(folderId)
     , StreamName(streamName)
+    , CurReadRuleGeneration(0)
 {
     Counters.Populate(counters);
 }
@@ -133,11 +134,11 @@ void TUsersInfoStorage::Remove(const TString& user, const TActorContext& ctx) {
     UsersInfo.erase(it);
 }
 
-TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx) {
+TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration) {
     Y_VERIFY(!user.empty());
     auto it = UsersInfo.find(user);
     if (it == UsersInfo.end()) {
-        return Create(ctx, user, 0, false, "", 0, 0, 0, 0, TInstant::Zero());
+        return Create(ctx, user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration, false, "", 0, 0, 0, 0, TInstant::Zero());
     }
     return it->second;
 }

@@ -3742,6 +3742,7 @@ namespace {
                 .ReadOnlyOriginal(true)
         );
 
+
         {
             TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
             auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
@@ -3758,5 +3759,6 @@ namespace {
             Cerr << "partition status: " << partitionStatus->DebugString() << Endl;
         }
     }
+
 }
 }

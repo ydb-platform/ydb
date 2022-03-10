@@ -114,6 +114,7 @@ class KikimrConfigGenerator(object):
             disable_mvcc=False,
             enable_public_api_external_blobs=False,
             node_kind=None,
+            bs_cache_file_path=None,
     ):
         self._version = version
         self.use_log_files = use_log_files
@@ -175,6 +176,8 @@ class KikimrConfigGenerator(object):
 
         self.__output_path = output_path or yatest_common.output_path()
         self.node_kind = node_kind
+
+        self.__bs_cache_file_path = bs_cache_file_path
 
         self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select, self.__node_ids, self.__additional_log_configs)
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
@@ -384,6 +387,9 @@ class KikimrConfigGenerator(object):
     def __build(self):
         datacenter_id_generator = itertools.cycle(self._dcs)
         self.yaml_config["blob_storage_config"] = {}
+        if self.__bs_cache_file_path:
+            self.yaml_config["blob_storage_config"]["cache_file_path"] = \
+                self.__bs_cache_file_path
         self.yaml_config["blob_storage_config"]["service_set"] = {}
         self.yaml_config["blob_storage_config"]["service_set"]["availability_domains"] = 1
         self.yaml_config["blob_storage_config"]["service_set"]["pdisks"] = []

@@ -448,6 +448,7 @@ RECURSE(
     glob2
     glom
     goerr
+    google-ads
     google-api-core
     google-api-python-client
     google-auth
@@ -773,6 +774,7 @@ RECURSE(
     promise
     prompt-toolkit
     prophet
+    proto-plus
     protobuf
     protobuf_std
     protobuf_to_dict

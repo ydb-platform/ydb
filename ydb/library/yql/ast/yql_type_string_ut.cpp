@@ -666,4 +666,8 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestFormat("((Tagged (Data String) \"a\\t\\n\\x01b\"))", "Tagged<String,'a\\t\\n\\x01b'>");
     }
 
+    Y_UNIT_TEST(FormatPg) {
+        TestFormat("((Pg int4))", "pgint4");
+        TestFormat("((Pg _int4))", "_pgint4");
+    }
 }

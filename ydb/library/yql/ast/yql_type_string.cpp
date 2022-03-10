@@ -2,6 +2,7 @@
 #include "yql_expr.h"
 #include "yql_ast_escaping.h"
 
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/string/cast.h>
@@ -181,6 +182,7 @@ public:
 
 private:
     TAstNode* ParseType() {
+        bool isPgType = false;
         TAstNode* type = nullptr;
 
         switch (Token) {
@@ -305,11 +307,33 @@ private:
             if (Identifier.empty()) {
                 return AddError("Expected type");
             }
-            return AddError(TString("Unknown type: '") + Identifier + "\'");
+
+            auto id = Identifier;
+            if (id.SkipPrefix("pg")) {
+                if (NPg::HasType(id)) {
+                    type = MakePgType(id);
+                    isPgType = true;
+                    GetNextToken();
+                }
+            } else if (id.SkipPrefix("_pg")) {
+                if (NPg::HasType(id) && !id.StartsWith('_')) {
+                    type = MakePgType(TString("_") + id);
+                    isPgType = true;
+                    GetNextToken();
+                }
+            }
+
+            if (!type) {
+                return AddError(TString("Unknown type: '") + Identifier + "\'");
+            }
         }
 
         if (type) {
             while (Token == '?') {
+                if (isPgType) {
+                    return AddError(TString("PG type can't be wrapped into Optional type"));
+                }
+
                 type = MakeOptionalType(type);
                 GetNextToken();
             }
@@ -1012,6 +1036,14 @@ private:
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
+    TAstNode* MakePgType(TStringBuf type) {
+        TAstNode* items[] = {
+            MakeLiteralAtom(TStringBuf("PgType")),
+            MakeQuotedAtom(type),
+        };
+        return MakeList(items, Y_ARRAY_SIZE(items));
+    }
+
     TAstNode* MakeDecimalType(TStringBuf precision, TStringBuf scale) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("DataType")),
@@ -1179,7 +1211,12 @@ private:
     }
 
     void Visit(const TPgExprType& type) final {
-        Out_ << "pg" << type.GetName();
+        TStringBuf name = type.GetName();
+        if (!name.SkipPrefix("_")) {
+            Out_ << "pg" << name;
+        } else {
+            Out_ << "_pg" << name;
+        }
     }
 
     void Visit(const TWorldExprType& type) final {

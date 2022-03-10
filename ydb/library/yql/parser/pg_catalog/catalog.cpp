@@ -287,7 +287,10 @@ public:
 
         Types[LastType.TypeId] = LastType;
         if (LastType.ArrayTypeId) {
-            Types[LastType.ArrayTypeId] = LastType;
+            auto arrayType = LastType;
+            arrayType.Name = "_" + arrayType.Name;
+            arrayType.TypeId = LastType.ArrayTypeId;
+            Types[LastType.ArrayTypeId] = arrayType;
         }
 
         LazyInfos[LastType.TypeId] = LastLazyTypeInfo;
@@ -601,6 +604,11 @@ const TProcDesc& LookupProc(ui32 procId) {
     }
 
     return *procPtr;
+}
+
+bool HasType(const TStringBuf& name) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.TypeByName.contains(name);
 }
 
 const TTypeDesc& LookupType(const TString& name) {

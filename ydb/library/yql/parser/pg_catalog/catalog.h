@@ -62,6 +62,7 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
 
+bool HasType(const TStringBuf& name);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
 

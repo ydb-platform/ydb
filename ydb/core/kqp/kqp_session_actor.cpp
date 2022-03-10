@@ -1,5 +1,6 @@
 #include "kqp_impl.h"
 
+#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_transform.h>
@@ -22,6 +23,8 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/string/printf.h>
+
+LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr {
 namespace NKqp {
@@ -61,6 +64,7 @@ struct TKqpQueryState {
     TString UserToken;
 
 
+    NLWTrace::TOrbit Orbit;
 
     TString TxId; // User tx
     bool Commit = true;
@@ -246,15 +250,18 @@ public:
                 "Invalid session, expected: " << SessionId << ", got: " << requestInfo.GetSessionId());
 
         MakeNewQueryState();
+
         QueryState->Request.Swap(event.MutableRequest());
         auto& queryRequest = QueryState->Request;
-
         YQL_ENSURE(queryRequest.GetDatabase() == Settings.Database,
                 "Wrong database, expected:" << Settings.Database << ", got: " << queryRequest.GetDatabase());
 
         YQL_ENSURE(queryRequest.HasAction());
         auto action = queryRequest.GetAction();
 
+        LWTRACK(KqpQueryRequest, QueryState->Orbit, queryRequest.GetDatabase(),
+                queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED,
+                action, queryRequest.GetQuery());
         LOG_D(requestInfo << "Received request,"
             << " proxyRequestId: " << proxyRequestId
             << " query: " << (queryRequest.HasQuery() ? queryRequest.GetQuery().Quote() : "")
@@ -352,6 +359,8 @@ public:
         YQL_ENSURE(compileResult);
         YQL_ENSURE(QueryState);
 
+        LWTRACK(KqpQueryCompiled, QueryState->Orbit, TStringBuilder() << compileResult->Status);
+
         if (compileResult->Status != Ydb::StatusIds::SUCCESS) {
             if (ReplyQueryCompileError(compileResult)) {
                 Cleanup();
@@ -389,7 +398,7 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
-        ExecuteOrDeferr();
+        ExecuteOrDefer();
     }
 
      void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
@@ -473,6 +482,9 @@ public:
         QueryState->QueryCtx = MakeIntrusive<TKikimrQueryContext>();
         QueryState->QueryCtx->TimeProvider = TAppData::TimeProvider;
         QueryState->QueryCtx->RandomProvider = TAppData::RandomProvider;
+
+        //const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+        //ApplyTableOperations(QueryState->QueryCtx.Get(), phyQuery);
 
         auto action = queryRequest.GetAction();
         auto queryType = queryRequest.GetType();
@@ -648,7 +660,7 @@ public:
     }
 
 
-    void ExecuteOrDeferr() {
+    void ExecuteOrDefer() {
         auto& txCtx = *QueryState->TxCtx;
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         if (!txCtx.DeferredEffects.Empty() && txCtx.Locks.Broken()) {
@@ -662,6 +674,7 @@ public:
         auto tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
                 &phyQuery.GetTransactions(QueryState->CurrentTx));
 
+
         while (tx->GetHasEffects()) {
             if (!txCtx.AddDeferredEffect(tx, CreateKqpValueMap(*tx))) {
                 ReplyProcessError(requestInfo, Ydb::StatusIds::BAD_REQUEST,
@@ -669,6 +682,7 @@ public:
                 return;
             }
             if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
+                LWTRACK(KqpPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
                 ++QueryState->CurrentTx;
                 tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
                         &phyQuery.GetTransactions(QueryState->CurrentTx));
@@ -743,6 +757,8 @@ public:
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
         }
 
+        LWTRACK(KqpPhyQueryProposeTx, QueryState->Orbit, QueryState->CurrentTx, request.Transactions.size(),
+                request.Locks.size(), request.AcquireLocksTxId.Defined());
         SendToExecuter(std::move(request));
     }
 
@@ -771,6 +787,7 @@ public:
             return;
         }
 
+        LWTRACK(KqpPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, response->GetResult().ResultsSize());
         // save tx results
         auto& txResult = *response->MutableResult();
         TVector<NKikimrMiniKQL::TResult> txResults;
@@ -804,7 +821,7 @@ public:
 
         if (QueryState->PreparedQuery &&
                 QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()) {
-            ExecuteOrDeferr();
+            ExecuteOrDefer();
         } else {
             ReplySuccess();
         }
@@ -822,6 +839,20 @@ public:
         //resStats->SetWorkerCpuTimeUs();
         resStats->MutableCompilation()->Swap(&QueryState->CompileStats);
     }
+
+    /*
+    void ApplyTableOperations(TKikimrQueryContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
+        TVector<NKqpProto::TKqpTableOp> operations(query.GetTableOps().begin(), query.GetTableOps().end());
+        TVector<NKqpProto::TKqpTableInfo> tableInfos(query.GetTableInfos().begin(), query.GetTableInfos().end());
+
+        auto isolationLevel = *txCtx->EffectiveIsolationLevel;
+        bool strictDml = true;
+
+        TExprContext ctx;
+        txCtx->ApplyTableOperations(operations, tableInfos, isolationLevel, strictDml,
+                EKikimrQueryType::Dml, ctx);
+    }
+    */
 
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         Y_VERIFY(QueryState);
@@ -921,6 +952,8 @@ public:
 
         resEv->Record.GetRef().SetYdbStatus(Ydb::StatusIds::SUCCESS);
         Reply(std::move(resEv));
+
+        LWTRACK(KqpQueryReplySuccess, QueryState->Orbit, arena->SpaceUsed());
 
         Cleanup();
     }
@@ -1149,6 +1182,7 @@ public:
         auto ev = std::make_unique<TEvKqp::TEvQueryResponse>();
         ev->Record.GetRef().SetYdbStatus(ydbStatus);
 
+        LWTRACK(KqpQueryReplyError, QueryState->Orbit, message);
         auto* response = ev->Record.GetRef().MutableResponse();
 
         auto *queryIssue = response->AddQueryIssues();

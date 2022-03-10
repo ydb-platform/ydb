@@ -17,6 +17,8 @@ SRCS(
     kqp_yql.h
     kqp_timeouts.h
     kqp_timeouts.cpp
+    kqp_lwtrace_probes.h
+    kqp_lwtrace_probes.cpp
 )
 
 PEERDIR(
@@ -28,6 +30,8 @@ PEERDIR(
     ydb/library/yql/core/issue
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
+    library/cpp/lwtrace
+    #library/cpp/lwtrace/protos
 )
 
 YQL_LAST_ABI_VERSION()

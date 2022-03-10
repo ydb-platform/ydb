@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/runtime/kqp_spilling_file.h>
 #include <ydb/core/kqp/runtime/kqp_spilling.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -26,8 +27,9 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/resource/resource.h>
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/resource/resource.h>
 
 
 namespace NKikimr::NKqp {
@@ -279,6 +281,7 @@ public:
         , ModuleResolverState() {}
 
     void Bootstrap() {
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 

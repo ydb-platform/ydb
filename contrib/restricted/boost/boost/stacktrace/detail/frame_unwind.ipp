@@ -1,4 +1,4 @@
-// Copyright Antony Polukhin, 2016-2017.
+// Copyright Antony Polukhin, 2016-2021.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -16,8 +16,8 @@
 
 #include <boost/stacktrace/detail/to_hex_array.hpp>
 #include <boost/stacktrace/detail/location_from_symbol.hpp>
+#include <boost/stacktrace/detail/to_dec_array.hpp>
 #include <boost/core/demangle.hpp>
-#include <boost/lexical_cast.hpp>
 
 #include <cstdio>
 
@@ -59,6 +59,9 @@ public:
 
 std::string to_string(const frame* frames, std::size_t size) {
     std::string res;
+    if (size == 0) {
+        return res;
+    }
     res.reserve(64 * size);
 
     to_string_impl impl;
@@ -67,7 +70,7 @@ std::string to_string(const frame* frames, std::size_t size) {
         if (i < 10) {
             res += ' ';
         }
-        res += boost::lexical_cast<boost::array<char, 40> >(i).data();
+        res += boost::stacktrace::detail::to_dec_array(i).data();
         res += '#';
         res += ' ';
         res += impl(frames[i].address());
@@ -82,9 +85,13 @@ std::string to_string(const frame* frames, std::size_t size) {
 
 
 std::string frame::name() const {
+    if (!addr_) {
+        return std::string();
+    }
+
 #if !defined(BOOST_WINDOWS) && !defined(__CYGWIN__)
     ::Dl_info dli;
-    const bool dl_ok = !!::dladdr(addr_, &dli);
+    const bool dl_ok = !!::dladdr(const_cast<void*>(addr_), &dli); // `dladdr` on Solaris accepts nonconst addresses
     if (dl_ok && dli.dli_sname) {
         return boost::core::demangle(dli.dli_sname);
     }
@@ -93,6 +100,10 @@ std::string frame::name() const {
 }
 
 std::string to_string(const frame& f) {
+    if (!f) {
+        return std::string();
+    }
+
     boost::stacktrace::detail::to_string_impl impl;
     return impl(f.address());
 }

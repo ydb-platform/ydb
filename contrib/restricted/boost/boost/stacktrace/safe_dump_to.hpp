@@ -1,4 +1,4 @@
-// Copyright Antony Polukhin, 2016-2017.
+// Copyright Antony Polukhin, 2016-2021.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -84,7 +84,7 @@ struct this_thread_frames { // struct is required to avoid warning about usage o
 ///
 /// @b Async-Handler-Safety: Safe.
 ///
-/// @returns Stored call sequence depth including terminating zero frame.
+/// @returns Stored call sequence depth including terminating zero frame. To get the actually consumed bytes multiply this value by the sizeof(boost::stacktrace::frame::native_frame_ptr_t)
 ///
 /// @param memory Preallocated buffer to store current function call sequence into.
 ///
@@ -99,7 +99,7 @@ BOOST_FORCEINLINE std::size_t safe_dump_to(void* memory, std::size_t size) BOOST
 ///
 /// @b Async-Handler-Safety: Safe.
 ///
-/// @returns Stored call sequence depth including terminating zero frame.
+/// @returns Stored call sequence depth including terminating zero frame.  To get the actually consumed bytes multiply this value by the sizeof(boost::stacktrace::frame::native_frame_ptr_t)
 ///
 /// @param skip How many top calls to skip and do not store.
 ///

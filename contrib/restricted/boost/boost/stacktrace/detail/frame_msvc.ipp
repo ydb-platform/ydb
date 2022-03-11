@@ -1,4 +1,4 @@
-// Copyright Antony Polukhin, 2016-2017.
+// Copyright Antony Polukhin, 2016-2021.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -16,7 +16,7 @@
 
 #include <boost/core/demangle.hpp>
 #include <boost/core/noncopyable.hpp>
-#include <boost/lexical_cast.hpp>
+#include <boost/stacktrace/detail/to_dec_array.hpp>
 #include <boost/stacktrace/detail/to_hex_array.hpp>
 #include <windows.h>
 #include "dbgeng.h"
@@ -98,7 +98,7 @@ public:
 };
 
 
-static std::string mingw_demangling_workaround(const std::string& s) {
+inline std::string mingw_demangling_workaround(const std::string& s) {
 #ifdef BOOST_GCC
     if (s.empty()) {
         return s;
@@ -112,6 +112,17 @@ static std::string mingw_demangling_workaround(const std::string& s) {
 #else
     return s;
 #endif
+}
+
+inline void trim_right_zeroes(std::string& s) {
+    // MSVC-9 does not have back() and pop_back() functions in std::string
+    while (!s.empty()) {
+        const std::size_t last = static_cast<std::size_t>(s.size() - 1);
+        if (s[last] != '\0') {
+            break;
+        }
+        s.resize(last);
+    }
 }
 
 class debugging_symbols: boost::noncopyable {
@@ -217,6 +228,7 @@ public:
                 &size,
                 0
             ));
+            trim_right_zeroes(result);
         } else if (res) {
             result = name;
         }
@@ -301,6 +313,7 @@ public:
             &size,
             0
         ));
+        trim_right_zeroes(result.first);
         result.second = line_num;
 
         if (!res) {
@@ -329,7 +342,7 @@ public:
             res += " at ";
             res += source_line.first;
             res += ':';
-            res += boost::lexical_cast<boost::array<char, 40> >(source_line.second).data();
+            res += boost::stacktrace::detail::to_dec_array(source_line.second).data();
         } else if (!module_name.empty()) {
             res += " in ";
             res += module_name;
@@ -349,7 +362,7 @@ std::string to_string(const frame* frames, std::size_t size) {
         if (i < 10) {
             res += ' ';
         }
-        res += boost::lexical_cast<boost::array<char, 40> >(i).data();
+        res += boost::stacktrace::detail::to_dec_array(i).data();
         res += '#';
         res += ' ';
         idebug.to_string_impl(frames[i].address(), res);

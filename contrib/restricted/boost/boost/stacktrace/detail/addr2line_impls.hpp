@@ -1,4 +1,4 @@
-// Copyright Antony Polukhin, 2016-2017.
+// Copyright Antony Polukhin, 2016-2021.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -13,8 +13,9 @@
 #endif
 
 #include <boost/stacktrace/detail/to_hex_array.hpp>
+#include <boost/stacktrace/detail/to_dec_array.hpp>
+#include <boost/stacktrace/detail/try_dec_convert.hpp>
 #include <boost/core/demangle.hpp>
-#include <boost/lexical_cast.hpp>
 #include <cstdio>
 
 #include <sys/types.h>
@@ -212,7 +213,7 @@ std::size_t frame::source_line() const {
     }
     res = res.substr(last + 1);
 
-    if (!boost::conversion::try_lexical_convert(res, line_num)) {
+    if (!boost::stacktrace::detail::try_dec_convert(res.c_str(), line_num)) {
         return 0;
     }
 

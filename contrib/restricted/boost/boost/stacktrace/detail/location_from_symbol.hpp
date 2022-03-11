@@ -1,4 +1,4 @@
-// Copyright Antony Polukhin, 2016-2017.
+// Copyright Antony Polukhin, 2016-2021.
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -28,7 +28,7 @@ public:
     explicit location_from_symbol(const void* addr) BOOST_NOEXCEPT
         : dli_()
     {
-        if (!::dladdr(addr, &dli_)) {
+        if (!::dladdr(const_cast<void*>(addr), &dli_)) { // `dladdr` on Solaris accepts nonconst addresses
             dli_.dli_fname = 0;
         }
     }

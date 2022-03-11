@@ -62,6 +62,11 @@ add_test(
   ydb-services-ydb-ut
   COMMAND
   ydb-services-ydb-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-services-ydb-ut
   PUBLIC

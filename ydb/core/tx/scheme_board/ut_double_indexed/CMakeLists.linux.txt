@@ -28,6 +28,11 @@ add_test(
   ydb-core-tx-scheme_board-ut_double_indexed
   COMMAND
   ydb-core-tx-scheme_board-ut_double_indexed
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-tx-scheme_board-ut_double_indexed
   PUBLIC

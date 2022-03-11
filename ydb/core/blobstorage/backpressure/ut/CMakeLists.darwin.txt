@@ -31,6 +31,11 @@ add_test(
   ydb-core-blobstorage-backpressure-ut
   COMMAND
   ydb-core-blobstorage-backpressure-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-blobstorage-backpressure-ut
   PUBLIC

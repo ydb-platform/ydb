@@ -28,6 +28,11 @@ add_test(
   client-extensions-discovery_mutator-ut
   COMMAND
   client-extensions-discovery_mutator-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(client-extensions-discovery_mutator-ut
   PUBLIC

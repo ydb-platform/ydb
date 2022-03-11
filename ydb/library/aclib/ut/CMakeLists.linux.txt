@@ -27,6 +27,11 @@ add_test(
   ydb-library-aclib-ut
   COMMAND
   ydb-library-aclib-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-library-aclib-ut
   PUBLIC

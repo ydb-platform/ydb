@@ -28,6 +28,11 @@ add_test(
   ydb-library-yql-utils-failure_injector-ut
   COMMAND
   ydb-library-yql-utils-failure_injector-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-library-yql-utils-failure_injector-ut
   PUBLIC

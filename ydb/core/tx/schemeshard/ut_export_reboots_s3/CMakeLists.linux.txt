@@ -38,6 +38,11 @@ add_test(
   ydb-core-tx-schemeshard-ut_export_reboots_s3
   COMMAND
   ydb-core-tx-schemeshard-ut_export_reboots_s3
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-tx-schemeshard-ut_export_reboots_s3
   PUBLIC

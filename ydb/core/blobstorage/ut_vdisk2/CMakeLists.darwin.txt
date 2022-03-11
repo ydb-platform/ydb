@@ -30,6 +30,11 @@ add_test(
   ydb-core-blobstorage-ut_vdisk2
   COMMAND
   ydb-core-blobstorage-ut_vdisk2
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-blobstorage-ut_vdisk2
   PUBLIC

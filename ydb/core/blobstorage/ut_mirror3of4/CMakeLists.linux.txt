@@ -35,6 +35,11 @@ add_test(
   ydb-core-blobstorage-ut_mirror3of4
   COMMAND
   ydb-core-blobstorage-ut_mirror3of4
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-blobstorage-ut_mirror3of4
   PUBLIC

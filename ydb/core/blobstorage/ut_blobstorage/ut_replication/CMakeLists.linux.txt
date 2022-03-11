@@ -27,6 +27,11 @@ add_test(
   core-blobstorage-ut_blobstorage-ut_replication
   COMMAND
   core-blobstorage-ut_blobstorage-ut_replication
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(core-blobstorage-ut_blobstorage-ut_replication
   PUBLIC

@@ -28,6 +28,11 @@ add_test(
   ydb-core-sys_view-service-ut
   COMMAND
   ydb-core-sys_view-service-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-sys_view-service-ut
   PUBLIC

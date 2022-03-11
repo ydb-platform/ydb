@@ -40,6 +40,11 @@ add_test(
   ydb-core-tx-datashard-ut_read_table
   COMMAND
   ydb-core-tx-datashard-ut_read_table
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-tx-datashard-ut_read_table
   PUBLIC

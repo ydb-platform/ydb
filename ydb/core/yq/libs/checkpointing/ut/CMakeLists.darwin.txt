@@ -32,6 +32,11 @@ add_test(
   ydb-core-yq-libs-checkpointing-ut
   COMMAND
   ydb-core-yq-libs-checkpointing-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-yq-libs-checkpointing-ut
   PUBLIC

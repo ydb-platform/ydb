@@ -26,6 +26,11 @@ add_test(
   ydb-core-metering-ut
   COMMAND
   ydb-core-metering-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-metering-ut
   PUBLIC

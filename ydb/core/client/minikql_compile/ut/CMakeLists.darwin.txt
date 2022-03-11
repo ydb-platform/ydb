@@ -38,6 +38,11 @@ add_test(
   ydb-core-client-minikql_compile-ut
   COMMAND
   ydb-core-client-minikql_compile-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-client-minikql_compile-ut
   PUBLIC

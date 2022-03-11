@@ -43,6 +43,11 @@ add_test(
   ydb-services-yq-ut_integration
   COMMAND
   ydb-services-yq-ut_integration
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-services-yq-ut_integration
   PUBLIC

@@ -32,6 +32,11 @@ add_test(
   ydb-core-grpc_services-ut
   COMMAND
   ydb-core-grpc_services-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-grpc_services-ut
   PUBLIC

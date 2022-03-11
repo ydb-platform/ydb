@@ -35,6 +35,11 @@ add_test(
   ydb-library-yql-udfs-common-stat-ut
   COMMAND
   ydb-library-yql-udfs-common-stat-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-library-yql-udfs-common-stat-ut
   PUBLIC

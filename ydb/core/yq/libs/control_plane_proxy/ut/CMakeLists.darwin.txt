@@ -37,6 +37,11 @@ add_test(
   ydb-core-yq-libs-control_plane_proxy-ut
   COMMAND
   ydb-core-yq-libs-control_plane_proxy-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-yq-libs-control_plane_proxy-ut
   PUBLIC

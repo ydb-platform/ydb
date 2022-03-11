@@ -26,6 +26,11 @@ add_test(
   ydb-library-keys-ut
   COMMAND
   ydb-library-keys-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-library-keys-ut
   PUBLIC

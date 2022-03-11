@@ -27,6 +27,11 @@ add_test(
   ut_group_reconfiguration
   COMMAND
   ut_group_reconfiguration
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ut_group_reconfiguration
   PUBLIC

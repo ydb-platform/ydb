@@ -36,6 +36,11 @@ add_test(
   ydb-core-keyvalue-ut
   COMMAND
   ydb-core-keyvalue-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-keyvalue-ut
   PUBLIC

@@ -27,6 +27,11 @@ add_test(
   ydb-library-naming_conventions-ut
   COMMAND
   ydb-library-naming_conventions-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-library-naming_conventions-ut
   PUBLIC

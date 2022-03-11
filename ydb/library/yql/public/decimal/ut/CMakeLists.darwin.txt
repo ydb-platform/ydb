@@ -27,6 +27,11 @@ add_test(
   ydb-library-yql-public-decimal-ut
   COMMAND
   ydb-library-yql-public-decimal-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-library-yql-public-decimal-ut
   PUBLIC

@@ -27,6 +27,11 @@ add_test(
   ydb-public-lib-operation_id-ut
   COMMAND
   ydb-public-lib-operation_id-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-public-lib-operation_id-ut
   PUBLIC

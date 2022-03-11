@@ -31,6 +31,11 @@ add_test(
   ydb-core-security-ut
   COMMAND
   ydb-core-security-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-security-ut
   PUBLIC

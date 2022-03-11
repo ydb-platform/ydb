@@ -27,6 +27,11 @@ add_test(
   yql-providers-common-structured_token-ut
   COMMAND
   yql-providers-common-structured_token-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(yql-providers-common-structured_token-ut
   PUBLIC

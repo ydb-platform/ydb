@@ -40,6 +40,11 @@ add_test(
   ydb-core-client-ut
   COMMAND
   ydb-core-client-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-client-ut
   PUBLIC

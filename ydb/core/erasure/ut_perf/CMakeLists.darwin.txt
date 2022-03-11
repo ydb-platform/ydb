@@ -26,6 +26,11 @@ add_test(
   ydb-core-erasure-ut_perf
   COMMAND
   ydb-core-erasure-ut_perf
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-erasure-ut_perf
   PUBLIC

@@ -31,6 +31,11 @@ add_test(
   ydb-core-tx-schemeshard-ut_cdc_stream
   COMMAND
   ydb-core-tx-schemeshard-ut_cdc_stream
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-tx-schemeshard-ut_cdc_stream
   PUBLIC

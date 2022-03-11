@@ -38,6 +38,11 @@ add_test(
   ydb-core-engine-ut
   COMMAND
   ydb-core-engine-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-engine-ut
   PUBLIC

@@ -36,6 +36,11 @@ add_test(
   ydb-core-tx-schemeshard-ut_split_merge
   COMMAND
   ydb-core-tx-schemeshard-ut_split_merge
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-core-tx-schemeshard-ut_split_merge
   PUBLIC

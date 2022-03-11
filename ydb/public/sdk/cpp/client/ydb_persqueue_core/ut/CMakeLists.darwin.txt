@@ -43,6 +43,11 @@ add_test(
   ydb-public-sdk-cpp-client-ydb_persqueue_core-ut
   COMMAND
   ydb-public-sdk-cpp-client-ydb_persqueue_core-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
 target_link_flags(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut
   PUBLIC

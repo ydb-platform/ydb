@@ -3489,6 +3489,20 @@ _outRawStmt(StringInfo str, const RawStmt *node)
 }
 
 static void
+_outInsertStmt(StringInfo str, const InsertStmt *node)
+{
+    WRITE_NODE_TYPE("INSERTSTMT");
+
+    WRITE_NODE_FIELD(relation);
+    WRITE_NODE_FIELD(cols);
+    WRITE_NODE_FIELD(selectStmt);
+    WRITE_NODE_FIELD(onConflictClause);
+    WRITE_NODE_FIELD(returningList);
+    WRITE_NODE_FIELD(withClause);
+    WRITE_ENUM_FIELD(override, OverridingKind);
+}
+
+static void
 _outAConst(StringInfo str, const A_Const *node)
 {
 	WRITE_NODE_TYPE("A_CONST");
@@ -3820,6 +3834,30 @@ _outPartitionRangeDatum(StringInfo str, const PartitionRangeDatum *node)
 
 	WRITE_ENUM_FIELD(kind, PartitionRangeDatumKind);
 	WRITE_NODE_FIELD(value);
+	WRITE_LOCATION_FIELD(location);
+}
+
+static void
+_outOnConflictClause(StringInfo str, const OnConflictClause *node)
+{
+	WRITE_NODE_TYPE("ONCONFLICTCLAUSE");
+
+	WRITE_ENUM_FIELD(action, OnConflictAction);
+	WRITE_NODE_FIELD(infer);
+	WRITE_NODE_FIELD(targetList);
+	WRITE_NODE_FIELD(whereClause);
+	WRITE_LOCATION_FIELD(location);
+}
+
+
+static void
+_outInferClause(StringInfo str, const InferClause *node)
+{
+	WRITE_NODE_TYPE("INFERCLAUSE");
+
+	WRITE_NODE_FIELD(indexElems);
+	WRITE_NODE_FIELD(whereClause);
+	WRITE_STRING_FIELD(conname);
 	WRITE_LOCATION_FIELD(location);
 }
 
@@ -4444,6 +4482,9 @@ outNode(StringInfo str, const void *obj)
 			case T_RawStmt:
 				_outRawStmt(str, obj);
 				break;
+            case T_InsertStmt:
+			    _outInsertStmt(str, obj);
+			    break;
 			case T_A_Const:
 				_outAConst(str, obj);
 				break;
@@ -4522,6 +4563,12 @@ outNode(StringInfo str, const void *obj)
 			case T_PartitionRangeDatum:
 				_outPartitionRangeDatum(str, obj);
 				break;
+		        case T_OnConflictClause:
+			        _outOnConflictClause(str, obj);
+			        break;
+		        case T_InferClause:
+			        _outInferClause(str, obj);
+			        break;
 
 			default:
 

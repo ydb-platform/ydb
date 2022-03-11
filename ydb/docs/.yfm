@@ -1,13 +1,23 @@
 allowHTML: true
 langs: ['en','ru']
+apply-presets: true
 
 docs-viewer:
   project-name: ydb
-  logo-title: YDB
-  no-index: true
+  no-index: true # Remove this after the public release
   langs: ['en','ru']
+  themes: ['light']
+
+  github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
+  
+  logo-options:
+    src: https://storage.yandexcloud.net/docs-external/ydb/assets/Logo-YDB.svg
+    src-mobile: https://storage.yandexcloud.net/docs-external/ydb/assets/Logo-YDB.svg
+    img-has:
+      width: 80px
+      offset: true
+  
   index-page:
     title: YDB Open Source
     description: Горизонтально масштабируемая распределённая отказоустойчивая СУБД
     hidden: true
-apply-presets: true

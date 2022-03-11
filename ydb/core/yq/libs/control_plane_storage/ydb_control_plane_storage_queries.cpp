@@ -44,16 +44,18 @@ TString TYdbControlPlaneStorageActor::AssignTenantName(const TString& cloudId, c
     const auto& mapping = Config.Proto.GetMapping();
 
     if (scope) {
-        const auto it = mapping.GetScopeToTenantName().find(scope);
-        if (it != mapping.GetScopeToTenantName().end()) {
-            return it->second;
+        for (const auto& scopeToTenant: mapping.GetScopeToTenantName()) {
+            if (scopeToTenant.GetKey() == scope) {
+                return scopeToTenant.GetValue();
+            }
         }
     }
 
     if (cloudId) {
-        const auto it = mapping.GetCloudIdToTenantName().find(cloudId);
-        if (it != mapping.GetCloudIdToTenantName().end()) {
-            return it->second;
+        for (const auto& cloudToTenant: mapping.GetCloudIdToTenantName()) {
+            if (cloudToTenant.GetKey() == cloudId) {
+                return cloudToTenant.GetValue();
+            }
         }
     }
 

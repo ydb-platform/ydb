@@ -8,10 +8,15 @@ import "ydb/core/yq/libs/config/protos/storage.proto";
 
 ////////////////////////////////////////////////////////////
 
+message TMapItem {
+    string Key = 1;
+    string Value = 2;
+}
+
 message TQueryMapping {
-    map<string, string> CloudIdToTenantName  = 1;
-    map<string, string> ScopeToTenantName = 2;
-    repeated string CommonTenantName        = 3;
+    repeated TMapItem CloudIdToTenantName  = 1;
+    repeated TMapItem ScopeToTenantName    = 2;
+    repeated string CommonTenantName       = 3;
 }
 
 message TControlPlaneStorageConfig {

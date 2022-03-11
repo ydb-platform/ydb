@@ -6,6 +6,7 @@ TWorkerManagerCounters::TWorkerManagerCounters(NMonitoring::TDynamicCounterPtr r
    ActiveWorkers = root->GetCounter("ActiveWorkers");
    MkqlMemoryLimit = root->GetCounter("MkqlMemoryLimit");
    MkqlMemoryAllocated = root->GetCounter("MkqlMemoryAllocated");
+   FreeGroupError = root->GetCounter("FreeGroupError");
 }
 
 TWorkerManagerCounters::TWorkerManagerCounters()

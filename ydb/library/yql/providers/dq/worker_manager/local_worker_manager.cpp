@@ -298,8 +298,9 @@ private:
                 UnregisterChild(actorId);
             }
 
-            if (sender) {
-                Y_VERIFY(it->second.Sender == sender);
+            if (sender && it->second.Sender != sender) {
+                Options.Counters.FreeGroupError->Inc();
+                YQL_LOG(ERROR) << "Free Group " << id << " mismatched alloc-free senders: " << it->second.Sender << " and " << sender << " TxId: " << it->second.TxId;
             }
 
             MemoryQuoter->Free(it->second.TxId, 0);

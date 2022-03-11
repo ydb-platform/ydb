@@ -669,7 +669,7 @@ public:
             return output;
         }
 
-        auto resOptions = QL(QL(QA("type")));
+        auto resOptions = QL(QL(QA("type")), QL(QA("autoref")));
         Statements.push_back(L(A("let"), A("output"), output));
         Statements.push_back(L(A("let"), A("result_sink"), L(A("DataSink"), QA(TString(NYql::ResultProviderName)))));
         Statements.push_back(L(A("let"), A("world"), L(A("Write!"),

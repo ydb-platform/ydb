@@ -115,6 +115,7 @@ set(CMAKE_CXX_FLAGS "\
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/cmake)
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR})
+list(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
 enable_testing()
 if (UNIX)
   include(CMakeLists.linux.txt)

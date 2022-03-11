@@ -9,27 +9,20 @@
 
 - Linux
 
-  Версия | Дата выпуска | Скачать
-  :--- | :--- | :---
-  v.1.6.0 | 24.12.21  | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.6.0/linux/amd64/ydb)
+  {% include notitle [Linux](_includes/ydb-cli/linux.md) %}
 
 - macOS (Intel)
 
-  Версия | Дата выпуска | Скачать
-  :--- | :--- | :---
-  v.1.6.0 | 24.12.21 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.6.0/darwin/amd64/ydb)
+  {% include notitle [macIntel](_includes/ydb-cli/darwin_amd64.md) %}
 
 - macOS (M1 arm)
 
-  Версия | Дата выпуска | Скачать
-  :--- | :--- | :---
-  v.1.6.0 | 24.12.21  | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.6.0/darwin/arm64/ydb)
+  {% include notitle [macM1](_includes/ydb-cli/darwin_arm64.md) %}
 
 - Windows
 
-  Версия | Дата выпуска | Скачать
-  :--- | :--- | :---
-  v.1.6.0 | 24.12.21  | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/1.6.0/windows/amd64/ydb.exe)
+  {% include notitle [Windows](_includes/ydb-cli/windows.md) %}
+
 
 {% endlist %}
 
@@ -41,14 +34,15 @@
 
 - Linux
 
-  Версия | Стабильный | Дата выпуска | Скачать
-  :--- | :--- | :--- | :---
-  v.21.4.62 | Да | 12.02.22 | [Бинарный файл](https://binaries.ydb.tech/ydbd-main-linux-amd64.tar.gz)
+  {% include notitle [linux](_includes/server/linux.md) %}
 
 - Docker
 
-  Версия | Стабильный | Дата выпуска | Скачать
-  :--- | :--- | :---
-  v.24.4.62 | Да | 12.02.22 | `cr.yandex/crpl7ipeu79oseqhcgn2/ydb-oss:main`
+  {% include notitle [docker](_includes/server/docker.md) %}
+
+- Исходный код
+
+  {% include notitle [docker](_includes/server/source_code.md) %}
+
 
 {% endlist %}

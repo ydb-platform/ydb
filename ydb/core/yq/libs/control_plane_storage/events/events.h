@@ -16,6 +16,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/yq/libs/events/event_subspace.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NYq {
 
@@ -25,6 +26,13 @@ struct TAuditDetails {
     TMaybe<T> After;
     bool IdempotencyResult = false;
     TString CloudId;
+
+    size_t GetByteSize() const {
+        return sizeof(*this)
+                + Before.Empty() ? 0 : Before->ByteSizeLong()
+                + After.Empty() ? 0 : After->ByteSizeLong()
+                + CloudId.Size();
+    }
 };
 
 struct TNodeInfo {
@@ -50,6 +58,19 @@ struct TDebugItem {
         }
         result += "Error: " + Error + "\n";
         return result;
+    }
+
+    size_t GetByteSize() const {
+        size_t paramsSize = 0;
+        for (const auto& [key, value]: Params.GetValues()) {
+            paramsSize += key.Size() + NYdb::TProtoAccessor::GetProto(value).ByteSizeLong();
+        }
+        return sizeof(*this)
+                + Query.Size()
+                + paramsSize
+                + Plan.Size()
+                + Ast.Size()
+                + Error.Size();
     }
 };
 
@@ -91,6 +112,35 @@ public:
         Permissions = 0xFFFFFFFF;
     }
 };
+
+namespace {
+    inline size_t GetIssuesByteSize(const NYql::TIssues& issues) {
+        size_t size = 0;
+        for (const auto& issue: issues) {
+            NYql::WalkThroughIssues(issue, false, [&size](const auto& issue, ui16) {
+                size += sizeof(issue);
+                size += issue.Message.size();
+            });
+        }
+        size += issues.Size() * sizeof(NYql::TIssue);
+        return size;
+    }
+
+    inline size_t GetIssuesByteSize(const TMaybe<NYql::TIssues>& issues) {
+        return issues.Empty() ? 0 : GetIssuesByteSize(*issues);
+    }
+
+    inline size_t GetDebugInfoByteSize(const TDebugInfoPtr& infos) {
+        if (!infos) {
+            return 0;
+        }
+        size_t size = 0;
+        for (const auto& info: *infos) {
+            size += info.GetByteSize();
+        }
+        return size;
+    }
+}
 
 struct TEvControlPlaneStorage {
     // Event ids.
@@ -166,6 +216,15 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size()
+                    + CloudId.Size();
+        }
+
         TString Scope;
         YandexQuery::CreateQueryRequest Request;
         TString User;
@@ -185,6 +244,14 @@ struct TEvControlPlaneStorage {
         explicit TEvCreateQueryResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::CreateQueryResult Result;
@@ -207,6 +274,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::ListQueriesRequest Request;
         TString User;
@@ -223,6 +298,13 @@ struct TEvControlPlaneStorage {
         explicit TEvListQueriesResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::ListQueriesResult Result;
@@ -244,6 +326,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::DescribeQueryRequest Request;
         TString User;
@@ -260,6 +350,13 @@ struct TEvControlPlaneStorage {
         explicit TEvDescribeQueryResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::DescribeQueryResult Result;
@@ -281,6 +378,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::GetQueryStatusRequest Request;
         TString User;
@@ -297,6 +402,13 @@ struct TEvControlPlaneStorage {
         explicit TEvGetQueryStatusResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::GetQueryStatusResult Result;
@@ -316,6 +428,14 @@ struct TEvControlPlaneStorage {
             , Token(token)
             , Permissions(permissions)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
         }
 
         TString Scope;
@@ -338,6 +458,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         YandexQuery::ModifyQueryResult Result;
         TAuditDetails<YandexQuery::Query> AuditDetails;
         NYql::TIssues Issues;
@@ -356,6 +484,14 @@ struct TEvControlPlaneStorage {
             , Token(token)
             , Permissions(permissions)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
         }
 
         TString Scope;
@@ -378,6 +514,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         YandexQuery::DeleteQueryResult Result;
         TAuditDetails<YandexQuery::Query> AuditDetails;
         NYql::TIssues Issues;
@@ -396,6 +540,14 @@ struct TEvControlPlaneStorage {
             , Token(token)
             , Permissions(permissions)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
         }
 
         TString Scope;
@@ -418,6 +570,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         YandexQuery::ControlQueryResult Result;
         TAuditDetails<YandexQuery::Query> AuditDetails;
         NYql::TIssues Issues;
@@ -438,6 +598,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::GetResultDataRequest Request;
         TString User;
@@ -454,6 +622,13 @@ struct TEvControlPlaneStorage {
         explicit TEvGetResultDataResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::GetResultDataResult Result;
@@ -475,6 +650,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::ListJobsRequest Request;
         TString User;
@@ -491,6 +674,13 @@ struct TEvControlPlaneStorage {
         explicit TEvListJobsResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::ListJobsResult Result;
@@ -512,6 +702,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::DescribeJobRequest Request;
         TString User;
@@ -528,6 +726,13 @@ struct TEvControlPlaneStorage {
         explicit TEvDescribeJobResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::DescribeJobResult Result;
@@ -551,6 +756,15 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size()
+                    + CloudId.Size();
+        }
+
         TString Scope;
         YandexQuery::CreateConnectionRequest Request;
         TString User;
@@ -570,6 +784,14 @@ struct TEvControlPlaneStorage {
         explicit TEvCreateConnectionResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::CreateConnectionResult Result;
@@ -592,6 +814,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::ListConnectionsRequest Request;
         TString User;
@@ -608,6 +838,13 @@ struct TEvControlPlaneStorage {
         explicit TEvListConnectionsResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::ListConnectionsResult Result;
@@ -629,6 +866,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::DescribeConnectionRequest Request;
         TString User;
@@ -645,6 +890,13 @@ struct TEvControlPlaneStorage {
         explicit TEvDescribeConnectionResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::DescribeConnectionResult Result;
@@ -664,6 +916,14 @@ struct TEvControlPlaneStorage {
             , Token(token)
             , Permissions(permissions)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
         }
 
         TString Scope;
@@ -686,6 +946,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         YandexQuery::ModifyConnectionResult Result;
         TAuditDetails<YandexQuery::Connection> AuditDetails;
         NYql::TIssues Issues;
@@ -706,6 +974,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::DeleteConnectionRequest Request;
         TString User;
@@ -724,6 +1000,14 @@ struct TEvControlPlaneStorage {
         explicit TEvDeleteConnectionResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::DeleteConnectionResult Result;
@@ -748,6 +1032,15 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size()
+                    + CloudId.Size();
+        }
+
         TString Scope;
         YandexQuery::CreateBindingRequest Request;
         TString User;
@@ -767,6 +1060,14 @@ struct TEvControlPlaneStorage {
         explicit TEvCreateBindingResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::CreateBindingResult Result;
@@ -789,6 +1090,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::ListBindingsRequest Request;
         TString User;
@@ -805,6 +1114,13 @@ struct TEvControlPlaneStorage {
         explicit TEvListBindingsResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::ListBindingsResult Result;
@@ -826,6 +1142,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::DescribeBindingRequest Request;
         TString User;
@@ -842,6 +1166,13 @@ struct TEvControlPlaneStorage {
         explicit TEvDescribeBindingResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::DescribeBindingResult Result;
@@ -861,6 +1192,14 @@ struct TEvControlPlaneStorage {
             , Token(token)
             , Permissions(permissions)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
         }
 
         TString Scope;
@@ -883,6 +1222,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         YandexQuery::ModifyBindingResult Result;
         TAuditDetails<YandexQuery::Binding> AuditDetails;
         NYql::TIssues Issues;
@@ -903,6 +1250,14 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + Request.ByteSizeLong()
+                    + User.Size()
+                    + Token.Size();
+        }
+
         TString Scope;
         YandexQuery::DeleteBindingRequest Request;
         TString User;
@@ -921,6 +1276,14 @@ struct TEvControlPlaneStorage {
         explicit TEvDeleteBindingResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + AuditDetails.GetByteSize()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
         }
 
         YandexQuery::DeleteBindingResult Result;
@@ -944,6 +1307,12 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + ResultId.Size()
+                    + ResultSet.ByteSizeLong();
+        }
+
         TString ResultId;
         int32_t ResultSetId = 0;
         int64_t StartRowId = 0;
@@ -965,6 +1334,12 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         NYql::TIssues Issues;
         const ui64 RequestId = 0;
         TDebugInfoPtr DebugInfo;
@@ -981,6 +1356,13 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Owner.Size()
+                    + HostName.Size()
+                    + TenantName.Size();
+        }
+
         TString Owner;
         TString HostName;
         TString TenantName;
@@ -993,6 +1375,14 @@ struct TEvControlPlaneStorage {
         YandexQuery::Internal::QueryInternal Internal;
         ui64 Generation = 0;
         TInstant Deadline;
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Scope.Size()
+                    + QueryId.Size()
+                    + Query.ByteSizeLong()
+                    + Internal.ByteSizeLong();
+        }
     };
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
@@ -1005,6 +1395,23 @@ struct TEvControlPlaneStorage {
         explicit TEvGetTaskResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + TasksByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + Owner.Size()
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
+        size_t TasksByteSizeLong() const {
+            size_t size = 0;
+            for (const auto& task: Tasks) {
+                size += task.GetByteSize();
+            }
+            size += Tasks.size() * sizeof(TTask);
+            return size;
         }
 
         NYql::TIssues Issues;
@@ -1023,6 +1430,16 @@ struct TEvControlPlaneStorage {
         bool UseSsl = false;
         TString TokenName;
         bool AddBearerToToken = false;
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + DatabaseId.Size()
+                    + Database.Size()
+                    + TopicPath.Size()
+                    + ConsumerName.Size()
+                    + ClusterEndpoint.Size()
+                    + TokenName.Size();
+        }
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
@@ -1034,6 +1451,57 @@ struct TEvControlPlaneStorage {
             , Deadline(deadline)
             , ResultId(resultId)
         {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + TenantName.Size()
+                    + Scope.Size()
+                    + QueryId.Size()
+                    + Owner.Size()
+                    + ResultId.Size()
+                    + Status.Empty() ? 0 : sizeof(*Status)
+                    + GetIssuesByteSize(Issues)
+                    + GetIssuesByteSize(TransientIssues)
+                    + Statistics.Empty() ? 0 : Statistics->Size()
+                    + ResultSetMetasByteSizeLong()
+                    + Ast.Empty() ? 0 : Ast->Size()
+                    + Plan.Empty() ? 0 : Plan->Size()
+                    + StartedAt.Empty() ? 0 : sizeof(*StartedAt)
+                    + FinishedAt.Empty() ? 0 : sizeof(*FinishedAt)
+                    + CreatedTopicConsumersByteSizeLong()
+                    + DqGraphByteSizeLong()
+                    + StreamingDisposition.Empty() ? 0 : StreamingDisposition->ByteSizeLong();
+        }
+
+        size_t ResultSetMetasByteSizeLong() const {
+            if (ResultSetMetas.Empty()) {
+                return 0;
+            }
+            size_t size = 0;
+            for (const auto& resultSet: *ResultSetMetas) {
+                size += resultSet.ByteSizeLong();
+            }
+            size += ResultSetMetas->size() * sizeof(YandexQuery::ResultSetMeta);
+            return size;
+        }
+
+        size_t CreatedTopicConsumersByteSizeLong() const {
+            size_t size = 0;
+            for (const auto& topic: CreatedTopicConsumers) {
+                size += topic.GetByteSize();
+            }
+            size += CreatedTopicConsumers.size() * sizeof(YandexQuery::ResultSetMeta);
+            return size;
+        }
+
+        size_t DqGraphByteSizeLong() const {
+            size_t size = 0;
+            for (const auto& graph: DqGraphs) {
+                size += graph.Size();
+            }
+            size += DqGraphs.size() * sizeof(TString);
+            return size;
         }
 
         const TString TenantName;
@@ -1070,6 +1538,12 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         YandexQuery::QueryAction Action = YandexQuery::QUERY_ACTION_UNSPECIFIED;
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
@@ -1080,6 +1554,12 @@ struct TEvControlPlaneStorage {
             Yq::Private::NodesHealthCheckRequest&& request)
             : Request(std::move(request))
         {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Request.ByteSizeLong();
+        }
+
         Yq::Private::NodesHealthCheckRequest Request;
     };
 
@@ -1094,6 +1574,13 @@ struct TEvControlPlaneStorage {
             const NYql::TIssues& issues)
             : Issues(issues)
         {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Record.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
 
         Yq::Private::NodesHealthCheckResult Record;
         NYql::TIssues Issues;

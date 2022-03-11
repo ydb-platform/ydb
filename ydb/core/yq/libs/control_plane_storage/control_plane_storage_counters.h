@@ -13,6 +13,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr Ok;
     NMonitoring::TDynamicCounters::TCounterPtr Error;
     NMonitoring::TDynamicCounters::TCounterPtr Retry;
+    NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
     NMonitoring::THistogramPtr LatencyMs;
     NMonitoring::TDynamicCounterPtr Issues;
 

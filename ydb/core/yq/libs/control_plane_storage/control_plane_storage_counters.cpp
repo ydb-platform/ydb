@@ -11,6 +11,8 @@ void TRequestCounters::Register(const NMonitoring::TDynamicCounterPtr& counters)
     Ok = requestCounters->GetCounter("Ok", true);
     Error = requestCounters->GetCounter("Error", true);
     Retry = requestCounters->GetCounter("Retry", true);
+    RequestBytes = requestCounters->GetCounter("RequestBytes", true);
+    ResponseBytes = requestCounters->GetCounter("ResponseBytes", true);
     LatencyMs = requestCounters->GetHistogram("LatencyMs", GetLatencyHistogramBuckets());
     Issues = requestCounters->GetSubgroup("subcomponent", "Issues");
 }

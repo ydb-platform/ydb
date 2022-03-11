@@ -9,6 +9,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     requestCounters->InFly->Inc();
 
     TEvControlPlaneStorage::TEvWriteResultDataRequest& request = *ev->Get();
+    requestCounters->RequestBytes->Add(request.GetByteSize());
     const TString resultId = request.ResultId;
     const int32_t resultSetId = request.ResultSetId;
     const int64_t startRowId = request.StartRowId;

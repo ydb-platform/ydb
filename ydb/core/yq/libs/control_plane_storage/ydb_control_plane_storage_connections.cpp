@@ -16,14 +16,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     TRequestCountersPtr requestCounters = Counters.Requests[RT_CREATE_CONNECTION];
     requestCounters->InFly->Inc();
 
-    const YandexQuery::CreateConnectionRequest& request = ev->Get()->Request;
-    const TString scope = ev->Get()->Scope;
-    const TString user = ev->Get()->User;
-    const TString token = ev->Get()->Token;
-    const TString cloudId = ev->Get()->CloudId;
-    const int byteSize = ev->Get()->Request.ByteSize();
+    const TEvControlPlaneStorage::TEvCreateConnectionRequest& event = *ev->Get();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
+    const YandexQuery::CreateConnectionRequest& request = event.Request;
+    const TString scope = event.Scope;
+    const TString user = event.User;
+    const TString token = event.Token;
+    const TString cloudId = event.CloudId;
+    const int byteSize = request.ByteSize();
     TPermissions permissions = Config.Proto.GetEnablePermissions()
-                            ? ev->Get()->Permissions
+                            ? event.Permissions
                             : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
@@ -133,14 +135,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_CONNECTIONS];
     requestCounters->InFly->Inc();
 
-    const YandexQuery::ListConnectionsRequest& request = ev->Get()->Request;
-    const TString scope = ev->Get()->Scope;
-    const TString user = ev->Get()->User;
+    const TEvControlPlaneStorage::TEvListConnectionsRequest& event = *ev->Get();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
+    const YandexQuery::ListConnectionsRequest& request = event.Request;
+    const TString scope = event.Scope;
+    const TString user = event.User;
     const TString pageToken = request.page_token();
-    const int byteSize = ev->Get()->Request.ByteSize();
-    const TString token = ev->Get()->Token;
+    const int byteSize = request.ByteSize();
+    const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
-                        ? ev->Get()->Permissions
+                        ? event.Permissions
                         : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
@@ -258,13 +262,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_CONNECTION];
     requestCounters->InFly->Inc();
 
-    const YandexQuery::DescribeConnectionRequest& request = ev->Get()->Request;
-    const TString scope = ev->Get()->Scope;
-    const TString user = ev->Get()->User;
+    const TEvControlPlaneStorage::TEvDescribeConnectionRequest& event = *ev->Get();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
+    const YandexQuery::DescribeConnectionRequest& request = event.Request;
+    const TString scope = event.Scope;
+    const TString user = event.User;
     const TString connectionId = request.connection_id();
-    const TString token = ev->Get()->Token;
+    const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
-                    ? ev->Get()->Permissions
+                    ? event.Permissions
                     : TPermissions{TPermissions::VIEW_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
@@ -352,12 +358,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     TRequestCountersPtr requestCounters = Counters.Requests[RT_MODIFY_CONNECTION];
     requestCounters->InFly->Inc();
 
-    const YandexQuery::ModifyConnectionRequest& request = ev->Get()->Request;
-    const TString scope = ev->Get()->Scope;
-    const TString user = ev->Get()->User;
-    const TString token = ev->Get()->Token;
+    const TEvControlPlaneStorage::TEvModifyConnectionRequest& event = *ev->Get();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
+    const YandexQuery::ModifyConnectionRequest& request = event.Request;
+    const TString scope = event.Scope;
+    const TString user = event.User;
+    const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
-                    ? ev->Get()->Permissions
+                    ? event.Permissions
                     : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
@@ -527,12 +535,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
     TRequestCountersPtr requestCounters = Counters.Requests[RT_DELETE_CONNECTION];
     requestCounters->InFly->Inc();
 
-    const YandexQuery::DeleteConnectionRequest& request = ev->Get()->Request;
-    const TString scope = ev->Get()->Scope;
-    const TString user = ev->Get()->User;
-    const TString token = ev->Get()->Token;
+    const TEvControlPlaneStorage::TEvDeleteConnectionRequest& event = *ev->Get();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
+    const YandexQuery::DeleteConnectionRequest& request = event.Request;
+    const TString scope = event.Scope;
+    const TString user = event.User;
+    const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
-                    ? ev->Get()->Permissions
+                    ? event.Permissions
                     : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();

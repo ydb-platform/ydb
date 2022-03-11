@@ -345,6 +345,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     requestCounters->InFly->Inc();
 
     TEvControlPlaneStorage::TEvPingTaskRequest* request = ev->Get();
+    requestCounters->RequestBytes->Add(request->GetByteSize());
     const TString scope = request->Scope;
     const TString queryId = request->QueryId;
     const TString owner = request->Owner;

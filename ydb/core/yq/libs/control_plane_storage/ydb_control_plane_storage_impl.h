@@ -634,10 +634,12 @@ private:
             }
 
             const auto& request = ev->Get()->Request;
+            size_t responseByteSize = 0;
             if (issues) {
                 CPS_LOG_AS_D(*actorSystem, name << ": " << request.DebugString() << " error: " << internalIssues.ToString());
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
+                responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters->Error->Inc();
                 for (const auto& issue : issues) {
@@ -650,10 +652,12 @@ private:
                 CPS_LOG_AS_T(*actorSystem, name << ": " << request.DebugString() << " success");
                 auto event = std::make_unique<ResponseEvent>(result);
                 event->DebugInfo = debugInfo;
+                responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters->Ok->Inc();
             }
             requestCounters->InFly->Dec();
+            requestCounters->ResponseBytes->Add(responseByteSize);
             TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             return MakeFuture(!issues);
@@ -705,10 +709,12 @@ private:
             }
 
             const auto& request = ev->Get()->Request;
+            size_t responseByteSize = 0;
             if (issues) {
                 CPS_LOG_AS_D(*actorSystem, name << ": " << request.DebugString() << " error: " << internalIssues.ToString());
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
+                responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters->Error->Inc();
                 for (const auto& issue : issues) {
@@ -721,10 +727,12 @@ private:
                 CPS_LOG_AS_T(*actorSystem, name << ": " << request.DebugString() << " success");
                 auto event = std::make_unique<ResponseEvent>(result, auditDetails);
                 event->DebugInfo = debugInfo;
+                responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters->Ok->Inc();
             }
             requestCounters->InFly->Dec();
+            requestCounters->ResponseBytes->Add(responseByteSize);
             TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             return MakeFuture(!issues);
@@ -771,10 +779,12 @@ private:
                 internalIssues.AddIssue(internalIssue);
             }
 
+            size_t responseByteSize = 0;
             if (issues) {
                 CPS_LOG_AS_D(*actorSystem, name << ": error: " << internalIssues.ToString());
-                auto event = std::unique_ptr<ResponseEvent>(new ResponseEvent(issues));
+                std::unique_ptr<ResponseEvent> event(new ResponseEvent(issues));
                 event->DebugInfo = debugInfo;
+                responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters->Error->Inc();
                 for (const auto& issue : issues) {
@@ -785,12 +795,14 @@ private:
                 }
             } else {
                 CPS_LOG_AS_T(*actorSystem, name << ":  success");
-                auto event = std::unique_ptr<ResponseEvent>(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
+                std::unique_ptr<ResponseEvent> event(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
                 event->DebugInfo = debugInfo;
+                responseByteSize = event->GetByteSize();
                 actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
                 requestCounters->Ok->Inc();
             }
             requestCounters->InFly->Dec();
+            requestCounters->ResponseBytes->Add(responseByteSize);
             TDuration delta = TInstant::Now() - startTime;
             requestCounters->LatencyMs->Collect(delta.MilliSeconds());
             return MakeFuture(!issues);
@@ -803,7 +815,9 @@ private:
                             ui64 cookie,
                             const TDuration& delta,
                             const TRequestCountersPtr& requestCounters) {
-        Send(sender, new T(issues), 0, cookie);
+        std::unique_ptr<T> event(new T{issues});
+        requestCounters->ResponseBytes->Add(event->GetByteSize());
+        Send(sender, event.release(), 0, cookie);
         requestCounters->InFly->Dec();
         requestCounters->Error->Inc();
         requestCounters->LatencyMs->Collect(delta.MilliSeconds());

@@ -10,7 +10,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     TRequestCountersPtr requestCounters = Counters.Requests[RT_NODES_HEALTH_CHECK];
     requestCounters->InFly->Inc();
 
-    const auto& request = ev->Get()->Request;
+    const TEvControlPlaneStorage::TEvNodesHealthCheckRequest& event = *ev->Get();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
+    const auto& request = event.Request;
     const TString tenant = request.tenant();
     const auto& node = request.node();
     const ui32 nodeId = node.node_id();

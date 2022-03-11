@@ -985,7 +985,7 @@ private:
   Allocator &allocator;
 
   /// Represent data as a node type without breaking aliasing rules.
-  template <typename T> T &dataAs() const { return *bit_cast<T *>(&data); }
+  template <typename T> T &dataAs() const { return *llvm::bit_cast<T *>(&data); }
 
   const RootLeaf &rootLeaf() const {
     assert(!branched() && "Cannot acces leaf data in branched root");

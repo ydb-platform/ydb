@@ -61,6 +61,7 @@ public:
         const TMaybe<TStringType>& discoveryEndpoint,
         const TMaybe<EDiscoveryMode>& discoveryMode,
         const TMaybe<bool>& enableSsl,
+        const TMaybe<TStringType>& caCert,
         const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
     );
     IQueueClientContextPtr CreateContext() override;
@@ -80,7 +81,7 @@ public:
     {
         auto clientConfig = NGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
         clientConfig.EnableSsl = dbState->EnableSsl;
-        clientConfig.SslCaCert = CaCert_;
+        clientConfig.SslCaCert = dbState->CaCert;
         clientConfig.MemQuota = MemoryQuota_;
 
         if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()

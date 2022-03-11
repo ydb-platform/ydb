@@ -180,6 +180,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
             DefaultDiscoveryEndpoint_,
             DefaultDiscoveryMode_,
             EnableSsl_,
+            CaCert_,
             DefaultCredentialsProviderFactory_
         );
     }
@@ -267,6 +268,7 @@ TDbDriverStatePtr TGRpcConnectionsImpl::GetDriverState(
     const TMaybe<TStringType>& discoveryEndpoint,
     const TMaybe<EDiscoveryMode>& discoveryMode,
     const TMaybe<bool>& enableSsl,
+    const TMaybe<TStringType>& caCert,
     const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
 ) {
     return StateTracker_.GetDriverState(
@@ -274,6 +276,7 @@ TDbDriverStatePtr TGRpcConnectionsImpl::GetDriverState(
         discoveryEndpoint ? discoveryEndpoint.GetRef() : DefaultDiscoveryEndpoint_,
         discoveryMode ? discoveryMode.GetRef() : DefaultDiscoveryMode_,
         enableSsl ? enableSsl.GetRef() : EnableSsl_,
+        caCert ? caCert.GetRef() : CaCert_,
         credentialsProviderFactory ? credentialsProviderFactory.GetRef() : DefaultCredentialsProviderFactory_);
 }
 

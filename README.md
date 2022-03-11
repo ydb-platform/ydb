@@ -69,7 +69,7 @@ For development purposes we test that YDB could be built and run under latest ve
 
 
 ## How to build
-    [Build howto.](BUILD.md)
+* Build ydb and ydbd binary [from source](BUILD.md).
 
 ## How to deploy
 

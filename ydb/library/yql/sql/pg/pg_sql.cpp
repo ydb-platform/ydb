@@ -111,6 +111,7 @@ public:
     static THashSet<TString> AggregateFuncs;
 
     using TFromDesc = std::tuple<TAstNode*, TString, TVector<TString>, bool>;
+    using TInsertDesc = std::tuple<TAstNode*,TAstNode*>;
 
     struct TExprSettings {
         bool AllowColumns = false;
@@ -163,6 +164,8 @@ public:
            }
         }
 
+        Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
+            A("world"))));
         Statements.push_back(L(A("return"), A("world")));
         return VL(Statements.data(), Statements.size());
     }
@@ -171,9 +174,10 @@ public:
     bool ParseRawStmt(const RawStmt* value) {
         auto node = value->stmt;
         switch (NodeTag(node)) {
-        case T_SelectStmt: {
+        case T_SelectStmt:
             return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;
-        }
+        case T_InsertStmt:
+            return ParseInsertStmt(CAST_NODE(InsertStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -679,6 +683,50 @@ public:
         return Statements.back();
     }
 
+    [[nodiscard]]
+    TAstNode* ParseInsertStmt(const InsertStmt* value) {
+        if (ListLength(value->cols) > 0) {
+            AddError("InsertStmt: target columns are not supported");
+            return nullptr;
+        }
+
+        if (!value->selectStmt) {
+            AddError("InsertStmt: expected Select");
+            return nullptr;
+        }
+
+        if (value->onConflictClause) {
+            AddError("InsertStmt: not supported onConflictClause");
+            return nullptr;
+        }
+
+        if (ListLength(value->returningList) > 0) {
+            AddError("InsertStmt: not supported returningList");
+            return nullptr;
+        }
+
+        if (value->withClause) {
+            AddError("InsertStmt: not supported withClause");
+            return nullptr;
+        }
+
+        auto insertDesc = ParseWriteRangeVar(value->relation);
+        if (!std::get<0>(insertDesc)) {
+            return nullptr;
+        }
+
+        auto select = ParseSelectStmt(CAST_NODE(SelectStmt, value->selectStmt), true);
+        if (!select) {
+            return nullptr;
+        }
+
+        auto writeOptions = QL(QL(QA("mode"), QA("append")));
+        Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
+            A("world"), std::get<0>(insertDesc), std::get<1>(insertDesc), select, writeOptions)));
+
+        return Statements.back();
+    }
+
     TFromDesc ParseFromClause(const Node* node) {
         switch (NodeTag(node)) {
         case T_RangeVar:
@@ -723,6 +771,38 @@ public:
 
         res = alias->aliasname;
         return true;
+    }
+
+    TInsertDesc ParseWriteRangeVar(const RangeVar* value) {
+        if (StrLength(value->catalogname) > 0) {
+            AddError("catalogname is not supported");
+            return {};
+        }
+
+        if (StrLength(value->schemaname) == 0) {
+            AddError("schemaname should be specified");
+            return {};
+        }
+
+        if (StrLength(value->relname) == 0) {
+            AddError("relname should be specified");
+            return {};
+        }
+
+        if (value->alias) {
+            AddError("alias is not supported");
+            return {};
+        }
+
+        auto p = Settings.ClusterMapping.FindPtr(value->schemaname);
+        if (!p) {
+            AddError(TStringBuilder() << "Unknown cluster: " << value->schemaname);
+            return {};
+        }
+
+        auto sink = L(A("DataSink"), QA(*p), QA(value->schemaname));
+        auto key = L(A("Key"), QL(QA("table"), L(A("String"), QA(value->relname))));
+        return { sink, key };
     }
 
     TFromDesc ParseRangeVar(const RangeVar* value) {

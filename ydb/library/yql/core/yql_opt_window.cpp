@@ -2181,7 +2181,7 @@ TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNo
             continue;
         }
 
-        YQL_ENSURE(winOn->IsCallable("WinOnRows"));
+        YQL_ENSURE(TCoWinOnBase::Match(winOn.Get()));
 
         TExprNodeList nonAggregates = { winOn->ChildPtr(0) };
         TExprNodeList aggregates = { winOn->ChildPtr(0) };
@@ -2200,9 +2200,9 @@ TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNo
             continue;
         }
 
-        nonCompactAggregatingFullFrames.push_back(ctx.NewCallable(winOn->Pos(), "WinOnRows", std::move(aggregates)));
+        nonCompactAggregatingFullFrames.push_back(ctx.ChangeChildren(*winOn, std::move(aggregates)));
         if (nonAggregates.size() > 1) {
-            otherFrames.push_back(ctx.NewCallable(winOn->Pos(), "WinOnRows", std::move(nonAggregates)));
+            otherFrames.push_back(ctx.ChangeChildren(*winOn, std::move(nonAggregates)));
         }
     }
 

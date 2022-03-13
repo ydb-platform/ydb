@@ -3120,12 +3120,24 @@ TNodePtr BuildDataType(TPosition pos, const TString& typeName) {
     return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, typeName, TNodeFlags::Default)});
 }
 
-TMaybe<TString> LookupSimpleType(const TStringBuf& alias, bool flexibleTypes) {
+TMaybe<TString> LookupSimpleType(const TStringBuf& alias, bool flexibleTypes, bool isPgType) {
+    TString normalized = to_lower(TString(alias));
+    if (isPgType) {
+        // original pg type is passed (like _int4)
+        if (!NPg::HasType(normalized)) {
+            return {};
+        }
+
+        if (normalized.StartsWith("_")) {
+            return "_pg" + normalized.substr(1);
+        }
+        return "pg" + normalized;
+    }
+
     if (auto sqlAlias = LookupSimpleTypeBySqlAlias(alias, flexibleTypes)) {
         return TString(*sqlAlias);
     }
 
-    TString normalized = to_lower(TString(alias));
     TString pgType;
     if (normalized.StartsWith("_pg")) {
         pgType = normalized.substr(3);
@@ -3143,7 +3155,7 @@ TMaybe<TString> LookupSimpleType(const TStringBuf& alias, bool flexibleTypes) {
 }
 
 TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly) {
-    auto found = LookupSimpleType(typeName, ctx.FlexibleTypes);
+    auto found = LookupSimpleType(typeName, ctx.FlexibleTypes, ctx.GetColumnReferenceState() == EColumnRefState::AsPgType);
     if (!found) {
         ctx.Error(pos) << "Unknown simple type '" << typeName << "'";
         return {};

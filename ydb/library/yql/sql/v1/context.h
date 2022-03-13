@@ -74,6 +74,7 @@ namespace NSQLTranslationV1 {
         Deny,
         Allow,
         AsStringLiteral,
+        AsPgType,
     };
 
     class TContext {

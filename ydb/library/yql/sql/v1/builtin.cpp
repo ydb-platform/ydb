@@ -570,6 +570,24 @@ public:
     }
 };
 
+class TYqlPgType: public TCallNode {
+public:
+    TYqlPgType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "PgType", 1, 1, args)
+    {
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlPgType(Pos, CloneContainer(Args));
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        // argument is already a proper PgType callable - here we just return argument
+        YQL_ENSURE(Nodes.size() == 2);
+        return Nodes.back()->Translate(ctx);
+    }
+};
+
 template <const char* Name>
 class TYqlSubqueryFor : public TCallNode {
 public:
@@ -2589,6 +2607,7 @@ struct TBuiltinFuncData {
             {"just", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Just", 1, 1) },
             {"nothing", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nothing", 1, 1) },
             {"formattype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatType", 1, 1) },
+            {"pgtype", BuildSimpleBuiltinFactoryCallback<TYqlPgType>() },
             {"typeof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeOf", 1, 1) },
             {"instanceof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1) },
             {"datatype", BuildSimpleBuiltinFactoryCallback<TYqlDataType>() },

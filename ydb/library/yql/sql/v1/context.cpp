@@ -429,6 +429,7 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
         { {"nothing", 0},             EColumnRefState::Deny },
         { {"formattype", 0},          EColumnRefState::Deny },
         { {"instanceof", 0},          EColumnRefState::Deny },
+        { {"pgtype", 0},              EColumnRefState::AsPgType },
 
         { {"unpickle", 0},            EColumnRefState::Deny },
         { {"typehandle", 0},          EColumnRefState::Deny },

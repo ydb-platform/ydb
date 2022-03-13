@@ -4238,9 +4238,10 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     } else {
         const bool flexibleTypes = Ctx.FlexibleTypes;
         bool columnOrType = false;
-        if (auto simpleType = LookupSimpleType(name, flexibleTypes); simpleType && typePossible && suffixIsEmpty) {
-            auto columnRefsState = Ctx.GetColumnReferenceState();
-            if (tail.Count > 0 || columnRefsState == EColumnRefState::Deny || !flexibleTypes) {
+        auto columnRefsState = Ctx.GetColumnReferenceState();
+        bool explicitPgType = columnRefsState == EColumnRefState::AsPgType;
+        if (auto simpleType = LookupSimpleType(name, flexibleTypes, explicitPgType); simpleType && typePossible && suffixIsEmpty) {
+            if (tail.Count > 0 || columnRefsState == EColumnRefState::Deny || explicitPgType || !flexibleTypes) {
                 // a type
                 return AddOptionals(BuildSimpleType(Ctx, Ctx.Pos(), name, false), tail.Count);
             }

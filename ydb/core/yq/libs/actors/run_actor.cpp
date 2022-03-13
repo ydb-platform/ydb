@@ -296,7 +296,8 @@ private:
         switch (Action) {
         case YandexQuery::ABORT:
         case YandexQuery::ABORT_GRACEFULLY: // not fully implemented
-            Abort("Aborted by user", YandexQuery::QueryMeta::ABORTED_BY_USER);
+            // ignore issues in case of controlled abort
+            Finish(YandexQuery::QueryMeta::ABORTED_BY_USER);
             break;
         case YandexQuery::PAUSE: // not implemented
         case YandexQuery::PAUSE_GRACEFULLY: // not implemented

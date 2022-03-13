@@ -64,7 +64,7 @@ NNodes::TExprBase DqRewriteLengthOfStageOutput(NNodes::TExprBase node, TExprCont
 
 NNodes::TExprBase DqRewriteRightJoinToLeft(const NNodes::TExprBase node, TExprContext& ctx);
 
-NNodes::TExprBase DqPushJoinToStage(const NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+NNodes::TExprBase DqRewriteLeftPureJoin(const NNodes::TExprBase node, TExprContext& ctx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx,

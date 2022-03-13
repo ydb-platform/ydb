@@ -36,7 +36,7 @@ public:
         AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput));
         AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
-        AddHandler(0, &TDqJoin::Match, HNDL(PushJoinToStage<false>));
+        AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoinDict<false>));
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(BuildSortStage<false>));
@@ -56,7 +56,7 @@ public:
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
         AddHandler(1, &TCoSort::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoTake::Match, HNDL(BuildTakeOrTakeSkipStage<true>));
-        AddHandler(1, &TDqJoin::Match, HNDL(PushJoinToStage<true>));
+        AddHandler(1, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(BuildJoin<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(BuildJoinDict<true>));
         AddHandler(1, &TCoAssumeSorted::Match, HNDL(BuildSortStage<true>));
@@ -266,8 +266,8 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> PushJoinToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqPushJoinToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+    TMaybeNode<TExprBase> RewriteLeftPureJoin(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        return DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

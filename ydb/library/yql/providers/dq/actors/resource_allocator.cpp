@@ -133,7 +133,7 @@ private:
 
     void OnAllocateWorkersResponse(TEvAllocateWorkersResponse::TPtr& ev, const TActorContext& ctx)
     {
-        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG_CTX_SCOPE(TraceId + SelfId().ToString());
         Y_UNUSED(ctx);
 
         YQL_LOG(DEBUG) << "TEvAllocateWorkersResponse " << ev->Sender.NodeId();
@@ -215,15 +215,18 @@ private:
 
     void DoPassAway() override
     {
+        YQL_LOG_CTX_SCOPE(TraceId + SelfId().ToString());
         for (const auto& group : AllocatedWorkers) {
             for (const auto& actorIdProto : group.GetWorkerActor()) {
                 auto actorNode = NActors::ActorIdFromProto(actorIdProto).NodeId();
+                YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << group.GetResourceId();
                 auto request = MakeHolder<TEvFreeWorkersNotify>(group.GetResourceId());
                 request->Record.SetTraceId(TraceId);
                 Send(MakeWorkerManagerActorID(actorNode), request.Release());
             }
         }
         if (!LocalMode) {
+            YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << ResourceId << " (failed)";
             auto request = MakeHolder<TEvFreeWorkersNotify>(ResourceId);
             request->Record.SetTraceId(TraceId);
             for (const auto& failedWorker : FailedWorkers) {
@@ -262,7 +265,7 @@ private:
     }
 
     void Fail(const ui64 cookie, const TString& reason) {
-        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG_CTX_SCOPE(TraceId + SelfId().ToString());
         if (FailState) {
             return;
         }

@@ -48,7 +48,7 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
-        AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecomputeStage));
+        AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecompute));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TKqlInsertRows::Match, HNDL(BuildInsertStages));
@@ -233,9 +233,9 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> BuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqBuildPrecomputeStage(node, ctx);
-        DumpAppliedRule("BuildPrecomputeStage", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> BuildPrecompute(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqBuildPrecompute(node, ctx);
+        DumpAppliedRule("BuildPrecompute", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

@@ -22,7 +22,6 @@ SRCS(
     kqp_acl_ut.cpp
     kqp_arrow_in_channels_ut.cpp
     kqp_document_api_ut.cpp
-    kqp_effects_perf_ut.cpp
     kqp_explain_ut.cpp
     kqp_flip_join_ut.cpp
     kqp_index_lookup_join_ut.cpp
@@ -33,10 +32,11 @@ SRCS(
     kqp_locks_ut.cpp
     kqp_merge_connection_ut.cpp
     kqp_mvcc_ut.cpp
-    kqp_newengine_inplace_update_ut.cpp
-    kqp_newengine_effects_ut.cpp
-    kqp_newengine_flowcontrol_ut.cpp
-    kqp_newengine_ut.cpp
+    kqp_ne_effects_ut.cpp
+    kqp_ne_flowcontrol_ut.cpp
+    kqp_ne_inplace_update_ut.cpp
+    kqp_ne_perf_ut.cpp
+    kqp_ne_ut.cpp
     kqp_not_null_columns_ut.cpp
     kqp_olap_ut.cpp
     kqp_params_ut.cpp

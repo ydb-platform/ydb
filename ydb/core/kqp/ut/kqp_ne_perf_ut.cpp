@@ -119,7 +119,7 @@ TParams BuildInsertIndexParams(TTableClient& client) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(KqpEffectsPerf) {
+Y_UNIT_TEST_SUITE(KqpPerf) {
     Y_UNIT_TEST_TWIN(Upsert, UseNewEngine) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -469,6 +469,59 @@ Y_UNIT_TEST_SUITE(KqpEffectsPerf) {
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 5 : 3);
+    }
+
+    Y_UNIT_TEST_TWIN(IdxLookupJoin, UseNewEngine) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key").Int32(3).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $key AS Int32;
+
+            SELECT *
+            FROM Join1 AS t1
+            INNER JOIN Join2 AS t2 ON t1.Fk21 = t2.Key1 AND t1.Fk22 = t2.Key2
+            WHERE t1.Key = $key;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 3 : 3);
+    }
+
+    Y_UNIT_TEST_TWIN(IdxLookupJoinThreeWay, UseNewEngine) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$key").Int32(3).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $key AS Int32;
+
+            SELECT t1.Key, t3.Value
+            FROM Join1 AS t1
+            INNER JOIN Join2 AS t2 ON t1.Fk21 = t2.Key1 AND t1.Fk22 = t2.Key2
+            INNER JOIN KeyValue2 AS t3 ON t2.Name = t3.Key
+            WHERE t1.Key = $key;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 5 : 4);
     }
 }
 

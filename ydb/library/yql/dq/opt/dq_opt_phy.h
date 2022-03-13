@@ -79,7 +79,7 @@ NNodes::TExprBase DqBuildPureExprStage(NNodes::TExprBase node, TExprContext& ctx
 
 NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx);
 
-NNodes::TExprBase DqBuildPrecomputeStage(NNodes::TExprBase node, TExprContext& ctx);
+NNodes::TExprBase DqBuildPrecompute(NNodes::TExprBase node, TExprContext& ctx);
 
 NYql::NNodes::TExprBase DqBuildHasItems(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     NYql::IOptimizationContext& optCtx);

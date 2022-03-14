@@ -28,7 +28,7 @@ public:
         std::vector<std::vector<TString>> parts;
         if (const TMaybeNode<TDqSource> source = &node) {
             cluster = source.Cast().DataSource().Cast<TS3DataSource>().Cluster().Value();
-            const auto settings = source.Cast().Settings().Cast<TS3SourceSettings>();
+            const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
             parts.reserve(settings.Paths().Size());
             for (auto i = 0u; i < settings.Paths().Size(); ++i)
                 parts.emplace_back(std::vector<TString>(1U, settings.Paths().Item(i).Path().StringValue()));
@@ -103,7 +103,21 @@ public:
 
             const auto token = "cluster:default_" + clusterName;
             YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
-
+/*
+            return Build<TDqSourceWrap>(ctx, read->Pos())
+                .Input<TS3ParseSettings>()
+                    .Paths(s3ReadObject.Object().Paths())
+                    .Token<TCoSecureParam>()
+                        .Name().Build(token)
+                        .Build()
+                    .Format(s3ReadObject.Object().Format())
+                    .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                    .Build()
+                .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
+                .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
+                .Done().Ptr();
+/*/
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TS3SourceSettings>()
                     .Paths(s3ReadObject.Object().Paths())
@@ -121,7 +135,7 @@ public:
 
     void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
         const TDqSource source(&node);
-        if (const auto maySettings = source.Settings().Maybe<TS3SourceSettings>()) {
+        if (const auto maySettings = source.Settings().Maybe<TS3SourceSettingsBase>()) {
             const auto settings = maySettings.Cast();
             const auto& cluster = source.DataSource().Cast<TS3DataSource>().Cluster().StringValue();
             const auto& connect = State_->Configuration->Clusters.at(cluster);

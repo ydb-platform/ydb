@@ -71,6 +71,27 @@ public:
 protected:
     TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) {
         const auto wrap = node.Cast<TDqSourceWrap>();
+        if (IsSameAnnotation(*GetSeqItemType(wrap.Ref().GetTypeAnn()), *GetSeqItemType(wrap.Input().Ref().GetTypeAnn()))) {
+        return Build<TDqCnUnionAll>(ctx, node.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                .Inputs()
+                    .Add<TDqSource>()
+                        .DataSource(wrap.DataSource())
+                        .Settings(wrap.Input())
+                        .Build()
+                    .Build()
+                .Program()
+                    .Args({"source"})
+                    .Body<TCoToStream>()
+                        .Input("source")
+                        .Build()
+                    .Build()
+                .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+                .Build()
+                .Index().Build("0")
+            .Build().Done();
+        }
         const auto& items = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
         auto narrow = wrap.Settings() ?
             ctx.Builder(node.Pos())
@@ -139,7 +160,7 @@ protected:
                         .Build()
                     .Build()
                 .Program(narrow)
-                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+                .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
                 .Build()
                 .Index().Build("0")
             .Build().Done();

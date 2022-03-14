@@ -35,11 +35,12 @@ public:
         AddHandler({TS3ReadObject::CallableName()}, Hndl(&TSelf::HandleRead));
         AddHandler({TS3Object::CallableName()}, Hndl(&TSelf::HandleObject));
         AddHandler({TS3SourceSettings::CallableName()}, Hndl(&TSelf::HandleS3SourceSettings));
+        AddHandler({TS3ParseSettings::CallableName()}, Hndl(&TSelf::HandleS3ParseSettings));
         AddHandler({TCoConfigure::CallableName()}, Hndl(&TSelf::HandleConfig));
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 1U, 2U, ctx)) {
+        if (!EnsureArgsCount(*input, 2U, ctx)) {
             return TStatus::Error;
         }
 
@@ -47,12 +48,44 @@ public:
             return TStatus::Error;
         }
 
-        if (input->ChildrenSize() > TS3SourceSettings::idx_Token && !TCoSecureParam::Match(input->Child(TS3SourceSettings::idx_Token))) {
+        if (!TCoSecureParam::Match(input->Child(TS3SourceSettings::idx_Token))) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3SourceSettings::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
             return TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleS3ParseSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 4U, 5U, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureTuple(*input->Child(TS3ParseSettings::idx_Paths), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!TCoSecureParam::Match(input->Child(TS3ParseSettings::idx_Token))) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ParseSettings::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto type = input->Child(TS3ParseSettings::idx_RowType)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureStructType(input->Child(TS3ParseSettings::idx_RowType)->Pos(), *type, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->ChildrenSize() > TS3ParseSettings::idx_Compression && !EnsureAtom(*input->Child(TS3ParseSettings::idx_Compression), ctx)) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ParseSettings::idx_Compression)->Pos()), "Expected compression atom."));
+            return TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(type));
         return TStatus::Ok;
     }
 

@@ -39,12 +39,27 @@
             "ListBase": "TS3Path"
         },
         {
-            "Name": "TS3SourceSettings",
+            "Name": "TS3SourceSettingsBase",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "S3SourceSettings"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 0, "Name": "Paths", "Type": "TS3Paths"},
                 {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"}
+            ]
+        },
+        {
+            "Name": "TS3SourceSettings",
+            "Base": "TS3SourceSettingsBase",
+            "Match": {"Type": "Callable", "Name": "S3SourceSettings"}
+        },
+        {
+            "Name": "TS3ParseSettings",
+            "Base": "TS3SourceSettingsBase",
+            "Match": {"Type": "Callable", "Name": "S3ParseSettings"},
+            "Children": [
+                {"Index": 2, "Name": "Format", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 4, "Name": "Compression", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

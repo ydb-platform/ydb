@@ -582,6 +582,7 @@ RECURSE(
     korean-lunar-calendar
     kubernetes
     langcodes
+    language-data
     lark-parser
     lazy
     lazy-object-proxy

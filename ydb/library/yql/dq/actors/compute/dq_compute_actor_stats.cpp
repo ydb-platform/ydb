@@ -5,7 +5,7 @@
 namespace NYql {
 namespace NDq {
 
-void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& taskStats,
+void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,
     NDqProto::TDqTaskStats* protoTask, bool withProfileStats)
 {
     protoTask->SetTaskId(taskId);

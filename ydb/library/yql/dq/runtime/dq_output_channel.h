@@ -26,6 +26,19 @@ struct TDqOutputChannelStats : TDqOutputStats {
 
     explicit TDqOutputChannelStats(ui64 channelId)
         : ChannelId(channelId) {}
+    
+    template<typename T>
+    void FromProto(const T& f)
+    {
+        this->ChannelId = f.GetChannelId();
+        this->Chunks = f.GetChunks();
+        this->Bytes = f.GetBytes();
+        this->RowsIn = f.GetRowsIn();
+        this->RowsOut = f.GetRowsOut();
+        this->MaxMemoryUsage = f.GetMaxMemoryUsage();
+        //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
+        //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
+    }
 };
 
 class IDqOutputChannel : public IDqOutput {

@@ -8,6 +8,19 @@ struct TDqSourceStats : TDqInputStats {
 
     explicit TDqSourceStats(ui64 inputIndex)
         : InputIndex(inputIndex) {}
+
+    template<typename T>
+    void FromProto(const T& f)
+    {
+        this->InputIndex = f.GetInputIndex();
+        this->Chunks = f.GetChunks();
+        this->Bytes = f.GetBytes();
+        this->RowsIn = f.GetRowsIn();
+        this->RowsOut = f.GetRowsOut();
+        this->MaxMemoryUsage = f.GetMaxMemoryUsage();
+        //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
+        //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
+    }
 };
 
 class IDqSource : public IDqInput {

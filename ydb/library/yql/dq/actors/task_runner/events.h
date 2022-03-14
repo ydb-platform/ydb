@@ -209,13 +209,15 @@ struct TEvChannelPopFinished
     : NActors::TEventLocal<TEvChannelPopFinished, TTaskRunnerEvents::ES_POP_FINISHED> {
     TEvChannelPopFinished() = default;
     TEvChannelPopFinished(ui32 channelId)
-        : ChannelId(channelId)
+        : Stats()
+        , ChannelId(channelId)
         , Data()
         , Finished(false)
         , Changed(false)
     { }
-    TEvChannelPopFinished(ui32 channelId, TVector<NDqProto::TData>&& data, bool finished, bool changed, const TTaskRunnerActorSensors& sensors = {})
+    TEvChannelPopFinished(ui32 channelId, TVector<NDqProto::TData>&& data, bool finished, bool changed, const TTaskRunnerActorSensors& sensors = {}, TDqTaskRunnerStatsView&& stats = {})
         : Sensors(sensors)
+        , Stats(std::move(stats))
         , ChannelId(channelId)
         , Data(std::move(data))
         , Finished(finished)
@@ -223,6 +225,7 @@ struct TEvChannelPopFinished
     { }
 
     TTaskRunnerActorSensors Sensors;
+    NDq::TDqTaskRunnerStatsView Stats;
 
     const ui32 ChannelId;
     TVector<NDqProto::TData> Data;

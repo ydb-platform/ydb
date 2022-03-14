@@ -289,6 +289,10 @@ private:
     }
 
     void OnPopFinished(NTaskRunnerActor::TEvChannelPopFinished::TPtr& ev, const NActors::TActorContext&) {
+        if (ev->Get()->Stats) {
+            TaskRunnerStats = std::move(ev->Get()->Stats);
+        }
+        CA_LOG_D("OnPopFinished, stats: " << *TaskRunnerStats.Get());
         auto channelId = ev->Get()->ChannelId;
         auto finished = ev->Get()->Finished;
         auto dataWasSent = ev->Get()->Changed;
@@ -385,6 +389,10 @@ private:
         CheckRunStatus();
     }
 
+    const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() override {
+        return TaskRunnerStats.Get();
+    }
+
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv;
     NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor;
     NActors::TActorId TaskRunnerActorId;
@@ -403,6 +411,7 @@ private:
     };
     THashMap<ui64, TTakeInputChannelData> TakeInputChannelDataRequests;
     ui64 Cookie = 0;
+    NDq::TDqTaskRunnerStatsView TaskRunnerStats;
 };
 
 

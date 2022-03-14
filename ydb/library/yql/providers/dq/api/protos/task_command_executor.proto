@@ -3,6 +3,7 @@ option cc_enable_arenas = true;
 
 package NYql.NDqProto;
 
+import "google/protobuf/any.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
@@ -62,6 +63,7 @@ message TPopResponse {
     bool Result = 1;
     TData Data = 2;
     repeated TMetric Metric = 3;
+    google.protobuf.Any Stats = 4;
 }
 
 message TSinkPopRequest {

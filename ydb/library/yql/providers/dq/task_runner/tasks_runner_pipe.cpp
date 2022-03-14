@@ -45,87 +45,6 @@ extern "C" int kill(int pid, int sig);
 extern "C" int waitpid(int pid, int* status, int options);
 #endif
 
-template<typename T>
-void FromProto(TDqOutputChannelStats* s, const T& f)
-{
-    s->ChannelId = f.GetChannelId();
-    s->Chunks = f.GetChunks();
-    s->Bytes = f.GetBytes();
-    s->RowsIn = f.GetRowsIn();
-    s->RowsOut = f.GetRowsOut();
-    s->MaxMemoryUsage = f.GetMaxMemoryUsage();
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
-}
-
-template<typename T>
-void FromProto(TDqInputChannelStats* s, const T& f)
-{
-    s->ChannelId = f.GetChannelId();
-    s->Chunks = f.GetChunks();
-    s->Bytes = f.GetBytes();
-    s->RowsIn = f.GetRowsIn();
-    s->RowsOut = f.GetRowsOut();
-    s->MaxMemoryUsage = f.GetMaxMemoryUsage();
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
-    s->DeserializationTime = TDuration::MicroSeconds(f.GetDeserializationTimeUs());
-}
-
-template<typename T>
-void FromProto(TDqSourceStats* s, const T& f)
-{
-    s->InputIndex = f.GetInputIndex();
-    s->Chunks = f.GetChunks();
-    s->Bytes = f.GetBytes();
-    s->RowsIn = f.GetRowsIn();
-    s->RowsOut = f.GetRowsOut();
-    s->MaxMemoryUsage = f.GetMaxMemoryUsage();
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
-}
-
-template<typename T>
-void FromProto(TDqSinkStats* s, const T& f)
-{
-    s->Chunks = f.GetChunks();
-    s->Bytes = f.GetBytes();
-    s->RowsIn = f.GetRowsIn();
-    s->RowsOut = f.GetRowsOut();
-    s->MaxMemoryUsage = f.GetMaxMemoryUsage();
-}
-
-template<typename T>
-void FromProto(TDqTaskRunnerStats* s, const T& f)
-{
-    //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
-    //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
-    s->BuildCpuTime = TDuration::MicroSeconds(f.GetBuildCpuTimeUs());
-    s->ComputeCpuTime = TDuration::MicroSeconds(f.GetComputeCpuTimeUs());
-    s->RunStatusTimeMetrics.Load(ERunStatus::PendingInput, TDuration::MicroSeconds(f.GetPendingInputTimeUs()));
-    s->RunStatusTimeMetrics.Load(ERunStatus::PendingOutput, TDuration::MicroSeconds(f.GetPendingOutputTimeUs()));
-    s->RunStatusTimeMetrics.Load(ERunStatus::Finished, TDuration::MicroSeconds(f.GetFinishTimeUs()));
-    //s->TotalTime = TDuration::MilliSeconds(f.GetTotalTime());
-    s->WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
-    s->WaitOutputTime = TDuration::MicroSeconds(f.GetWaitOutputTimeUs());
-
-    //s->MkqlTotalNodes = f.GetMkqlTotalNodes();
-    //s->MkqlCodegenFunctions = f.GetMkqlCodegenFunctions();
-    //s->CodeGenTotalInstructions = f.GetCodeGenTotalInstructions();
-    //s->CodeGenTotalFunctions = f.GetCodeGenTotalFunctions();
-    //s->CodeGenFullTime = f.GetCodeGenFullTime();
-    //s->CodeGenFinalizeTime = f.GetCodeGenFinalizeTime();
-    //s->CodeGenModulePassTime = f.GetCodeGenModulePassTime();
-
-    for (const auto& input : f.GetInputChannels()) {
-        FromProto(const_cast<TDqInputChannelStats*>(s->InputChannels[input.GetChannelId()]), input);
-    }
-
-    for (const auto& output : f.GetOutputChannels()) {
-        FromProto(const_cast<TDqOutputChannelStats*>(s->OutputChannels[output.GetChannelId()]), output);
-    }
-}
-
 class TChildProcess: private TNonCopyable {
 public:
     TChildProcess(const TString& exeName, const TVector<TString>& args, const THashMap<TString, TString>& env, const TString& workDir)
@@ -658,7 +577,7 @@ public:
             NDqProto::TGetStatsInputResponse response;
             response.Load(&Input);
 
-            FromProto(&Stats, response.GetStats());
+            Stats.FromProto(response.GetStats());
             return &Stats;
         } catch (...) {
             TaskRunner->RaiseException();
@@ -820,7 +739,7 @@ public:
             NDqProto::TGetStatsSourceResponse response;
             response.Load(&Input);
 
-            FromProto(&Stats, response.GetStats());
+            Stats.FromProto(response.GetStats());
             return &Stats;
         } catch (...) {
             TaskRunner->RaiseException();
@@ -1055,7 +974,7 @@ public:
             NDqProto::TGetStatsOutputResponse response;
             response.Load(&Input);
 
-            FromProto(&Stats, response.GetStats());
+            Stats.FromProto(response.GetStats());
             return &Stats;
         } catch (...) {
             TaskRunner->RaiseException();
@@ -1211,7 +1130,7 @@ public:
             NDqProto::TSinkStatsResponse response;
             response.Load(&Input);
 
-            FromProto(&Stats, response.GetStats());
+            Stats.FromProto(response.GetStats());
             return &Stats;
         } catch (...) {
             TaskRunner->RaiseException();
@@ -1612,7 +1531,7 @@ public:
             NDqProto::TGetStatsResponse response;
             response.Load(&Delegate->GetInput());
 
-            FromProto(&Stats, response.GetStats());
+            Stats.FromProto(response.GetStats());
 
             return &Stats;
         } catch (...) {

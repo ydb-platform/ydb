@@ -1347,6 +1347,14 @@ private:
         }
     }
 
+    virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() {
+        if (!TaskRunner) {
+            return nullptr;
+        }
+        TaskRunner->UpdateStats();
+        return TaskRunner->GetStats();
+    }
+
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (!BasicStats) {
             return;
@@ -1364,58 +1372,54 @@ private:
             dst->SetMkqlExtraMemoryRequests(ProfileStats->MkqlExtraMemoryRequests);
         }
 
-        if (TaskRunner) {
-            TaskRunner->UpdateStats();
+        if (auto* taskStats = GetTaskRunnerStats()) {
+            auto* protoTask = dst->AddTasks();
+            FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) ProfileStats);
 
-            if (auto* taskStats = TaskRunner->GetStats()) {
-                auto* protoTask = dst->AddTasks();
-                FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) ProfileStats);
+            for (auto& [outputIndex, sinkInfo] : SinksMap) {
+                if (auto* sinkStats = sinkInfo.Sink ? sinkInfo.Sink->GetStats() : nullptr) {
+                    protoTask->SetOutputRows(protoTask->GetOutputRows() + sinkStats->RowsIn);
+                    protoTask->SetOutputBytes(protoTask->GetOutputBytes() + sinkStats->Bytes);
 
-                for (auto& [outputIndex, sinkInfo] : SinksMap) {
-                    if (auto* sinkStats = sinkInfo.Sink ? sinkInfo.Sink->GetStats() : nullptr) {
-                        protoTask->SetOutputRows(protoTask->GetOutputRows() + sinkStats->RowsIn);
-                        protoTask->SetOutputBytes(protoTask->GetOutputBytes() + sinkStats->Bytes);
+                    if (ProfileStats) {
+                        auto* protoSink = protoTask->AddSinks();
+                        protoSink->SetOutputIndex(outputIndex);
 
-                        if (ProfileStats) {
-                            auto* protoSink = protoTask->AddSinks();
-                            protoSink->SetOutputIndex(outputIndex);
+                        protoSink->SetChunks(sinkStats->Chunks);
+                        protoSink->SetBytes(sinkStats->Bytes);
+                        protoSink->SetRowsIn(sinkStats->RowsIn);
+                        protoSink->SetRowsOut(sinkStats->RowsOut);
 
-                            protoSink->SetChunks(sinkStats->Chunks);
-                            protoSink->SetBytes(sinkStats->Bytes);
-                            protoSink->SetRowsIn(sinkStats->RowsIn);
-                            protoSink->SetRowsOut(sinkStats->RowsOut);
+                        protoSink->SetMaxMemoryUsage(sinkStats->MaxMemoryUsage);
+                        protoSink->SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
+                    }
+                }
+            }
 
-                            protoSink->SetMaxMemoryUsage(sinkStats->MaxMemoryUsage);
-                            protoSink->SetErrorsCount(sinkInfo.IssuesBuffer.GetAllAddedIssuesCount());
-                        }
+            if (ProfileStats) {
+                for (auto& protoSource : *protoTask->MutableSources()) {
+                    if (auto* sourceInfo = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
+                        protoSource.SetErrorsCount(sourceInfo->IssuesBuffer.GetAllAddedIssuesCount());
                     }
                 }
 
-                if (ProfileStats) {
-                    for (auto& protoSource : *protoTask->MutableSources()) {
-                        if (auto* sourceInfo = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
-                            protoSource.SetErrorsCount(sourceInfo->IssuesBuffer.GetAllAddedIssuesCount());
-                        }
+                for (auto& protoInputChannelStats : *protoTask->MutableInputChannels()) {
+                    if (auto* caChannelStats = Channels->GetInputChannelStats(protoInputChannelStats.GetChannelId())) {
+                        protoInputChannelStats.SetPollRequests(caChannelStats->PollRequests);
+                        protoInputChannelStats.SetWaitTimeUs(caChannelStats->WaitTime.MicroSeconds());
+                        protoInputChannelStats.SetResentMessages(caChannelStats->ResentMessages);
+                    }
+                }
+
+                for (auto& protoOutputChannelStats : *protoTask->MutableOutputChannels()) {
+                    if (auto* x = Channels->GetOutputChannelStats(protoOutputChannelStats.GetChannelId())) {
+                        protoOutputChannelStats.SetResentMessages(x->ResentMessages);
                     }
 
-                    for (auto& protoInputChannelStats : *protoTask->MutableInputChannels()) {
-                        if (auto* caChannelStats = Channels->GetInputChannelStats(protoInputChannelStats.GetChannelId())) {
-                            protoInputChannelStats.SetPollRequests(caChannelStats->PollRequests);
-                            protoInputChannelStats.SetWaitTimeUs(caChannelStats->WaitTime.MicroSeconds());
-                            protoInputChannelStats.SetResentMessages(caChannelStats->ResentMessages);
-                        }
-                    }
-
-                    for (auto& protoOutputChannelStats : *protoTask->MutableOutputChannels()) {
-                        if (auto* x = Channels->GetOutputChannelStats(protoOutputChannelStats.GetChannelId())) {
-                            protoOutputChannelStats.SetResentMessages(x->ResentMessages);
-                        }
-
-                        if (auto* outputInfo = OutputChannelsMap.FindPtr(protoOutputChannelStats.GetChannelId())) {
-                            if (auto *x = outputInfo->Stats.Get()) {
-                                protoOutputChannelStats.SetBlockedByCapacity(x->BlockedByCapacity);
-                                protoOutputChannelStats.SetNoDstActorId(x->NoDstActorId);
-                            }
+                    if (auto* outputInfo = OutputChannelsMap.FindPtr(protoOutputChannelStats.GetChannelId())) {
+                        if (auto *x = outputInfo->Stats.Get()) {
+                            protoOutputChannelStats.SetBlockedByCapacity(x->BlockedByCapacity);
+                            protoOutputChannelStats.SetNoDstActorId(x->NoDstActorId);
                         }
                     }
                 }

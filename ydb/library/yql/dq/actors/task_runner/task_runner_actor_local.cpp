@@ -189,7 +189,9 @@ private:
                     channelId,
                     std::move(chunks),
                     isFinished,
-                    changed),
+                    changed,
+                    {},
+                    TDqTaskRunnerStatsView(TaskRunner->GetStats())),
                 /*flags=*/0,
                 ev->Cookie));
     }

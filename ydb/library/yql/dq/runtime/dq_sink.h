@@ -12,6 +12,16 @@ struct TDqSinkStats : TDqOutputStats {
 
     explicit TDqSinkStats(ui64 outputIndex)
         : OutputIndex(outputIndex) {}
+
+    template<typename T>
+    void FromProto(const T& f)
+    {
+        this->Chunks = f.GetChunks();
+        this->Bytes = f.GetBytes();
+        this->RowsIn = f.GetRowsIn();
+        this->RowsOut = f.GetRowsOut();
+        this->MaxMemoryUsage = f.GetMaxMemoryUsage();
+    }
 };
 
 class IDqSink : public IDqOutput {

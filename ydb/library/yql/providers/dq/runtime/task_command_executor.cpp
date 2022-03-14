@@ -240,6 +240,49 @@ public:
         _exit(127);
     }
 
+    NDqProto::TGetStatsResponse GetStats(ui64 taskId) {
+        const auto stats = Runner->GetStats();
+
+        NDqProto::TGetStatsResponse response;
+        auto* s = response.MutableStats();
+        s->SetTaskId(taskId);
+        //s->SetStartTs(stats->StartTs.MilliSeconds());
+        //s->SetFinishTs(stats->FinishTs.MilliSeconds());
+        s->SetBuildCpuTimeUs(stats->BuildCpuTime.MicroSeconds());
+        s->SetComputeCpuTimeUs(stats->ComputeCpuTime.MicroSeconds());
+
+        // All run statuses metrics
+        s->SetPendingInputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingInput].MicroSeconds());
+        s->SetPendingOutputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingOutput].MicroSeconds());
+        s->SetFinishTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::Finished].MicroSeconds());
+        static_assert(NDq::TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
+
+        //s->SetTotalTime(stats->TotalTime.MilliSeconds());
+        s->SetWaitTimeUs(stats->WaitTime.MicroSeconds());
+        s->SetWaitOutputTimeUs(stats->WaitOutputTime.MicroSeconds());
+
+        //s->SetMkqlTotalNodes(stats->MkqlTotalNodes);
+        //s->SetMkqlCodegenFunctions(stats->MkqlCodegenFunctions);
+        //s->SetCodeGenTotalInstructions(stats->CodeGenTotalInstructions);
+        //s->SetCodeGenTotalFunctions(stats->CodeGenTotalFunctions);
+        //s->SetCodeGenFullTime(stats->CodeGenFullTime);
+        //s->SetCodeGenFinalizeTime(stats->CodeGenFinalizeTime);
+        //s->SetCodeGenModulePassTime(stats->CodeGenModulePassTime);
+
+        for (const auto& [id, ss] : stats->OutputChannels) {
+            ToProto(s->AddOutputChannels(), ss);
+        }
+
+        for (const auto& [id, ss] : stats->InputChannels) {
+            ToProto(s->AddInputChannels(), ss);
+        }
+
+        for (const auto& [id, ss] : stats->Sources) {
+            ToProto(s->AddSources(), ss);
+        }
+        return response;
+    }
+
     void RunUnsafe()
     {
         FunctionRegistry = QueryStat.Measure<TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry>>("CreateFunctionRegistry", [&]() {
@@ -432,6 +475,7 @@ public:
                 response.SetResult(channel->Pop(*response.MutableData(), 5 << 20));
                 UpdateOutputChannelStats(channelId);
                 QueryStat.FlushCounters(response);
+                response.MutableStats()->PackFrom(GetStats(taskId));
                 response.Save(&output);
 
                 break;
@@ -533,48 +577,7 @@ public:
             case NDqProto::TCommandHeader::GET_STATS: {
                 Y_ENSURE(header.GetVersion() >= 3);
                 Y_ENSURE(taskId == Runner->GetTaskId());
-                auto stats = Runner->GetStats();
-
-                NDqProto::TGetStatsResponse response;
-                auto* s = response.MutableStats();
-                s->SetTaskId(taskId);
-                //s->SetStartTs(stats->StartTs.MilliSeconds());
-                //s->SetFinishTs(stats->FinishTs.MilliSeconds());
-                s->SetBuildCpuTimeUs(stats->BuildCpuTime.MicroSeconds());
-                s->SetComputeCpuTimeUs(stats->ComputeCpuTime.MicroSeconds());
-
-                // All run statuses metrics
-                s->SetPendingInputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingInput].MicroSeconds());
-                s->SetPendingOutputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingOutput].MicroSeconds());
-                s->SetFinishTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::Finished].MicroSeconds());
-                static_assert(NDq::TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
-
-                //s->SetTotalTime(stats->TotalTime.MilliSeconds());
-                s->SetWaitTimeUs(stats->WaitTime.MicroSeconds());
-                s->SetWaitOutputTimeUs(stats->WaitOutputTime.MicroSeconds());
-
-                //s->SetMkqlTotalNodes(stats->MkqlTotalNodes);
-                //s->SetMkqlCodegenFunctions(stats->MkqlCodegenFunctions);
-                //s->SetCodeGenTotalInstructions(stats->CodeGenTotalInstructions);
-                //s->SetCodeGenTotalFunctions(stats->CodeGenTotalFunctions);
-                //s->SetCodeGenFullTime(stats->CodeGenFullTime);
-                //s->SetCodeGenFinalizeTime(stats->CodeGenFinalizeTime);
-                //s->SetCodeGenModulePassTime(stats->CodeGenModulePassTime);
-
-                for (const auto& [id, ss] : stats->OutputChannels) {
-                    ToProto(s->AddOutputChannels(), ss);
-                }
-
-                for (const auto& [id, ss] : stats->InputChannels) {
-                    ToProto(s->AddInputChannels(), ss);
-                }
-
-                for (const auto& [id, ss] : stats->Sources) {
-                    ToProto(s->AddSources(), ss);
-                }
-
-                response.Save(&output);
-
+                GetStats(taskId).Save(&output);
                 break;
             }
             case NDqProto::TCommandHeader::GET_STATS_INPUT: {

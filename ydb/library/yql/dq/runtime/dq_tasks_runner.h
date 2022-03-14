@@ -66,7 +66,7 @@ struct TMkqlStat {
     i64 Value = 0;
 };
 
-struct TDqTaskRunnerStats {
+struct TTaskRunnerStatsBase {
     // basic stats
     TDuration BuildCpuTime;
     TInstant FinishTs;
@@ -85,6 +85,130 @@ struct TDqTaskRunnerStats {
     THashMap<ui64, const TDqOutputChannelStats*> OutputChannels; // Channel id -> Channel stats
 
     TVector<TMkqlStat> MkqlStats;
+
+    TTaskRunnerStatsBase() = default;
+    TTaskRunnerStatsBase(TTaskRunnerStatsBase&&) = default;
+    TTaskRunnerStatsBase& operator=(TTaskRunnerStatsBase&&) = default;
+
+    virtual ~TTaskRunnerStatsBase() = default;
+
+    template<typename T>
+    void FromProto(const T& f)
+    {
+        //s->StartTs = TInstant::MilliSeconds(f.GetStartTs());
+        //s->FinishTs = TInstant::MilliSeconds(f.GetFinishTs());
+        this->BuildCpuTime = TDuration::MicroSeconds(f.GetBuildCpuTimeUs());
+        this->ComputeCpuTime = TDuration::MicroSeconds(f.GetComputeCpuTimeUs());
+        this->RunStatusTimeMetrics.Load(ERunStatus::PendingInput, TDuration::MicroSeconds(f.GetPendingInputTimeUs()));
+        this->RunStatusTimeMetrics.Load(ERunStatus::PendingOutput, TDuration::MicroSeconds(f.GetPendingOutputTimeUs()));
+        this->RunStatusTimeMetrics.Load(ERunStatus::Finished, TDuration::MicroSeconds(f.GetFinishTimeUs()));
+        //s->TotalTime = TDuration::MilliSeconds(f.GetTotalTime());
+        this->WaitTime = TDuration::MicroSeconds(f.GetWaitTimeUs());
+        this->WaitOutputTime = TDuration::MicroSeconds(f.GetWaitOutputTimeUs());
+
+        //s->MkqlTotalNodes = f.GetMkqlTotalNodes();
+        //s->MkqlCodegenFunctions = f.GetMkqlCodegenFunctions();
+        //s->CodeGenTotalInstructions = f.GetCodeGenTotalInstructions();
+        //s->CodeGenTotalFunctions = f.GetCodeGenTotalFunctions();
+        //s->CodeGenFullTime = f.GetCodeGenFullTime();
+        //s->CodeGenFinalizeTime = f.GetCodeGenFinalizeTime();
+        //s->CodeGenModulePassTime = f.GetCodeGenModulePassTime();
+
+        for (const auto& input : f.GetInputChannels()) {
+            this->MutableInputChannel(input.GetChannelId())->FromProto(input);
+        }
+
+        for (const auto& output : f.GetOutputChannels()) {
+            this->MutableOutputChannel(output.GetChannelId())->FromProto(output);
+        }
+
+        // todo: (whcrc) fill sources and ComputeCpuTimeByRun?
+    }
+
+private:
+    virtual TDqInputChannelStats* MutableInputChannel(ui64 channelId) = 0;
+    virtual TDqSourceStats* MutableSource(ui64 sourceId) = 0;  // todo: (whcrc) unused, not modified by these pointers
+    virtual TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) = 0;
+};
+
+struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
+    // these stats are owned by TDqTaskRunner
+    TDqInputChannelStats* MutableInputChannel(ui64 channelId) override {
+        return const_cast<TDqInputChannelStats*>(InputChannels[channelId]);
+    }
+
+    TDqSourceStats* MutableSource(ui64 sourceId) override {
+        return const_cast<TDqSourceStats*>(Sources[sourceId]);
+    }
+
+    TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) override {
+        return const_cast<TDqOutputChannelStats*>(OutputChannels[channelId]);
+    }
+};
+
+struct TDqTaskRunnerStatsInplace : public TTaskRunnerStatsBase {
+    // all stats are owned by this object
+    TVector<THolder<TDqInputChannelStats>> InputChannelHolder;
+    TVector<THolder<TDqSourceStats>> SourceHolder;
+    TVector<THolder<TDqOutputChannelStats>> OutputChannelHolder;
+
+    template<typename TStat>
+    static TStat* GetOrCreate(THashMap<ui64, const TStat*>& mapper, TVector<THolder<TStat>>& holder, ui64 statIdx) {
+        if (auto it = mapper.find(statIdx); it != mapper.end()) {
+            return const_cast<TStat*>(it->second);
+        }
+        holder.push_back(MakeHolder<TStat>(statIdx));
+        mapper[statIdx] = holder.back().Get();
+        return holder.back().Get();
+    }
+
+    TDqInputChannelStats* MutableInputChannel(ui64 channelId) override {
+        return GetOrCreate(InputChannels, InputChannelHolder, channelId);
+    }
+
+    TDqSourceStats* MutableSource(ui64 sourceId) override {
+        return GetOrCreate(Sources, SourceHolder, sourceId);
+    }
+
+    TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) override {
+        return GetOrCreate(OutputChannels, OutputChannelHolder, channelId);
+    }
+};
+
+// Provides read access to TTaskRunnerStatsBase
+// May or may not own the underlying object
+class TDqTaskRunnerStatsView {
+public:
+    TDqTaskRunnerStatsView() : IsDefined(false) {}
+
+    TDqTaskRunnerStatsView(TDqTaskRunnerStatsInplace&& stats)  // used in TTaskRunnerActor, cause it constructs stats on-the-fly, and cannot own it due to threaded implementation
+        : StatsInplace(std::move(stats))
+        , StatsPtr(nullptr)
+        , IsInplace(true)
+        , IsDefined(true) {
+    }
+
+    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats)   // used in TLocalTaskRunnerActor, cause it holds this stats, and does not modify it asyncronously from TDqAsyncComputeActor
+        : StatsInplace()
+        , StatsPtr(stats)
+        , IsInplace(false)
+        , IsDefined(true) {
+    }
+
+    const TTaskRunnerStatsBase* Get() {
+        Y_VERIFY(IsDefined);
+        return IsInplace ? static_cast<const TTaskRunnerStatsBase*>(&StatsInplace) : StatsPtr;
+    }
+
+    operator bool() const {
+        return IsDefined;
+    }
+
+private:
+    TDqTaskRunnerStatsInplace StatsInplace;
+    const TDqTaskRunnerStats* StatsPtr;
+    bool IsInplace;
+    bool IsDefined;
 };
 
 struct TDqTaskRunnerContext {
@@ -186,3 +310,16 @@ TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, c
     const TLogFunc& logFunc);
 
 } // namespace NYql::NDq
+
+template <>
+inline void Out<NYql::NDq::TTaskRunnerStatsBase>(IOutputStream& os, TTypeTraits<NYql::NDq::TTaskRunnerStatsBase>::TFuncParam stats) {
+    os << "TTaskRunnerStatsBase:" << Endl
+       << "\tBuildCpuTime: " << stats.BuildCpuTime << Endl
+       << "\tFinishTs: " << stats.FinishTs << Endl
+       << "\tComputeCpuTime: " << stats.ComputeCpuTime << Endl
+       << "\tWaitTime: " << stats.WaitTime << Endl
+       << "\tWaitOutputTime: " << stats.WaitOutputTime << Endl
+       << "\tsize of InputChannels: " << stats.InputChannels.size() << Endl
+       << "\tsize of Sources: " << stats.Sources.size() << Endl
+       << "\tsize of OutputChannels: " << stats.OutputChannels.size();
+}

@@ -919,6 +919,38 @@ Y_UNIT_TEST_SUITE(TCircularOperationQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 5UL);
     }
 
+    Y_UNIT_TEST(CheckWakeupWhenRPSExhausted) {
+        // regression case for the following case:
+        // Config: Inglight = 1, RPS = 1/s, MinOperationRepeatDelay = 60s
+        // 1. Enqueue multiple operations, 1 is running
+        // 3. OnDone1, OnDone2 within same second, RPS is now exhausted.
+        // 4. Wakeup should be +1 second, not +MinOperationRepeatDelay=60s as caused by bug
+
+        TQueue::TConfig config;
+        config.IsCircular = true;
+        config.InflightLimit = 1;
+        config.MaxRate = 1.0;
+        config.Timeout = Timeout;
+        config.MinOperationRepeatDelay = TDuration::Seconds(60);
+        TOperationStarter starter;
+
+        TQueue queue(config, starter, starter);
+        queue.Start();
+
+        queue.Enqueue(1);
+        queue.Enqueue(2);
+        queue.Enqueue(3);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+        queue.OnDone(1);
+        queue.OnDone(2);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 0UL);
+
+        auto goldWakeup = starter.TimeProvider.Now() + TDuration::Seconds(1);
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.back(), goldWakeup);
+    }
+
     Y_UNIT_TEST(CheckStartAfterStop) {
         TQueue::TConfig config;
         config.IsCircular = true;

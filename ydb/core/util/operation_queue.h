@@ -619,8 +619,13 @@ void TOperationQueue<T, TQueue>::ScheduleWakeup() {
 
     auto now = Timer.Now();
     if (RunningItems.Empty() && !ReadyQueue.Empty()) {
-        // special case when we failed to start anything
-        if (!NextWakeup || NextWakeup <= now) {
+        if (TokenBucket.Available() <= 0) {
+            // we didn't start anything because of RPS limit
+            NextWakeup = now + TokenBucket.NextAvailableDelay();
+            Timer.SetWakeupTimer(NextWakeup);
+            return;
+        } else if (!NextWakeup || NextWakeup <= now) {
+            // special case when we failed to start anything
             NextWakeup = now + Config.WakeupInterval;
             Timer.SetWakeupTimer(NextWakeup);
             return;

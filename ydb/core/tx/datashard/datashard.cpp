@@ -140,6 +140,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , ReadColumnsScanInUserPool(0, 0, 1)
     , BackupReadAheadLo(0, 0, 64*1024*1024)
     , BackupReadAheadHi(0, 0, 128*1024*1024)
+    , EnablePrioritizedMvccSnapshotReads(0, 0, 1)
+    , EnableUnprotectedMvccSnapshotReads(0, 0, 1)
     , DataShardSysTables(InitDataShardSysTables(this))
     , ChangeSenderActivator(info->TabletID)
     , ChangeExchangeSplitter(this)
@@ -265,6 +267,7 @@ void TDataShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorCo
 void TDataShard::Cleanup(const TActorContext& ctx) {
     //PipeClientCache->Detach(ctx);
     if (RegistrationSended) {
+        ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvUnsubscribeReadStep());
         ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvUnregisterTablet(TabletID()));
     }
 
@@ -301,6 +304,9 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     AppData(ctx)->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
     AppData(ctx)->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
 
+    AppData(ctx)->Icb->RegisterSharedControl(EnablePrioritizedMvccSnapshotReads, "DataShardControls.PrioritizedMvccSnapshotReads");
+    AppData(ctx)->Icb->RegisterSharedControl(EnableUnprotectedMvccSnapshotReads, "DataShardControls.UnprotectedMvccSnapshotReads");
+
     // OnActivateExecutor might be called multiple times for a follower
     // but the counters should be initialized only once
     if (TabletCountersPtr) {
@@ -324,6 +330,16 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
 }
 
 void TDataShard::SwitchToWork(const TActorContext &ctx) {
+    if (IsMvccEnabled() && (
+        SnapshotManager.GetPerformedUnprotectedReads() ||
+        SnapshotManager.GetImmediateWriteEdge().Step > SnapshotManager.GetCompleteEdge().Step))
+    {
+        // We will need to wait until mediator state is fully restored before
+        // processing new immediate transactions.
+        MediatorStateWaiting = true;
+        CheckMediatorStateRestored();
+    }
+
     SyncConfig();
     PlanQueue.Progress(ctx);
     OutReadSets.ResendAll(ctx);
@@ -360,10 +376,23 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Send registration request to time cast "
          << DatashardStateName(State) << " tabletId " << TabletID()
          << " mediators count is " << ProcessingParams->MediatorsSize()
+         << " coordinators count is " << ProcessingParams->CoordinatorsSize()
          << " buckets per mediator " << ProcessingParams->GetTimeCastBucketsPerMediator());
 
     RegistrationSended = true;
     ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
+
+    // Subscribe to all known coordinators
+    for (ui64 coordinatorId : ProcessingParams->GetCoordinators()) {
+        size_t index = CoordinatorSubscriptions.size();
+        auto res = CoordinatorSubscriptionById.emplace(coordinatorId, index);
+        if (res.second) {
+            auto& subscription = CoordinatorSubscriptions.emplace_back();
+            subscription.CoordinatorId = coordinatorId;
+            ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvSubscribeReadStep(coordinatorId));
+            ++CoordinatorSubscriptionsPending;
+        }
+    }
 }
 
 void TDataShard::PrepareAndSaveOutReadSets(ui64 step,
@@ -1267,7 +1296,8 @@ TReadWriteVersions TDataShard::GetLocalReadWriteVersions() const {
     if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
         return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
 
-    return TRowVersion((++edge).Step, ::Max<ui64>());
+    TRowVersion candidate = TRowVersion((++edge).Step, ::Max<ui64>());
+    return Max(candidate, SnapshotManager.GetImmediateWriteEdge());
 }
 
 TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const {
@@ -1291,6 +1321,9 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
             // With read-only transactions we don't need reads to include
             // changes made at the incomplete edge, as that is a point where
             // distributed transactions performed some reads, not writes.
+            // Since incomplete transactions are still inflight, the actual
+            // version will stick to the first incomplete transaction is queue,
+            // effectively reading non-repeatable state before that transaction.
             edge = readEdge;
             break;
         case EMvccTxMode::ReadWrite:
@@ -1308,12 +1341,41 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
     if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
         return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
 
-    // This is currently active step for immediate writes, not that when
-    // writeEdge is equal to some (PlanStep, Max<ui64>()) that means everything
-    // up to this point is "fixed" and cannot be changed. In that case we
-    // choose at least PlanStep + 1 for new writes.
-    ui64 writeStep = Max(MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0, (++writeEdge).Step);
-    return TRowVersion(writeStep, ::Max<ui64>());
+    // Normally we stick transactions to the end of the last known mediator step
+    // Note this calculations only happen when we don't have distributed
+    // transactions left in queue, and we won't have any more transactions
+    // up to the current mediator time. The mediator time itself may be stale,
+    // in which case we may have evidence of its higher value via complete and
+    // incomplete edges above.
+    const ui64 mediatorStep = Max(MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0, writeEdge.Step);
+    TRowVersion mediatorEdge(mediatorStep, ::Max<ui64>());
+
+    switch (mode) {
+        case EMvccTxMode::ReadOnly: {
+            // We want to include everything that was potentially confirmed to
+            // users, but we don't want to include anything that is not replied
+            // at the start of this read.
+            // Note it's only possible to have ImmediateWriteEdge > mediatorEdge
+            // when ImmediateWriteEdge == mediatorEdge + 1
+            return Max(mediatorEdge, SnapshotManager.GetImmediateWriteEdgeReplied(), SnapshotManager.GetUnprotectedReadEdge());
+        }
+
+        case EMvccTxMode::ReadWrite: {
+            // We must use at least a previously used immediate write edge
+            // But we must also avoid trumpling over any unprotected mvcc
+            // snapshot reads that have occurred.
+            // Note it's only possible to go past the last known mediator step
+            // is when we had an unprotected read, which itself happens at the
+            // last mediator step. So we may only ever have a +1 step, never
+            // anything more.
+            TRowVersion postReadEdge = SnapshotManager.GetPerformedUnprotectedReads()
+                ? SnapshotManager.GetUnprotectedReadEdge().Next()
+                : TRowVersion::Min();
+            return Max(mediatorEdge, writeEdge.Next(), postReadEdge, SnapshotManager.GetImmediateWriteEdge());
+        }
+    }
+
+    Y_FAIL("unreachable");
 }
 
 TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
@@ -1331,6 +1393,195 @@ TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
     }
 
     return mvccVersion;
+}
+
+TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdges(
+        const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc)
+{
+    TPromotePostExecuteEdges res;
+
+    res.HadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(version, txc);
+
+    switch (mode) {
+        case EPromotePostExecuteEdges::ReadOnly:
+            // We want read-only immediate transactions to be readonly, thus
+            // don't promote the complete edge unnecessarily. On restarts we
+            // will assume anything written is potentially replied anyway,
+            // even if it has never been read.
+            break;
+
+        case EPromotePostExecuteEdges::RepeatableRead: {
+            bool unprotectedReads = GetEnableUnprotectedMvccSnapshotReads();
+            if (unprotectedReads) {
+                // We want to use unprotected reads, but we need to make sure it's properly marked first
+                if (!SnapshotManager.GetPerformedUnprotectedReads()) {
+                    SnapshotManager.SetPerformedUnprotectedReads(true, txc);
+                    res.HadWrites = true;
+                }
+                if (!res.HadWrites && !SnapshotManager.IsPerformedUnprotectedReadsCommitted()) {
+                    // We need to wait for completion until the flag is committed
+                    res.WaitCompletion = true;
+                }
+                SnapshotManager.PromoteUnprotectedReadEdge(version);
+            } else if (SnapshotManager.GetPerformedUnprotectedReads()) {
+                // We want to drop the flag as soon as possible
+                SnapshotManager.SetPerformedUnprotectedReads(false, txc);
+                res.HadWrites = true;
+            }
+
+            // We want to promote the complete edge when protected reads are
+            // used or when we're already writing something anyway.
+            if (res.HadWrites || !unprotectedReads) {
+                res.HadWrites |= SnapshotManager.PromoteCompleteEdge(version, txc);
+                if (!res.HadWrites && SnapshotManager.GetCommittedCompleteEdge() < version) {
+                    // We need to wait for completion because some other transaction
+                    // has moved complete edge, but it's not committed yet.
+                    res.WaitCompletion = true;
+                }
+            }
+
+            break;
+        }
+
+        case EPromotePostExecuteEdges::ReadWrite: {
+            if (version.Step <= GetMaxObservedStep()) {
+                res.HadWrites |= SnapshotManager.PromoteCompleteEdge(version.Step, txc);
+            }
+            res.HadWrites |= SnapshotManager.PromoteImmediateWriteEdge(version, txc);
+            break;
+        }
+    }
+
+    return res;
+}
+
+ui64 TDataShard::GetMaxObservedStep() const {
+    return Max(
+        Pipeline.GetLastPlannedTx().Step,
+        SnapshotManager.GetCompleteEdge().Step,
+        SnapshotManager.GetIncompleteEdge().Step,
+        SnapshotManager.GetUnprotectedReadEdge().Step,
+        MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0);
+}
+
+void TDataShard::SendImmediateWriteResult(
+        const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie)
+{
+    const ui64 step = version.Step;
+    const ui64 observedStep = GetMaxObservedStep();
+    if (step <= observedStep) {
+        SnapshotManager.PromoteImmediateWriteEdgeReplied(version);
+        Send(target, event, 0, cookie);
+        return;
+    }
+
+    MediatorDelayedReplies.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(version),
+        std::forward_as_tuple(target, THolder<IEventBase>(event), cookie));
+
+    // Try to subscribe to the next step, when needed
+    if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
+        MediatorTimeCastWaitingSteps.insert(step);
+        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+    }
+}
+
+void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
+    for (auto it = MediatorDelayedReplies.begin(); it != MediatorDelayedReplies.end();) {
+        const ui64 step = it->first.Step;
+
+        if (step <= mediatorStep) {
+            SnapshotManager.PromoteImmediateWriteEdgeReplied(it->first);
+            Send(it->second.Target, it->second.Event.Release(), 0, it->second.Cookie);
+            it = MediatorDelayedReplies.erase(it);
+            continue;
+        }
+
+        // Try to subscribe to the next step, when needed
+        if (MediatorTimeCastEntry && (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin())) {
+            MediatorTimeCastWaitingSteps.insert(step);
+            Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+        }
+        break;
+    }
+}
+
+void TDataShard::CheckMediatorStateRestored() {
+    if (!MediatorStateWaiting ||
+        !RegistrationSended ||
+        !MediatorTimeCastEntry ||
+        CoordinatorSubscriptionsPending > 0 && CoordinatorPrevReadStepMax == Max<ui64>())
+    {
+        // We are not waiting or not ready to make a decision
+        if (MediatorStateWaiting &&
+            MediatorTimeCastEntry &&
+            CoordinatorPrevReadStepMax == Max<ui64>() &&
+            !MediatorStateBackupInitiated)
+        {
+            // It is possible we don't have coordinators with new protocol support
+            // Use a backup plan of acquiring a read snapshot for restoring the read step
+            Schedule(TDuration::MilliSeconds(50), new TEvPrivate::TEvMediatorRestoreBackup);
+            MediatorStateBackupInitiated = true;
+        }
+        return;
+    }
+
+    // CoordinatorPrevReadStepMax shows us what is the next minimum step that
+    // may be acquired as a snapshot. This tells as that no previous read
+    // could have happened after this step, even if it has been acquired.
+    // CoordinatorPrevReadStepMin shows us the maximum step that could have
+    // been acquired before we subscribed. Even if the next step is very
+    // large it may be used to infer an erlier step, as previous generation
+    // could not have read any step that was not acquired.
+    // When some coordinators are still pending we use CoordinatorPrevReadStepMax
+    // as a worst case read step in the future, hoping to make a tighter
+    // prediction while we wait for that.
+    const ui64 step = CoordinatorSubscriptionsPending == 0
+        ? Min(CoordinatorPrevReadStepMax, CoordinatorPrevReadStepMin)
+        : CoordinatorPrevReadStepMax;
+
+    // WARNING: we must perform this check BEFORE we update unprotected read edge
+    // We may enter this code path multiple times, and we expect that the above
+    // read step may be refined while we wait based on pessimistic backup step.
+    if (GetMaxObservedStep() < step) {
+        // We need to wait until we observe mediator step that is at least
+        // as large as the step we found.
+        if (MediatorTimeCastWaitingSteps.insert(step).second) {
+            Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+        }
+        return;
+    }
+
+    // Using the inferred last read step we restore the pessimistic unprotected
+    // read edge. Note we only need to do so if there have actually been any
+    // unprotected reads in this datashard history.
+    const TRowVersion lastReadEdge(step, Max<ui64>());
+    if (SnapshotManager.GetPerformedUnprotectedReads()) {
+        SnapshotManager.PromoteUnprotectedReadEdge(lastReadEdge);
+    }
+
+    // Promote the replied immediate write edge up to the currently observed step
+    // This is needed to make sure we read any potentially replied immediate
+    // writes before the restart, and conversely don't accidentally read any
+    // data that is definitely not replied yet.
+    if (SnapshotManager.GetImmediateWriteEdgeReplied() < SnapshotManager.GetImmediateWriteEdge()) {
+        const TRowVersion edge(GetMaxObservedStep(), Max<ui64>());
+        SnapshotManager.PromoteImmediateWriteEdgeReplied(
+            Min(edge, SnapshotManager.GetImmediateWriteEdge()));
+    }
+
+    MediatorStateWaiting = false;
+
+    // Resend all waiting messages
+    TVector<THolder<IEventHandle>> msgs;
+    msgs.swap(MediatorStateWaitingMsgs);
+    for (auto& ev : msgs) {
+        TActivationContext::Send(ev.Release());
+    }
 }
 
 NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult code) {
@@ -1483,7 +1734,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
             rejectReasons.push_back("decided to reject due to given RejectProbability");
     }
 
-    size_t totalInFly = (TxInFly() + ImmediateInFly() + ProposeQueue.Size() + TxWaiting());
+    size_t totalInFly = (TxInFly() + ImmediateInFly() + MediatorStateWaitingMsgs.size() + ProposeQueue.Size() + TxWaiting());
     if (totalInFly > GetMaxTxInFly()) {
         reject = true;
         rejectReasons.push_back("MaxTxInFly was exceeded");
@@ -1554,10 +1805,21 @@ bool TDataShard::CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* 
 }
 
 void TDataShard::UpdateProposeQueueSize() const {
-    SetCounter(COUNTER_PROPOSE_QUEUE_SIZE, ProposeQueue.Size() + DelayedProposeQueue.size() + Pipeline.WaitingTxs());
+    SetCounter(COUNTER_PROPOSE_QUEUE_SIZE, MediatorStateWaitingMsgs.size() + ProposeQueue.Size() + DelayedProposeQueue.size() + Pipeline.WaitingTxs());
 }
 
 void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+    // Check if we need to delay an immediate transaction
+    if (MediatorStateWaiting &&
+        (ev->Get()->GetFlags() & TTxFlags::Immediate) &&
+        !(ev->Get()->GetFlags() & TTxFlags::ForceOnline))
+    {
+        // We cannot calculate correct version until we restore mediator state
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
+
     if (Pipeline.HasProposeDelayers()) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Handle TEvProposeTransaction delayed at " << TabletID() << " until dependency graph is restored");
@@ -1970,7 +2232,30 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
     MediatorTimeCastEntry = ev->Get()->Entry;
     Y_VERIFY(MediatorTimeCastEntry);
 
+    SendAfterMediatorStepActivate(MediatorTimeCastEntry->Get(TabletID()));
+
     Pipeline.ActivateWaitingTxOps(ctx);
+
+    CheckMediatorStateRestored();
+}
+
+void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Got TEvMediatorTimecast::TEvSubscribeReadStepResult at " << TabletID()
+                << " coordinator " << msg->CoordinatorId
+                << " last step " << msg->LastReadStep
+                << " next step " << msg->ReadStep->Get());
+    auto it = CoordinatorSubscriptionById.find(msg->CoordinatorId);
+    Y_VERIFY_S(it != CoordinatorSubscriptionById.end(),
+        "Unexpected TEvSubscribeReadStepResult for coordinator " << msg->CoordinatorId);
+    size_t index = it->second;
+    auto& subscription = CoordinatorSubscriptions.at(index);
+    subscription.ReadStep = msg->ReadStep;
+    CoordinatorPrevReadStepMin = Max(CoordinatorPrevReadStepMin, msg->LastReadStep);
+    CoordinatorPrevReadStepMax = Min(CoordinatorPrevReadStepMax, msg->NextReadStep);
+    --CoordinatorSubscriptionsPending;
+    CheckMediatorStateRestored();
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx) {
@@ -1984,11 +2269,25 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
     for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end() && *it <= step;)
         it = MediatorTimeCastWaitingSteps.erase(it);
 
+    SendAfterMediatorStepActivate(step);
+
     Pipeline.ActivateWaitingTxOps(ctx);
+
+    CheckMediatorStateRestored();
+}
+
+void TDataShard::Handle(TEvPrivate::TEvMediatorRestoreBackup::TPtr&, const TActorContext&) {
+    if (MediatorStateWaiting && CoordinatorPrevReadStepMax == Max<ui64>()) {
+        // We are still waiting for new protol coordinator state
+        // TODO: send an old snapshot request to coordinators
+    }
 }
 
 bool TDataShard::WaitPlanStep(ui64 step) {
     if (step <= Pipeline.GetLastPlannedTx().Step)
+        return false;
+
+    if (step <= SnapshotManager.GetCompleteEdge().Step)
         return false;
 
     if (MediatorTimeCastEntry && step <= MediatorTimeCastEntry->Get(TabletID()))
@@ -2016,7 +2315,7 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     auto &rec = ev->Get()->Record;
     if (rec.HasMvccSnapshot()) {
         TRowVersion rowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
-        TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
+        TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge(GetEnablePrioritizedMvccSnapshotReads());
         if (rowVersion >= unreadableEdge) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction reads from " << rowVersion << " which is not before unreadable edge " << unreadableEdge);
             return true;

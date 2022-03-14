@@ -1581,19 +1581,21 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
     if (Self->MvccSwitchState == TSwitchState::SWITCHING) {
         WaitingDataTxOps.emplace(TRowVersion::Min(), std::move(ev)); // postpone tx processing till mvcc state switch is finished
     } else {
+        bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
         Y_VERIFY_DEBUG(ev->Get()->Record.HasMvccSnapshot());
         TRowVersion snapshot(ev->Get()->Record.GetMvccSnapshot().GetStep(), ev->Get()->Record.GetMvccSnapshot().GetTxId());
         WaitingDataTxOps.emplace(snapshot, std::move(ev));
+        const ui64 waitStep = prioritizedReads ? snapshot.Step : snapshot.Step + 1;
         TRowVersion unreadableEdge;
-        if (!Self->WaitPlanStep(snapshot.Step + 1) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
-            ActivateWaitingTxOps(unreadableEdge, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
+        if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge(prioritizedReads))) {
+            ActivateWaitingTxOps(unreadableEdge, prioritizedReads, ctx);  // Async MediatorTimeCastEntry update, need to reschedule the op
         }
     }
 
     return true;
 }
 
-void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx) {
+void TPipeline::ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, const TActorContext& ctx) {
     if (WaitingDataTxOps.empty() || Self->MvccSwitchState == TSwitchState::SWITCHING)
         return;
 
@@ -1611,8 +1613,12 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
             activated = true;
         }
 
-        if (minWait == TRowVersion::Max() || Self->WaitPlanStep(minWait.Step + 1) || minWait >= (edge = GetUnreadableEdge()))
+        if (minWait == TRowVersion::Max() ||
+            Self->WaitPlanStep(prioritizedReads ? minWait.Step : minWait.Step + 1) ||
+            minWait >= (edge = GetUnreadableEdge(prioritizedReads)))
+        {
             break;
+        }
 
         // Async MediatorTimeCastEntry update, need to rerun activation
     }
@@ -1626,7 +1632,8 @@ void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
     if (WaitingDataTxOps.empty() || Self->MvccSwitchState == TSwitchState::SWITCHING)
         return;
 
-    ActivateWaitingTxOps(GetUnreadableEdge(), ctx);
+    bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
+    ActivateWaitingTxOps(GetUnreadableEdge(prioritizedReads), prioritizedReads, ctx);
 }
 
 TRowVersion TPipeline::GetReadEdge() const {
@@ -1645,29 +1652,51 @@ TRowVersion TPipeline::GetReadEdge() const {
     return TRowVersion(step, Max<ui64>());
 }
 
-TRowVersion TPipeline::GetUnreadableEdge() const {
-    auto last = TRowVersion(
+TRowVersion TPipeline::GetUnreadableEdge(bool prioritizeReads) const {
+    const auto last = TRowVersion(
         GetLastActivePlannedOpStep(),
         GetLastActivePlannedOpId());
     auto it = Self->TransQueue.PlannedTxs.upper_bound(TStepOrder(last.Step, last.TxId));
     while (it != Self->TransQueue.PlannedTxs.end()) {
-        last = TRowVersion(it->Step, it->TxId);
-        if (!Self->TransQueue.FindTxInFly(last.TxId)->IsReadOnly()) {
+        const auto next = TRowVersion(it->Step, it->TxId);
+        if (!Self->TransQueue.FindTxInFly(next.TxId)->IsReadOnly()) {
             // If there's any non-read-only planned tx we don't have in the
             // dependency tracker yet, we absolutely cannot read from that
             // version.
-            return last;
+            return next;
         }
         ++it;
     }
 
-    // It looks like we have an empty plan queue (or it's read-only), so we
-    // use a rough estimate of a point we would use for immediate writes in
-    // the far future. That point in time is not complete yet and cannot be
-    // used for snapshot reads.
-    last = TRowVersion(LastPlannedTx.Step, LastPlannedTx.TxId);
-    ui64 step = Max(Self->MediatorTimeCastEntry ? Self->MediatorTimeCastEntry->Get(Self->TabletID()) : 0, (++last).Step);
-    return TRowVersion(step, Max<ui64>());
+    // It looks like we have an empty plan queue (or it's read-only), so we use
+    // a rough estimate of a point in time we would use for immediate writes
+    // in the distant future. That point in time possibly has some unfinished
+    // transactions, but they would be resolved using dependency tracker. Here
+    // we use an estimate of the observed mediator step (including possible past
+    // generations). Note that we also update CompleteEdge when the distributed
+    // queue is empty, but we have been performing immediate writes and thus
+    // observing an updated mediator timecast step.
+    const ui64 mediatorStep = Max(
+        Self->MediatorTimeCastEntry ? Self->MediatorTimeCastEntry->Get(Self->TabletID()) : 0,
+        Self->SnapshotManager.GetIncompleteEdge().Step,
+        Self->SnapshotManager.GetCompleteEdge().Step,
+        LastPlannedTx.Step);
+
+    // Using an observed mediator step we conclude that we have observed all
+    // distributed transactions up to the end of that step.
+    const TRowVersion mediatorEdge(mediatorStep, ::Max<ui64>());
+
+    if (prioritizeReads) {
+        // We are prioritizing reads, and we are ok with blocking immediate writes
+        // in the current step. So the first unreadable version is actually in
+        // the next step.
+        return mediatorEdge.Next();
+    } else {
+        // We cannot block immediate writes up to this edge, thus we actually
+        // need to wait until the edge progresses above this version. This
+        // would happen when mediator timecast moves to the next step.
+        return mediatorEdge;
+    }
 }
 
 void TPipeline::AddCompletingOp(const TOperation::TPtr& op) {

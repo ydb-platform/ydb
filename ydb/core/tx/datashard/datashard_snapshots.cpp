@@ -30,9 +30,11 @@ bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
     TRowVersion completeEdge = TRowVersion::Min();
     TRowVersion incompleteEdge = TRowVersion::Min();
     TRowVersion lowWatermark = TRowVersion::Min();
+    TRowVersion immediateWriteEdge = TRowVersion::Min();
 
     ui32 mvccState = 0;
     ui64 keepSnapshotTimeout = 0;
+    ui64 unprotectedReads = 0;
 
     TSnapshotMap snapshots;
 
@@ -43,12 +45,15 @@ bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
         // We don't currently support mvcc on the follower
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_State, mvccState);
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_KeepSnapshotTimeout, keepSnapshotTimeout);
+        ready &= Self->SysGetUi64(db, Schema::SysMvcc_UnprotectedReads, unprotectedReads);
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_CompleteEdgeStep, completeEdge.Step);
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_CompleteEdgeTxId, completeEdge.TxId);
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_IncompleteEdgeStep, incompleteEdge.Step);
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_IncompleteEdgeTxId, incompleteEdge.TxId);
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_LowWatermarkStep, lowWatermark.Step);
         ready &= Self->SysGetUi64(db, Schema::SysMvcc_LowWatermarkTxId, lowWatermark.TxId);
+        ready &= Self->SysGetUi64(db, Schema::SysMvcc_ImmediateWriteEdgeStep, immediateWriteEdge.Step);
+        ready &= Self->SysGetUi64(db, Schema::SysMvcc_ImmediateWriteEdgeTxId, immediateWriteEdge.TxId);
     }
 
     {
@@ -86,9 +91,19 @@ bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
         MinWriteVersion = minWriteVersion;
         MvccState = static_cast<EMvccState>(mvccState);
         KeepSnapshotTimeout = keepSnapshotTimeout;
+        PerformedUnprotectedReads = (unprotectedReads != 0);
         CompleteEdge = completeEdge;
         IncompleteEdge = incompleteEdge;
         LowWatermark = lowWatermark;
+        ImmediateWriteEdge = immediateWriteEdge;
+        if (ImmediateWriteEdge.Step <= Max(CompleteEdge.Step, IncompleteEdge.Step)) {
+            ImmediateWriteEdgeReplied = immediateWriteEdge;
+        } else {
+            // We cannot be sure which writes we have replied to
+            // Datashard will restore mediator state and decide
+            ImmediateWriteEdgeReplied.Step = Max(CompleteEdge.Step, IncompleteEdge.Step);
+            ImmediateWriteEdgeReplied.TxId = Max<ui64>();
+        }
         CommittedCompleteEdge = completeEdge;
         Snapshots = std::move(snapshots);
     }
@@ -208,6 +223,82 @@ bool TSnapshotManager::PromoteIncompleteEdge(TOperation* op, TTransactionContext
     return false;
 }
 
+TRowVersion TSnapshotManager::GetImmediateWriteEdge() const {
+    return ImmediateWriteEdge;
+}
+
+TRowVersion TSnapshotManager::GetImmediateWriteEdgeReplied() const {
+    return ImmediateWriteEdgeReplied;
+}
+
+void TSnapshotManager::SetImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc) {
+    using Schema = TDataShard::Schema;
+
+    NIceDb::TNiceDb db(txc.DB);
+    Self->PersistSys(db, Schema::SysMvcc_ImmediateWriteEdgeStep, version.Step);
+    Self->PersistSys(db, Schema::SysMvcc_ImmediateWriteEdgeTxId, version.TxId);
+    ImmediateWriteEdge = version;
+}
+
+bool TSnapshotManager::PromoteImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc) {
+    if (!IsMvccEnabled())
+        return false;
+
+    if (version > ImmediateWriteEdge) {
+        SetImmediateWriteEdge(version, txc);
+
+        return true;
+    }
+
+    return false;
+}
+
+bool TSnapshotManager::PromoteImmediateWriteEdgeReplied(const TRowVersion& version) {
+    if (!IsMvccEnabled())
+        return false;
+
+    if (version > ImmediateWriteEdgeReplied) {
+        ImmediateWriteEdgeReplied = version;
+        return true;
+    }
+
+    return false;
+}
+
+TRowVersion TSnapshotManager::GetUnprotectedReadEdge() const {
+    return UnprotectedReadEdge;
+}
+
+bool TSnapshotManager::PromoteUnprotectedReadEdge(const TRowVersion& version) {
+    if (IsMvccEnabled() && UnprotectedReadEdge < version) {
+        UnprotectedReadEdge = version;
+        return true;
+    }
+
+    return false;
+}
+
+bool TSnapshotManager::GetPerformedUnprotectedReads() const {
+    return PerformedUnprotectedReads;
+}
+
+bool TSnapshotManager::IsPerformedUnprotectedReadsCommitted() const {
+    return PerformedUnprotectedReadsUncommitted != 0;
+}
+
+void TSnapshotManager::SetPerformedUnprotectedReads(bool performedUnprotectedReads, TTransactionContext& txc) {
+    using Schema = TDataShard::Schema;
+
+    NIceDb::TNiceDb db(txc.DB);
+    Self->PersistSys(db, Schema::SysMvcc_UnprotectedReads, ui64(performedUnprotectedReads ? 1 : 0));
+    PerformedUnprotectedReads = performedUnprotectedReads;
+    PerformedUnprotectedReadsUncommitted++;
+
+    txc.OnCommitted([this] {
+        this->PerformedUnprotectedReadsUncommitted--;
+    });
+}
+
 void TSnapshotManager::SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout) {
     using Schema = TDataShard::Schema;
 
@@ -275,7 +366,7 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
     const TRowVersion opVersion(step, txId);
 
     // We need to choose a version that is at least as large as all previous edges
-    TRowVersion nextVersion = Max(opVersion, MinWriteVersion, CompleteEdge, IncompleteEdge);
+    TRowVersion nextVersion = Max(opVersion, MinWriteVersion, CompleteEdge, IncompleteEdge, ImmediateWriteEdge);
 
     // This must be a version that we may have previously written to, and which
     // must not be a snapshot. We don't know if there have been any immediate
@@ -300,7 +391,9 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
 
             SetCompleteEdge(nicedb, nextVersion);
             SetIncompleteEdge(nicedb, nextVersion);
+            SetImmediateWriteEdge(nextVersion, txc);
             SetLowWatermark(nicedb, nextVersion);
+            ImmediateWriteEdgeReplied = ImmediateWriteEdge;
 
             break;
         }
@@ -316,7 +409,9 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
             const auto minVersion = TRowVersion::Min();
             SetCompleteEdge(nicedb, minVersion);
             SetIncompleteEdge(nicedb, minVersion);
+            SetImmediateWriteEdge(minVersion, txc);
             SetLowWatermark(nicedb, minVersion);
+            ImmediateWriteEdgeReplied = ImmediateWriteEdge;
 
             break;
         }

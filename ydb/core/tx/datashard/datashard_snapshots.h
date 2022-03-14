@@ -131,6 +131,19 @@ public:
 
     bool PromoteIncompleteEdge(TOperation* op, TTransactionContext& txc);
 
+    TRowVersion GetImmediateWriteEdge() const;
+    TRowVersion GetImmediateWriteEdgeReplied() const;
+    void SetImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc);
+    bool PromoteImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc);
+    bool PromoteImmediateWriteEdgeReplied(const TRowVersion& version);
+
+    TRowVersion GetUnprotectedReadEdge() const;
+    bool PromoteUnprotectedReadEdge(const TRowVersion& version);
+
+    bool GetPerformedUnprotectedReads() const;
+    bool IsPerformedUnprotectedReadsCommitted() const;
+    void SetPerformedUnprotectedReads(bool performedUnprotectedReads, TTransactionContext& txc);
+
     EMvccState GetMvccState() const {
         return MvccState;
     }
@@ -203,9 +216,14 @@ private:
 
     EMvccState MvccState = EMvccState::MvccUnspecified;
     ui64 KeepSnapshotTimeout = 0;
+    bool PerformedUnprotectedReads = false;
+    ui64 PerformedUnprotectedReadsUncommitted = 0;
     TRowVersion IncompleteEdge = TRowVersion::Min();
     TRowVersion CompleteEdge = TRowVersion::Min();
     TRowVersion LowWatermark = TRowVersion::Min();
+    TRowVersion ImmediateWriteEdge = TRowVersion::Min();
+    TRowVersion ImmediateWriteEdgeReplied = TRowVersion::Min();
+    TRowVersion UnprotectedReadEdge = TRowVersion::Min();
 
     TRowVersion CommittedCompleteEdge = TRowVersion::Min();
 

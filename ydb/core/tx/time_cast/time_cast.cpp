@@ -324,13 +324,13 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr &ev, co
             default: {
                 const ui64 step = record.GetTimeBarrier();
                 bucket.Entry->Update(step, nullptr, 0);
-                THashSet<ui64> processed; // a set of processed tablets
+                THashSet<std::pair<TActorId, ui64>> processed; // a set of processed tablets
                 while (!bucket.Waiters.empty()) {
                     const auto& top = bucket.Waiters.top();
                     if (step < top.PlanStep) {
                         break;
                     }
-                    if (processed.insert(top.TabletId).second) {
+                    if (processed.insert(std::make_pair(top.Sender, top.TabletId)).second) {
                         ctx.Send(top.Sender, new TEvMediatorTimecast::TEvNotifyPlanStep(top.TabletId, step));
                     }
                     bucket.Waiters.pop();
@@ -495,6 +495,7 @@ void TMediatorTimecastProxy::Handle(TEvTxProxy::TEvSubscribeReadStepResult::TPtr
                     new TEvMediatorTimecast::TEvSubscribeReadStepResult(
                         coordinatorId,
                         lastReadStep,
+                        nextReadStep,
                         coordinator.ReadStep),
                     0, cookie);
             }

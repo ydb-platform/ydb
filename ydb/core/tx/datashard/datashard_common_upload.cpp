@@ -209,6 +209,21 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 }
 
 template <typename TEvRequest, typename TEvResponse>
+void TCommonUploadOps<TEvRequest, TEvResponse>::GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie) {
+    Y_VERIFY(Result);
+
+    if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {
+        self->IncCounter(COUNTER_BULK_UPSERT_SUCCESS);
+    } else {
+        self->IncCounter(COUNTER_BULK_UPSERT_ERROR);
+    }
+
+    target = Ev->Sender;
+    event = std::move(Result);
+    cookie = 0;
+}
+
+template <typename TEvRequest, typename TEvResponse>
 void TCommonUploadOps<TEvRequest, TEvResponse>::SendResult(TDataShard* self, const TActorContext& ctx) {
     Y_VERIFY(Result);
 

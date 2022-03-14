@@ -282,6 +282,9 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_UNSAFE_UPLOAD_ROWS; }
+
+private:
+    TRowVersion MvccVersion = TRowVersion::Min();
 };
 
 class TDataShard::TTxExecuteMvccStateChange: public NTabletFlatExecutor::TTransactionBase<TDataShard> {

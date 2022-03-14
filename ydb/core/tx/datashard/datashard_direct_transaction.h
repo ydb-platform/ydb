@@ -11,11 +11,17 @@
 namespace NKikimr {
 namespace NDataShard {
 
+struct TDirectTxResult {
+    TActorId Target;
+    THolder<IEventBase> Event;
+    ui64 Cookie;
+};
+
 class IDirectTx {
 public:
     virtual ~IDirectTx() = default;
     virtual bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) = 0;
-    virtual void SendResult(TDataShard* self, const TActorContext& ctx) = 0;
+    virtual TDirectTxResult GetResult(TDataShard* self) = 0;
     virtual TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const = 0;
 };
 

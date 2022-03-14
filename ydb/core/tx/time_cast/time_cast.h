@@ -199,14 +199,17 @@ struct TEvMediatorTimecast {
     struct TEvSubscribeReadStepResult : public TEventLocal<TEvSubscribeReadStepResult, EvSubscribeReadStepResult> {
         const ui64 CoordinatorId;
         const ui64 LastReadStep;
+        const ui64 NextReadStep;
         const TMediatorTimecastReadStep::TCPtr ReadStep;
 
         TEvSubscribeReadStepResult(
                 ui64 coordinatorId,
                 ui64 lastReadStep,
+                ui64 nextReadStep,
                 TMediatorTimecastReadStep::TCPtr readStep)
             : CoordinatorId(coordinatorId)
             , LastReadStep(lastReadStep)
+            , NextReadStep(nextReadStep)
             , ReadStep(std::move(readStep))
         {
             Y_VERIFY(ReadStep);
@@ -217,6 +220,7 @@ struct TEvMediatorTimecast {
                 << ToStringHeader() << "{"
                 << " CoordinatorId# " << CoordinatorId
                 << " LastReadStep# " << LastReadStep
+                << " NextReadStep# " << NextReadStep
                 << " ReadStep# " << ReadStep->Get()
                 << " }";
         }

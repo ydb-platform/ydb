@@ -4623,6 +4623,323 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterStuckRW, UseNewEngine) {
     }
 }
 
+Y_UNIT_TEST_QUAD(TestSnapshotReadPriority, UnprotectedReads, UseNewEngine) {
+    TPortManager pm;
+    TServerSettings::TControls controls;
+    controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+    controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(UnprotectedReads ? 1 : 0);
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetEnableMvcc(true)
+        .SetEnableMvccSnapshotReads(true)
+        .SetControls(controls)
+        .SetUseRealThreads(false);
+
+    Tests::TServer::TPtr server = new TServer(serverSettings);
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TIMECAST, NLog::PRI_TRACE);
+
+    InitRoot(server, sender);
+
+    TDisableDataShardLogBatching disableDataShardLogBatching;
+    CreateShardedTable(server, sender, "/Root", "table-1", 1);
+    CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+    auto table1shards = GetTableShards(server, sender, "/Root/table-1");
+    auto table2shards = GetTableShards(server, sender, "/Root/table-2");
+
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2)"));
+
+    SimulateSleep(server, TDuration::Seconds(1));
+
+    // Perform an immediate write
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 3)"));
+
+    auto execSimpleRequest = [&](const TString& query) -> TString {
+        auto reqSender = runtime.AllocateEdgeActor();
+        auto ev = ExecRequest(runtime, reqSender, MakeSimpleRequest(query));
+        auto& response = ev->Get()->Record.GetRef();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    };
+
+    auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
+        auto reqSender = runtime.AllocateEdgeActor();
+        sessionId = CreateSession(runtime, reqSender);
+        auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
+        auto& response = ev->Get()->Record.GetRef();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        txId = response.GetResponse().GetTxMeta().id();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    };
+
+    auto continueSnapshotRequest = [&](const TString& sessionId, const TString& txId, const TString& query) -> TString {
+        auto reqSender = runtime.AllocateEdgeActor();
+        auto ev = ExecRequest(runtime, reqSender, MakeContinueRequest(sessionId, txId, query));
+        auto& response = ev->Get()->Record.GetRef();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+        return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+    };
+
+    auto execSnapshotRequest = [&](const TString& query) -> TString {
+        auto reqSender = runtime.AllocateEdgeActor();
+        TString sessionId, txId;
+        TString result = beginSnapshotRequest(sessionId, txId, query);
+        CloseSession(runtime, reqSender, sessionId);
+        return result;
+    };
+
+    // Perform an immediate read, we should observe the write above
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "} Struct { Bool: false }");
+
+    // Same when using a fresh snapshot read
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSnapshotRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "} Struct { Bool: false }");
+
+    // Spam schedules in the runtime to prevent mediator time jumping prematurely
+    {
+        Cerr << "!!! Setting up wakeup spam" << Endl;
+        auto senderWakeupSpam = runtime.AllocateEdgeActor();
+        for (int i = 1; i <= 10; ++i) {
+            runtime.Schedule(new IEventHandle(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
+        }
+    }
+
+    // Send an immediate write transaction, but don't wait for result
+    auto senderImmediateWrite = runtime.AllocateEdgeActor();
+    SendRequest(runtime, senderImmediateWrite, MakeSimpleRequest(Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5)
+        )")));
+
+    // We sleep for very little so datashard commits changes, but doesn't advance
+    SimulateSleep(runtime, TDuration::MicroSeconds(1));
+
+    // Perform an immediate read again, it should NOT observe the write above
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "} Struct { Bool: false }");
+
+    // Same when using a fresh snapshot read
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSnapshotRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "} Struct { Bool: false }");
+
+    // Wait for the write to finish
+    {
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderImmediateWrite);
+        auto& response = ev->Get()->Record.GetRef();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+    }
+
+    // Perform an immediate read again, it should observe the write above
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "} Struct { Bool: false }");
+
+    // Same when using a fresh snapshot read
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSnapshotRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "} Struct { Bool: false }");
+
+    // Start a new write and sleep again
+    SendRequest(runtime, senderImmediateWrite, MakeSimpleRequest(Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 7)
+        )")));
+    SimulateSleep(runtime, TDuration::MicroSeconds(1));
+
+    // Verify this write is not observed yet
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "} Struct { Bool: false }");
+
+    // Spam schedules in the runtime to prevent mediator time jumping prematurely
+    {
+        Cerr << "!!! Setting up wakeup spam" << Endl;
+        auto senderWakeupSpam = runtime.AllocateEdgeActor();
+        for (int i = 1; i <= 10; ++i) {
+            runtime.Schedule(new IEventHandle(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
+        }
+    }
+
+    // Reboot the tablet
+    RebootTablet(runtime, table1shards.at(0), sender);
+
+    // Verify the write above cannot be observed after restart as well
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "} Struct { Bool: false }");
+
+    // Send one more write and sleep again
+    auto senderImmediateWrite2 = runtime.AllocateEdgeActor();
+    SendRequest(runtime, senderImmediateWrite2, MakeSimpleRequest(Q_(R"(
+        UPSERT INTO `/Root/table-1` (key, value) VALUES (9, 9)
+        )")));
+    SimulateSleep(runtime, TDuration::MicroSeconds(1));
+
+    // Verify it is also hidden at the moment
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "} Struct { Bool: false }");
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSnapshotRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "} Struct { Bool: false }");
+
+    // Wait for result of the second write
+    {
+        auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(senderImmediateWrite2);
+        auto& response = ev->Get()->Record.GetRef();
+        UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+    }
+
+    // We should finally observe both writes
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSimpleRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 7 } } } "
+        "List { Struct { Optional { Uint32: 9 } } Struct { Optional { Uint32: 9 } } } "
+        "} Struct { Bool: false }");
+
+    TString snapshotSessionId, snapshotTxId;
+    UNIT_ASSERT_VALUES_EQUAL(
+        beginSnapshotRequest(snapshotSessionId, snapshotTxId, Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 7 } } } "
+        "List { Struct { Optional { Uint32: 9 } } Struct { Optional { Uint32: 9 } } } "
+        "} Struct { Bool: false }");
+
+    // Spam schedules in the runtime to prevent mediator time jumping prematurely
+    {
+        Cerr << "!!! Setting up wakeup spam" << Endl;
+        auto senderWakeupSpam = runtime.AllocateEdgeActor();
+        for (int i = 1; i <= 10; ++i) {
+            runtime.Schedule(new IEventHandle(senderWakeupSpam, senderWakeupSpam, new TEvents::TEvWakeup()), TDuration::MicroSeconds(i * 250));
+        }
+    }
+
+    // Reboot the tablet
+    RebootTablet(runtime, table1shards.at(0), sender);
+
+    // Upsert new data after reboot
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (11, 11)"));
+
+    // Make sure datashard state is restored correctly and snapshot is not corrupted
+    UNIT_ASSERT_VALUES_EQUAL(
+        continueSnapshotRequest(snapshotSessionId, snapshotTxId, Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 7 } } } "
+        "List { Struct { Optional { Uint32: 9 } } Struct { Optional { Uint32: 9 } } } "
+        "} Struct { Bool: false }");
+
+    // Make sure new snapshot will actually observe new data
+    UNIT_ASSERT_VALUES_EQUAL(
+        execSnapshotRequest(Q_(R"(
+            SELECT key, value FROM `/Root/table-1`
+            ORDER BY key
+            )")),
+        "Struct { "
+        "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+        "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+        "List { Struct { Optional { Uint32: 5 } } Struct { Optional { Uint32: 5 } } } "
+        "List { Struct { Optional { Uint32: 7 } } Struct { Optional { Uint32: 7 } } } "
+        "List { Struct { Optional { Uint32: 9 } } Struct { Optional { Uint32: 9 } } } "
+        "List { Struct { Optional { Uint32: 11 } } Struct { Optional { Uint32: 11 } } } "
+        "} Struct { Bool: false }");
+}
+
 } // Y_UNIT_TEST_SUITE(DataShardOutOfOrder)
 
 } // namespace NKikimr

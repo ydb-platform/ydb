@@ -1724,6 +1724,10 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration) {
     auto &runtime = *server->GetRuntime();
+    SimulateSleep(runtime, duration);
+}
+
+void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
     runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);

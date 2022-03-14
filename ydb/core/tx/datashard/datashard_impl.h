@@ -297,6 +297,7 @@ class TDataShard
             EvRequestChangeRecords,
             EvRemoveChangeRecords,
             EvReplicationSourceOffsets,
+            EvMediatorRestoreBackup,
             EvEnd
         };
 
@@ -436,6 +437,8 @@ class TDataShard
             // Note that keys are NOT sorted in any way
             THashMap<TString, TVector<TSplitKey>> SourceOffsets;
         };
+
+        struct TEvMediatorRestoreBackup : public TEventLocal<TEvMediatorRestoreBackup, EvMediatorRestoreBackup> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -819,6 +822,10 @@ class TDataShard
             Sys_NextChangeRecordOrder, // 36 Next order of change record
             Sys_LastChangeRecordGroup, // 37 Last group number of change records
 
+            SysMvcc_UnprotectedReads, // 38 Shard may have performed unprotected mvcc reads when non-zero
+            SysMvcc_ImmediateWriteEdgeStep, // 39 Maximum step of immediate writes with mvcc enabled
+            SysMvcc_ImmediateWriteEdgeTxId, // 40 Maximum txId of immediate writes with mvcc enabled
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -828,6 +835,9 @@ class TDataShard
         static_assert(ESysTableKeys::Sys_SubDomainOwnerId == 33, "Sys_SubDomainOwnerId changed its value");
         static_assert(ESysTableKeys::Sys_SubDomainLocalPathId == 34, "Sys_SubDomainLocalPathId changed its value");
         static_assert(ESysTableKeys::Sys_SubDomainOutOfSpace == 35, "Sys_SubDomainOutOfSpace changed its value");
+        static_assert(ESysTableKeys::SysMvcc_UnprotectedReads == 38, "SysMvcc_UnprotectedReads changed its value");
+        static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeStep == 39, "SysMvcc_ImmediateWriteEdgeStep changed its value");
+        static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeTxId == 40, "SysMvcc_ImmediateWriteEdgeTxId changed its value");
 
         static constexpr ui64 MinLocalTid = TSysTables::SysTableMAX + 1; // 1000
 
@@ -918,7 +928,9 @@ class TDataShard
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvMediatorRestoreBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx);
@@ -1242,6 +1254,16 @@ public:
         return BackupReadAheadHi;
     }
 
+    bool GetEnablePrioritizedMvccSnapshotReads() const {
+        ui64 value = EnablePrioritizedMvccSnapshotReads;
+        return value != 0;
+    }
+
+    bool GetEnableUnprotectedMvccSnapshotReads() const {
+        ui64 value = EnableUnprotectedMvccSnapshotReads;
+        return value != 0;
+    }
+
     template <typename T>
     void ReleaseCache(T& tx) {
         ReleaseTxCache(tx.GetTxCacheUsage());
@@ -1436,7 +1458,26 @@ public:
     // Returns a suitable row version for performing a transaction
     TRowVersion GetMvccTxVersion(EMvccTxMode mode, TOperation* op = nullptr) const;
 
+    enum class EPromotePostExecuteEdges {
+        ReadOnly,
+        RepeatableRead,
+        ReadWrite,
+    };
+
+    struct TPromotePostExecuteEdges {
+        bool HadWrites = false;
+        bool WaitCompletion = false;
+    };
+
     TReadWriteVersions GetReadWriteVersions(TOperation* op = nullptr) const;
+    TPromotePostExecuteEdges PromoteImmediatePostExecuteEdges(
+            const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc);
+    ui64 GetMaxObservedStep() const;
+    void SendImmediateWriteResult(
+            const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0);
+    void SendAfterMediatorStepActivate(ui64 mediatorStep);
+
+    void CheckMediatorStateRestored();
 
     void FillExecutionStats(const TExecutionProfile& execProfile, TEvDataShard::TEvProposeTransactionResult& result) const;
 
@@ -1986,8 +2027,36 @@ private:
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
 
+    struct TMediatorDelayedReply {
+        TActorId Target;
+        THolder<IEventBase> Event;
+        ui64 Cookie;
+
+        TMediatorDelayedReply(const TActorId& target, THolder<IEventBase> event, ui64 cookie)
+            : Target(target)
+            , Event(std::move(event))
+            , Cookie(cookie)
+        { }
+    };
+
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     TSet<ui64> MediatorTimeCastWaitingSteps;
+    TMultiMap<TRowVersion, TMediatorDelayedReply> MediatorDelayedReplies;
+
+    struct TCoordinatorSubscription {
+        ui64 CoordinatorId;
+        TMediatorTimecastReadStep::TCPtr ReadStep;
+    };
+
+    TVector<TCoordinatorSubscription> CoordinatorSubscriptions;
+    THashMap<ui64, size_t> CoordinatorSubscriptionById;
+    size_t CoordinatorSubscriptionsPending = 0;
+    ui64 CoordinatorPrevReadStepMin = 0;
+    ui64 CoordinatorPrevReadStepMax = Max<ui64>();
+
+    TVector<THolder<IEventHandle>> MediatorStateWaitingMsgs;
+    bool MediatorStateWaiting = false;
+    bool MediatorStateBackupInitiated = false;
 
     TControlWrapper DisableByKeyFilter;
     TControlWrapper MaxTxInFly;
@@ -2008,6 +2077,9 @@ private:
 
     TControlWrapper BackupReadAheadLo;
     TControlWrapper BackupReadAheadHi;
+
+    TControlWrapper EnablePrioritizedMvccSnapshotReads;
+    TControlWrapper EnableUnprotectedMvccSnapshotReads;
 
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;
@@ -2153,6 +2225,9 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+            HFuncTraced(TEvMediatorTimecast::TEvSubscribeReadStepResult, Handle);
+            HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
+            HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
@@ -2202,7 +2277,9 @@ protected:
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+            HFuncTraced(TEvMediatorTimecast::TEvSubscribeReadStepResult, Handle);
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
+            HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
             HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvDataShard::TEvReturnBorrowedPart, Handle);

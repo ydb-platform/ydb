@@ -23,6 +23,7 @@ public:
 
 protected:
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion);
+    void GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie);
     void SendResult(TDataShard* self, const TActorContext& ctx);
     TVector<IChangeCollector::TChange> GetCollectedChanges() const;
 

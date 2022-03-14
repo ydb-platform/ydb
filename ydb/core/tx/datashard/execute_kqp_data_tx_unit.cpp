@@ -152,10 +152,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         AddLocksToResult(op, ctx);
 
-        if (op->IsImmediate() && !op->IsReadOnly()) {
-            DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
-        }
-
         op->ChangeRecords() = std::move(dataTx->GetCollectedChanges());
 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());

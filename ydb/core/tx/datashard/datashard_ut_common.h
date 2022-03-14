@@ -606,6 +606,7 @@ void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId)
 void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
+void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 
 void SendSQL(Tests::TServer::TPtr server,
              TActorId sender,
@@ -630,5 +631,22 @@ struct IsTxResultComplete {
 };
 
 void WaitTabletBecomesOffline(Tests::TServer::TPtr server, ui64 tabletId);
+
+///
+class TDisableDataShardLogBatching : public TNonCopyable {
+public:
+    TDisableDataShardLogBatching()
+        : PrevValue(NDataShard::gAllowLogBatchingDefaultValue)
+    {
+        NDataShard::gAllowLogBatchingDefaultValue = false;
+    }
+
+    ~TDisableDataShardLogBatching() {
+        NDataShard::gAllowLogBatchingDefaultValue = PrevValue;
+    }
+
+private:
+    const bool PrevValue;
+};
 
 }

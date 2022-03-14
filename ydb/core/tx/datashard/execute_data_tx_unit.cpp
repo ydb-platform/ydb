@@ -23,7 +23,6 @@ public:
 
 private:
     void ExecuteDataTx(TOperation::TPtr op,
-                       TTransactionContext& txc,
                        const TActorContext& ctx);
     void AddLocksToResult(TOperation::TPtr op);
 };
@@ -124,7 +123,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
     try {
         try {
-            ExecuteDataTx(op, txc, ctx);
+            ExecuteDataTx(op, ctx);
         } catch (const TNotReadyTabletException&) {
             // We want to try pinning (actually precharging) all required pages
             // before restarting the transaction, to minimize future restarts.
@@ -169,7 +168,6 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 }
 
 void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
-                                       TTransactionContext& txc,
                                        const TActorContext& ctx) {
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
@@ -236,9 +234,6 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         result->SetExecutionError(ConvertErrCode(engineResult), engine->GetErrors());
     } else {
         result->SetTxResult(engine->GetShardReply(DataShard.TabletID()));
-
-        if (op->IsImmediate() && !op->IsReadOnly())
-            DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
 
         op->ChangeRecords() = std::move(tx->GetDataTx()->GetCollectedChanges());
     }

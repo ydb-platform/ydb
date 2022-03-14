@@ -357,7 +357,8 @@ public:
         UNIT_TEST(Level2_InteractiveWriteOnly);
         UNIT_TEST(Level2_CompilationFailure);
         UNIT_TEST(Level2_NoFallback);
-        UNIT_TEST(Level2_ActiveRequest);
+        UNIT_TEST(Level2_ActiveRequestRead);
+        UNIT_TEST(Level2_ActiveRequestWrite);
 
         UNIT_TEST(Level3_NotInteractiveReadOnly);
         UNIT_TEST(Level3_NotInteractiveWriteOnly);
@@ -365,6 +366,8 @@ public:
         UNIT_TEST(Level3_InteractiveReadWrite);
         UNIT_TEST(Level3_CompilationFailure);
         UNIT_TEST(Level3_NoFallback);
+        UNIT_TEST(Level3_ActiveRequestRead);
+        UNIT_TEST(Level3_ActiveRequestWrite);
     UNIT_TEST_SUITE_END();
 
     void Level0_NotInteractiveReadOnly();
@@ -397,7 +400,8 @@ public:
     void Level2_InteractiveWriteOnly();
     void Level2_CompilationFailure();
     void Level2_NoFallback();
-    void Level2_ActiveRequest();
+    void Level2_ActiveRequestRead();
+    void Level2_ActiveRequestWrite();
 
     void Level3_NotInteractiveReadOnly();
     void Level3_NotInteractiveWriteOnly();
@@ -405,6 +409,8 @@ public:
     void Level3_InteractiveReadWrite();
     void Level3_CompilationFailure();
     void Level3_NoFallback();
+    void Level3_ActiveRequestRead();
+    void Level3_ActiveRequestWrite();
 
 private:
     std::unique_ptr<TKikimrRunner> Kikimr;
@@ -737,8 +743,47 @@ void KqpForceNewEngine::Level2_NoFallback() {
     TestNotInteractiveReadOnlyTxFallback(2);
 }
 
-void KqpForceNewEngine::Level2_ActiveRequest() {
+void KqpForceNewEngine::Level2_ActiveRequestRead() {
     auto session = Session();
+
+    // start request with OldEngine
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard` LIMIT 1
+    )", TTxControl::BeginTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineForcedQueryCount->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineCompatibleQueryCount->Val());
+
+    ForceNewEngine(100, 2);
+
+    // can switch to NewEngine (RO-query, no deferred effects)
+
+    result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard` LIMIT 1
+    )", TTxControl::Tx(*result.GetTransaction())).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+    UNIT_ASSERT_VALUES_EQUAL(1, KqpCounters->NewEngineForcedQueryCount->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineCompatibleQueryCount->Val());
+
+    result = session.ExecuteDataQuery(R"(
+        SELECT 42
+    )", TTxControl::Tx(*result.GetTransaction()).CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+    UNIT_ASSERT_VALUES_EQUAL(2, KqpCounters->NewEngineForcedQueryCount->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineCompatibleQueryCount->Val());
+}
+
+void KqpForceNewEngine::Level2_ActiveRequestWrite() {
+    auto session = Session();
+
+    // start query with OldEngine
 
     auto result = session.ExecuteDataQuery(R"(
         REPLACE INTO `/Root/TwoShard` (Key, Value1) VALUES (1, "OneOne")
@@ -751,7 +796,7 @@ void KqpForceNewEngine::Level2_ActiveRequest() {
 
     ForceNewEngine(100, 2);
 
-    // dont force new engine on active transactions
+    // have deferred effects, so dont force new engine on active transactions
 
     result = session.ExecuteDataQuery(R"(
         SELECT 42
@@ -894,6 +939,95 @@ void KqpForceNewEngine::Level3_CompilationFailure() {
 
 void KqpForceNewEngine::Level3_NoFallback() {
     TestNotInteractiveReadOnlyTxFallback(3);
+}
+
+void KqpForceNewEngine::Level3_ActiveRequestRead() {
+    auto session = Session();
+
+    ForceNewEngine(1, 2);
+
+    // start request with forced OldEngine
+    TMaybe<TTransaction> tx;
+    while (!tx) {
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/TwoShard` LIMIT 1
+        )", TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+
+        if (KqpCounters->NewEngineForcedQueryCount->Val() == 1) {
+            // reroll :-)
+
+            tx->Rollback().GetValueSync();
+            session = Session();
+
+            KqpCounters->NewEngineForcedQueryCount->Set(0);
+            KqpCounters->NewEngineCompatibleQueryCount->Set(0);
+            continue;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineForcedQueryCount->Val());
+        UNIT_ASSERT_VALUES_EQUAL(1, KqpCounters->NewEngineCompatibleQueryCount->Val());
+
+        tx = result.GetTransaction();
+    }
+
+    ForceNewEngine(100, 3);
+
+    // dont change to NewEngine
+
+    auto result = session.ExecuteDataQuery(R"(
+        REPLACE INTO `/Root/TwoShard` (Key, Value1) VALUES (1, "OneOne")
+    )", TTxControl::Tx(*tx)).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineForcedQueryCount->Val());
+    UNIT_ASSERT_VALUES_EQUAL(1, KqpCounters->NewEngineCompatibleQueryCount->Val());
+
+    result = session.ExecuteDataQuery(R"(
+        SELECT 42
+    )", TTxControl::Tx(*result.GetTransaction()).CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineForcedQueryCount->Val());
+    UNIT_ASSERT_VALUES_EQUAL(1, KqpCounters->NewEngineCompatibleQueryCount->Val());
+}
+
+void KqpForceNewEngine::Level3_ActiveRequestWrite() {
+    auto session = Session();
+
+    ForceNewEngine(100, 2);
+
+    // start request with forced OldEngine
+    auto result = session.ExecuteDataQuery(R"(
+        REPLACE INTO `/Root/TwoShard` (Key, Value1) VALUES (1, "OneOne")
+    )", TTxControl::BeginTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineForcedQueryCount->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineCompatibleQueryCount->Val());
+
+    ForceNewEngine(100, 3);
+
+    // dont switch to NewEngine (have deferred effects)
+
+    result = session.ExecuteDataQuery(R"(
+        SELECT 42
+    )", TTxControl::Tx(*result.GetTransaction())).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    result = session.ExecuteDataQuery(R"(
+        SELECT 42
+    )", TTxControl::Tx(*result.GetTransaction()).CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->ForceNewEngineCompileErrors->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineForcedQueryCount->Val());
+    UNIT_ASSERT_VALUES_EQUAL(0, KqpCounters->NewEngineCompatibleQueryCount->Val());
 }
 
 } // namespace NKqp

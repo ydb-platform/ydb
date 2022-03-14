@@ -53,21 +53,44 @@ namespace {
         return TUnboxedValuePod(static_cast<ui64>(result));
     }
 
-    SIMPLE_UDF(TToUint64, ui64(TAutoMap<TUtf8>, ui16)) {
+    SIMPLE_UDF_OPTIONS(TToUint64, ui64(TAutoMap<TUtf8>, TOptional<ui16>),
+                       builder.OptionalArgs(1)) {
         Y_UNUSED(valueBuilder);
         const TString inputStr(args[0].AsStringRef());
         const char* input = inputStr.Data();
-        const int base = static_cast<int>(args[1].Get<ui16>());
-        char *pos = nullptr;
+        const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
+        char* pos = nullptr;
         unsigned long long res = std::strtoull(input, &pos, base);
+        ui64 ret = static_cast<ui64>(res);
         if (!res && pos == input) {
             UdfTerminate("Input string is not a number");
-        } else if (res == ULLONG_MAX && errno == ERANGE) {
+        } else if ((res == ULLONG_MAX && errno == ERANGE) || ret != res) {
             UdfTerminate("Converted value falls out of Uint64 range");
         } else if (*pos) {
             UdfTerminate("Input string contains junk after the number");
         }
-        return TUnboxedValuePod(static_cast<ui64>(res));
+        return TUnboxedValuePod(ret);
+    }
+
+    SIMPLE_UDF_OPTIONS(TTryToUint64, TOptional<ui64>(TAutoMap<TUtf8>, TOptional<ui16>),
+                       builder.OptionalArgs(1)) {
+        Y_UNUSED(valueBuilder);
+        const TString inputStr(args[0].AsStringRef());
+        const char* input = inputStr.Data();
+        const int base = static_cast<int>(args[1].GetOrDefault<ui16>(0));
+        char* pos = nullptr;
+        unsigned long long res = std::strtoull(input, &pos, base);
+        ui64 ret = static_cast<ui64>(res);
+        if (!res && pos == input) {
+            return TUnboxedValuePod();
+        }
+        if ((res == ULLONG_MAX && errno == ERANGE) || ret != res) {
+            return TUnboxedValuePod();
+        } 
+        if (*pos) {
+            return TUnboxedValuePod();
+        }
+        return TUnboxedValuePod(ret);
     }
 
     SIMPLE_UDF_OPTIONS(TSubstring, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>),
@@ -452,5 +475,6 @@ namespace {
     TToLower, \
     TToUpper, \
     TToTitle, \
-    TToUint64
+    TToUint64, \
+    TTryToUint64
 }

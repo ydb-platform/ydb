@@ -588,6 +588,33 @@ public:
     }
 };
 
+class TYqlPgConst : public TCallNode {
+public:
+    TYqlPgConst(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "PgConst", 2, 2, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+        auto value = MakeAtomFromExpression(ctx, Args[1]).Build();
+        Args[1] = value;
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlPgConst(Pos, Args);
+    }
+};
+
+
 template <const char* Name>
 class TYqlSubqueryFor : public TCallNode {
 public:
@@ -2608,6 +2635,7 @@ struct TBuiltinFuncData {
             {"nothing", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nothing", 1, 1) },
             {"formattype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatType", 1, 1) },
             {"pgtype", BuildSimpleBuiltinFactoryCallback<TYqlPgType>() },
+            {"pgconst", BuildSimpleBuiltinFactoryCallback<TYqlPgConst>() },
             {"typeof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeOf", 1, 1) },
             {"instanceof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1) },
             {"datatype", BuildSimpleBuiltinFactoryCallback<TYqlDataType>() },

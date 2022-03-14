@@ -9509,15 +9509,32 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
+        ui32 typeId;
+        if (input->Child(0)->IsAtom()) {
+            auto type = input->Child(0)->Content();
+            if (!NPg::HasType(type)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
+                    TStringBuilder() << "Unknown type: '" << type << "'"));
+                return IGraphTransformer::TStatus::Error;
+            }
+            typeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
+        } else {
+            if (!EnsureType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            auto typeAnn = input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (typeAnn->GetKind() != ETypeAnnotationKind::Pg) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
+                    TStringBuilder() << "Expecting Pg type, got: " << *typeAnn));
+                return IGraphTransformer::TStatus::Error;
+            }
+            typeId = typeAnn->Cast<TPgExprType>()->GetId();
         }
 
         if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto typeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
         input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(typeId));
         return IGraphTransformer::TStatus::Ok;
     }

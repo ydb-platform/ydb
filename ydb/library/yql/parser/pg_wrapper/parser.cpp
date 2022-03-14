@@ -236,8 +236,6 @@ void PGParse(const TString& input, IPGParseEvents& events) {
     MemoryContext ctx = NULL;
     PgQueryInternalParsetreeAndError parsetree_and_error;
 
-    SetDatabaseEncoding(PG_UTF8);
-
     CurrentMemoryContext = (MemoryContext)malloc(sizeof(MemoryContextData));
     MemoryContextCreate(CurrentMemoryContext,
         T_AllocSetContext,
@@ -302,6 +300,7 @@ extern "C" void setup_pg_thread_cleanup() {
     };
 
     static thread_local TThreadCleanup ThreadCleanup;
+    SetDatabaseEncoding(PG_UTF8);
     MemoryContextInit();
     auto owner = ResourceOwnerCreate(NULL, "TopTransaction");
     TopTransactionResourceOwner = owner;

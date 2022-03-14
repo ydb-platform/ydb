@@ -53,6 +53,23 @@ namespace {
         return TUnboxedValuePod(static_cast<ui64>(result));
     }
 
+    SIMPLE_UDF(TToUint64, ui64(TAutoMap<TUtf8>, ui16)) {
+        Y_UNUSED(valueBuilder);
+        const TString inputStr(args[0].AsStringRef());
+        const char* input = inputStr.Data();
+        const int base = static_cast<int>(args[1].Get<ui16>());
+        char *pos = nullptr;
+        unsigned long long res = std::strtoull(input, &pos, base);
+        if (!res && pos == input) {
+            UdfTerminate("Input string is not a number");
+        } else if (res == ULLONG_MAX && errno == ERANGE) {
+            UdfTerminate("Converted value falls out of Uint64 range");
+        } else if (*pos) {
+            UdfTerminate("Input string contains junk after the number");
+        }
+        return TUnboxedValuePod(static_cast<ui64>(res));
+    }
+
     SIMPLE_UDF_OPTIONS(TSubstring, TUtf8(TAutoMap<TUtf8>, TOptional<ui64>, TOptional<ui64>),
                        builder.OptionalArgs(1)) {
         const TStringBuf input(args[0].AsStringRef());
@@ -434,5 +451,6 @@ namespace {
     TReverse, \
     TToLower, \
     TToUpper, \
-    TToTitle
+    TToTitle, \
+    TToUint64
 }

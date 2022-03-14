@@ -23,6 +23,7 @@ extern "C" {
 #include "utils/palloc.h"
 #include "utils/memutils.h"
 #include "utils/memdebug.h"
+#include "utils/resowner.h"
 #include "port/pg_bitutils.h"
 #include "port/pg_crc32c.h"
 #include "thread_inits.h"
@@ -295,8 +296,15 @@ extern "C" void setup_pg_thread_cleanup() {
     struct TThreadCleanup {
         ~TThreadCleanup() {
             destroy_timezone_hashtable();
+            ResourceOwnerDelete(CurrentResourceOwner);
+            MemoryContextDelete(TopMemoryContext);
         }
     };
 
     static thread_local TThreadCleanup ThreadCleanup;
+    MemoryContextInit();
+    auto owner = ResourceOwnerCreate(NULL, "TopTransaction");
+    TopTransactionResourceOwner = owner;
+    CurTransactionResourceOwner = owner;
+    CurrentResourceOwner = owner;
 };

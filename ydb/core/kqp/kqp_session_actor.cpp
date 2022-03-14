@@ -353,6 +353,10 @@ public:
         Become(&TKqpSessionActor::CompileState);
     }
 
+    void HandleCompile(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        ReplyBusy(ev);
+    }
+
     void HandleCompile(TEvKqp::TEvCompileResponse::TPtr& ev) {
         auto compileResult = ev->Get()->CompileResult;
 
@@ -777,6 +781,10 @@ public:
     void HandleNoop(TEvKqpExecuter::TEvExecuterProgress::TPtr& /*ev*/) {
     }
 
+    void HandleExecute(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        ReplyBusy(ev);
+    }
+
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         auto* response = ev->Get()->Record.MutableResponse();
         LOG_D("TEvTxResponse, CurrentTx: " << QueryState->CurrentTx << " response: " << response->DebugString());
@@ -963,6 +971,22 @@ public:
         FillCompileStatus(compileResult, responseEv->Record);
         responseEv->Record.GetRef().SetConsumedRu(1);
         return Reply(std::move(responseEv));
+    }
+
+    void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
+
+        //ui64 proxyRequestId = ev->Cookie;
+        //if (!CheckRequest(requestInfo, ev->Sender, proxyRequestId, ctx)) {
+        //    return;
+        //}
+
+        auto busyStatus = Settings.Service.GetUseSessionBusyStatus()
+            ? Ydb::StatusIds::SESSION_BUSY
+            : Ydb::StatusIds::PRECONDITION_FAILED;
+
+        ReplyProcessError(requestInfo, busyStatus, "Pending previous query completion");
     }
 
     bool Reply(std::unique_ptr<TEvKqp::TEvQueryResponse> responseEv) {
@@ -1225,6 +1249,7 @@ public:
     STATEFN(CompileState) {
         try {
             switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqp::TEvQueryRequest, HandleCompile);
                 hFunc(TEvKqp::TEvCompileResponse, HandleCompile);
 
                 hFunc(TEvKqp::TEvPingSessionRequest, Handle);
@@ -1241,6 +1266,7 @@ public:
     STATEFN(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqp::TEvQueryRequest, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop);
 

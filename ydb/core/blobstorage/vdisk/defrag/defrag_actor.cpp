@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/util/stlog.h>
 #include <library/cpp/actors/core/invoke.h>
 
 namespace NKikimr {
@@ -96,6 +97,7 @@ namespace NKikimr {
             {}
 
             void Bootstrap(const TActorId parentId) {
+                STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD01, VDISKP(DCtx->VCtx->VDiskLogPrefix, "Bootstrap"));
                 ParentId = parentId;
                 Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
                 Become(&TThis::StateFunc);
@@ -112,17 +114,30 @@ namespace NKikimr {
                 } else {
                     const ui32 totalChunks = CalcStat->GetTotalChunks();
                     const ui32 usefulChunks = CalcStat->GetUsefulChunks();
+                    const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
                     Y_VERIFY(usefulChunks <= totalChunks);
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
-                    if (HugeHeapDefragmentationRequired(DCtx->VCtx->GetOutOfSpaceState(), canBeFreedChunks, totalChunks)) {
+                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks)) {
                         TChunksToDefrag chunksToDefrag = CalcStat->GetChunksToDefrag(DCtx->MaxChunksToDefrag);
                         Y_VERIFY(chunksToDefrag);
+                        STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
+                            (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
+                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
+                            (ChunksToDefrag, chunksToDefrag.ToString()));
                         Send(ParentId, new TEvDefragStartQuantum(std::move(chunksToDefrag)));
                     } else {
+                        STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
+                            (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
+                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())));
                         Send(ParentId, new TEvDefragStartQuantum(TChunksToDefrag()));
                     }
                     PassAway();
                 }
+            }
+
+            void PassAway() override {
+                STLOG(PRI_DEBUG, BS_VDISK_DEFRAG, BSVDD02, VDISKP(DCtx->VCtx->VDiskLogPrefix, "PassAway"));
+                TActorBootstrapped::PassAway();
             }
 
             STRICT_STFUNC(StateFunc,

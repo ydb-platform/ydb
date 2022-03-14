@@ -65,7 +65,7 @@ class TPqMetaCacheV2Test: public TTestBase {
         tableDesc = TTableBuilder()
                 .AddNullableColumn("name", EPrimitiveType::String)
                 .AddNullableColumn("version", EPrimitiveType::Int64)
-                .SetPrimaryKeyColumns({"name", "version"})
+                .SetPrimaryKeyColumns({"name"})
                 .Build();
         CheckYdbResult(session.CreateTable("/Root/PQ/Config/V2/Versions", std::move(tableDesc)));
 
@@ -79,7 +79,7 @@ class TPqMetaCacheV2Test: public TTestBase {
         }
         SchemeCacheId = runtime->Register(CreateSchemeBoardSchemeCache(config.Get()));
         MetaCacheId = runtime->Register(
-                NPqMetaCacheV2::CreatePQMetaCache(GrpcServerPort, config->Counters, TDuration::MilliSeconds(50))
+                NPqMetaCacheV2::CreatePQMetaCache(config->Counters, TDuration::MilliSeconds(50))
         );
         runtime->EnableScheduleForActor(SchemeCacheId, true);
         runtime->EnableScheduleForActor(MetaCacheId, true);
@@ -124,6 +124,7 @@ class TPqMetaCacheV2Test: public TTestBase {
                 param.Build();
             }
             CheckYdbResult(versionPrepared.Execute(txControl, builder.Build()));
+            Cerr << "TOPIC VERSION SHIFTED TO " << Version << "\n";
         }
         CheckYdbResult(tx.Commit());
         for (auto& status : createTopicStatus) {
@@ -195,7 +196,7 @@ class TPqMetaCacheV2Test: public TTestBase {
 
     TActorId MakeEdgeTargetedMetaCache() {
         auto anotherMetaCacheId = Server->GetRuntime()->Register(
-                NPqMetaCacheV2::CreatePQMetaCache(TableClient, EdgeActorId)
+                NPqMetaCacheV2::CreatePQMetaCache(EdgeActorId)
 
         );
         return anotherMetaCacheId;

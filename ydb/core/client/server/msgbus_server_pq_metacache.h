@@ -42,8 +42,8 @@ struct TEvPqNewMetaCache {
         EvQueryPrepared,
         EvQueryComplete,
         EvRestartQuery,
-        EvListTopicsRequest,
-        EvListTopicsResponse,
+        EvGetVersionRequest,
+        EvGetVersionResponse,
         EvDescribeTopicsRequest,
         EvDescribeTopicsResponse,
         EvDescribeAllTopicsRequest,
@@ -74,11 +74,14 @@ struct TEvPqNewMetaCache {
             : Type(type) {}
     };
 
-    struct TEvListTopicsRequest : public TEventLocal<TEvListTopicsRequest, EvListTopicsRequest> {
+    struct TEvGetVersionRequest : public TEventLocal<TEvGetVersionRequest, EvGetVersionRequest> {
     };
 
-    struct TEvListTopicsResponse : public TEventLocal<TEvListTopicsResponse, EvListTopicsResponse> {
-        TVector<TString> Topics;
+    struct TEvGetVersionResponse : public TEventLocal<TEvGetVersionResponse, EvGetVersionResponse> {
+        TEvGetVersionResponse(ui64 version)
+                : TopicsVersion(version)
+        {}
+
         ui64 TopicsVersion;
     };
 
@@ -100,7 +103,7 @@ struct TEvPqNewMetaCache {
 
     struct TEvDescribeTopicsResponse : public TEventLocal<TEvDescribeTopicsResponse, EvDescribeTopicsResponse> {
         TVector<TString> TopicsRequested;
-        THolder<NSchemeCache::TSchemeCacheNavigate> Result;
+        std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
         explicit TEvDescribeTopicsResponse(const TVector<TString>& topics,
                                            NSchemeCache::TSchemeCacheNavigate* result)
 
@@ -120,11 +123,11 @@ struct TEvPqNewMetaCache {
     struct TEvDescribeAllTopicsResponse : public TEventLocal<TEvDescribeAllTopicsResponse, EvDescribeAllTopicsResponse> {
         bool Success = true;
         TString Path;
-        THolder<NSchemeCache::TSchemeCacheNavigate> Result;
+        std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
         explicit TEvDescribeAllTopicsResponse(const TString& path)
             : Path(path)
         {}
-        TEvDescribeAllTopicsResponse(const TString& path, NSchemeCache::TSchemeCacheNavigate* result)
+        TEvDescribeAllTopicsResponse(const TString& path, const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
             : Path(path)
             , Result(result)
         {}
@@ -136,6 +139,11 @@ IActor* CreatePQMetaCache(const NMonitoring::TDynamicCounterPtr& counters,
 IActor* CreatePQMetaCache(ui64 grpcPort,
                           const NMonitoring::TDynamicCounterPtr& counters,
                           const TDuration& versionCheckInterval = TDuration::Seconds(1));
+
+IActor* CreatePQMetaCache(const TAtomicSharedPtr<NYdb::NTable::TTableClient>& tableClient,
+                          const NActors::TActorId& schemeBoardCacheId,
+                          const TDuration& versionCheckInterval = TDuration::Seconds(1));
+
 
 } // namespace NPqMetaCacheV2
 

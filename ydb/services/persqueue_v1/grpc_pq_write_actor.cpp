@@ -384,7 +384,7 @@ void TWriteSessionActor::InitCheckSchema(const TActorContext& ctx, bool needWait
 }
 
 void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    auto* res = ev->Get()->Result.Get();
+    auto& res = ev->Get()->Result;
     Y_VERIFY(res->ResultSet.size() == 1);
 
     auto& entry = res->ResultSet[0];

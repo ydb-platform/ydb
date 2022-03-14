@@ -21,6 +21,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    pq_metacache_v2_ut.cpp
     msgbus_server_pq_metarequest_ut.cpp
 )
 

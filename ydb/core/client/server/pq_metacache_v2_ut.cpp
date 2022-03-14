@@ -27,7 +27,8 @@ class TPqMetaCacheV2Test: public TTestBase {
         settings.SetDomainName("Root");
         settings.SetDomain(0);
         settings.SetUseRealThreads(true);
-        Server = new NKikimr::Tests::TServer(settings);
+        //settings.PQConfig.SetMetaCacheSkipVersionCheck(true);
+        Server = MakeHolder<NKikimr::Tests::TServer>(settings);
 
         Server->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcServerPort));
         auto* runtime = Server->GetRuntime();
@@ -38,15 +39,15 @@ class TPqMetaCacheV2Test: public TTestBase {
         runtime->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_EMERG);
         runtime->SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_EMERG);
 
-        Client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, GrpcServerPort);
+        Client = std::make_shared<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, GrpcServerPort);
 
         Client->InitRootScheme();
 
         NYdb::TDriverConfig driverCfg;
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << GrpcServerPort);
-        YdbDriver = new NYdb::TDriver(driverCfg);
-        TableClient = new NYdb::NTable::TTableClient(*YdbDriver);
-        PQClient = new NYdb::NPersQueue::TPersQueueClient(*YdbDriver);
+        YdbDriver = std::make_shared<NYdb::TDriver>(driverCfg);
+        TableClient.Reset(new NYdb::NTable::TTableClient(*YdbDriver));
+        PQClient = std::make_shared<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
 
         Client->MkDir("/Root", "PQ");
         Client->MkDir("/Root/PQ", "Config");
@@ -63,7 +64,7 @@ class TPqMetaCacheV2Test: public TTestBase {
 
         tableDesc = TTableBuilder()
                 .AddNullableColumn("name", EPrimitiveType::String)
-                .AddNullableColumn("version", EPrimitiveType::Uint64)
+                .AddNullableColumn("version", EPrimitiveType::Int64)
                 .SetPrimaryKeyColumns({"name", "version"})
                 .Build();
         CheckYdbResult(session.CreateTable("/Root/PQ/Config/V2/Versions", std::move(tableDesc)));
@@ -78,7 +79,7 @@ class TPqMetaCacheV2Test: public TTestBase {
         }
         SchemeCacheId = runtime->Register(CreateSchemeBoardSchemeCache(config.Get()));
         MetaCacheId = runtime->Register(
-                NPqMetaCacheV2::CreatePQMetaCache(config->Counters, TDuration::MilliSeconds(50))
+                NPqMetaCacheV2::CreatePQMetaCache(GrpcServerPort, config->Counters, TDuration::MilliSeconds(50))
         );
         runtime->EnableScheduleForActor(SchemeCacheId, true);
         runtime->EnableScheduleForActor(MetaCacheId, true);
@@ -119,7 +120,7 @@ class TPqMetaCacheV2Test: public TTestBase {
             auto builder = versionPrepared.GetParamsBuilder();
             {
                 auto &param = builder.AddParam("$Version");
-                param.Uint64(++Version);
+                param.Int64(++Version);
                 param.Build();
             }
             CheckYdbResult(versionPrepared.Execute(txControl, builder.Build()));
@@ -130,24 +131,33 @@ class TPqMetaCacheV2Test: public TTestBase {
         }
     }
 
-    THolder<TEvPqNewMetaCache::TEvDescribeTopicsResponse> DoMetaCacheRequest(const TVector<TTopicInfo>& topicList) {
+    template<class TEvType>
+    THolder<TEvType> DoMetaCacheRequest(const TVector<TTopicInfo>& topicList = {}) {
         IEventBase* ev;
         if (topicList.empty()) {
             ev = new TEvPqNewMetaCache::TEvDescribeAllTopicsRequest();
         } else {
             TVector<TString> topicNames;
             for (const auto &topic : topicList) {
-                topicNames.emplace_back(std::move(::NPersQueue::BuildFullTopicName(topic.Path, topic.Cluster)));
+                topicNames.emplace_back(TString("/Root/PQ/") + ::NPersQueue::BuildFullTopicName(topic.Path, topic.Cluster));
             }
             ev = new TEvPqNewMetaCache::TEvDescribeTopicsRequest(topicNames);
         }
         auto handle = new IEventHandle(MetaCacheId, EdgeActorId, ev);
         Server->GetRuntime()->Send(handle);
-        auto response = Server->GetRuntime()->GrabEdgeEvent<TEvPqNewMetaCache::TEvDescribeTopicsResponse>();
+        auto response = Server->GetRuntime()->GrabEdgeEvent<TEvType>();
         return std::move(response);
     }
 
-    void CheckTopicInfo(const TVector<TTopicInfo>& expected, TSchemeCacheNavigate* result) {
+    THolder<TEvPqNewMetaCache::TEvDescribeTopicsResponse> DescribeTopics(const TVector<TTopicInfo>& topicList) {
+        return DoMetaCacheRequest<TEvPqNewMetaCache::TEvDescribeTopicsResponse>(topicList);
+    }
+
+    THolder<TEvPqNewMetaCache::TEvDescribeAllTopicsResponse> DescribeAllTopics() {
+        return DoMetaCacheRequest<TEvPqNewMetaCache::TEvDescribeAllTopicsResponse>();
+    }
+
+    void CheckTopicInfo(const TVector<TTopicInfo>& expected, std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> result) {
         ui64 i = 0;
         Cerr << "=== Got cache navigate response: \n" << result->ToString(NKikimr::NScheme::TTypeRegistry()) << Endl;
         Cerr << "=== Expect to have " << expected.size() << " records, got: " << result->ResultSet.size() << " records" << Endl;
@@ -170,9 +180,9 @@ class TPqMetaCacheV2Test: public TTestBase {
         auto endTime = TInstant::Now() + timeout;
         auto* runtime = Server->GetRuntime();
         while (endTime > TInstant::Now()) {
-            auto handle = new IEventHandle(MetaCacheId, EdgeActorId, new TEvPqNewMetaCache::TEvListTopicsRequest());
+            auto handle = new IEventHandle(MetaCacheId, EdgeActorId, new TEvPqNewMetaCache::TEvGetVersionRequest());
             runtime->Send(handle);
-            auto response = runtime->GrabEdgeEvent<TEvPqNewMetaCache::TEvListTopicsResponse>();
+            auto response = runtime->GrabEdgeEvent<TEvPqNewMetaCache::TEvGetVersionResponse>();
             currentVersion = response->TopicsVersion;
             if (currentVersion >= version) {
                 Cerr << "=== Got current topics version: " << currentVersion << Endl;
@@ -183,50 +193,125 @@ class TPqMetaCacheV2Test: public TTestBase {
         UNIT_FAIL("Wait for topics version timed out");
     }
 
+    TActorId MakeEdgeTargetedMetaCache() {
+        auto anotherMetaCacheId = Server->GetRuntime()->Register(
+                NPqMetaCacheV2::CreatePQMetaCache(TableClient, EdgeActorId)
+
+        );
+        return anotherMetaCacheId;
+    }
+
     void TestDescribeTopics() {
         auto topics = TVector<TTopicInfo>({
-                          {"topic1", "man", true},
-                          {"topic2", "man", true},
-                          {"topic3", "man", false}
-        });
+                                                  {"topic1", "man", true},
+                                                  {"topic2", "man", true},
+                                                  {"topic3", "man", false}
+                                          });
         AddTopics(topics);
-        auto ev = DoMetaCacheRequest(topics);
-        CheckTopicInfo(topics, ev->Result.Get());
+        auto ev = DescribeTopics(topics);
+        CheckTopicInfo(topics, ev->Result);
         UNIT_ASSERT(ev);
     }
+
+    void TestDescribeManyTopics() {
+        auto topics = TVector<TTopicInfo>({
+                                                  {"topic1", "man", true},
+                                                  {"topic2", "man", false},
+                                                  {"topic3", "man", false}
+                                          });
+
+        AddTopics(topics);
+
+        Cerr << "===Wait base response\n";
+        auto baseResponse = DescribeTopics(topics);
+        Cerr << "===Got base response\n";
+        auto baseEntry = baseResponse->Result->ResultSet[0];
+
+        TVector<TTopicInfo> lotOfTopics;
+        for (auto i = 0u; i < 10000u; i++) {
+            lotOfTopics.emplace_back(TTopicInfo{TString("topic0") + ToString(i), "man", false});
+        }
+        AddTopics(lotOfTopics);
+        ui64 totalTopics = topics.size() + lotOfTopics.size();
+        auto secondMetaCache = MakeEdgeTargetedMetaCache();
+        Cerr << "===Registered secondary meta cache: " << secondMetaCache.ToString() << Endl;
+        auto* runtime = Server->GetRuntime();
+
+        auto sendRequest = [&]() {
+            auto* ev = new TEvPqNewMetaCache::TEvDescribeAllTopicsRequest();
+            auto handle = new IEventHandle(secondMetaCache, EdgeActorId, ev);
+            runtime->Send(handle);
+        };
+        Cerr << "===Send first request\n";
+        sendRequest();
+
+        auto scRequest = runtime->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySet>();
+        Cerr << "===Got SC request\n";
+        auto& entries = scRequest->Request->ResultSet;
+        UNIT_ASSERT_VALUES_EQUAL(entries.size(), totalTopics);
+        for (auto i = 0u; i < entries.size(); i++) {
+            auto initialPath = entries[i].Path;
+            entries[i] = baseEntry;
+            entries[i].Path = initialPath;
+        }
+        auto* scResponse = new TEvTxProxySchemeCache::TEvNavigateKeySetResult(scRequest->Request);
+
+        auto handle = new IEventHandle(secondMetaCache, EdgeActorId, scResponse);
+        Cerr << "===Send fake SC response\n";
+        runtime->Send(handle);
+
+        Cerr << "===Wait secondary metacache response\n";
+        auto response = runtime->GrabEdgeEvent<TEvPqNewMetaCache::TEvDescribeAllTopicsResponse>();
+        Cerr << "===Got secondary metacache response\n";
+
+        // Preparation done, now can send many requests
+        Cerr << "===Started pushing requests at: " << TInstant::Now() << Endl;
+        for (auto i = 0u; i < 1000; i++) {
+            sendRequest();
+        }
+        Cerr << "===Done pushing requests at: " << TInstant::Now() << Endl;
+        for (auto i = 0u; i < 1000; i++) {
+            response = runtime->GrabEdgeEvent<TEvPqNewMetaCache::TEvDescribeAllTopicsResponse>();
+            if (!i) {
+                Cerr << "===Done gathering first response at: " << TInstant::Now() << Endl;
+            }
+        }
+        Cerr << "===Done gathering responses at: " << TInstant::Now() << Endl;
+    }
+
     void TestDescribeAllTopics() {
         auto topics = TVector<TTopicInfo>({
-                          {"topic1", "man", true},
-                          {"topic2", "man", true},
-                          {"topic3", "man", false}
+              {"topic1", "man", true},
+              {"topic2", "man", true},
+              {"topic3", "man", false}
         });
         AddTopics(topics);
-        auto ev = DoMetaCacheRequest({});
-        CheckTopicInfo(topics, ev->Result.Get());
+        auto ev = DescribeAllTopics();
+        CheckTopicInfo(topics, ev->Result);
         UNIT_ASSERT(ev);
     }
 
     void TestTopicsUpdate() {
         auto topics = TVector<TTopicInfo>({
-                          {"topic1", "man", true},
-                          {"topic2", "man", true},
-                          {"topic3", "man", false}
-        });
+                {"topic1", "man", true},
+                {"topic2", "man", true},
+                {"topic3", "man", false}
+          });
         AddTopics(topics);
-        CheckTopicInfo(topics, DoMetaCacheRequest(topics)->Result.Get());
+        CheckTopicInfo(topics, DescribeTopics(topics)->Result);
         WaitForVersion(Version);
 
         TTopicInfo topic{"topic1", "sas", true};
         AddTopics({topic}, false);
 
-        CheckTopicInfo(topics, DoMetaCacheRequest({})->Result.Get());
+        CheckTopicInfo(topics, DescribeAllTopics()->Result);
 
         AddTopics({}, true);
-        Cerr << "===Wait for version: " << Version << Endl;
         WaitForVersion(Version);
         topics.insert(topics.end() - 1, topic);
-        CheckTopicInfo(topics, DoMetaCacheRequest({})->Result.Get());
+        CheckTopicInfo(topics, DescribeAllTopics()->Result);
     }
+
 
     template<class T>
     T CheckYdbResult(NThreading::TFuture<T>&& asyncResult) {
@@ -259,7 +344,7 @@ private:
     std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> Client;
 
     std::shared_ptr<NYdb::TDriver> YdbDriver;
-    std::shared_ptr<NYdb::NTable::TTableClient> TableClient;
+    TAtomicSharedPtr<NYdb::NTable::TTableClient> TableClient;
     std::shared_ptr<NYdb::NPersQueue::TPersQueueClient> PQClient;
     TString UpsertTopicQuery = TStringBuilder()
             << "--!syntax_v1\n"
@@ -268,8 +353,8 @@ private:
             << "(path, dc) VALUES ($Path, $Cluster);";
     TString UpdateVersionQuery = TStringBuilder()
             << "--!syntax_v1\n"
-            << "DECLARE $Version as Uint64; "
-            << "UPSERT INTO `/Root/PQ/Config/V2/Version`"
+            << "DECLARE $Version as Int64; "
+            << "UPSERT INTO `/Root/PQ/Config/V2/Versions`"
             << "(name, version) VALUES ('Topics', $Version);";
 
 

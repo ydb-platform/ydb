@@ -742,9 +742,6 @@ namespace {
                 }
 
                 Types.PgTypes = (name == "PgTypes");
-                if (Types.PgTypes) {
-                    Types.OptLLVM = "OFF";
-                }
             }
             else if (name == "FolderSubDirsLimit") {
                 if (args.size() != 1) {

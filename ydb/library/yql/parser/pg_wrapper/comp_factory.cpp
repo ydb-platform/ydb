@@ -1141,6 +1141,14 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
     }
 }
 
+extern "C" void ReadSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf) {
+    value = ReadSkiffPg(type, buf);
+}
+
+extern "C" void WriteSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    WriteSkiffPg(type, value, buf);
+}
+
 } // namespace NCommon
 
 TMaybe<ui32> ConvertToPgType(NUdf::EDataSlot slot) {

@@ -57,6 +57,7 @@ public:
         AddHandler(0, &TKqlUpsertRowsIndex::Match, HNDL(BuildUpsertIndexStages));
         AddHandler(0, &TKqlInsertRowsIndex::Match, HNDL(BuildInsertIndexStages));
         AddHandler(0, &TKqlDeleteRowsIndex::Match, HNDL(BuildDeleteIndexStages));
+        AddHandler(0, &TCoUnorderedBase::Match, HNDL(DropUnordered));
         AddHandler(0, &TDqStage::Match, HNDL(FloatUpStage));
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
         AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute));
@@ -290,6 +291,15 @@ protected:
     TMaybeNode<TExprBase> BuildDeleteIndexStages(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildDeleteIndexStages(node, ctx, KqpCtx);
         DumpAppliedRule("BuildDeleteIndexStages", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> DropUnordered(TExprBase node, TExprContext& ctx) {
+        TExprBase output = node;
+        if (node.Maybe<TCoUnorderedBase>().Input().Maybe<TDqCnUnionAll>()) {
+            output = node.Cast<TCoUnorderedBase>().Input();
+        }
+        DumpAppliedRule("DropUnordered", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

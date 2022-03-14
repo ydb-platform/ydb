@@ -16,6 +16,7 @@
 extern "C" {
 #include "postgres.h"
 #include "catalog/pg_type_d.h"
+#include "catalog/pg_collation_d.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "lib/stringinfo.h"
@@ -273,6 +274,7 @@ public:
         Zero(callInfo);
         callInfo.flinfo = const_cast<FmgrInfo*>(finfo);
         callInfo.nargs = NumArgs;
+        callInfo.fncollation = DEFAULT_COLLATION_OID;
     }
 
     FunctionCallInfoBaseData& Ref() {
@@ -737,6 +739,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         Zero(*callInfo);
         callInfo->flinfo = &finfo;
         callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value):
@@ -822,6 +825,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         Zero(*callInfo);
         callInfo->flinfo = &finfo;
         callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value):
@@ -917,6 +921,7 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
         Zero(*callInfo);
         callInfo->flinfo = &finfo;
         callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { (Datum)&stringInfo, false };
         callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
@@ -1028,6 +1033,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
         Zero(*callInfo);
         callInfo->flinfo = &finfo;
         callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { (Datum)&stringInfo, false };
         callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
@@ -1119,6 +1125,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
         Zero(*callInfo);
         callInfo->flinfo = &finfo;
         callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
@@ -1274,6 +1281,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         Zero(*callInfo);
         callInfo->flinfo = &finfo;
         callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
@@ -1365,6 +1373,7 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         Zero(*callInfo);
         callInfo->flinfo = &finfo;
         callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
         callInfo->args[0] = { (Datum)&stringInfo, false };
         callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };

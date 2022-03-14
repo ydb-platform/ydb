@@ -831,15 +831,23 @@ public:
         return NKikimrServices::TActivity::KQP_EXEC_PHYSICAL_REQUEST_HANDLER;
     }
 
-    TKqpExecPhysicalRequestHandler(TRequest* request, bool streaming, const TActorId& target, TPromise<TResult> promise)
+    TKqpExecPhysicalRequestHandler(TRequest* request, bool streaming, const TActorId& target, TPromise<TResult> promise, bool needTxId)
         : Request(request)
         , Streaming(streaming)
         , Executer(request->ExecuterId)
         , Target(target)
-        , Promise(promise) {}
+        , Promise(promise)
+        , NeedTxId(needTxId) {}
 
     void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(MakeTxProxyID(), this->Request.Release());
+        if (NeedTxId) {
+            ctx.Send(MakeTxProxyID(), this->Request.Release());
+        } else {
+            auto executerEv = MakeHolder<NKqp::TEvKqpExecuter::TEvTxRequest>();
+            ActorIdToProto(ctx.SelfID, executerEv->Record.MutableTarget());
+            executerEv->Record.MutableRequest()->SetTxId(0);
+            ctx.Send(Request->ExecuterId, executerEv.Release());
+        }
 
         Become(&TKqpExecPhysicalRequestHandler::ProcessState);
     }
@@ -939,6 +947,7 @@ private:
     TActorId Executer;
     TActorId Target;
     TPromise<TResult> Promise;
+    bool NeedTxId;
 };
 
 template<typename TResult>
@@ -2135,6 +2144,7 @@ private:
     TFuture<TExecPhysicalResult> ExecutePhysicalQueryInternal(TExecPhysicalRequest&& request, const TActorId& target,
         bool streaming)
     {
+        const bool needTxId = request.NeedTxId;
         auto executerActor = CreateKqpExecuter(std::move(request), Database,
             UserToken ? TMaybe<TString>(UserToken->Serialized) : Nothing(), Counters);
         auto executerId = RegisterActor(executerActor);
@@ -2144,7 +2154,7 @@ private:
         auto promise = NewPromise<TExecPhysicalResult>();
 
         auto ev = MakeHolder<TEvTxUserProxy::TEvProposeKqpTransaction>(executerId);
-        IActor* requestHandler = new TKqpExecPhysicalRequestHandler(ev.Release(), streaming, target, promise);
+        IActor* requestHandler = new TKqpExecPhysicalRequestHandler(ev.Release(), streaming, target, promise, needTxId);
         RegisterActor(requestHandler);
 
         return promise.GetFuture();

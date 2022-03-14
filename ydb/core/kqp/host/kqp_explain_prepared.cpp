@@ -49,6 +49,7 @@ public:
             if (pure(*tx) && params) {
                 IKqpGateway::TExecPhysicalRequest request;
                 request.Transactions.emplace_back(std::move(tx), std::move(*params));
+                request.NeedTxId = false;
 
                 ExecuteFuture = Gateway->ExecutePure(std::move(request), {});
 

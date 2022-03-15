@@ -53,6 +53,9 @@ struct TOperationStarter : public TQueue::IStarter, public NOperationQueue::ITim
         WakeupHistory.push_back(t);
     }
 
+    void OnTimeout(const int&) override
+    {}
+
     TInstant Now() override
     {
         return TimeProvider.Now();

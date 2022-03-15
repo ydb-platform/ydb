@@ -191,11 +191,9 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     auto oldAggrStats = table->GetStats().Aggregated;
     table->UpdateShardStats(shardIdx, newStats);
 
-    if (Self->CompactionQueue) {
-        TShardCompactionInfo compactionInfo(shardIdx, newStats);
-        if (!Self->CompactionQueue->Update(compactionInfo))
-            Self->CompactionQueue->Enqueue(std::move(compactionInfo));
-        Self->UpdateBackgroundCompactionQueueMetrics();
+    if (!table->IsBackup) {
+        Self->UpdateCompaction(TShardCompactionInfo(shardIdx, newStats));
+        Self->UpdateShardMetrics(shardIdx, newStats);
     }
 
     NIceDb::TNiceDb db(txc.DB);

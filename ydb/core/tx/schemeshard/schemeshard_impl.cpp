@@ -306,6 +306,11 @@ void TSchemeShard::Clear() {
         TabletCounters->Simple()[idx].Set(0);
     }
     TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].Clear();
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].Clear();
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].Clear();
+    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].Clear();
+
+    PartitionMetricsMap.clear();
 }
 
 void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug) {
@@ -2074,8 +2079,7 @@ void TSchemeShard::DeleteTablePartitioning(NIceDb::TNiceDb& db, const TPathId pa
         db.Table<Schema::MigratedTablePartitions>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
         db.Table<Schema::TablePartitionStats>().Key(pathId.OwnerId, pathId.LocalPathId, pi).Delete();
 
-        CompactionQueue->Remove(TShardCompactionInfo(partitions[pi].ShardIdx));
-        UpdateBackgroundCompactionQueueMetrics();
+        ShardRemoved(partitions[pi].ShardIdx);
     }
 }
 
@@ -3250,10 +3254,10 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         }
     }
 
+    // sanity check: by this time compaction queue and metrics must be updated already
     for (const auto& p: tableInfo->GetPartitions()) {
-        CompactionQueue->Remove(TShardCompactionInfo(p.ShardIdx));
+        ShardRemoved(p.ShardIdx);
     }
-    UpdateBackgroundCompactionQueueMetrics();
 
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
@@ -5798,8 +5802,8 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
-                CompactionQueue->Enqueue(TShardCompactionInfo(p.ShardIdx, it->second));
-                UpdateBackgroundCompactionQueueMetrics();
+                EnqueueCompaction(TShardCompactionInfo(p.ShardIdx, it->second));
+                UpdateShardMetrics(p.ShardIdx, it->second);
             }
         }
     }
@@ -6008,13 +6012,6 @@ void TSchemeShard::ConfigureCompactionQueue(
     compactionConfig.MaxRate = config.GetMaxRate();
     compactionConfig.MinOperationRepeatDelay = TDuration::Seconds(config.GetMinCompactionRepeatDelaySeconds());
 
-    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "CompactionQueue configured: Timeout# " << compactionConfig.Timeout
-                 << ", WakeupInterval# " << compactionConfig.WakeupInterval
-                 << ", RoundInterval# " << compactionConfig.RoundInterval
-                 << ", InflightLimit# " << compactionConfig.InflightLimit
-                 << ", MaxRate# " << compactionConfig.MaxRate);
-
     if (CompactionQueue) {
         CompactionQueue->UpdateConfig(compactionConfig, queueConfig);
     } else {
@@ -6023,6 +6020,15 @@ void TSchemeShard::ConfigureCompactionQueue(
             queueConfig,
             CompactionStarter);
     }
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "CompactionQueue configured: Timeout# " << compactionConfig.Timeout
+                 << ", Rate# " << CompactionQueue->GetRate()
+                 << ", WakeupInterval# " << compactionConfig.WakeupInterval
+                 << ", RoundInterval# " << compactionConfig.RoundInterval
+                 << ", InflightLimit# " << compactionConfig.InflightLimit
+                 << ", MinCompactionRepeatDelaySeconds# " << compactionConfig.MinOperationRepeatDelay
+                 << ", MaxRate# " << compactionConfig.MaxRate);
 }
 
 void TSchemeShard::StartStopCompactionQueue() {

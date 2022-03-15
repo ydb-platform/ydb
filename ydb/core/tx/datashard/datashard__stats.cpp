@@ -196,7 +196,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
 
         dataSize += tableInfo.Stats.DataStats.DataSize;
 
-        UpdateSearchHeightStats(tableInfo.Stats, ev->Get()->SearchHeight);
+        tableInfo.Stats.SearchHeight = ev->Get()->SearchHeight;
 
         tableInfo.StatsUpdateInProgress = false;
 
@@ -258,12 +258,10 @@ public:
                 searchHeight = 0;
             }
 
-            Self->UpdateFullCompactionTsMetric(ti.second->Stats);
-
             if (!ti.second->StatsNeedUpdate) {
                 ti.second->Stats.MemRowCount = memRowCount;
                 ti.second->Stats.MemDataSize = memDataSize;
-                Self->UpdateSearchHeightStats(ti.second->Stats, searchHeight);
+                ti.second->Stats.SearchHeight = searchHeight;
                 continue;
             }
 
@@ -359,38 +357,6 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "UpdateTableStats at datashard %" PRIu64, TabletID());
 
     Executor()->Execute(new TTxInitiateStatsUpdate(this), ctx);
-}
-
-void TDataShard::UpdateSearchHeightStats(TUserTable::TStats& stats, ui64 newSearchHeight) {
-    if (TabletCounters) {
-        if (stats.LastSearchHeightMetricSet)
-            TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].DecrementFor(stats.SearchHeight);
-
-        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_SEARCH_HEIGHT].IncrementFor(newSearchHeight);
-        stats.LastSearchHeightMetricSet = true;
-    }
-    stats.SearchHeight = newSearchHeight;
-}
-
-void TDataShard::UpdateFullCompactionTsMetric(TUserTable::TStats& stats) {
-    if (!TabletCounters)
-        return;
-
-    auto now = AppData()->TimeProvider->Now();
-    if (now < stats.LastFullCompaction) {
-        // extra sanity check
-        return;
-    }
-
-    auto newHours = (now - stats.LastFullCompaction).Hours();
-    if (stats.HoursSinceFullCompaction && newHours == *stats.HoursSinceFullCompaction)
-        return;
-
-    if (stats.HoursSinceFullCompaction)
-        TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].DecrementFor(*stats.HoursSinceFullCompaction);
-
-    TabletCounters->Percentile()[COUNTER_SHARDS_WITH_FULL_COMPACTION].IncrementFor(newHours);
-    stats.HoursSinceFullCompaction = newHours;
 }
 
 void TDataShard::CollectCpuUsage(const TActorContext &ctx) {

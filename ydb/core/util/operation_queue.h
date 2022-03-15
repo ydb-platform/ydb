@@ -37,6 +37,10 @@ public:
     virtual ~IStarter() = default;
 
     virtual EStartStatus StartOperation(const T& item) = 0;
+
+    // in many cases just for metrics/logging, because
+    // queue is able to restart operation itself
+    virtual void OnTimeout(const T& item) = 0;
 };
 
 struct TConfig {
@@ -262,8 +266,6 @@ private:
     bool Running = false;
     bool WasRunning = false;
 
-    ui64 TimeoutCount = 0;
-
     // operations / s
     double Rate = 0;
 
@@ -388,8 +390,6 @@ public:
     }
 
     double GetRate() const { return Rate; }
-
-    ui64 ResetTimeoutCount() { return TimeoutCount; TimeoutCount = 0; }
 
     const TQueue& GetReadyQueue() const { return ReadyQueue; }
 
@@ -551,7 +551,7 @@ void TOperationQueue<T, TQueue>::CheckTimeoutOperations() {
     while (!RunningItems.Empty()) {
         const auto& item = RunningItems.Front();
         if (item.Timestamp + Config.Timeout <= now) {
-            ++TimeoutCount;
+            Starter.OnTimeout(item.Item);
             if (Config.IsCircular)
                 ReEnqueueNoStart(std::move(item.Item));
             RunningItems.PopFront();

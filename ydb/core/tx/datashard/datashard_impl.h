@@ -1300,8 +1300,6 @@ public:
     NMiniKQL::IKeyAccessSampler::TPtr GetKeyAccessSampler();
     void EnableKeyAccessSampling(const TActorContext &ctx, TInstant until);
     void UpdateTableStats(const TActorContext& ctx);
-    void UpdateSearchHeightStats(TUserTable::TStats& stats, ui64 newSearchHeight);
-    void UpdateFullCompactionTsMetric(TUserTable::TStats& stats);
     void CollectCpuUsage(const TActorContext& ctx);
 
     void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;

@@ -320,10 +320,6 @@ struct TUserTable : public TThrRefBase {
         ui64 BackgroundCompactionRequests = 0;
         NTable::TKeyAccessSample AccessStats;
 
-        bool LastSearchHeightMetricSet = false;
-
-        std::optional<ui32> HoursSinceFullCompaction;
-
         void Update(NTable::TStats&& dataStats, ui64 indexSize, THashSet<ui64>&& partOwners, ui64 partCount, TInstant statsUpdateTime) {
             DataStats = dataStats;
             IndexSize = indexSize;

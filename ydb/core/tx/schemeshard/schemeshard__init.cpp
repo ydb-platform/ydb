@@ -2170,6 +2170,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 tableInfo->UpdateShardStats(shardIdx, stats);
 
+                // note that we don't update shard metrics here, because we will always update
+                // the shard metrics in TSchemeShard::SetPartitioning
+
                 if (!rowSet.Next()) {
                     return false;
                 }

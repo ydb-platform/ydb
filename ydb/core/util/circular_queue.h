@@ -180,7 +180,7 @@ public:
         Queue.PopFrontToBack();
     }
 
-    bool Empty() const {  
+    bool Empty() const {
         return Queue.Empty();
     }
 

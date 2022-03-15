@@ -57,6 +57,8 @@ public:
         TActorBase::PassAway();
     }
 
+    TInstant GetWakeupTime() const { return When; }
+
 private:
     // ITimer, note that it is made private,
     // since it should be called only from TBase

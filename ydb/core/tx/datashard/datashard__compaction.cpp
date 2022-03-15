@@ -93,7 +93,7 @@ public:
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
-                NKikimrTxDataShard::TEvCompactTableResult::FAILED);
+                NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -177,7 +177,7 @@ public:
             << ", last full compaction# " << Ts);
     }
 };
- 
+
 void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx) {
     Executor()->Execute(new TTxCompactTable(this, ev), ctx);
 }
@@ -190,6 +190,7 @@ void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
             if (ti.second->LocalTid != tableId && ti.second->ShadowTid != tableId)
                 continue;
             if (ti.second->Stats.LastFullCompaction < finishedInfo.FullCompactionTs) {
+                IncCounter(COUNTER_FULL_COMPACTION_DONE);
                 ti.second->Stats.LastFullCompaction = finishedInfo.FullCompactionTs;
                 Executor()->Execute(
                     new TTxPersistFullCompactionTs(

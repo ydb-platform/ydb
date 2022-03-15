@@ -13,12 +13,7 @@ public:
     { }
 
     friend IOutputStream& operator<<(IOutputStream& out, const TYdbErrorException& e) {
-        out << "Status: " << e.Status.GetStatus() << Endl;
-        if (e.Status.GetIssues()) {
-            out << "Issues: " << Endl;
-            e.Status.GetIssues().PrintTo(out);
-        }
-        return out;
+        return out << e.Status;
     }
 
 private:
@@ -26,14 +21,10 @@ private:
 };
 
 inline void ThrowOnError(NYdb::TStatus status) {
-    if (status.IsSuccess()) {
-        if (status.GetIssues()) {
-            Cerr << "Status: " << status.GetStatus() << Endl;
-            Cerr << "Issues: " << Endl;
-            status.GetIssues().PrintTo(Cerr);
-        }
-    } else {
+    if (!status.IsSuccess()) {
         throw TYdbErrorException(std::move(status));
+    } else if (status.GetIssues()) {
+        Cerr << status;
     }
 }
 

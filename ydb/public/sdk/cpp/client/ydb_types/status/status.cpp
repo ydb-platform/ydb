@@ -72,6 +72,15 @@ float TStatus::GetConsumedRu() const {
     return Impl_->Status.ConstInfo.consumed_units();
 }
 
+IOutputStream& operator<<(IOutputStream& out, const TStatus& st) {
+    out << "Status: " << st.GetStatus() << Endl;
+    if (st.GetIssues()) {
+        out << "Issues: " << Endl;
+        st.GetIssues().PrintTo(out);
+    }
+    return out;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TStreamPartStatus::TStreamPartStatus(TStatus&& status)

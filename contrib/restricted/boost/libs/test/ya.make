@@ -1,5 +1,0 @@
-OWNER(snowball)
-
-RECURSE(
-    targets
-)

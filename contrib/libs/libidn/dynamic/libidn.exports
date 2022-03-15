@@ -1,9 +1,0 @@
-C idna_to_ascii_4i
-C idna_to_unicode_44i
-C idna_to_ascii_4z
-C idna_to_unicode_44z
-C punycode_encode
-C punycode_strerror
-C punycode_decode
-C idna_strerror
-C idna_to_unicode_4z4z

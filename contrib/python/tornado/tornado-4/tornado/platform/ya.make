@@ -1,1 +1,0 @@
-OWNER(g:python-contrib)

@@ -1,4 +1,0 @@
-OWNER(
-    shadchin
-    g:yatest
-)

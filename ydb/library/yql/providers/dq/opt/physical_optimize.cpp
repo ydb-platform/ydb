@@ -38,7 +38,6 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
-        AddHandler(0, &TDqJoin::Match, HNDL(BuildJoinDict<false>));
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
@@ -58,7 +57,6 @@ public:
         AddHandler(1, &TCoTake::Match, HNDL(BuildTakeOrTakeSkipStage<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(BuildJoin<true>));
-        AddHandler(1, &TDqJoin::Match, HNDL(BuildJoinDict<true>));
         AddHandler(1, &TCoAssumeSorted::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
@@ -295,24 +293,7 @@ protected:
     TMaybeNode<TExprBase> BuildJoin(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         auto join = node.Cast<TDqJoin>();
         const TParentsMap* parentsMap = getParents();
-        if (!JoinPrerequisitesVerify(join, parentsMap, IsGlobal)) {
-            return node;
-        }
-
-        return DqBuildPhyJoin(join, false /* TODO */, ctx, optCtx);
-    }
-
-    template <bool IsGlobal>
-    TMaybeNode<TExprBase> BuildJoinDict(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        Y_UNUSED(optCtx);
-
-        auto join = node.Cast<TDqJoin>();
-        const TParentsMap* parentsMap = getParents();
-        if (!JoinPrerequisitesVerify(join, parentsMap, IsGlobal)) {
-            return node;
-        }
-
-        return DqBuildJoinDict(join, ctx); // , optCtx);
+        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */);
     }
 
     TMaybeNode<TExprBase> BuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
@@ -321,25 +302,6 @@ protected:
 
     TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
         return DqBuildScalarPrecompute(node, ctx, optCtx);
-    }
-
-private:
-    bool JoinPrerequisitesVerify(TDqJoin join, const TParentsMap* parentsMap, bool isGlobal) const {
-        // KqpBuildJoin copy/paste
-        if (!join.LeftInput().Maybe<TDqCnUnionAll>()) {
-            return false;
-        }
-        if (!join.RightInput().Maybe<TDqCnUnionAll>()) {
-            return false;
-        }
-
-        if (!IsSingleConsumerConnection(join.LeftInput().Cast<TDqCnUnionAll>(), *parentsMap, isGlobal)) {
-            return false;
-        }
-        if (!IsSingleConsumerConnection(join.RightInput().Cast<TDqCnUnionAll>(), *parentsMap, isGlobal)) {
-            return false;
-        }
-        return true;
     }
 };
 

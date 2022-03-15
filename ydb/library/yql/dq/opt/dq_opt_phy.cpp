@@ -1639,4 +1639,104 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
     return precompute;
 }
 
+// left input should be DqCnUnionAll (with single usage)
+// right input should be either DqCnUnionAll (with single usage) or DqPure expression
+bool DqValidateJoinInputs(const TExprBase& left, const TExprBase& right, const TParentsMap& parentsMap,
+    bool allowStageMultiUsage)
+{
+    if (!left.Maybe<TDqCnUnionAll>()) {
+        return false;
+    }
+    if (!IsSingleConsumerConnection(left.Cast<TDqCnUnionAll>(), parentsMap, allowStageMultiUsage)) {
+        return false;
+    }
+
+    if (right.Maybe<TDqCnUnionAll>()) {
+        if (!IsSingleConsumerConnection(right.Cast<TDqCnUnionAll>(), parentsMap, allowStageMultiUsage)) {
+            return false;
+        }
+    } else if (IsDqPureExpr(right, /* isPrecomputePure */ true)) {
+        // pass
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
+    auto joinType = join.JoinType().Value();
+
+    if (joinType == "Inner"sv || joinType == "Full"sv || joinType == "Exclusion"sv || joinType == "Cross"sv) {
+        // pass
+    } else if (joinType == "Right"sv) {
+        joinType = "Left"sv;
+    } else if (joinType == "Left"sv) {
+        joinType = "Right"sv;
+    } else if (joinType == "RightSemi"sv) {
+        joinType = "LeftSemi"sv;
+    } else if (joinType == "LeftSemi"sv) {
+        joinType = "RightSemi"sv;
+    } else if (joinType == "RightOnly"sv) {
+        joinType = "LeftOnly"sv;
+    } else if (joinType == "LeftOnly"sv) {
+        joinType = "RightOnly"sv;
+    } else {
+        return {};
+    }
+
+    auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, join.Pos());
+    for (const auto& keys : join.JoinKeys()) {
+        joinKeysBuilder.Add<TDqJoinKeyTuple>()
+            .LeftLabel(keys.RightLabel())
+            .LeftColumn(keys.RightColumn())
+            .RightLabel(keys.LeftLabel())
+            .RightColumn(keys.LeftColumn())
+            .Build();
+    }
+
+    return Build<TDqJoin>(ctx, join.Pos())
+        .LeftInput(join.RightInput())
+        .LeftLabel(join.RightLabel())
+        .RightInput(join.LeftInput())
+        .RightLabel(join.LeftLabel())
+        .JoinType().Build(joinType)
+        .JoinKeys(joinKeysBuilder.Done())
+        .Done();
+}
+
+TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationContext& optCtx,
+                      const TParentsMap& parentsMap, bool allowStageMultiUsage, bool pushLeftStage)
+{
+    if (!node.Maybe<TDqJoin>()) {
+        return node;
+    }
+
+    auto join = node.Cast<TDqJoin>();
+
+    if (DqValidateJoinInputs(join.LeftInput(), join.RightInput(), parentsMap, allowStageMultiUsage)) {
+        // pass
+    } else if (DqValidateJoinInputs(join.RightInput(), join.LeftInput(), parentsMap, allowStageMultiUsage)) {
+        auto maybeFlipJoin = DqFlipJoin(join, ctx);
+        if (!maybeFlipJoin) {
+            return node;
+        }
+        join = maybeFlipJoin.Cast();
+    } else {
+        return node;
+    }
+
+    auto joinType = join.JoinType().Value();
+
+    if (joinType == "Full"sv || joinType == "Exclusion"sv) {
+        return DqBuildJoinDict(join, ctx);
+    }
+
+    // NOTE: We don't want to broadcast table data via readsets for data queries, so we need to create a
+    // separate stage to receive data from both sides of join.
+    // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
+    //       requires some additional knowledge, probably with use of constraints.
+    return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx);
+}
+
 } // namespace NYql::NDq

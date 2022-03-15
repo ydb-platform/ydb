@@ -25,7 +25,6 @@ target_sources(core-kqp-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_build_txs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_effects.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_kql.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phase.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_check.cpp

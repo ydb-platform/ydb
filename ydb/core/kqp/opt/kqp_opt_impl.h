@@ -45,10 +45,6 @@ NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableDescription& tabl
 NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableMetadata& tableMeta,
     const NYql::TPositionHandle& pos, NYql::TExprContext& ctx);
 
-NYql::NNodes::TExprBase KqpBuildJoin(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, NYql::IOptimizationContext& optCtx, const NYql::TParentsMap& parentsMap,
-    bool allowStageMultiUsage);
-
 TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::TKqlReadTableIndex& index,
     const NYql::TKikimrTablesData& tables, TStringBuf cluster);
 

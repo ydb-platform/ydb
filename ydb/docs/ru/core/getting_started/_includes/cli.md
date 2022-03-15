@@ -63,7 +63,7 @@ ydb
 Проверьте работоспособность профиля командой `scheme ls`:
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls
+{{ ydb-cli }} -p db1 scheme ls
 ```
 
 ## Исполнение YQL скрипта {#yql}
@@ -71,7 +71,7 @@ ydb
 Команда {{ ydb-short-name }} CLI `scripting yql` позволяет выполнить любую команду (как DDL так и DML) на [языке YQL](../../yql/reference/index.md) - диалекте SQL, поддерживаемом {{ ydb-short-name }}:
 
 ```bash
-{{ ydb-cli }} --profile <profile_name> yql -s <yql_request>
+{{ ydb-cli }} -p <profile_name> yql -s <yql_request>
 ```
 
 Например:
@@ -79,19 +79,19 @@ ydb
 * Создание таблицы:
 
   ```bash
-  {{ ydb-cli }} --profile db1 yql -s "create table t1( id uint64, primary key(id))"
+  {{ ydb-cli }} -p db1 yql -s "create table t1( id uint64, primary key(id))"
   ```
 
 * Добавление записи:
 
   ```bash
-  {{ ydb-cli }} --profile db1 yql -s "insert into t1(id) values (1)"
+  {{ ydb-cli }} -p db1 yql -s "insert into t1(id) values (1)"
   ```
 
 * Выборка данных:
 
   ```bash
-  {{ ydb-cli }} --profile db1 yql -s "select * from t1"
+  {{ ydb-cli }} -p db1 yql -s "select * from t1"
   ```
 
 Если вы получаете ошибку `Profile db1 does not exist`, значит вы не создали его на [предыдущем шаге](#profile).

@@ -30,15 +30,15 @@
 [config profile set](../profile/activate.md) | Активация [профиля](../profile/index.md)
 [discovery list](../commands/discovery-list.md) | Список эндпоинтов
 [discovery whoami](../commands/discovery-whoami.md) | Проверка аутентификации
-export s3 | Экспорт данных в хранилище S3
+[export s3](../export_import/s3_export.md) | Экспорт данных в хранилище S3
 import file csv | Импорт данных из CSV-файла
 import file tsv | Импорт данных из TSV-файла
-import s3 | Импорт данных из хранилища S3
+[import s3](../export_import/s3_import.md) | Импорт данных из хранилища S3
 [init](../profile/create.md) | Инициализация CLI, создание [профиля](../profile/index.md)
-operation cancel | Прерывание исполнения долгой операции
-operation forget | Удалить долгую операцию из истории
-operation get | Статус долгой операции
-operation list | Список долгих операций
+operation cancel | Прерывание исполнения фоновой операции
+operation forget | Удаление фоновой операции из истории
+operation get | Статус фоновой операции
+operation list | Список фоновых операций
 [scheme describe](../commands/scheme-describe.md) | Описание объекта схемы данных
 [scheme ls](../commands/scheme-ls.md) | Список объектов схемы данных
 [scheme mkdir](../commands/dir.md#mkdir) | Создание директории
@@ -64,9 +64,9 @@ table drop | Удаление таблицы
 table ttl drop  | Удаление параметров TTL
 table ttl set  | Установка параметров TTL
 tools copy | Копирование таблиц
-tools dump | Выгрузка директории или таблицы в файловую систему
+[tools dump](../export_import/tools_dump.md) | Выгрузка директории или таблицы в файловую систему
 [tools rename](../commands/tools/rename.md) | Переименование таблиц
-tools restore | Восстановление из файловой системы
+[tools restore](../export_import/tools_restore.md) | Восстановление из файловой системы
 {% if ydb-cli == "ydb" %}
 [update](../commands/service.md) | Обновление {{ ydb-short-name }} CLI
 [version](../commands/service.md) | Вывод информации о версии {{ ydb-short-name }} CLI

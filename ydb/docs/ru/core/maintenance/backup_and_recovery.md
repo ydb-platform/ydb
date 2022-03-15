@@ -1,23 +1,30 @@
-{% include [intro.md](_includes/backup_and_recovery/01_intro.md) %}
+# Резервное копирование и восстановление
 
-{% include [prerequisites.md](_includes/backup_and_recovery/02_prerequisites.md) %}
+Резервное копирование применяется для защиты от потери данных, позволяя восстановить потерянные данные из резервной копии. 
 
-{% include [limitations.md](_includes/backup_and_recovery/03_limitations.md) %}
+YDB предоставляет несколько решений для выполнения резервного копирования и восстановления:
 
-{% include [fs_backup_header.md](_includes/backup_and_recovery/04_fs_backup_1_header.md) %}
+- Копирование в файлы и восстановление по команде администратора с помощью YDB CLI
+- Копирование в S3-совместимое хранилище и восстановление по команде администратора с помошью YDB CLI
 
-{% include [fs_backup_body.md](_includes/backup_and_recovery/04_fs_backup_2_body.md) %}
+{% include [_includes/backup_and_recovery/options_overlay.md](_includes/backup_and_recovery/options_overlay.md) %}
 
-{% include [fs_restore.md](_includes/backup_and_recovery/05_fs_restore.md) %}
+## YDB CLI {#cli}
 
-{% include [s3_header.md](_includes/backup_and_recovery/06_s3_1_header.md) %}
+### Файлы {#files}
 
-{% include [s3_prerequisites.md](_includes/backup_and_recovery/06_s3_2_prerequisites.md) %}
+Для выполнения резервного копирования в файлы администратором применяется [команда `tools dump`](../reference/ydb-cli/export_import/tools_dump.md) YDB CLI. Перейдите [по ссылке](../reference/ydb-cli/export_import/tools_dump.md) в справочник по YDB CLI для получения информации о данной команде.
 
-{% include [s3_access_keys.md](_includes/backup_and_recovery/06_s3_3_access_keys.md) %}
+Для выполнения восстановления из файловой резервной копии, созданной при помощи команды `tools dump` YDB CLI, применяется [команда `tools restore`](../reference/ydb-cli/export_import/tools_restore.md) YDB CLI. Перейдите [по ссылке](../reference/ydb-cli/export_import/tools_restore.md) в справочник по YDB CLI для получения информации о данной команде.
 
-{% include [s3_export.md](_includes/backup_and_recovery/06_s3_4_export.md) %}
+### S3-совместимое хранилище {#s3}
 
-{% include [s3_restore.md](_includes/backup_and_recovery/06_s3_5_restore.md) %}
+Для выполнения резервного копирования в S3-совместимое хранилище (например, [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html)) администратором применяется [команда `export s3`](../reference/ydb-cli/export_import/s3_export.md) YDB CLI. Перейдите [по ссылке](../reference/ydb-cli/export_import/s3_export.md) в справочник по YDB CLI для получения информации о данной команде.
 
-{% include [s3_forget.md](_includes/backup_and_recovery/06_s3_6_forget.md) %}
+Для выполнения восстановления из резервной копии, созданной в S3-совместимом хранилище при помощи команды `export s3` YDB CLI, применяется [команда `import s3`](../reference/ydb-cli/export_import/s3_import.md) YDB CLI. Перейдите [по ссылке](../reference/ydb-cli/export_import/s3_import.md) в справочник по YDB CLI для получения информации о данной команде.
+
+{% include [_includes/backup_and_recovery/cli_overlay.md](_includes/backup_and_recovery/cli_overlay.md) %}
+
+{% include [_includes/backup_and_recovery/others_overlay.md](_includes/backup_and_recovery/others_overlay.md) %}
+
+

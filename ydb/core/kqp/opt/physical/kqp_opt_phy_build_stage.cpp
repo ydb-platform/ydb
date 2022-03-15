@@ -64,10 +64,17 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
     TVector<TExprBase> values;
     TNodeOnNodeOwnedMap replaceMap;
 
-    auto checkRange = [&values](const TVarArgCallable<TExprBase>& tuple) {
+    auto checkRange = [&values](const TVarArgCallable<TExprBase>& tuple, bool& literalRange) {
+        literalRange = true;
+
         for (const auto& value : tuple) {
             if (!IsDqPureExpr(value)) {
+                literalRange = false;
                 return false;
+            }
+
+            if (!value.Maybe<TCoDataCtor>()) {
+                literalRange = false;
             }
 
             if (!value.Maybe<TCoParameter>()) {
@@ -78,18 +85,22 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
         return true;
     };
 
-    if (!checkRange(read.Range().From())) {
+    bool fromIsLiteral = false;
+    if (!checkRange(read.Range().From(), fromIsLiteral)) {
         return read;
     }
 
-    if (!checkRange(read.Range().To())) {
+    bool toIsLiteral = false;
+    if (!checkRange(read.Range().To(), toIsLiteral)) {
         return read;
     }
+
+    bool literalRanges = fromIsLiteral && toIsLiteral;
 
     TVector<TExprBase> inputs;
     TVector<TCoArgument> programArgs;
     TNodeOnNodeOwnedMap rangeReplaces;
-    if (!values.empty()) {
+    if (!values.empty() && !literalRanges) {
         auto computeStage = Build<TDqStage>(ctx, read.Pos())
             .Inputs()
                 .Build()

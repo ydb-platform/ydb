@@ -961,20 +961,12 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value1\"]]]");
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
 
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-
-            }
         }
 
         {
@@ -994,17 +986,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), UseNewEngine ? 2 : 1, stats.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
 
-            ui32 index = 0;
-            if (UseNewEngine) {
-                UNIT_ASSERT(stats.query_phases(index).table_access().empty());
-                index = 1;
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
         }
 
         {
@@ -1067,24 +1053,17 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             if (WithMvcc && !UseNewEngine) {
                 phaseCount--;
             }
-            if (UseNewEngine) {
-                phaseCount++;
-            }
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), phaseCount);
 
-            int idx = 0;
-            if (UseNewEngine) {
-                idx = 1;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
 
-            idx++;
-            if (UseNewEngine) {
-                idx++;
+            int idx = phaseCount - 1;
+            if (!WithMvcc && !UseNewEngine) {
+                idx--;
             }
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(idx).table_access().size(), 1, stats.DebugString());
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/KeyValue2");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
         }
@@ -2893,11 +2872,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 int indexPhaseId = 0;
                 int tablePhaseId = 1;
-                if (UseNewEngine) {
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                    indexPhaseId = 1;
-                    tablePhaseId = 2;
-                }
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access(0).name(), "/Root/TestTable");
@@ -2944,11 +2918,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 int indexPhaseId = 0;
                 int tablePhaseId = 1;
-                if (UseNewEngine) {
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                    indexPhaseId = 1;
-                    tablePhaseId = 2;
-                }
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(tablePhaseId).table_access(0).name(), "/Root/TestTable");
@@ -2994,10 +2963,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                 auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
                 int indexPhaseId = 0;
-                if (UseNewEngine) {
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-                    indexPhaseId = 1;
-                }
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(indexPhaseId).table_access(0).name(), "/Root/TestTable/ix_cust3/indexImplTable");

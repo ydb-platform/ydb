@@ -3017,6 +3017,53 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[2u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(LiteralKeys) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto settings = TExecDataQuerySettings()
+            .CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            SELECT * FROM `/Root/Logs` WHERE App = 'nginx'u AND Ts >= 2 LIMIT 1
+        )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[["nginx"];["nginx-23"];["PUT /form HTTP/1.1"];[2]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases().size()); // no LiteralExecuter phase
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access().size());
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
+        UNIT_ASSERT_VALUES_EQUAL("/Root/Logs", stats.query_phases()[0].table_access()[0].name());
+
+        // mix param and literal
+        auto params = TParamsBuilder()
+            .AddParam("$app").Utf8("nginx").Build()
+            .Build();
+
+        result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            DECLARE $app AS Utf8;
+
+            SELECT * FROM `/Root/Logs` WHERE App = $app AND Ts >= 2 LIMIT 1
+        )", TTxControl::BeginTx().CommitTx(), std::move(params), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[["nginx"];["nginx-23"];["PUT /form HTTP/1.1"];[2]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(2, stats.query_phases().size()); // with LiteralExecuter phase
+        UNIT_ASSERT_VALUES_EQUAL(0, stats.query_phases()[0].table_access().size());
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[1].table_access().size());
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[1].affected_shards());
+        UNIT_ASSERT_VALUES_EQUAL("/Root/Logs", stats.query_phases()[1].table_access()[0].name());
+    }
 }
 
 } // namespace NKikimr::NKqp

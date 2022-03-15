@@ -143,14 +143,14 @@ protected:
         }
 
         if (!entry.KesusInfo) {
-            this->Reply(StatusIds::INTERNAL_ERROR, "Internal error: no coordination node info found.", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, TActivationContext::ActorContextFor(this->SelfId()));
+            this->Reply(StatusIds::BAD_REQUEST, "Bad request: no coordination node info found.", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, TActivationContext::ActorContextFor(this->SelfId()));
             return;
         }
 
         KesusTabletId = entry.KesusInfo->Description.GetKesusTabletId();
 
         if (!KesusTabletId) {
-            this->Reply(StatusIds::INTERNAL_ERROR, "Internal error: no coordination node id found.", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, TActivationContext::ActorContextFor(this->SelfId()));
+            this->Reply(StatusIds::BAD_REQUEST, "Bad request: no coordination node id found.", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, TActivationContext::ActorContextFor(this->SelfId()));
             return;
         }
 

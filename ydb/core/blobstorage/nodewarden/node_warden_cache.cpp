@@ -180,7 +180,7 @@ TNodeWarden::TWrappedCacheOp TNodeWarden::UpdateServiceSet(const NKikimrBlobStor
     };
 }
 
-std::unique_ptr<ICacheAccessor> NKikimr::CreateFileCacheAccessor(const TFsPath& cacheFilePath) {
+std::unique_ptr<ICacheAccessor> NKikimr::CreateFileCacheAccessor(const TString& templ, const std::unordered_map<char, TString>& vars) {
     class TAccessor : public ICacheAccessor {
         TFsPath Path;
 
@@ -230,5 +230,23 @@ std::unique_ptr<ICacheAccessor> NKikimr::CreateFileCacheAccessor(const TFsPath& 
         }
     };
 
-    return std::make_unique<TAccessor>(cacheFilePath);
+    TStringStream ss;
+    for (size_t i = 0; i < templ.size(); ++i) {
+        if (templ[i] == '%') {
+            ++i;
+            if (i != templ.size()) {
+                if (const auto it = vars.find(templ[i]); it != vars.end()) {
+                    ss << it->second;
+                } else {
+                    ss << templ[i];
+                }
+            } else {
+                ss << '%';
+            }
+        } else {
+            ss << templ[i];
+        }
+    }
+
+    return std::make_unique<TAccessor>(ss.Str());
 }

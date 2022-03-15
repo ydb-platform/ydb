@@ -31,7 +31,7 @@ public:
             if (node.LocationAcquired) {
                 NIceDb::TNiceDb db(txc.DB);
                 NActorsInterconnect::TNodeLocation location;
-                node.Location.Serialize(&location);
+                node.Location.Serialize(&location, false);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Location>(location);
                 Self->UpdateRegisteredDataCenters(node.Location.GetDataCenterId());
             }

@@ -515,7 +515,7 @@ namespace NKikimr::NBsController {
             auto& node = nodes[record.NodeId];
             node.SetNodeId(record.NodeId);
             node.SetPhysicalLocation(s.Str());
-            record.Location.Serialize(node.MutableLocation());
+            record.Location.Serialize(node.MutableLocation(), false); // this field has been introduced recently, so it doesn't have compatibility format
             auto *key = node.MutableHostKey();
             key->SetFqdn(std::get<0>(hostId));
             key->SetIcPort(std::get<1>(hostId));

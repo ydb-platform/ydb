@@ -106,7 +106,7 @@ namespace NActors {
         return res;
     }
 
-    void TNodeLocation::Serialize(NActorsInterconnect::TNodeLocation *pb) const {
+    void TNodeLocation::Serialize(NActorsInterconnect::TNodeLocation *pb, bool compatibleWithOlderVersions) const {
         const NProtoBuf::Descriptor *descriptor = NActorsInterconnect::TNodeLocation::descriptor();
         const NProtoBuf::Reflection *reflection = pb->GetReflection();
         NProtoBuf::UnknownFieldSet *unknown = pb->mutable_unknown_fields();
@@ -117,11 +117,14 @@ namespace NActors {
                 unknown->AddLengthDelimited(key)->assign(value);
             }
         }
+        if (compatibleWithOlderVersions) {
+            GetLegacyValue().Serialize(pb);
+        }
     }
 
     TString TNodeLocation::GetSerializedLocation() const {
         NActorsInterconnect::TNodeLocation pb;
-        Serialize(&pb);
+        Serialize(&pb, false);
         TString s;
         const bool success = pb.SerializeToString(&s);
         Y_VERIFY(success);

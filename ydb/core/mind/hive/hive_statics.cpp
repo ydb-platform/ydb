@@ -336,7 +336,7 @@ TString LongToShortTabletName(const TString& longTabletName) {
 
 TString GetLocationString(const NActors::TNodeLocation& location) {
     NActorsInterconnect::TNodeLocation proto;
-    location.Serialize(&proto);
+    location.Serialize(&proto, false);
     return proto.ShortDebugString();
 }
 

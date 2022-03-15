@@ -299,7 +299,7 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetResolveHost(node.ResolveHost);
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
-    node.Location.Serialize(info.MutableLocation());
+    node.Location.Serialize(info.MutableLocation(), true);
 }
 
 void TNodeBroker::ComputeNextEpochDiff(TStateDiff &diff)

@@ -193,6 +193,11 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
+        if (table->IsTTLEnabled()) {
+            context.SS->TTLEnabledTables[pathId] = table;
+            context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+        }
+
         auto parentDir = context.SS->PathsById.at(path->ParentPathId); // TargetPathId has been created
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);

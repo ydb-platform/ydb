@@ -483,6 +483,8 @@ TVector<TTableShardInfo> NTableState::ApplyPartitioningCopyTable(const TShardInf
         txState.Shards.emplace_back(idx, ETabletType::DataShard, TTxState::CreateParts);
         // Properly set new shard idx
         dstPartitions[i].ShardIdx = idx;
+        // clear lag to avoid counter underflow
+        dstPartitions[i].LastCondEraseLag.Clear();
     }
 
     return dstPartitions;

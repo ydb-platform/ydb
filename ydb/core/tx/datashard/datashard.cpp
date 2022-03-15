@@ -1605,7 +1605,7 @@ NKikimrTxDataShard::TError::EKind ConvertErrCode(NMiniKQL::IEngineFlat::EResult 
     case EResult::SnapshotNotExist:
         return NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST;
     case EResult::ResultTooBig:
-        return NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED;
+        return NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED;
     case EResult::Cancelled:
         return NKikimrTxDataShard::TError::EXECUTION_CANCELLED;
     default:
@@ -1627,7 +1627,7 @@ Ydb::StatusIds::StatusCode ConvertToYdbStatusCode(NKikimrTxDataShard::TError::EK
         case NKikimrTxDataShard::TError::READ_SIZE_EXECEEDED:
         case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
         case NKikimrTxDataShard::TError::UNKNOWN:
-        case NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED:
+        case NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED:
         case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
             return Ydb::StatusIds::INTERNAL_ERROR;
         case NKikimrTxDataShard::TError::BAD_ARGUMENT:

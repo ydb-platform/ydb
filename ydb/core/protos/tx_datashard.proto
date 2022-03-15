@@ -506,7 +506,7 @@ message TError {
         READ_SIZE_EXECEEDED = 15;
         SHARD_IS_BLOCKED = 16;
         UNKNOWN = 17;
-        REPLY_SIZE_EXECEEDED = 18;
+        REPLY_SIZE_EXCEEDED = 18;
         EXECUTION_CANCELLED = 19;
     }
 

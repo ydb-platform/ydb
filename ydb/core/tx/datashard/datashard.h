@@ -536,7 +536,7 @@ struct TEvDataShard {
 
         void SetExecutionError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) {
             switch (error) {
-                case NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED:
+                case NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED:
                     Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::RESULT_UNAVAILABLE);
                     break;
                 case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:

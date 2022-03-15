@@ -449,7 +449,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                             << MaxDatashardReplySize << ")";
 
                         LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
-                        result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXECEEDED, message);
+                        result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
                     } else {
                         ctx.Send(computeActor, dataEv.Release());
                     }

@@ -1462,7 +1462,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE,
             "Result of Kikimr query didn't meet requirements and isn't available"sv), result.GetIssues().ToString());
 
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("REPLY_SIZE_EXECEEDED"), result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("REPLY_SIZE_EXCEEDED"), result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(TestDoubleKey) {

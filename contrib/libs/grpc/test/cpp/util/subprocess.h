@@ -29,7 +29,7 @@ namespace grpc {
 
 class SubProcess {
  public:
-  SubProcess(const std::vector<TString>& args);
+  explicit SubProcess(const std::vector<TString>& args);
   ~SubProcess();
 
   int Join();

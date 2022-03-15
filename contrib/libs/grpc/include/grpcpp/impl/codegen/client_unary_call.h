@@ -20,6 +20,7 @@
 #define GRPCPP_IMPL_CODEGEN_CLIENT_UNARY_CALL_H
 
 #include <grpcpp/impl/codegen/call.h>
+#include <grpcpp/impl/codegen/call_op_set.h>
 #include <grpcpp/impl/codegen/channel_interface.h>
 #include <grpcpp/impl/codegen/config.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
@@ -30,12 +31,23 @@ namespace grpc {
 class ClientContext;
 namespace internal {
 class RpcMethod;
-/// Wrapper that performs a blocking unary call
-template <class InputMessage, class OutputMessage>
+
+/// Wrapper that performs a blocking unary call. May optionally specify the base
+/// class of the Request and Response so that the internal calls and structures
+/// below this may be based on those base classes and thus achieve code reuse
+/// across different RPCs (e.g., for protobuf, MessageLite would be a base
+/// class).
+template <class InputMessage, class OutputMessage,
+          class BaseInputMessage = InputMessage,
+          class BaseOutputMessage = OutputMessage>
 Status BlockingUnaryCall(ChannelInterface* channel, const RpcMethod& method,
                          grpc::ClientContext* context,
                          const InputMessage& request, OutputMessage* result) {
-  return BlockingUnaryCallImpl<InputMessage, OutputMessage>(
+  static_assert(std::is_base_of<BaseInputMessage, InputMessage>::value,
+                "Invalid input message specification");
+  static_assert(std::is_base_of<BaseOutputMessage, OutputMessage>::value,
+                "Invalid output message specification");
+  return BlockingUnaryCallImpl<BaseInputMessage, BaseOutputMessage>(
              channel, method, context, request, result)
       .status();
 }

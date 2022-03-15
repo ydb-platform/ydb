@@ -38,6 +38,7 @@
 #include <grpcpp/impl/codegen/completion_queue_tag.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
 #include <grpcpp/impl/codegen/grpc_library.h>
+#include <grpcpp/impl/codegen/rpc_service_method.h>
 #include <grpcpp/impl/codegen/status.h>
 #include <grpcpp/impl/codegen/sync.h>
 #include <grpcpp/impl/codegen/time.h>
@@ -59,7 +60,12 @@ namespace internal {
 template <class W, class R>
 class ServerReaderWriterBody;
 
-template <class ServiceType, class RequestType, class ResponseType>
+template <class ResponseType>
+void UnaryRunHandlerHelper(
+    const ::grpc::internal::MethodHandler::HandlerParameter&, ResponseType*,
+    ::grpc::Status&);
+template <class ServiceType, class RequestType, class ResponseType,
+          class BaseRequestType, class BaseResponseType>
 class RpcMethodHandler;
 template <class ServiceType, class RequestType, class ResponseType>
 class ClientStreamingHandler;
@@ -108,7 +114,7 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
   explicit CompletionQueue(grpc_completion_queue* take);
 
   /// Destructor. Destroys the owned wrapped completion queue / instance.
-  ~CompletionQueue() {
+  ~CompletionQueue() override {
     ::grpc::g_core_codegen_interface->grpc_completion_queue_destroy(cq_);
   }
 
@@ -123,8 +129,8 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
   /// Read from the queue, blocking until an event is available or the queue is
   /// shutting down.
   ///
-  /// \param tag [out] Updated to point to the read event's tag.
-  /// \param ok [out] true if read a successful event, false otherwise.
+  /// \param[out] tag Updated to point to the read event's tag.
+  /// \param[out] ok true if read a successful event, false otherwise.
   ///
   /// Note that each tag sent to the completion queue (through RPC operations
   /// or alarms) will be delivered out of the completion queue by a call to
@@ -179,10 +185,10 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
   /// within the \a deadline).  A \a tag points to an arbitrary location usually
   /// employed to uniquely identify an event.
   ///
-  /// \param tag [out] Upon success, updated to point to the event's tag.
-  /// \param ok [out] Upon success, true if a successful event, false otherwise
+  /// \param[out] tag Upon success, updated to point to the event's tag.
+  /// \param[out] ok Upon success, true if a successful event, false otherwise
   ///        See documentation for CompletionQueue::Next for explanation of ok
-  /// \param deadline [in] How long to block in wait for an event.
+  /// \param[in] deadline How long to block in wait for an event.
   ///
   /// \return The type of event read.
   template <typename T>
@@ -198,11 +204,11 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
   /// within the \a deadline).  A \a tag points to an arbitrary location usually
   /// employed to uniquely identify an event.
   ///
-  /// \param f [in] Function to execute before calling AsyncNext on this queue.
-  /// \param tag [out] Upon success, updated to point to the event's tag.
-  /// \param ok [out] Upon success, true if read a regular event, false
+  /// \param[in] f Function to execute before calling AsyncNext on this queue.
+  /// \param[out] tag Upon success, updated to point to the event's tag.
+  /// \param[out] ok Upon success, true if read a regular event, false
   /// otherwise.
-  /// \param deadline [in] How long to block in wait for an event.
+  /// \param[in] deadline How long to block in wait for an event.
   ///
   /// \return The type of event read.
   template <typename T, typename F>
@@ -237,11 +243,11 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
 
  protected:
   /// Private constructor of CompletionQueue only visible to friend classes
-  CompletionQueue(const grpc_completion_queue_attributes& attributes) {
+  explicit CompletionQueue(const grpc_completion_queue_attributes& attributes) {
     cq_ = ::grpc::g_core_codegen_interface->grpc_completion_queue_create(
         ::grpc::g_core_codegen_interface->grpc_completion_queue_factory_lookup(
             &attributes),
-        &attributes, NULL);
+        &attributes, nullptr);
     InitialAvalanching();  // reserve this for the future shutdown
   }
 
@@ -265,8 +271,10 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
   friend class ::grpc::ServerWriter;
   template <class W, class R>
   friend class ::grpc::internal::ServerReaderWriterBody;
-  template <class ServiceType, class RequestType, class ResponseType>
-  friend class ::grpc::internal::RpcMethodHandler;
+  template <class ResponseType>
+  friend void ::grpc::internal::UnaryRunHandlerHelper(
+      const ::grpc::internal::MethodHandler::HandlerParameter&, ResponseType*,
+      ::grpc::Status&);
   template <class ServiceType, class RequestType, class ResponseType>
   friend class ::grpc::internal::ClientStreamingHandler;
   template <class ServiceType, class RequestType, class ResponseType>
@@ -293,7 +301,7 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
   /// initialized, it must be flushed on the same thread.
   class CompletionQueueTLSCache {
    public:
-    CompletionQueueTLSCache(CompletionQueue* cq);
+    explicit CompletionQueueTLSCache(CompletionQueue* cq);
     ~CompletionQueueTLSCache();
     bool Flush(void** tag, bool* ok);
 
@@ -400,6 +408,9 @@ class CompletionQueue : private ::grpc::GrpcLibraryCodegen {
 #endif
     return true;
   }
+
+  static CompletionQueue* CallbackAlternativeCQ();
+  static void ReleaseCallbackAlternativeCQ(CompletionQueue* cq);
 
   grpc_completion_queue* cq_;  // owned
 

@@ -16,18 +16,13 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <inttypes.h>
-#include <limits.h>
-#include <string.h>
+#include <set>
+#include <util/generic/string.h>
+#include <vector>
 
-#include "y_absl/container/inlined_vector.h"
-#include "y_absl/strings/match.h"
-#include "y_absl/strings/numbers.h"
+#include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
-#include "y_absl/strings/str_join.h"
-#include "y_absl/strings/str_split.h"
 #include "y_absl/strings/string_view.h"
-#include "re2/re2.h"
 
 #include <grpc/grpc.h>
 
@@ -36,7 +31,6 @@
 #include "src/core/ext/filters/client_channel/lb_policy_factory.h"
 #include "src/core/ext/filters/client_channel/lb_policy_registry.h"
 #include "src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h"
-#include "src/core/ext/xds/xds_api.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/orphanable.h"
@@ -61,7 +55,7 @@ class XdsClusterManagerLbConfig : public LoadBalancingPolicy::Config {
   using ClusterMap =
       std::map<TString, RefCountedPtr<LoadBalancingPolicy::Config>>;
 
-  XdsClusterManagerLbConfig(ClusterMap cluster_map)
+  explicit XdsClusterManagerLbConfig(ClusterMap cluster_map)
       : cluster_map_(std::move(cluster_map)) {}
 
   const char* name() const override { return kXdsClusterManager; }
@@ -109,17 +103,13 @@ class XdsClusterManagerLb : public LoadBalancingPolicy {
 
     // It is required that the keys of cluster_map have to live at least as long
     // as the ClusterPicker instance.
-    ClusterPicker(ClusterMap cluster_map,
-                  RefCountedPtr<XdsClusterManagerLbConfig> config)
-        : cluster_map_(std::move(cluster_map)), config_(std::move(config)) {}
+    explicit ClusterPicker(ClusterMap cluster_map)
+        : cluster_map_(std::move(cluster_map)) {}
 
     PickResult Pick(PickArgs args) override;
 
    private:
     ClusterMap cluster_map_;
-    // Take a reference to config so that we can use
-    // XdsApi::RdsUpdate::RdsRoute::Matchers from it.
-    RefCountedPtr<XdsClusterManagerLbConfig> config_;
   };
 
   // Each ClusterChild holds a ref to its parent XdsClusterManagerLb.
@@ -127,7 +117,7 @@ class XdsClusterManagerLb : public LoadBalancingPolicy {
    public:
     ClusterChild(RefCountedPtr<XdsClusterManagerLb> xds_cluster_manager_policy,
                  const TString& name);
-    ~ClusterChild();
+    ~ClusterChild() override;
 
     void Orphan() override;
 
@@ -151,7 +141,9 @@ class XdsClusterManagerLb : public LoadBalancingPolicy {
       explicit Helper(RefCountedPtr<ClusterChild> xds_cluster_manager_child)
           : xds_cluster_manager_child_(std::move(xds_cluster_manager_child)) {}
 
-      ~Helper() { xds_cluster_manager_child_.reset(DEBUG_LOCATION, "Helper"); }
+      ~Helper() override {
+        xds_cluster_manager_child_.reset(DEBUG_LOCATION, "Helper");
+      }
 
       RefCountedPtr<SubchannelInterface> CreateSubchannel(
           ServerAddress address, const grpc_channel_args& args) override;
@@ -192,7 +184,7 @@ class XdsClusterManagerLb : public LoadBalancingPolicy {
     bool shutdown_ = false;
   };
 
-  ~XdsClusterManagerLb();
+  ~XdsClusterManagerLb() override;
 
   void ShutdownLocked() override;
 
@@ -368,8 +360,7 @@ void XdsClusterManagerLb::UpdateStateLocked() {
                                 Ref(DEBUG_LOCATION, "QueuePicker")));
         }
       }
-      picker =
-          y_absl::make_unique<ClusterPicker>(std::move(cluster_map), config_);
+      picker = y_absl::make_unique<ClusterPicker>(std::move(cluster_map));
       break;
     }
     case GRPC_CHANNEL_CONNECTING:
@@ -510,7 +501,7 @@ void XdsClusterManagerLb::ClusterChild::ResetBackoffLocked() {
 
 void XdsClusterManagerLb::ClusterChild::DeactivateLocked() {
   // If already deactivated, don't do that again.
-  if (delayed_removal_timer_callback_pending_ == true) return;
+  if (delayed_removal_timer_callback_pending_) return;
   // Set the child weight to 0 so that future picker won't contain this child.
   // Start a timer to delete the child.
   Ref(DEBUG_LOCATION, "ClusterChild+timer").release();
@@ -547,8 +538,9 @@ void XdsClusterManagerLb::ClusterChild::OnDelayedRemovalTimerLocked(
 RefCountedPtr<SubchannelInterface>
 XdsClusterManagerLb::ClusterChild::Helper::CreateSubchannel(
     ServerAddress address, const grpc_channel_args& args) {
-  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_)
+  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_) {
     return nullptr;
+  }
   return xds_cluster_manager_child_->xds_cluster_manager_policy_
       ->channel_control_helper()
       ->CreateSubchannel(std::move(address), args);
@@ -566,8 +558,9 @@ void XdsClusterManagerLb::ClusterChild::Helper::UpdateState(
         xds_cluster_manager_child_->name_.c_str(), ConnectivityStateName(state),
         status.ToString().c_str(), picker.get());
   }
-  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_)
+  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_) {
     return;
+  }
   // Cache the picker in the ClusterChild.
   xds_cluster_manager_child_->picker_wrapper_ =
       MakeRefCounted<ChildPickerWrapper>(xds_cluster_manager_child_->name_,
@@ -591,8 +584,9 @@ void XdsClusterManagerLb::ClusterChild::Helper::UpdateState(
 }
 
 void XdsClusterManagerLb::ClusterChild::Helper::RequestReresolution() {
-  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_)
+  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_) {
     return;
+  }
   xds_cluster_manager_child_->xds_cluster_manager_policy_
       ->channel_control_helper()
       ->RequestReresolution();
@@ -600,8 +594,9 @@ void XdsClusterManagerLb::ClusterChild::Helper::RequestReresolution() {
 
 void XdsClusterManagerLb::ClusterChild::Helper::AddTraceEvent(
     TraceSeverity severity, y_absl::string_view message) {
-  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_)
+  if (xds_cluster_manager_child_->xds_cluster_manager_policy_->shutting_down_) {
     return;
+  }
   xds_cluster_manager_child_->xds_cluster_manager_policy_
       ->channel_control_helper()
       ->AddTraceEvent(severity, message);

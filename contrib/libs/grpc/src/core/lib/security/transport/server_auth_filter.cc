@@ -123,8 +123,9 @@ static grpc_filtered_mdelem remove_consumed_md(void* user_data,
   for (i = 0; i < calld->num_consumed_md; i++) {
     const grpc_metadata* consumed_md = &calld->consumed_md[i];
     if (grpc_slice_eq(GRPC_MDKEY(md), consumed_md->key) &&
-        grpc_slice_eq(GRPC_MDVALUE(md), consumed_md->value))
+        grpc_slice_eq(GRPC_MDVALUE(md), consumed_md->value)) {
       return GRPC_FILTERED_REMOVE();
+    }
   }
   return GRPC_FILTERED_MDELEM(md);
 }
@@ -299,6 +300,13 @@ static grpc_error* server_auth_init_channel_elem(
   GPR_ASSERT(!args->is_last);
   grpc_auth_context* auth_context =
       grpc_find_auth_context_in_args(args->channel_args);
+  if (auth_context == nullptr) {
+    grpc_error* error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "No authorization context found. This might be a TRANSIENT failure due "
+        "to certificates not having been loaded yet.");
+    gpr_log(GPR_DEBUG, "%s", grpc_error_string(error));
+    return error;
+  }
   GPR_ASSERT(auth_context != nullptr);
   grpc_server_credentials* creds =
       grpc_find_server_credentials_in_args(args->channel_args);

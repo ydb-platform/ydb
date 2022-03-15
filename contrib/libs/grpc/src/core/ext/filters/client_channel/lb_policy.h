@@ -30,7 +30,6 @@
 #include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/ext/filters/client_channel/service_config.h"
 #include "src/core/ext/filters/client_channel/subchannel_interface.h"
-#include "src/core/lib/gprpp/map.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/polling_entity.h"
@@ -95,11 +94,11 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// Application-specific requests cost metrics.  Metric names are
     /// determined by the application.  Each value is an absolute cost
     /// (e.g. 3487 bytes of storage) associated with the request.
-    std::map<y_absl::string_view, double, StringLess> request_cost;
+    std::map<y_absl::string_view, double> request_cost;
     /// Application-specific resource utilization metrics.  Metric names
     /// are determined by the application.  Each value is expressed as a
     /// fraction of total resources available.
-    std::map<y_absl::string_view, double, StringLess> utilization;
+    std::map<y_absl::string_view, double> utilization;
   };
 
   /// Interface for accessing per-call state.
@@ -301,7 +300,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   /// return the parameters they need.
   class Config : public RefCounted<Config> {
    public:
-    virtual ~Config() = default;
+    ~Config() override = default;
 
     // Returns the load balancing policy name
     virtual const char* name() const = 0;
@@ -341,7 +340,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   };
 
   explicit LoadBalancingPolicy(Args args, intptr_t initial_refcount = 1);
-  virtual ~LoadBalancingPolicy();
+  ~LoadBalancingPolicy() override;
 
   // Not copyable nor movable.
   LoadBalancingPolicy(const LoadBalancingPolicy&) = delete;
@@ -376,7 +375,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     explicit QueuePicker(RefCountedPtr<LoadBalancingPolicy> parent)
         : parent_(std::move(parent)) {}
 
-    ~QueuePicker() { parent_.reset(DEBUG_LOCATION, "QueuePicker"); }
+    ~QueuePicker() override { parent_.reset(DEBUG_LOCATION, "QueuePicker"); }
 
     PickResult Pick(PickArgs args) override;
 

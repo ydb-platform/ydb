@@ -273,10 +273,6 @@ limitations under the License.
 
 
 ====================COPYRIGHT====================
- * Copyright 2016-2017 gRPC authors.
-
-
-====================COPYRIGHT====================
  * Copyright 2017 gRPC authors.
 
 
@@ -302,6 +298,14 @@ limitations under the License.
 
 ====================COPYRIGHT====================
 // Copyright 2019 The gRPC Authors
+
+
+====================COPYRIGHT====================
+// Copyright 2021 The gRPC Authors
+
+
+====================COPYRIGHT====================
+// Copyright 2021 gRPC authors.
 
 
 ====================COPYRIGHT====================

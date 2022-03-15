@@ -56,10 +56,10 @@ class XdsLocalityName : public RefCounted<XdsLocalityName> {
     }
   };
 
-  XdsLocalityName(TString region, TString zone, TString subzone)
+  XdsLocalityName(TString region, TString zone, TString sub_zone)
       : region_(std::move(region)),
         zone_(std::move(zone)),
-        sub_zone_(std::move(subzone)) {}
+        sub_zone_(std::move(sub_zone)) {}
 
   bool operator==(const XdsLocalityName& other) const {
     return region_ == other.region_ && zone_ == other.zone_ &&
@@ -131,7 +131,7 @@ class XdsClusterDropStats : public RefCounted<XdsClusterDropStats> {
                       y_absl::string_view lrs_server_name,
                       y_absl::string_view cluster_name,
                       y_absl::string_view eds_service_name);
-  ~XdsClusterDropStats();
+  ~XdsClusterDropStats() override;
 
   // Returns a snapshot of this instance and resets all the counters.
   Snapshot GetSnapshotAndReset();
@@ -206,7 +206,7 @@ class XdsClusterLocalityStats : public RefCounted<XdsClusterLocalityStats> {
                           y_absl::string_view cluster_name,
                           y_absl::string_view eds_service_name,
                           RefCountedPtr<XdsLocalityName> name);
-  ~XdsClusterLocalityStats();
+  ~XdsClusterLocalityStats() override;
 
   // Returns a snapshot of this instance and resets all the counters.
   Snapshot GetSnapshotAndReset();

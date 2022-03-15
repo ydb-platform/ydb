@@ -30,6 +30,7 @@
 #include <utility>
 #include <vector>
 
+#include "y_absl/memory/memory.h"
 #include "y_absl/types/optional.h"
 
 #include <grpc/support/alloc.h>
@@ -317,7 +318,8 @@ class Server::RealRequestMatcher : public RequestMatcherInterface {
 // advance or queue up any incoming RPC for later match. Instead, MatchOrQueue
 // will call out to an allocation function passed in at the construction of the
 // object. These request matchers are designed for the C++ callback API, so they
-// only support 1 completion queue (passed in at the constructor).
+// only support 1 completion queue (passed in at the constructor). They are also
+// used for the sync API.
 class Server::AllocatingRequestMatcherBase : public RequestMatcherInterface {
  public:
   AllocatingRequestMatcherBase(Server* server, grpc_completion_queue* cq)
@@ -369,15 +371,20 @@ class Server::AllocatingRequestMatcherBatch
 
   void MatchOrQueue(size_t /*start_request_queue_index*/,
                     CallData* calld) override {
-    BatchCallAllocation call_info = allocator_();
-    GPR_ASSERT(server()->ValidateServerRequest(
-                   cq(), static_cast<void*>(call_info.tag), nullptr, nullptr) ==
-               GRPC_CALL_OK);
-    RequestedCall* rc = new RequestedCall(
-        static_cast<void*>(call_info.tag), cq(), call_info.call,
-        call_info.initial_metadata, call_info.details);
-    calld->SetState(CallData::CallState::ACTIVATED);
-    calld->Publish(cq_idx(), rc);
+    if (server()->ShutdownRefOnRequest()) {
+      BatchCallAllocation call_info = allocator_();
+      GPR_ASSERT(server()->ValidateServerRequest(
+                     cq(), static_cast<void*>(call_info.tag), nullptr,
+                     nullptr) == GRPC_CALL_OK);
+      RequestedCall* rc = new RequestedCall(
+          static_cast<void*>(call_info.tag), call_info.cq, call_info.call,
+          call_info.initial_metadata, call_info.details);
+      calld->SetState(CallData::CallState::ACTIVATED);
+      calld->Publish(cq_idx(), rc);
+    } else {
+      calld->FailCallCreation();
+    }
+    server()->ShutdownUnrefOnRequest();
   }
 
  private:
@@ -397,17 +404,21 @@ class Server::AllocatingRequestMatcherRegistered
 
   void MatchOrQueue(size_t /*start_request_queue_index*/,
                     CallData* calld) override {
-    RegisteredCallAllocation call_info = allocator_();
-    GPR_ASSERT(
-        server()->ValidateServerRequest(cq(), static_cast<void*>(call_info.tag),
-                                        call_info.optional_payload,
-                                        registered_method_) == GRPC_CALL_OK);
-    RequestedCall* rc = new RequestedCall(
-        static_cast<void*>(call_info.tag), cq(), call_info.call,
-        call_info.initial_metadata, registered_method_, call_info.deadline,
-        call_info.optional_payload);
-    calld->SetState(CallData::CallState::ACTIVATED);
-    calld->Publish(cq_idx(), rc);
+    if (server()->ShutdownRefOnRequest()) {
+      RegisteredCallAllocation call_info = allocator_();
+      GPR_ASSERT(server()->ValidateServerRequest(
+                     cq(), call_info.tag, call_info.optional_payload,
+                     registered_method_) == GRPC_CALL_OK);
+      RequestedCall* rc =
+          new RequestedCall(call_info.tag, call_info.cq, call_info.call,
+                            call_info.initial_metadata, registered_method_,
+                            call_info.deadline, call_info.optional_payload);
+      calld->SetState(CallData::CallState::ACTIVATED);
+      calld->Publish(cq_idx(), rc);
+    } else {
+      calld->FailCallCreation();
+    }
+    server()->ShutdownUnrefOnRequest();
   }
 
  private:
@@ -512,7 +523,7 @@ grpc_resource_user* CreateDefaultResourceUser(const grpc_channel_args* args) {
 }
 
 RefCountedPtr<channelz::ServerNode> CreateChannelzNode(
-    Server* server, const grpc_channel_args* args) {
+    const grpc_channel_args* args) {
   RefCountedPtr<channelz::ServerNode> channelz_node;
   if (grpc_channel_args_find_bool(args, GRPC_ARG_ENABLE_CHANNELZ,
                                   GRPC_ENABLE_CHANNELZ_DEFAULT)) {
@@ -533,10 +544,18 @@ RefCountedPtr<channelz::ServerNode> CreateChannelzNode(
 Server::Server(const grpc_channel_args* args)
     : channel_args_(grpc_channel_args_copy(args)),
       default_resource_user_(CreateDefaultResourceUser(args)),
-      channelz_node_(CreateChannelzNode(this, args)) {}
+      channelz_node_(CreateChannelzNode(args)) {}
 
 Server::~Server() {
   grpc_channel_args_destroy(channel_args_);
+  // Remove the cq pollsets from the config_fetcher.
+  if (started_ && config_fetcher_ != nullptr &&
+      config_fetcher_->interested_parties() != nullptr) {
+    for (grpc_pollset* pollset : pollsets_) {
+      grpc_pollset_set_del_pollset(config_fetcher_->interested_parties(),
+                                   pollset);
+    }
+  }
   for (size_t i = 0; i < cqs_.size(); i++) {
     GRPC_CQ_INTERNAL_UNREF(cqs_[i], "server");
   }
@@ -570,6 +589,16 @@ void Server::Start() {
     MutexLock lock(&mu_global_);
     starting_ = true;
   }
+  // Register the interested parties from the config fetcher to the cq pollsets
+  // before starting listeners so that config fetcher is being polled when the
+  // listeners start watch the fetcher.
+  if (config_fetcher_ != nullptr &&
+      config_fetcher_->interested_parties() != nullptr) {
+    for (grpc_pollset* pollset : pollsets_) {
+      grpc_pollset_set_add_pollset(config_fetcher_->interested_parties(),
+                                   pollset);
+    }
+  }
   for (auto& listener : listeners_) {
     listener.listener->Start(this, &pollsets_);
   }
@@ -578,14 +607,18 @@ void Server::Start() {
   starting_cv_.Signal();
 }
 
-void Server::SetupTransport(
+grpc_error* Server::SetupTransport(
     grpc_transport* transport, grpc_pollset* accepting_pollset,
     const grpc_channel_args* args,
     const RefCountedPtr<grpc_core::channelz::SocketNode>& socket_node,
     grpc_resource_user* resource_user) {
   // Create channel.
+  grpc_error* error = GRPC_ERROR_NONE;
   grpc_channel* channel = grpc_channel_create(
-      nullptr, args, GRPC_SERVER_CHANNEL, transport, resource_user);
+      nullptr, args, GRPC_SERVER_CHANNEL, transport, resource_user, &error);
+  if (channel == nullptr) {
+    return error;
+  }
   ChannelData* chand = static_cast<ChannelData*>(
       grpc_channel_stack_element(grpc_channel_get_channel_stack(channel), 0)
           ->channel_data);
@@ -606,6 +639,7 @@ void Server::SetupTransport(
   }
   // Initialize chand.
   chand->InitTransport(Ref(), channel, cq_idx, transport, channelz_socket_uuid);
+  return GRPC_ERROR_NONE;
 }
 
 bool Server::HasOpenConnections() {
@@ -687,7 +721,7 @@ void Server::FailCall(size_t cq_idx, RequestedCall* rc, grpc_error* error) {
 // Before calling MaybeFinishShutdown(), we must hold mu_global_ and not
 // hold mu_call_.
 void Server::MaybeFinishShutdown() {
-  if (!shutdown_flag_.load(std::memory_order_acquire) || shutdown_published_) {
+  if (!ShutdownReady() || shutdown_published_) {
     return;
   }
   {
@@ -772,7 +806,7 @@ void Server::ShutdownAndNotify(grpc_completion_queue* cq, void* tag) {
   {
     // Wait for startup to be finished.  Locks mu_global.
     MutexLock lock(&mu_global_);
-    starting_cv_.WaitUntil(&mu_global_, [this] { return !starting_; });
+    WaitUntil(&starting_cv_, &mu_global_, [this] { return !starting_; });
     // Stay locked, and gather up some stuff to do.
     GPR_ASSERT(grpc_cq_begin_op(cq, tag));
     if (shutdown_published_) {
@@ -781,19 +815,18 @@ void Server::ShutdownAndNotify(grpc_completion_queue* cq, void* tag) {
       return;
     }
     shutdown_tags_.emplace_back(tag, cq);
-    if (shutdown_flag_.load(std::memory_order_acquire)) {
+    if (ShutdownCalled()) {
       return;
     }
     last_shutdown_message_time_ = gpr_now(GPR_CLOCK_REALTIME);
     broadcaster.FillChannelsLocked(GetChannelsLocked());
-    shutdown_flag_.store(true, std::memory_order_release);
     // Collect all unregistered then registered calls.
     {
       MutexLock lock(&mu_call_);
       KillPendingWorkLocked(
           GRPC_ERROR_CREATE_FROM_STATIC_STRING("Server Shutdown"));
     }
-    MaybeFinishShutdown();
+    ShutdownUnrefOnShutdownCall();
   }
   // Shutdown listeners.
   for (auto& listener : listeners_) {
@@ -825,8 +858,7 @@ void Server::CancelAllCalls() {
 void Server::Orphan() {
   {
     MutexLock lock(&mu_global_);
-    GPR_ASSERT(shutdown_flag_.load(std::memory_order_acquire) ||
-               listeners_.empty());
+    GPR_ASSERT(ShutdownCalled() || listeners_.empty());
     GPR_ASSERT(listeners_destroyed_ == listeners_.size());
   }
   if (default_resource_user_ != nullptr) {
@@ -845,7 +877,7 @@ grpc_call_error Server::ValidateServerRequest(
                            (rm->payload_handling == GRPC_SRM_PAYLOAD_NONE)))) {
     return GRPC_CALL_ERROR_PAYLOAD_TYPE_MISMATCH;
   }
-  if (grpc_cq_begin_op(cq_for_notification, tag) == false) {
+  if (!grpc_cq_begin_op(cq_for_notification, tag)) {
     return GRPC_CALL_ERROR_COMPLETION_QUEUE_SHUTDOWN;
   }
   return GRPC_CALL_OK;
@@ -873,7 +905,7 @@ grpc_call_error Server::ValidateServerRequestAndCq(
 }
 
 grpc_call_error Server::QueueRequestedCall(size_t cq_idx, RequestedCall* rc) {
-  if (shutdown_flag_.load(std::memory_order_acquire)) {
+  if (ShutdownCalled()) {
     FailCall(cq_idx, rc,
              GRPC_ERROR_CREATE_FROM_STATIC_STRING("Server Shutdown"));
     return GRPC_CALL_OK;
@@ -936,7 +968,7 @@ class Server::ChannelData::ConnectivityWatcher
     GRPC_CHANNEL_INTERNAL_REF(chand_->channel_, "connectivity");
   }
 
-  ~ConnectivityWatcher() {
+  ~ConnectivityWatcher() override {
     GRPC_CHANNEL_INTERNAL_UNREF(chand_->channel_, "connectivity");
   }
 
@@ -1000,7 +1032,8 @@ void Server::ChannelData::InitTransport(RefCountedPtr<Server> server,
   if (num_registered_methods > 0) {
     uint32_t max_probes = 0;
     size_t slots = 2 * num_registered_methods;
-    registered_methods_.reset(new std::vector<ChannelRegisteredMethod>(slots));
+    registered_methods_ =
+        y_absl::make_unique<std::vector<ChannelRegisteredMethod>>(slots);
     for (std::unique_ptr<RegisteredMethod>& rm : server_->registered_methods_) {
       ExternallyManagedSlice host;
       ExternallyManagedSlice method(rm->method.c_str());
@@ -1041,7 +1074,7 @@ void Server::ChannelData::InitTransport(RefCountedPtr<Server> server,
   op->set_accept_stream_fn = AcceptStream;
   op->set_accept_stream_user_data = this;
   op->start_connectivity_watch = MakeOrphanable<ConnectivityWatcher>(this);
-  if (server_->shutdown_flag_.load(std::memory_order_acquire)) {
+  if (server_->ShutdownCalled()) {
     op->disconnect_with_error =
         GRPC_ERROR_CREATE_FROM_STATIC_STRING("Server shutdown");
   }
@@ -1113,8 +1146,8 @@ void Server::ChannelData::AcceptStream(void* arg, grpc_transport* /*transport*/,
   calld->Start(elem);
 }
 
-void Server::ChannelData::FinishDestroy(void* cd, grpc_error* /*error*/) {
-  auto* chand = static_cast<Server::ChannelData*>(cd);
+void Server::ChannelData::FinishDestroy(void* arg, grpc_error* /*error*/) {
+  auto* chand = static_cast<Server::ChannelData*>(arg);
   Server* server = chand->server_.get();
   GRPC_CHANNEL_INTERNAL_UNREF(chand->channel_, "server");
   server->Unref();
@@ -1257,8 +1290,7 @@ void Server::CallData::PublishNewRpc(void* arg, grpc_error* error) {
   auto* chand = static_cast<Server::ChannelData*>(call_elem->channel_data);
   RequestMatcherInterface* rm = calld->matcher_;
   Server* server = rm->server();
-  if (error != GRPC_ERROR_NONE ||
-      server->shutdown_flag_.load(std::memory_order_acquire)) {
+  if (error != GRPC_ERROR_NONE || server->ShutdownCalled()) {
     calld->state_.Store(CallState::ZOMBIED, MemoryOrder::RELAXED);
     calld->KillZombie();
     return;
@@ -1282,7 +1314,7 @@ void Server::CallData::KillZombie() {
 
 void Server::CallData::StartNewRpc(grpc_call_element* elem) {
   auto* chand = static_cast<ChannelData*>(elem->channel_data);
-  if (server_->shutdown_flag_.load(std::memory_order_acquire)) {
+  if (server_->ShutdownCalled()) {
     state_.Store(CallState::ZOMBIED, MemoryOrder::RELAXED);
     KillZombie();
     return;
@@ -1353,8 +1385,8 @@ void Server::CallData::StartTransportStreamOpBatchImpl(
   grpc_call_next_op(elem, batch);
 }
 
-void Server::CallData::RecvInitialMetadataReady(void* ptr, grpc_error* error) {
-  grpc_call_element* elem = static_cast<grpc_call_element*>(ptr);
+void Server::CallData::RecvInitialMetadataReady(void* arg, grpc_error* error) {
+  grpc_call_element* elem = static_cast<grpc_call_element*>(arg);
   CallData* calld = static_cast<CallData*>(elem->call_data);
   grpc_millis op_deadline;
   if (error == GRPC_ERROR_NONE) {
@@ -1396,9 +1428,8 @@ void Server::CallData::RecvInitialMetadataReady(void* ptr, grpc_error* error) {
   Closure::Run(DEBUG_LOCATION, closure, error);
 }
 
-void Server::CallData::RecvTrailingMetadataReady(void* user_data,
-                                                 grpc_error* error) {
-  grpc_call_element* elem = static_cast<grpc_call_element*>(user_data);
+void Server::CallData::RecvTrailingMetadataReady(void* arg, grpc_error* error) {
+  grpc_call_element* elem = static_cast<grpc_call_element*>(arg);
   CallData* calld = static_cast<CallData*>(elem->call_data);
   if (calld->original_recv_initial_metadata_ready_ != nullptr) {
     calld->recv_trailing_metadata_error_ = GRPC_ERROR_REF(error);
@@ -1533,23 +1564,45 @@ grpc_call_error grpc_server_request_call(
 }
 
 grpc_call_error grpc_server_request_registered_call(
-    grpc_server* server, void* rmp, grpc_call** call, gpr_timespec* deadline,
-    grpc_metadata_array* request_metadata, grpc_byte_buffer** optional_payload,
+    grpc_server* server, void* registered_method, grpc_call** call,
+    gpr_timespec* deadline, grpc_metadata_array* request_metadata,
+    grpc_byte_buffer** optional_payload,
     grpc_completion_queue* cq_bound_to_call,
     grpc_completion_queue* cq_for_notification, void* tag_new) {
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   GRPC_STATS_INC_SERVER_REQUESTED_CALLS();
-  auto* rm = static_cast<grpc_core::Server::RegisteredMethod*>(rmp);
+  auto* rm =
+      static_cast<grpc_core::Server::RegisteredMethod*>(registered_method);
   GRPC_API_TRACE(
       "grpc_server_request_registered_call("
-      "server=%p, rmp=%p, call=%p, deadline=%p, request_metadata=%p, "
+      "server=%p, registered_method=%p, call=%p, deadline=%p, "
+      "request_metadata=%p, "
       "optional_payload=%p, cq_bound_to_call=%p, cq_for_notification=%p, "
       "tag=%p)",
       9,
-      (server, rmp, call, deadline, request_metadata, optional_payload,
-       cq_bound_to_call, cq_for_notification, tag_new));
+      (server, registered_method, call, deadline, request_metadata,
+       optional_payload, cq_bound_to_call, cq_for_notification, tag_new));
   return server->core_server->RequestRegisteredCall(
       rm, call, deadline, request_metadata, optional_payload, cq_bound_to_call,
       cq_for_notification, tag_new);
+}
+
+void grpc_server_set_config_fetcher(
+    grpc_server* server, grpc_server_config_fetcher* server_config_fetcher) {
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
+  grpc_core::ExecCtx exec_ctx;
+  GRPC_API_TRACE("grpc_server_set_config_fetcher(server=%p, config_fetcher=%p)",
+                 2, (server, server_config_fetcher));
+  server->core_server->set_config_fetcher(
+      std::unique_ptr<grpc_server_config_fetcher>(server_config_fetcher));
+}
+
+void grpc_server_config_fetcher_destroy(
+    grpc_server_config_fetcher* server_config_fetcher) {
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
+  grpc_core::ExecCtx exec_ctx;
+  GRPC_API_TRACE("grpc_server_config_fetcher_destroy(config_fetcher=%p)", 1,
+                 (server_config_fetcher));
+  delete server_config_fetcher;
 }

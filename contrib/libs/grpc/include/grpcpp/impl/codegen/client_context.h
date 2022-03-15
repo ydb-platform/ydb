@@ -72,6 +72,7 @@ template <class Request>
 class ClientCallbackWriterImpl;
 class ClientCallbackUnaryImpl;
 class ClientContextAccessor;
+class ClientAsyncResponseReaderHelper;
 }  // namespace internal
 
 template <class R>
@@ -310,7 +311,7 @@ class ClientContext {
   ///
   /// \see grpc::AuthContext.
   std::shared_ptr<const grpc::AuthContext> auth_context() const {
-    if (auth_context_.get() == nullptr) {
+    if (auth_context_ == nullptr) {
       auth_context_ = grpc::CreateAuthContext(call_);
     }
     return auth_context_;
@@ -439,6 +440,7 @@ class ClientContext {
   friend class ::grpc::ClientAsyncReaderWriter;
   template <class R>
   friend class ::grpc::ClientAsyncResponseReader;
+  friend class ::grpc::internal::ClientAsyncResponseReaderHelper;
   template <class InputMessage, class OutputMessage>
   friend class ::grpc::internal::BlockingUnaryCallImpl;
   template <class InputMessage, class OutputMessage>

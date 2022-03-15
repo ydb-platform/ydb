@@ -58,7 +58,11 @@ std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
     std::vector<
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
         interceptor_creators);
-}
+
+/// Builds XDS Credentials.
+std::shared_ptr<ChannelCredentials> XdsCredentials(
+    const std::shared_ptr<ChannelCredentials>& fallback_creds);
+}  // namespace experimental
 
 /// A channel credentials object encapsulates all the state needed by a client
 /// to authenticate with a server for a given channel.
@@ -69,12 +73,19 @@ std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
 class ChannelCredentials : private grpc::GrpcLibraryCodegen {
  public:
   ChannelCredentials();
-  ~ChannelCredentials();
+  ~ChannelCredentials() override;
 
  protected:
   friend std::shared_ptr<ChannelCredentials> CompositeChannelCredentials(
       const std::shared_ptr<ChannelCredentials>& channel_creds,
       const std::shared_ptr<CallCredentials>& call_creds);
+
+  // TODO(yashykt): We need this friend declaration mainly for access to
+  // AsSecureCredentials(). Once we are able to remove insecure builds from gRPC
+  // (and also internal dependencies on the indirect method of creating a
+  // channel through credentials), we would be able to remove this.
+  friend std::shared_ptr<ChannelCredentials> grpc::experimental::XdsCredentials(
+      const std::shared_ptr<ChannelCredentials>& fallback_creds);
 
   virtual SecureChannelCredentials* AsSecureCredentials() = 0;
 
@@ -105,6 +116,11 @@ class ChannelCredentials : private grpc::GrpcLibraryCodegen {
       /*interceptor_creators*/) {
     return nullptr;
   }
+
+  // TODO(yashkt): This is a hack that is needed since InsecureCredentials can
+  // not use grpc_channel_credentials internally and should be removed after
+  // insecure builds are removed from gRPC.
+  virtual bool IsInsecure() const { return false; }
 };
 
 /// A call credentials object encapsulates the state needed by a client to
@@ -114,7 +130,7 @@ class ChannelCredentials : private grpc::GrpcLibraryCodegen {
 class CallCredentials : private grpc::GrpcLibraryCodegen {
  public:
   CallCredentials();
-  ~CallCredentials();
+  ~CallCredentials() override;
 
   /// Apply this instance's credentials to \a call.
   virtual bool ApplyToCall(grpc_call* call) = 0;
@@ -265,6 +281,12 @@ class MetadataCredentialsPlugin {
 std::shared_ptr<CallCredentials> MetadataCredentialsFromPlugin(
     std::unique_ptr<MetadataCredentialsPlugin> plugin);
 
+/// Builds External Account credentials.
+/// json_string is the JSON string containing the credentials options.
+/// scopes contains the scopes to be binded with the credentials.
+std::shared_ptr<CallCredentials> ExternalAccountCredentials(
+    const grpc::string& json_string, const std::vector<grpc::string>& scopes);
+
 namespace experimental {
 
 /// Options for creating STS Oauth Token Exchange credentials following the IETF
@@ -317,7 +339,7 @@ std::shared_ptr<ChannelCredentials> LocalCredentials(
 
 /// Builds TLS Credentials given TLS options.
 std::shared_ptr<ChannelCredentials> TlsCredentials(
-    const TlsCredentialsOptions& options);
+    const TlsChannelCredentialsOptions& options);
 
 }  // namespace experimental
 }  // namespace grpc

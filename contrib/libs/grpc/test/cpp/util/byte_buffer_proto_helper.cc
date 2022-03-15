@@ -18,6 +18,8 @@
 
 #include "test/cpp/util/byte_buffer_proto_helper.h"
 
+#include "y_absl/memory/memory.h"
+
 namespace grpc {
 namespace testing {
 
@@ -37,7 +39,7 @@ std::unique_ptr<ByteBuffer> SerializeToByteBuffer(
   TString buf;
   message->SerializeToString(&buf);
   Slice slice(buf);
-  return std::unique_ptr<ByteBuffer>(new ByteBuffer(&slice, 1));
+  return y_absl::make_unique<ByteBuffer>(&slice, 1);
 }
 
 bool SerializeToByteBufferInPlace(grpc::protobuf::Message* message,

@@ -25,6 +25,7 @@ target_link_libraries(src-core-lib PUBLIC
   ybase-internal-spinlock_wait
   abseil-cpp-tstring-y_absl-container
   abseil-cpp-tstring-y_absl-memory
+  yabseil-cpp-tstring-y_absl-status
   yabseil-cpp-tstring-y_absl-strings
   ystrings-internal-str_format
   yabseil-cpp-tstring-y_absl-synchronization
@@ -64,12 +65,16 @@ target_sources(src-core-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/tmpfile_windows.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/wrap_memcpy.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/arena.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/examine_stack.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/fork.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/global_config_env.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/host_port.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/mpscq.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/stat_posix.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/stat_windows.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/thd_posix.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/thd_windows.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/time_util.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/profiling/basic_timers.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/profiling/stap_timers.cc
 )

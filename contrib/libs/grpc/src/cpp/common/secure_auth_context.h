@@ -49,7 +49,7 @@ class SecureAuthContext final : public AuthContext {
   void AddProperty(const TString& key,
                    const grpc::string_ref& value) override;
 
-  virtual bool SetPeerIdentityPropertyName(const TString& name) override;
+  bool SetPeerIdentityPropertyName(const TString& name) override;
 
  private:
   grpc_core::RefCountedPtr<grpc_auth_context> ctx_;

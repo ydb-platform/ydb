@@ -32,6 +32,9 @@
 
 extern grpc_core::DebugOnlyTraceFlag grpc_trace_resolver_refcount;
 
+// Name associated with individual address, if available.
+#define GRPC_ARG_ADDRESS_NAME "grpc.address_name"
+
 namespace grpc_core {
 
 /// Interface for name resolution.
@@ -87,7 +90,7 @@ class Resolver : public InternallyRefCounted<Resolver> {
   // Not copyable nor movable.
   Resolver(const Resolver&) = delete;
   Resolver& operator=(const Resolver&) = delete;
-  virtual ~Resolver() = default;
+  ~Resolver() override = default;
 
   /// Starts resolving.
   virtual void StartLocked() = 0;
@@ -122,21 +125,10 @@ class Resolver : public InternallyRefCounted<Resolver> {
   }
 
  protected:
-  Resolver(std::shared_ptr<WorkSerializer> work_serializer,
-           std::unique_ptr<ResultHandler> result_handler);
+  Resolver();
 
   /// Shuts down the resolver.
   virtual void ShutdownLocked() = 0;
-
-  std::shared_ptr<WorkSerializer> work_serializer() const {
-    return work_serializer_;
-  }
-
-  ResultHandler* result_handler() const { return result_handler_.get(); }
-
- private:
-  std::shared_ptr<WorkSerializer> work_serializer_;
-  std::unique_ptr<ResultHandler> result_handler_;
 };
 
 }  // namespace grpc_core

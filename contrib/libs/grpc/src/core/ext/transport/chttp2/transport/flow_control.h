@@ -201,7 +201,7 @@ class TransportFlowControlBase {
 class TransportFlowControlDisabled final : public TransportFlowControlBase {
  public:
   // Maxes out all values
-  TransportFlowControlDisabled(grpc_chttp2_transport* t);
+  explicit TransportFlowControlDisabled(grpc_chttp2_transport* t);
 
   bool flow_control_enabled() const override { return false; }
 
@@ -221,7 +221,7 @@ class TransportFlowControlDisabled final : public TransportFlowControlBase {
 class TransportFlowControl final : public TransportFlowControlBase {
  public:
   TransportFlowControl(const grpc_chttp2_transport* t, bool enable_bdp_probe);
-  ~TransportFlowControl() {}
+  ~TransportFlowControl() override {}
 
   bool flow_control_enabled() const override { return true; }
 
@@ -409,7 +409,7 @@ class StreamFlowControlDisabled : public StreamFlowControlBase {
 class StreamFlowControl final : public StreamFlowControlBase {
  public:
   StreamFlowControl(TransportFlowControl* tfc, const grpc_chttp2_stream* s);
-  ~StreamFlowControl() {
+  ~StreamFlowControl() override {
     tfc_->PreUpdateAnnouncedWindowOverIncomingWindow(announced_window_delta_);
   }
 

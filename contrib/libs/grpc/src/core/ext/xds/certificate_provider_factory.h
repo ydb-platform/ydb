@@ -23,7 +23,7 @@
 
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/json/json.h"
-#include "src/core/lib/security/certificate_provider.h"
+#include "src/core/lib/security/credentials/tls/grpc_tls_certificate_provider.h"
 
 namespace grpc_core {
 
@@ -32,13 +32,15 @@ namespace grpc_core {
 class CertificateProviderFactory {
  public:
   // Interface for configs for CertificateProviders.
-  class Config {
+  class Config : public RefCounted<Config> {
    public:
-    virtual ~Config() = default;
+    ~Config() override = default;
 
     // Name of the type of the CertificateProvider. Unique to each type of
     // config.
     virtual const char* name() const = 0;
+
+    virtual TString ToString() const = 0;
   };
 
   virtual ~CertificateProviderFactory() = default;
@@ -46,12 +48,12 @@ class CertificateProviderFactory {
   // Name of the plugin.
   virtual const char* name() const = 0;
 
-  virtual std::unique_ptr<Config> CreateCertificateProviderConfig(
+  virtual RefCountedPtr<Config> CreateCertificateProviderConfig(
       const Json& config_json, grpc_error** error) = 0;
 
   // Create a CertificateProvider instance from config.
   virtual RefCountedPtr<grpc_tls_certificate_provider>
-  CreateCertificateProvider(std::unique_ptr<Config> config) = 0;
+  CreateCertificateProvider(RefCountedPtr<Config> config) = 0;
 };
 
 }  // namespace grpc_core

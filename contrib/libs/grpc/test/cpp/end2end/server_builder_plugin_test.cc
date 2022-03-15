@@ -31,6 +31,8 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
+#include "y_absl/memory/memory.h"
+
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/util/port.h"
 #include "test/core/util/test_config.h"
@@ -138,7 +140,7 @@ class ServerBuilderPluginTest : public ::testing::TestWithParam<bool> {
 
   void SetUp() override {
     port_ = grpc_pick_unused_port_or_die();
-    builder_.reset(new ServerBuilder());
+    builder_ = y_absl::make_unique<ServerBuilder>();
   }
 
   void InsertPlugin() {
@@ -227,8 +229,8 @@ class ServerBuilderPluginTest : public ::testing::TestWithParam<bool> {
   void RunCQ() {
     void* tag;
     bool ok;
-    while (cq_->Next(&tag, &ok))
-      ;
+    while (cq_->Next(&tag, &ok)) {
+    }
   }
 };
 

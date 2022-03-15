@@ -183,7 +183,7 @@ TString grpc_sockaddr_to_string(const grpc_resolved_address* resolved_addr,
   if (ip != nullptr && grpc_inet_ntop(addr->sa_family, ip, ntop_buf,
                                       sizeof(ntop_buf)) != nullptr) {
     if (sin6_scope_id != 0) {
-      // Enclose sin6_scope_id with the format defined in RFC 6784 section 2.
+      // Enclose sin6_scope_id with the format defined in RFC 6874 section 2.
       TString host_with_scope =
           y_absl::StrFormat("%s%%25%" PRIu32, ntop_buf, sin6_scope_id);
       out = grpc_core::JoinHostPort(host_with_scope, port);
@@ -201,8 +201,8 @@ TString grpc_sockaddr_to_string(const grpc_resolved_address* resolved_addr,
 void grpc_string_to_sockaddr(grpc_resolved_address* out, const char* addr,
                              int port) {
   memset(out, 0, sizeof(grpc_resolved_address));
-  grpc_sockaddr_in6* addr6 = (grpc_sockaddr_in6*)out->addr;
-  grpc_sockaddr_in* addr4 = (grpc_sockaddr_in*)out->addr;
+  grpc_sockaddr_in6* addr6 = reinterpret_cast<grpc_sockaddr_in6*>(out->addr);
+  grpc_sockaddr_in* addr4 = reinterpret_cast<grpc_sockaddr_in*>(out->addr);
   if (grpc_inet_pton(GRPC_AF_INET6, addr, &addr6->sin6_addr) == 1) {
     addr6->sin6_family = GRPC_AF_INET6;
     out->len = sizeof(grpc_sockaddr_in6);
@@ -213,6 +213,25 @@ void grpc_string_to_sockaddr(grpc_resolved_address* out, const char* addr,
     GPR_ASSERT(0);
   }
   grpc_sockaddr_set_port(out, port);
+}
+
+grpc_error* grpc_string_to_sockaddr_new(grpc_resolved_address* out,
+                                        const char* addr, int port) {
+  memset(out, 0, sizeof(grpc_resolved_address));
+  grpc_sockaddr_in6* addr6 = reinterpret_cast<grpc_sockaddr_in6*>(out->addr);
+  grpc_sockaddr_in* addr4 = reinterpret_cast<grpc_sockaddr_in*>(out->addr);
+  if (grpc_inet_pton(GRPC_AF_INET6, addr, &addr6->sin6_addr) == 1) {
+    addr6->sin6_family = GRPC_AF_INET6;
+    out->len = sizeof(grpc_sockaddr_in6);
+  } else if (grpc_inet_pton(GRPC_AF_INET, addr, &addr4->sin_addr) == 1) {
+    addr4->sin_family = GRPC_AF_INET;
+    out->len = sizeof(grpc_sockaddr_in);
+  } else {
+    return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrCat("Failed to parse address:", addr).c_str());
+  }
+  grpc_sockaddr_set_port(out, port);
+  return GRPC_ERROR_NONE;
 }
 
 TString grpc_sockaddr_to_uri(const grpc_resolved_address* resolved_addr) {
@@ -260,9 +279,11 @@ int grpc_sockaddr_get_port(const grpc_resolved_address* resolved_addr) {
       reinterpret_cast<const grpc_sockaddr*>(resolved_addr->addr);
   switch (addr->sa_family) {
     case GRPC_AF_INET:
-      return grpc_ntohs(((grpc_sockaddr_in*)addr)->sin_port);
+      return grpc_ntohs(
+          (reinterpret_cast<const grpc_sockaddr_in*>(addr))->sin_port);
     case GRPC_AF_INET6:
-      return grpc_ntohs(((grpc_sockaddr_in6*)addr)->sin6_port);
+      return grpc_ntohs(
+          (reinterpret_cast<const grpc_sockaddr_in6*>(addr))->sin6_port);
     default:
       if (grpc_is_unix_socket(resolved_addr)) {
         return 1;
@@ -273,19 +294,17 @@ int grpc_sockaddr_get_port(const grpc_resolved_address* resolved_addr) {
   }
 }
 
-int grpc_sockaddr_set_port(const grpc_resolved_address* resolved_addr,
-                           int port) {
-  const grpc_sockaddr* addr =
-      reinterpret_cast<const grpc_sockaddr*>(resolved_addr->addr);
+int grpc_sockaddr_set_port(grpc_resolved_address* resolved_addr, int port) {
+  grpc_sockaddr* addr = reinterpret_cast<grpc_sockaddr*>(resolved_addr->addr);
   switch (addr->sa_family) {
     case GRPC_AF_INET:
       GPR_ASSERT(port >= 0 && port < 65536);
-      ((grpc_sockaddr_in*)addr)->sin_port =
+      (reinterpret_cast<grpc_sockaddr_in*>(addr))->sin_port =
           grpc_htons(static_cast<uint16_t>(port));
       return 1;
     case GRPC_AF_INET6:
       GPR_ASSERT(port >= 0 && port < 65536);
-      ((grpc_sockaddr_in6*)addr)->sin6_port =
+      (reinterpret_cast<grpc_sockaddr_in6*>(addr))->sin6_port =
           grpc_htons(static_cast<uint16_t>(port));
       return 1;
     default:
@@ -293,4 +312,105 @@ int grpc_sockaddr_set_port(const grpc_resolved_address* resolved_addr,
               addr->sa_family);
       return 0;
   }
+}
+
+TString grpc_sockaddr_get_packed_host(
+    const grpc_resolved_address* resolved_addr) {
+  const grpc_sockaddr* addr =
+      reinterpret_cast<const grpc_sockaddr*>(resolved_addr->addr);
+  if (addr->sa_family == GRPC_AF_INET) {
+    const grpc_sockaddr_in* addr4 =
+        reinterpret_cast<const grpc_sockaddr_in*>(addr);
+    const char* addr_bytes = reinterpret_cast<const char*>(&addr4->sin_addr);
+    return TString(addr_bytes, 4);
+  } else if (addr->sa_family == GRPC_AF_INET6) {
+    const grpc_sockaddr_in6* addr6 =
+        reinterpret_cast<const grpc_sockaddr_in6*>(addr);
+    const char* addr_bytes = reinterpret_cast<const char*>(&addr6->sin6_addr);
+    return TString(addr_bytes, 16);
+  } else {
+    GPR_ASSERT(false);
+  }
+}
+
+void grpc_sockaddr_mask_bits(grpc_resolved_address* address,
+                             uint32_t mask_bits) {
+  grpc_sockaddr* addr = reinterpret_cast<grpc_sockaddr*>(address->addr);
+  if (addr->sa_family == GRPC_AF_INET) {
+    grpc_sockaddr_in* addr4 = reinterpret_cast<grpc_sockaddr_in*>(addr);
+    if (mask_bits == 0) {
+      memset(&addr4->sin_addr, 0, sizeof(addr4->sin_addr));
+      return;
+    } else if (mask_bits >= 32) {
+      return;
+    }
+    uint32_t mask_ip_addr = (~(uint32_t(0))) << (32 - mask_bits);
+    addr4->sin_addr.s_addr &= grpc_htonl(mask_ip_addr);
+  } else if (addr->sa_family == GRPC_AF_INET6) {
+    grpc_sockaddr_in6* addr6 = reinterpret_cast<grpc_sockaddr_in6*>(addr);
+    if (mask_bits == 0) {
+      memset(&addr6->sin6_addr, 0, sizeof(addr6->sin6_addr));
+      return;
+    } else if (mask_bits >= 128) {
+      return;
+    }
+    // We cannot use s6_addr32 since it is not defined on all platforms that we
+    // need it on.
+    uint32_t address_parts[4];
+    GPR_ASSERT(sizeof(addr6->sin6_addr) == sizeof(address_parts));
+    memcpy(address_parts, &addr6->sin6_addr, sizeof(grpc_in6_addr));
+    if (mask_bits <= 32) {
+      uint32_t mask_ip_addr = (~(uint32_t(0))) << (32 - mask_bits);
+      address_parts[0] &= grpc_htonl(mask_ip_addr);
+      memset(&address_parts[1], 0, sizeof(uint32_t));
+      memset(&address_parts[2], 0, sizeof(uint32_t));
+      memset(&address_parts[3], 0, sizeof(uint32_t));
+    } else if (mask_bits <= 64) {
+      mask_bits -= 32;
+      uint32_t mask_ip_addr = (~(uint32_t(0))) << (32 - mask_bits);
+      address_parts[1] &= grpc_htonl(mask_ip_addr);
+      memset(&address_parts[2], 0, sizeof(uint32_t));
+      memset(&address_parts[3], 0, sizeof(uint32_t));
+    } else if (mask_bits <= 96) {
+      mask_bits -= 64;
+      uint32_t mask_ip_addr = (~(uint32_t(0))) << (32 - mask_bits);
+      address_parts[2] &= grpc_htonl(mask_ip_addr);
+      memset(&address_parts[3], 0, sizeof(uint32_t));
+    } else {
+      mask_bits -= 96;
+      uint32_t mask_ip_addr = (~(uint32_t(0))) << (32 - mask_bits);
+      address_parts[3] &= grpc_htonl(mask_ip_addr);
+    }
+    memcpy(&addr6->sin6_addr, address_parts, sizeof(grpc_in6_addr));
+  }
+}
+
+bool grpc_sockaddr_match_subnet(const grpc_resolved_address* address,
+                                const grpc_resolved_address* subnet_address,
+                                uint32_t mask_bits) {
+  auto* addr = reinterpret_cast<const grpc_sockaddr*>(address->addr);
+  auto* subnet_addr =
+      reinterpret_cast<const grpc_sockaddr*>(subnet_address->addr);
+  if (addr->sa_family != subnet_addr->sa_family) return false;
+  grpc_resolved_address masked_address;
+  memcpy(&masked_address, address, sizeof(grpc_resolved_address));
+  addr = reinterpret_cast<grpc_sockaddr*>((&masked_address)->addr);
+  grpc_sockaddr_mask_bits(&masked_address, mask_bits);
+  if (addr->sa_family == GRPC_AF_INET) {
+    auto* addr4 = reinterpret_cast<const grpc_sockaddr_in*>(addr);
+    auto* subnet_addr4 = reinterpret_cast<const grpc_sockaddr_in*>(subnet_addr);
+    if (memcmp(&addr4->sin_addr, &subnet_addr4->sin_addr,
+               sizeof(addr4->sin_addr)) == 0) {
+      return true;
+    }
+  } else if (addr->sa_family == GRPC_AF_INET6) {
+    auto* addr6 = reinterpret_cast<const grpc_sockaddr_in6*>(addr);
+    auto* subnet_addr6 =
+        reinterpret_cast<const grpc_sockaddr_in6*>(subnet_addr);
+    if (memcmp(&addr6->sin6_addr, &subnet_addr6->sin6_addr,
+               sizeof(addr6->sin6_addr)) == 0) {
+      return true;
+    }
+  }
+  return false;
 }

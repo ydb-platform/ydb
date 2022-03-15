@@ -34,7 +34,8 @@ grpc_channel* grpc_channel_create(const char* target,
                                   const grpc_channel_args* args,
                                   grpc_channel_stack_type channel_stack_type,
                                   grpc_transport* optional_transport,
-                                  grpc_resource_user* resource_user = nullptr);
+                                  grpc_resource_user* resource_user = nullptr,
+                                  grpc_error** error = nullptr);
 
 /** The same as grpc_channel_destroy, but doesn't create an ExecCtx, and so
  * is safe to use from within core. */
@@ -42,7 +43,7 @@ void grpc_channel_destroy_internal(grpc_channel* channel);
 
 grpc_channel* grpc_channel_create_with_builder(
     grpc_channel_stack_builder* builder,
-    grpc_channel_stack_type channel_stack_type);
+    grpc_channel_stack_type channel_stack_type, grpc_error** error = nullptr);
 
 /** Create a call given a grpc_channel, in order to call \a method.
     Progress is tied to activity on \a pollset_set. The returned call object is
@@ -93,9 +94,9 @@ struct CallRegistrationTable {
   // The map key should be owned strings rather than unowned char*'s to
   // guarantee that it outlives calls on the core channel (which may outlast the
   // C++ or other wrapped language Channel that registered these calls).
-  std::map<std::pair<TString, TString>, RegisteredCall>
-      map /* GUARDED_BY(mu) */;
-  int method_registration_attempts /* GUARDED_BY(mu) */ = 0;
+  std::map<std::pair<TString, TString>, RegisteredCall> map
+      Y_ABSL_GUARDED_BY(mu);
+  int method_registration_attempts Y_ABSL_GUARDED_BY(mu) = 0;
 };
 
 }  // namespace grpc_core

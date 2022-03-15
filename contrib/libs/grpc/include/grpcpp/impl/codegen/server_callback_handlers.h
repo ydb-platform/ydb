@@ -53,7 +53,7 @@ class CallbackUnaryHandler : public ::grpc::internal::MethodHandler {
         param.call->call(), sizeof(ServerCallbackUnaryImpl)))
         ServerCallbackUnaryImpl(
             static_cast<::grpc::CallbackServerContext*>(param.server_context),
-            param.call, allocator_state, std::move(param.call_requester));
+            param.call, allocator_state, param.call_requester);
     param.server_context->BeginCompletionOp(
         param.call, [call](bool) { call->MaybeDone(); }, call);
 
@@ -157,14 +157,15 @@ class CallbackUnaryHandler : public ::grpc::internal::MethodHandler {
       // (OnSendInitialMetadataDone). Thus it must be dispatched to an executor
       // thread. However, any OnDone needed after that can be inlined because it
       // is already running on an executor thread.
-      meta_tag_.Set(call_.call(),
-                    [this](bool ok) {
-                      ServerUnaryReactor* reactor =
-                          reactor_.load(std::memory_order_relaxed);
-                      reactor->OnSendInitialMetadataDone(ok);
-                      this->MaybeDone(/*inlineable_ondone=*/true);
-                    },
-                    &meta_ops_, /*can_inline=*/false);
+      meta_tag_.Set(
+          call_.call(),
+          [this](bool ok) {
+            ServerUnaryReactor* reactor =
+                reactor_.load(std::memory_order_relaxed);
+            reactor->OnSendInitialMetadataDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &meta_ops_, /*can_inline=*/false);
       meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                     ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
@@ -209,6 +210,9 @@ class CallbackUnaryHandler : public ::grpc::internal::MethodHandler {
       grpc_call* call = call_.call();
       auto call_requester = std::move(call_requester_);
       allocator_state_->Release();
+      if (ctx_->context_allocator() != nullptr) {
+        ctx_->context_allocator()->Release(ctx_);
+      }
       this->~ServerCallbackUnaryImpl();  // explicitly call destructor
       ::grpc::g_core_codegen_interface->grpc_call_unref(call);
       call_requester();
@@ -265,7 +269,7 @@ class CallbackClientStreamingHandler : public ::grpc::internal::MethodHandler {
         param.call->call(), sizeof(ServerCallbackReaderImpl)))
         ServerCallbackReaderImpl(
             static_cast<::grpc::CallbackServerContext*>(param.server_context),
-            param.call, std::move(param.call_requester));
+            param.call, param.call_requester);
     // Inlineable OnDone can be false in the CompletionOp callback because there
     // is no read reactor that has an inlineable OnDone; this only applies to
     // the DefaultReactor (which is unary).
@@ -305,14 +309,15 @@ class CallbackClientStreamingHandler : public ::grpc::internal::MethodHandler {
       // A finish tag with only MaybeDone can have its callback inlined
       // regardless even if OnDone is not inlineable because this callback just
       // checks a ref and then decides whether or not to dispatch OnDone.
-      finish_tag_.Set(call_.call(),
-                      [this](bool) {
-                        // Inlineable OnDone can be false here because there is
-                        // no read reactor that has an inlineable OnDone; this
-                        // only applies to the DefaultReactor (which is unary).
-                        this->MaybeDone(/*inlineable_ondone=*/false);
-                      },
-                      &finish_ops_, /*can_inline=*/true);
+      finish_tag_.Set(
+          call_.call(),
+          [this](bool) {
+            // Inlineable OnDone can be false here because there is
+            // no read reactor that has an inlineable OnDone; this
+            // only applies to the DefaultReactor (which is unary).
+            this->MaybeDone(/*inlineable_ondone=*/false);
+          },
+          &finish_ops_, /*can_inline=*/true);
       if (!ctx_->sent_initial_metadata_) {
         finish_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                         ctx_->initial_metadata_flags());
@@ -338,14 +343,15 @@ class CallbackClientStreamingHandler : public ::grpc::internal::MethodHandler {
       // The callback for this function should not be inlined because it invokes
       // a user-controlled reaction, but any resulting OnDone can be inlined in
       // the executor to which this callback is dispatched.
-      meta_tag_.Set(call_.call(),
-                    [this](bool ok) {
-                      ServerReadReactor<RequestType>* reactor =
-                          reactor_.load(std::memory_order_relaxed);
-                      reactor->OnSendInitialMetadataDone(ok);
-                      this->MaybeDone(/*inlineable_ondone=*/true);
-                    },
-                    &meta_ops_, /*can_inline=*/false);
+      meta_tag_.Set(
+          call_.call(),
+          [this](bool ok) {
+            ServerReadReactor<RequestType>* reactor =
+                reactor_.load(std::memory_order_relaxed);
+            reactor->OnSendInitialMetadataDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &meta_ops_, /*can_inline=*/false);
       meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                     ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
@@ -375,12 +381,13 @@ class CallbackClientStreamingHandler : public ::grpc::internal::MethodHandler {
       // The callback for this function should not be inlined because it invokes
       // a user-controlled reaction, but any resulting OnDone can be inlined in
       // the executor to which this callback is dispatched.
-      read_tag_.Set(call_.call(),
-                    [this, reactor](bool ok) {
-                      reactor->OnReadDone(ok);
-                      this->MaybeDone(/*inlineable_ondone=*/true);
-                    },
-                    &read_ops_, /*can_inline=*/false);
+      read_tag_.Set(
+          call_.call(),
+          [this, reactor](bool ok) {
+            reactor->OnReadDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &read_ops_, /*can_inline=*/false);
       read_ops_.set_core_cq_tag(&read_tag_);
       this->BindReactor(reactor);
       this->MaybeCallOnCancel(reactor);
@@ -398,6 +405,9 @@ class CallbackClientStreamingHandler : public ::grpc::internal::MethodHandler {
       reactor_.load(std::memory_order_relaxed)->OnDone();
       grpc_call* call = call_.call();
       auto call_requester = std::move(call_requester_);
+      if (ctx_->context_allocator() != nullptr) {
+        ctx_->context_allocator()->Release(ctx_);
+      }
       this->~ServerCallbackReaderImpl();  // explicitly call destructor
       ::grpc::g_core_codegen_interface->grpc_call_unref(call);
       call_requester();
@@ -449,7 +459,7 @@ class CallbackServerStreamingHandler : public ::grpc::internal::MethodHandler {
         ServerCallbackWriterImpl(
             static_cast<::grpc::CallbackServerContext*>(param.server_context),
             param.call, static_cast<RequestType*>(param.request),
-            std::move(param.call_requester));
+            param.call_requester);
     // Inlineable OnDone can be false in the CompletionOp callback because there
     // is no write reactor that has an inlineable OnDone; this only applies to
     // the DefaultReactor (which is unary).
@@ -505,14 +515,15 @@ class CallbackServerStreamingHandler : public ::grpc::internal::MethodHandler {
       // A finish tag with only MaybeDone can have its callback inlined
       // regardless even if OnDone is not inlineable because this callback just
       // checks a ref and then decides whether or not to dispatch OnDone.
-      finish_tag_.Set(call_.call(),
-                      [this](bool) {
-                        // Inlineable OnDone can be false here because there is
-                        // no write reactor that has an inlineable OnDone; this
-                        // only applies to the DefaultReactor (which is unary).
-                        this->MaybeDone(/*inlineable_ondone=*/false);
-                      },
-                      &finish_ops_, /*can_inline=*/true);
+      finish_tag_.Set(
+          call_.call(),
+          [this](bool) {
+            // Inlineable OnDone can be false here because there is
+            // no write reactor that has an inlineable OnDone; this
+            // only applies to the DefaultReactor (which is unary).
+            this->MaybeDone(/*inlineable_ondone=*/false);
+          },
+          &finish_ops_, /*can_inline=*/true);
       finish_ops_.set_core_cq_tag(&finish_tag_);
 
       if (!ctx_->sent_initial_metadata_) {
@@ -533,14 +544,15 @@ class CallbackServerStreamingHandler : public ::grpc::internal::MethodHandler {
       // The callback for this function should not be inlined because it invokes
       // a user-controlled reaction, but any resulting OnDone can be inlined in
       // the executor to which this callback is dispatched.
-      meta_tag_.Set(call_.call(),
-                    [this](bool ok) {
-                      ServerWriteReactor<ResponseType>* reactor =
-                          reactor_.load(std::memory_order_relaxed);
-                      reactor->OnSendInitialMetadataDone(ok);
-                      this->MaybeDone(/*inlineable_ondone=*/true);
-                    },
-                    &meta_ops_, /*can_inline=*/false);
+      meta_tag_.Set(
+          call_.call(),
+          [this](bool ok) {
+            ServerWriteReactor<ResponseType>* reactor =
+                reactor_.load(std::memory_order_relaxed);
+            reactor->OnSendInitialMetadataDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &meta_ops_, /*can_inline=*/false);
       meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                     ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
@@ -595,12 +607,13 @@ class CallbackServerStreamingHandler : public ::grpc::internal::MethodHandler {
       // The callback for this function should not be inlined because it invokes
       // a user-controlled reaction, but any resulting OnDone can be inlined in
       // the executor to which this callback is dispatched.
-      write_tag_.Set(call_.call(),
-                     [this, reactor](bool ok) {
-                       reactor->OnWriteDone(ok);
-                       this->MaybeDone(/*inlineable_ondone=*/true);
-                     },
-                     &write_ops_, /*can_inline=*/false);
+      write_tag_.Set(
+          call_.call(),
+          [this, reactor](bool ok) {
+            reactor->OnWriteDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &write_ops_, /*can_inline=*/false);
       write_ops_.set_core_cq_tag(&write_tag_);
       this->BindReactor(reactor);
       this->MaybeCallOnCancel(reactor);
@@ -609,7 +622,11 @@ class CallbackServerStreamingHandler : public ::grpc::internal::MethodHandler {
       // DefaultReactor (which is unary).
       this->MaybeDone(/*inlineable_ondone=*/false);
     }
-    ~ServerCallbackWriterImpl() { req_->~RequestType(); }
+    ~ServerCallbackWriterImpl() {
+      if (req_ != nullptr) {
+        req_->~RequestType();
+      }
+    }
 
     const RequestType* request() { return req_; }
 
@@ -617,6 +634,9 @@ class CallbackServerStreamingHandler : public ::grpc::internal::MethodHandler {
       reactor_.load(std::memory_order_relaxed)->OnDone();
       grpc_call* call = call_.call();
       auto call_requester = std::move(call_requester_);
+      if (ctx_->context_allocator() != nullptr) {
+        ctx_->context_allocator()->Release(ctx_);
+      }
       this->~ServerCallbackWriterImpl();  // explicitly call destructor
       ::grpc::g_core_codegen_interface->grpc_call_unref(call);
       call_requester();
@@ -666,7 +686,7 @@ class CallbackBidiHandler : public ::grpc::internal::MethodHandler {
         param.call->call(), sizeof(ServerCallbackReaderWriterImpl)))
         ServerCallbackReaderWriterImpl(
             static_cast<::grpc::CallbackServerContext*>(param.server_context),
-            param.call, std::move(param.call_requester));
+            param.call, param.call_requester);
     // Inlineable OnDone can be false in the CompletionOp callback because there
     // is no bidi reactor that has an inlineable OnDone; this only applies to
     // the DefaultReactor (which is unary).
@@ -707,14 +727,15 @@ class CallbackBidiHandler : public ::grpc::internal::MethodHandler {
       // A finish tag with only MaybeDone can have its callback inlined
       // regardless even if OnDone is not inlineable because this callback just
       // checks a ref and then decides whether or not to dispatch OnDone.
-      finish_tag_.Set(call_.call(),
-                      [this](bool) {
-                        // Inlineable OnDone can be false here because there is
-                        // no bidi reactor that has an inlineable OnDone; this
-                        // only applies to the DefaultReactor (which is unary).
-                        this->MaybeDone(/*inlineable_ondone=*/false);
-                      },
-                      &finish_ops_, /*can_inline=*/true);
+      finish_tag_.Set(
+          call_.call(),
+          [this](bool) {
+            // Inlineable OnDone can be false here because there is
+            // no bidi reactor that has an inlineable OnDone; this
+            // only applies to the DefaultReactor (which is unary).
+            this->MaybeDone(/*inlineable_ondone=*/false);
+          },
+          &finish_ops_, /*can_inline=*/true);
       finish_ops_.set_core_cq_tag(&finish_tag_);
 
       if (!ctx_->sent_initial_metadata_) {
@@ -735,14 +756,15 @@ class CallbackBidiHandler : public ::grpc::internal::MethodHandler {
       // The callback for this function should not be inlined because it invokes
       // a user-controlled reaction, but any resulting OnDone can be inlined in
       // the executor to which this callback is dispatched.
-      meta_tag_.Set(call_.call(),
-                    [this](bool ok) {
-                      ServerBidiReactor<RequestType, ResponseType>* reactor =
-                          reactor_.load(std::memory_order_relaxed);
-                      reactor->OnSendInitialMetadataDone(ok);
-                      this->MaybeDone(/*inlineable_ondone=*/true);
-                    },
-                    &meta_ops_, /*can_inline=*/false);
+      meta_tag_.Set(
+          call_.call(),
+          [this](bool ok) {
+            ServerBidiReactor<RequestType, ResponseType>* reactor =
+                reactor_.load(std::memory_order_relaxed);
+            reactor->OnSendInitialMetadataDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &meta_ops_, /*can_inline=*/false);
       meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                     ctx_->initial_metadata_flags());
       if (ctx_->compression_level_set()) {
@@ -798,19 +820,21 @@ class CallbackBidiHandler : public ::grpc::internal::MethodHandler {
       // The callbacks for these functions should not be inlined because they
       // invoke user-controlled reactions, but any resulting OnDones can be
       // inlined in the executor to which a callback is dispatched.
-      write_tag_.Set(call_.call(),
-                     [this, reactor](bool ok) {
-                       reactor->OnWriteDone(ok);
-                       this->MaybeDone(/*inlineable_ondone=*/true);
-                     },
-                     &write_ops_, /*can_inline=*/false);
+      write_tag_.Set(
+          call_.call(),
+          [this, reactor](bool ok) {
+            reactor->OnWriteDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &write_ops_, /*can_inline=*/false);
       write_ops_.set_core_cq_tag(&write_tag_);
-      read_tag_.Set(call_.call(),
-                    [this, reactor](bool ok) {
-                      reactor->OnReadDone(ok);
-                      this->MaybeDone(/*inlineable_ondone=*/true);
-                    },
-                    &read_ops_, /*can_inline=*/false);
+      read_tag_.Set(
+          call_.call(),
+          [this, reactor](bool ok) {
+            reactor->OnReadDone(ok);
+            this->MaybeDone(/*inlineable_ondone=*/true);
+          },
+          &read_ops_, /*can_inline=*/false);
       read_ops_.set_core_cq_tag(&read_tag_);
       this->BindReactor(reactor);
       this->MaybeCallOnCancel(reactor);
@@ -824,6 +848,9 @@ class CallbackBidiHandler : public ::grpc::internal::MethodHandler {
       reactor_.load(std::memory_order_relaxed)->OnDone();
       grpc_call* call = call_.call();
       auto call_requester = std::move(call_requester_);
+      if (ctx_->context_allocator() != nullptr) {
+        ctx_->context_allocator()->Release(ctx_);
+      }
       this->~ServerCallbackReaderWriterImpl();  // explicitly call destructor
       ::grpc::g_core_codegen_interface->grpc_call_unref(call);
       call_requester();

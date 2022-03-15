@@ -95,26 +95,19 @@ std::unique_ptr<ClientChannelMethodParsedConfig::RetryPolicy> ParseRetryPolicy(
     }
   }
   // Parse initialBackoff.
-  it = json.object_value().find("initialBackoff");
-  if (it != json.object_value().end()) {
-    if (!ParseDurationFromJson(it->second, &retry_policy->initial_backoff)) {
-      error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "field:initialBackoff error:Failed to parse"));
-    } else if (retry_policy->initial_backoff == 0) {
-      error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "field:initialBackoff error:must be greater than 0"));
-    }
+  if (ParseJsonObjectFieldAsDuration(json.object_value(), "initialBackoff",
+                                     &retry_policy->initial_backoff,
+                                     &error_list) &&
+      retry_policy->initial_backoff == 0) {
+    error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "field:initialBackoff error:must be greater than 0"));
   }
   // Parse maxBackoff.
-  it = json.object_value().find("maxBackoff");
-  if (it != json.object_value().end()) {
-    if (!ParseDurationFromJson(it->second, &retry_policy->max_backoff)) {
-      error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "field:maxBackoff error:failed to parse"));
-    } else if (retry_policy->max_backoff == 0) {
-      error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "field:maxBackoff error:should be greater than 0"));
-    }
+  if (ParseJsonObjectFieldAsDuration(json.object_value(), "maxBackoff",
+                                     &retry_policy->max_backoff, &error_list) &&
+      retry_policy->max_backoff == 0) {
+    error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "field:maxBackoff error:should be greater than 0"));
   }
   // Parse backoffMultiplier.
   it = json.object_value().find("backoffMultiplier");
@@ -255,26 +248,24 @@ grpc_error* ParseRetryThrottling(
   return GRPC_ERROR_CREATE_FROM_VECTOR("retryPolicy", &error_list);
 }
 
-const char* ParseHealthCheckConfig(const Json& field, grpc_error** error) {
+y_absl::optional<TString> ParseHealthCheckConfig(const Json& field,
+                                                   grpc_error** error) {
   GPR_DEBUG_ASSERT(error != nullptr && *error == GRPC_ERROR_NONE);
-  const char* service_name = nullptr;
   if (field.type() != Json::Type::OBJECT) {
     *error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
         "field:healthCheckConfig error:should be of type object");
-    return nullptr;
+    return y_absl::nullopt;
   }
   std::vector<grpc_error*> error_list;
+  y_absl::optional<TString> service_name;
   auto it = field.object_value().find("serviceName");
   if (it != field.object_value().end()) {
     if (it->second.type() != Json::Type::STRING) {
       error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           "field:serviceName error:should be of type string"));
     } else {
-      service_name = it->second.string_value().c_str();
+      service_name = it->second.string_value();
     }
-  }
-  if (!error_list.empty()) {
-    return nullptr;
   }
   *error =
       GRPC_ERROR_CREATE_FROM_VECTOR("field:healthCheckConfig", &error_list);
@@ -288,12 +279,8 @@ ClientChannelServiceConfigParser::ParseGlobalParams(
     const grpc_channel_args* /*args*/, const Json& json, grpc_error** error) {
   GPR_DEBUG_ASSERT(error != nullptr && *error == GRPC_ERROR_NONE);
   std::vector<grpc_error*> error_list;
-  RefCountedPtr<LoadBalancingPolicy::Config> parsed_lb_config;
-  TString lb_policy_name;
-  y_absl::optional<ClientChannelGlobalParsedConfig::RetryThrottling>
-      retry_throttling;
-  const char* health_check_service_name = nullptr;
   // Parse LB config.
+  RefCountedPtr<LoadBalancingPolicy::Config> parsed_lb_config;
   auto it = json.object_value().find("loadBalancingConfig");
   if (it != json.object_value().end()) {
     grpc_error* parse_error = GRPC_ERROR_NONE;
@@ -307,6 +294,7 @@ ClientChannelServiceConfigParser::ParseGlobalParams(
     }
   }
   // Parse deprecated LB policy.
+  TString lb_policy_name;
   it = json.object_value().find("loadBalancingPolicy");
   if (it != json.object_value().end()) {
     if (it->second.type() != Json::Type::STRING) {
@@ -332,6 +320,8 @@ ClientChannelServiceConfigParser::ParseGlobalParams(
     }
   }
   // Parse retry throttling.
+  y_absl::optional<ClientChannelGlobalParsedConfig::RetryThrottling>
+      retry_throttling;
   it = json.object_value().find("retryThrottling");
   if (it != json.object_value().end()) {
     ClientChannelGlobalParsedConfig::RetryThrottling data;
@@ -343,6 +333,7 @@ ClientChannelServiceConfigParser::ParseGlobalParams(
     }
   }
   // Parse health check config.
+  y_absl::optional<TString> health_check_service_name;
   it = json.object_value().find("healthCheckConfig");
   if (it != json.object_value().end()) {
     grpc_error* parsing_error = GRPC_ERROR_NONE;
@@ -357,7 +348,7 @@ ClientChannelServiceConfigParser::ParseGlobalParams(
   if (*error == GRPC_ERROR_NONE) {
     return y_absl::make_unique<ClientChannelGlobalParsedConfig>(
         std::move(parsed_lb_config), std::move(lb_policy_name),
-        retry_throttling, health_check_service_name);
+        retry_throttling, std::move(health_check_service_name));
   }
   return nullptr;
 }
@@ -383,13 +374,8 @@ ClientChannelServiceConfigParser::ParsePerMethodParams(
     }
   }
   // Parse timeout.
-  it = json.object_value().find("timeout");
-  if (it != json.object_value().end()) {
-    if (!ParseDurationFromJson(it->second, &timeout)) {
-      error_list.push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "field:timeout error:Failed parsing"));
-    };
-  }
+  ParseJsonObjectFieldAsDuration(json.object_value(), "timeout", &timeout,
+                                 &error_list, false);
   // Parse retry policy.
   it = json.object_value().find("retryPolicy");
   if (it != json.object_value().end()) {

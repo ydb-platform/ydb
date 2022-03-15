@@ -17,14 +17,17 @@
  */
 
 #include "test/cpp/end2end/interceptors_util.h"
+
+#include "y_absl/memory/memory.h"
+
 #include <util/string/cast.h>
 
 namespace grpc {
 namespace testing {
 
-std::atomic<int> DummyInterceptor::num_times_run_;
-std::atomic<int> DummyInterceptor::num_times_run_reverse_;
-std::atomic<int> DummyInterceptor::num_times_cancel_;
+std::atomic<int> PhonyInterceptor::num_times_run_;
+std::atomic<int> PhonyInterceptor::num_times_run_reverse_;
+std::atomic<int> PhonyInterceptor::num_times_cancel_;
 
 void MakeCall(const std::shared_ptr<Channel>& channel) {
   auto stub = grpc::testing::EchoTestService::NewStub(channel);
@@ -198,14 +201,13 @@ bool CheckMetadata(const std::multimap<TString, TString>& map,
 }
 
 std::vector<std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>
-CreateDummyClientInterceptors() {
+CreatePhonyClientInterceptors() {
   std::vector<std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>
       creators;
-  // Add 20 dummy interceptors before hijacking interceptor
+  // Add 20 phony interceptors before hijacking interceptor
   creators.reserve(20);
   for (auto i = 0; i < 20; i++) {
-    creators.push_back(std::unique_ptr<DummyInterceptorFactory>(
-        new DummyInterceptorFactory()));
+    creators.push_back(y_absl::make_unique<PhonyInterceptorFactory>());
   }
   return creators;
 }

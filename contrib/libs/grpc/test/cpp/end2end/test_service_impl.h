@@ -38,8 +38,6 @@
 
 #include <util/string/cast.h>
 
-using std::chrono::system_clock;
-
 namespace grpc {
 namespace testing {
 

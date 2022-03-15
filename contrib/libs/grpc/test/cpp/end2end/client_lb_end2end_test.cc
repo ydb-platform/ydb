@@ -24,6 +24,7 @@
 #include <util/generic/string.h>
 #include <thread>
 
+#include "y_absl/memory/memory.h"
 #include "y_absl/strings/str_cat.h"
 
 #include <grpc/grpc.h>
@@ -58,6 +59,7 @@
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/orca_load_report_for_test.pb.h"
 #include "test/core/util/port.h"
+#include "test/core/util/resolve_localhost_ip46.h"
 #include "test/core/util/test_config.h"
 #include "test/core/util/test_lb_policies.h"
 #include "test/cpp/end2end/test_service_impl.h"
@@ -67,7 +69,6 @@
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
-using std::chrono::system_clock;
 
 // defined in tcp_client.cc
 extern grpc_tcp_client_vtable* grpc_tcp_client_impl;
@@ -152,12 +153,14 @@ class MyTestServiceImpl : public TestServiceImpl {
 
 class FakeResolverResponseGeneratorWrapper {
  public:
-  FakeResolverResponseGeneratorWrapper()
-      : response_generator_(grpc_core::MakeRefCounted<
+  explicit FakeResolverResponseGeneratorWrapper(bool ipv6_only)
+      : ipv6_only_(ipv6_only),
+        response_generator_(grpc_core::MakeRefCounted<
                             grpc_core::FakeResolverResponseGenerator>()) {}
 
   FakeResolverResponseGeneratorWrapper(
       FakeResolverResponseGeneratorWrapper&& other) noexcept {
+    ipv6_only_ = other.ipv6_only_;
     response_generator_ = std::move(other.response_generator_);
   }
 
@@ -167,13 +170,15 @@ class FakeResolverResponseGeneratorWrapper {
       std::unique_ptr<grpc_core::ServerAddress::AttributeInterface> attribute =
           nullptr) {
     grpc_core::ExecCtx exec_ctx;
-    response_generator_->SetResponse(BuildFakeResults(
-        ports, service_config_json, attribute_key, std::move(attribute)));
+    response_generator_->SetResponse(
+        BuildFakeResults(ipv6_only_, ports, service_config_json, attribute_key,
+                         std::move(attribute)));
   }
 
   void SetNextResolutionUponError(const std::vector<int>& ports) {
     grpc_core::ExecCtx exec_ctx;
-    response_generator_->SetReresolutionResponse(BuildFakeResults(ports));
+    response_generator_->SetReresolutionResponse(
+        BuildFakeResults(ipv6_only_, ports));
   }
 
   void SetFailureOnReresolution() {
@@ -187,17 +192,18 @@ class FakeResolverResponseGeneratorWrapper {
 
  private:
   static grpc_core::Resolver::Result BuildFakeResults(
-      const std::vector<int>& ports, const char* service_config_json = nullptr,
+      bool ipv6_only, const std::vector<int>& ports,
+      const char* service_config_json = nullptr,
       const char* attribute_key = nullptr,
       std::unique_ptr<grpc_core::ServerAddress::AttributeInterface> attribute =
           nullptr) {
     grpc_core::Resolver::Result result;
     for (const int& port : ports) {
-      TString lb_uri_str = y_absl::StrCat("ipv4:127.0.0.1:", port);
-      grpc_uri* lb_uri = grpc_uri_parse(lb_uri_str.c_str(), true);
-      GPR_ASSERT(lb_uri != nullptr);
+      y_absl::StatusOr<grpc_core::URI> lb_uri = grpc_core::URI::Parse(
+          y_absl::StrCat(ipv6_only ? "ipv6:[::1]:" : "ipv4:127.0.0.1:", port));
+      GPR_ASSERT(lb_uri.ok());
       grpc_resolved_address address;
-      GPR_ASSERT(grpc_parse_uri(lb_uri, &address));
+      GPR_ASSERT(grpc_parse_uri(*lb_uri, &address));
       std::map<const char*,
                std::unique_ptr<grpc_core::ServerAddress::AttributeInterface>>
           attributes;
@@ -206,7 +212,6 @@ class FakeResolverResponseGeneratorWrapper {
       }
       result.addresses.emplace_back(address.addr, address.len,
                                     nullptr /* args */, std::move(attributes));
-      grpc_uri_destroy(lb_uri);
     }
     if (service_config_json != nullptr) {
       result.service_config = grpc_core::ServiceConfig::Create(
@@ -216,6 +221,7 @@ class FakeResolverResponseGeneratorWrapper {
     return result;
   }
 
+  bool ipv6_only_ = false;
   grpc_core::RefCountedPtr<grpc_core::FakeResolverResponseGenerator>
       response_generator_;
 };
@@ -238,7 +244,14 @@ class ClientLbEnd2endTest : public ::testing::Test {
 #endif
   }
 
-  void SetUp() override { grpc_init(); }
+  void SetUp() override {
+    grpc_init();
+    bool localhost_resolves_to_ipv4 = false;
+    bool localhost_resolves_to_ipv6 = false;
+    grpc_core::LocalhostResolves(&localhost_resolves_to_ipv4,
+                                 &localhost_resolves_to_ipv6);
+    ipv6_only_ = !localhost_resolves_to_ipv4 && localhost_resolves_to_ipv6;
+  }
 
   void TearDown() override {
     for (size_t i = 0; i < servers_.size(); ++i) {
@@ -246,7 +259,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
     }
     servers_.clear();
     creds_.reset();
-    grpc_shutdown_blocking();
+    grpc_shutdown();
   }
 
   void CreateServers(size_t num_servers,
@@ -278,7 +291,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
   }
 
   FakeResolverResponseGeneratorWrapper BuildResolverResponseGenerator() {
-    return FakeResolverResponseGeneratorWrapper();
+    return FakeResolverResponseGeneratorWrapper(ipv6_only_);
   }
 
   std::unique_ptr<grpc::testing::EchoTestService::Stub> BuildStub(
@@ -290,7 +303,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
       const TString& lb_policy_name,
       const FakeResolverResponseGeneratorWrapper& response_generator,
       ChannelArguments args = ChannelArguments()) {
-    if (lb_policy_name.size() > 0) {
+    if (!lb_policy_name.empty()) {
       args.SetLoadBalancingPolicyName(lb_policy_name);
     }  // else, default to pick first
     args.SetPointer(GRPC_ARG_FAKE_RESOLVER_RESPONSE_GENERATOR,
@@ -359,9 +372,9 @@ class ClientLbEnd2endTest : public ::testing::Test {
       grpc::internal::Mutex mu;
       grpc::internal::MutexLock lock(&mu);
       grpc::internal::CondVar cond;
-      thread_.reset(new std::thread(
-          std::bind(&ServerData::Serve, this, server_host, &mu, &cond)));
-      cond.WaitUntil(&mu, [this] { return server_ready_; });
+      thread_ = y_absl::make_unique<std::thread>(
+          std::bind(&ServerData::Serve, this, server_host, &mu, &cond));
+      grpc::internal::WaitUntil(&cond, &mu, [this] { return server_ready_; });
       server_ready_ = false;
       gpr_log(GPR_INFO, "server startup complete");
     }
@@ -412,7 +425,8 @@ class ClientLbEnd2endTest : public ::testing::Test {
   }
 
   bool WaitForChannelState(
-      Channel* channel, std::function<bool(grpc_connectivity_state)> predicate,
+      Channel* channel,
+      const std::function<bool(grpc_connectivity_state)>& predicate,
       bool try_to_connect = false, int timeout_seconds = 5) {
     const gpr_timespec deadline =
         grpc_timeout_seconds_to_deadline(timeout_seconds);
@@ -467,6 +481,7 @@ class ClientLbEnd2endTest : public ::testing::Test {
   std::vector<std::unique_ptr<ServerData>> servers_;
   const TString kRequestMessage_;
   std::shared_ptr<ChannelCredentials> creds_;
+  bool ipv6_only_ = false;
 };
 
 TEST_F(ClientLbEnd2endTest, ChannelStateConnectingWhenResolving) {
@@ -1637,14 +1652,17 @@ TEST_F(ClientLbEnd2endTest, ChannelIdleness) {
   // The initial channel state should be IDLE.
   EXPECT_EQ(channel->GetState(false), GRPC_CHANNEL_IDLE);
   // After sending RPC, channel state should be READY.
+  gpr_log(GPR_INFO, "*** SENDING RPC, CHANNEL SHOULD CONNECT ***");
   response_generator.SetNextResolution(GetServersPorts());
   CheckRpcSendOk(stub, DEBUG_LOCATION);
   EXPECT_EQ(channel->GetState(false), GRPC_CHANNEL_READY);
   // After a period time not using the channel, the channel state should switch
   // to IDLE.
+  gpr_log(GPR_INFO, "*** WAITING FOR CHANNEL TO GO IDLE ***");
   gpr_sleep_until(grpc_timeout_milliseconds_to_deadline(1200));
   EXPECT_EQ(channel->GetState(false), GRPC_CHANNEL_IDLE);
   // Sending a new RPC should awake the IDLE channel.
+  gpr_log(GPR_INFO, "*** SENDING ANOTHER RPC, CHANNEL SHOULD RECONNECT ***");
   response_generator.SetNextResolution(GetServersPorts());
   CheckRpcSendOk(stub, DEBUG_LOCATION);
   EXPECT_EQ(channel->GetState(false), GRPC_CHANNEL_READY);
@@ -1662,7 +1680,7 @@ class ClientLbPickArgsTest : public ClientLbEnd2endTest {
     grpc_core::RegisterTestPickArgsLoadBalancingPolicy(SavePickArgs);
   }
 
-  static void TearDownTestCase() { grpc_shutdown_blocking(); }
+  static void TearDownTestCase() { grpc_shutdown(); }
 
   const std::vector<grpc_core::PickArgsSeen>& args_seen_list() {
     grpc::internal::MutexLock lock(&mu_);
@@ -1728,7 +1746,7 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
         ReportTrailerIntercepted);
   }
 
-  static void TearDownTestCase() { grpc_shutdown_blocking(); }
+  static void TearDownTestCase() { grpc_shutdown(); }
 
   int trailers_intercepted() {
     grpc::internal::MutexLock lock(&mu_);
@@ -1754,7 +1772,8 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
     self->trailers_intercepted_++;
     self->trailing_metadata_ = args_seen.metadata;
     if (backend_metric_data != nullptr) {
-      self->load_report_.reset(new udpa::data::orca::v1::OrcaLoadReport);
+      self->load_report_ =
+          y_absl::make_unique<udpa::data::orca::v1::OrcaLoadReport>();
       self->load_report_->set_cpu_utilization(
           backend_metric_data->cpu_utilization);
       self->load_report_->set_mem_utilization(
@@ -1762,13 +1781,11 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
       self->load_report_->set_rps(backend_metric_data->requests_per_second);
       for (const auto& p : backend_metric_data->request_cost) {
         TString name = TString(p.first);
-        (*self->load_report_->mutable_request_cost())[std::move(name)] =
-            p.second;
+        (*self->load_report_->mutable_request_cost())[name] = p.second;
       }
       for (const auto& p : backend_metric_data->utilization) {
         TString name = TString(p.first);
-        (*self->load_report_->mutable_utilization())[std::move(name)] =
-            p.second;
+        (*self->load_report_->mutable_utilization())[name] = p.second;
       }
     }
   }
@@ -1933,7 +1950,7 @@ class ClientLbAddressTest : public ClientLbEnd2endTest {
     grpc_core::RegisterAddressTestLoadBalancingPolicy(SaveAddress);
   }
 
-  static void TearDownTestCase() { grpc_shutdown_blocking(); }
+  static void TearDownTestCase() { grpc_shutdown(); }
 
   const std::vector<TString>& addresses_seen() {
     grpc::internal::MutexLock lock(&mu_);
@@ -1972,8 +1989,9 @@ TEST_F(ClientLbAddressTest, Basic) {
   // Make sure that the attributes wind up on the subchannels.
   std::vector<TString> expected;
   for (const int port : GetServersPorts()) {
-    expected.emplace_back(y_absl::StrCat(
-        "127.0.0.1:", port, " args={} attributes={", kAttributeKey, "=foo}"));
+    expected.emplace_back(
+        y_absl::StrCat(ipv6_only_ ? "[::1]:" : "127.0.0.1:", port,
+                     " args={} attributes={", kAttributeKey, "=foo}"));
   }
   EXPECT_EQ(addresses_seen(), expected);
 }

@@ -25,8 +25,10 @@
 #include <memory>
 
 #include "y_absl/container/inlined_vector.h"
+#include "y_absl/strings/str_format.h"
 
 #include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/iomgr/resolve_address.h"
 
 namespace grpc_core {
@@ -97,10 +99,6 @@ class ServerAddress {
   TString ToString() const;
 
  private:
-  // Allows the channel to access the attributes without knowing the keys.
-  // (We intentionally do not allow LB policies to do this.)
-  friend class ChannelServerAddressPeer;
-
   grpc_resolved_address address_;
   grpc_channel_args* args_;
   std::map<const char*, std::unique_ptr<AttributeInterface>> attributes_;
@@ -111,6 +109,35 @@ class ServerAddress {
 //
 
 typedef y_absl::InlinedVector<ServerAddress, 1> ServerAddressList;
+
+//
+// ServerAddressWeightAttribute
+//
+class ServerAddressWeightAttribute : public ServerAddress::AttributeInterface {
+ public:
+  static const char* kServerAddressWeightAttributeKey;
+
+  explicit ServerAddressWeightAttribute(uint32_t weight) : weight_(weight) {}
+
+  uint32_t weight() const { return weight_; }
+
+  std::unique_ptr<AttributeInterface> Copy() const override {
+    return y_absl::make_unique<ServerAddressWeightAttribute>(weight_);
+  }
+
+  int Cmp(const AttributeInterface* other) const override {
+    const auto* other_locality_attr =
+        static_cast<const ServerAddressWeightAttribute*>(other);
+    return GPR_ICMP(weight_, other_locality_attr->weight_);
+  }
+
+  TString ToString() const override {
+    return y_absl::StrFormat("%d", weight_);
+  }
+
+ private:
+  uint32_t weight_;
+};
 
 }  // namespace grpc_core
 

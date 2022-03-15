@@ -49,7 +49,7 @@ using ::grpc::experimental::GenericCallbackServerContext;
 using ::grpc::experimental::ServerGenericBidiReactor;
 #endif
 
-void* tag(int i) { return (void*)static_cast<intptr_t>(i); }
+void* tag(int i) { return reinterpret_cast<void*>(i); }
 
 bool VerifyReturnSuccess(CompletionQueue* cq, int i) {
   void* got_tag;
@@ -305,8 +305,8 @@ class HybridEnd2endTest : public ::testing::TestWithParam<bool> {
     bool ignored_ok;
     for (auto it = cqs_.begin(); it != cqs_.end(); ++it) {
       (*it)->Shutdown();
-      while ((*it)->Next(&ignored_tag, &ignored_ok))
-        ;
+      while ((*it)->Next(&ignored_tag, &ignored_ok)) {
+      }
     }
   }
 

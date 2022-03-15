@@ -19,22 +19,23 @@
 
 #include "test/cpp/util/test_credentials_provider.h"
 
-#include <cstdio>
-#include <fstream>
-#include <iostream>
-
-#include <mutex>
-#include <unordered_map>
-
-#include <gflags/gflags.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 #include <grpcpp/security/server_credentials.h>
 
+#include <cstdio>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <unordered_map>
+
+#include "y_absl/flags/flag.h"
 #include "test/core/end2end/data/ssl_test_data.h"
 
-DEFINE_string(tls_cert_file, "", "The TLS cert file used when --use_tls=true");
-DEFINE_string(tls_key_file, "", "The TLS key file used when --use_tls=true");
+Y_ABSL_FLAG(TString, tls_cert_file, "",
+          "The TLS cert file used when --use_tls=true");
+Y_ABSL_FLAG(TString, tls_key_file, "",
+          "The TLS key file used when --use_tls=true");
 
 namespace grpc {
 namespace testing {
@@ -56,11 +57,11 @@ TString ReadFile(const TString& src_path) {
 class DefaultCredentialsProvider : public CredentialsProvider {
  public:
   DefaultCredentialsProvider() {
-    if (!FLAGS_tls_key_file.empty()) {
-      custom_server_key_ = ReadFile(FLAGS_tls_key_file);
+    if (!y_absl::GetFlag(FLAGS_tls_key_file).empty()) {
+      custom_server_key_ = ReadFile(y_absl::GetFlag(FLAGS_tls_key_file));
     }
-    if (!FLAGS_tls_cert_file.empty()) {
-      custom_server_cert_ = ReadFile(FLAGS_tls_cert_file);
+    if (!y_absl::GetFlag(FLAGS_tls_cert_file).empty()) {
+      custom_server_cert_ = ReadFile(y_absl::GetFlag(FLAGS_tls_cert_file));
     }
   }
   ~DefaultCredentialsProvider() override {}

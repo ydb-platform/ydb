@@ -29,8 +29,8 @@ class CliCredentials {
  public:
   virtual ~CliCredentials() {}
   std::shared_ptr<grpc::ChannelCredentials> GetCredentials() const;
-  virtual const TString GetCredentialUsage() const;
-  virtual const TString GetSslTargetNameOverride() const;
+  virtual TString GetCredentialUsage() const;
+  virtual TString GetSslTargetNameOverride() const;
 
  protected:
   // Returns the appropriate channel_creds_type value for the set of legacy

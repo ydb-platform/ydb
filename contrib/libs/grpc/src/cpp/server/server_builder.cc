@@ -83,9 +83,9 @@ ServerBuilder& ServerBuilder::RegisterService(Service* service) {
   return *this;
 }
 
-ServerBuilder& ServerBuilder::RegisterService(const TString& addr,
+ServerBuilder& ServerBuilder::RegisterService(const TString& host,
                                               Service* service) {
-  services_.emplace_back(new NamedService(addr, service));
+  services_.emplace_back(new NamedService(host, service));
   return *this;
 }
 
@@ -95,7 +95,7 @@ ServerBuilder& ServerBuilder::RegisterAsyncGenericService(
     gpr_log(GPR_ERROR,
             "Adding multiple generic services is unsupported for now. "
             "Dropping the service %p",
-            (void*)service);
+            service);
   } else {
     generic_service_ = service;
   }
@@ -122,13 +122,19 @@ ServerBuilder& ServerBuilder::experimental_type::RegisterCallbackGenericService(
     gpr_log(GPR_ERROR,
             "Adding multiple generic services is unsupported for now. "
             "Dropping the service %p",
-            (void*)service);
+            service);
   } else {
     builder_->callback_generic_service_ = service;
   }
   return *builder_;
 }
 #endif
+
+ServerBuilder& ServerBuilder::experimental_type::SetContextAllocator(
+    std::unique_ptr<grpc::ContextAllocator> context_allocator) {
+  builder_->context_allocator_ = std::move(context_allocator);
+  return *builder_;
+}
 
 std::unique_ptr<grpc::experimental::ExternalConnectionAcceptor>
 ServerBuilder::experimental_type::AddExternalConnectionAcceptor(
@@ -331,7 +337,7 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
   std::unique_ptr<grpc::Server> server(new grpc::Server(
       &args, sync_server_cqs, sync_server_settings_.min_pollers,
       sync_server_settings_.max_pollers, sync_server_settings_.cq_timeout_msec,
-      std::move(acceptors_), resource_quota_,
+      std::move(acceptors_), server_config_fetcher_, resource_quota_,
       std::move(interceptor_creators_)));
 
   ServerInitializer* initializer = server->initializer();
@@ -368,6 +374,13 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
             "At least one of the completion queues must be frequently polled");
     return nullptr;
   }
+
+#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+  server->RegisterContextAllocator(std::move(context_allocator_));
+#else
+  server->experimental_registration()->RegisterContextAllocator(
+      std::move(context_allocator_));
+#endif
 
   for (const auto& value : services_) {
     if (!server->RegisterService(value->host.get(), value->service)) {

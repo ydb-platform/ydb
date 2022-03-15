@@ -34,6 +34,8 @@
 #include <grpcpp/support/config.h>
 #include <grpcpp/support/slice.h>
 
+#include "y_absl/memory/memory.h"
+
 #include "src/cpp/common/channel_filter.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/util/port.h"
@@ -44,13 +46,12 @@
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
-using std::chrono::system_clock;
 
 namespace grpc {
 namespace testing {
 namespace {
 
-void* tag(int i) { return (void*)static_cast<intptr_t>(i); }
+void* tag(int i) { return reinterpret_cast<void*>(i); }
 
 void verify_ok(CompletionQueue* cq, int i, bool expect_ok) {
   bool ok;
@@ -101,7 +102,7 @@ int GetCallCounterValue() {
 class ChannelDataImpl : public ChannelData {
  public:
   grpc_error* Init(grpc_channel_element* /*elem*/,
-                   grpc_channel_element_args* /*args*/) {
+                   grpc_channel_element_args* /*args*/) override {
     IncrementConnectionCounter();
     return GRPC_ERROR_NONE;
   }
@@ -151,16 +152,16 @@ class FilterEnd2endTest : public ::testing::Test {
     bool ignored_ok;
     cli_cq_.Shutdown();
     srv_cq_->Shutdown();
-    while (cli_cq_.Next(&ignored_tag, &ignored_ok))
-      ;
-    while (srv_cq_->Next(&ignored_tag, &ignored_ok))
-      ;
+    while (cli_cq_.Next(&ignored_tag, &ignored_ok)) {
+    }
+    while (srv_cq_->Next(&ignored_tag, &ignored_ok)) {
+    }
   }
 
   void ResetStub() {
     std::shared_ptr<Channel> channel = grpc::CreateChannel(
         server_address_.str(), InsecureChannelCredentials());
-    generic_stub_.reset(new GenericStub(channel));
+    generic_stub_ = y_absl::make_unique<GenericStub>(channel);
     ResetConnectionCounter();
     ResetCallCounter();
   }

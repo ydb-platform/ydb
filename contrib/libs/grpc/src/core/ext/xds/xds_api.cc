@@ -28,7 +28,61 @@
 #include "y_absl/strings/str_format.h"
 #include "y_absl/strings/str_join.h"
 #include "y_absl/strings/str_split.h"
-
+#include "envoy/admin/v3/config_dump.upb.h"
+#include "envoy/config/cluster/v3/circuit_breaker.upb.h"
+#include "envoy/config/cluster/v3/cluster.upb.h"
+#include "envoy/config/cluster/v3/cluster.upbdefs.h"
+#include "envoy/config/core/v3/address.upb.h"
+#include "envoy/config/core/v3/base.upb.h"
+#include "envoy/config/core/v3/base.upbdefs.h"
+#include "envoy/config/core/v3/config_source.upb.h"
+#include "envoy/config/core/v3/health_check.upb.h"
+#include "envoy/config/core/v3/protocol.upb.h"
+#include "envoy/config/endpoint/v3/endpoint.upb.h"
+#include "envoy/config/endpoint/v3/endpoint.upbdefs.h"
+#include "envoy/config/endpoint/v3/endpoint_components.upb.h"
+#include "envoy/config/endpoint/v3/load_report.upb.h"
+#include "envoy/config/listener/v3/api_listener.upb.h"
+#include "envoy/config/listener/v3/listener.upb.h"
+#include "envoy/config/listener/v3/listener.upbdefs.h"
+#include "envoy/config/listener/v3/listener_components.upb.h"
+#include "envoy/config/route/v3/route.upb.h"
+#include "envoy/config/route/v3/route.upbdefs.h"
+#include "envoy/config/route/v3/route_components.upb.h"
+#include "envoy/config/route/v3/route_components.upbdefs.h"
+#include "envoy/extensions/clusters/aggregate/v3/cluster.upb.h"
+#include "envoy/extensions/clusters/aggregate/v3/cluster.upbdefs.h"
+#include "envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upb.h"
+#include "envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upbdefs.h"
+#include "envoy/extensions/transport_sockets/tls/v3/common.upb.h"
+#include "envoy/extensions/transport_sockets/tls/v3/tls.upb.h"
+#include "envoy/extensions/transport_sockets/tls/v3/tls.upbdefs.h"
+#include "envoy/service/cluster/v3/cds.upb.h"
+#include "envoy/service/cluster/v3/cds.upbdefs.h"
+#include "envoy/service/discovery/v3/discovery.upb.h"
+#include "envoy/service/discovery/v3/discovery.upbdefs.h"
+#include "envoy/service/endpoint/v3/eds.upb.h"
+#include "envoy/service/endpoint/v3/eds.upbdefs.h"
+#include "envoy/service/listener/v3/lds.upb.h"
+#include "envoy/service/load_stats/v3/lrs.upb.h"
+#include "envoy/service/load_stats/v3/lrs.upbdefs.h"
+#include "envoy/service/route/v3/rds.upb.h"
+#include "envoy/service/route/v3/rds.upbdefs.h"
+#include "envoy/service/status/v3/csds.upb.h"
+#include "envoy/service/status/v3/csds.upbdefs.h"
+#include "envoy/type/matcher/v3/regex.upb.h"
+#include "envoy/type/matcher/v3/string.upb.h"
+#include "envoy/type/v3/percent.upb.h"
+#include "envoy/type/v3/range.upb.h"
+#include "google/protobuf/any.upb.h"
+#include "google/protobuf/duration.upb.h"
+#include "google/protobuf/struct.upb.h"
+#include "google/protobuf/timestamp.upb.h"
+#include "google/protobuf/wrappers.upb.h"
+#include "google/rpc/status.upb.h"
+#include "udpa/type/v1/typed_struct.upb.h"
+#include "upb/text_encode.h"
+#include "upb/upb.h"
 #include "upb/upb.hpp"
 
 #include <grpc/impl/codegen/log.h>
@@ -39,190 +93,125 @@
 #include "src/core/lib/gpr/env.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/iomgr/error.h"
+#include "src/core/lib/iomgr/sockaddr.h"
 #include "src/core/lib/iomgr/sockaddr_utils.h"
-
-#include "envoy/config/cluster/v3/circuit_breaker.upb.h"
-#include "envoy/config/cluster/v3/cluster.upb.h"
-#include "envoy/config/core/v3/address.upb.h"
-#include "envoy/config/core/v3/base.upb.h"
-#include "envoy/config/core/v3/config_source.upb.h"
-#include "envoy/config/core/v3/health_check.upb.h"
-#include "envoy/config/endpoint/v3/endpoint.upb.h"
-#include "envoy/config/endpoint/v3/endpoint_components.upb.h"
-#include "envoy/config/endpoint/v3/load_report.upb.h"
-#include "envoy/config/listener/v3/api_listener.upb.h"
-#include "envoy/config/listener/v3/listener.upb.h"
-#include "envoy/config/route/v3/route.upb.h"
-#include "envoy/config/route/v3/route_components.upb.h"
-#include "envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.upb.h"
-#include "envoy/extensions/transport_sockets/tls/v3/common.upb.h"
-#include "envoy/extensions/transport_sockets/tls/v3/tls.upb.h"
-#include "envoy/service/cluster/v3/cds.upb.h"
-#include "envoy/service/discovery/v3/discovery.upb.h"
-#include "envoy/service/endpoint/v3/eds.upb.h"
-#include "envoy/service/listener/v3/lds.upb.h"
-#include "envoy/service/load_stats/v3/lrs.upb.h"
-#include "envoy/service/route/v3/rds.upb.h"
-#include "envoy/type/matcher/v3/regex.upb.h"
-#include "envoy/type/matcher/v3/string.upb.h"
-#include "envoy/type/v3/percent.upb.h"
-#include "envoy/type/v3/range.upb.h"
-#include "google/protobuf/any.upb.h"
-#include "google/protobuf/duration.upb.h"
-#include "google/protobuf/struct.upb.h"
-#include "google/protobuf/wrappers.upb.h"
-#include "google/rpc/status.upb.h"
-#include "upb/upb.h"
+#include "src/core/lib/iomgr/socket_utils.h"
+#include "src/core/lib/slice/slice_utils.h"
 
 namespace grpc_core {
 
+// TODO(donnadionne): Check to see if cluster types aggregate_cluster and
+// logical_dns are enabled, this will be
+// removed once the cluster types are fully integration-tested and enabled by
+// default.
+bool XdsAggregateAndLogicalDnsClusterEnabled() {
+  char* value = gpr_getenv(
+      "GRPC_XDS_EXPERIMENTAL_ENABLE_AGGREGATE_AND_LOGICAL_DNS_CLUSTER");
+  bool parsed_value;
+  bool parse_succeeded = gpr_parse_bool_value(value, &parsed_value);
+  gpr_free(value);
+  return parse_succeeded && parsed_value;
+}
+
+// TODO(donnadionne): Check to see if ring hash policy is enabled, this will be
+// removed once ring hash policy is fully integration-tested and enabled by
+// default.
+bool XdsRingHashEnabled() {
+  char* value = gpr_getenv("GRPC_XDS_EXPERIMENTAL_ENABLE_RING_HASH");
+  bool parsed_value;
+  bool parse_succeeded = gpr_parse_bool_value(value, &parsed_value);
+  gpr_free(value);
+  return parse_succeeded && parsed_value;
+}
+
+// TODO(yashykt): Check to see if xDS security is enabled. This will be
+// removed once this feature is fully integration-tested and enabled by
+// default.
+bool XdsSecurityEnabled() {
+  char* value = gpr_getenv("GRPC_XDS_EXPERIMENTAL_SECURITY_SUPPORT");
+  bool parsed_value;
+  bool parse_succeeded = gpr_parse_bool_value(value, &parsed_value);
+  gpr_free(value);
+  return parse_succeeded && parsed_value;
+}
+
 //
-// XdsApi::Route::Matchers::PathMatcher
+// XdsApi::Route::HashPolicy
 //
 
-XdsApi::Route::Matchers::PathMatcher::PathMatcher(const PathMatcher& other)
-    : type(other.type) {
-  if (type == PathMatcherType::REGEX) {
-    regex_matcher = y_absl::make_unique<RE2>(other.regex_matcher->pattern());
-  } else {
-    string_matcher = other.string_matcher;
+XdsApi::Route::HashPolicy::HashPolicy(const HashPolicy& other)
+    : type(other.type),
+      header_name(other.header_name),
+      regex_substitution(other.regex_substitution) {
+  if (other.regex != nullptr) {
+    regex =
+        y_absl::make_unique<RE2>(other.regex->pattern(), other.regex->options());
   }
 }
 
-XdsApi::Route::Matchers::PathMatcher& XdsApi::Route::Matchers::PathMatcher::
-operator=(const PathMatcher& other) {
+XdsApi::Route::HashPolicy& XdsApi::Route::HashPolicy::operator=(
+    const HashPolicy& other) {
   type = other.type;
-  if (type == PathMatcherType::REGEX) {
-    regex_matcher = y_absl::make_unique<RE2>(other.regex_matcher->pattern());
-  } else {
-    string_matcher = other.string_matcher;
+  header_name = other.header_name;
+  if (other.regex != nullptr) {
+    regex =
+        y_absl::make_unique<RE2>(other.regex->pattern(), other.regex->options());
   }
+  regex_substitution = other.regex_substitution;
   return *this;
 }
 
-bool XdsApi::Route::Matchers::PathMatcher::operator==(
-    const PathMatcher& other) const {
+XdsApi::Route::HashPolicy::HashPolicy(HashPolicy&& other) noexcept
+    : type(other.type),
+      header_name(std::move(other.header_name)),
+      regex(std::move(other.regex)),
+      regex_substitution(std::move(other.regex_substitution)) {}
+
+XdsApi::Route::HashPolicy& XdsApi::Route::HashPolicy::operator=(
+    HashPolicy&& other) noexcept {
+  type = other.type;
+  header_name = std::move(other.header_name);
+  regex = std::move(other.regex);
+  regex_substitution = std::move(other.regex_substitution);
+  return *this;
+}
+
+bool XdsApi::Route::HashPolicy::HashPolicy::operator==(
+    const HashPolicy& other) const {
   if (type != other.type) return false;
-  if (type == PathMatcherType::REGEX) {
-    // Should never be null.
-    if (regex_matcher == nullptr || other.regex_matcher == nullptr) {
-      return false;
+  if (type == Type::HEADER) {
+    if (regex == nullptr) {
+      if (other.regex != nullptr) return false;
+    } else {
+      if (other.regex == nullptr) return false;
+      return header_name == other.header_name &&
+             regex->pattern() == other.regex->pattern() &&
+             regex_substitution == other.regex_substitution;
     }
-    return regex_matcher->pattern() == other.regex_matcher->pattern();
   }
-  return string_matcher == other.string_matcher;
+  return true;
 }
 
-TString XdsApi::Route::Matchers::PathMatcher::ToString() const {
-  TString path_type_string;
+TString XdsApi::Route::HashPolicy::ToString() const {
+  std::vector<TString> contents;
   switch (type) {
-    case PathMatcherType::PATH:
-      path_type_string = "path match";
+    case Type::HEADER:
+      contents.push_back("type=HEADER");
       break;
-    case PathMatcherType::PREFIX:
-      path_type_string = "prefix match";
-      break;
-    case PathMatcherType::REGEX:
-      path_type_string = "regex match";
-      break;
-    default:
+    case Type::CHANNEL_ID:
+      contents.push_back("type=CHANNEL_ID");
       break;
   }
-  return y_absl::StrFormat("Path %s:%s", path_type_string,
-                         type == PathMatcherType::REGEX
-                             ? regex_matcher->pattern()
-                             : string_matcher);
-}
-
-//
-// XdsApi::Route::Matchers::HeaderMatcher
-//
-
-XdsApi::Route::Matchers::HeaderMatcher::HeaderMatcher(
-    const HeaderMatcher& other)
-    : name(other.name), type(other.type), invert_match(other.invert_match) {
-  switch (type) {
-    case HeaderMatcherType::REGEX:
-      regex_match = y_absl::make_unique<RE2>(other.regex_match->pattern());
-      break;
-    case HeaderMatcherType::RANGE:
-      range_start = other.range_start;
-      range_end = other.range_end;
-      break;
-    case HeaderMatcherType::PRESENT:
-      present_match = other.present_match;
-      break;
-    default:
-      string_matcher = other.string_matcher;
+  contents.push_back(
+      y_absl::StrFormat("terminal=%s", terminal ? "true" : "false"));
+  if (type == Type::HEADER) {
+    contents.push_back(y_absl::StrFormat(
+        "Header %s:/%s/%s", header_name,
+        (regex == nullptr) ? "" : regex->pattern(), regex_substitution));
   }
-}
-
-XdsApi::Route::Matchers::HeaderMatcher& XdsApi::Route::Matchers::HeaderMatcher::
-operator=(const HeaderMatcher& other) {
-  name = other.name;
-  type = other.type;
-  invert_match = other.invert_match;
-  switch (type) {
-    case HeaderMatcherType::REGEX:
-      regex_match = y_absl::make_unique<RE2>(other.regex_match->pattern());
-      break;
-    case HeaderMatcherType::RANGE:
-      range_start = other.range_start;
-      range_end = other.range_end;
-      break;
-    case HeaderMatcherType::PRESENT:
-      present_match = other.present_match;
-      break;
-    default:
-      string_matcher = other.string_matcher;
-  }
-  return *this;
-}
-
-bool XdsApi::Route::Matchers::HeaderMatcher::operator==(
-    const HeaderMatcher& other) const {
-  if (name != other.name) return false;
-  if (type != other.type) return false;
-  if (invert_match != other.invert_match) return false;
-  switch (type) {
-    case HeaderMatcherType::REGEX:
-      return regex_match->pattern() != other.regex_match->pattern();
-    case HeaderMatcherType::RANGE:
-      return range_start != other.range_start && range_end != other.range_end;
-    case HeaderMatcherType::PRESENT:
-      return present_match != other.present_match;
-    default:
-      return string_matcher != other.string_matcher;
-  }
-}
-
-TString XdsApi::Route::Matchers::HeaderMatcher::ToString() const {
-  switch (type) {
-    case HeaderMatcherType::EXACT:
-      return y_absl::StrFormat("Header exact match:%s %s:%s",
-                             invert_match ? " not" : "", name, string_matcher);
-    case HeaderMatcherType::REGEX:
-      return y_absl::StrFormat("Header regex match:%s %s:%s",
-                             invert_match ? " not" : "", name,
-                             regex_match->pattern());
-    case HeaderMatcherType::RANGE:
-      return y_absl::StrFormat("Header range match:%s %s:[%d, %d)",
-                             invert_match ? " not" : "", name, range_start,
-                             range_end);
-    case HeaderMatcherType::PRESENT:
-      return y_absl::StrFormat("Header present match:%s %s:%s",
-                             invert_match ? " not" : "", name,
-                             present_match ? "true" : "false");
-    case HeaderMatcherType::PREFIX:
-      return y_absl::StrFormat("Header prefix match:%s %s:%s",
-                             invert_match ? " not" : "", name, string_matcher);
-    case HeaderMatcherType::SUFFIX:
-      return y_absl::StrFormat("Header suffix match:%s %s:%s",
-                             invert_match ? " not" : "", name, string_matcher);
-    default:
-      return "";
-  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
 }
 
 //
@@ -231,7 +220,8 @@ TString XdsApi::Route::Matchers::HeaderMatcher::ToString() const {
 
 TString XdsApi::Route::Matchers::ToString() const {
   std::vector<TString> contents;
-  contents.push_back(path_matcher.ToString());
+  contents.push_back(
+      y_absl::StrFormat("PathMatcher{%s}", path_matcher.ToString()));
   for (const HeaderMatcher& header_matcher : header_matchers) {
     contents.push_back(header_matcher.ToString());
   }
@@ -243,17 +233,45 @@ TString XdsApi::Route::Matchers::ToString() const {
 }
 
 TString XdsApi::Route::ClusterWeight::ToString() const {
-  return y_absl::StrFormat("{cluster=%s, weight=%d}", name, weight);
+  std::vector<TString> contents;
+  contents.push_back(y_absl::StrCat("cluster=", name));
+  contents.push_back(y_absl::StrCat("weight=", weight));
+  if (!typed_per_filter_config.empty()) {
+    std::vector<TString> parts;
+    for (const auto& p : typed_per_filter_config) {
+      const TString& key = p.first;
+      const auto& config = p.second;
+      parts.push_back(y_absl::StrCat(key, "=", config.ToString()));
+    }
+    contents.push_back(y_absl::StrCat("typed_per_filter_config={",
+                                    y_absl::StrJoin(parts, ", "), "}"));
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
 }
 
 TString XdsApi::Route::ToString() const {
   std::vector<TString> contents;
   contents.push_back(matchers.ToString());
+  for (const HashPolicy& hash_policy : hash_policies) {
+    contents.push_back(y_absl::StrCat("hash_policy=", hash_policy.ToString()));
+  }
   if (!cluster_name.empty()) {
     contents.push_back(y_absl::StrFormat("Cluster name: %s", cluster_name));
   }
   for (const ClusterWeight& cluster_weight : weighted_clusters) {
     contents.push_back(cluster_weight.ToString());
+  }
+  if (max_stream_duration.has_value()) {
+    contents.push_back(max_stream_duration->ToString());
+  }
+  if (!typed_per_filter_config.empty()) {
+    contents.push_back("typed_per_filter_config={");
+    for (const auto& p : typed_per_filter_config) {
+      const TString& name = p.first;
+      const auto& config = p.second;
+      contents.push_back(y_absl::StrCat("  ", name, "=", config.ToString()));
+    }
+    contents.push_back("}");
   }
   return y_absl::StrJoin(contents, "\n");
 }
@@ -277,6 +295,14 @@ TString XdsApi::RdsUpdate::ToString() const {
       vhosts.push_back("\n    }\n");
     }
     vhosts.push_back("  ]\n");
+    vhosts.push_back("  typed_per_filter_config={\n");
+    for (const auto& p : vhost.typed_per_filter_config) {
+      const TString& name = p.first;
+      const auto& config = p.second;
+      vhosts.push_back(
+          y_absl::StrCat("    ", name, "=", config.ToString(), "\n"));
+    }
+    vhosts.push_back("  }\n");
     vhosts.push_back("]\n");
   }
   return y_absl::StrJoin(vhosts, "");
@@ -294,9 +320,11 @@ enum MatchType {
 };
 
 // Returns true if match succeeds.
-bool DomainMatch(MatchType match_type, TString domain_pattern,
-                 TString expected_host_name) {
+bool DomainMatch(MatchType match_type, const TString& domain_pattern_in,
+                 const TString& expected_host_name_in) {
   // Normalize the args to lower-case. Domain matching is case-insensitive.
+  TString domain_pattern = domain_pattern_in;
+  TString expected_host_name = expected_host_name_in;
   std::transform(domain_pattern.cbegin(), domain_pattern.cend(),
                  domain_pattern.begin(),
                  [](unsigned char c) { return std::tolower(c); });
@@ -379,41 +407,312 @@ XdsApi::RdsUpdate::VirtualHost* XdsApi::RdsUpdate::FindVirtualHostForDomain(
 }
 
 //
-// XdsApi::StringMatcher
+// XdsApi::CommonTlsContext::CertificateValidationContext
 //
 
-XdsApi::StringMatcher::StringMatcher(const StringMatcher& other)
-    : type(other.type) {
-  switch (type) {
-    case StringMatcherType::SAFE_REGEX:
-      regex_match = y_absl::make_unique<RE2>(other.regex_match->pattern());
-      break;
-    default:
-      string_matcher = other.string_matcher;
+TString XdsApi::CommonTlsContext::CertificateValidationContext::ToString()
+    const {
+  std::vector<TString> contents;
+  for (const auto& match : match_subject_alt_names) {
+    contents.push_back(match.ToString());
   }
+  return y_absl::StrFormat("{match_subject_alt_names=[%s]}",
+                         y_absl::StrJoin(contents, ", "));
 }
 
-XdsApi::StringMatcher& XdsApi::StringMatcher::operator=(
-    const StringMatcher& other) {
-  type = other.type;
-  switch (type) {
-    case StringMatcherType::SAFE_REGEX:
-      regex_match = y_absl::make_unique<RE2>(other.regex_match->pattern());
-      break;
-    default:
-      string_matcher = other.string_matcher;
-  }
-  return *this;
+bool XdsApi::CommonTlsContext::CertificateValidationContext::Empty() const {
+  return match_subject_alt_names.empty();
 }
 
-bool XdsApi::StringMatcher::operator==(const StringMatcher& other) const {
-  if (type != other.type) return false;
-  switch (type) {
-    case StringMatcherType::SAFE_REGEX:
-      return regex_match->pattern() != other.regex_match->pattern();
-    default:
-      return string_matcher != other.string_matcher;
+//
+// XdsApi::CommonTlsContext::CertificateValidationContext
+//
+
+TString XdsApi::CommonTlsContext::CertificateProviderInstance::ToString()
+    const {
+  y_absl::InlinedVector<TString, 2> contents;
+  if (!instance_name.empty()) {
+    contents.push_back(y_absl::StrFormat("instance_name=%s", instance_name));
   }
+  if (!certificate_name.empty()) {
+    contents.push_back(
+        y_absl::StrFormat("certificate_name=%s", certificate_name));
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
+}
+
+bool XdsApi::CommonTlsContext::CertificateProviderInstance::Empty() const {
+  return instance_name.empty() && certificate_name.empty();
+}
+
+//
+// XdsApi::CommonTlsContext::CombinedCertificateValidationContext
+//
+
+TString
+XdsApi::CommonTlsContext::CombinedCertificateValidationContext::ToString()
+    const {
+  y_absl::InlinedVector<TString, 2> contents;
+  if (!default_validation_context.Empty()) {
+    contents.push_back(y_absl::StrFormat("default_validation_context=%s",
+                                       default_validation_context.ToString()));
+  }
+  if (!validation_context_certificate_provider_instance.Empty()) {
+    contents.push_back(y_absl::StrFormat(
+        "validation_context_certificate_provider_instance=%s",
+        validation_context_certificate_provider_instance.ToString()));
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
+}
+
+bool XdsApi::CommonTlsContext::CombinedCertificateValidationContext::Empty()
+    const {
+  return default_validation_context.Empty() &&
+         validation_context_certificate_provider_instance.Empty();
+}
+
+//
+// XdsApi::CommonTlsContext
+//
+
+TString XdsApi::CommonTlsContext::ToString() const {
+  y_absl::InlinedVector<TString, 2> contents;
+  if (!tls_certificate_certificate_provider_instance.Empty()) {
+    contents.push_back(y_absl::StrFormat(
+        "tls_certificate_certificate_provider_instance=%s",
+        tls_certificate_certificate_provider_instance.ToString()));
+  }
+  if (!combined_validation_context.Empty()) {
+    contents.push_back(y_absl::StrFormat("combined_validation_context=%s",
+                                       combined_validation_context.ToString()));
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
+}
+
+bool XdsApi::CommonTlsContext::Empty() const {
+  return tls_certificate_certificate_provider_instance.Empty() &&
+         combined_validation_context.Empty();
+}
+
+//
+// XdsApi::DownstreamTlsContext
+//
+
+TString XdsApi::DownstreamTlsContext::ToString() const {
+  return y_absl::StrFormat("common_tls_context=%s, require_client_certificate=%s",
+                         common_tls_context.ToString(),
+                         require_client_certificate ? "true" : "false");
+}
+
+bool XdsApi::DownstreamTlsContext::Empty() const {
+  return common_tls_context.Empty();
+}
+
+//
+// XdsApi::LdsUpdate::HttpConnectionManager
+//
+
+TString XdsApi::LdsUpdate::HttpConnectionManager::ToString() const {
+  y_absl::InlinedVector<TString, 4> contents;
+  contents.push_back(y_absl::StrFormat(
+      "route_config_name=%s",
+      !route_config_name.empty() ? route_config_name.c_str() : "<inlined>"));
+  contents.push_back(y_absl::StrFormat("http_max_stream_duration=%s",
+                                     http_max_stream_duration.ToString()));
+  if (rds_update.has_value()) {
+    contents.push_back(
+        y_absl::StrFormat("rds_update=%s", rds_update->ToString()));
+  }
+  if (!http_filters.empty()) {
+    std::vector<TString> filter_strings;
+    for (const auto& http_filter : http_filters) {
+      filter_strings.push_back(http_filter.ToString());
+    }
+    contents.push_back(y_absl::StrCat("http_filters=[",
+                                    y_absl::StrJoin(filter_strings, ", "), "]"));
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
+}
+
+//
+// XdsApi::LdsUpdate::HttpFilter
+//
+
+TString XdsApi::LdsUpdate::HttpConnectionManager::HttpFilter::ToString()
+    const {
+  return y_absl::StrCat("{name=", name, ", config=", config.ToString(), "}");
+}
+
+//
+// XdsApi::LdsUpdate::FilterChainData
+//
+
+TString XdsApi::LdsUpdate::FilterChainData::ToString() const {
+  return y_absl::StrCat(
+      "{downstream_tls_context=", downstream_tls_context.ToString(),
+      " http_connection_manager=", http_connection_manager.ToString(), "}");
+}
+
+//
+// XdsApi::LdsUpdate::FilterChainMap::CidrRange
+//
+
+TString XdsApi::LdsUpdate::FilterChainMap::CidrRange::ToString() const {
+  return y_absl::StrCat(
+      "{address_prefix=", grpc_sockaddr_to_string(&address, false),
+      ", prefix_len=", prefix_len, "}");
+}
+
+//
+// FilterChain
+//
+
+struct FilterChain {
+  struct FilterChainMatch {
+    uint32_t destination_port = 0;
+    std::vector<XdsApi::LdsUpdate::FilterChainMap::CidrRange> prefix_ranges;
+    XdsApi::LdsUpdate::FilterChainMap::ConnectionSourceType source_type =
+        XdsApi::LdsUpdate::FilterChainMap::ConnectionSourceType::kAny;
+    std::vector<XdsApi::LdsUpdate::FilterChainMap::CidrRange>
+        source_prefix_ranges;
+    std::vector<uint32_t> source_ports;
+    std::vector<TString> server_names;
+    TString transport_protocol;
+    std::vector<TString> application_protocols;
+
+    TString ToString() const;
+  } filter_chain_match;
+
+  std::shared_ptr<XdsApi::LdsUpdate::FilterChainData> filter_chain_data;
+};
+
+TString FilterChain::FilterChainMatch::ToString() const {
+  y_absl::InlinedVector<TString, 8> contents;
+  if (destination_port != 0) {
+    contents.push_back(y_absl::StrCat("destination_port=", destination_port));
+  }
+  if (!prefix_ranges.empty()) {
+    std::vector<TString> prefix_ranges_content;
+    for (const auto& range : prefix_ranges) {
+      prefix_ranges_content.push_back(range.ToString());
+    }
+    contents.push_back(y_absl::StrCat(
+        "prefix_ranges={", y_absl::StrJoin(prefix_ranges_content, ", "), "}"));
+  }
+  if (source_type == XdsApi::LdsUpdate::FilterChainMap::ConnectionSourceType::
+                         kSameIpOrLoopback) {
+    contents.push_back("source_type=SAME_IP_OR_LOOPBACK");
+  } else if (source_type == XdsApi::LdsUpdate::FilterChainMap::
+                                ConnectionSourceType::kExternal) {
+    contents.push_back("source_type=EXTERNAL");
+  }
+  if (!source_prefix_ranges.empty()) {
+    std::vector<TString> source_prefix_ranges_content;
+    for (const auto& range : source_prefix_ranges) {
+      source_prefix_ranges_content.push_back(range.ToString());
+    }
+    contents.push_back(
+        y_absl::StrCat("source_prefix_ranges={",
+                     y_absl::StrJoin(source_prefix_ranges_content, ", "), "}"));
+  }
+  if (!source_ports.empty()) {
+    contents.push_back(
+        y_absl::StrCat("source_ports={", y_absl::StrJoin(source_ports, ", "), "}"));
+  }
+  if (!server_names.empty()) {
+    contents.push_back(
+        y_absl::StrCat("server_names={", y_absl::StrJoin(server_names, ", "), "}"));
+  }
+  if (!transport_protocol.empty()) {
+    contents.push_back(y_absl::StrCat("transport_protocol=", transport_protocol));
+  }
+  if (!application_protocols.empty()) {
+    contents.push_back(y_absl::StrCat("application_protocols={",
+                                    y_absl::StrJoin(application_protocols, ", "),
+                                    "}"));
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
+}
+
+//
+// XdsApi::LdsUpdate::FilterChainMap
+//
+
+TString XdsApi::LdsUpdate::FilterChainMap::ToString() const {
+  std::vector<TString> contents;
+  for (const auto& destination_ip : destination_ip_vector) {
+    for (int source_type = 0; source_type < 3; ++source_type) {
+      for (const auto& source_ip :
+           destination_ip.source_types_array[source_type]) {
+        for (const auto& source_port_pair : source_ip.ports_map) {
+          FilterChain::FilterChainMatch filter_chain_match;
+          if (destination_ip.prefix_range.has_value()) {
+            filter_chain_match.prefix_ranges.push_back(
+                *destination_ip.prefix_range);
+          }
+          filter_chain_match.source_type = static_cast<
+              XdsApi::LdsUpdate::FilterChainMap::ConnectionSourceType>(
+              source_type);
+          if (source_ip.prefix_range.has_value()) {
+            filter_chain_match.source_prefix_ranges.push_back(
+                *source_ip.prefix_range);
+          }
+          if (source_port_pair.first != 0) {
+            filter_chain_match.source_ports.push_back(source_port_pair.first);
+          }
+          contents.push_back(y_absl::StrCat(
+              "{filter_chain_match=", filter_chain_match.ToString(),
+              ", filter_chain=", source_port_pair.second.data->ToString(),
+              "}"));
+        }
+      }
+    }
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
+}
+
+//
+// XdsApi::LdsUpdate
+//
+
+TString XdsApi::LdsUpdate::ToString() const {
+  y_absl::InlinedVector<TString, 4> contents;
+  if (type == ListenerType::kTcpListener) {
+    contents.push_back(y_absl::StrCat("address=", address));
+    contents.push_back(
+        y_absl::StrCat("filter_chain_map=", filter_chain_map.ToString()));
+    if (default_filter_chain.has_value()) {
+      contents.push_back(y_absl::StrCat("default_filter_chain=",
+                                      default_filter_chain->ToString()));
+    }
+  } else if (type == ListenerType::kHttpApiListener) {
+    contents.push_back(y_absl::StrFormat("http_connection_manager=%s",
+                                       http_connection_manager.ToString()));
+  }
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
+}
+
+//
+// XdsApi::CdsUpdate
+//
+
+TString XdsApi::CdsUpdate::ToString() const {
+  y_absl::InlinedVector<TString, 4> contents;
+  if (!eds_service_name.empty()) {
+    contents.push_back(
+        y_absl::StrFormat("eds_service_name=%s", eds_service_name));
+  }
+  if (!common_tls_context.Empty()) {
+    contents.push_back(y_absl::StrFormat("common_tls_context=%s",
+                                       common_tls_context.ToString()));
+  }
+  if (lrs_load_reporting_server_name.has_value()) {
+    contents.push_back(y_absl::StrFormat("lrs_load_reporting_server_name=%s",
+                                       lrs_load_reporting_server_name.value()));
+  }
+  contents.push_back(
+      y_absl::StrFormat("max_concurrent_requests=%d", max_concurrent_requests));
+  return y_absl::StrCat("{", y_absl::StrJoin(contents, ", "), "}");
 }
 
 //
@@ -508,8 +807,13 @@ const char* kCdsV2TypeUrl = "type.googleapis.com/envoy.api.v2.Cluster";
 const char* kEdsV2TypeUrl =
     "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
-bool IsLds(y_absl::string_view type_url) {
-  return type_url == XdsApi::kLdsTypeUrl || type_url == kLdsV2TypeUrl;
+bool IsLds(y_absl::string_view type_url, bool* is_v2 = nullptr) {
+  if (type_url == XdsApi::kLdsTypeUrl) return true;
+  if (type_url == kLdsV2TypeUrl) {
+    if (is_v2 != nullptr) *is_v2 = true;
+    return true;
+  }
+  return false;
 }
 
 bool IsRds(y_absl::string_view type_url) {
@@ -527,16 +831,40 @@ bool IsEds(y_absl::string_view type_url) {
 }  // namespace
 
 XdsApi::XdsApi(XdsClient* client, TraceFlag* tracer,
-               const XdsBootstrap* bootstrap)
+               const XdsBootstrap::Node* node)
     : client_(client),
       tracer_(tracer),
-      use_v3_(bootstrap != nullptr && bootstrap->server().ShouldUseV3()),
-      bootstrap_(bootstrap),
+      node_(node),
       build_version_(y_absl::StrCat("gRPC C-core ", GPR_PLATFORM_STRING, " ",
                                   grpc_version_string())),
-      user_agent_name_(y_absl::StrCat("gRPC C-core ", GPR_PLATFORM_STRING)) {}
+      user_agent_name_(y_absl::StrCat("gRPC C-core ", GPR_PLATFORM_STRING)) {
+  // Populate upb symtab with xDS proto messages that we want to print
+  // properly in logs.
+  // Note: This won't actually work properly until upb adds support for
+  // Any fields in textproto printing (internal b/178821188).
+  envoy_config_listener_v3_Listener_getmsgdef(symtab_.ptr());
+  envoy_config_route_v3_RouteConfiguration_getmsgdef(symtab_.ptr());
+  envoy_config_cluster_v3_Cluster_getmsgdef(symtab_.ptr());
+  envoy_extensions_clusters_aggregate_v3_ClusterConfig_getmsgdef(symtab_.ptr());
+  envoy_config_cluster_v3_Cluster_getmsgdef(symtab_.ptr());
+  envoy_config_endpoint_v3_ClusterLoadAssignment_getmsgdef(symtab_.ptr());
+  envoy_extensions_transport_sockets_tls_v3_UpstreamTlsContext_getmsgdef(
+      symtab_.ptr());
+  envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_getmsgdef(
+      symtab_.ptr());
+  // Load HTTP filter proto messages into the upb symtab.
+  XdsHttpFilterRegistry::PopulateSymtab(symtab_.ptr());
+}
 
 namespace {
+
+struct EncodingContext {
+  XdsClient* client;
+  TraceFlag* tracer;
+  upb_symtab* symtab;
+  upb_arena* arena;
+  bool use_v3;
+};
 
 // Works for both TString and y_absl::string_view.
 template <typename T>
@@ -544,29 +872,32 @@ inline upb_strview StdStringToUpbString(const T& str) {
   return upb_strview_make(str.data(), str.size());
 }
 
-void PopulateMetadataValue(upb_arena* arena, google_protobuf_Value* value_pb,
-                           const Json& value);
+void PopulateMetadataValue(const EncodingContext& context,
+                           google_protobuf_Value* value_pb, const Json& value);
 
-void PopulateListValue(upb_arena* arena, google_protobuf_ListValue* list_value,
+void PopulateListValue(const EncodingContext& context,
+                       google_protobuf_ListValue* list_value,
                        const Json::Array& values) {
   for (const auto& value : values) {
-    auto* value_pb = google_protobuf_ListValue_add_values(list_value, arena);
-    PopulateMetadataValue(arena, value_pb, value);
+    auto* value_pb =
+        google_protobuf_ListValue_add_values(list_value, context.arena);
+    PopulateMetadataValue(context, value_pb, value);
   }
 }
 
-void PopulateMetadata(upb_arena* arena, google_protobuf_Struct* metadata_pb,
+void PopulateMetadata(const EncodingContext& context,
+                      google_protobuf_Struct* metadata_pb,
                       const Json::Object& metadata) {
   for (const auto& p : metadata) {
-    google_protobuf_Value* value = google_protobuf_Value_new(arena);
-    PopulateMetadataValue(arena, value, p.second);
+    google_protobuf_Value* value = google_protobuf_Value_new(context.arena);
+    PopulateMetadataValue(context, value, p.second);
     google_protobuf_Struct_fields_set(
-        metadata_pb, StdStringToUpbString(p.first), value, arena);
+        metadata_pb, StdStringToUpbString(p.first), value, context.arena);
   }
 }
 
-void PopulateMetadataValue(upb_arena* arena, google_protobuf_Value* value_pb,
-                           const Json& value) {
+void PopulateMetadataValue(const EncodingContext& context,
+                           google_protobuf_Value* value_pb, const Json& value) {
   switch (value.type()) {
     case Json::Type::JSON_NULL:
       google_protobuf_Value_set_null_value(value_pb, 0);
@@ -587,14 +918,14 @@ void PopulateMetadataValue(upb_arena* arena, google_protobuf_Value* value_pb,
       break;
     case Json::Type::OBJECT: {
       google_protobuf_Struct* struct_value =
-          google_protobuf_Value_mutable_struct_value(value_pb, arena);
-      PopulateMetadata(arena, struct_value, value.object_value());
+          google_protobuf_Value_mutable_struct_value(value_pb, context.arena);
+      PopulateMetadata(context, struct_value, value.object_value());
       break;
     }
     case Json::Type::ARRAY: {
       google_protobuf_ListValue* list_value =
-          google_protobuf_Value_mutable_list_value(value_pb, arena);
-      PopulateListValue(arena, list_value, value.array_value());
+          google_protobuf_Value_mutable_list_value(value_pb, context.arena);
+      PopulateListValue(context, list_value, value.array_value());
       break;
     }
   }
@@ -621,7 +952,8 @@ TString EncodeStringField(uint32_t field_number, const TString& str) {
          EncodeVarint(str.size()) + str;
 }
 
-void PopulateBuildVersion(upb_arena* arena, envoy_config_core_v3_Node* node_msg,
+void PopulateBuildVersion(const EncodingContext& context,
+                          envoy_config_core_v3_Node* node_msg,
                           const TString& build_version) {
   TString encoded_build_version = EncodeStringField(5, build_version);
   // TODO(roth): This should use upb_msg_addunknown(), but that API is
@@ -629,14 +961,14 @@ void PopulateBuildVersion(upb_arena* arena, envoy_config_core_v3_Node* node_msg,
   // API for now.  Change this once we upgrade to a version of upb that
   // fixes this bug.
   _upb_msg_addunknown(node_msg, encoded_build_version.data(),
-                      encoded_build_version.size(), arena);
+                      encoded_build_version.size(), context.arena);
 }
 
-void PopulateNode(upb_arena* arena, const XdsBootstrap* bootstrap,
+void PopulateNode(const EncodingContext& context,
+                  const XdsBootstrap::Node* node,
                   const TString& build_version,
                   const TString& user_agent_name,
                   envoy_config_core_v3_Node* node_msg) {
-  const XdsBootstrap::Node* node = bootstrap->node();
   if (node != nullptr) {
     if (!node->id.empty()) {
       envoy_config_core_v3_Node_set_id(node_msg,
@@ -648,13 +980,13 @@ void PopulateNode(upb_arena* arena, const XdsBootstrap* bootstrap,
     }
     if (!node->metadata.object_value().empty()) {
       google_protobuf_Struct* metadata =
-          envoy_config_core_v3_Node_mutable_metadata(node_msg, arena);
-      PopulateMetadata(arena, metadata, node->metadata.object_value());
+          envoy_config_core_v3_Node_mutable_metadata(node_msg, context.arena);
+      PopulateMetadata(context, metadata, node->metadata.object_value());
     }
     if (!node->locality_region.empty() || !node->locality_zone.empty() ||
-        !node->locality_subzone.empty()) {
+        !node->locality_sub_zone.empty()) {
       envoy_config_core_v3_Locality* locality =
-          envoy_config_core_v3_Node_mutable_locality(node_msg, arena);
+          envoy_config_core_v3_Node_mutable_locality(node_msg, context.arena);
       if (!node->locality_region.empty()) {
         envoy_config_core_v3_Locality_set_region(
             locality, StdStringToUpbString(node->locality_region));
@@ -663,14 +995,14 @@ void PopulateNode(upb_arena* arena, const XdsBootstrap* bootstrap,
         envoy_config_core_v3_Locality_set_zone(
             locality, StdStringToUpbString(node->locality_zone));
       }
-      if (!node->locality_subzone.empty()) {
+      if (!node->locality_sub_zone.empty()) {
         envoy_config_core_v3_Locality_set_sub_zone(
-            locality, StdStringToUpbString(node->locality_subzone));
+            locality, StdStringToUpbString(node->locality_sub_zone));
       }
     }
   }
-  if (!bootstrap->server().ShouldUseV3()) {
-    PopulateBuildVersion(arena, node_msg, build_version);
+  if (!context.use_v3) {
+    PopulateBuildVersion(context, node_msg, build_version);
   }
   envoy_config_core_v3_Node_set_user_agent_name(
       node_msg, StdStringToUpbString(user_agent_name));
@@ -678,7 +1010,7 @@ void PopulateNode(upb_arena* arena, const XdsBootstrap* bootstrap,
       node_msg, upb_strview_makez(grpc_version_string()));
   envoy_config_core_v3_Node_add_client_features(
       node_msg, upb_strview_makez("envoy.lb.does_not_support_overprovisioning"),
-      arena);
+      context.arena);
 }
 
 inline y_absl::string_view UpbStringToAbsl(const upb_strview& str) {
@@ -689,180 +1021,26 @@ inline TString UpbStringToStdString(const upb_strview& str) {
   return TString(str.data, str.size);
 }
 
-inline void AddStringField(const char* name, const upb_strview& value,
-                           std::vector<TString>* fields,
-                           bool add_if_empty = false) {
-  if (value.size > 0 || add_if_empty) {
-    fields->emplace_back(
-        y_absl::StrCat(name, ": \"", UpbStringToAbsl(value), "\""));
-  }
-}
-
-inline void AddUInt32ValueField(const char* name,
-                                const google_protobuf_UInt32Value* value,
-                                std::vector<TString>* fields) {
-  if (value != nullptr) {
-    fields->emplace_back(y_absl::StrCat(
-        name, " { value: ", google_protobuf_UInt32Value_value(value), " }"));
-  }
-}
-
-inline void AddLocalityField(int indent_level,
-                             const envoy_config_core_v3_Locality* locality,
-                             std::vector<TString>* fields) {
-  TString indent =
-      y_absl::StrJoin(std::vector<TString>(indent_level, "  "), "");
-  // region
-  TString field = y_absl::StrCat(indent, "region");
-  AddStringField(field.c_str(), envoy_config_core_v3_Locality_region(locality),
-                 fields);
-  // zone
-  field = y_absl::StrCat(indent, "zone");
-  AddStringField(field.c_str(), envoy_config_core_v3_Locality_zone(locality),
-                 fields);
-  // sub_zone
-  field = y_absl::StrCat(indent, "sub_zone");
-  AddStringField(field.c_str(),
-                 envoy_config_core_v3_Locality_sub_zone(locality), fields);
-}
-
-void AddNodeLogFields(const envoy_config_core_v3_Node* node,
-                      const TString& build_version,
-                      std::vector<TString>* fields) {
-  fields->emplace_back("node {");
-  // id
-  AddStringField("  id", envoy_config_core_v3_Node_id(node), fields);
-  // metadata
-  const google_protobuf_Struct* metadata =
-      envoy_config_core_v3_Node_metadata(node);
-  if (metadata != nullptr) {
-    fields->emplace_back("  metadata {");
-    size_t entry_idx = UPB_MAP_BEGIN;
-    while (true) {
-      const google_protobuf_Struct_FieldsEntry* entry =
-          google_protobuf_Struct_fields_next(metadata, &entry_idx);
-      if (entry == nullptr) break;
-      fields->emplace_back("    field {");
-      // key
-      AddStringField("      key", google_protobuf_Struct_FieldsEntry_key(entry),
-                     fields);
-      // value
-      const google_protobuf_Value* value =
-          google_protobuf_Struct_FieldsEntry_value(entry);
-      if (value != nullptr) {
-        TString value_str;
-        if (google_protobuf_Value_has_string_value(value)) {
-          value_str = y_absl::StrCat(
-              "string_value: \"",
-              UpbStringToAbsl(google_protobuf_Value_string_value(value)), "\"");
-        } else if (google_protobuf_Value_has_null_value(value)) {
-          value_str = "null_value: NULL_VALUE";
-        } else if (google_protobuf_Value_has_number_value(value)) {
-          value_str = y_absl::StrCat("double_value: ",
-                                   google_protobuf_Value_number_value(value));
-        } else if (google_protobuf_Value_has_bool_value(value)) {
-          value_str = y_absl::StrCat("bool_value: ",
-                                   google_protobuf_Value_bool_value(value));
-        } else if (google_protobuf_Value_has_struct_value(value)) {
-          value_str = "struct_value: <not printed>";
-        } else if (google_protobuf_Value_has_list_value(value)) {
-          value_str = "list_value: <not printed>";
-        } else {
-          value_str = "<unknown>";
-        }
-        fields->emplace_back(y_absl::StrCat("      value { ", value_str, " }"));
-      }
-      fields->emplace_back("    }");
-    }
-    fields->emplace_back("  }");
-  }
-  // locality
-  const envoy_config_core_v3_Locality* locality =
-      envoy_config_core_v3_Node_locality(node);
-  if (locality != nullptr) {
-    fields->emplace_back("  locality {");
-    AddLocalityField(2, locality, fields);
-    fields->emplace_back("  }");
-  }
-  // build_version (doesn't exist in v3 proto; this is a horrible hack)
-  if (!build_version.empty()) {
-    fields->emplace_back(
-        y_absl::StrCat("  build_version: \"", build_version, "\""));
-  }
-  // user_agent_name
-  AddStringField("  user_agent_name",
-                 envoy_config_core_v3_Node_user_agent_name(node), fields);
-  // user_agent_version
-  AddStringField("  user_agent_version",
-                 envoy_config_core_v3_Node_user_agent_version(node), fields);
-  // client_features
-  size_t num_client_features;
-  const upb_strview* client_features =
-      envoy_config_core_v3_Node_client_features(node, &num_client_features);
-  for (size_t i = 0; i < num_client_features; ++i) {
-    AddStringField("  client_features", client_features[i], fields);
-  }
-  fields->emplace_back("}");
-}
-
 void MaybeLogDiscoveryRequest(
-    XdsClient* client, TraceFlag* tracer,
-    const envoy_service_discovery_v3_DiscoveryRequest* request,
-    const TString& build_version) {
-  if (GRPC_TRACE_FLAG_ENABLED(*tracer) &&
+    const EncodingContext& context,
+    const envoy_service_discovery_v3_DiscoveryRequest* request) {
+  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    // TODO(roth): When we can upgrade upb, use upb textformat code to dump
-    // the raw proto instead of doing this manually.
-    std::vector<TString> fields;
-    // version_info
-    AddStringField(
-        "version_info",
-        envoy_service_discovery_v3_DiscoveryRequest_version_info(request),
-        &fields);
-    // node
-    const envoy_config_core_v3_Node* node =
-        envoy_service_discovery_v3_DiscoveryRequest_node(request);
-    if (node != nullptr) AddNodeLogFields(node, build_version, &fields);
-    // resource_names
-    size_t num_resource_names;
-    const upb_strview* resource_names =
-        envoy_service_discovery_v3_DiscoveryRequest_resource_names(
-            request, &num_resource_names);
-    for (size_t i = 0; i < num_resource_names; ++i) {
-      AddStringField("resource_names", resource_names[i], &fields);
-    }
-    // type_url
-    AddStringField(
-        "type_url",
-        envoy_service_discovery_v3_DiscoveryRequest_type_url(request), &fields);
-    // response_nonce
-    AddStringField(
-        "response_nonce",
-        envoy_service_discovery_v3_DiscoveryRequest_response_nonce(request),
-        &fields);
-    // error_detail
-    const struct google_rpc_Status* error_detail =
-        envoy_service_discovery_v3_DiscoveryRequest_error_detail(request);
-    if (error_detail != nullptr) {
-      fields.emplace_back("error_detail {");
-      // code
-      int32_t code = google_rpc_Status_code(error_detail);
-      if (code != 0) fields.emplace_back(y_absl::StrCat("  code: ", code));
-      // message
-      AddStringField("  message", google_rpc_Status_message(error_detail),
-                     &fields);
-      fields.emplace_back("}");
-    }
-    gpr_log(GPR_DEBUG, "[xds_client %p] constructed ADS request: %s", client,
-            y_absl::StrJoin(fields, "\n").c_str());
+    const upb_msgdef* msg_type =
+        envoy_service_discovery_v3_DiscoveryRequest_getmsgdef(context.symtab);
+    char buf[10240];
+    upb_text_encode(request, msg_type, nullptr, 0, buf, sizeof(buf));
+    gpr_log(GPR_DEBUG, "[xds_client %p] constructed ADS request: %s",
+            context.client, buf);
   }
 }
 
 grpc_slice SerializeDiscoveryRequest(
-    upb_arena* arena, envoy_service_discovery_v3_DiscoveryRequest* request) {
+    const EncodingContext& context,
+    envoy_service_discovery_v3_DiscoveryRequest* request) {
   size_t output_length;
   char* output = envoy_service_discovery_v3_DiscoveryRequest_serialize(
-      request, arena, &output_length);
+      request, context.arena, &output_length);
   return grpc_slice_from_copied_buffer(output, output_length);
 }
 
@@ -888,17 +1066,19 @@ y_absl::string_view TypeUrlExternalToInternal(bool use_v3,
 }  // namespace
 
 grpc_slice XdsApi::CreateAdsRequest(
-    const TString& type_url,
+    const XdsBootstrap::XdsServer& server, const TString& type_url,
     const std::set<y_absl::string_view>& resource_names,
     const TString& version, const TString& nonce, grpc_error* error,
     bool populate_node) {
   upb::Arena arena;
+  const EncodingContext context = {client_, tracer_, symtab_.ptr(), arena.ptr(),
+                                   server.ShouldUseV3()};
   // Create a request.
   envoy_service_discovery_v3_DiscoveryRequest* request =
       envoy_service_discovery_v3_DiscoveryRequest_new(arena.ptr());
   // Set type_url.
   y_absl::string_view real_type_url =
-      TypeUrlExternalToInternal(use_v3_, type_url);
+      TypeUrlExternalToInternal(server.ShouldUseV3(), type_url);
   envoy_service_discovery_v3_DiscoveryRequest_set_type_url(
       request, StdStringToUpbString(real_type_url));
   // Set version_info.
@@ -913,17 +1093,18 @@ grpc_slice XdsApi::CreateAdsRequest(
   }
   // Set error_detail if it's a NACK.
   if (error != GRPC_ERROR_NONE) {
-    grpc_slice error_description_slice;
-    GPR_ASSERT(grpc_error_get_str(error, GRPC_ERROR_STR_DESCRIPTION,
-                                  &error_description_slice));
-    upb_strview error_description_strview =
-        upb_strview_make(reinterpret_cast<const char*>(
-                             GPR_SLICE_START_PTR(error_description_slice)),
-                         GPR_SLICE_LENGTH(error_description_slice));
     google_rpc_Status* error_detail =
         envoy_service_discovery_v3_DiscoveryRequest_mutable_error_detail(
             request, arena.ptr());
-    google_rpc_Status_set_message(error_detail, error_description_strview);
+    // Hard-code INVALID_ARGUMENT as the status code.
+    // TODO(roth): If at some point we decide we care about this value,
+    // we could attach a status code to the individual errors where we
+    // generate them in the parsing code, and then use that here.
+    google_rpc_Status_set_code(error_detail, GRPC_STATUS_INVALID_ARGUMENT);
+    // Error description comes from the error that was passed in.
+    upb_strview error_description =
+        StdStringToUpbString(y_absl::string_view(grpc_error_string(error)));
+    google_rpc_Status_set_message(error_detail, error_description);
     GRPC_ERROR_UNREF(error);
   }
   // Populate node.
@@ -931,401 +1112,106 @@ grpc_slice XdsApi::CreateAdsRequest(
     envoy_config_core_v3_Node* node_msg =
         envoy_service_discovery_v3_DiscoveryRequest_mutable_node(request,
                                                                  arena.ptr());
-    PopulateNode(arena.ptr(), bootstrap_, build_version_, user_agent_name_,
-                 node_msg);
+    PopulateNode(context, node_, build_version_, user_agent_name_, node_msg);
   }
   // Add resource_names.
   for (const auto& resource_name : resource_names) {
     envoy_service_discovery_v3_DiscoveryRequest_add_resource_names(
         request, StdStringToUpbString(resource_name), arena.ptr());
   }
-  MaybeLogDiscoveryRequest(client_, tracer_, request, build_version_);
-  return SerializeDiscoveryRequest(arena.ptr(), request);
+  MaybeLogDiscoveryRequest(context, request);
+  return SerializeDiscoveryRequest(context, request);
 }
 
 namespace {
 
 void MaybeLogDiscoveryResponse(
-    XdsClient* client, TraceFlag* tracer,
+    const EncodingContext& context,
     const envoy_service_discovery_v3_DiscoveryResponse* response) {
-  if (GRPC_TRACE_FLAG_ENABLED(*tracer) &&
+  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    // TODO(roth): When we can upgrade upb, use upb textformat code to dump
-    // the raw proto instead of doing this manually.
-    std::vector<TString> fields;
-    // version_info
-    AddStringField(
-        "version_info",
-        envoy_service_discovery_v3_DiscoveryResponse_version_info(response),
-        &fields);
-    // resources
-    size_t num_resources;
-    envoy_service_discovery_v3_DiscoveryResponse_resources(response,
-                                                           &num_resources);
-    fields.emplace_back(
-        y_absl::StrCat("resources: <", num_resources, " element(s)>"));
-    // type_url
-    AddStringField(
-        "type_url",
-        envoy_service_discovery_v3_DiscoveryResponse_type_url(response),
-        &fields);
-    // nonce
-    AddStringField("nonce",
-                   envoy_service_discovery_v3_DiscoveryResponse_nonce(response),
-                   &fields);
-    gpr_log(GPR_DEBUG, "[xds_client %p] received response: %s", client,
-            y_absl::StrJoin(fields, "\n").c_str());
+    const upb_msgdef* msg_type =
+        envoy_service_discovery_v3_DiscoveryResponse_getmsgdef(context.symtab);
+    char buf[10240];
+    upb_text_encode(response, msg_type, nullptr, 0, buf, sizeof(buf));
+    gpr_log(GPR_DEBUG, "[xds_client %p] received response: %s", context.client,
+            buf);
+  }
+}
+
+void MaybeLogHttpConnectionManager(
+    const EncodingContext& context,
+    const envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager*
+        http_connection_manager_config) {
+  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
+      gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
+    const upb_msgdef* msg_type =
+        envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_getmsgdef(
+            context.symtab);
+    char buf[10240];
+    upb_text_encode(http_connection_manager_config, msg_type, nullptr, 0, buf,
+                    sizeof(buf));
+    gpr_log(GPR_DEBUG, "[xds_client %p] HttpConnectionManager: %s",
+            context.client, buf);
   }
 }
 
 void MaybeLogRouteConfiguration(
-    XdsClient* client, TraceFlag* tracer,
+    const EncodingContext& context,
     const envoy_config_route_v3_RouteConfiguration* route_config) {
-  if (GRPC_TRACE_FLAG_ENABLED(*tracer) &&
+  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    // TODO(roth): When we can upgrade upb, use upb textformat code to dump
-    // the raw proto instead of doing this manually.
-    std::vector<TString> fields;
-    // name
-    AddStringField("name",
-                   envoy_config_route_v3_RouteConfiguration_name(route_config),
-                   &fields);
-    // virtual_hosts
-    size_t num_virtual_hosts;
-    const envoy_config_route_v3_VirtualHost* const* virtual_hosts =
-        envoy_config_route_v3_RouteConfiguration_virtual_hosts(
-            route_config, &num_virtual_hosts);
-    for (size_t i = 0; i < num_virtual_hosts; ++i) {
-      const auto* virtual_host = virtual_hosts[i];
-      fields.push_back("virtual_hosts {");
-      // name
-      AddStringField("  name",
-                     envoy_config_route_v3_VirtualHost_name(virtual_host),
-                     &fields);
-      // domains
-      size_t num_domains;
-      const upb_strview* const domains =
-          envoy_config_route_v3_VirtualHost_domains(virtual_host, &num_domains);
-      for (size_t j = 0; j < num_domains; ++j) {
-        AddStringField("  domains", domains[j], &fields);
-      }
-      // routes
-      size_t num_routes;
-      const envoy_config_route_v3_Route* const* routes =
-          envoy_config_route_v3_VirtualHost_routes(virtual_host, &num_routes);
-      for (size_t j = 0; j < num_routes; ++j) {
-        const auto* route = routes[j];
-        fields.push_back("  route {");
-        // name
-        AddStringField("    name", envoy_config_route_v3_Route_name(route),
-                       &fields);
-        // match
-        const envoy_config_route_v3_RouteMatch* match =
-            envoy_config_route_v3_Route_match(route);
-        if (match != nullptr) {
-          fields.emplace_back("    match {");
-          // path matching
-          if (envoy_config_route_v3_RouteMatch_has_prefix(match)) {
-            AddStringField("      prefix",
-                           envoy_config_route_v3_RouteMatch_prefix(match),
-                           &fields,
-                           /*add_if_empty=*/true);
-          } else if (envoy_config_route_v3_RouteMatch_has_path(match)) {
-            AddStringField("      path",
-                           envoy_config_route_v3_RouteMatch_path(match),
-                           &fields,
-                           /*add_if_empty=*/true);
-          } else if (envoy_config_route_v3_RouteMatch_has_safe_regex(match)) {
-            fields.emplace_back("      safe_regex: <not printed>");
-          } else {
-            fields.emplace_back("      <unknown path matching type>");
-          }
-          // header matching
-          size_t num_headers;
-          envoy_config_route_v3_RouteMatch_headers(match, &num_headers);
-          if (num_headers > 0) {
-            fields.emplace_back(
-                y_absl::StrCat("      headers: <", num_headers, " element(s)>"));
-          }
-          fields.emplace_back("    }");
-        }
-        // action
-        if (envoy_config_route_v3_Route_has_route(route)) {
-          const envoy_config_route_v3_RouteAction* action =
-              envoy_config_route_v3_Route_route(route);
-          fields.emplace_back("    route {");
-          if (envoy_config_route_v3_RouteAction_has_cluster(action)) {
-            AddStringField("      cluster",
-                           envoy_config_route_v3_RouteAction_cluster(action),
-                           &fields);
-          } else if (envoy_config_route_v3_RouteAction_has_cluster_header(
-                         action)) {
-            AddStringField(
-                "      cluster_header",
-                envoy_config_route_v3_RouteAction_cluster_header(action),
-                &fields);
-          } else if (envoy_config_route_v3_RouteAction_has_weighted_clusters(
-                         action)) {
-            const envoy_config_route_v3_WeightedCluster* weighted_clusters =
-                envoy_config_route_v3_RouteAction_weighted_clusters(action);
-            fields.emplace_back("      weighted_clusters {");
-            size_t num_cluster_weights;
-            const envoy_config_route_v3_WeightedCluster_ClusterWeight* const*
-                cluster_weights =
-                    envoy_config_route_v3_WeightedCluster_clusters(
-                        weighted_clusters, &num_cluster_weights);
-            for (size_t i = 0; i < num_cluster_weights; ++i) {
-              const envoy_config_route_v3_WeightedCluster_ClusterWeight*
-                  cluster_weight = cluster_weights[i];
-              fields.emplace_back("        clusters {");
-              AddStringField(
-                  "          name",
-                  envoy_config_route_v3_WeightedCluster_ClusterWeight_name(
-                      cluster_weight),
-                  &fields);
-              AddUInt32ValueField(
-                  "          weight",
-                  envoy_config_route_v3_WeightedCluster_ClusterWeight_weight(
-                      cluster_weight),
-                  &fields);
-              fields.emplace_back("        }");
-            }
-            AddUInt32ValueField(
-                "        total_weight",
-                envoy_config_route_v3_WeightedCluster_total_weight(
-                    weighted_clusters),
-                &fields);
-            fields.emplace_back("      }");
-          }
-          fields.emplace_back("    }");
-        } else if (envoy_config_route_v3_Route_has_redirect(route)) {
-          fields.emplace_back("    redirect: <not printed>");
-        } else if (envoy_config_route_v3_Route_has_direct_response(route)) {
-          fields.emplace_back("    direct_response: <not printed>");
-        } else if (envoy_config_route_v3_Route_has_filter_action(route)) {
-          fields.emplace_back("    filter_action: <not printed>");
-        }
-        fields.push_back("  }");
-      }
-      fields.push_back("}");
-    }
-    gpr_log(GPR_DEBUG, "[xds_client %p] RouteConfiguration: %s", client,
-            y_absl::StrJoin(fields, "\n").c_str());
+    const upb_msgdef* msg_type =
+        envoy_config_route_v3_RouteConfiguration_getmsgdef(context.symtab);
+    char buf[10240];
+    upb_text_encode(route_config, msg_type, nullptr, 0, buf, sizeof(buf));
+    gpr_log(GPR_DEBUG, "[xds_client %p] RouteConfiguration: %s", context.client,
+            buf);
   }
 }
 
-void MaybeLogCluster(XdsClient* client, TraceFlag* tracer,
+void MaybeLogCluster(const EncodingContext& context,
                      const envoy_config_cluster_v3_Cluster* cluster) {
-  if (GRPC_TRACE_FLAG_ENABLED(*tracer) &&
+  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    // TODO(roth): When we can upgrade upb, use upb textformat code to dump
-    // the raw proto instead of doing this manually.
-    std::vector<TString> fields;
-    // name
-    AddStringField("name", envoy_config_cluster_v3_Cluster_name(cluster),
-                   &fields);
-    // type
-    if (envoy_config_cluster_v3_Cluster_has_type(cluster)) {
-      fields.emplace_back(y_absl::StrCat(
-          "type: ", envoy_config_cluster_v3_Cluster_type(cluster)));
-    } else if (envoy_config_cluster_v3_Cluster_has_cluster_type(cluster)) {
-      fields.emplace_back("cluster_type: <not printed>");
-    } else {
-      fields.emplace_back("<unknown type>");
-    }
-    // eds_cluster_config
-    const envoy_config_cluster_v3_Cluster_EdsClusterConfig* eds_cluster_config =
-        envoy_config_cluster_v3_Cluster_eds_cluster_config(cluster);
-    if (eds_cluster_config != nullptr) {
-      fields.emplace_back("eds_cluster_config {");
-      // eds_config
-      const struct envoy_config_core_v3_ConfigSource* eds_config =
-          envoy_config_cluster_v3_Cluster_EdsClusterConfig_eds_config(
-              eds_cluster_config);
-      if (eds_config != nullptr) {
-        if (envoy_config_core_v3_ConfigSource_has_ads(eds_config)) {
-          fields.emplace_back("  eds_config { ads {} }");
-        } else {
-          fields.emplace_back("  eds_config: <non-ADS type>");
-        }
-      }
-      // service_name
-      AddStringField(
-          "  service_name",
-          envoy_config_cluster_v3_Cluster_EdsClusterConfig_service_name(
-              eds_cluster_config),
-          &fields);
-      fields.emplace_back("}");
-    }
-    // lb_policy
-    fields.emplace_back(y_absl::StrCat(
-        "lb_policy: ", envoy_config_cluster_v3_Cluster_lb_policy(cluster)));
-    // lrs_server
-    const envoy_config_core_v3_ConfigSource* lrs_server =
-        envoy_config_cluster_v3_Cluster_lrs_server(cluster);
-    if (lrs_server != nullptr) {
-      if (envoy_config_core_v3_ConfigSource_has_self(lrs_server)) {
-        fields.emplace_back("lrs_server { self {} }");
-      } else {
-        fields.emplace_back("lrs_server: <non-self type>");
-      }
-    }
-    gpr_log(GPR_DEBUG, "[xds_client %p] Cluster: %s", client,
-            y_absl::StrJoin(fields, "\n").c_str());
+    const upb_msgdef* msg_type =
+        envoy_config_cluster_v3_Cluster_getmsgdef(context.symtab);
+    char buf[10240];
+    upb_text_encode(cluster, msg_type, nullptr, 0, buf, sizeof(buf));
+    gpr_log(GPR_DEBUG, "[xds_client %p] Cluster: %s", context.client, buf);
   }
 }
 
 void MaybeLogClusterLoadAssignment(
-    XdsClient* client, TraceFlag* tracer,
+    const EncodingContext& context,
     const envoy_config_endpoint_v3_ClusterLoadAssignment* cla) {
-  if (GRPC_TRACE_FLAG_ENABLED(*tracer) &&
+  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    // TODO(roth): When we can upgrade upb, use upb textformat code to dump
-    // the raw proto instead of doing this manually.
-    std::vector<TString> fields;
-    // cluster_name
-    AddStringField(
-        "cluster_name",
-        envoy_config_endpoint_v3_ClusterLoadAssignment_cluster_name(cla),
-        &fields);
-    // endpoints
-    size_t num_localities;
-    const struct envoy_config_endpoint_v3_LocalityLbEndpoints* const*
-        locality_endpoints =
-            envoy_config_endpoint_v3_ClusterLoadAssignment_endpoints(
-                cla, &num_localities);
-    for (size_t i = 0; i < num_localities; ++i) {
-      const auto* locality_endpoint = locality_endpoints[i];
-      fields.emplace_back("endpoints {");
-      // locality
-      const auto* locality =
-          envoy_config_endpoint_v3_LocalityLbEndpoints_locality(
-              locality_endpoint);
-      if (locality != nullptr) {
-        fields.emplace_back("  locality {");
-        AddLocalityField(2, locality, &fields);
-        fields.emplace_back("  }");
-      }
-      // lb_endpoints
-      size_t num_lb_endpoints;
-      const envoy_config_endpoint_v3_LbEndpoint* const* lb_endpoints =
-          envoy_config_endpoint_v3_LocalityLbEndpoints_lb_endpoints(
-              locality_endpoint, &num_lb_endpoints);
-      for (size_t j = 0; j < num_lb_endpoints; ++j) {
-        const auto* lb_endpoint = lb_endpoints[j];
-        fields.emplace_back("  lb_endpoints {");
-        // health_status
-        uint32_t health_status =
-            envoy_config_endpoint_v3_LbEndpoint_health_status(lb_endpoint);
-        if (health_status > 0) {
-          fields.emplace_back(
-              y_absl::StrCat("    health_status: ", health_status));
-        }
-        // endpoint
-        const envoy_config_endpoint_v3_Endpoint* endpoint =
-            envoy_config_endpoint_v3_LbEndpoint_endpoint(lb_endpoint);
-        if (endpoint != nullptr) {
-          fields.emplace_back("    endpoint {");
-          // address
-          const auto* address =
-              envoy_config_endpoint_v3_Endpoint_address(endpoint);
-          if (address != nullptr) {
-            fields.emplace_back("      address {");
-            // socket_address
-            const auto* socket_address =
-                envoy_config_core_v3_Address_socket_address(address);
-            if (socket_address != nullptr) {
-              fields.emplace_back("        socket_address {");
-              // address
-              AddStringField(
-                  "          address",
-                  envoy_config_core_v3_SocketAddress_address(socket_address),
-                  &fields);
-              // port_value
-              if (envoy_config_core_v3_SocketAddress_has_port_value(
-                      socket_address)) {
-                fields.emplace_back(
-                    y_absl::StrCat("          port_value: ",
-                                 envoy_config_core_v3_SocketAddress_port_value(
-                                     socket_address)));
-              } else {
-                fields.emplace_back("        <non-numeric port>");
-              }
-              fields.emplace_back("        }");
-            } else {
-              fields.emplace_back("        <non-socket address>");
-            }
-            fields.emplace_back("      }");
-          }
-          fields.emplace_back("    }");
-        }
-        fields.emplace_back("  }");
-      }
-      // load_balancing_weight
-      AddUInt32ValueField(
-          "  load_balancing_weight",
-          envoy_config_endpoint_v3_LocalityLbEndpoints_load_balancing_weight(
-              locality_endpoint),
-          &fields);
-      // priority
-      uint32_t priority = envoy_config_endpoint_v3_LocalityLbEndpoints_priority(
-          locality_endpoint);
-      if (priority > 0) {
-        fields.emplace_back(y_absl::StrCat("  priority: ", priority));
-      }
-      fields.emplace_back("}");
-    }
-    // policy
-    const envoy_config_endpoint_v3_ClusterLoadAssignment_Policy* policy =
-        envoy_config_endpoint_v3_ClusterLoadAssignment_policy(cla);
-    if (policy != nullptr) {
-      fields.emplace_back("policy {");
-      // drop_overloads
-      size_t num_drop_overloads;
-      const envoy_config_endpoint_v3_ClusterLoadAssignment_Policy_DropOverload* const*
-          drop_overloads =
-              envoy_config_endpoint_v3_ClusterLoadAssignment_Policy_drop_overloads(
-                  policy, &num_drop_overloads);
-      for (size_t i = 0; i < num_drop_overloads; ++i) {
-        auto* drop_overload = drop_overloads[i];
-        fields.emplace_back("  drop_overloads {");
-        // category
-        AddStringField(
-            "    category",
-            envoy_config_endpoint_v3_ClusterLoadAssignment_Policy_DropOverload_category(
-                drop_overload),
-            &fields);
-        // drop_percentage
-        const auto* drop_percentage =
-            envoy_config_endpoint_v3_ClusterLoadAssignment_Policy_DropOverload_drop_percentage(
-                drop_overload);
-        if (drop_percentage != nullptr) {
-          fields.emplace_back("    drop_percentage {");
-          fields.emplace_back(y_absl::StrCat(
-              "      numerator: ",
-              envoy_type_v3_FractionalPercent_numerator(drop_percentage)));
-          fields.emplace_back(y_absl::StrCat(
-              "      denominator: ",
-              envoy_type_v3_FractionalPercent_denominator(drop_percentage)));
-          fields.emplace_back("    }");
-        }
-        fields.emplace_back("  }");
-      }
-      // overprovisioning_factor
-      fields.emplace_back("}");
-    }
-    gpr_log(GPR_DEBUG, "[xds_client %p] ClusterLoadAssignment: %s", client,
-            y_absl::StrJoin(fields, "\n").c_str());
+    const upb_msgdef* msg_type =
+        envoy_config_endpoint_v3_ClusterLoadAssignment_getmsgdef(
+            context.symtab);
+    char buf[10240];
+    upb_text_encode(cla, msg_type, nullptr, 0, buf, sizeof(buf));
+    gpr_log(GPR_DEBUG, "[xds_client %p] ClusterLoadAssignment: %s",
+            context.client, buf);
   }
 }
 
 grpc_error* RoutePathMatchParse(const envoy_config_route_v3_RouteMatch* match,
                                 XdsApi::Route* route, bool* ignore_route) {
+  auto* case_sensitive_ptr =
+      envoy_config_route_v3_RouteMatch_case_sensitive(match);
+  bool case_sensitive = true;
+  if (case_sensitive_ptr != nullptr) {
+    case_sensitive = google_protobuf_BoolValue_value(case_sensitive_ptr);
+  }
+  StringMatcher::Type type;
+  TString match_string;
   if (envoy_config_route_v3_RouteMatch_has_prefix(match)) {
     y_absl::string_view prefix =
         UpbStringToAbsl(envoy_config_route_v3_RouteMatch_prefix(match));
     // Empty prefix "" is accepted.
-    if (prefix.size() > 0) {
+    if (!prefix.empty()) {
       // Prefix "/" is accepted.
       if (prefix[0] != '/') {
         // Prefix which does not start with a / will never match anything, so
@@ -1345,13 +1231,12 @@ grpc_error* RoutePathMatchParse(const envoy_config_route_v3_RouteMatch* match,
         return GRPC_ERROR_NONE;
       }
     }
-    route->matchers.path_matcher.type =
-        XdsApi::Route::Matchers::PathMatcher::PathMatcherType::PREFIX;
-    route->matchers.path_matcher.string_matcher = TString(prefix);
+    type = StringMatcher::Type::PREFIX;
+    match_string = TString(prefix);
   } else if (envoy_config_route_v3_RouteMatch_has_path(match)) {
     y_absl::string_view path =
         UpbStringToAbsl(envoy_config_route_v3_RouteMatch_path(match));
-    if (path.size() == 0) {
+    if (path.empty()) {
       // Path that is empty will never match anything, so ignore this route.
       *ignore_route = true;
       return GRPC_ERROR_NONE;
@@ -1380,27 +1265,28 @@ grpc_error* RoutePathMatchParse(const envoy_config_route_v3_RouteMatch* match,
       *ignore_route = true;
       return GRPC_ERROR_NONE;
     }
-    route->matchers.path_matcher.type =
-        XdsApi::Route::Matchers::PathMatcher::PathMatcherType::PATH;
-    route->matchers.path_matcher.string_matcher = TString(path);
+    type = StringMatcher::Type::EXACT;
+    match_string = TString(path);
   } else if (envoy_config_route_v3_RouteMatch_has_safe_regex(match)) {
     const envoy_type_matcher_v3_RegexMatcher* regex_matcher =
         envoy_config_route_v3_RouteMatch_safe_regex(match);
     GPR_ASSERT(regex_matcher != nullptr);
-    TString matcher = UpbStringToStdString(
+    type = StringMatcher::Type::SAFE_REGEX;
+    match_string = UpbStringToStdString(
         envoy_type_matcher_v3_RegexMatcher_regex(regex_matcher));
-    std::unique_ptr<RE2> regex = y_absl::make_unique<RE2>(std::move(matcher));
-    if (!regex->ok()) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "Invalid regex string specified in path matcher.");
-    }
-    route->matchers.path_matcher.type =
-        XdsApi::Route::Matchers::PathMatcher::PathMatcherType::REGEX;
-    route->matchers.path_matcher.regex_matcher = std::move(regex);
   } else {
     return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
         "Invalid route path specifier specified.");
   }
+  y_absl::StatusOr<StringMatcher> string_matcher =
+      StringMatcher::Create(type, match_string, case_sensitive);
+  if (!string_matcher.ok()) {
+    return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrCat("path matcher: ", string_matcher.status().message())
+            .c_str());
+    ;
+  }
+  route->matchers.path_matcher = std::move(string_matcher.value());
   return GRPC_ERROR_NONE;
 }
 
@@ -1411,64 +1297,62 @@ grpc_error* RouteHeaderMatchersParse(
       envoy_config_route_v3_RouteMatch_headers(match, &size);
   for (size_t i = 0; i < size; ++i) {
     const envoy_config_route_v3_HeaderMatcher* header = headers[i];
-    XdsApi::Route::Matchers::HeaderMatcher header_matcher;
-    header_matcher.name =
+    const TString name =
         UpbStringToStdString(envoy_config_route_v3_HeaderMatcher_name(header));
+    HeaderMatcher::Type type;
+    TString match_string;
+    int64_t range_start = 0;
+    int64_t range_end = 0;
+    bool present_match = false;
     if (envoy_config_route_v3_HeaderMatcher_has_exact_match(header)) {
-      header_matcher.type =
-          XdsApi::Route::Matchers::HeaderMatcher::HeaderMatcherType::EXACT;
-      header_matcher.string_matcher = UpbStringToStdString(
+      type = HeaderMatcher::Type::EXACT;
+      match_string = UpbStringToStdString(
           envoy_config_route_v3_HeaderMatcher_exact_match(header));
     } else if (envoy_config_route_v3_HeaderMatcher_has_safe_regex_match(
                    header)) {
       const envoy_type_matcher_v3_RegexMatcher* regex_matcher =
           envoy_config_route_v3_HeaderMatcher_safe_regex_match(header);
       GPR_ASSERT(regex_matcher != nullptr);
-      const TString matcher = UpbStringToStdString(
+      type = HeaderMatcher::Type::SAFE_REGEX;
+      match_string = UpbStringToStdString(
           envoy_type_matcher_v3_RegexMatcher_regex(regex_matcher));
-      std::unique_ptr<RE2> regex = y_absl::make_unique<RE2>(matcher);
-      if (!regex->ok()) {
-        return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-            "Invalid regex string specified in header matcher.");
-      }
-      header_matcher.type =
-          XdsApi::Route::Matchers::HeaderMatcher::HeaderMatcherType::REGEX;
-      header_matcher.regex_match = std::move(regex);
     } else if (envoy_config_route_v3_HeaderMatcher_has_range_match(header)) {
-      header_matcher.type =
-          XdsApi::Route::Matchers::HeaderMatcher::HeaderMatcherType::RANGE;
+      type = HeaderMatcher::Type::RANGE;
       const envoy_type_v3_Int64Range* range_matcher =
           envoy_config_route_v3_HeaderMatcher_range_match(header);
-      header_matcher.range_start =
-          envoy_type_v3_Int64Range_start(range_matcher);
-      header_matcher.range_end = envoy_type_v3_Int64Range_end(range_matcher);
-      if (header_matcher.range_end < header_matcher.range_start) {
-        return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-            "Invalid range header matcher specifier specified: end "
-            "cannot be smaller than start.");
-      }
+      range_start = envoy_type_v3_Int64Range_start(range_matcher);
+      range_end = envoy_type_v3_Int64Range_end(range_matcher);
     } else if (envoy_config_route_v3_HeaderMatcher_has_present_match(header)) {
-      header_matcher.type =
-          XdsApi::Route::Matchers::HeaderMatcher::HeaderMatcherType::PRESENT;
-      header_matcher.present_match =
-          envoy_config_route_v3_HeaderMatcher_present_match(header);
+      type = HeaderMatcher::Type::PRESENT;
+      present_match = envoy_config_route_v3_HeaderMatcher_present_match(header);
     } else if (envoy_config_route_v3_HeaderMatcher_has_prefix_match(header)) {
-      header_matcher.type =
-          XdsApi::Route::Matchers::HeaderMatcher::HeaderMatcherType::PREFIX;
-      header_matcher.string_matcher = UpbStringToStdString(
+      type = HeaderMatcher::Type::PREFIX;
+      match_string = UpbStringToStdString(
           envoy_config_route_v3_HeaderMatcher_prefix_match(header));
     } else if (envoy_config_route_v3_HeaderMatcher_has_suffix_match(header)) {
-      header_matcher.type =
-          XdsApi::Route::Matchers::HeaderMatcher::HeaderMatcherType::SUFFIX;
-      header_matcher.string_matcher = UpbStringToStdString(
+      type = HeaderMatcher::Type::SUFFIX;
+      match_string = UpbStringToStdString(
           envoy_config_route_v3_HeaderMatcher_suffix_match(header));
+    } else if (envoy_config_route_v3_HeaderMatcher_has_contains_match(header)) {
+      type = HeaderMatcher::Type::CONTAINS;
+      match_string = UpbStringToStdString(
+          envoy_config_route_v3_HeaderMatcher_contains_match(header));
     } else {
       return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           "Invalid route header matcher specified.");
     }
-    header_matcher.invert_match =
+    bool invert_match =
         envoy_config_route_v3_HeaderMatcher_invert_match(header);
-    route->matchers.header_matchers.emplace_back(std::move(header_matcher));
+    y_absl::StatusOr<HeaderMatcher> header_matcher =
+        HeaderMatcher::Create(name, type, match_string, range_start, range_end,
+                              present_match, invert_match);
+    if (!header_matcher.ok()) {
+      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("header matcher: ", header_matcher.status().message())
+              .c_str());
+    }
+    route->matchers.header_matchers.emplace_back(
+        std::move(header_matcher.value()));
   }
   return GRPC_ERROR_NONE;
 }
@@ -1506,7 +1390,96 @@ grpc_error* RouteRuntimeFractionParse(
   return GRPC_ERROR_NONE;
 }
 
-grpc_error* RouteActionParse(const envoy_config_route_v3_Route* route_msg,
+grpc_error* ExtractHttpFilterTypeName(const EncodingContext& context,
+                                      const google_protobuf_Any* any,
+                                      y_absl::string_view* filter_type) {
+  *filter_type = UpbStringToAbsl(google_protobuf_Any_type_url(any));
+  if (*filter_type == "type.googleapis.com/udpa.type.v1.TypedStruct") {
+    upb_strview any_value = google_protobuf_Any_value(any);
+    const auto* typed_struct = udpa_type_v1_TypedStruct_parse(
+        any_value.data, any_value.size, context.arena);
+    if (typed_struct == nullptr) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "could not parse TypedStruct from filter config");
+    }
+    *filter_type =
+        UpbStringToAbsl(udpa_type_v1_TypedStruct_type_url(typed_struct));
+  }
+  *filter_type = y_absl::StripPrefix(*filter_type, "type.googleapis.com/");
+  return GRPC_ERROR_NONE;
+}
+
+template <typename ParentType, typename EntryType>
+grpc_error* ParseTypedPerFilterConfig(
+    const EncodingContext& context, const ParentType* parent,
+    const EntryType* (*entry_func)(const ParentType*, size_t*),
+    upb_strview (*key_func)(const EntryType*),
+    const google_protobuf_Any* (*value_func)(const EntryType*),
+    XdsApi::TypedPerFilterConfig* typed_per_filter_config) {
+  size_t filter_it = UPB_MAP_BEGIN;
+  while (true) {
+    const auto* filter_entry = entry_func(parent, &filter_it);
+    if (filter_entry == nullptr) break;
+    y_absl::string_view key = UpbStringToAbsl(key_func(filter_entry));
+    if (key.empty()) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("empty filter name in map");
+    }
+    const google_protobuf_Any* any = value_func(filter_entry);
+    GPR_ASSERT(any != nullptr);
+    y_absl::string_view filter_type =
+        UpbStringToAbsl(google_protobuf_Any_type_url(any));
+    if (filter_type.empty()) {
+      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("no filter config specified for filter name ", key)
+              .c_str());
+    }
+    bool is_optional = false;
+    if (filter_type ==
+        "type.googleapis.com/envoy.config.route.v3.FilterConfig") {
+      upb_strview any_value = google_protobuf_Any_value(any);
+      const auto* filter_config = envoy_config_route_v3_FilterConfig_parse(
+          any_value.data, any_value.size, context.arena);
+      if (filter_config == nullptr) {
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat("could not parse FilterConfig wrapper for ", key)
+                .c_str());
+      }
+      is_optional =
+          envoy_config_route_v3_FilterConfig_is_optional(filter_config);
+      any = envoy_config_route_v3_FilterConfig_config(filter_config);
+      if (any == nullptr) {
+        if (is_optional) continue;
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat("no filter config specified for filter name ", key)
+                .c_str());
+      }
+    }
+    grpc_error* error = ExtractHttpFilterTypeName(context, any, &filter_type);
+    if (error != GRPC_ERROR_NONE) return error;
+    const XdsHttpFilterImpl* filter_impl =
+        XdsHttpFilterRegistry::GetFilterForType(filter_type);
+    if (filter_impl == nullptr) {
+      if (is_optional) continue;
+      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("no filter registered for config type ", filter_type)
+              .c_str());
+    }
+    y_absl::StatusOr<XdsHttpFilterImpl::FilterConfig> filter_config =
+        filter_impl->GenerateFilterConfigOverride(
+            google_protobuf_Any_value(any), context.arena);
+    if (!filter_config.ok()) {
+      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("filter config for type ", filter_type,
+                       " failed to parse: ", filter_config.status().ToString())
+              .c_str());
+    }
+    (*typed_per_filter_config)[TString(key)] = std::move(*filter_config);
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* RouteActionParse(const EncodingContext& context,
+                             const envoy_config_route_v3_Route* route_msg,
                              XdsApi::Route* route, bool* ignore_route) {
   if (!envoy_config_route_v3_Route_has_route(route_msg)) {
     return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
@@ -1518,7 +1491,7 @@ grpc_error* RouteActionParse(const envoy_config_route_v3_Route* route_msg,
   if (envoy_config_route_v3_RouteAction_has_cluster(route_action)) {
     route->cluster_name = UpbStringToStdString(
         envoy_config_route_v3_RouteAction_cluster(route_action));
-    if (route->cluster_name.size() == 0) {
+    if (route->cluster_name.empty()) {
       return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           "RouteAction cluster contains empty cluster name.");
     }
@@ -1557,7 +1530,19 @@ grpc_error* RouteActionParse(const envoy_config_route_v3_Route* route_msg,
             "RouteAction weighted_cluster cluster missing weight");
       }
       cluster.weight = google_protobuf_UInt32Value_value(weight);
+      if (cluster.weight == 0) continue;
       sum_of_weights += cluster.weight;
+      if (context.use_v3) {
+        grpc_error* error = ParseTypedPerFilterConfig<
+            envoy_config_route_v3_WeightedCluster_ClusterWeight,
+            envoy_config_route_v3_WeightedCluster_ClusterWeight_TypedPerFilterConfigEntry>(
+            context, cluster_weight,
+            envoy_config_route_v3_WeightedCluster_ClusterWeight_typed_per_filter_config_next,
+            envoy_config_route_v3_WeightedCluster_ClusterWeight_TypedPerFilterConfigEntry_key,
+            envoy_config_route_v3_WeightedCluster_ClusterWeight_TypedPerFilterConfigEntry_value,
+            &cluster.typed_per_filter_config);
+        if (error != GRPC_ERROR_NONE) return error;
+      }
       route->weighted_clusters.emplace_back(std::move(cluster));
     }
     if (total_weight != sum_of_weights) {
@@ -1571,22 +1556,124 @@ grpc_error* RouteActionParse(const envoy_config_route_v3_Route* route_msg,
   } else {
     // No cluster or weighted_clusters found in RouteAction, ignore this route.
     *ignore_route = true;
-    return GRPC_ERROR_NONE;
+  }
+  if (!*ignore_route) {
+    const envoy_config_route_v3_RouteAction_MaxStreamDuration*
+        max_stream_duration =
+            envoy_config_route_v3_RouteAction_max_stream_duration(route_action);
+    if (max_stream_duration != nullptr) {
+      const google_protobuf_Duration* duration =
+          envoy_config_route_v3_RouteAction_MaxStreamDuration_grpc_timeout_header_max(
+              max_stream_duration);
+      if (duration == nullptr) {
+        duration =
+            envoy_config_route_v3_RouteAction_MaxStreamDuration_max_stream_duration(
+                max_stream_duration);
+      }
+      if (duration != nullptr) {
+        XdsApi::Duration duration_in_route;
+        duration_in_route.seconds = google_protobuf_Duration_seconds(duration);
+        duration_in_route.nanos = google_protobuf_Duration_nanos(duration);
+        route->max_stream_duration = duration_in_route;
+      }
+    }
+  }
+  // Get HashPolicy from RouteAction
+  if (XdsRingHashEnabled()) {
+    size_t size = 0;
+    const envoy_config_route_v3_RouteAction_HashPolicy* const* hash_policies =
+        envoy_config_route_v3_RouteAction_hash_policy(route_action, &size);
+    for (size_t i = 0; i < size; ++i) {
+      const envoy_config_route_v3_RouteAction_HashPolicy* hash_policy =
+          hash_policies[i];
+      XdsApi::Route::HashPolicy policy;
+      policy.terminal =
+          envoy_config_route_v3_RouteAction_HashPolicy_terminal(hash_policy);
+      const envoy_config_route_v3_RouteAction_HashPolicy_Header* header;
+      const envoy_config_route_v3_RouteAction_HashPolicy_FilterState*
+          filter_state;
+      if ((header = envoy_config_route_v3_RouteAction_HashPolicy_header(
+               hash_policy)) != nullptr) {
+        policy.type = XdsApi::Route::HashPolicy::Type::HEADER;
+        policy.header_name = UpbStringToStdString(
+            envoy_config_route_v3_RouteAction_HashPolicy_Header_header_name(
+                header));
+        const struct envoy_type_matcher_v3_RegexMatchAndSubstitute*
+            regex_rewrite =
+                envoy_config_route_v3_RouteAction_HashPolicy_Header_regex_rewrite(
+                    header);
+        if (regex_rewrite == nullptr) {
+          gpr_log(
+              GPR_DEBUG,
+              "RouteAction HashPolicy contains policy specifier Header with "
+              "RegexMatchAndSubstitution but Regex is missing");
+          continue;
+        }
+        const envoy_type_matcher_v3_RegexMatcher* regex_matcher =
+            envoy_type_matcher_v3_RegexMatchAndSubstitute_pattern(
+                regex_rewrite);
+        if (regex_matcher == nullptr) {
+          gpr_log(
+              GPR_DEBUG,
+              "RouteAction HashPolicy contains policy specifier Header with "
+              "RegexMatchAndSubstitution but RegexMatcher pattern is "
+              "missing");
+          continue;
+        }
+        RE2::Options options;
+        policy.regex = y_absl::make_unique<RE2>(
+            UpbStringToStdString(
+                envoy_type_matcher_v3_RegexMatcher_regex(regex_matcher)),
+            options);
+        if (!policy.regex->ok()) {
+          gpr_log(
+              GPR_DEBUG,
+              "RouteAction HashPolicy contains policy specifier Header with "
+              "RegexMatchAndSubstitution but RegexMatcher pattern does not "
+              "compile");
+          continue;
+        }
+        policy.regex_substitution = UpbStringToStdString(
+            envoy_type_matcher_v3_RegexMatchAndSubstitute_substitution(
+                regex_rewrite));
+      } else if ((filter_state =
+                      envoy_config_route_v3_RouteAction_HashPolicy_filter_state(
+                          hash_policy)) != nullptr) {
+        TString key = UpbStringToStdString(
+            envoy_config_route_v3_RouteAction_HashPolicy_FilterState_key(
+                filter_state));
+        if (key == "io.grpc.channel_id") {
+          policy.type = XdsApi::Route::HashPolicy::Type::CHANNEL_ID;
+        } else {
+          gpr_log(GPR_DEBUG,
+                  "RouteAction HashPolicy contains policy specifier "
+                  "FilterState but "
+                  "key is not io.grpc.channel_id.");
+          continue;
+        }
+      } else {
+        gpr_log(
+            GPR_DEBUG,
+            "RouteAction HashPolicy contains unsupported policy specifier.");
+        continue;
+      }
+      route->hash_policies.emplace_back(std::move(policy));
+    }
   }
   return GRPC_ERROR_NONE;
 }
 
 grpc_error* RouteConfigParse(
-    XdsClient* client, TraceFlag* tracer,
+    const EncodingContext& context,
     const envoy_config_route_v3_RouteConfiguration* route_config,
     XdsApi::RdsUpdate* rds_update) {
-  MaybeLogRouteConfiguration(client, tracer, route_config);
+  MaybeLogRouteConfiguration(context, route_config);
   // Get the virtual hosts.
-  size_t size;
+  size_t num_virtual_hosts;
   const envoy_config_route_v3_VirtualHost* const* virtual_hosts =
-      envoy_config_route_v3_RouteConfiguration_virtual_hosts(route_config,
-                                                             &size);
-  for (size_t i = 0; i < size; ++i) {
+      envoy_config_route_v3_RouteConfiguration_virtual_hosts(
+          route_config, &num_virtual_hosts);
+  for (size_t i = 0; i < num_virtual_hosts; ++i) {
     rds_update->virtual_hosts.emplace_back();
     XdsApi::RdsUpdate::VirtualHost& vhost = rds_update->virtual_hosts.back();
     // Parse domains.
@@ -1606,6 +1693,18 @@ grpc_error* RouteConfigParse(
     if (vhost.domains.empty()) {
       return GRPC_ERROR_CREATE_FROM_STATIC_STRING("VirtualHost has no domains");
     }
+    // Parse typed_per_filter_config.
+    if (context.use_v3) {
+      grpc_error* error = ParseTypedPerFilterConfig<
+          envoy_config_route_v3_VirtualHost,
+          envoy_config_route_v3_VirtualHost_TypedPerFilterConfigEntry>(
+          context, virtual_hosts[i],
+          envoy_config_route_v3_VirtualHost_typed_per_filter_config_next,
+          envoy_config_route_v3_VirtualHost_TypedPerFilterConfigEntry_key,
+          envoy_config_route_v3_VirtualHost_TypedPerFilterConfigEntry_value,
+          &vhost.typed_per_filter_config);
+      if (error != GRPC_ERROR_NONE) return error;
+    }
     // Parse routes.
     size_t num_routes;
     const envoy_config_route_v3_Route* const* routes =
@@ -1618,6 +1717,9 @@ grpc_error* RouteConfigParse(
     for (size_t j = 0; j < num_routes; ++j) {
       const envoy_config_route_v3_RouteMatch* match =
           envoy_config_route_v3_Route_match(routes[j]);
+      if (match == nullptr) {
+        return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Match can't be null.");
+      }
       size_t query_parameters_size;
       static_cast<void>(envoy_config_route_v3_RouteMatch_query_parameters(
           match, &query_parameters_size));
@@ -1633,15 +1735,19 @@ grpc_error* RouteConfigParse(
       if (error != GRPC_ERROR_NONE) return error;
       error = RouteRuntimeFractionParse(match, &route);
       if (error != GRPC_ERROR_NONE) return error;
-      error = RouteActionParse(routes[j], &route, &ignore_route);
+      error = RouteActionParse(context, routes[j], &route, &ignore_route);
       if (error != GRPC_ERROR_NONE) return error;
       if (ignore_route) continue;
-      const google_protobuf_BoolValue* case_sensitive =
-          envoy_config_route_v3_RouteMatch_case_sensitive(match);
-      if (case_sensitive != nullptr &&
-          !google_protobuf_BoolValue_value(case_sensitive)) {
-        return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-            "case_sensitive if set must be set to true.");
+      if (context.use_v3) {
+        grpc_error* error = ParseTypedPerFilterConfig<
+            envoy_config_route_v3_Route,
+            envoy_config_route_v3_Route_TypedPerFilterConfigEntry>(
+            context, routes[j],
+            envoy_config_route_v3_Route_typed_per_filter_config_next,
+            envoy_config_route_v3_Route_TypedPerFilterConfigEntry_key,
+            envoy_config_route_v3_Route_TypedPerFilterConfigEntry_value,
+            &route.typed_per_filter_config);
+        if (error != GRPC_ERROR_NONE) return error;
       }
       vhost.routes.emplace_back(std::move(route));
     }
@@ -1652,151 +1758,17 @@ grpc_error* RouteConfigParse(
   return GRPC_ERROR_NONE;
 }
 
-grpc_error* LdsResponseParse(
-    XdsClient* client, TraceFlag* tracer,
-    const envoy_service_discovery_v3_DiscoveryResponse* response,
-    const std::set<y_absl::string_view>& expected_listener_names,
-    XdsApi::LdsUpdateMap* lds_update_map, upb_arena* arena) {
-  // Get the resources from the response.
-  size_t size;
-  const google_protobuf_Any* const* resources =
-      envoy_service_discovery_v3_DiscoveryResponse_resources(response, &size);
-  for (size_t i = 0; i < size; ++i) {
-    // Check the type_url of the resource.
-    y_absl::string_view type_url =
-        UpbStringToAbsl(google_protobuf_Any_type_url(resources[i]));
-    if (!IsLds(type_url)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Resource is not LDS.");
-    }
-    // Decode the listener.
-    const upb_strview encoded_listener =
-        google_protobuf_Any_value(resources[i]);
-    const envoy_config_listener_v3_Listener* listener =
-        envoy_config_listener_v3_Listener_parse(encoded_listener.data,
-                                                encoded_listener.size, arena);
-    if (listener == nullptr) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Can't decode listener.");
-    }
-    // Check listener name. Ignore unexpected listeners.
-    TString listener_name =
-        UpbStringToStdString(envoy_config_listener_v3_Listener_name(listener));
-    if (expected_listener_names.find(listener_name) ==
-        expected_listener_names.end()) {
-      continue;
-    }
-    // Fail if listener name is duplicated.
-    if (lds_update_map->find(listener_name) != lds_update_map->end()) {
-      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-          y_absl::StrCat("duplicate listener name \"", listener_name, "\"")
-              .c_str());
-    }
-    XdsApi::LdsUpdate& lds_update = (*lds_update_map)[listener_name];
-    // Get api_listener and decode it to http_connection_manager.
-    const envoy_config_listener_v3_ApiListener* api_listener =
-        envoy_config_listener_v3_Listener_api_listener(listener);
-    if (api_listener == nullptr) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "Listener has no ApiListener.");
-    }
-    const upb_strview encoded_api_listener = google_protobuf_Any_value(
-        envoy_config_listener_v3_ApiListener_api_listener(api_listener));
-    const envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager*
-        http_connection_manager =
-            envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_parse(
-                encoded_api_listener.data, encoded_api_listener.size, arena);
-    if (http_connection_manager == nullptr) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "Could not parse HttpConnectionManager config from ApiListener");
-    }
-    // Found inlined route_config. Parse it to find the cluster_name.
-    if (envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_has_route_config(
-            http_connection_manager)) {
-      const envoy_config_route_v3_RouteConfiguration* route_config =
-          envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_route_config(
-              http_connection_manager);
-      XdsApi::RdsUpdate rds_update;
-      grpc_error* error =
-          RouteConfigParse(client, tracer, route_config, &rds_update);
-      if (error != GRPC_ERROR_NONE) return error;
-      lds_update.rds_update = std::move(rds_update);
-      continue;
-    }
-    // Validate that RDS must be used to get the route_config dynamically.
-    if (!envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_has_rds(
-            http_connection_manager)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "HttpConnectionManager neither has inlined route_config nor RDS.");
-    }
-    const envoy_extensions_filters_network_http_connection_manager_v3_Rds* rds =
-        envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_rds(
-            http_connection_manager);
-    // Check that the ConfigSource specifies ADS.
-    const envoy_config_core_v3_ConfigSource* config_source =
-        envoy_extensions_filters_network_http_connection_manager_v3_Rds_config_source(
-            rds);
-    if (config_source == nullptr) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "HttpConnectionManager missing config_source for RDS.");
-    }
-    if (!envoy_config_core_v3_ConfigSource_has_ads(config_source)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "HttpConnectionManager ConfigSource for RDS does not specify ADS.");
-    }
-    // Get the route_config_name.
-    lds_update.route_config_name = UpbStringToStdString(
-        envoy_extensions_filters_network_http_connection_manager_v3_Rds_route_config_name(
-            rds));
-  }
-  return GRPC_ERROR_NONE;
-}
-
-grpc_error* RdsResponseParse(
-    XdsClient* client, TraceFlag* tracer,
-    const envoy_service_discovery_v3_DiscoveryResponse* response,
-    const std::set<y_absl::string_view>& expected_route_configuration_names,
-    XdsApi::RdsUpdateMap* rds_update_map, upb_arena* arena) {
-  // Get the resources from the response.
-  size_t size;
-  const google_protobuf_Any* const* resources =
-      envoy_service_discovery_v3_DiscoveryResponse_resources(response, &size);
-  for (size_t i = 0; i < size; ++i) {
-    // Check the type_url of the resource.
-    y_absl::string_view type_url =
-        UpbStringToAbsl(google_protobuf_Any_type_url(resources[i]));
-    if (!IsRds(type_url)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Resource is not RDS.");
-    }
-    // Decode the route_config.
-    const upb_strview encoded_route_config =
-        google_protobuf_Any_value(resources[i]);
-    const envoy_config_route_v3_RouteConfiguration* route_config =
-        envoy_config_route_v3_RouteConfiguration_parse(
-            encoded_route_config.data, encoded_route_config.size, arena);
-    if (route_config == nullptr) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Can't decode route_config.");
-    }
-    // Check route_config_name. Ignore unexpected route_config.
-    TString route_config_name = UpbStringToStdString(
-        envoy_config_route_v3_RouteConfiguration_name(route_config));
-    if (expected_route_configuration_names.find(route_config_name) ==
-        expected_route_configuration_names.end()) {
-      continue;
-    }
-    // Fail if route config name is duplicated.
-    if (rds_update_map->find(route_config_name) != rds_update_map->end()) {
-      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-          y_absl::StrCat("duplicate route config name \"", route_config_name,
-                       "\"")
-              .c_str());
-    }
-    // Parse the route_config.
-    XdsApi::RdsUpdate& rds_update =
-        (*rds_update_map)[std::move(route_config_name)];
-    grpc_error* error =
-        RouteConfigParse(client, tracer, route_config, &rds_update);
-    if (error != GRPC_ERROR_NONE) return error;
-  }
-  return GRPC_ERROR_NONE;
+XdsApi::CommonTlsContext::CertificateProviderInstance
+CertificateProviderInstanceParse(
+    const envoy_extensions_transport_sockets_tls_v3_CommonTlsContext_CertificateProviderInstance*
+        certificate_provider_instance_proto) {
+  return {
+      UpbStringToStdString(
+          envoy_extensions_transport_sockets_tls_v3_CommonTlsContext_CertificateProviderInstance_instance_name(
+              certificate_provider_instance_proto)),
+      UpbStringToStdString(
+          envoy_extensions_transport_sockets_tls_v3_CommonTlsContext_CertificateProviderInstance_certificate_name(
+              certificate_provider_instance_proto))};
 }
 
 grpc_error* CommonTlsContextParse(
@@ -1820,47 +1792,61 @@ grpc_error* CommonTlsContextParse(
           envoy_extensions_transport_sockets_tls_v3_CertificateValidationContext_match_subject_alt_names(
               default_validation_context, &len);
       for (size_t i = 0; i < len; ++i) {
-        XdsApi::StringMatcher matcher;
+        StringMatcher::Type type;
+        TString matcher;
         if (envoy_type_matcher_v3_StringMatcher_has_exact(
                 subject_alt_names_matchers[i])) {
-          matcher.type = XdsApi::StringMatcher::StringMatcherType::EXACT;
-          matcher.string_matcher =
+          type = StringMatcher::Type::EXACT;
+          matcher =
               UpbStringToStdString(envoy_type_matcher_v3_StringMatcher_exact(
                   subject_alt_names_matchers[i]));
         } else if (envoy_type_matcher_v3_StringMatcher_has_prefix(
                        subject_alt_names_matchers[i])) {
-          matcher.type = XdsApi::StringMatcher::StringMatcherType::PREFIX;
-          matcher.string_matcher =
+          type = StringMatcher::Type::PREFIX;
+          matcher =
               UpbStringToStdString(envoy_type_matcher_v3_StringMatcher_prefix(
                   subject_alt_names_matchers[i]));
         } else if (envoy_type_matcher_v3_StringMatcher_has_suffix(
                        subject_alt_names_matchers[i])) {
-          matcher.type = XdsApi::StringMatcher::StringMatcherType::SUFFIX;
-          matcher.string_matcher =
+          type = StringMatcher::Type::SUFFIX;
+          matcher =
               UpbStringToStdString(envoy_type_matcher_v3_StringMatcher_suffix(
+                  subject_alt_names_matchers[i]));
+        } else if (envoy_type_matcher_v3_StringMatcher_has_contains(
+                       subject_alt_names_matchers[i])) {
+          type = StringMatcher::Type::CONTAINS;
+          matcher =
+              UpbStringToStdString(envoy_type_matcher_v3_StringMatcher_contains(
                   subject_alt_names_matchers[i]));
         } else if (envoy_type_matcher_v3_StringMatcher_has_safe_regex(
                        subject_alt_names_matchers[i])) {
-          matcher.type = XdsApi::StringMatcher::StringMatcherType::SAFE_REGEX;
+          type = StringMatcher::Type::SAFE_REGEX;
           auto* regex_matcher = envoy_type_matcher_v3_StringMatcher_safe_regex(
               subject_alt_names_matchers[i]);
-          std::unique_ptr<RE2> regex =
-              y_absl::make_unique<RE2>(UpbStringToStdString(
-                  envoy_type_matcher_v3_RegexMatcher_regex(regex_matcher)));
-          if (!regex->ok()) {
-            return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-                "Invalid regex string specified in string matcher.");
-          }
-          matcher.regex_match = std::move(regex);
+          matcher = UpbStringToStdString(
+              envoy_type_matcher_v3_RegexMatcher_regex(regex_matcher));
         } else {
           return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
               "Invalid StringMatcher specified");
         }
-        matcher.ignore_case = envoy_type_matcher_v3_StringMatcher_ignore_case(
+        bool ignore_case = envoy_type_matcher_v3_StringMatcher_ignore_case(
             subject_alt_names_matchers[i]);
+        y_absl::StatusOr<StringMatcher> string_matcher =
+            StringMatcher::Create(type, matcher,
+                                  /*case_sensitive=*/!ignore_case);
+        if (!string_matcher.ok()) {
+          return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat("string matcher: ",
+                           string_matcher.status().message())
+                  .c_str());
+        }
+        if (type == StringMatcher::Type::SAFE_REGEX && ignore_case) {
+          return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+              "StringMatcher: ignore_case has no effect for SAFE_REGEX.");
+        }
         common_tls_context->combined_validation_context
-            .default_validation_context.match_subject_alt_names.emplace_back(
-                matcher);
+            .default_validation_context.match_subject_alt_names.push_back(
+                std::move(string_matcher.value()));
       }
     }
     auto* validation_context_certificate_provider_instance =
@@ -1868,28 +1854,809 @@ grpc_error* CommonTlsContextParse(
             combined_validation_context);
     if (validation_context_certificate_provider_instance != nullptr) {
       common_tls_context->combined_validation_context
-          .validation_context_certificate_provider_instance = UpbStringToStdString(
-          envoy_extensions_transport_sockets_tls_v3_CommonTlsContext_CertificateProviderInstance_instance_name(
-              validation_context_certificate_provider_instance));
+          .validation_context_certificate_provider_instance =
+          CertificateProviderInstanceParse(
+              validation_context_certificate_provider_instance);
     }
   }
   auto* tls_certificate_certificate_provider_instance =
       envoy_extensions_transport_sockets_tls_v3_CommonTlsContext_tls_certificate_certificate_provider_instance(
           common_tls_context_proto);
   if (tls_certificate_certificate_provider_instance != nullptr) {
-    common_tls_context
-        ->tls_certificate_certificate_provider_instance = UpbStringToStdString(
-        envoy_extensions_transport_sockets_tls_v3_CommonTlsContext_CertificateProviderInstance_instance_name(
-            tls_certificate_certificate_provider_instance));
+    common_tls_context->tls_certificate_certificate_provider_instance =
+        CertificateProviderInstanceParse(
+            tls_certificate_certificate_provider_instance);
   }
   return GRPC_ERROR_NONE;
 }
 
+grpc_error* HttpConnectionManagerParse(
+    bool is_client, const EncodingContext& context,
+    const envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager*
+        http_connection_manager_proto,
+    bool is_v2,
+    XdsApi::LdsUpdate::HttpConnectionManager* http_connection_manager) {
+  MaybeLogHttpConnectionManager(context, http_connection_manager_proto);
+  // Obtain max_stream_duration from Http Protocol Options.
+  const envoy_config_core_v3_HttpProtocolOptions* options =
+      envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_common_http_protocol_options(
+          http_connection_manager_proto);
+  if (options != nullptr) {
+    const google_protobuf_Duration* duration =
+        envoy_config_core_v3_HttpProtocolOptions_max_stream_duration(options);
+    if (duration != nullptr) {
+      http_connection_manager->http_max_stream_duration.seconds =
+          google_protobuf_Duration_seconds(duration);
+      http_connection_manager->http_max_stream_duration.nanos =
+          google_protobuf_Duration_nanos(duration);
+    }
+  }
+  // Parse filters.
+  if (!is_v2) {
+    size_t num_filters = 0;
+    const auto* http_filters =
+        envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_http_filters(
+            http_connection_manager_proto, &num_filters);
+    std::set<y_absl::string_view> names_seen;
+    for (size_t i = 0; i < num_filters; ++i) {
+      const auto* http_filter = http_filters[i];
+      y_absl::string_view name = UpbStringToAbsl(
+          envoy_extensions_filters_network_http_connection_manager_v3_HttpFilter_name(
+              http_filter));
+      if (name.empty()) {
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat("empty filter name at index ", i).c_str());
+      }
+      if (names_seen.find(name) != names_seen.end()) {
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat("duplicate HTTP filter name: ", name).c_str());
+      }
+      names_seen.insert(name);
+      const bool is_optional =
+          envoy_extensions_filters_network_http_connection_manager_v3_HttpFilter_is_optional(
+              http_filter);
+      const google_protobuf_Any* any =
+          envoy_extensions_filters_network_http_connection_manager_v3_HttpFilter_typed_config(
+              http_filter);
+      if (any == nullptr) {
+        if (is_optional) continue;
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat("no filter config specified for filter name ", name)
+                .c_str());
+      }
+      y_absl::string_view filter_type;
+      grpc_error* error = ExtractHttpFilterTypeName(context, any, &filter_type);
+      if (error != GRPC_ERROR_NONE) return error;
+      const XdsHttpFilterImpl* filter_impl =
+          XdsHttpFilterRegistry::GetFilterForType(filter_type);
+      if (filter_impl == nullptr) {
+        if (is_optional) continue;
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat("no filter registered for config type ", filter_type)
+                .c_str());
+      }
+      if ((is_client && !filter_impl->IsSupportedOnClients()) ||
+          (!is_client && !filter_impl->IsSupportedOnServers())) {
+        if (is_optional) continue;
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrFormat("Filter %s is not supported on %s", filter_type,
+                            is_client ? "clients" : "servers")
+                .c_str());
+      }
+      y_absl::StatusOr<XdsHttpFilterImpl::FilterConfig> filter_config =
+          filter_impl->GenerateFilterConfig(google_protobuf_Any_value(any),
+                                            context.arena);
+      if (!filter_config.ok()) {
+        return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat(
+                "filter config for type ", filter_type,
+                " failed to parse: ", filter_config.status().ToString())
+                .c_str());
+      }
+      http_connection_manager->http_filters.emplace_back(
+          XdsApi::LdsUpdate::HttpConnectionManager::HttpFilter{
+              TString(name), std::move(*filter_config)});
+    }
+  } else {
+    // If using a v2 config, we just hard-code a list containing only the
+    // router filter without actually looking at the config.  This ensures
+    // that the right thing happens in the xds resolver without having
+    // to expose whether the resource we received was v2 or v3.
+    http_connection_manager->http_filters.emplace_back(
+        XdsApi::LdsUpdate::HttpConnectionManager::HttpFilter{
+            "router", {kXdsHttpRouterFilterConfigName, Json()}});
+  }
+  if (is_client) {
+    // Found inlined route_config. Parse it to find the cluster_name.
+    if (envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_has_route_config(
+            http_connection_manager_proto)) {
+      const envoy_config_route_v3_RouteConfiguration* route_config =
+          envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_route_config(
+              http_connection_manager_proto);
+      XdsApi::RdsUpdate rds_update;
+      grpc_error* error = RouteConfigParse(context, route_config, &rds_update);
+      if (error != GRPC_ERROR_NONE) return error;
+      http_connection_manager->rds_update = std::move(rds_update);
+      return GRPC_ERROR_NONE;
+    }
+    // Validate that RDS must be used to get the route_config dynamically.
+    const envoy_extensions_filters_network_http_connection_manager_v3_Rds* rds =
+        envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_rds(
+            http_connection_manager_proto);
+    if (rds == nullptr) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "HttpConnectionManager neither has inlined route_config nor RDS.");
+    }
+    // Check that the ConfigSource specifies ADS.
+    const envoy_config_core_v3_ConfigSource* config_source =
+        envoy_extensions_filters_network_http_connection_manager_v3_Rds_config_source(
+            rds);
+    if (config_source == nullptr) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "HttpConnectionManager missing config_source for RDS.");
+    }
+    if (!envoy_config_core_v3_ConfigSource_has_ads(config_source)) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "HttpConnectionManager ConfigSource for RDS does not specify ADS.");
+    }
+    // Get the route_config_name.
+    http_connection_manager->route_config_name = UpbStringToStdString(
+        envoy_extensions_filters_network_http_connection_manager_v3_Rds_route_config_name(
+            rds));
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* LdsResponseParseClient(
+    const EncodingContext& context,
+    const envoy_config_listener_v3_ApiListener* api_listener, bool is_v2,
+    XdsApi::LdsUpdate* lds_update) {
+  lds_update->type = XdsApi::LdsUpdate::ListenerType::kHttpApiListener;
+  const upb_strview encoded_api_listener = google_protobuf_Any_value(
+      envoy_config_listener_v3_ApiListener_api_listener(api_listener));
+  const auto* http_connection_manager =
+      envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_parse(
+          encoded_api_listener.data, encoded_api_listener.size, context.arena);
+  if (http_connection_manager == nullptr) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "Could not parse HttpConnectionManager config from ApiListener");
+  }
+  return HttpConnectionManagerParse(true /* is_client */, context,
+                                    http_connection_manager, is_v2,
+                                    &lds_update->http_connection_manager);
+}
+
+grpc_error* DownstreamTlsContextParse(
+    const EncodingContext& context,
+    const envoy_config_core_v3_TransportSocket* transport_socket,
+    XdsApi::DownstreamTlsContext* downstream_tls_context) {
+  y_absl::string_view name = UpbStringToAbsl(
+      envoy_config_core_v3_TransportSocket_name(transport_socket));
+  if (name == "envoy.transport_sockets.tls") {
+    auto* typed_config =
+        envoy_config_core_v3_TransportSocket_typed_config(transport_socket);
+    if (typed_config != nullptr) {
+      const upb_strview encoded_downstream_tls_context =
+          google_protobuf_Any_value(typed_config);
+      auto* downstream_tls_context_proto =
+          envoy_extensions_transport_sockets_tls_v3_DownstreamTlsContext_parse(
+              encoded_downstream_tls_context.data,
+              encoded_downstream_tls_context.size, context.arena);
+      if (downstream_tls_context_proto == nullptr) {
+        return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+            "Can't decode downstream tls context.");
+      }
+      auto* common_tls_context =
+          envoy_extensions_transport_sockets_tls_v3_DownstreamTlsContext_common_tls_context(
+              downstream_tls_context_proto);
+      if (common_tls_context != nullptr) {
+        grpc_error* error = CommonTlsContextParse(
+            common_tls_context, &downstream_tls_context->common_tls_context);
+        if (error != GRPC_ERROR_NONE) return error;
+      }
+      auto* require_client_certificate =
+          envoy_extensions_transport_sockets_tls_v3_DownstreamTlsContext_require_client_certificate(
+              downstream_tls_context_proto);
+      if (require_client_certificate != nullptr) {
+        downstream_tls_context->require_client_certificate =
+            google_protobuf_BoolValue_value(require_client_certificate);
+      }
+    }
+    if (downstream_tls_context->common_tls_context
+            .tls_certificate_certificate_provider_instance.instance_name
+            .empty()) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "TLS configuration provided but no "
+          "tls_certificate_certificate_provider_instance found.");
+    }
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* CidrRangeParse(
+    const envoy_config_core_v3_CidrRange* cidr_range_proto,
+    XdsApi::LdsUpdate::FilterChainMap::CidrRange* cidr_range) {
+  TString address_prefix = UpbStringToStdString(
+      envoy_config_core_v3_CidrRange_address_prefix(cidr_range_proto));
+  grpc_error* error = grpc_string_to_sockaddr_new(&cidr_range->address,
+                                                  address_prefix.c_str(), 0);
+  if (error != GRPC_ERROR_NONE) return error;
+  cidr_range->prefix_len = 0;
+  auto* prefix_len_proto =
+      envoy_config_core_v3_CidrRange_prefix_len(cidr_range_proto);
+  if (prefix_len_proto != nullptr) {
+    cidr_range->prefix_len = std::min(
+        google_protobuf_UInt32Value_value(prefix_len_proto),
+        (reinterpret_cast<const grpc_sockaddr*>(cidr_range->address.addr))
+                    ->sa_family == GRPC_AF_INET
+            ? uint32_t(32)
+            : uint32_t(128));
+  }
+  // Normalize the network address by masking it with prefix_len
+  grpc_sockaddr_mask_bits(&cidr_range->address, cidr_range->prefix_len);
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* FilterChainMatchParse(
+    const envoy_config_listener_v3_FilterChainMatch* filter_chain_match_proto,
+    FilterChain::FilterChainMatch* filter_chain_match) {
+  auto* destination_port =
+      envoy_config_listener_v3_FilterChainMatch_destination_port(
+          filter_chain_match_proto);
+  if (destination_port != nullptr) {
+    filter_chain_match->destination_port =
+        google_protobuf_UInt32Value_value(destination_port);
+  }
+  size_t size = 0;
+  auto* prefix_ranges = envoy_config_listener_v3_FilterChainMatch_prefix_ranges(
+      filter_chain_match_proto, &size);
+  filter_chain_match->prefix_ranges.reserve(size);
+  for (size_t i = 0; i < size; i++) {
+    XdsApi::LdsUpdate::FilterChainMap::CidrRange cidr_range;
+    grpc_error* error = CidrRangeParse(prefix_ranges[i], &cidr_range);
+    if (error != GRPC_ERROR_NONE) return error;
+    filter_chain_match->prefix_ranges.push_back(cidr_range);
+  }
+  filter_chain_match->source_type =
+      static_cast<XdsApi::LdsUpdate::FilterChainMap::ConnectionSourceType>(
+          envoy_config_listener_v3_FilterChainMatch_source_type(
+              filter_chain_match_proto));
+  auto* source_prefix_ranges =
+      envoy_config_listener_v3_FilterChainMatch_source_prefix_ranges(
+          filter_chain_match_proto, &size);
+  filter_chain_match->source_prefix_ranges.reserve(size);
+  for (size_t i = 0; i < size; i++) {
+    XdsApi::LdsUpdate::FilterChainMap::CidrRange cidr_range;
+    grpc_error* error = CidrRangeParse(source_prefix_ranges[i], &cidr_range);
+    if (error != GRPC_ERROR_NONE) return error;
+    filter_chain_match->source_prefix_ranges.push_back(cidr_range);
+  }
+  auto* source_ports = envoy_config_listener_v3_FilterChainMatch_source_ports(
+      filter_chain_match_proto, &size);
+  filter_chain_match->source_ports.reserve(size);
+  for (size_t i = 0; i < size; i++) {
+    filter_chain_match->source_ports.push_back(source_ports[i]);
+  }
+  auto* server_names = envoy_config_listener_v3_FilterChainMatch_server_names(
+      filter_chain_match_proto, &size);
+  for (size_t i = 0; i < size; i++) {
+    filter_chain_match->server_names.push_back(
+        UpbStringToStdString(server_names[i]));
+  }
+  filter_chain_match->transport_protocol = UpbStringToStdString(
+      envoy_config_listener_v3_FilterChainMatch_transport_protocol(
+          filter_chain_match_proto));
+  auto* application_protocols =
+      envoy_config_listener_v3_FilterChainMatch_application_protocols(
+          filter_chain_match_proto, &size);
+  for (size_t i = 0; i < size; i++) {
+    filter_chain_match->application_protocols.push_back(
+        UpbStringToStdString(application_protocols[i]));
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* FilterChainParse(
+    const EncodingContext& context,
+    const envoy_config_listener_v3_FilterChain* filter_chain_proto, bool is_v2,
+    FilterChain* filter_chain) {
+  grpc_error* error = GRPC_ERROR_NONE;
+  auto* filter_chain_match =
+      envoy_config_listener_v3_FilterChain_filter_chain_match(
+          filter_chain_proto);
+  if (filter_chain_match != nullptr) {
+    error = FilterChainMatchParse(filter_chain_match,
+                                  &filter_chain->filter_chain_match);
+    if (error != GRPC_ERROR_NONE) return error;
+  }
+  // Parse the filters list. Currently we only support HttpConnectionManager.
+  size_t size = 0;
+  auto* filters =
+      envoy_config_listener_v3_FilterChain_filters(filter_chain_proto, &size);
+  if (size != 1) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "FilterChain should have exactly one filter: HttpConnectionManager; no "
+        "other filter is supported at the moment");
+  }
+  auto* typed_config = envoy_config_listener_v3_Filter_typed_config(filters[0]);
+  if (typed_config == nullptr) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "No typed_config found in filter.");
+  }
+  y_absl::string_view type_url =
+      UpbStringToAbsl(google_protobuf_Any_type_url(typed_config));
+  if (type_url !=
+      "type.googleapis.com/"
+      "envoy.extensions.filters.network.http_connection_manager.v3."
+      "HttpConnectionManager") {
+    return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrCat("Unsupported filter type ", type_url).c_str());
+  }
+  const upb_strview encoded_http_connection_manager =
+      google_protobuf_Any_value(typed_config);
+  const auto* http_connection_manager =
+      envoy_extensions_filters_network_http_connection_manager_v3_HttpConnectionManager_parse(
+          encoded_http_connection_manager.data,
+          encoded_http_connection_manager.size, context.arena);
+  if (http_connection_manager == nullptr) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "Could not parse HttpConnectionManager config from filter "
+        "typed_config");
+  }
+  filter_chain->filter_chain_data =
+      std::make_shared<XdsApi::LdsUpdate::FilterChainData>();
+  error = HttpConnectionManagerParse(
+      false /* is_client */, context, http_connection_manager, is_v2,
+      &filter_chain->filter_chain_data->http_connection_manager);
+  if (error != GRPC_ERROR_NONE) return error;
+  // Get the DownstreamTlsContext for the filter chain
+  if (XdsSecurityEnabled()) {
+    auto* transport_socket =
+        envoy_config_listener_v3_FilterChain_transport_socket(
+            filter_chain_proto);
+    if (transport_socket != nullptr) {
+      error = DownstreamTlsContextParse(
+          context, transport_socket,
+          &filter_chain->filter_chain_data->downstream_tls_context);
+    }
+  }
+  return error;
+}
+
+grpc_error* AddressParse(const envoy_config_core_v3_Address* address_proto,
+                         TString* address) {
+  const auto* socket_address =
+      envoy_config_core_v3_Address_socket_address(address_proto);
+  if (socket_address == nullptr) {
+    return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        "Address does not have socket_address");
+  }
+  if (envoy_config_core_v3_SocketAddress_protocol(socket_address) !=
+      envoy_config_core_v3_SocketAddress_TCP) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+        "SocketAddress protocol is not TCP");
+  }
+  uint32_t port = envoy_config_core_v3_SocketAddress_port_value(socket_address);
+  if (port > 65535) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Invalid port");
+  }
+  *address = JoinHostPort(
+      UpbStringToAbsl(
+          envoy_config_core_v3_SocketAddress_address(socket_address)),
+      port);
+  return GRPC_ERROR_NONE;
+}
+
+// An intermediate map for filter chains that we create to validate the list of
+// filter chains received from the control plane and to finally create
+// XdsApi::LdsUpdate::FilterChainMap
+struct InternalFilterChainMap {
+  using SourceIpMap =
+      std::map<TString, XdsApi::LdsUpdate::FilterChainMap::SourceIp>;
+  using ConnectionSourceTypesArray = std::array<SourceIpMap, 3>;
+  struct DestinationIp {
+    y_absl::optional<XdsApi::LdsUpdate::FilterChainMap::CidrRange> prefix_range;
+    bool transport_protocol_raw_buffer_provided = false;
+    ConnectionSourceTypesArray source_types_array;
+  };
+  using DestinationIpMap = std::map<TString, DestinationIp>;
+  DestinationIpMap destination_ip_map;
+};
+
+grpc_error* AddFilterChainDataForSourcePort(
+    const FilterChain& filter_chain,
+    XdsApi::LdsUpdate::FilterChainMap::SourcePortsMap* ports_map,
+    uint32_t port) {
+  auto insert_result = ports_map->emplace(
+      port, XdsApi::LdsUpdate::FilterChainMap::FilterChainDataSharedPtr{
+                filter_chain.filter_chain_data});
+  if (!insert_result.second) {
+    return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+        y_absl::StrCat(
+            "Duplicate matching rules detected when adding filter chain: ",
+            filter_chain.filter_chain_match.ToString())
+            .c_str());
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* AddFilterChainDataForSourcePorts(
+    const FilterChain& filter_chain,
+    XdsApi::LdsUpdate::FilterChainMap::SourcePortsMap* ports_map) {
+  if (filter_chain.filter_chain_match.source_ports.empty()) {
+    return AddFilterChainDataForSourcePort(filter_chain, ports_map, 0);
+  } else {
+    for (uint32_t port : filter_chain.filter_chain_match.source_ports) {
+      grpc_error* error =
+          AddFilterChainDataForSourcePort(filter_chain, ports_map, port);
+      if (error != GRPC_ERROR_NONE) return error;
+    }
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* AddFilterChainDataForSourceIpRange(
+    const FilterChain& filter_chain,
+    InternalFilterChainMap::SourceIpMap* source_ip_map) {
+  if (filter_chain.filter_chain_match.source_prefix_ranges.empty()) {
+    auto insert_result = source_ip_map->emplace(
+        "", XdsApi::LdsUpdate::FilterChainMap::SourceIp());
+    return AddFilterChainDataForSourcePorts(
+        filter_chain, &insert_result.first->second.ports_map);
+  } else {
+    for (const auto& prefix_range :
+         filter_chain.filter_chain_match.source_prefix_ranges) {
+      auto insert_result = source_ip_map->emplace(
+          y_absl::StrCat(grpc_sockaddr_to_string(&prefix_range.address, false),
+                       "/", prefix_range.prefix_len),
+          XdsApi::LdsUpdate::FilterChainMap::SourceIp());
+      if (insert_result.second) {
+        insert_result.first->second.prefix_range.emplace(prefix_range);
+      }
+      grpc_error* error = AddFilterChainDataForSourcePorts(
+          filter_chain, &insert_result.first->second.ports_map);
+      if (error != GRPC_ERROR_NONE) return error;
+    }
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* AddFilterChainDataForSourceType(
+    const FilterChain& filter_chain,
+    InternalFilterChainMap::DestinationIp* destination_ip) {
+  GPR_ASSERT(static_cast<unsigned int>(
+                 filter_chain.filter_chain_match.source_type) < 3);
+  return AddFilterChainDataForSourceIpRange(
+      filter_chain, &destination_ip->source_types_array[static_cast<int>(
+                        filter_chain.filter_chain_match.source_type)]);
+}
+
+grpc_error* AddFilterChainDataForApplicationProtocols(
+    const FilterChain& filter_chain,
+    InternalFilterChainMap::DestinationIp* destination_ip) {
+  // Only allow filter chains that do not mention application protocols
+  if (!filter_chain.filter_chain_match.application_protocols.empty()) {
+    return GRPC_ERROR_NONE;
+  }
+  return AddFilterChainDataForSourceType(filter_chain, destination_ip);
+}
+
+grpc_error* AddFilterChainDataForTransportProtocol(
+    const FilterChain& filter_chain,
+    InternalFilterChainMap::DestinationIp* destination_ip) {
+  const TString& transport_protocol =
+      filter_chain.filter_chain_match.transport_protocol;
+  // Only allow filter chains with no transport protocol or "raw_buffer"
+  if (!transport_protocol.empty() && transport_protocol != "raw_buffer") {
+    return GRPC_ERROR_NONE;
+  }
+  // If for this configuration, we've already seen filter chains that mention
+  // the transport protocol as "raw_buffer", we will never match filter chains
+  // that do not mention it.
+  if (destination_ip->transport_protocol_raw_buffer_provided &&
+      transport_protocol.empty()) {
+    return GRPC_ERROR_NONE;
+  }
+  if (!transport_protocol.empty() &&
+      !destination_ip->transport_protocol_raw_buffer_provided) {
+    destination_ip->transport_protocol_raw_buffer_provided = true;
+    // Clear out the previous entries if any since those entries did not mention
+    // "raw_buffer"
+    destination_ip->source_types_array =
+        InternalFilterChainMap::ConnectionSourceTypesArray();
+  }
+  return AddFilterChainDataForApplicationProtocols(filter_chain,
+                                                   destination_ip);
+}
+
+grpc_error* AddFilterChainDataForServerNames(
+    const FilterChain& filter_chain,
+    InternalFilterChainMap::DestinationIp* destination_ip) {
+  // Don't continue adding filter chains with server names mentioned
+  if (!filter_chain.filter_chain_match.server_names.empty()) {
+    return GRPC_ERROR_NONE;
+  }
+  return AddFilterChainDataForTransportProtocol(filter_chain, destination_ip);
+}
+
+grpc_error* AddFilterChainDataForDestinationIpRange(
+    const FilterChain& filter_chain,
+    InternalFilterChainMap::DestinationIpMap* destination_ip_map) {
+  if (filter_chain.filter_chain_match.prefix_ranges.empty()) {
+    auto insert_result = destination_ip_map->emplace(
+        "", InternalFilterChainMap::DestinationIp());
+    return AddFilterChainDataForServerNames(filter_chain,
+                                            &insert_result.first->second);
+  } else {
+    for (const auto& prefix_range :
+         filter_chain.filter_chain_match.prefix_ranges) {
+      auto insert_result = destination_ip_map->emplace(
+          y_absl::StrCat(grpc_sockaddr_to_string(&prefix_range.address, false),
+                       "/", prefix_range.prefix_len),
+          InternalFilterChainMap::DestinationIp());
+      if (insert_result.second) {
+        insert_result.first->second.prefix_range.emplace(prefix_range);
+      }
+      grpc_error* error = AddFilterChainDataForServerNames(
+          filter_chain, &insert_result.first->second);
+      if (error != GRPC_ERROR_NONE) return error;
+    }
+  }
+  return GRPC_ERROR_NONE;
+}
+
+XdsApi::LdsUpdate::FilterChainMap BuildFromInternalFilterChainMap(
+    InternalFilterChainMap* internal_filter_chain_map) {
+  XdsApi::LdsUpdate::FilterChainMap filter_chain_map;
+  for (auto& destination_ip_pair :
+       internal_filter_chain_map->destination_ip_map) {
+    XdsApi::LdsUpdate::FilterChainMap::DestinationIp destination_ip;
+    destination_ip.prefix_range = destination_ip_pair.second.prefix_range;
+    for (int i = 0; i < 3; i++) {
+      auto& source_ip_map = destination_ip_pair.second.source_types_array[i];
+      for (auto& source_ip_pair : source_ip_map) {
+        destination_ip.source_types_array[i].push_back(
+            std::move(source_ip_pair.second));
+      }
+    }
+    filter_chain_map.destination_ip_vector.push_back(std::move(destination_ip));
+  }
+  return filter_chain_map;
+}
+
+grpc_error* BuildFilterChainMap(
+    const std::vector<FilterChain>& filter_chains,
+    XdsApi::LdsUpdate::FilterChainMap* filter_chain_map) {
+  InternalFilterChainMap internal_filter_chain_map;
+  for (const auto& filter_chain : filter_chains) {
+    // Discard filter chain entries that specify destination port
+    if (filter_chain.filter_chain_match.destination_port != 0) continue;
+    grpc_error* error = AddFilterChainDataForDestinationIpRange(
+        filter_chain, &internal_filter_chain_map.destination_ip_map);
+    if (error != GRPC_ERROR_NONE) return error;
+  }
+  *filter_chain_map =
+      BuildFromInternalFilterChainMap(&internal_filter_chain_map);
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* LdsResponseParseServer(
+    const EncodingContext& context,
+    const envoy_config_listener_v3_Listener* listener, bool is_v2,
+    XdsApi::LdsUpdate* lds_update) {
+  lds_update->type = XdsApi::LdsUpdate::ListenerType::kTcpListener;
+  grpc_error* error =
+      AddressParse(envoy_config_listener_v3_Listener_address(listener),
+                   &lds_update->address);
+  if (error != GRPC_ERROR_NONE) return error;
+  const auto* use_original_dst =
+      envoy_config_listener_v3_Listener_use_original_dst(listener);
+  if (use_original_dst != nullptr) {
+    if (google_protobuf_BoolValue_value(use_original_dst)) {
+      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+          "Field \'use_original_dst\' is not supported.");
+    }
+  }
+  size_t size = 0;
+  auto* filter_chains =
+      envoy_config_listener_v3_Listener_filter_chains(listener, &size);
+  std::vector<FilterChain> parsed_filter_chains;
+  parsed_filter_chains.reserve(size);
+  for (size_t i = 0; i < size; i++) {
+    FilterChain filter_chain;
+    error = FilterChainParse(context, filter_chains[i], is_v2, &filter_chain);
+    if (error != GRPC_ERROR_NONE) return error;
+    parsed_filter_chains.push_back(std::move(filter_chain));
+  }
+  error =
+      BuildFilterChainMap(parsed_filter_chains, &lds_update->filter_chain_map);
+  if (error != GRPC_ERROR_NONE) return error;
+  auto* default_filter_chain =
+      envoy_config_listener_v3_Listener_default_filter_chain(listener);
+  if (default_filter_chain != nullptr) {
+    FilterChain filter_chain;
+    error =
+        FilterChainParse(context, default_filter_chain, is_v2, &filter_chain);
+    if (error != GRPC_ERROR_NONE) return error;
+    if (filter_chain.filter_chain_data != nullptr) {
+      lds_update->default_filter_chain =
+          std::move(*filter_chain.filter_chain_data);
+    }
+  }
+  if (size == 0 && default_filter_chain == nullptr) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING("No filter chain provided.");
+  }
+  return GRPC_ERROR_NONE;
+}
+
+grpc_error* LdsResponseParse(
+    const EncodingContext& context,
+    const envoy_service_discovery_v3_DiscoveryResponse* response,
+    const std::set<y_absl::string_view>& expected_listener_names,
+    XdsApi::LdsUpdateMap* lds_update_map,
+    std::set<TString>* resource_names_failed) {
+  std::vector<grpc_error*> errors;
+  // Get the resources from the response.
+  size_t size;
+  const google_protobuf_Any* const* resources =
+      envoy_service_discovery_v3_DiscoveryResponse_resources(response, &size);
+  for (size_t i = 0; i < size; ++i) {
+    // Check the type_url of the resource.
+    y_absl::string_view type_url =
+        UpbStringToAbsl(google_protobuf_Any_type_url(resources[i]));
+    bool is_v2 = false;
+    if (!IsLds(type_url, &is_v2)) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i, ": Resource is not LDS.")
+              .c_str()));
+      continue;
+    }
+    // Decode the listener.
+    const upb_strview encoded_listener =
+        google_protobuf_Any_value(resources[i]);
+    const envoy_config_listener_v3_Listener* listener =
+        envoy_config_listener_v3_Listener_parse(
+            encoded_listener.data, encoded_listener.size, context.arena);
+    if (listener == nullptr) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i, ": Can't decode listener.")
+              .c_str()));
+      continue;
+    }
+    // Check listener name. Ignore unexpected listeners.
+    TString listener_name =
+        UpbStringToStdString(envoy_config_listener_v3_Listener_name(listener));
+    if (expected_listener_names.find(listener_name) ==
+        expected_listener_names.end()) {
+      continue;
+    }
+    // Fail if listener name is duplicated.
+    if (lds_update_map->find(listener_name) != lds_update_map->end()) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("duplicate listener name \"", listener_name, "\"")
+              .c_str()));
+      resource_names_failed->insert(listener_name);
+      continue;
+    }
+    // Serialize into JSON and store it in the LdsUpdateMap
+    XdsApi::LdsResourceData& lds_resource_data =
+        (*lds_update_map)[listener_name];
+    XdsApi::LdsUpdate& lds_update = lds_resource_data.resource;
+    lds_resource_data.serialized_proto = UpbStringToStdString(encoded_listener);
+    // Check whether it's a client or server listener.
+    const envoy_config_listener_v3_ApiListener* api_listener =
+        envoy_config_listener_v3_Listener_api_listener(listener);
+    const envoy_config_core_v3_Address* address =
+        envoy_config_listener_v3_Listener_address(listener);
+    if (api_listener != nullptr && address != nullptr) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat(listener_name,
+                       ": Listener has both address and ApiListener")
+              .c_str()));
+      resource_names_failed->insert(listener_name);
+      continue;
+    }
+    if (api_listener == nullptr && address == nullptr) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat(listener_name,
+                       ": Listener has neither address nor ApiListener")
+              .c_str()));
+      resource_names_failed->insert(listener_name);
+      continue;
+    }
+    grpc_error* error = GRPC_ERROR_NONE;
+    if (api_listener != nullptr) {
+      error = LdsResponseParseClient(context, api_listener, is_v2, &lds_update);
+    } else {
+      error = LdsResponseParseServer(context, listener, is_v2, &lds_update);
+    }
+    if (error != GRPC_ERROR_NONE) {
+      errors.push_back(grpc_error_add_child(
+          GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat(listener_name, ": validation error").c_str()),
+          error));
+      resource_names_failed->insert(listener_name);
+    }
+  }
+  return GRPC_ERROR_CREATE_FROM_VECTOR("errors parsing LDS response", &errors);
+}
+
+grpc_error* RdsResponseParse(
+    const EncodingContext& context,
+    const envoy_service_discovery_v3_DiscoveryResponse* response,
+    const std::set<y_absl::string_view>& expected_route_configuration_names,
+    XdsApi::RdsUpdateMap* rds_update_map,
+    std::set<TString>* resource_names_failed) {
+  std::vector<grpc_error*> errors;
+  // Get the resources from the response.
+  size_t size;
+  const google_protobuf_Any* const* resources =
+      envoy_service_discovery_v3_DiscoveryResponse_resources(response, &size);
+  for (size_t i = 0; i < size; ++i) {
+    // Check the type_url of the resource.
+    y_absl::string_view type_url =
+        UpbStringToAbsl(google_protobuf_Any_type_url(resources[i]));
+    if (!IsRds(type_url)) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i, ": Resource is not RDS.")
+              .c_str()));
+      continue;
+    }
+    // Decode the route_config.
+    const upb_strview encoded_route_config =
+        google_protobuf_Any_value(resources[i]);
+    const envoy_config_route_v3_RouteConfiguration* route_config =
+        envoy_config_route_v3_RouteConfiguration_parse(
+            encoded_route_config.data, encoded_route_config.size,
+            context.arena);
+    if (route_config == nullptr) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i, ": Can't decode route_config.")
+              .c_str()));
+      continue;
+    }
+    // Check route_config_name. Ignore unexpected route_config.
+    TString route_config_name = UpbStringToStdString(
+        envoy_config_route_v3_RouteConfiguration_name(route_config));
+    if (expected_route_configuration_names.find(route_config_name) ==
+        expected_route_configuration_names.end()) {
+      continue;
+    }
+    // Fail if route config name is duplicated.
+    if (rds_update_map->find(route_config_name) != rds_update_map->end()) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("duplicate route config name \"", route_config_name,
+                       "\"")
+              .c_str()));
+      resource_names_failed->insert(route_config_name);
+      continue;
+    }
+    // Serialize into JSON and store it in the RdsUpdateMap
+    XdsApi::RdsResourceData& rds_resource_data =
+        (*rds_update_map)[route_config_name];
+    XdsApi::RdsUpdate& rds_update = rds_resource_data.resource;
+    rds_resource_data.serialized_proto =
+        UpbStringToStdString(encoded_route_config);
+    // Parse the route_config.
+    grpc_error* error = RouteConfigParse(context, route_config, &rds_update);
+    if (error != GRPC_ERROR_NONE) {
+      errors.push_back(grpc_error_add_child(
+          GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat(route_config_name, ": validation error").c_str()),
+          error));
+      resource_names_failed->insert(route_config_name);
+    }
+  }
+  return GRPC_ERROR_CREATE_FROM_VECTOR("errors parsing RDS response", &errors);
+}
+
 grpc_error* CdsResponseParse(
-    XdsClient* client, TraceFlag* tracer,
+    const EncodingContext& context,
     const envoy_service_discovery_v3_DiscoveryResponse* response,
     const std::set<y_absl::string_view>& expected_cluster_names,
-    XdsApi::CdsUpdateMap* cds_update_map, upb_arena* arena) {
+    XdsApi::CdsUpdateMap* cds_update_map,
+    std::set<TString>* resource_names_failed) {
+  std::vector<grpc_error*> errors;
   // Get the resources from the response.
   size_t size;
   const google_protobuf_Any* const* resources =
@@ -1900,17 +2667,23 @@ grpc_error* CdsResponseParse(
     y_absl::string_view type_url =
         UpbStringToAbsl(google_protobuf_Any_type_url(resources[i]));
     if (!IsCds(type_url)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Resource is not CDS.");
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i, ": Resource is not CDS.")
+              .c_str()));
+      continue;
     }
     // Decode the cluster.
     const upb_strview encoded_cluster = google_protobuf_Any_value(resources[i]);
     const envoy_config_cluster_v3_Cluster* cluster =
-        envoy_config_cluster_v3_Cluster_parse(encoded_cluster.data,
-                                              encoded_cluster.size, arena);
+        envoy_config_cluster_v3_Cluster_parse(
+            encoded_cluster.data, encoded_cluster.size, context.arena);
     if (cluster == nullptr) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Can't decode cluster.");
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i, ": Can't decode cluster.")
+              .c_str()));
+      continue;
     }
-    MaybeLogCluster(client, tracer, cluster);
+    MaybeLogCluster(context, cluster);
     // Ignore unexpected cluster names.
     TString cluster_name =
         UpbStringToStdString(envoy_config_cluster_v3_Cluster_name(cluster));
@@ -1920,69 +2693,249 @@ grpc_error* CdsResponseParse(
     }
     // Fail on duplicate resources.
     if (cds_update_map->find(cluster_name) != cds_update_map->end()) {
-      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
           y_absl::StrCat("duplicate resource name \"", cluster_name, "\"")
-              .c_str());
+              .c_str()));
+      resource_names_failed->insert(cluster_name);
+      continue;
     }
-    XdsApi::CdsUpdate& cds_update = (*cds_update_map)[std::move(cluster_name)];
+    // Serialize into JSON and store it in the CdsUpdateMap
+    XdsApi::CdsResourceData& cds_resource_data =
+        (*cds_update_map)[cluster_name];
+    XdsApi::CdsUpdate& cds_update = cds_resource_data.resource;
+    cds_resource_data.serialized_proto = UpbStringToStdString(encoded_cluster);
     // Check the cluster_discovery_type.
-    if (!envoy_config_cluster_v3_Cluster_has_type(cluster)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("DiscoveryType not found.");
+    if (!envoy_config_cluster_v3_Cluster_has_type(cluster) &&
+        !envoy_config_cluster_v3_Cluster_has_cluster_type(cluster)) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat(cluster_name, ": DiscoveryType not found.").c_str()));
+      resource_names_failed->insert(cluster_name);
+      continue;
     }
-    if (envoy_config_cluster_v3_Cluster_type(cluster) !=
+    if (envoy_config_cluster_v3_Cluster_type(cluster) ==
         envoy_config_cluster_v3_Cluster_EDS) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("DiscoveryType is not EDS.");
-    }
-    // Check the EDS config source.
-    const envoy_config_cluster_v3_Cluster_EdsClusterConfig* eds_cluster_config =
-        envoy_config_cluster_v3_Cluster_eds_cluster_config(cluster);
-    const envoy_config_core_v3_ConfigSource* eds_config =
-        envoy_config_cluster_v3_Cluster_EdsClusterConfig_eds_config(
-            eds_cluster_config);
-    if (!envoy_config_core_v3_ConfigSource_has_ads(eds_config)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "EDS ConfigSource is not ADS.");
-    }
-    // Record EDS service_name (if any).
-    upb_strview service_name =
-        envoy_config_cluster_v3_Cluster_EdsClusterConfig_service_name(
-            eds_cluster_config);
-    if (service_name.size != 0) {
-      cds_update.eds_service_name = UpbStringToStdString(service_name);
+      cds_update.cluster_type = XdsApi::CdsUpdate::ClusterType::EDS;
+      // Check the EDS config source.
+      const envoy_config_cluster_v3_Cluster_EdsClusterConfig*
+          eds_cluster_config =
+              envoy_config_cluster_v3_Cluster_eds_cluster_config(cluster);
+      const envoy_config_core_v3_ConfigSource* eds_config =
+          envoy_config_cluster_v3_Cluster_EdsClusterConfig_eds_config(
+              eds_cluster_config);
+      if (!envoy_config_core_v3_ConfigSource_has_ads(eds_config)) {
+        errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat(cluster_name, ": EDS ConfigSource is not ADS.")
+                .c_str()));
+        resource_names_failed->insert(cluster_name);
+        continue;
+      }
+      // Record EDS service_name (if any).
+      upb_strview service_name =
+          envoy_config_cluster_v3_Cluster_EdsClusterConfig_service_name(
+              eds_cluster_config);
+      if (service_name.size != 0) {
+        cds_update.eds_service_name = UpbStringToStdString(service_name);
+      }
+    } else if (!XdsAggregateAndLogicalDnsClusterEnabled()) {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat(cluster_name, ": DiscoveryType is not valid.").c_str()));
+      resource_names_failed->insert(cluster_name);
+      continue;
+    } else if (envoy_config_cluster_v3_Cluster_type(cluster) ==
+               envoy_config_cluster_v3_Cluster_LOGICAL_DNS) {
+      cds_update.cluster_type = XdsApi::CdsUpdate::ClusterType::LOGICAL_DNS;
+    } else {
+      if (envoy_config_cluster_v3_Cluster_has_cluster_type(cluster)) {
+        const envoy_config_cluster_v3_Cluster_CustomClusterType*
+            custom_cluster_type =
+                envoy_config_cluster_v3_Cluster_cluster_type(cluster);
+        upb_strview type_name =
+            envoy_config_cluster_v3_Cluster_CustomClusterType_name(
+                custom_cluster_type);
+        if (UpbStringToAbsl(type_name) == "envoy.clusters.aggregate") {
+          cds_update.cluster_type = XdsApi::CdsUpdate::ClusterType::AGGREGATE;
+          // Retrieve aggregate clusters.
+          const google_protobuf_Any* typed_config =
+              envoy_config_cluster_v3_Cluster_CustomClusterType_typed_config(
+                  custom_cluster_type);
+          const upb_strview aggregate_cluster_config_upb_strview =
+              google_protobuf_Any_value(typed_config);
+          const envoy_extensions_clusters_aggregate_v3_ClusterConfig*
+              aggregate_cluster_config =
+                  envoy_extensions_clusters_aggregate_v3_ClusterConfig_parse(
+                      aggregate_cluster_config_upb_strview.data,
+                      aggregate_cluster_config_upb_strview.size, context.arena);
+          if (aggregate_cluster_config == nullptr) {
+            errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+                y_absl::StrCat(cluster_name, ": Can't parse aggregate cluster.")
+                    .c_str()));
+            resource_names_failed->insert(cluster_name);
+            continue;
+          }
+          size_t size;
+          const upb_strview* clusters =
+              envoy_extensions_clusters_aggregate_v3_ClusterConfig_clusters(
+                  aggregate_cluster_config, &size);
+          for (size_t i = 0; i < size; ++i) {
+            const upb_strview cluster = clusters[i];
+            cds_update.prioritized_cluster_names.emplace_back(
+                UpbStringToStdString(cluster));
+          }
+        } else {
+          errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat(cluster_name, ": DiscoveryType is not valid.")
+                  .c_str()));
+          resource_names_failed->insert(cluster_name);
+          continue;
+        }
+      } else {
+        errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat(cluster_name, ": DiscoveryType is not valid.")
+                .c_str()));
+        resource_names_failed->insert(cluster_name);
+        continue;
+      }
     }
     // Check the LB policy.
-    if (envoy_config_cluster_v3_Cluster_lb_policy(cluster) !=
+    if (envoy_config_cluster_v3_Cluster_lb_policy(cluster) ==
         envoy_config_cluster_v3_Cluster_ROUND_ROBIN) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "LB policy is not ROUND_ROBIN.");
+      cds_update.lb_policy = "ROUND_ROBIN";
+    } else if (XdsRingHashEnabled() &&
+               envoy_config_cluster_v3_Cluster_lb_policy(cluster) ==
+                   envoy_config_cluster_v3_Cluster_RING_HASH) {
+      cds_update.lb_policy = "RING_HASH";
+      // Record ring hash lb config
+      auto* ring_hash_config =
+          envoy_config_cluster_v3_Cluster_ring_hash_lb_config(cluster);
+      if (ring_hash_config == nullptr) {
+        errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat(cluster_name,
+                         ": ring hash lb config required but not present.")
+                .c_str()));
+        resource_names_failed->insert(cluster_name);
+        continue;
+      }
+      const google_protobuf_UInt64Value* max_ring_size =
+          envoy_config_cluster_v3_Cluster_RingHashLbConfig_maximum_ring_size(
+              ring_hash_config);
+      if (max_ring_size != nullptr) {
+        cds_update.max_ring_size =
+            google_protobuf_UInt64Value_value(max_ring_size);
+        if (cds_update.max_ring_size > 8388608 ||
+            cds_update.max_ring_size == 0) {
+          errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat(
+                  cluster_name,
+                  ": max_ring_size is not in the range of 1 to 8388608.")
+                  .c_str()));
+          resource_names_failed->insert(cluster_name);
+          continue;
+        }
+      }
+      const google_protobuf_UInt64Value* min_ring_size =
+          envoy_config_cluster_v3_Cluster_RingHashLbConfig_minimum_ring_size(
+              ring_hash_config);
+      if (min_ring_size != nullptr) {
+        cds_update.min_ring_size =
+            google_protobuf_UInt64Value_value(min_ring_size);
+        if (cds_update.min_ring_size > 8388608 ||
+            cds_update.min_ring_size == 0) {
+          errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat(
+                  cluster_name,
+                  ": min_ring_size is not in the range of 1 to 8388608.")
+                  .c_str()));
+          resource_names_failed->insert(cluster_name);
+          continue;
+        }
+        if (cds_update.min_ring_size > cds_update.max_ring_size) {
+          errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat(
+                  cluster_name,
+                  ": min_ring_size cannot be greater than max_ring_size.")
+                  .c_str()));
+          resource_names_failed->insert(cluster_name);
+          continue;
+        }
+      }
+      if (envoy_config_cluster_v3_Cluster_RingHashLbConfig_hash_function(
+              ring_hash_config) ==
+          envoy_config_cluster_v3_Cluster_RingHashLbConfig_XX_HASH) {
+        cds_update.hash_function = XdsApi::CdsUpdate::HashFunction::XX_HASH;
+      } else if (
+          envoy_config_cluster_v3_Cluster_RingHashLbConfig_hash_function(
+              ring_hash_config) ==
+          envoy_config_cluster_v3_Cluster_RingHashLbConfig_MURMUR_HASH_2) {
+        cds_update.hash_function =
+            XdsApi::CdsUpdate::HashFunction::MURMUR_HASH_2;
+      } else {
+        errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat(cluster_name,
+                         ": ring hash lb config has invalid hash function.")
+                .c_str()));
+        resource_names_failed->insert(cluster_name);
+        continue;
+      }
+    } else {
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat(cluster_name, ": LB policy is not supported.").c_str()));
+      resource_names_failed->insert(cluster_name);
+      continue;
     }
-    // Record Upstream tls context
-    auto* transport_socket =
-        envoy_config_cluster_v3_Cluster_transport_socket(cluster);
-    if (transport_socket != nullptr) {
-      y_absl::string_view name = UpbStringToAbsl(
-          envoy_config_core_v3_TransportSocket_name(transport_socket));
-      if (name == "tls") {
-        auto* typed_config =
-            envoy_config_core_v3_TransportSocket_typed_config(transport_socket);
-        if (typed_config != nullptr) {
-          const upb_strview encoded_upstream_tls_context =
-              google_protobuf_Any_value(typed_config);
-          auto* upstream_tls_context =
-              envoy_extensions_transport_sockets_tls_v3_UpstreamTlsContext_parse(
-                  encoded_upstream_tls_context.data,
-                  encoded_upstream_tls_context.size, arena);
-          if (upstream_tls_context == nullptr) {
-            return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-                "Can't decode upstream tls context.");
+    if (XdsSecurityEnabled()) {
+      // Record Upstream tls context
+      auto* transport_socket =
+          envoy_config_cluster_v3_Cluster_transport_socket(cluster);
+      if (transport_socket != nullptr) {
+        y_absl::string_view name = UpbStringToAbsl(
+            envoy_config_core_v3_TransportSocket_name(transport_socket));
+        if (name == "envoy.transport_sockets.tls") {
+          auto* typed_config =
+              envoy_config_core_v3_TransportSocket_typed_config(
+                  transport_socket);
+          if (typed_config != nullptr) {
+            const upb_strview encoded_upstream_tls_context =
+                google_protobuf_Any_value(typed_config);
+            auto* upstream_tls_context =
+                envoy_extensions_transport_sockets_tls_v3_UpstreamTlsContext_parse(
+                    encoded_upstream_tls_context.data,
+                    encoded_upstream_tls_context.size, context.arena);
+            if (upstream_tls_context == nullptr) {
+              errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+                  y_absl::StrCat(cluster_name,
+                               ": Can't decode upstream tls context.")
+                      .c_str()));
+              resource_names_failed->insert(cluster_name);
+              continue;
+            }
+            auto* common_tls_context =
+                envoy_extensions_transport_sockets_tls_v3_UpstreamTlsContext_common_tls_context(
+                    upstream_tls_context);
+            if (common_tls_context != nullptr) {
+              grpc_error* error = CommonTlsContextParse(
+                  common_tls_context, &cds_update.common_tls_context);
+              if (error != GRPC_ERROR_NONE) {
+                errors.push_back(grpc_error_add_child(
+                    GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+                        y_absl::StrCat(cluster_name, ": error in TLS context")
+                            .c_str()),
+                    error));
+                resource_names_failed->insert(cluster_name);
+                continue;
+              }
+            }
           }
-          auto* common_tls_context =
-              envoy_extensions_transport_sockets_tls_v3_UpstreamTlsContext_common_tls_context(
-                  upstream_tls_context);
-          if (common_tls_context != nullptr) {
-            grpc_error* error = CommonTlsContextParse(
-                common_tls_context, &cds_update.common_tls_context);
-            if (error != GRPC_ERROR_NONE) return error;
+          if (cds_update.common_tls_context.combined_validation_context
+                  .validation_context_certificate_provider_instance
+                  .instance_name.empty()) {
+            errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+                y_absl::StrCat(cluster_name,
+                             "TLS configuration provided but no "
+                             "validation_context_certificate_provider_instance "
+                             "found.")
+                    .c_str()));
+            resource_names_failed->insert(cluster_name);
+            continue;
           }
         }
       }
@@ -1992,8 +2945,11 @@ grpc_error* CdsResponseParse(
         envoy_config_cluster_v3_Cluster_lrs_server(cluster);
     if (lrs_server != nullptr) {
       if (!envoy_config_core_v3_ConfigSource_has_self(lrs_server)) {
-        return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-            "LRS ConfigSource is not self.");
+        errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat(cluster_name, ": LRS ConfigSource is not self.")
+                .c_str()));
+        resource_names_failed->insert(cluster_name);
+        continue;
       }
       cds_update.lrs_load_reporting_server_name.emplace("");
     }
@@ -2024,7 +2980,7 @@ grpc_error* CdsResponseParse(
       }
     }
   }
-  return GRPC_ERROR_NONE;
+  return GRPC_ERROR_CREATE_FROM_VECTOR("errors parsing CDS response", &errors);
 }
 
 grpc_error* ServerAddressParseAndAppend(
@@ -2052,7 +3008,9 @@ grpc_error* ServerAddressParseAndAppend(
   }
   // Populate grpc_resolved_address.
   grpc_resolved_address addr;
-  grpc_string_to_sockaddr(&addr, address_str.c_str(), port);
+  grpc_error* error =
+      grpc_string_to_sockaddr_new(&addr, address_str.c_str(), port);
+  if (error != GRPC_ERROR_NONE) return error;
   // Append the address to the list.
   list->emplace_back(addr, nullptr);
   return GRPC_ERROR_NONE;
@@ -2075,6 +3033,9 @@ grpc_error* LocalityParse(
   const envoy_config_core_v3_Locality* locality =
       envoy_config_endpoint_v3_LocalityLbEndpoints_locality(
           locality_lb_endpoints);
+  if (locality == nullptr) {
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Empty locality.");
+  }
   TString region =
       UpbStringToStdString(envoy_config_core_v3_Locality_region(locality));
   TString zone =
@@ -2107,7 +3068,7 @@ grpc_error* DropParseAndAppend(
   TString category = UpbStringToStdString(
       envoy_config_endpoint_v3_ClusterLoadAssignment_Policy_DropOverload_category(
           drop_overload));
-  if (category.size() == 0) {
+  if (category.empty()) {
     return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Empty drop category name");
   }
   // Get the drop rate (per million).
@@ -2139,10 +3100,12 @@ grpc_error* DropParseAndAppend(
 }
 
 grpc_error* EdsResponseParse(
-    XdsClient* client, TraceFlag* tracer,
+    const EncodingContext& context,
     const envoy_service_discovery_v3_DiscoveryResponse* response,
     const std::set<y_absl::string_view>& expected_eds_service_names,
-    XdsApi::EdsUpdateMap* eds_update_map, upb_arena* arena) {
+    XdsApi::EdsUpdateMap* eds_update_map,
+    std::set<TString>* resource_names_failed) {
+  std::vector<grpc_error*> errors;
   // Get the resources from the response.
   size_t size;
   const google_protobuf_Any* const* resources =
@@ -2152,7 +3115,10 @@ grpc_error* EdsResponseParse(
     y_absl::string_view type_url =
         UpbStringToAbsl(google_protobuf_Any_type_url(resources[i]));
     if (!IsEds(type_url)) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Resource is not EDS.");
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i, ": Resource is not EDS.")
+              .c_str()));
+      continue;
     }
     // Get the cluster_load_assignment.
     upb_strview encoded_cluster_load_assignment =
@@ -2160,12 +3126,15 @@ grpc_error* EdsResponseParse(
     envoy_config_endpoint_v3_ClusterLoadAssignment* cluster_load_assignment =
         envoy_config_endpoint_v3_ClusterLoadAssignment_parse(
             encoded_cluster_load_assignment.data,
-            encoded_cluster_load_assignment.size, arena);
+            encoded_cluster_load_assignment.size, context.arena);
     if (cluster_load_assignment == nullptr) {
-      return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "Can't parse cluster_load_assignment.");
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+          y_absl::StrCat("resource index ", i,
+                       ": Can't parse cluster_load_assignment.")
+              .c_str()));
+      continue;
     }
-    MaybeLogClusterLoadAssignment(client, tracer, cluster_load_assignment);
+    MaybeLogClusterLoadAssignment(context, cluster_load_assignment);
     // Check the EDS service name.  Ignore unexpected names.
     TString eds_service_name = UpbStringToStdString(
         envoy_config_endpoint_v3_ClusterLoadAssignment_cluster_name(
@@ -2176,22 +3145,29 @@ grpc_error* EdsResponseParse(
     }
     // Fail on duplicate resources.
     if (eds_update_map->find(eds_service_name) != eds_update_map->end()) {
-      return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+      errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
           y_absl::StrCat("duplicate resource name \"", eds_service_name, "\"")
-              .c_str());
+              .c_str()));
+      resource_names_failed->insert(eds_service_name);
+      continue;
     }
-    XdsApi::EdsUpdate& eds_update =
-        (*eds_update_map)[std::move(eds_service_name)];
+    // Serialize into JSON and store it in the EdsUpdateMap
+    XdsApi::EdsResourceData& eds_resource_data =
+        (*eds_update_map)[eds_service_name];
+    XdsApi::EdsUpdate& eds_update = eds_resource_data.resource;
+    eds_resource_data.serialized_proto =
+        UpbStringToStdString(encoded_cluster_load_assignment);
     // Get the endpoints.
     size_t locality_size;
     const envoy_config_endpoint_v3_LocalityLbEndpoints* const* endpoints =
         envoy_config_endpoint_v3_ClusterLoadAssignment_endpoints(
             cluster_load_assignment, &locality_size);
+    grpc_error* error = GRPC_ERROR_NONE;
     for (size_t j = 0; j < locality_size; ++j) {
       size_t priority;
       XdsApi::EdsUpdate::Priority::Locality locality;
-      grpc_error* error = LocalityParse(endpoints[j], &locality, &priority);
-      if (error != GRPC_ERROR_NONE) return error;
+      error = LocalityParse(endpoints[j], &locality, &priority);
+      if (error != GRPC_ERROR_NONE) break;
       // Filter out locality with weight 0.
       if (locality.lb_weight == 0) continue;
       // Make sure prorities is big enough. Note that they might not
@@ -2202,10 +3178,21 @@ grpc_error* EdsResponseParse(
       eds_update.priorities[priority].localities.emplace(locality.name.get(),
                                                          std::move(locality));
     }
+    if (error != GRPC_ERROR_NONE) {
+      errors.push_back(grpc_error_add_child(
+          GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+              y_absl::StrCat(eds_service_name, ": locality validation error")
+                  .c_str()),
+          error));
+      resource_names_failed->insert(eds_service_name);
+      continue;
+    }
     for (const auto& priority : eds_update.priorities) {
       if (priority.localities.empty()) {
-        return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-            "EDS update includes sparse priority list");
+        errors.push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+            y_absl::StrCat(eds_service_name, ": sparse priority list").c_str()));
+        resource_names_failed->insert(eds_service_name);
+        continue;
       }
     }
     // Get the drop config.
@@ -2220,13 +3207,22 @@ grpc_error* EdsResponseParse(
               envoy_config_endpoint_v3_ClusterLoadAssignment_Policy_drop_overloads(
                   policy, &drop_size);
       for (size_t j = 0; j < drop_size; ++j) {
-        grpc_error* error =
+        error =
             DropParseAndAppend(drop_overload[j], eds_update.drop_config.get());
-        if (error != GRPC_ERROR_NONE) return error;
+        if (error != GRPC_ERROR_NONE) break;
+      }
+      if (error != GRPC_ERROR_NONE) {
+        errors.push_back(grpc_error_add_child(
+            GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+                y_absl::StrCat(eds_service_name, ": drop config validation error")
+                    .c_str()),
+            error));
+        resource_names_failed->insert(eds_service_name);
+        continue;
       }
     }
   }
-  return GRPC_ERROR_NONE;
+  return GRPC_ERROR_CREATE_FROM_VECTOR("errors parsing EDS response", &errors);
 }
 
 TString TypeUrlInternalToExternal(y_absl::string_view type_url) {
@@ -2242,16 +3238,27 @@ TString TypeUrlInternalToExternal(y_absl::string_view type_url) {
   return TString(type_url);
 }
 
+template <typename UpdateMap>
+void MoveUpdatesToFailedSet(UpdateMap* update_map,
+                            std::set<TString>* resource_names_failed) {
+  for (const auto& p : *update_map) {
+    resource_names_failed->insert(p.first);
+  }
+  update_map->clear();
+}
+
 }  // namespace
 
 XdsApi::AdsParseResult XdsApi::ParseAdsResponse(
-    const grpc_slice& encoded_response,
+    const XdsBootstrap::XdsServer& server, const grpc_slice& encoded_response,
     const std::set<y_absl::string_view>& expected_listener_names,
     const std::set<y_absl::string_view>& expected_route_configuration_names,
     const std::set<y_absl::string_view>& expected_cluster_names,
     const std::set<y_absl::string_view>& expected_eds_service_names) {
   AdsParseResult result;
   upb::Arena arena;
+  const EncodingContext context = {client_, tracer_, symtab_.ptr(), arena.ptr(),
+                                   server.ShouldUseV3()};
   // Decode the response.
   const envoy_service_discovery_v3_DiscoveryResponse* response =
       envoy_service_discovery_v3_DiscoveryResponse_parse(
@@ -2263,7 +3270,7 @@ XdsApi::AdsParseResult XdsApi::ParseAdsResponse(
         GRPC_ERROR_CREATE_FROM_STATIC_STRING("Can't decode DiscoveryResponse.");
     return result;
   }
-  MaybeLogDiscoveryResponse(client_, tracer_, response);
+  MaybeLogDiscoveryResponse(context, response);
   // Record the type_url, the version_info, and the nonce of the response.
   result.type_url = TypeUrlInternalToExternal(UpbStringToAbsl(
       envoy_service_discovery_v3_DiscoveryResponse_type_url(response)));
@@ -2274,20 +3281,36 @@ XdsApi::AdsParseResult XdsApi::ParseAdsResponse(
   // Parse the response according to the resource type.
   if (IsLds(result.type_url)) {
     result.parse_error =
-        LdsResponseParse(client_, tracer_, response, expected_listener_names,
-                         &result.lds_update_map, arena.ptr());
+        LdsResponseParse(context, response, expected_listener_names,
+                         &result.lds_update_map, &result.resource_names_failed);
+    if (result.parse_error != GRPC_ERROR_NONE) {
+      MoveUpdatesToFailedSet(&result.lds_update_map,
+                             &result.resource_names_failed);
+    }
   } else if (IsRds(result.type_url)) {
-    result.parse_error = RdsResponseParse(client_, tracer_, response,
-                                          expected_route_configuration_names,
-                                          &result.rds_update_map, arena.ptr());
+    result.parse_error =
+        RdsResponseParse(context, response, expected_route_configuration_names,
+                         &result.rds_update_map, &result.resource_names_failed);
+    if (result.parse_error != GRPC_ERROR_NONE) {
+      MoveUpdatesToFailedSet(&result.rds_update_map,
+                             &result.resource_names_failed);
+    }
   } else if (IsCds(result.type_url)) {
     result.parse_error =
-        CdsResponseParse(client_, tracer_, response, expected_cluster_names,
-                         &result.cds_update_map, arena.ptr());
+        CdsResponseParse(context, response, expected_cluster_names,
+                         &result.cds_update_map, &result.resource_names_failed);
+    if (result.parse_error != GRPC_ERROR_NONE) {
+      MoveUpdatesToFailedSet(&result.cds_update_map,
+                             &result.resource_names_failed);
+    }
   } else if (IsEds(result.type_url)) {
     result.parse_error =
-        EdsResponseParse(client_, tracer_, response, expected_eds_service_names,
-                         &result.eds_update_map, arena.ptr());
+        EdsResponseParse(context, response, expected_eds_service_names,
+                         &result.eds_update_map, &result.resource_names_failed);
+    if (result.parse_error != GRPC_ERROR_NONE) {
+      MoveUpdatesToFailedSet(&result.eds_update_map,
+                             &result.resource_names_failed);
+    }
   }
   return result;
 }
@@ -2295,136 +3318,35 @@ XdsApi::AdsParseResult XdsApi::ParseAdsResponse(
 namespace {
 
 void MaybeLogLrsRequest(
-    XdsClient* client, TraceFlag* tracer,
-    const envoy_service_load_stats_v3_LoadStatsRequest* request,
-    const TString& build_version) {
-  if (GRPC_TRACE_FLAG_ENABLED(*tracer) &&
+    const EncodingContext& context,
+    const envoy_service_load_stats_v3_LoadStatsRequest* request) {
+  if (GRPC_TRACE_FLAG_ENABLED(*context.tracer) &&
       gpr_should_log(GPR_LOG_SEVERITY_DEBUG)) {
-    // TODO(roth): When we can upgrade upb, use upb textformat code to dump
-    // the raw proto instead of doing this manually.
-    std::vector<TString> fields;
-    // node
-    const auto* node =
-        envoy_service_load_stats_v3_LoadStatsRequest_node(request);
-    if (node != nullptr) {
-      AddNodeLogFields(node, build_version, &fields);
-    }
-    // cluster_stats
-    size_t num_cluster_stats;
-    const struct envoy_config_endpoint_v3_ClusterStats* const* cluster_stats =
-        envoy_service_load_stats_v3_LoadStatsRequest_cluster_stats(
-            request, &num_cluster_stats);
-    for (size_t i = 0; i < num_cluster_stats; ++i) {
-      const auto* cluster_stat = cluster_stats[i];
-      fields.emplace_back("cluster_stats {");
-      // cluster_name
-      AddStringField(
-          "  cluster_name",
-          envoy_config_endpoint_v3_ClusterStats_cluster_name(cluster_stat),
-          &fields);
-      // cluster_service_name
-      AddStringField("  cluster_service_name",
-                     envoy_config_endpoint_v3_ClusterStats_cluster_service_name(
-                         cluster_stat),
-                     &fields);
-      // upstream_locality_stats
-      size_t num_stats;
-      const envoy_config_endpoint_v3_UpstreamLocalityStats* const* stats =
-          envoy_config_endpoint_v3_ClusterStats_upstream_locality_stats(
-              cluster_stat, &num_stats);
-      for (size_t j = 0; j < num_stats; ++j) {
-        const auto* stat = stats[j];
-        fields.emplace_back("  upstream_locality_stats {");
-        // locality
-        const auto* locality =
-            envoy_config_endpoint_v3_UpstreamLocalityStats_locality(stat);
-        if (locality != nullptr) {
-          fields.emplace_back("    locality {");
-          AddLocalityField(3, locality, &fields);
-          fields.emplace_back("    }");
-        }
-        // total_successful_requests
-        fields.emplace_back(y_absl::StrCat(
-            "    total_successful_requests: ",
-            envoy_config_endpoint_v3_UpstreamLocalityStats_total_successful_requests(
-                stat)));
-        // total_requests_in_progress
-        fields.emplace_back(y_absl::StrCat(
-            "    total_requests_in_progress: ",
-            envoy_config_endpoint_v3_UpstreamLocalityStats_total_requests_in_progress(
-                stat)));
-        // total_error_requests
-        fields.emplace_back(y_absl::StrCat(
-            "    total_error_requests: ",
-            envoy_config_endpoint_v3_UpstreamLocalityStats_total_error_requests(
-                stat)));
-        // total_issued_requests
-        fields.emplace_back(y_absl::StrCat(
-            "    total_issued_requests: ",
-            envoy_config_endpoint_v3_UpstreamLocalityStats_total_issued_requests(
-                stat)));
-        fields.emplace_back("  }");
-      }
-      // total_dropped_requests
-      fields.emplace_back(y_absl::StrCat(
-          "  total_dropped_requests: ",
-          envoy_config_endpoint_v3_ClusterStats_total_dropped_requests(
-              cluster_stat)));
-      // dropped_requests
-      size_t num_drops;
-      const envoy_config_endpoint_v3_ClusterStats_DroppedRequests* const*
-          drops = envoy_config_endpoint_v3_ClusterStats_dropped_requests(
-              cluster_stat, &num_drops);
-      for (size_t j = 0; j < num_drops; ++j) {
-        const auto* drop = drops[j];
-        fields.emplace_back("  dropped_requests {");
-        // category
-        AddStringField(
-            "    category",
-            envoy_config_endpoint_v3_ClusterStats_DroppedRequests_category(
-                drop),
-            &fields);
-        // dropped_count
-        fields.emplace_back(y_absl::StrCat(
-            "    dropped_count: ",
-            envoy_config_endpoint_v3_ClusterStats_DroppedRequests_dropped_count(
-                drop)));
-        fields.emplace_back("  }");
-      }
-      // load_report_interval
-      const auto* load_report_interval =
-          envoy_config_endpoint_v3_ClusterStats_load_report_interval(
-              cluster_stat);
-      if (load_report_interval != nullptr) {
-        fields.emplace_back("  load_report_interval {");
-        fields.emplace_back(y_absl::StrCat(
-            "    seconds: ",
-            google_protobuf_Duration_seconds(load_report_interval)));
-        fields.emplace_back(
-            y_absl::StrCat("    nanos: ",
-                         google_protobuf_Duration_nanos(load_report_interval)));
-        fields.emplace_back("  }");
-      }
-      fields.emplace_back("}");
-    }
-    gpr_log(GPR_DEBUG, "[xds_client %p] constructed LRS request: %s", client,
-            y_absl::StrJoin(fields, "\n").c_str());
+    const upb_msgdef* msg_type =
+        envoy_service_load_stats_v3_LoadStatsRequest_getmsgdef(context.symtab);
+    char buf[10240];
+    upb_text_encode(request, msg_type, nullptr, 0, buf, sizeof(buf));
+    gpr_log(GPR_DEBUG, "[xds_client %p] constructed LRS request: %s",
+            context.client, buf);
   }
 }
 
 grpc_slice SerializeLrsRequest(
-    const envoy_service_load_stats_v3_LoadStatsRequest* request,
-    upb_arena* arena) {
+    const EncodingContext& context,
+    const envoy_service_load_stats_v3_LoadStatsRequest* request) {
   size_t output_length;
   char* output = envoy_service_load_stats_v3_LoadStatsRequest_serialize(
-      request, arena, &output_length);
+      request, context.arena, &output_length);
   return grpc_slice_from_copied_buffer(output, output_length);
 }
 
 }  // namespace
 
-grpc_slice XdsApi::CreateLrsInitialRequest() {
+grpc_slice XdsApi::CreateLrsInitialRequest(
+    const XdsBootstrap::XdsServer& server) {
   upb::Arena arena;
+  const EncodingContext context = {client_, tracer_, symtab_.ptr(), arena.ptr(),
+                                   server.ShouldUseV3()};
   // Create a request.
   envoy_service_load_stats_v3_LoadStatsRequest* request =
       envoy_service_load_stats_v3_LoadStatsRequest_new(arena.ptr());
@@ -2432,25 +3354,25 @@ grpc_slice XdsApi::CreateLrsInitialRequest() {
   envoy_config_core_v3_Node* node_msg =
       envoy_service_load_stats_v3_LoadStatsRequest_mutable_node(request,
                                                                 arena.ptr());
-  PopulateNode(arena.ptr(), bootstrap_, build_version_, user_agent_name_,
-               node_msg);
+  PopulateNode(context, node_, build_version_, user_agent_name_, node_msg);
   envoy_config_core_v3_Node_add_client_features(
       node_msg, upb_strview_makez("envoy.lrs.supports_send_all_clusters"),
       arena.ptr());
-  MaybeLogLrsRequest(client_, tracer_, request, build_version_);
-  return SerializeLrsRequest(request, arena.ptr());
+  MaybeLogLrsRequest(context, request);
+  return SerializeLrsRequest(context, request);
 }
 
 namespace {
 
 void LocalityStatsPopulate(
+    const EncodingContext& context,
     envoy_config_endpoint_v3_UpstreamLocalityStats* output,
     const XdsLocalityName& locality_name,
-    const XdsClusterLocalityStats::Snapshot& snapshot, upb_arena* arena) {
+    const XdsClusterLocalityStats::Snapshot& snapshot) {
   // Set locality.
   envoy_config_core_v3_Locality* locality =
-      envoy_config_endpoint_v3_UpstreamLocalityStats_mutable_locality(output,
-                                                                      arena);
+      envoy_config_endpoint_v3_UpstreamLocalityStats_mutable_locality(
+          output, context.arena);
   if (!locality_name.region().empty()) {
     envoy_config_core_v3_Locality_set_region(
         locality, StdStringToUpbString(locality_name.region()));
@@ -2478,7 +3400,7 @@ void LocalityStatsPopulate(
     const XdsClusterLocalityStats::BackendMetric& metric_value = p.second;
     envoy_config_endpoint_v3_EndpointLoadMetricStats* load_metric =
         envoy_config_endpoint_v3_UpstreamLocalityStats_add_load_metric_stats(
-            output, arena);
+            output, context.arena);
     envoy_config_endpoint_v3_EndpointLoadMetricStats_set_metric_name(
         load_metric, StdStringToUpbString(metric_name));
     envoy_config_endpoint_v3_EndpointLoadMetricStats_set_num_requests_finished_with_metric(
@@ -2493,6 +3415,8 @@ void LocalityStatsPopulate(
 grpc_slice XdsApi::CreateLrsRequest(
     ClusterLoadReportMap cluster_load_report_map) {
   upb::Arena arena;
+  const EncodingContext context = {client_, tracer_, symtab_.ptr(), arena.ptr(),
+                                   false};
   // Create a request.
   envoy_service_load_stats_v3_LoadStatsRequest* request =
       envoy_service_load_stats_v3_LoadStatsRequest_new(arena.ptr());
@@ -2519,8 +3443,7 @@ grpc_slice XdsApi::CreateLrsRequest(
       envoy_config_endpoint_v3_UpstreamLocalityStats* locality_stats =
           envoy_config_endpoint_v3_ClusterStats_add_upstream_locality_stats(
               cluster_stats, arena.ptr());
-      LocalityStatsPopulate(locality_stats, locality_name, snapshot,
-                            arena.ptr());
+      LocalityStatsPopulate(context, locality_stats, locality_name, snapshot);
     }
     // Add dropped requests.
     uint64_t total_dropped_requests = 0;
@@ -2549,8 +3472,8 @@ grpc_slice XdsApi::CreateLrsRequest(
     google_protobuf_Duration_set_seconds(load_report_interval, timespec.tv_sec);
     google_protobuf_Duration_set_nanos(load_report_interval, timespec.tv_nsec);
   }
-  MaybeLogLrsRequest(client_, tracer_, request, build_version_);
-  return SerializeLrsRequest(request, arena.ptr());
+  MaybeLogLrsRequest(context, request);
+  return SerializeLrsRequest(context, request);
 }
 
 grpc_error* XdsApi::ParseLrsResponse(const grpc_slice& encoded_response,
@@ -2591,6 +3514,278 @@ grpc_error* XdsApi::ParseLrsResponse(const grpc_slice& encoded_response,
       GPR_TIMESPAN};
   *load_reporting_interval = gpr_time_to_millis(timespec);
   return GRPC_ERROR_NONE;
+}
+
+namespace {
+google_protobuf_Timestamp* GrpcMillisToTimestamp(const EncodingContext& context,
+                                                 grpc_millis value) {
+  google_protobuf_Timestamp* timestamp =
+      google_protobuf_Timestamp_new(context.arena);
+  gpr_timespec timespec = grpc_millis_to_timespec(value, GPR_CLOCK_REALTIME);
+  google_protobuf_Timestamp_set_seconds(timestamp, timespec.tv_sec);
+  google_protobuf_Timestamp_set_nanos(timestamp, timespec.tv_nsec);
+  return timestamp;
+}
+
+envoy_admin_v3_UpdateFailureState* CreateUpdateFailureStateUpb(
+    const EncodingContext& context,
+    const XdsApi::ResourceMetadata* resource_metadata) {
+  auto* update_failure_state =
+      envoy_admin_v3_UpdateFailureState_new(context.arena);
+  envoy_admin_v3_UpdateFailureState_set_details(
+      update_failure_state,
+      StdStringToUpbString(resource_metadata->failed_details));
+  envoy_admin_v3_UpdateFailureState_set_version_info(
+      update_failure_state,
+      StdStringToUpbString(resource_metadata->failed_version));
+  envoy_admin_v3_UpdateFailureState_set_last_update_attempt(
+      update_failure_state,
+      GrpcMillisToTimestamp(context, resource_metadata->failed_update_time));
+  return update_failure_state;
+}
+
+void DumpLdsConfig(const EncodingContext& context,
+                   const XdsApi::ResourceTypeMetadata& resource_type_metadata,
+                   envoy_service_status_v3_PerXdsConfig* per_xds_config) {
+  upb_strview kLdsTypeUrlUpb = upb_strview_makez(XdsApi::kLdsTypeUrl);
+  auto* listener_config_dump =
+      envoy_service_status_v3_PerXdsConfig_mutable_listener_config(
+          per_xds_config, context.arena);
+  envoy_admin_v3_ListenersConfigDump_set_version_info(
+      listener_config_dump,
+      StdStringToUpbString(resource_type_metadata.version));
+  for (auto& p : resource_type_metadata.resource_metadata_map) {
+    y_absl::string_view name = p.first;
+    const XdsApi::ResourceMetadata* meta = p.second;
+    const upb_strview name_upb = StdStringToUpbString(name);
+    auto* dynamic_listener =
+        envoy_admin_v3_ListenersConfigDump_add_dynamic_listeners(
+            listener_config_dump, context.arena);
+    envoy_admin_v3_ListenersConfigDump_DynamicListener_set_name(
+        dynamic_listener, name_upb);
+    envoy_admin_v3_ListenersConfigDump_DynamicListener_set_client_status(
+        dynamic_listener, meta->client_status);
+    if (!meta->serialized_proto.empty()) {
+      // Set in-effective listeners
+      auto* dynamic_listener_state =
+          envoy_admin_v3_ListenersConfigDump_DynamicListener_mutable_active_state(
+              dynamic_listener, context.arena);
+      envoy_admin_v3_ListenersConfigDump_DynamicListenerState_set_version_info(
+          dynamic_listener_state, StdStringToUpbString(meta->version));
+      envoy_admin_v3_ListenersConfigDump_DynamicListenerState_set_last_updated(
+          dynamic_listener_state,
+          GrpcMillisToTimestamp(context, meta->update_time));
+      auto* listener_any =
+          envoy_admin_v3_ListenersConfigDump_DynamicListenerState_mutable_listener(
+              dynamic_listener_state, context.arena);
+      google_protobuf_Any_set_type_url(listener_any, kLdsTypeUrlUpb);
+      google_protobuf_Any_set_value(
+          listener_any, StdStringToUpbString(meta->serialized_proto));
+    }
+    if (meta->client_status == XdsApi::ResourceMetadata::NACKED) {
+      // Set error_state if NACKED
+      envoy_admin_v3_ListenersConfigDump_DynamicListener_set_error_state(
+          dynamic_listener, CreateUpdateFailureStateUpb(context, meta));
+    }
+  }
+}
+
+void DumpRdsConfig(const EncodingContext& context,
+                   const XdsApi::ResourceTypeMetadata& resource_type_metadata,
+                   envoy_service_status_v3_PerXdsConfig* per_xds_config) {
+  upb_strview kRdsTypeUrlUpb = upb_strview_makez(XdsApi::kRdsTypeUrl);
+  auto* route_config_dump =
+      envoy_service_status_v3_PerXdsConfig_mutable_route_config(per_xds_config,
+                                                                context.arena);
+  for (auto& p : resource_type_metadata.resource_metadata_map) {
+    y_absl::string_view name = p.first;
+    const XdsApi::ResourceMetadata* meta = p.second;
+    const upb_strview name_upb = StdStringToUpbString(name);
+    auto* dynamic_route_config =
+        envoy_admin_v3_RoutesConfigDump_add_dynamic_route_configs(
+            route_config_dump, context.arena);
+    envoy_admin_v3_RoutesConfigDump_DynamicRouteConfig_set_client_status(
+        dynamic_route_config, meta->client_status);
+    auto* route_config_any =
+        envoy_admin_v3_RoutesConfigDump_DynamicRouteConfig_mutable_route_config(
+            dynamic_route_config, context.arena);
+    if (!meta->serialized_proto.empty()) {
+      // Set in-effective route configs
+      envoy_admin_v3_RoutesConfigDump_DynamicRouteConfig_set_version_info(
+          dynamic_route_config, StdStringToUpbString(meta->version));
+      envoy_admin_v3_RoutesConfigDump_DynamicRouteConfig_set_last_updated(
+          dynamic_route_config,
+          GrpcMillisToTimestamp(context, meta->update_time));
+      google_protobuf_Any_set_type_url(route_config_any, kRdsTypeUrlUpb);
+      google_protobuf_Any_set_value(
+          route_config_any, StdStringToUpbString(meta->serialized_proto));
+    } else {
+      // If there isn't a working route config, we still need to print the
+      // name.
+      auto* route_config =
+          envoy_config_route_v3_RouteConfiguration_new(context.arena);
+      envoy_config_route_v3_RouteConfiguration_set_name(route_config, name_upb);
+      size_t length;
+      char* bytes = envoy_config_route_v3_RouteConfiguration_serialize(
+          route_config, context.arena, &length);
+      google_protobuf_Any_set_type_url(route_config_any, kRdsTypeUrlUpb);
+      google_protobuf_Any_set_value(route_config_any,
+                                    upb_strview_make(bytes, length));
+    }
+    if (meta->client_status == XdsApi::ResourceMetadata::NACKED) {
+      // Set error_state if NACKED
+      envoy_admin_v3_RoutesConfigDump_DynamicRouteConfig_set_error_state(
+          dynamic_route_config, CreateUpdateFailureStateUpb(context, meta));
+    }
+  }
+}
+
+void DumpCdsConfig(const EncodingContext& context,
+                   const XdsApi::ResourceTypeMetadata& resource_type_metadata,
+                   envoy_service_status_v3_PerXdsConfig* per_xds_config) {
+  upb_strview kCdsTypeUrlUpb = upb_strview_makez(XdsApi::kCdsTypeUrl);
+  auto* cluster_config_dump =
+      envoy_service_status_v3_PerXdsConfig_mutable_cluster_config(
+          per_xds_config, context.arena);
+  envoy_admin_v3_ClustersConfigDump_set_version_info(
+      cluster_config_dump,
+      StdStringToUpbString(resource_type_metadata.version));
+  for (auto& p : resource_type_metadata.resource_metadata_map) {
+    y_absl::string_view name = p.first;
+    const XdsApi::ResourceMetadata* meta = p.second;
+    const upb_strview name_upb = StdStringToUpbString(name);
+    auto* dynamic_cluster =
+        envoy_admin_v3_ClustersConfigDump_add_dynamic_active_clusters(
+            cluster_config_dump, context.arena);
+    envoy_admin_v3_ClustersConfigDump_DynamicCluster_set_client_status(
+        dynamic_cluster, meta->client_status);
+    auto* cluster_any =
+        envoy_admin_v3_ClustersConfigDump_DynamicCluster_mutable_cluster(
+            dynamic_cluster, context.arena);
+    if (!meta->serialized_proto.empty()) {
+      // Set in-effective clusters
+      envoy_admin_v3_ClustersConfigDump_DynamicCluster_set_version_info(
+          dynamic_cluster, StdStringToUpbString(meta->version));
+      envoy_admin_v3_ClustersConfigDump_DynamicCluster_set_last_updated(
+          dynamic_cluster, GrpcMillisToTimestamp(context, meta->update_time));
+      google_protobuf_Any_set_type_url(cluster_any, kCdsTypeUrlUpb);
+      google_protobuf_Any_set_value(
+          cluster_any, StdStringToUpbString(meta->serialized_proto));
+    } else {
+      // If there isn't a working cluster, we still need to print the name.
+      auto* cluster = envoy_config_cluster_v3_Cluster_new(context.arena);
+      envoy_config_cluster_v3_Cluster_set_name(cluster, name_upb);
+      size_t length;
+      char* bytes = envoy_config_cluster_v3_Cluster_serialize(
+          cluster, context.arena, &length);
+      google_protobuf_Any_set_type_url(cluster_any, kCdsTypeUrlUpb);
+      google_protobuf_Any_set_value(cluster_any,
+                                    upb_strview_make(bytes, length));
+    }
+    if (meta->client_status == XdsApi::ResourceMetadata::NACKED) {
+      // Set error_state if NACKED
+      envoy_admin_v3_ClustersConfigDump_DynamicCluster_set_error_state(
+          dynamic_cluster, CreateUpdateFailureStateUpb(context, meta));
+    }
+  }
+}
+
+void DumpEdsConfig(const EncodingContext& context,
+                   const XdsApi::ResourceTypeMetadata& resource_type_metadata,
+                   envoy_service_status_v3_PerXdsConfig* per_xds_config) {
+  upb_strview kEdsTypeUrlUpb = upb_strview_makez(XdsApi::kEdsTypeUrl);
+  auto* endpoint_config_dump =
+      envoy_service_status_v3_PerXdsConfig_mutable_endpoint_config(
+          per_xds_config, context.arena);
+  for (auto& p : resource_type_metadata.resource_metadata_map) {
+    y_absl::string_view name = p.first;
+    const XdsApi::ResourceMetadata* meta = p.second;
+    const upb_strview name_upb = StdStringToUpbString(name);
+    auto* dynamic_endpoint =
+        envoy_admin_v3_EndpointsConfigDump_add_dynamic_endpoint_configs(
+            endpoint_config_dump, context.arena);
+    envoy_admin_v3_EndpointsConfigDump_DynamicEndpointConfig_set_client_status(
+        dynamic_endpoint, meta->client_status);
+    auto* endpoint_any =
+        envoy_admin_v3_EndpointsConfigDump_DynamicEndpointConfig_mutable_endpoint_config(
+            dynamic_endpoint, context.arena);
+    if (!meta->serialized_proto.empty()) {
+      // Set in-effective endpoints
+      envoy_admin_v3_EndpointsConfigDump_DynamicEndpointConfig_set_version_info(
+          dynamic_endpoint, StdStringToUpbString(meta->version));
+      envoy_admin_v3_EndpointsConfigDump_DynamicEndpointConfig_set_last_updated(
+          dynamic_endpoint, GrpcMillisToTimestamp(context, meta->update_time));
+      google_protobuf_Any_set_type_url(endpoint_any, kEdsTypeUrlUpb);
+      google_protobuf_Any_set_value(
+          endpoint_any, StdStringToUpbString(meta->serialized_proto));
+    } else {
+      // If there isn't a working endpoint, we still need to print the name.
+      auto* cluster_load_assignment =
+          envoy_config_endpoint_v3_ClusterLoadAssignment_new(context.arena);
+      envoy_config_endpoint_v3_ClusterLoadAssignment_set_cluster_name(
+          cluster_load_assignment, name_upb);
+      size_t length;
+      char* bytes = envoy_config_endpoint_v3_ClusterLoadAssignment_serialize(
+          cluster_load_assignment, context.arena, &length);
+      google_protobuf_Any_set_type_url(endpoint_any, kEdsTypeUrlUpb);
+      google_protobuf_Any_set_value(endpoint_any,
+                                    upb_strview_make(bytes, length));
+    }
+    if (meta->client_status == XdsApi::ResourceMetadata::NACKED) {
+      // Set error_state if NACKED
+      envoy_admin_v3_EndpointsConfigDump_DynamicEndpointConfig_set_error_state(
+          dynamic_endpoint, CreateUpdateFailureStateUpb(context, meta));
+    }
+  }
+}
+
+}  // namespace
+
+TString XdsApi::AssembleClientConfig(
+    const ResourceTypeMetadataMap& resource_type_metadata_map) {
+  upb::Arena arena;
+  // Create the ClientConfig for resource metadata from XdsClient
+  auto* client_config = envoy_service_status_v3_ClientConfig_new(arena.ptr());
+  // Fill-in the node information
+  auto* node = envoy_service_status_v3_ClientConfig_mutable_node(client_config,
+                                                                 arena.ptr());
+  const EncodingContext context = {client_, tracer_, symtab_.ptr(), arena.ptr(),
+                                   true};
+  PopulateNode(context, node_, build_version_, user_agent_name_, node);
+  // Dump each xDS-type config into PerXdsConfig
+  for (auto& p : resource_type_metadata_map) {
+    y_absl::string_view type_url = p.first;
+    const ResourceTypeMetadata& resource_type_metadata = p.second;
+    if (type_url == kLdsTypeUrl) {
+      auto* per_xds_config =
+          envoy_service_status_v3_ClientConfig_add_xds_config(client_config,
+                                                              context.arena);
+      DumpLdsConfig(context, resource_type_metadata, per_xds_config);
+    } else if (type_url == kRdsTypeUrl) {
+      auto* per_xds_config =
+          envoy_service_status_v3_ClientConfig_add_xds_config(client_config,
+                                                              context.arena);
+      DumpRdsConfig(context, resource_type_metadata, per_xds_config);
+    } else if (type_url == kCdsTypeUrl) {
+      auto* per_xds_config =
+          envoy_service_status_v3_ClientConfig_add_xds_config(client_config,
+                                                              context.arena);
+      DumpCdsConfig(context, resource_type_metadata, per_xds_config);
+    } else if (type_url == kEdsTypeUrl) {
+      auto* per_xds_config =
+          envoy_service_status_v3_ClientConfig_add_xds_config(client_config,
+                                                              context.arena);
+      DumpEdsConfig(context, resource_type_metadata, per_xds_config);
+    } else {
+      gpr_log(GPR_ERROR, "invalid type_url %s", TString(type_url).c_str());
+      return "";
+    }
+  }
+  // Serialize the upb message to bytes
+  size_t output_length;
+  char* output = envoy_service_status_v3_ClientConfig_serialize(
+      client_config, arena.ptr(), &output_length);
+  return TString(output, output_length);
 }
 
 }  // namespace grpc_core

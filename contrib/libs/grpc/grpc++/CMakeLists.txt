@@ -31,6 +31,7 @@ target_link_libraries(libs-grpc-grpc++ PUBLIC
   grpc-third_party-upb
   OpenSSL::OpenSSL
   yabseil-cpp-tstring-y_absl-strings
+  yabseil-cpp-tstring-y_absl-synchronization
 )
 target_sources(libs-grpc-grpc++ PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/channel_cc.cc
@@ -43,6 +44,7 @@ target_sources(libs-grpc-grpc++ PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/credentials_cc.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/insecure_credentials.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/secure_credentials.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/xds_credentials.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/codegen/codegen_init.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/alarm.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/auth_property_iterator.cc
@@ -55,6 +57,7 @@ target_sources(libs-grpc-grpc++ PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/secure_auth_context.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/secure_channel_arguments.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/secure_create_auth_context.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/tls_certificate_provider.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/tls_credentials_options.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/tls_credentials_options_util.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/validate_service_config.cc
@@ -81,6 +84,7 @@ target_sources(libs-grpc-grpc++ PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/server/server_context.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/server/server_credentials.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/server/server_posix.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/server/xds_server_credentials.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/thread_manager/thread_manager.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/util/byte_buffer_cc.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/util/status.cc

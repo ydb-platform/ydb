@@ -56,7 +56,7 @@ void grpc_sockaddr_make_wildcard6(int port, grpc_resolved_address* wild_out);
 int grpc_sockaddr_get_port(const grpc_resolved_address* addr);
 
 /* Set IP port number of a sockaddr */
-int grpc_sockaddr_set_port(const grpc_resolved_address* addr, int port);
+int grpc_sockaddr_set_port(grpc_resolved_address* addr, int port);
 
 // Converts a sockaddr into a newly-allocated human-readable string.
 //
@@ -66,8 +66,15 @@ int grpc_sockaddr_set_port(const grpc_resolved_address* addr, int port);
 TString grpc_sockaddr_to_string(const grpc_resolved_address* addr,
                                     bool normalize);
 
+// TODO(yashykt): Remove this function and replace usages with
+// `grpc_string_to_sockaddr_new`
 void grpc_string_to_sockaddr(grpc_resolved_address* out, const char* addr,
                              int port);
+
+// Newer form of grpc_string_to_sockaddr which returns an error instead of
+// crashing if \a addr is not IPv6/IPv6
+grpc_error* grpc_string_to_sockaddr_new(grpc_resolved_address* out,
+                                        const char* addr, int port);
 
 /* Returns the URI string corresponding to \a addr */
 TString grpc_sockaddr_to_uri(const grpc_resolved_address* addr);
@@ -76,5 +83,23 @@ TString grpc_sockaddr_to_uri(const grpc_resolved_address* addr);
 const char* grpc_sockaddr_get_uri_scheme(const grpc_resolved_address* addr);
 
 int grpc_sockaddr_get_family(const grpc_resolved_address* resolved_addr);
+
+TString grpc_sockaddr_get_packed_host(
+    const grpc_resolved_address* resolved_addr);
+
+// Applies a mask of \a mask_bits to IPv4/IPv6 addresses. Has no effect if the
+// address type is not IPv4/IPv6.
+void grpc_sockaddr_mask_bits(grpc_resolved_address* address,
+                             uint32_t mask_bits);
+
+// If \a address is IPv4/IPv6, checks if the IP address falls in the CIDR
+// specified by \a subnet_address and \a mask_bits.
+// Returns false if \a address is not an IPv4/IPv6 address. The ports (if set)
+// are ignored for matching purposes. Note that, \a subnet_address should be
+// normalized, i.e., `grpc_sockaddr_mask_bits` should have been called on it if
+// necessary.
+bool grpc_sockaddr_match_subnet(const grpc_resolved_address* address,
+                                const grpc_resolved_address* subnet_address,
+                                uint32_t mask_bits);
 
 #endif /* GRPC_CORE_LIB_IOMGR_SOCKADDR_UTILS_H */

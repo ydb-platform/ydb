@@ -21,13 +21,15 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <map>
+#include <memory>
+
 #include "y_absl/status/status.h"
 
 #include <grpc/grpc.h>
 
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/atomic.h"
-#include "src/core/lib/gprpp/map.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
@@ -48,7 +50,7 @@ const char* ConnectivityStateName(grpc_connectivity_state state);
 class ConnectivityStateWatcherInterface
     : public InternallyRefCounted<ConnectivityStateWatcherInterface> {
  public:
-  virtual ~ConnectivityStateWatcherInterface() = default;
+  ~ConnectivityStateWatcherInterface() override = default;
 
   // Notifies the watcher that the state has changed to new_state.
   virtual void Notify(grpc_connectivity_state new_state,
@@ -63,12 +65,12 @@ class ConnectivityStateWatcherInterface
 class AsyncConnectivityStateWatcherInterface
     : public ConnectivityStateWatcherInterface {
  public:
-  virtual ~AsyncConnectivityStateWatcherInterface() = default;
+  ~AsyncConnectivityStateWatcherInterface() override = default;
 
   // Schedules a closure on the ExecCtx to invoke
   // OnConnectivityStateChange() asynchronously.
   void Notify(grpc_connectivity_state new_state,
-              const y_absl::Status& status) override final;
+              const y_absl::Status& status) final;
 
  protected:
   class Notifier;
@@ -95,9 +97,9 @@ class AsyncConnectivityStateWatcherInterface
 // to be called).
 class ConnectivityStateTracker {
  public:
-  ConnectivityStateTracker(const char* name,
-                           grpc_connectivity_state state = GRPC_CHANNEL_IDLE,
-                           const y_absl::Status& status = y_absl::Status())
+  explicit ConnectivityStateTracker(
+      const char* name, grpc_connectivity_state state = GRPC_CHANNEL_IDLE,
+      const y_absl::Status& status = y_absl::Status())
       : name_(name), state_(state), status_(status) {}
 
   ~ConnectivityStateTracker();

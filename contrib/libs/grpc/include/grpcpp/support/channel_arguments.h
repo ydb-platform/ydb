@@ -102,14 +102,18 @@ class ChannelArguments {
   /// Primarily meant for use in unit tests.
   void SetServiceConfigJSON(const TString& service_config_json);
 
-  // Generic channel argument setters. Only for advanced use cases.
+  // Generic channel argument setter. Only for advanced use cases.
   /// Set an integer argument \a value under \a key.
   void SetInt(const TString& key, int value);
 
   // Generic channel argument setter. Only for advanced use cases.
-  /// Set a pointer argument \a value under \a key. Owership is not transferred.
+  /// Set a pointer argument \a value under \a key. Ownership is not
+  /// transferred.
   void SetPointer(const TString& key, void* value);
 
+  /// Set a pointer argument \a value under \a key, transferring ownership of
+  /// \a value to the \a ChannelArguments object. The \a vtable::Delete function
+  /// is responsible for \a value cleanup/destruction when called.
   void SetPointerWithVtable(const TString& key, void* value,
                             const grpc_arg_pointer_vtable* vtable);
 
@@ -121,7 +125,7 @@ class ChannelArguments {
   grpc_channel_args c_channel_args() const {
     grpc_channel_args out;
     out.num_args = args_.size();
-    out.args = args_.empty() ? NULL : const_cast<grpc_arg*>(&args_[0]);
+    out.args = args_.empty() ? nullptr : const_cast<grpc_arg*>(&args_[0]);
     return out;
   }
 

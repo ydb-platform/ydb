@@ -202,8 +202,15 @@ typedef struct {
 #define GRPC_ARG_HTTP2_MAX_FRAME_SIZE "grpc.http2.max_frame_size"
 /** Should BDP probing be performed? */
 #define GRPC_ARG_HTTP2_BDP_PROBE "grpc.http2.bdp_probe"
-/** Minimum time between sending successive ping frames without receiving any
-    data/header frame, Int valued, milliseconds. */
+/** (DEPRECATED) Does not have any effect.
+    Earlier, this arg configured the minimum time between successive ping frames
+    without receiving any data/header frame, Int valued, milliseconds. This put
+    unnecessary constraints on the configuration of keepalive pings,
+    requiring users to set this channel arg along with
+    GRPC_ARG_KEEPALIVE_TIME_MS. This arg also limited the activity of the other
+    source of pings in gRPC Core - BDP pings, but BDP pings are only sent when
+    there is receive-side data activity, making this arg unuseful for BDP pings
+    too.  */
 #define GRPC_ARG_HTTP2_MIN_SENT_PING_INTERVAL_WITHOUT_DATA_MS \
   "grpc.http2.min_time_between_pings_ms"
 /** Minimum allowed time between a server receiving successive ping frames
@@ -455,7 +462,7 @@ typedef enum grpc_call_error {
 
 /** Default send/receive message size limits in bytes. -1 for unlimited. */
 /** TODO(roth) Make this match the default receive limit after next release */
-#define GRPC_DEFAULT_MAX_SEND_MESSAGE_LENGTH -1
+#define GRPC_DEFAULT_MAX_SEND_MESSAGE_LENGTH (-1)
 #define GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH (4 * 1024 * 1024)
 
 /** Write Flags: */

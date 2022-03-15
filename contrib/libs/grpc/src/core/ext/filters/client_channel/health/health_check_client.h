@@ -44,13 +44,13 @@ namespace grpc_core {
 
 class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
  public:
-  HealthCheckClient(const char* service_name,
+  HealthCheckClient(TString service_name,
                     RefCountedPtr<ConnectedSubchannel> connected_subchannel,
                     grpc_pollset_set* interested_parties,
                     RefCountedPtr<channelz::SubchannelNode> channelz_node,
                     RefCountedPtr<ConnectivityStateWatcherInterface> watcher);
 
-  ~HealthCheckClient();
+  ~HealthCheckClient() override;
 
   void Orphan() override;
 
@@ -60,7 +60,7 @@ class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
    public:
     CallState(RefCountedPtr<HealthCheckClient> health_check_client,
               grpc_pollset_set* interested_parties_);
-    ~CallState();
+    ~CallState() override;
 
     void Orphan() override;
 
@@ -150,7 +150,7 @@ class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
   void SetHealthStatusLocked(grpc_connectivity_state state,
                              const char* reason);  // Requires holding mu_.
 
-  const char* service_name_;  // Do not own.
+  TString service_name_;
   RefCountedPtr<ConnectedSubchannel> connected_subchannel_;
   grpc_pollset_set* interested_parties_;  // Do not own.
   RefCountedPtr<channelz::SubchannelNode> channelz_node_;

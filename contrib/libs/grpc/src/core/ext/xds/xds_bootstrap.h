@@ -26,16 +26,26 @@
 
 #include "y_absl/container/inlined_vector.h"
 
-#include <grpc/impl/codegen/slice.h>
+#include <grpc/slice.h>
 
-#include "src/core/lib/gprpp/map.h"
+#include "src/core/ext/xds/certificate_provider_store.h"
 #include "src/core/lib/gprpp/memory.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/json/json.h"
+#include "src/core/lib/security/credentials/credentials.h"
 
 namespace grpc_core {
 
 class XdsClient;
+
+class XdsChannelCredsRegistry {
+ public:
+  static bool IsSupported(const TString& creds_type);
+  static bool IsValidConfig(const TString& creds_type, const Json& config);
+  static RefCountedPtr<grpc_channel_credentials> MakeChannelCreds(
+      const TString& creds_type, const Json& config);
+};
 
 class XdsBootstrap {
  public:
@@ -44,28 +54,32 @@ class XdsBootstrap {
     TString cluster;
     TString locality_region;
     TString locality_zone;
-    TString locality_subzone;
+    TString locality_sub_zone;
     Json metadata;
-  };
-
-  struct ChannelCreds {
-    TString type;
-    Json config;
   };
 
   struct XdsServer {
     TString server_uri;
-    y_absl::InlinedVector<ChannelCreds, 1> channel_creds;
+    TString channel_creds_type;
+    Json channel_creds_config;
     std::set<TString> server_features;
 
     bool ShouldUseV3() const;
   };
 
+  // Creates bootstrap object, obtaining the bootstrap JSON as appropriate
+  // for the environment:
+  // - If the GRPC_XDS_BOOTSTRAP env var is set, reads the file it specifies
+  //   to obtain the bootstrap JSON.
+  // - Otherwise, if the GRPC_XDS_BOOTSTRAP_CONFIG env var is set, reads the
+  //   content of that env var to obtain the bootstrap JSON.
+  // - Otherwise, the JSON will be read from fallback_config (if non-null).
   // If *error is not GRPC_ERROR_NONE after returning, then there was an
-  // error reading the file.
-  static std::unique_ptr<XdsBootstrap> ReadFromFile(XdsClient* client,
-                                                    TraceFlag* tracer,
-                                                    grpc_error** error);
+  // error (e.g., no config found or error reading the file).
+  static std::unique_ptr<XdsBootstrap> Create(XdsClient* client,
+                                              TraceFlag* tracer,
+                                              const char* fallback_config,
+                                              grpc_error** error);
 
   // Do not instantiate directly -- use ReadFromFile() above instead.
   XdsBootstrap(Json json, grpc_error** error);
@@ -74,6 +88,14 @@ class XdsBootstrap {
   // add support for fallback for the xds channel.
   const XdsServer& server() const { return servers_[0]; }
   const Node* node() const { return node_.get(); }
+  const TString& server_listener_resource_name_template() const {
+    return server_listener_resource_name_template_;
+  }
+
+  const CertificateProviderStore::PluginDefinitionMap& certificate_providers()
+      const {
+    return certificate_providers_;
+  }
 
  private:
   grpc_error* ParseXdsServerList(Json* json);
@@ -83,9 +105,14 @@ class XdsBootstrap {
   grpc_error* ParseServerFeaturesArray(Json* json, XdsServer* server);
   grpc_error* ParseNode(Json* json);
   grpc_error* ParseLocality(Json* json);
+  grpc_error* ParseCertificateProviders(Json* json);
+  grpc_error* ParseCertificateProvider(const TString& instance_name,
+                                       Json* certificate_provider_json);
 
   y_absl::InlinedVector<XdsServer, 1> servers_;
   std::unique_ptr<Node> node_;
+  TString server_listener_resource_name_template_;
+  CertificateProviderStore::PluginDefinitionMap certificate_providers_;
 };
 
 }  // namespace grpc_core

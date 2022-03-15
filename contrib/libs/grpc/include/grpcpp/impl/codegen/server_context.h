@@ -37,6 +37,7 @@
 #include <grpcpp/impl/codegen/create_auth_context.h>
 #include <grpcpp/impl/codegen/message_allocator.h>
 #include <grpcpp/impl/codegen/metadata_map.h>
+#include <grpcpp/impl/codegen/rpc_service_method.h>
 #include <grpcpp/impl/codegen/security/auth_context.h>
 #include <grpcpp/impl/codegen/server_callback.h>
 #include <grpcpp/impl/codegen/server_interceptor.h>
@@ -75,7 +76,11 @@ template <class RequestType, class ResponseType>
 class CallbackBidiHandler;
 template <class ServiceType, class RequestType, class ResponseType>
 class ClientStreamingHandler;
-template <class ServiceType, class RequestType, class ResponseType>
+template <class ResponseType>
+void UnaryRunHandlerHelper(const MethodHandler::HandlerParameter&,
+                           ResponseType*, Status&);
+template <class ServiceType, class RequestType, class ResponseType,
+          class BaseRequestType, class BaseResponseType>
 class RpcMethodHandler;
 template <class Base>
 class FinishOnlyReactor;
@@ -95,6 +100,7 @@ class CompletionQueue;
 class GenericServerContext;
 class Server;
 class ServerInterface;
+class ContextAllocator;
 
 // TODO(vjpai): Remove namespace experimental when de-experimentalized fully.
 namespace experimental {
@@ -260,7 +266,7 @@ class ServerContextBase {
   ///
   /// \see grpc::AuthContext.
   std::shared_ptr<const ::grpc::AuthContext> auth_context() const {
-    if (auth_context_.get() == nullptr) {
+    if (auth_context_ == nullptr) {
       auth_context_ = ::grpc::CreateAuthContext(call_.call);
     }
     return auth_context_;
@@ -335,6 +341,12 @@ class ServerContextBase {
   ServerContextBase();
   ServerContextBase(gpr_timespec deadline, grpc_metadata_array* arr);
 
+  void set_context_allocator(ContextAllocator* context_allocator) {
+    context_allocator_ = context_allocator;
+  }
+
+  ContextAllocator* context_allocator() const { return context_allocator_; }
+
  private:
   friend class ::grpc::testing::InteropServerContextInspector;
   friend class ::grpc::testing::ServerContextTestSpouse;
@@ -355,7 +367,12 @@ class ServerContextBase {
   friend class ::grpc::ServerWriter;
   template <class W, class R>
   friend class ::grpc::internal::ServerReaderWriterBody;
-  template <class ServiceType, class RequestType, class ResponseType>
+  template <class ResponseType>
+  friend void ::grpc::internal::UnaryRunHandlerHelper(
+      const internal::MethodHandler::HandlerParameter& param, ResponseType* rsp,
+      Status& status);
+  template <class ServiceType, class RequestType, class ResponseType,
+            class BaseRequestType, class BaseResponseType>
   friend class ::grpc::internal::RpcMethodHandler;
   template <class ServiceType, class RequestType, class ResponseType>
   friend class ::grpc::internal::ClientStreamingHandler;
@@ -405,7 +422,7 @@ class ServerContextBase {
       const char* method, ::grpc::internal::RpcMethod::RpcType type,
       const std::vector<std::unique_ptr<
           ::grpc::experimental::ServerInterceptorFactoryInterface>>& creators) {
-    if (creators.size() != 0) {
+    if (!creators.empty()) {
       rpc_info_ = new ::grpc::experimental::ServerRpcInfo(this, method, type);
       rpc_info_->RegisterInterceptors(creators);
     }
@@ -453,6 +470,7 @@ class ServerContextBase {
 
   ::grpc::experimental::ServerRpcInfo* rpc_info_ = nullptr;
   ::grpc::experimental::RpcAllocatorState* message_allocator_state_ = nullptr;
+  ContextAllocator* context_allocator_ = nullptr;
 
   class Reactor : public ::grpc::ServerUnaryReactor {
    public:
@@ -466,6 +484,7 @@ class ServerContextBase {
   };
 
   void SetupTestDefaultReactor(std::function<void(::grpc::Status)> func) {
+    // NOLINTNEXTLINE(modernize-make-unique)
     test_unary_.reset(new TestServerCallbackUnary(this, std::move(func)));
   }
   bool test_status_set() const {
@@ -579,12 +598,14 @@ class CallbackServerContext : public ServerContextBase {
   using ServerContextBase::compression_algorithm;
   using ServerContextBase::compression_level;
   using ServerContextBase::compression_level_set;
+  using ServerContextBase::context_allocator;
   using ServerContextBase::deadline;
   using ServerContextBase::IsCancelled;
   using ServerContextBase::peer;
   using ServerContextBase::raw_deadline;
   using ServerContextBase::set_compression_algorithm;
   using ServerContextBase::set_compression_level;
+  using ServerContextBase::set_context_allocator;
   using ServerContextBase::SetLoadReportingCosts;
   using ServerContextBase::TryCancel;
 
@@ -599,6 +620,37 @@ class CallbackServerContext : public ServerContextBase {
   /// Prevent copying.
   CallbackServerContext(const CallbackServerContext&) = delete;
   CallbackServerContext& operator=(const CallbackServerContext&) = delete;
+};
+
+/// A CallbackServerContext allows users to use the contents of the
+/// CallbackServerContext or GenericCallbackServerContext structure for the
+/// callback API.
+/// The library will invoke the allocator any time a new call is initiated.
+/// and call the Release method after the server OnDone.
+class ContextAllocator {
+ public:
+  virtual ~ContextAllocator() {}
+
+  virtual CallbackServerContext* NewCallbackServerContext() { return nullptr; }
+
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
+  virtual experimental::GenericCallbackServerContext*
+  NewGenericCallbackServerContext() {
+    return nullptr;
+  }
+#else
+  virtual GenericCallbackServerContext* NewGenericCallbackServerContext() {
+    return nullptr;
+  }
+#endif
+
+  virtual void Release(CallbackServerContext*) {}
+
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
+  virtual void Release(experimental::GenericCallbackServerContext*) {}
+#else
+  virtual void Release(GenericCallbackServerContext*) {}
+#endif
 };
 
 }  // namespace grpc

@@ -21,14 +21,15 @@
 
 #include <functional>
 #include <map>
+#include <vector>
 
 #include "y_absl/strings/string_view.h"
 
-#include <grpc/impl/codegen/grpc_types.h>
-#include <grpc/impl/codegen/slice.h>
+#include <grpc/grpc.h>
 
 #include "src/core/ext/filters/client_channel/service_config.h"
 #include "src/core/ext/filters/client_channel/service_config_parser.h"
+#include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/gprpp/arena.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
@@ -66,7 +67,7 @@ class ConfigSelector : public RefCounted<ConfigSelector> {
     std::function<void()> on_call_committed;
   };
 
-  virtual ~ConfigSelector() = default;
+  ~ConfigSelector() override = default;
 
   virtual const char* name() const = 0;
 
@@ -79,6 +80,16 @@ class ConfigSelector : public RefCounted<ConfigSelector> {
     if (cs2 == nullptr) return false;
     if (strcmp(cs1->name(), cs2->name()) != 0) return false;
     return cs1->Equals(cs2);
+  }
+
+  // The channel will call this when the resolver returns a new ConfigSelector
+  // to determine what set of dynamic filters will be configured.
+  virtual std::vector<const grpc_channel_filter*> GetFilters() { return {}; }
+
+  // Modifies channel args to be passed to the dynamic filter stack.
+  // Takes ownership of argument.  Caller takes ownership of result.
+  virtual grpc_channel_args* ModifyChannelArgs(grpc_channel_args* args) {
+    return args;
   }
 
   virtual CallConfig GetCallConfig(GetCallConfigArgs args) = 0;
@@ -103,7 +114,7 @@ class DefaultConfigSelector : public ConfigSelector {
 
   // Only comparing the ConfigSelector itself, not the underlying
   // service config, so we always return true.
-  bool Equals(const ConfigSelector* other) const override { return true; }
+  bool Equals(const ConfigSelector* /*other*/) const override { return true; }
 
   CallConfig GetCallConfig(GetCallConfigArgs args) override {
     CallConfig call_config;

@@ -81,8 +81,7 @@ static void maybe_initiate_ping(grpc_chttp2_transport* t) {
       (t->keepalive_permit_without_calls == 0 &&
        grpc_chttp2_stream_map_size(&t->stream_map) == 0)
           ? 7200 * GPR_MS_PER_SEC
-          : (t->ping_policy.min_sent_ping_interval_without_data +
-             GPR_MS_PER_SEC); /* A second is added to deal with network delays
+          : (GPR_MS_PER_SEC); /* A second is added to deal with network delays
                                  and timing imprecision */
   grpc_millis next_allowed_ping =
       t->ping_state.last_ping_sent_time + next_allowed_ping_interval;
@@ -199,7 +198,7 @@ class StreamWriteContext;
 
 class WriteContext {
  public:
-  WriteContext(grpc_chttp2_transport* t) : t_(t) {
+  explicit WriteContext(grpc_chttp2_transport* t) : t_(t) {
     GRPC_STATS_INC_HTTP2_WRITES_BEGUN();
     GPR_TIMER_SCOPE("grpc_chttp2_begin_write", 0);
   }

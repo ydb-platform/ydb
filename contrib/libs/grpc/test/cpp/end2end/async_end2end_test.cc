@@ -32,6 +32,8 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
+#include "y_absl/memory/memory.h"
+
 #include "src/core/ext/filters/client_channel/backup_poller.h"
 #include "src/core/lib/gpr/tls.h"
 #include "src/core/lib/iomgr/port.h"
@@ -51,7 +53,6 @@
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
-using grpc::testing::kTlsCredentialsType;
 using std::chrono::system_clock;
 
 namespace grpc {
@@ -59,7 +60,7 @@ namespace testing {
 
 namespace {
 
-void* tag(int i) { return (void*)static_cast<intptr_t>(i); }
+void* tag(int t) { return reinterpret_cast<void*>(t); }
 int detag(void* p) { return static_cast<int>(reinterpret_cast<intptr_t>(p)); }
 
 class Verifier {
@@ -271,8 +272,8 @@ class AsyncEnd2endTest : public ::testing::TestWithParam<TestScenario> {
     void* ignored_tag;
     bool ignored_ok;
     cq_->Shutdown();
-    while (cq_->Next(&ignored_tag, &ignored_ok))
-      ;
+    while (cq_->Next(&ignored_tag, &ignored_ok)) {
+    }
     stub_.reset();
     grpc_recycle_unused_port(port_);
   }
@@ -282,7 +283,8 @@ class AsyncEnd2endTest : public ::testing::TestWithParam<TestScenario> {
     auto server_creds = GetCredentialsProvider()->GetServerCredentials(
         GetParam().credentials_type);
     builder.AddListeningPort(server_address_.str(), server_creds);
-    service_.reset(new grpc::testing::EchoTestService::AsyncService());
+    service_ =
+        y_absl::make_unique<grpc::testing::EchoTestService::AsyncService>();
     builder.RegisterService(service_.get());
     if (GetParam().health_check_service) {
       builder.RegisterService(&health_check_);
@@ -426,8 +428,8 @@ TEST_P(AsyncEnd2endTest, ReconnectChannel) {
   void* ignored_tag;
   bool ignored_ok;
   cq_->Shutdown();
-  while (cq_->Next(&ignored_tag, &ignored_ok))
-    ;
+  while (cq_->Next(&ignored_tag, &ignored_ok)) {
+  }
   BuildAndStartServer();
   // It needs more than GRPC_CLIENT_CHANNEL_BACKUP_POLL_INTERVAL_MS time to
   // reconnect the channel.
@@ -1493,9 +1495,9 @@ class AsyncEnd2endServerTryCancelTest : public AsyncEnd2endTest {
     EXPECT_EQ(::grpc::StatusCode::CANCELLED, recv_status.error_code());
 
     cli_cq.Shutdown();
-    void* dummy_tag;
-    bool dummy_ok;
-    while (cli_cq.Next(&dummy_tag, &dummy_ok)) {
+    void* phony_tag;
+    bool phony_ok;
+    while (cli_cq.Next(&phony_tag, &phony_ok)) {
     }
   }
 
@@ -1642,9 +1644,9 @@ class AsyncEnd2endServerTryCancelTest : public AsyncEnd2endTest {
     EXPECT_EQ(::grpc::StatusCode::CANCELLED, recv_status.error_code());
 
     cli_cq.Shutdown();
-    void* dummy_tag;
-    bool dummy_ok;
-    while (cli_cq.Next(&dummy_tag, &dummy_ok)) {
+    void* phony_tag;
+    bool phony_ok;
+    while (cli_cq.Next(&phony_tag, &phony_ok)) {
     }
   }
 

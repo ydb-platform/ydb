@@ -21,17 +21,21 @@
 
 #include <grpc/grpc_security.h>
 
+#include <utility>
+
 #include "y_absl/container/inlined_vector.h"
 #include "y_absl/types/optional.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/security/security_connector/ssl_utils.h"
 
+struct grpc_tls_identity_pairs {
+  grpc_core::PemKeyCertPairList pem_key_cert_pairs;
+};
+
 // TLS certificate distributor.
 struct grpc_tls_certificate_distributor
     : public grpc_core::RefCounted<grpc_tls_certificate_distributor> {
  public:
-  typedef y_absl::InlinedVector<grpc_core::PemKeyCertPair, 1> PemKeyCertPairList;
-
   // Interface for watching TLS certificates update.
   class TlsCertificatesWatcherInterface {
    public:
@@ -48,7 +52,7 @@ struct grpc_tls_certificate_distributor
     // pairs.
     virtual void OnCertificatesChanged(
         y_absl::optional<y_absl::string_view> root_certs,
-        y_absl::optional<PemKeyCertPairList> key_cert_pairs) = 0;
+        y_absl::optional<grpc_core::PemKeyCertPairList> key_cert_pairs) = 0;
 
     // Handles an error that occurs while attempting to fetch certificate data.
     // Note that if a watcher sees an error, it simply means the Provider is
@@ -68,19 +72,14 @@ struct grpc_tls_certificate_distributor
                          grpc_error* identity_cert_error) = 0;
   };
 
-  // Sets the key materials based on their certificate name. Note that we are
-  // not doing any copies for pem_root_certs and pem_key_cert_pairs. For
-  // pem_root_certs, the original string contents need to outlive the
-  // distributor; for pem_key_cert_pairs, internally it is taking two
-  // unique_ptr(s) to the credential string, so the ownership is actually
-  // transferred.
+  // Sets the key materials based on their certificate name.
   //
   // @param cert_name The name of the certificates being updated.
   // @param pem_root_certs The content of root certificates.
   // @param pem_key_cert_pairs The content of identity key-cert pairs.
-  void SetKeyMaterials(const TString& cert_name,
-                       y_absl::optional<TString> pem_root_certs,
-                       y_absl::optional<PemKeyCertPairList> pem_key_cert_pairs);
+  void SetKeyMaterials(
+      const TString& cert_name, y_absl::optional<TString> pem_root_certs,
+      y_absl::optional<grpc_core::PemKeyCertPairList> pem_key_cert_pairs);
 
   bool HasRootCerts(const TString& root_cert_name);
 
@@ -127,7 +126,7 @@ struct grpc_tls_certificate_distributor
   void SetWatchStatusCallback(
       std::function<void(TString, bool, bool)> callback) {
     grpc_core::MutexLock lock(&mu_);
-    watch_status_callback_ = callback;
+    watch_status_callback_ = std::move(callback);
   };
 
   // Registers a watcher. The caller may keep a raw pointer to the watcher,
@@ -168,7 +167,7 @@ struct grpc_tls_certificate_distributor
     // The contents of the root certificates.
     TString pem_root_certs;
     // The contents of the identity key-certificate pairs.
-    PemKeyCertPairList pem_key_cert_pairs;
+    grpc_core::PemKeyCertPairList pem_key_cert_pairs;
     // The root cert reloading error propagated by the caller.
     grpc_error* root_cert_error = GRPC_ERROR_NONE;
     // The identity cert reloading error propagated by the caller.

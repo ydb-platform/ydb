@@ -32,7 +32,11 @@ DebugOnlyTraceFlag grpc_trace_lb_policy_refcount(false, "lb_policy_refcount");
 //
 
 LoadBalancingPolicy::LoadBalancingPolicy(Args args, intptr_t initial_refcount)
-    : InternallyRefCounted(&grpc_trace_lb_policy_refcount, initial_refcount),
+    : InternallyRefCounted(
+          GRPC_TRACE_FLAG_ENABLED(grpc_trace_lb_policy_refcount)
+              ? "LoadBalancingPolicy"
+              : nullptr,
+          initial_refcount),
       work_serializer_(std::move(args.work_serializer)),
       interested_parties_(grpc_pollset_set_create()),
       channel_control_helper_(std::move(args.channel_control_helper)) {}
@@ -66,6 +70,9 @@ LoadBalancingPolicy::UpdateArgs::UpdateArgs(UpdateArgs&& other) noexcept {
 
 LoadBalancingPolicy::UpdateArgs& LoadBalancingPolicy::UpdateArgs::operator=(
     const UpdateArgs& other) {
+  if (&other == this) {
+    return *this;
+  }
   addresses = other.addresses;
   config = other.config;
   grpc_channel_args_destroy(args);
@@ -101,7 +108,7 @@ LoadBalancingPolicy::PickResult LoadBalancingPolicy::QueuePicker::Pick(
   // 2. We are currently running in the data plane mutex, but we
   //    need to bounce into the control plane work_serializer to call
   //    ExitIdleLocked().
-  if (!exit_idle_called_) {
+  if (!exit_idle_called_ && parent_ != nullptr) {
     exit_idle_called_ = true;
     auto* parent = parent_->Ref().release();  // ref held by lambda.
     ExecCtx::Run(DEBUG_LOCATION,

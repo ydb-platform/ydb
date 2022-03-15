@@ -28,7 +28,6 @@ using grpc::StatusCode;
 using grpc::reflection::v1alpha::ErrorResponse;
 using grpc::reflection::v1alpha::ExtensionNumberResponse;
 using grpc::reflection::v1alpha::ExtensionRequest;
-using grpc::reflection::v1alpha::FileDescriptorResponse;
 using grpc::reflection::v1alpha::ListServiceResponse;
 using grpc::reflection::v1alpha::ServerReflectionRequest;
 using grpc::reflection::v1alpha::ServerReflectionResponse;
@@ -110,14 +109,14 @@ Status ProtoServerReflection::ListService(ServerContext* /*context*/,
 }
 
 Status ProtoServerReflection::GetFileByName(
-    ServerContext* /*context*/, const TString& filename,
+    ServerContext* /*context*/, const TString& file_name,
     ServerReflectionResponse* response) {
   if (descriptor_pool_ == nullptr) {
     return Status::CANCELLED;
   }
 
   const protobuf::FileDescriptor* file_desc =
-      descriptor_pool_->FindFileByName(TProtoStringType(filename));
+      descriptor_pool_->FindFileByName(TProtoStringType(file_name));
   if (file_desc == nullptr) {
     return Status(StatusCode::NOT_FOUND, "File not found.");
   }

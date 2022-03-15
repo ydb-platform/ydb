@@ -32,6 +32,8 @@
 #include <grpcpp/server_context.h>
 #include <grpcpp/support/slice.h>
 
+#include "y_absl/memory/memory.h"
+
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/util/port.h"
 #include "test/core/util/test_config.h"
@@ -41,13 +43,12 @@
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
-using std::chrono::system_clock;
 
 namespace grpc {
 namespace testing {
 namespace {
 
-void* tag(int i) { return (void*)static_cast<intptr_t>(i); }
+void* tag(int i) { return reinterpret_cast<void*>(i); }
 
 void verify_ok(CompletionQueue* cq, int i, bool expect_ok) {
   bool ok;
@@ -85,10 +86,10 @@ class GenericEnd2endTest : public ::testing::Test {
       bool ignored_ok;
       cli_cq_.Shutdown();
       srv_cq_->Shutdown();
-      while (cli_cq_.Next(&ignored_tag, &ignored_ok))
-        ;
-      while (srv_cq_->Next(&ignored_tag, &ignored_ok))
-        ;
+      while (cli_cq_.Next(&ignored_tag, &ignored_ok)) {
+      }
+      while (srv_cq_->Next(&ignored_tag, &ignored_ok)) {
+      }
       shut_down_ = true;
     }
   }
@@ -98,7 +99,7 @@ class GenericEnd2endTest : public ::testing::Test {
     std::shared_ptr<Channel> channel = grpc::CreateChannel(
         server_address_.str(), InsecureChannelCredentials());
     stub_ = grpc::testing::EchoTestService::NewStub(channel);
-    generic_stub_.reset(new GenericStub(channel));
+    generic_stub_ = y_absl::make_unique<GenericStub>(channel);
   }
 
   void server_ok(int i) { verify_ok(srv_cq_.get(), i, true); }
@@ -285,8 +286,8 @@ TEST_F(GenericEnd2endTest, SequentialUnaryRpcs) {
         SerializeToByteBuffer(&send_request);
     std::thread request_call([this]() { server_ok(4); });
     std::unique_ptr<GenericClientAsyncResponseReader> call =
-        generic_stub_->PrepareUnaryCall(&cli_ctx, kMethodName,
-                                        *cli_send_buffer.get(), &cli_cq_);
+        generic_stub_->PrepareUnaryCall(&cli_ctx, kMethodName, *cli_send_buffer,
+                                        &cli_cq_);
     call->StartCall();
     ByteBuffer cli_recv_buffer;
     call->Finish(&cli_recv_buffer, &recv_status, tag(1));

@@ -639,12 +639,12 @@ void PrintHeaderClientMethodCallbackInterfaces(
     printer->Print(*vars,
                    "#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL\n"
                    "virtual void $Method$(::grpc::ClientContext* context, "
-                   "$Request$* request, "
+                   "const $Request$* request, "
                    "::grpc::ClientReadReactor< $Response$>* "
                    "reactor) = 0;\n"
                    "#else\n"
                    "virtual void $Method$(::grpc::ClientContext* context, "
-                   "$Request$* request, "
+                   "const $Request$* request, "
                    "::grpc::experimental::ClientReadReactor< $Response$>* "
                    "reactor) = 0;\n"
                    "#endif\n");
@@ -736,12 +736,12 @@ void PrintHeaderClientMethodCallback(grpc_generator::Printer* printer,
     printer->Print(*vars,
                    "#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL\n"
                    "void $Method$(::grpc::ClientContext* context, "
-                   "$Request$* request, "
+                   "const $Request$* request, "
                    "::grpc::ClientReadReactor< $Response$>* "
                    "reactor) override;\n"
                    "#else\n"
                    "void $Method$(::grpc::ClientContext* context, "
-                   "$Request$* request, "
+                   "const $Request$* request, "
                    "::grpc::experimental::ClientReadReactor< $Response$>* "
                    "reactor) override;\n"
                    "#endif\n");
@@ -768,7 +768,7 @@ void PrintHeaderClientMethodCallbackEnd(
   printer->Indent();
   printer->Print("friend class Stub;\n");
   printer->Print("explicit experimental_async(Stub* stub): stub_(stub) { }\n");
-  // include a function with a dummy use of stub_ to avoid an unused
+  // include a function with a phony use of stub_ to avoid an unused
   // private member warning for service with no methods
   printer->Print("Stub* stub() { return stub_; }\n");
   printer->Print("Stub* stub_;\n");
@@ -1893,6 +1893,8 @@ void PrintSourceClientMethod(grpc_generator::Printer* printer,
                    "const $Request$& request, $Response$* response) {\n");
     printer->Print(*vars,
                    "  return ::grpc::internal::BlockingUnaryCall"
+                   "< $Request$, $Response$, ::grpc::protobuf::MessageLite, "
+                   "::grpc::protobuf::MessageLite>"
                    "(channel_.get(), rpcmethod_$Method$_, "
                    "context, request, response);\n}\n\n");
 
@@ -1903,6 +1905,8 @@ void PrintSourceClientMethod(grpc_generator::Printer* printer,
                    "std::function<void(::grpc::Status)> f) {\n");
     printer->Print(*vars,
                    "  ::grpc::internal::CallbackUnaryCall"
+                   "< $Request$, $Response$, ::grpc::protobuf::MessageLite, "
+                   "::grpc::protobuf::MessageLite>"
                    "(stub_->channel_.get(), stub_->rpcmethod_$Method$_, "
                    "context, request, response, std::move(f));\n}\n\n");
 
@@ -1913,6 +1917,8 @@ void PrintSourceClientMethod(grpc_generator::Printer* printer,
                    "::grpc::experimental::ClientUnaryReactor* reactor) {\n");
     printer->Print(*vars,
                    "  ::grpc::internal::ClientCallbackUnaryFactory::Create"
+                   "< ::grpc::protobuf::MessageLite, "
+                   "::grpc::protobuf::MessageLite>"
                    "(stub_->channel_.get(), stub_->rpcmethod_$Method$_, "
                    "context, request, response, reactor);\n}\n\n");
 
@@ -1924,10 +1930,11 @@ void PrintSourceClientMethod(grpc_generator::Printer* printer,
                    "::grpc::CompletionQueue* cq) {\n");
     printer->Print(*vars,
                    "  return "
-                   "::grpc::internal::ClientAsyncResponseReaderFactory"
-                   "< $Response$>::Create(channel_.get(), cq, "
-                   "rpcmethod_$Method$_, "
-                   "context, request, false);\n"
+                   "::grpc::internal::ClientAsyncResponseReaderHelper::Create"
+                   "< $Response$, $Request$, ::grpc::protobuf::MessageLite, "
+                   "::grpc::protobuf::MessageLite>"
+                   "(channel_.get(), cq, rpcmethod_$Method$_, "
+                   "context, request);\n"
                    "}\n\n");
     printer->Print(*vars,
                    "::grpc::ClientAsyncResponseReader< $Response$>* "
@@ -2004,7 +2011,7 @@ void PrintSourceClientMethod(grpc_generator::Printer* printer,
         *vars,
         "void $ns$$Service$::Stub::experimental_async::$Method$(::grpc::"
         "ClientContext* context, "
-        "$Request$* request, "
+        "const $Request$* request, "
         "::grpc::experimental::ClientReadReactor< $Response$>* reactor) {\n");
     printer->Print(*vars,
                    "  ::grpc::internal::ClientCallbackReaderFactory< "
@@ -2216,8 +2223,8 @@ void PrintSourceService(grpc_generator::Printer* printer,
           "    $prefix$$Service$_method_names[$Idx$],\n"
           "    ::grpc::internal::RpcMethod::NORMAL_RPC,\n"
           "    new ::grpc::internal::RpcMethodHandler< $ns$$Service$::Service, "
-          "$Request$, "
-          "$Response$>(\n"
+          "$Request$, $Response$, ::grpc::protobuf::MessageLite, "
+          "::grpc::protobuf::MessageLite>(\n"
           "        []($ns$$Service$::Service* service,\n"
           "           ::grpc::ServerContext* ctx,\n"
           "           const $Request$* req,\n"

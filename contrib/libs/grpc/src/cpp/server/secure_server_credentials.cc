@@ -55,18 +55,18 @@ void AuthMetadataProcessorAyncWrapper::Process(
 }
 
 void AuthMetadataProcessorAyncWrapper::InvokeProcessor(
-    grpc_auth_context* ctx, const grpc_metadata* md, size_t num_md,
+    grpc_auth_context* context, const grpc_metadata* md, size_t num_md,
     grpc_process_auth_metadata_done_cb cb, void* user_data) {
   AuthMetadataProcessor::InputMetadata metadata;
   for (size_t i = 0; i < num_md; i++) {
     metadata.insert(std::make_pair(StringRefFromSlice(&md[i].key),
                                    StringRefFromSlice(&md[i].value)));
   }
-  SecureAuthContext context(ctx);
+  SecureAuthContext ctx(context);
   AuthMetadataProcessor::OutputMetadata consumed_metadata;
   AuthMetadataProcessor::OutputMetadata response_metadata;
 
-  Status status = processor_->Process(metadata, &context, &consumed_metadata,
+  Status status = processor_->Process(metadata, &ctx, &consumed_metadata,
                                       &response_metadata);
 
   std::vector<grpc_metadata> consumed_md;
@@ -145,8 +145,7 @@ std::shared_ptr<ServerCredentials> LocalServerCredentials(
 }
 
 std::shared_ptr<ServerCredentials> TlsServerCredentials(
-    const grpc::experimental::TlsCredentialsOptions& options) {
-  grpc::GrpcLibraryCodegen init;
+    const grpc::experimental::TlsServerCredentialsOptions& options) {
   return std::shared_ptr<ServerCredentials>(new SecureServerCredentials(
       grpc_tls_server_credentials_create(options.c_credentials_options())));
 }

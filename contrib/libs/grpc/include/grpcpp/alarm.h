@@ -38,7 +38,7 @@ class Alarm : private ::grpc::GrpcLibraryCodegen {
   Alarm();
 
   /// Destroy the given completion queue alarm, cancelling it in the process.
-  ~Alarm();
+  ~Alarm() override;
 
   /// DEPRECATED: Create and set a completion queue alarm instance associated to
   /// \a cq.
@@ -56,6 +56,10 @@ class Alarm : private ::grpc::GrpcLibraryCodegen {
   /// Once the alarm expires (at \a deadline) or it's cancelled (see \a Cancel),
   /// an event with tag \a tag will be added to \a cq. If the alarm expired, the
   /// event's success bit will be true, false otherwise (ie, upon cancellation).
+  //
+  // USAGE NOTE: This is frequently used to inject arbitrary tags into \a cq by
+  // setting an immediate deadline. Such usage allows synchronizing an external
+  // event with an application's \a grpc::CompletionQueue::Next loop.
   template <typename T>
   void Set(::grpc::CompletionQueue* cq, const T& deadline, void* tag) {
     SetInternal(cq, ::grpc::TimePoint<T>(deadline).raw_time(), tag);
@@ -66,8 +70,8 @@ class Alarm : private ::grpc::GrpcLibraryCodegen {
   Alarm& operator=(const Alarm&) = delete;
 
   /// Alarms are movable.
-  Alarm(Alarm&& rhs) : alarm_(rhs.alarm_) { rhs.alarm_ = nullptr; }
-  Alarm& operator=(Alarm&& rhs) {
+  Alarm(Alarm&& rhs) noexcept : alarm_(rhs.alarm_) { rhs.alarm_ = nullptr; }
+  Alarm& operator=(Alarm&& rhs) noexcept {
     alarm_ = rhs.alarm_;
     rhs.alarm_ = nullptr;
     return *this;

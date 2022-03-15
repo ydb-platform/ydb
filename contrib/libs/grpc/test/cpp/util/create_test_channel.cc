@@ -18,20 +18,18 @@
 
 #include "test/cpp/util/create_test_channel.h"
 
-#include <gflags/gflags.h>
-
 #include <grpc/support/log.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 
+#include "y_absl/flags/flag.h"
 #include "test/cpp/util/test_credentials_provider.h"
 
-DEFINE_string(
-    grpc_test_use_grpclb_with_child_policy, "",
-    "If non-empty, set a static service config on channels created by "
-    "grpc::CreateTestChannel, that configures the grpclb LB policy "
-    "with a child policy being the value of this flag (e.g. round_robin "
-    "or pick_first).");
+Y_ABSL_FLAG(TString, grpc_test_use_grpclb_with_child_policy, "",
+          "If non-empty, set a static service config on channels created by "
+          "grpc::CreateTestChannel, that configures the grpclb LB policy "
+          "with a child policy being the value of this flag (e.g. round_robin "
+          "or pick_first).");
 
 namespace grpc {
 
@@ -59,12 +57,13 @@ void AddProdSslType() {
 }
 
 void MaybeSetCustomChannelArgs(grpc::ChannelArguments* args) {
-  if (FLAGS_grpc_test_use_grpclb_with_child_policy.size() > 0) {
-    args->SetString("grpc.service_config",
-                    "{\"loadBalancingConfig\":[{\"grpclb\":{\"childPolicy\":[{"
-                    "\"" +
-                        FLAGS_grpc_test_use_grpclb_with_child_policy +
-                        "\":{}}]}}]}");
+  if (!y_absl::GetFlag(FLAGS_grpc_test_use_grpclb_with_child_policy).empty()) {
+    args->SetString(
+        "grpc.service_config",
+        "{\"loadBalancingConfig\":[{\"grpclb\":{\"childPolicy\":[{"
+        "\"" +
+            y_absl::GetFlag(FLAGS_grpc_test_use_grpclb_with_child_policy) +
+            "\":{}}]}}]}");
   }
 }
 

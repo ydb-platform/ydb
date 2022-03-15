@@ -23,6 +23,8 @@
 
 #include <map>
 
+#include "y_absl/types/optional.h"
+
 #include "src/core/lib/iomgr/endpoint.h"
 #include "src/core/lib/security/context/security_context.h"
 #include "src/core/lib/transport/metadata_batch.h"
@@ -39,6 +41,15 @@ class EvaluateArgs {
   y_absl::string_view GetHost() const;
   y_absl::string_view GetMethod() const;
   std::multimap<y_absl::string_view, y_absl::string_view> GetHeaders() const;
+  // Returns metadata value(s) for the specified key.
+  // If the key is not present in the batch, returns y_absl::nullopt.
+  // If the key is present exactly once in the batch, returns a string_view of
+  // that value.
+  // If the key is present more than once in the batch, constructs a
+  // comma-concatenated string of all values in concatenated_value and returns a
+  // string_view of that string.
+  y_absl::optional<y_absl::string_view> GetHeaderValue(
+      y_absl::string_view key, TString* concatenated_value) const;
   y_absl::string_view GetLocalAddress() const;
   int GetLocalPort() const;
   y_absl::string_view GetPeerAddress() const;
@@ -46,7 +57,7 @@ class EvaluateArgs {
   y_absl::string_view GetSpiffeId() const;
   y_absl::string_view GetCertServerName() const;
 
-  // TODO: Add a getter function for source.principal
+  // TODO(unknown): Add a getter function for source.principal
 
  private:
   grpc_metadata_batch* metadata_;

@@ -27,12 +27,12 @@
 #include <util/generic/string.h>
 
 #include "y_absl/container/inlined_vector.h"
+#include "y_absl/types/optional.h"
 
 #include "src/core/lib/channel/channel_trace.h"
 #include "src/core/lib/gpr/time_precise.h"
 #include "src/core/lib/gprpp/atomic.h"
 #include "src/core/lib/gprpp/manual_constructor.h"
-#include "src/core/lib/gprpp/map.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/sync.h"
@@ -55,7 +55,7 @@
  * events per channel trace node. If
  * GRPC_ARG_MAX_CHANNEL_TRACE_EVENT_MEMORY_PER_NODE is set, it will override
  * this default value. */
-#define GRPC_MAX_CHANNEL_TRACE_EVENT_MEMORY_PER_NODE_DEFAULT 1024 * 4
+#define GRPC_MAX_CHANNEL_TRACE_EVENT_MEMORY_PER_NODE_DEFAULT (1024 * 4)
 
 namespace grpc_core {
 
@@ -87,7 +87,7 @@ class BaseNode : public RefCounted<BaseNode> {
   BaseNode(EntityType type, TString name);
 
  public:
-  virtual ~BaseNode();
+  ~BaseNode() override;
 
   // All children must implement this function.
   virtual Json RenderJson() = 0;
@@ -269,10 +269,37 @@ class ServerNode : public BaseNode {
   std::map<intptr_t, RefCountedPtr<ListenSocketNode>> child_listen_sockets_;
 };
 
+#define GRPC_ARG_CHANNELZ_SECURITY "grpc.internal.channelz_security"
+
 // Handles channelz bookkeeping for sockets
 class SocketNode : public BaseNode {
  public:
-  SocketNode(TString local, TString remote, TString name);
+  struct Security : public RefCounted<Security> {
+    struct Tls {
+      enum class NameType { kUnset = 0, kStandardName = 1, kOtherName = 2 };
+      NameType type = NameType::kUnset;
+      // Holds the value of standard_name or other_names if type is not kUnset.
+      TString name;
+      TString local_certificate;
+      TString remote_certificate;
+
+      Json RenderJson();
+    };
+    enum class ModelType { kUnset = 0, kTls = 1, kOther = 2 };
+    ModelType type = ModelType::kUnset;
+    y_absl::optional<Tls> tls;
+    y_absl::optional<Json> other;
+
+    Json RenderJson();
+
+    grpc_arg MakeChannelArg() const;
+
+    static RefCountedPtr<Security> GetFromChannelArgs(
+        const grpc_channel_args* args);
+  };
+
+  SocketNode(TString local, TString remote, TString name,
+             RefCountedPtr<Security> security);
   ~SocketNode() override {}
 
   Json RenderJson() override;
@@ -306,6 +333,7 @@ class SocketNode : public BaseNode {
   Atomic<gpr_cycle_counter> last_message_received_cycle_{0};
   TString local_;
   TString remote_;
+  RefCountedPtr<Security> const security_;
 };
 
 // Handles channelz bookkeeping for listen sockets

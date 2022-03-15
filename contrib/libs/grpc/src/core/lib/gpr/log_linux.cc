@@ -38,8 +38,13 @@
 #include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
+
 #include <util/generic/string.h>
+
 #include "y_absl/strings/str_format.h"
+#include "src/core/lib/gprpp/examine_stack.h"
+
+int gpr_should_log_stacktrace(gpr_log_severity severity);
 
 static long sys_gettid(void) { return syscall(__NR_gettid); }
 
@@ -74,10 +79,11 @@ void gpr_default_log(gpr_log_func_args* args) {
 
   timer = static_cast<time_t>(now.tv_sec);
   final_slash = strrchr(args->file, '/');
-  if (final_slash == nullptr)
+  if (final_slash == nullptr) {
     display_file = args->file;
-  else
+  } else {
     display_file = final_slash + 1;
+  }
 
   if (!localtime_r(&timer, &tm)) {
     strcpy(time_buffer, "error:localtime");
@@ -89,7 +95,17 @@ void gpr_default_log(gpr_log_func_args* args) {
   TString prefix = y_absl::StrFormat(
       "%s%s.%09" PRId32 " %7ld %s:%d]", gpr_log_severity_string(args->severity),
       time_buffer, now.tv_nsec, tid, display_file, args->line);
-  fprintf(stderr, "%-60s %s\n", prefix.c_str(), args->message);
+
+  y_absl::optional<TString> stack_trace =
+      gpr_should_log_stacktrace(args->severity)
+          ? grpc_core::GetCurrentStackTrace()
+          : y_absl::nullopt;
+  if (stack_trace) {
+    fprintf(stderr, "%-60s %s\n%s\n", prefix.c_str(), args->message,
+            stack_trace->c_str());
+  } else {
+    fprintf(stderr, "%-60s %s\n", prefix.c_str(), args->message);
+  }
 }
 
 #endif /* GPR_LINUX_LOG */

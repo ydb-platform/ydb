@@ -22,7 +22,8 @@
 
   Example of talking to grpc interop server:
   grpc_cli call localhost:50051 UnaryCall "response_size:10" \
-      --protofiles=src/proto/grpc/testing/test.proto --enable_ssl=false
+      --protofiles=src/proto/grpc/testing/test.proto \
+      --channel_creds_type=insecure
 
   Options:
     1. --protofiles, use this flag to provide proto files if the server does
@@ -33,7 +34,8 @@
        provided.
     3. --metadata specifies metadata to be sent to the server, such as:
        --metadata="MyHeaderKey1:Value1:MyHeaderKey2:Value2"
-    4. --enable_ssl, whether to use tls.
+    4. --channel_creds_type, whether to use tls, insecure or platform-specific
+       options.
     5. --use_auth, if set to true, attach a GoogleDefaultCredentials to the call
     6. --infile, input filename (defaults to stdin)
     7. --outfile, output filename (defaults to stdout)
@@ -58,17 +60,18 @@
        address of the connection that each RPC is made on to stderr.
 */
 
+#include <grpcpp/support/config.h>
+
 #include <fstream>
 #include <functional>
 #include <iostream>
 
-#include <gflags/gflags.h>
-#include <grpcpp/support/config.h>
+#include "y_absl/flags/flag.h"
 #include "test/cpp/util/cli_credentials.h"
 #include "test/cpp/util/grpc_tool.h"
 #include "test/cpp/util/test_config.h"
 
-DEFINE_string(outfile, "", "Output file (default is stdout)");
+Y_ABSL_FLAG(TString, outfile, "", "Output file (default is stdout)");
 
 static bool SimplePrint(const TString& outfile, const TString& output) {
   if (outfile.empty()) {
@@ -85,6 +88,7 @@ int main(int argc, char** argv) {
   grpc::testing::InitTest(&argc, &argv, true);
 
   return grpc::testing::GrpcToolMainLib(
-      argc, (const char**)argv, grpc::testing::CliCredentials(),
-      std::bind(SimplePrint, TString(FLAGS_outfile.c_str()), std::placeholders::_1));
+      argc, const_cast<const char**>(argv), grpc::testing::CliCredentials(),
+      std::bind(SimplePrint, y_absl::GetFlag(FLAGS_outfile),
+                std::placeholders::_1));
 }

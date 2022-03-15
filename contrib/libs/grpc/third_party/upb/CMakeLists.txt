@@ -14,13 +14,20 @@ target_compile_options(grpc-third_party-upb PRIVATE
 target_include_directories(grpc-third_party-upb PRIVATE
   ${CMAKE_BINARY_DIR}/contrib/libs/grpc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb
 )
 target_sources(grpc-third_party-upb PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/protobuf/descriptor.upb.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upbdefs-generated/google/protobuf/descriptor.upbdefs.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/decode_fast.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/def.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/encode.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/msg.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/port.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/reflection.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/table.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/text_encode.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb/upb/upb.c
 )

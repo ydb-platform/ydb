@@ -53,14 +53,17 @@ class string_ref {
   string_ref() : data_(nullptr), length_(0) {}
   string_ref(const string_ref& other)
       : data_(other.data_), length_(other.length_) {}
+  // NOLINTNEXTLINE(bugprone-unhandled-self-assignment)
   string_ref& operator=(const string_ref& rhs) {
     data_ = rhs.data_;
     length_ = rhs.length_;
     return *this;
   }
 
+  /* NOLINTNEXTLINE(google-explicit-constructor) */
   string_ref(const char* s) : data_(s), length_(strlen(s)) {}
   string_ref(const char* s, size_t l) : data_(s), length_(l) {}
+  /* NOLINTNEXTLINE(google-explicit-constructor) */
   string_ref(const TString& s) : data_(s.data()), length_(s.length()) {}
 
   /// iterators

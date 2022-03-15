@@ -23,31 +23,55 @@
 
 #include <stddef.h>
 
+#include "y_absl/strings/string_view.h"
+
 #include "src/core/lib/iomgr/resolve_address.h"
 #include "src/core/lib/uri/uri_parser.h"
 
 /** Populate \a resolved_addr from \a uri, whose path is expected to contain a
  * unix socket path. Returns true upon success. */
-bool grpc_parse_unix(const grpc_uri* uri, grpc_resolved_address* resolved_addr);
+bool grpc_parse_unix(const grpc_core::URI& uri,
+                     grpc_resolved_address* resolved_addr);
+
+/** Populate \a resolved_addr from \a uri, whose path is expected to contain a
+ * unix socket path in the abstract namespace. Returns true upon success. */
+bool grpc_parse_unix_abstract(const grpc_core::URI& uri,
+                              grpc_resolved_address* resolved_addr);
 
 /** Populate \a resolved_addr from \a uri, whose path is expected to contain an
  * IPv4 host:port pair. Returns true upon success. */
-bool grpc_parse_ipv4(const grpc_uri* uri, grpc_resolved_address* resolved_addr);
+bool grpc_parse_ipv4(const grpc_core::URI& uri,
+                     grpc_resolved_address* resolved_addr);
 
 /** Populate \a resolved_addr from \a uri, whose path is expected to contain an
  * IPv6 host:port pair. Returns true upon success. */
-bool grpc_parse_ipv6(const grpc_uri* uri, grpc_resolved_address* resolved_addr);
+bool grpc_parse_ipv6(const grpc_core::URI& uri,
+                     grpc_resolved_address* resolved_addr);
 
 /** Populate \a resolved_addr from \a uri. Returns true upon success. */
-bool grpc_parse_uri(const grpc_uri* uri, grpc_resolved_address* resolved_addr);
+bool grpc_parse_uri(const grpc_core::URI& uri,
+                    grpc_resolved_address* resolved_addr);
 
 /** Parse bare IPv4 or IPv6 "IP:port" strings. */
-bool grpc_parse_ipv4_hostport(const char* hostport, grpc_resolved_address* addr,
-                              bool log_errors);
-bool grpc_parse_ipv6_hostport(const char* hostport, grpc_resolved_address* addr,
-                              bool log_errors);
+bool grpc_parse_ipv4_hostport(y_absl::string_view hostport,
+                              grpc_resolved_address* addr, bool log_errors);
+bool grpc_parse_ipv6_hostport(y_absl::string_view hostport,
+                              grpc_resolved_address* addr, bool log_errors);
 
 /* Converts named or numeric port to a uint16 suitable for use in a sockaddr. */
 uint16_t grpc_strhtons(const char* port);
+
+namespace grpc_core {
+
+/** Populate \a resolved_addr to be a unix socket at |path| */
+grpc_error* UnixSockaddrPopulate(y_absl::string_view path,
+                                 grpc_resolved_address* resolved_addr);
+
+/** Populate \a resolved_addr to be a unix socket in the abstract namespace
+ * at |path| */
+grpc_error* UnixAbstractSockaddrPopulate(y_absl::string_view path,
+                                         grpc_resolved_address* resolved_addr);
+
+}  // namespace grpc_core
 
 #endif /* GRPC_CORE_LIB_IOMGR_PARSE_ADDRESS_H */

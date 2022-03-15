@@ -23,9 +23,12 @@
 
 #include <stdbool.h>
 
+#include "y_absl/types/optional.h"
+
 #include <grpc/grpc.h>
 #include <grpc/slice.h>
 #include <grpc/support/time.h>
+
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/transport/metadata.h"
 #include "src/core/lib/transport/static_metadata.h"
@@ -73,10 +76,21 @@ void grpc_metadata_batch_remove(grpc_metadata_batch* batch,
 /** Substitute a new mdelem for an old value */
 grpc_error* grpc_metadata_batch_substitute(grpc_metadata_batch* batch,
                                            grpc_linked_mdelem* storage,
-                                           grpc_mdelem new_value);
+                                           grpc_mdelem new_mdelem);
 
 void grpc_metadata_batch_set_value(grpc_linked_mdelem* storage,
                                    const grpc_slice& value);
+
+/** Returns metadata value(s) for the specified key.
+    If the key is not present in the batch, returns y_absl::nullopt.
+    If the key is present exactly once in the batch, returns a string_view of
+    that value.
+    If the key is present more than once in the batch, constructs a
+    comma-concatenated string of all values in concatenated_value and returns a
+    string_view of that string. */
+y_absl::optional<y_absl::string_view> grpc_metadata_batch_get_value(
+    grpc_metadata_batch* batch, y_absl::string_view target_key,
+    TString* concatenated_value);
 
 /** Add \a storage to the beginning of \a batch. storage->md is
     assumed to be valid.
@@ -172,10 +186,10 @@ grpc_error* grpc_metadata_batch_filter(
     void* user_data, const char* composite_error_string) GRPC_MUST_USE_RESULT;
 
 #ifndef NDEBUG
-void grpc_metadata_batch_assert_ok(grpc_metadata_batch* comd);
+void grpc_metadata_batch_assert_ok(grpc_metadata_batch* batch);
 #else
-#define grpc_metadata_batch_assert_ok(comd) \
-  do {                                      \
+#define grpc_metadata_batch_assert_ok(batch) \
+  do {                                       \
   } while (0)
 #endif
 

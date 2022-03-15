@@ -33,20 +33,21 @@ class FlatExprBuilder : public CelExpressionBuilder {
  public:
   FlatExprBuilder() = default;
 
-  cel_base::StatusOr<std::unique_ptr<CelExpression>> CreateExpression(
-      const google::api::expr::v1alpha1::Expr* expr,
-      const google::api::expr::v1alpha1::SourceInfo* source_info)
-      const override {
+  y_absl::StatusOr<std::unique_ptr<CelExpression>> CreateExpression(
+      const google_api_expr_v1alpha1_Expr* expr,
+      const google_api_expr_v1alpha1_SourceInfo* source_info) const override {
     ExecutionPath path;
-    return y_absl::make_unique<CelExpressionFlatImpl>(nullptr, path, 0);
+    return y_absl::make_unique<CelExpressionFlatImpl>(nullptr, path, 0,
+                                                    std::set<TString>{});
   }
 
-  cel_base::StatusOr<std::unique_ptr<CelExpression>> CreateExpression(
-      const google::api::expr::v1alpha1::Expr* expr,
-      const google::api::expr::v1alpha1::SourceInfo* source_info,
+  y_absl::StatusOr<std::unique_ptr<CelExpression>> CreateExpression(
+      const google_api_expr_v1alpha1_Expr* expr,
+      const google_api_expr_v1alpha1_SourceInfo* source_info,
       std::vector<y_absl::Status>* warnings) const override {
     ExecutionPath path;
-    return y_absl::make_unique<CelExpressionFlatImpl>(nullptr, path, 0);
+    return y_absl::make_unique<CelExpressionFlatImpl>(nullptr, path, 0,
+                                                    std::set<TString>{});
   }
 };
 

@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import traceback
 
 import setuptools
@@ -211,21 +212,38 @@ class BuildExt(build_ext.build_ext):
     }
     LINK_OPTIONS = {}
 
+    def get_ext_filename(self, ext_name):
+        # since python3.5, python extensions' shared libraries use a suffix that corresponds to the value
+        # of sysconfig.get_config_var('EXT_SUFFIX') and contains info about the architecture the library targets.
+        # E.g. on x64 linux the suffix is ".cpython-XYZ-x86_64-linux-gnu.so"
+        # When crosscompiling python wheels, we need to be able to override this suffix
+        # so that the resulting file name matches the target architecture and we end up with a well-formed
+        # wheel.
+        filename = build_ext.build_ext.get_ext_filename(self, ext_name)
+        orig_ext_suffix = sysconfig.get_config_var('EXT_SUFFIX')
+        new_ext_suffix = os.getenv('GRPC_PYTHON_OVERRIDE_EXT_SUFFIX')
+        if new_ext_suffix and filename.endswith(orig_ext_suffix):
+            filename = filename[:-len(orig_ext_suffix)] + new_ext_suffix
+        return filename
+
     def build_extensions(self):
 
         def compiler_ok_with_extra_std():
             """Test if default compiler is okay with specifying c++ version
             when invoked in C mode. GCC is okay with this, while clang is not.
             """
-            if platform.system() != 'Windows':
+            try:
+                # TODO(lidiz) Remove the generated a.out for success tests.
+                cc_test = subprocess.Popen(['cc', '-x', 'c', '-std=c++11', '-'],
+                                           stdin=subprocess.PIPE,
+                                           stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE)
+                _, cc_err = cc_test.communicate(input=b'int main(){return 0;}')
+                return not 'invalid argument' in str(cc_err)
+            except:
+                sys.stderr.write('Non-fatal exception:' +
+                                 traceback.format_exc() + '\n')
                 return False
-            # TODO(lidiz) Remove the generated a.out for success tests.
-            cc_test = subprocess.Popen(['cc', '-x', 'c', '-std=c++11', '-'],
-                                       stdin=subprocess.PIPE,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
-            _, cc_err = cc_test.communicate(input=b'int main(){return 0;}')
-            return not 'invalid argument' in str(cc_err)
 
         # This special conditioning is here due to difference of compiler
         #   behavior in gcc and clang. The clang doesn't take --stdc++11

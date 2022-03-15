@@ -26,7 +26,7 @@
 
 void grpc_tls_certificate_distributor::SetKeyMaterials(
     const TString& cert_name, y_absl::optional<TString> pem_root_certs,
-    y_absl::optional<PemKeyCertPairList> pem_key_cert_pairs) {
+    y_absl::optional<grpc_core::PemKeyCertPairList> pem_key_cert_pairs) {
   GPR_ASSERT(pem_root_certs.has_value() || pem_key_cert_pairs.has_value());
   grpc_core::MutexLock lock(&mu_);
   auto& cert_info = certificate_info_map_[cert_name];
@@ -38,14 +38,17 @@ void grpc_tls_certificate_distributor::SetKeyMaterials(
       const auto watcher_it = watchers_.find(watcher_ptr);
       GPR_ASSERT(watcher_it != watchers_.end());
       GPR_ASSERT(watcher_it->second.root_cert_name.has_value());
-      y_absl::optional<PemKeyCertPairList> pem_key_cert_pairs_to_report;
+      y_absl::optional<grpc_core::PemKeyCertPairList>
+          pem_key_cert_pairs_to_report;
       if (pem_key_cert_pairs.has_value() &&
           watcher_it->second.identity_cert_name == cert_name) {
         pem_key_cert_pairs_to_report = pem_key_cert_pairs;
       } else if (watcher_it->second.identity_cert_name.has_value()) {
         auto& identity_cert_info =
             certificate_info_map_[*watcher_it->second.identity_cert_name];
-        pem_key_cert_pairs_to_report = identity_cert_info.pem_key_cert_pairs;
+        if (!identity_cert_info.pem_key_cert_pairs.empty()) {
+          pem_key_cert_pairs_to_report = identity_cert_info.pem_key_cert_pairs;
+        }
       }
       watcher_ptr->OnCertificatesChanged(
           pem_root_certs, std::move(pem_key_cert_pairs_to_report));
@@ -69,7 +72,9 @@ void grpc_tls_certificate_distributor::SetKeyMaterials(
       } else if (watcher_it->second.root_cert_name.has_value()) {
         auto& root_cert_info =
             certificate_info_map_[*watcher_it->second.root_cert_name];
-        pem_root_certs_to_report = root_cert_info.pem_root_certs;
+        if (!root_cert_info.pem_root_certs.empty()) {
+          pem_root_certs_to_report = root_cert_info.pem_root_certs;
+        }
       }
       watcher_ptr->OnCertificatesChanged(pem_root_certs_to_report,
                                          pem_key_cert_pairs);
@@ -188,7 +193,7 @@ void grpc_tls_certificate_distributor::WatchTlsCertificates(
     watchers_[watcher_ptr] = {std::move(watcher), root_cert_name,
                               identity_cert_name};
     y_absl::optional<y_absl::string_view> updated_root_certs;
-    y_absl::optional<PemKeyCertPairList> updated_identity_pairs;
+    y_absl::optional<grpc_core::PemKeyCertPairList> updated_identity_pairs;
     grpc_error* root_error = GRPC_ERROR_NONE;
     grpc_error* identity_error = GRPC_ERROR_NONE;
     if (root_cert_name.has_value()) {
@@ -319,3 +324,23 @@ void grpc_tls_certificate_distributor::CancelTlsCertificatesWatch(
     }
   }
 };
+
+/** -- Wrapper APIs declared in grpc_security.h -- **/
+
+grpc_tls_identity_pairs* grpc_tls_identity_pairs_create() {
+  return new grpc_tls_identity_pairs();
+}
+
+void grpc_tls_identity_pairs_add_pair(grpc_tls_identity_pairs* pairs,
+                                      const char* private_key,
+                                      const char* cert_chain) {
+  GPR_ASSERT(pairs != nullptr);
+  GPR_ASSERT(private_key != nullptr);
+  GPR_ASSERT(cert_chain != nullptr);
+  pairs->pem_key_cert_pairs.emplace_back(private_key, cert_chain);
+}
+
+void grpc_tls_identity_pairs_destroy(grpc_tls_identity_pairs* pairs) {
+  GPR_ASSERT(pairs != nullptr);
+  delete pairs;
+}

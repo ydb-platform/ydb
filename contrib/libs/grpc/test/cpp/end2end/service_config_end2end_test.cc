@@ -24,6 +24,7 @@
 #include <util/generic/string.h>
 #include <thread>
 
+#include "y_absl/memory/memory.h"
 #include "y_absl/strings/str_cat.h"
 
 #include <grpc/grpc.h>
@@ -56,6 +57,7 @@
 
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/util/port.h"
+#include "test/core/util/resolve_localhost_ip46.h"
 #include "test/core/util/test_config.h"
 #include "test/cpp/end2end/test_service_impl.h"
 
@@ -64,7 +66,6 @@
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
-using std::chrono::system_clock;
 
 namespace grpc {
 namespace testing {
@@ -131,6 +132,11 @@ class ServiceConfigEnd2endTest : public ::testing::Test {
     grpc_init();
     response_generator_ =
         grpc_core::MakeRefCounted<grpc_core::FakeResolverResponseGenerator>();
+    bool localhost_resolves_to_ipv4 = false;
+    bool localhost_resolves_to_ipv6 = false;
+    grpc_core::LocalhostResolves(&localhost_resolves_to_ipv4,
+                                 &localhost_resolves_to_ipv6);
+    ipv6_only_ = !localhost_resolves_to_ipv4 && localhost_resolves_to_ipv6;
   }
 
   void TearDown() override {
@@ -143,7 +149,7 @@ class ServiceConfigEnd2endTest : public ::testing::Test {
     stub_.reset();
     servers_.clear();
     creds_.reset();
-    grpc_shutdown_blocking();
+    grpc_shutdown();
   }
 
   void CreateServers(size_t num_servers,
@@ -169,14 +175,14 @@ class ServiceConfigEnd2endTest : public ::testing::Test {
   grpc_core::Resolver::Result BuildFakeResults(const std::vector<int>& ports) {
     grpc_core::Resolver::Result result;
     for (const int& port : ports) {
-      TString lb_uri_str = y_absl::StrCat("ipv4:127.0.0.1:", port);
-      grpc_uri* lb_uri = grpc_uri_parse(lb_uri_str.c_str(), true);
-      GPR_ASSERT(lb_uri != nullptr);
+      TString lb_uri_str =
+          y_absl::StrCat(ipv6_only_ ? "ipv6:[::1]:" : "ipv4:127.0.0.1:", port);
+      y_absl::StatusOr<grpc_core::URI> lb_uri = grpc_core::URI::Parse(lb_uri_str);
+      GPR_ASSERT(lb_uri.ok());
       grpc_resolved_address address;
-      GPR_ASSERT(grpc_parse_uri(lb_uri, &address));
+      GPR_ASSERT(grpc_parse_uri(*lb_uri, &address));
       result.addresses.emplace_back(address.addr, address.len,
                                     nullptr /* args */);
-      grpc_uri_destroy(lb_uri);
     }
     return result;
   }
@@ -311,9 +317,9 @@ class ServiceConfigEnd2endTest : public ::testing::Test {
       grpc::internal::Mutex mu;
       grpc::internal::MutexLock lock(&mu);
       grpc::internal::CondVar cond;
-      thread_.reset(new std::thread(
-          std::bind(&ServerData::Serve, this, server_host, &mu, &cond)));
-      cond.WaitUntil(&mu, [this] { return server_ready_; });
+      thread_ = y_absl::make_unique<std::thread>(
+          std::bind(&ServerData::Serve, this, server_host, &mu, &cond));
+      grpc::internal::WaitUntil(&cond, &mu, [this] { return server_ready_; });
       server_ready_ = false;
       gpr_log(GPR_INFO, "server startup complete");
     }
@@ -422,6 +428,7 @@ class ServiceConfigEnd2endTest : public ::testing::Test {
     return "{\"version\": \"invalid_default\"";
   }
 
+  bool ipv6_only_ = false;
   const TString server_host_;
   std::unique_ptr<grpc::testing::EchoTestService::Stub> stub_;
   std::vector<std::unique_ptr<ServerData>> servers_;

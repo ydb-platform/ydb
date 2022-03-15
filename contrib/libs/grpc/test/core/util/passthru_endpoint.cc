@@ -197,8 +197,8 @@ static void half_init(half* m, passthru_endpoint* parent,
   m->parent = parent;
   grpc_slice_buffer_init(&m->read_buffer);
   m->on_read = nullptr;
-  TString name = y_absl::StrFormat("passthru_endpoint_%s_%" PRIxPTR,
-                                     half_name, (intptr_t)parent);
+  TString name =
+      y_absl::StrFormat("passthru_endpoint_%s_%p", half_name, parent);
   m->resource_user = grpc_resource_user_create(resource_quota, name.c_str());
 }
 
@@ -209,7 +209,7 @@ void grpc_passthru_endpoint_create(grpc_endpoint** client,
   passthru_endpoint* m =
       static_cast<passthru_endpoint*>(gpr_malloc(sizeof(*m)));
   m->halves = 2;
-  m->shutdown = 0;
+  m->shutdown = false;
   if (stats == nullptr) {
     m->stats = grpc_passthru_endpoint_stats_create();
   } else {

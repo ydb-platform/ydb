@@ -409,7 +409,7 @@ static void timer_init(grpc_timer* timer, grpc_millis deadline,
   }
   gpr_mu_unlock(&shard->mu);
 
-  /* Deadline may have decreased, we need to adjust the master queue.  Note
+  /* Deadline may have decreased, we need to adjust the main queue.  Note
      that there is a potential racy unlocked region here.  There could be a
      reordering of multiple grpc_timer_init calls, at this point, but the < test
      below should ensure that we err on the side of caution.  There could
@@ -432,7 +432,7 @@ static void timer_init(grpc_timer* timer, grpc_millis deadline,
       note_deadline_change(shard);
       if (shard->shard_queue_index == 0 && deadline < old_min_deadline) {
 #if GPR_ARCH_64
-        // TODO: sreek - Using c-style cast here. static_cast<> gives an error
+        // TODO(sreek): Using c-style cast here. static_cast<> gives an error
         // (on mac platforms complaining that gpr_atm* is (long *) while
         // (&g_shared_mutables.min_timer) is a (long long *). The cast should be
         // safe since we know that both are pointer types and 64-bit wide.
@@ -586,7 +586,7 @@ static grpc_timer_check_result run_some_expired_timers(grpc_millis now,
   grpc_timer_check_result result = GRPC_TIMERS_NOT_CHECKED;
 
 #if GPR_ARCH_64
-  // TODO: sreek - Using c-style cast here. static_cast<> gives an error (on
+  // TODO(sreek): Using c-style cast here. static_cast<> gives an error (on
   // mac platforms complaining that gpr_atm* is (long *) while
   // (&g_shared_mutables.min_timer) is a (long long *). The cast should be
   // safe since we know that both are pointer types and 64-bit wide
@@ -639,7 +639,7 @@ static grpc_timer_check_result run_some_expired_timers(grpc_millis now,
 
       /* An grpc_timer_init() on the shard could intervene here, adding a new
          timer that is earlier than new_min_deadline.  However,
-         grpc_timer_init() will block on the master_lock before it can call
+         grpc_timer_init() will block on the mutex before it can call
          set_min_deadline, so this one will complete first and then the Addtimer
          will reduce the min_deadline (perhaps unnecessarily). */
       g_shard_queue[0]->min_deadline = new_min_deadline;
@@ -651,7 +651,7 @@ static grpc_timer_check_result run_some_expired_timers(grpc_millis now,
     }
 
 #if GPR_ARCH_64
-    // TODO: sreek - Using c-style cast here. static_cast<> gives an error (on
+    // TODO(sreek): Using c-style cast here. static_cast<> gives an error (on
     // mac platforms complaining that gpr_atm* is (long *) while
     // (&g_shared_mutables.min_timer) is a (long long *). The cast should be
     // safe since we know that both are pointer types and 64-bit wide

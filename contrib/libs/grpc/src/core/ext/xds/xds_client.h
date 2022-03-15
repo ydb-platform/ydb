@@ -30,7 +30,6 @@
 #include "src/core/ext/xds/xds_client_stats.h"
 #include "src/core/lib/channel/channelz.h"
 #include "src/core/lib/gprpp/dual_ref_counted.h"
-#include "src/core/lib/gprpp/map.h"
 #include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted.h"
@@ -39,7 +38,8 @@
 
 namespace grpc_core {
 
-extern TraceFlag xds_client_trace;
+extern TraceFlag grpc_xds_client_trace;
+extern TraceFlag grpc_xds_client_refcount_trace;
 
 class XdsClient : public DualRefCounted<XdsClient> {
  public:
@@ -86,7 +86,17 @@ class XdsClient : public DualRefCounted<XdsClient> {
 
   // Callers should not instantiate directly.  Use GetOrCreate() instead.
   explicit XdsClient(grpc_error** error);
-  ~XdsClient();
+  ~XdsClient() override;
+
+  const XdsBootstrap& bootstrap() const {
+    // bootstrap_ is guaranteed to be non-null since XdsClient::GetOrCreate()
+    // would return a null object if bootstrap_ was null.
+    return *bootstrap_;
+  }
+
+  CertificateProviderStore& certificate_provider_store() {
+    return *certificate_provider_store_;
+  }
 
   grpc_pollset_set* interested_parties() const { return interested_parties_; }
 
@@ -181,6 +191,15 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // Resets connection backoff state.
   void ResetBackoff();
 
+  // Dumps the active xDS config in JSON format.
+  // Individual xDS resource is encoded as envoy.admin.v3.*ConfigDump. Returns
+  // envoy.service.status.v3.ClientConfig which also includes the config
+  // status (e.g., CLIENT_REQUESTED, CLIENT_ACKED, CLIENT_NACKED).
+  //
+  // Expected to be invoked by wrapper languages in their CSDS service
+  // implementation.
+  TString DumpClientConfigBinary();
+
  private:
   // Contains a channel to the xds server and all the data related to the
   // channel.  Holds a ref to the xds client object.
@@ -198,8 +217,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
     class LrsCallState;
 
     ChannelState(WeakRefCountedPtr<XdsClient> xds_client,
-                 grpc_channel* channel);
-    ~ChannelState();
+                 const XdsBootstrap::XdsServer& server);
+    ~ChannelState() override;
 
     void Orphan() override;
 
@@ -211,6 +230,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
     void MaybeStartLrsCall();
     void StopLrsCall();
 
+    bool HasAdsCall() const;
     bool HasActiveAdsCall() const;
 
     void StartConnectivityWatchLocked();
@@ -225,6 +245,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
 
     // The owning xds client.
     WeakRefCountedPtr<XdsClient> xds_client_;
+
+    const XdsBootstrap::XdsServer& server_;
 
     // The channel and its status.
     grpc_channel* channel_;
@@ -242,6 +264,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
         watchers;
     // The latest data seen from LDS.
     y_absl::optional<XdsApi::LdsUpdate> update;
+    XdsApi::ResourceMetadata meta;
   };
 
   struct RouteConfigState {
@@ -250,6 +273,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
         watchers;
     // The latest data seen from RDS.
     y_absl::optional<XdsApi::RdsUpdate> update;
+    XdsApi::ResourceMetadata meta;
   };
 
   struct ClusterState {
@@ -257,6 +281,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
         watchers;
     // The latest data seen from CDS.
     y_absl::optional<XdsApi::CdsUpdate> update;
+    XdsApi::ResourceMetadata meta;
   };
 
   struct EndpointState {
@@ -265,19 +290,16 @@ class XdsClient : public DualRefCounted<XdsClient> {
         watchers;
     // The latest data seen from EDS.
     y_absl::optional<XdsApi::EdsUpdate> update;
+    XdsApi::ResourceMetadata meta;
   };
 
-  // TODO(roth): Change this to store exactly one instance of
-  // XdsClusterDropStats and exactly one instance of
-  // XdsClusterLocalityStats per locality.  We can return multiple refs
-  // to the same object instead of registering multiple objects.
   struct LoadReportState {
     struct LocalityState {
-      std::set<XdsClusterLocalityStats*> locality_stats;
-      std::vector<XdsClusterLocalityStats::Snapshot> deleted_locality_stats;
+      XdsClusterLocalityStats* locality_stats = nullptr;
+      XdsClusterLocalityStats::Snapshot deleted_locality_stats;
     };
 
-    std::set<XdsClusterDropStats*> drop_stats;
+    XdsClusterDropStats* drop_stats = nullptr;
     XdsClusterDropStats::Snapshot deleted_drop_stats;
     std::map<RefCountedPtr<XdsLocalityName>, LocalityState,
              XdsLocalityName::Less>
@@ -291,9 +313,16 @@ class XdsClient : public DualRefCounted<XdsClient> {
   XdsApi::ClusterLoadReportMap BuildLoadReportSnapshotLocked(
       bool send_all_clusters, const std::set<TString>& clusters);
 
+  void UpdateResourceMetadataWithFailedParseResult(
+      grpc_millis update_time, const XdsApi::AdsParseResult& result);
+  void UpdatePendingResources(
+      const TString& type_url,
+      XdsApi::ResourceMetadataMap* resource_metadata_map);
+
   const grpc_millis request_timeout_;
   grpc_pollset_set* interested_parties_;
   std::unique_ptr<XdsBootstrap> bootstrap_;
+  OrphanablePtr<CertificateProviderStore> certificate_provider_store_;
   XdsApi api_;
 
   Mutex mu_;
@@ -317,12 +346,18 @@ class XdsClient : public DualRefCounted<XdsClient> {
       LoadReportState>
       load_report_map_;
 
+  // Stores the most recent accepted resource version for each resource type.
+  std::map<TString /*type*/, TString /*version*/> resource_version_map_;
+
   bool shutting_down_ = false;
 };
 
 namespace internal {
 void SetXdsChannelArgsForTest(grpc_channel_args* args);
 void UnsetGlobalXdsClientForTest();
+// Sets bootstrap config to be used when no env var is set.
+// Does not take ownership of config.
+void SetXdsFallbackBootstrapConfig(const char* config);
 }  // namespace internal
 
 }  // namespace grpc_core

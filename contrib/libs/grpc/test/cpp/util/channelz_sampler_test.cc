@@ -64,9 +64,9 @@ TString output_json("output.json");
 
 // Creata an echo server
 class EchoServerImpl final : public grpc::testing::TestService::Service {
-  Status EmptyCall(::grpc::ServerContext* context,
-                   const grpc::testing::Empty* request,
-                   grpc::testing::Empty* response) {
+  Status EmptyCall(::grpc::ServerContext* /*context*/,
+                   const grpc::testing::Empty* /*request*/,
+                   grpc::testing::Empty* /*response*/) override {
     return Status::OK;
   }
 };
@@ -155,8 +155,8 @@ TEST(ChannelzSamplerTest, SimpleTest) {
     GPR_ASSERT(0);
   }
   delete test_driver;
-  gpr_event_set(&done_ev1, (void*)1);
-  gpr_event_set(&done_ev2, (void*)1);
+  gpr_event_set(&done_ev1, reinterpret_cast<void*>(1));
+  gpr_event_set(&done_ev2, reinterpret_cast<void*>(1));
   client_thread_1.join();
   client_thread_2.join();
 }

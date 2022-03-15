@@ -29,11 +29,11 @@ namespace grpc {
 namespace testing {
 /* This interceptor does nothing. Just keeps a global count on the number of
  * times it was invoked. */
-class DummyInterceptor : public experimental::Interceptor {
+class PhonyInterceptor : public experimental::Interceptor {
  public:
-  DummyInterceptor() {}
+  PhonyInterceptor() {}
 
-  virtual void Intercept(experimental::InterceptorBatchMethods* methods) {
+  void Intercept(experimental::InterceptorBatchMethods* methods) override {
     if (methods->QueryInterceptionHookPoint(
             experimental::InterceptionHookPoints::PRE_SEND_INITIAL_METADATA)) {
       num_times_run_++;
@@ -67,18 +67,18 @@ class DummyInterceptor : public experimental::Interceptor {
   static std::atomic<int> num_times_cancel_;
 };
 
-class DummyInterceptorFactory
+class PhonyInterceptorFactory
     : public experimental::ClientInterceptorFactoryInterface,
       public experimental::ServerInterceptorFactoryInterface {
  public:
-  virtual experimental::Interceptor* CreateClientInterceptor(
+  experimental::Interceptor* CreateClientInterceptor(
       experimental::ClientRpcInfo* /*info*/) override {
-    return new DummyInterceptor();
+    return new PhonyInterceptor();
   }
 
-  virtual experimental::Interceptor* CreateServerInterceptor(
+  experimental::Interceptor* CreateServerInterceptor(
       experimental::ServerRpcInfo* /*info*/) override {
-    return new DummyInterceptor();
+    return new PhonyInterceptor();
   }
 };
 
@@ -87,12 +87,12 @@ class NullInterceptorFactory
     : public experimental::ClientInterceptorFactoryInterface,
       public experimental::ServerInterceptorFactoryInterface {
  public:
-  virtual experimental::Interceptor* CreateClientInterceptor(
+  experimental::Interceptor* CreateClientInterceptor(
       experimental::ClientRpcInfo* /*info*/) override {
     return nullptr;
   }
 
-  virtual experimental::Interceptor* CreateServerInterceptor(
+  experimental::Interceptor* CreateServerInterceptor(
       experimental::ServerRpcInfo* /*info*/) override {
     return nullptr;
   }
@@ -189,9 +189,9 @@ bool CheckMetadata(const std::multimap<TString, TString>& map,
                    const string& key, const string& value);
 
 std::vector<std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>
-CreateDummyClientInterceptors();
+CreatePhonyClientInterceptors();
 
-inline void* tag(int i) { return (void*)static_cast<intptr_t>(i); }
+inline void* tag(int i) { return reinterpret_cast<void*>(i); }
 inline int detag(void* p) {
   return static_cast<int>(reinterpret_cast<intptr_t>(p));
 }

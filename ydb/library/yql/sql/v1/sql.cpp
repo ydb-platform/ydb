@@ -4240,8 +4240,16 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
         bool columnOrType = false;
         auto columnRefsState = Ctx.GetColumnReferenceState();
         bool explicitPgType = columnRefsState == EColumnRefState::AsPgType;
-        if (auto simpleType = LookupSimpleType(name, flexibleTypes, explicitPgType); simpleType && typePossible && suffixIsEmpty) {
-            if (tail.Count > 0 || columnRefsState == EColumnRefState::Deny || explicitPgType || !flexibleTypes) {
+        if (explicitPgType && typePossible && suffixIsEmpty) {
+            auto pgType = BuildSimpleType(Ctx, Ctx.Pos(), name, false);
+            if (pgType && tail.Count) {
+                Ctx.Error() << "Optional types are not supported in this context";
+                return {};
+            }
+            return pgType;
+        }
+        if (auto simpleType = LookupSimpleType(name, flexibleTypes, false); simpleType && typePossible && suffixIsEmpty) {
+            if (tail.Count > 0 || columnRefsState == EColumnRefState::Deny || !flexibleTypes) {
                 // a type
                 return AddOptionals(BuildSimpleType(Ctx, Ctx.Pos(), name, false), tail.Count);
             }

@@ -3123,7 +3123,13 @@ TNodePtr BuildDataType(TPosition pos, const TString& typeName) {
 TMaybe<TString> LookupSimpleType(const TStringBuf& alias, bool flexibleTypes, bool isPgType) {
     TString normalized = to_lower(TString(alias));
     if (isPgType) {
-        // original pg type is passed (like _int4)
+        // expecting original pg type (like _int4 or varchar) with optional pg suffix (i.e. _pgint4, pgvarchar)
+        if (normalized.StartsWith("pg")) {
+            normalized = normalized.substr(2);
+        } else if (normalized.StartsWith("_pg")) {
+            normalized = "_" + normalized.substr(3);
+        }
+
         if (!NPg::HasType(normalized)) {
             return {};
         }
@@ -3155,9 +3161,10 @@ TMaybe<TString> LookupSimpleType(const TStringBuf& alias, bool flexibleTypes, bo
 }
 
 TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly) {
-    auto found = LookupSimpleType(typeName, ctx.FlexibleTypes, ctx.GetColumnReferenceState() == EColumnRefState::AsPgType);
+    bool explicitPgType = ctx.GetColumnReferenceState() == EColumnRefState::AsPgType;
+    auto found = LookupSimpleType(typeName, ctx.FlexibleTypes, explicitPgType);
     if (!found) {
-        ctx.Error(pos) << "Unknown simple type '" << typeName << "'";
+        ctx.Error(pos) << "Unknown " << (explicitPgType ? "pg" : "simple") <<  " type '" << typeName << "'";
         return {};
     }
 

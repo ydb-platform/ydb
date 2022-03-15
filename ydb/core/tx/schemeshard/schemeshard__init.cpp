@@ -2167,6 +2167,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 stats.SearchHeight = rowSet.GetValueOrDefault<Schema::TablePartitionStats::SearchHeight>();
                 stats.FullCompactionTs = rowSet.GetValueOrDefault<Schema::TablePartitionStats::FullCompactionTs>();
+                stats.MemDataSize = rowSet.GetValueOrDefault<Schema::TablePartitionStats::MemDataSize>();
 
                 tableInfo->UpdateShardStats(shardIdx, stats);
 

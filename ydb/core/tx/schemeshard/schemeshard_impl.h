@@ -635,8 +635,8 @@ public:
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
 
-    void EnqueueCompaction(TShardCompactionInfo&& info);
-    void UpdateCompaction(TShardCompactionInfo&& info);
+    void EnqueueCompaction(const TShardIdx& shardIdx, const TTableInfo::TPartitionStats& stats);
+    void UpdateCompaction(const TShardIdx& shardIdx, const TTableInfo::TPartitionStats& stats);
     void RemoveCompaction(const TShardIdx& shardIdx);
 
     void UpdateShardMetrics(const TShardIdx& shardIdx, const TTableInfo::TPartitionStats& newStats);

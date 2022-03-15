@@ -29,10 +29,15 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
         << ", running# " << CompactionQueue->RunningSize() << " shards"
         << " at schemeshard " << TabletID());
 
+    std::unique_ptr<TEvDataShard::TEvCompactTable> request(new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
+    if (CompactionQueue->GetReadyQueue().GetConfig().CompactSinglePartedShards) {
+        request->Record.SetCompactSinglePartedShards(true);
+    }
+
     PipeClientCache->Send(
         ctx,
         ui64(datashardId),
-        new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
+        request.release());
 
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
@@ -126,18 +131,33 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     UpdateBackgroundCompactionQueueMetrics();
 }
 
-void TSchemeShard::EnqueueCompaction(TShardCompactionInfo&& info) {
+void TSchemeShard::EnqueueCompaction(
+    const TShardIdx& shardIdx,
+    const TTableInfo::TPartitionStats& stats)
+{
     if (!CompactionQueue)
         return;
 
-    CompactionQueue->Enqueue(std::move(info));
+    if (stats.HasBorrowed)
+        return;
+
+    CompactionQueue->Enqueue(TShardCompactionInfo(shardIdx, stats));
     UpdateBackgroundCompactionQueueMetrics();
 }
 
-void TSchemeShard::UpdateCompaction(TShardCompactionInfo&& info) {
+void TSchemeShard::UpdateCompaction(
+    const TShardIdx& shardIdx,
+    const TTableInfo::TPartitionStats& newStats)
+{
     if (!CompactionQueue)
         return;
 
+    if (newStats.HasBorrowed) {
+        RemoveCompaction(shardIdx);
+        return;
+    }
+
+    TShardCompactionInfo info(shardIdx, newStats);
     if (!CompactionQueue->Update(info))
         CompactionQueue->Enqueue(std::move(info));
     UpdateBackgroundCompactionQueueMetrics();

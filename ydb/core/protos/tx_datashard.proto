@@ -1401,6 +1401,7 @@ message TEvKqpScan {
 message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool CompactBorrowed = 2;
+    optional bool CompactSinglePartedShards = 3;
 }
 
 message TEvCompactTableResult {

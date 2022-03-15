@@ -99,6 +99,9 @@ struct TShardCompactionInfo {
     ui64 RowCount = 0;
     ui64 RowDeletes = 0;
 
+    ui64 PartCount = 0;
+    ui64 MemDataSize = 0;
+
     explicit TShardCompactionInfo(const TShardIdx& id)
         : ShardIdx(id)
     {}
@@ -109,6 +112,8 @@ struct TShardCompactionInfo {
         , LastFullCompactionTs(stats.FullCompactionTs)
         , RowCount(stats.RowCount)
         , RowDeletes(stats.RowDeletes)
+        , PartCount(stats.PartCount)
+        , MemDataSize(stats.MemDataSize)
     {}
 
     TShardCompactionInfo(const TShardCompactionInfo&) = default;
@@ -180,7 +185,9 @@ public:
     struct TConfig {
         ui32 SearchHeightThreshold = 0;
         ui32 RowDeletesThreshold = 0;
-        ui32 RowCountThreshold = 0;
+        ui32 RowCountThreshold = 1;
+
+        bool CompactSinglePartedShards = false;
 
         TConfig() = default;
     };
@@ -232,17 +239,27 @@ public:
             Config = config;
     }
 
+    const TConfig& GetConfig() const { return Config; }
+
     bool Enqueue(const TShardCompactionInfo& info) {
-        if (info.RowCount < Config.RowCountThreshold) {
+        // ignore empty shard, note that Config.RowDeletesThreshold == 0
+        // is expected in tests only
+        if (info.PartCount == 0 && info.MemDataSize == 0 && Config.RowCountThreshold != 0)
             return false;
-        }
+
+        // ignore single parted shard if needed
+        bool isSingleParted = info.PartCount == 1 && info.MemDataSize == 0;
+        if (!Config.CompactSinglePartedShards && isSingleParted)
+            return false;
+
+        if (info.RowCount < Config.RowCountThreshold)
+            return false;
 
         if (info.SearchHeight >= Config.SearchHeightThreshold)
             QueueSearchHeight.Enqueue(info);
 
-        if (info.RowDeletes >= Config.RowDeletesThreshold) {
+        if (info.RowDeletes >= Config.RowDeletesThreshold)
             QueueRowDeletes.Enqueue(info);
-        }
 
         return QueueLastCompaction.Enqueue(info);
     }

@@ -2137,7 +2137,8 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
         NIceDb::TUpdate<Schema::TablePartitionStats::WriteIops>(stats.WriteIops),
 
         NIceDb::TUpdate<Schema::TablePartitionStats::SearchHeight>(stats.SearchHeight),
-        NIceDb::TUpdate<Schema::TablePartitionStats::FullCompactionTs>(stats.FullCompactionTs)
+        NIceDb::TUpdate<Schema::TablePartitionStats::FullCompactionTs>(stats.FullCompactionTs),
+        NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize)
     );
 }
 
@@ -5802,7 +5803,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
-                EnqueueCompaction(TShardCompactionInfo(p.ShardIdx, it->second));
+                EnqueueCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second);
             }
         }
@@ -5999,6 +6000,7 @@ void TSchemeShard::ConfigureCompactionQueue(
     queueConfig.SearchHeightThreshold = config.GetSearchHeightThreshold();
     queueConfig.RowDeletesThreshold = config.GetRowDeletesThreshold();
     queueConfig.RowCountThreshold = config.GetRowCountThreshold();
+    queueConfig.CompactSinglePartedShards = config.GetCompactSinglePartedShards();
 
     TCompactionQueue::TConfig compactionConfig;
 
@@ -6023,6 +6025,7 @@ void TSchemeShard::ConfigureCompactionQueue(
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "CompactionQueue configured: Timeout# " << compactionConfig.Timeout
+                 << ", compact single parted# " << (queueConfig.CompactSinglePartedShards ? "yes" : "no")
                  << ", Rate# " << CompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", RoundInterval# " << compactionConfig.RoundInterval

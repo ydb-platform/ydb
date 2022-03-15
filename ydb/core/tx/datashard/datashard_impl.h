@@ -2474,6 +2474,7 @@ protected:
             ev->Record.SetRound(StatsReportRound++);
             ev->Record.MutableTableStats()->SetRowCount(ti.Stats.DataStats.RowCount + ti.Stats.MemRowCount);
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize + ti.Stats.MemDataSize);
+            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.IndexSize);
             ev->Record.MutableTableStats()->SetLastAccessTime(ti.Stats.AccessTime.MilliSeconds());
             ev->Record.MutableTableStats()->SetLastUpdateTime(ti.Stats.UpdateTime.MilliSeconds());

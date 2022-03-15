@@ -48,6 +48,7 @@ void SetFeatures(
     auto* compactionConfig = request->Record.MutableConfig()->MutableCompactionConfig();
     compactionConfig->MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig->MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
 
     auto sender = runtime.AllocateEdgeActor();
 
@@ -82,6 +83,7 @@ void DisableBackgroundCompactionViaRestart(
     auto& compactionConfig = runtime.GetAppData().CompactionConfig;
     compactionConfig.MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
 
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
@@ -101,6 +103,7 @@ void EnableBackgroundCompactionViaRestart(
     auto& compactionConfig = runtime.GetAppData().CompactionConfig;
     compactionConfig.MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
 
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
@@ -439,6 +442,70 @@ namespace NKikimr::NSchemeShard {
 Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
     constexpr TShardIdx ShardIdx = TShardIdx(11, 17);
 
+    Y_UNIT_TEST(EnqueueEmptyShard) {
+        TCompactionQueueImpl::TConfig config;
+        config.SearchHeightThreshold = 0;
+        config.RowDeletesThreshold = 0;
+
+        TTableInfo::TPartitionStats stats; // all zeros
+
+        TCompactionQueueImpl queue(config);
+        UNIT_ASSERT(!queue.Enqueue({ShardIdx, stats}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
+    }
+
+    Y_UNIT_TEST(EnqueueSinglePartedShard) {
+        TCompactionQueueImpl::TConfig config;
+        config.SearchHeightThreshold = 0;
+        config.RowDeletesThreshold = 0;
+
+        TTableInfo::TPartitionStats stats;
+        stats.RowCount = 10;
+        stats.RowDeletes = 100;
+        stats.SearchHeight = 1; // below threshold
+        stats.PartCount = 1;
+        stats.MemDataSize = 0;
+
+        TCompactionQueueImpl queue(config);
+        UNIT_ASSERT(!queue.Enqueue({ShardIdx, stats}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
+    }
+
+    Y_UNIT_TEST(EnqueueSinglePartedShardWhenEnabled) {
+        TCompactionQueueImpl::TConfig config;
+        config.SearchHeightThreshold = 0;
+        config.RowDeletesThreshold = 0;
+        config.CompactSinglePartedShards = true; // turn on
+
+        TTableInfo::TPartitionStats stats;
+        stats.RowCount = 10;
+        stats.RowDeletes = 100;
+        stats.SearchHeight = 1; // below threshold
+        stats.PartCount = 1;
+        stats.MemDataSize = 0;
+
+        TCompactionQueueImpl queue(config);
+        UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
+    }
+
+    Y_UNIT_TEST(EnqueueSinglePartedShardWithMemData) {
+        TCompactionQueueImpl::TConfig config;
+        config.SearchHeightThreshold = 10;
+        config.RowDeletesThreshold = 0;
+
+        TTableInfo::TPartitionStats stats;
+        stats.RowCount = 10;
+        stats.RowDeletes = 100;
+        stats.SearchHeight = 1; // below threshold
+        stats.PartCount = 1;
+        stats.MemDataSize = 10;
+
+        TCompactionQueueImpl queue(config);
+        UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
+    }
+
     Y_UNIT_TEST(EnqueuBelowSearchHeightThreshold) {
         TCompactionQueueImpl::TConfig config;
         config.SearchHeightThreshold = 10;
@@ -448,6 +515,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowCount = 10;
         stats.RowDeletes = 100;
         stats.SearchHeight = 3;
+        stats.PartCount = 100; // random number to not consider shard as empty
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
@@ -465,6 +533,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowCount = 10;
         stats.RowDeletes = 1;
         stats.SearchHeight = 20;
+        stats.PartCount = 100; // random number to not consider shard as empty
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
@@ -500,6 +569,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowCount = 10;
         stats.RowDeletes = 100;
         stats.SearchHeight = 20;
+        stats.PartCount = 100; // random number to not consider shard as empty
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
@@ -521,6 +591,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowCount = 10;
         stats.RowDeletes = 1000;
         stats.SearchHeight = 20;
+        stats.PartCount = 100; // random number to not consider shard as empty
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
@@ -543,11 +614,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowCount = 10;
         stats.RowDeletes = 1000;
         stats.SearchHeight = 20;
+        stats.PartCount = 100; // random number to not consider shard as empty
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
 
         stats.RowCount = 0;
+        stats.PartCount = 0;
         UNIT_ASSERT(queue.UpdateIfFound({ShardIdx, stats}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
@@ -564,15 +637,16 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
             TShardIdx shardId = TShardIdx(1, idx);
             TTableInfo::TPartitionStats stats;
             stats.FullCompactionTs = ts;
+            stats.PartCount = 100; // random number to not consider shard as empty
             return TShardCompactionInfo(shardId, stats);
         };
 
         std::vector<TShardCompactionInfo> shardInfos = {
             //       id,   ts
-            makeInfo(1,    1), 
+            makeInfo(1,    1),
             makeInfo(2,    2),
             makeInfo(3,    3),
-            makeInfo(4,    4) 
+            makeInfo(4,    4)
         };
 
         auto rng = std::default_random_engine {};
@@ -608,6 +682,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
             stats.FullCompactionTs = ts;
             stats.SearchHeight = sh;
             stats.RowDeletes = d;
+            stats.PartCount = 100; // random number to not consider shard as empty
             return TShardCompactionInfo(shardId, stats);
         };
 

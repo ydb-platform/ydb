@@ -98,7 +98,9 @@ public:
             return true;
         }
 
-        if (stats.PartCount <= 1 && stats.MemDataSize == 0 && !hasBorrowed) {
+        bool isEmpty = stats.PartCount == 0 && stats.MemDataSize == 0;
+        bool isSingleParted = stats.PartCount == 1 && stats.MemDataSize == 0;
+        if (isEmpty || isSingleParted && !hasBorrowed && !record.HasCompactSinglePartedShards()) {
             // nothing to compact
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Background compaction of tablet# " << Self->TabletID()

@@ -524,12 +524,17 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
     entry->SetPathId(pathId.LocalPathId);
     entry->SetPartitionCount(solomonVolumeInfo->Partitions.size());
 
+    entry->MutablePartitions()->Reserve(entry->GetPartitionCount());
+    for (ui32 idx = 0; idx < entry->GetPartitionCount(); ++idx) {
+        entry->AddPartitions();
+    }
+
     for (const auto& partition: solomonVolumeInfo->Partitions) {
         auto shardId = partition.first;
         auto shardInfo = Self->ShardInfos.FindPtr(shardId);
         Y_VERIFY(shardInfo);
 
-        auto part = entry->AddPartitions();
+        auto part = entry->MutablePartitions()->Mutable(partition.second->PartitionId);
         part->SetPartitionId(partition.second->PartitionId);
         part->SetShardIdx(ui64(shardId.GetLocalId()));
         auto tabletId = partition.second->TabletId;

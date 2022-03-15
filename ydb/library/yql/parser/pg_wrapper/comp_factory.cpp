@@ -676,6 +676,55 @@ private:
     IComputationNode* const Arg;
 };
 
+template <NUdf::EDataSlot Slot>
+class TToPg : public TMutableComputationNode<TToPg<Slot>> {
+    typedef TMutableComputationNode<TToPg<Slot>> TBaseComputation;
+public:
+    TToPg(TComputationMutables& mutables, IComputationNode* arg)
+        : TBaseComputation(mutables)
+        , Arg(arg)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        auto value = Arg->GetValue(compCtx);
+        if (!value) {
+            return value.Release();
+        }
+
+        switch (Slot)
+        {
+        case NUdf::EDataSlot::Bool:
+            return ScalarDatumToPod(BoolGetDatum(value.Get<bool>()));
+        case NUdf::EDataSlot::Int16:
+            return ScalarDatumToPod(Int16GetDatum(value.Get<i16>()));
+        case NUdf::EDataSlot::Int32:
+            return ScalarDatumToPod(Int32GetDatum(value.Get<i32>()));
+        case NUdf::EDataSlot::Int64:
+            return ScalarDatumToPod(Int64GetDatum(value.Get<i64>()));
+        case NUdf::EDataSlot::Float:
+            return ScalarDatumToPod(Float4GetDatum(value.Get<float>()));
+        case NUdf::EDataSlot::Double:
+            return ScalarDatumToPod(Float8GetDatum(value.Get<double>()));
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Utf8: {
+            const auto& ref = value.AsStringRef();
+            SET_MEMORY_CONTEXT;
+            return PointerDatumToPod((Datum)cstring_to_text_with_len(ref.Data(), ref.Size()));
+        }
+        default:
+            Y_UNREACHABLE();
+        }
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->DependsOn(Arg);
+    }
+
+    IComputationNode* const Arg;
+};
+
 TComputationNodeFactory GetPgFactory() {
     return [] (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             pg_thread_init();
@@ -745,6 +794,32 @@ TComputationNodeFactory GetPgFactory() {
                     return new TFromPg<NUdf::EDataSlot::Utf8, true>(ctx.Mutables, arg);
                 default:
                     ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceId).Name;
+                }
+            }
+
+            if (name == "ToPg") {
+                auto arg = LocateNode(ctx.NodeLocator, callable, 0);
+                auto returnType = callable.GetType()->GetReturnType();
+                auto targetId = AS_TYPE(TPgType, returnType)->GetTypeId();
+                switch (targetId) {
+                case BOOLOID:
+                    return new TToPg<NUdf::EDataSlot::Bool>(ctx.Mutables, arg);
+                case INT2OID:
+                    return new TToPg<NUdf::EDataSlot::Int16>(ctx.Mutables, arg);
+                case INT4OID:
+                    return new TToPg<NUdf::EDataSlot::Int32>(ctx.Mutables, arg);
+                case INT8OID:
+                    return new TToPg<NUdf::EDataSlot::Int64>(ctx.Mutables, arg);
+                case FLOAT4OID:
+                    return new TToPg<NUdf::EDataSlot::Float>(ctx.Mutables, arg);
+                case FLOAT8OID:
+                    return new TToPg<NUdf::EDataSlot::Double>(ctx.Mutables, arg);
+                case TEXTOID:
+                    return new TToPg<NUdf::EDataSlot::Utf8>(ctx.Mutables, arg);
+                case BYTEAOID:
+                    return new TToPg<NUdf::EDataSlot::String>(ctx.Mutables, arg);
+                default:
+                    ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetId).Name;
                 }
             }
 

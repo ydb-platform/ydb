@@ -627,6 +627,7 @@ public:
     TRuntimeNode PgResolvedCall(const std::string_view& name, ui32 id, const TArrayRef<const TRuntimeNode>& args, TType* returnType);
     TRuntimeNode PgCast(TRuntimeNode input, TType* returnType);
     TRuntimeNode FromPg(TRuntimeNode input, TType* returnType);
+    TRuntimeNode ToPg(TRuntimeNode input, TType* returnType);
 
 protected:
     TRuntimeNode Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args);

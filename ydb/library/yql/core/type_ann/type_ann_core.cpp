@@ -8946,6 +8946,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (IsNull(input->Head())) {
+            output = input->TailPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         if (input->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
@@ -8976,6 +8981,68 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto result = ctx.Expr.MakeType<TOptionalExprType>(dataType);
+        input->SetTypeAnn(result);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->TailPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        bool isOptional;
+        const TDataExprType* dataType;
+        if (!EnsureDataOrOptionalOfData(input->Head(), isOptional, dataType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TString pgType;
+        switch (dataType->GetSlot()) {
+        case NUdf::EDataSlot::Bool:
+            pgType = "bool";
+            break;
+        case NUdf::EDataSlot::Int16:
+            pgType = "int2";
+            break;
+        case NUdf::EDataSlot::Int32:
+            pgType = "int4";
+            break;
+        case NUdf::EDataSlot::Int64:
+            pgType = "int8";
+            break;
+        case NUdf::EDataSlot::Float:
+            pgType = "float4";
+            break;
+        case NUdf::EDataSlot::Double:
+            pgType = "float8";
+            break;
+        case NUdf::EDataSlot::String:
+            pgType = "bytea";
+            break;
+        case NUdf::EDataSlot::Utf8:
+            pgType = "text";
+            break;
+        default:
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Unsupported type: " << dataType->GetName()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType(pgType).TypeId);
         input->SetTypeAnn(result);
         return IGraphTransformer::TStatus::Ok;
     }
@@ -13475,6 +13542,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NextValue"] = &NextValueWrapper;
 
         Functions["FromPg"] = &FromPgWrapper;
+        Functions["ToPg"] = &ToPgWrapper;
         ExtFunctions["PgCall"] = &PgCallWrapper;
         ExtFunctions["PgResolvedCall"] = &PgCallWrapper;
         ExtFunctions["PgOp"] = &PgOpWrapper;

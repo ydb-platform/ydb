@@ -130,21 +130,30 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         auto params = db.GetParamsBuilder()
             .AddParam("$ParamBool").Bool(true).Build()
+            .AddParam("$ParamInt8").Int8(-5).Build()
             .AddParam("$ParamByte").Uint8(5).Build()
+            .AddParam("$ParamInt16").Int16(-8).Build()
+            .AddParam("$ParamUint16").Uint16(8).Build()
             .AddParam("$ParamInt32").Int32(-10).Build()
             .AddParam("$ParamUint32").Uint32(10).Build()
             .AddParam("$ParamInt64").Int64(-20).Build()
             .AddParam("$ParamUint64").Uint64(20).Build()
             .AddParam("$ParamFloat").Float(30.5).Build()
             .AddParam("$ParamDouble").Double(40.5).Build()
+            .AddParam("$ParamDecimal").Decimal(TDecimalValue("50.5")).Build()
+            .AddParam("$ParamDyNumber").DyNumber("60.5").Build()
             .AddParam("$ParamString").String("StringValue").Build()
             .AddParam("$ParamUtf8").Utf8("Utf8Value").Build()
             .AddParam("$ParamYson").Yson("[{Value=50}]").Build()
             .AddParam("$ParamJson").Json("[{\"Value\":60}]").Build()
+            .AddParam("$ParamJsonDocument").JsonDocument("[{\"Value\":70}]").Build()
             .AddParam("$ParamDate").Date(TInstant::ParseIso8601("2020-01-10")).Build()
             .AddParam("$ParamDatetime").Datetime(TInstant::ParseIso8601("2020-01-11 15:04:53")).Build()
             .AddParam("$ParamTimestamp").Timestamp(TInstant::ParseIso8601("2020-01-12 21:18:37")).Build()
             .AddParam("$ParamInterval").Interval(3600).Build()
+            .AddParam("$ParamTzDate").TzDate("2022-03-14,GMT").Build()
+            .AddParam("$ParamTzDateTime").TzDatetime("2022-03-14T00:00:00,GMT").Build()
+            .AddParam("$ParamTzTimestamp").TzTimestamp("2022-03-14T00:00:00.123,GMT").Build()
             .AddParam("$ParamOpt").OptionalString("Opt").Build()
             .AddParam("$ParamTuple")
                 .BeginTuple()
@@ -181,22 +190,30 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         auto result = session.ExecuteDataQuery(Q1_(R"(
             DECLARE $ParamBool AS Bool;
+            DECLARE $ParamInt8 AS Int8;
             DECLARE $ParamByte AS Uint8;
+            DECLARE $ParamInt16 AS Int16;
+            DECLARE $ParamUint16 AS Uint16;
             DECLARE $ParamInt32 AS Int32;
             DECLARE $ParamUint32 AS Uint32;
             DECLARE $ParamInt64 AS Int64;
             DECLARE $ParamUint64 AS Uint64;
             DECLARE $ParamFloat AS Float;
             DECLARE $ParamDouble AS Double;
+            DECLARE $ParamDecimal AS Decimal(22, 9);
+            DECLARE $ParamDyNumber AS DyNumber;
             DECLARE $ParamString AS String;
             DECLARE $ParamUtf8 AS Utf8;
             DECLARE $ParamYson AS Yson;
             DECLARE $ParamJson AS Json;
+            DECLARE $ParamJsonDocument AS JsonDocument;
             DECLARE $ParamDate AS Date;
             DECLARE $ParamDatetime AS Datetime;
             DECLARE $ParamTimestamp AS Timestamp;
             DECLARE $ParamInterval AS Interval;
-
+            DECLARE $ParamTzDate AS TzDate;
+            DECLARE $ParamTzDateTime AS TzDateTime;
+            DECLARE $ParamTzTimestamp AS TzTimestamp;
             DECLARE $ParamOpt AS String?;
             DECLARE $ParamTuple AS Tuple<Utf8, Int32>;
             DECLARE $ParamList AS List<Uint64>;
@@ -206,21 +223,30 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
             SELECT
                 $ParamBool AS ValueBool,
+                $ParamInt8 AS ValueInt8,
                 $ParamByte AS ValueByte,
+                $ParamInt16 AS ValueInt16,
+                $ParamUint16 AS ValueUint16,
                 $ParamInt32 AS ValueInt32,
                 $ParamUint32 AS ValueUint32,
                 $ParamInt64 AS ValueInt64,
                 $ParamUint64 AS ValueUint64,
                 $ParamFloat AS ValueFloat,
                 $ParamDouble AS ValueDouble,
+                $ParamDecimal AS ValueDecimal,
+                $ParamDyNumber AS ValueDyNumber,
                 $ParamString AS ValueString,
                 $ParamUtf8 AS ValueUtf8,
                 $ParamYson AS ValueYson,
                 $ParamJson AS ValueJson,
+                $ParamJsonDocument AS ValueJsonDocument,
                 $ParamDate AS ValueDate,
                 $ParamDatetime AS ValueDatetime,
                 $ParamTimestamp AS ValueTimestamp,
                 $ParamInterval AS ValueInterval,
+                $ParamTzDate AS ValueTzDate,
+                $ParamTzDateTime AS ValueTzDateTime,
+                $ParamTzTimestamp AS ValueTzTimestamp,
                 $ParamOpt AS ValueOpt,
                 $ParamTuple AS ValueTuple,
                 $ParamList AS ValueList,
@@ -233,13 +259,15 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
         auto actual = ReformatYson(FormatResultSetYson(result.GetResultSet(0)));
         auto expected1 = ReformatYson(R"([[
-            %true;5u;-10;10u;-20;20u;30.5;40.5;"StringValue";"Utf8Value";"[{Value=50}]";"[{\"Value\":60}]";18271u;
-            1578755093u;1578863917000000u;3600;["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
+            %true;-5;5u;-8;8u;-10;10u;-20;20u;30.5;40.5;"50.5";".605e2";"StringValue";"Utf8Value";"[{Value=50}]";
+            "[{\"Value\":60}]";"[{\"Value\":70}]";18271u;1578755093u;1578863917000000u;3600;"2022-03-14,GMT";
+            "2022-03-14T00:00:00,GMT";"2022-03-14T00:00:00.123000,GMT";["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
             [["Key2";20u];["Key1";10u]]
         ]])");
         auto expected2 = ReformatYson(R"([[
-            %true;5u;-10;10u;-20;20u;30.5;40.5;"StringValue";"Utf8Value";"[{Value=50}]";"[{\"Value\":60}]";18271u;
-            1578755093u;1578863917000000u;3600;["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
+            %true;-5;5u;-8;8u;-10;10u;-20;20u;30.5;40.5;"50.5";".605e2";"StringValue";"Utf8Value";"[{Value=50}]";
+            "[{\"Value\":60}]";"[{\"Value\":70}]";18271u;1578755093u;1578863917000000u;3600;"2022-03-14,GMT";
+            "2022-03-14T00:00:00,GMT";"2022-03-14T00:00:00.123000,GMT";["Opt"];["Tuple0";1];[17u;19u];[];["Paul";-5];
             [["Key1";10u];["Key2";20u]]
         ]])");
 

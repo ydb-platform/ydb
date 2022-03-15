@@ -4,7 +4,7 @@
       Path,
       PartIdx,
       CPUCores
-  FROM `/cluster/path/to/database/.sys/partition_stats`
+  FROM `.sys/partition_stats`
   ORDER BY CPUCores DESC
   LIMIT 5
   ```
@@ -17,6 +17,6 @@
       SUM(RowCount) as Rows,
       SUM(DataSize) as Size,
       SUM(CPUCores) as CPU
-  FROM `/cluster/path/to/database/.sys/partition_stats`
+  FROM `.sys/partition_stats`
   GROUP BY Path
   ```

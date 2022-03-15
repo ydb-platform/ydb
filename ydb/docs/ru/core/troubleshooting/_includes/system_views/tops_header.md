@@ -19,6 +19,7 @@
 |---|---|---|---|
 | IntervalEnd | Timestamp | 0 | Момент закрытия минутного или часового интервала
 | Rank | Uint32 | 1 | Ранг запроса в топе
+| RequestUnits | Uint64 | | Количество затраченных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options)
 | QueryText | Utf8 | | Текст запроса
 | Duration | Interval | | Полное время исполнения запроса
 | EndTime | Timestamp | | Момент окончания исполнения запроса
@@ -28,6 +29,7 @@
 | UpdateRows | Uint64 | | Количество записанных строк
 | UpdateBytes | Uint64 | | Количество записанных байт
 | DeleteRows | Uint64 | | Количество удалённых строк
+| DeleteBytes | Uint64 | | Количество удалённых байт
 | Partitions | Uint64 | | Количество партиций таблиц, участвовавших в исполнении запроса
 | UserSID | String | | Security ID пользователя
 | ParametersSize | Uint64 | | Размер параметров запроса в байтах

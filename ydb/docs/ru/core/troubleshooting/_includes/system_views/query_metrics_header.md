@@ -8,7 +8,7 @@
 
 | **Поле** | **Тип** | **Ключ** | **Значение** |
 |---|---|---|---|
-| IntervalEnd | Timestamp | 0 | Момент закрытия минутного или часового интервала
+| IntervalEnd | Timestamp | 0 | Момент закрытия минутного интервала
 | Rank | Uint32 | 1 | Ранг запроса в пределах интервала (по полю SumCPUTime)
 | QueryText | Utf8 | | Текст запроса
 | Count | Uint64 | | Количество запусков запроса
@@ -33,6 +33,9 @@
 | SumDeleteRows | Uint64 | | Общее количество удалённых строк
 | MinDeleteRows | Uint64 | | Минимальное количество удалённых строк
 | MaxDeleteRows | Uint64 | | Максимальное количество удалённых строк
+| SumRequestUnits | Uint64 | | Общее количество использованных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options)
+| MinRequestUnits | Uint64 | | Минимальное количество использованных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options)
+| MaxRequestUnits | Uint64 | | Максимальное количество использованных [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options)
 
 Ограничения:
 

@@ -102,6 +102,13 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         }
     }
 
+    if (expectedType.GetKind() == ETypeAnnotationKind::Pg) {
+        if (IsNull(sourceType)) {
+            node = ctx.NewCallable(node->Pos(), "Nothing", { ExpandType(node->Pos(), expectedType, ctx) });
+            return IGraphTransformer::TStatus::Repeat;
+        }
+    }
+
     if (expectedType.GetKind() == ETypeAnnotationKind::Optional) {
         auto nextType = expectedType.Cast<TOptionalExprType>()->GetItemType();
         auto originalNode = node;
@@ -3587,7 +3594,7 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
     }
 
     if (IsNull(type1)) {
-        if (type2.GetKind() == ETypeAnnotationKind::Optional) {
+        if (type2.GetKind() == ETypeAnnotationKind::Optional || type2.GetKind() == ETypeAnnotationKind::Pg) {
             node1 = ctx.NewCallable(node1->Pos(), "Nothing", { ExpandType(node2->Pos(), type2, ctx) });
             commonType = &type2;
             return IGraphTransformer::TStatus::Repeat;
@@ -3601,7 +3608,7 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
     }
 
     if (IsNull(type2)) {
-        if (type1.GetKind() == ETypeAnnotationKind::Optional) {
+        if (type1.GetKind() == ETypeAnnotationKind::Optional || type1.GetKind() == ETypeAnnotationKind::Pg) {
             node2 = ctx.NewCallable(node2->Pos(), "Nothing", { ExpandType(node1->Pos(), type1, ctx) });
             commonType = &type1;
             return IGraphTransformer::TStatus::Repeat;

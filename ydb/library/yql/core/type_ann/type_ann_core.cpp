@@ -4207,7 +4207,7 @@ namespace NTypeAnnImpl {
         auto leftItemType = leftType;
         if (leftType->GetKind() == ETypeAnnotationKind::Optional) {
             leftItemType = leftType->Cast<TOptionalExprType>()->GetItemType();
-        } else {
+        } else if (leftType->GetKind() != ETypeAnnotationKind::Pg) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -4765,8 +4765,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (type->GetKind() != ETypeAnnotationKind::Optional) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected optional or Null type, but got: "
+        if (type->GetKind() != ETypeAnnotationKind::Optional && type->GetKind() != ETypeAnnotationKind::Pg) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected optional, pg type or Null type, but got: "
                 << *type));
             return IGraphTransformer::TStatus::Error;
         }
@@ -8937,6 +8937,49 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
     }
 
+    IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        auto name = input->Head().GetTypeAnn()->Cast<TPgExprType>()->GetName();
+        const TDataExprType* dataType;
+        if (name == "bool") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
+        } else if (name == "int2") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int16);
+        } else if (name == "int4") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int32);
+        } else if (name == "int8") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
+        } else if (name == "float4") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Float);
+        } else if (name == "float8") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double);
+        } else if (name == "text" || name == "varchar" || name == "cstring") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8);
+        } else if (name == "bytea") {
+            dataType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Unsupported type: " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto result = ctx.Expr.MakeType<TOptionalExprType>(dataType);
+        input->SetTypeAnn(result);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         bool isResolved = input->IsCallable("PgResolvedOp");
         if (!EnsureMinArgsCount(*input, isResolved ? 3 : 2, ctx.Expr)) {
@@ -10307,16 +10350,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        auto predicate = ctx.Expr.Builder(data.Pos())
-                            .Callable("Coalesce")
-                                .Add(0, newRoot)
-                                .Callable(1, "Bool")
-                                    .Atom(0, "0")
-                                .Seal()
-                            .Seal()
-                            .Build();
-
-                        auto newLambda = ctx.Expr.NewLambda(data.Pos(), std::move(arguments), std::move(predicate));
+                        auto newLambda = ctx.Expr.NewLambda(data.Pos(), std::move(arguments), std::move(newRoot));
 
                         auto newChildren = data.ChildrenList();
                         newChildren[0] = typeNode;
@@ -10326,7 +10360,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
                         return IGraphTransformer::TStatus::Repeat;
                     } else {
-                        if (!EnsureSpecificDataType(data, EDataSlot::Bool, ctx.Expr)) {
+                        if (data.GetTypeAnn() && data.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+                            // nothing to do
+                        } else if (data.GetTypeAnn() && data.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+                            auto name = data.GetTypeAnn()->Cast<TPgExprType>()->GetName();
+                            if (name != "bool") {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data.Pos()), TStringBuilder() <<
+                                    "Expected bool type, but got: " << name));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        } else if (!EnsureSpecificDataType(data, EDataSlot::Bool, ctx.Expr, true)) {
                             return IGraphTransformer::TStatus::Error;
                         }
                     }
@@ -13431,6 +13474,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RoundDown"] = &RoundWrapper;
         Functions["NextValue"] = &NextValueWrapper;
 
+        Functions["FromPg"] = &FromPgWrapper;
         ExtFunctions["PgCall"] = &PgCallWrapper;
         ExtFunctions["PgResolvedCall"] = &PgCallWrapper;
         ExtFunctions["PgOp"] = &PgOpWrapper;

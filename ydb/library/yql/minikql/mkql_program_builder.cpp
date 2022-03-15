@@ -1945,10 +1945,14 @@ TRuntimeNode TProgramBuilder::NewEmptyListOfVoid() {
     return TRuntimeNode(Env.GetListOfVoid(), true);
 }
 
-TRuntimeNode TProgramBuilder::NewEmptyOptional(TType* optionalType) {
-    MKQL_ENSURE(optionalType->IsOptional(), "Expected optional type");
+TRuntimeNode TProgramBuilder::NewEmptyOptional(TType* optionalOrPgType) {
+    MKQL_ENSURE(optionalOrPgType->IsOptional() || optionalOrPgType->IsPg(), "Expected optional or pg type");
 
-    return TRuntimeNode(TOptionalLiteral::Create(static_cast<TOptionalType*>(optionalType), Env), true);
+    if (optionalOrPgType->IsOptional()) {
+        return TRuntimeNode(TOptionalLiteral::Create(static_cast<TOptionalType*>(optionalOrPgType), Env), true);
+    }
+
+    return PgCast(NewNull(), optionalOrPgType);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyOptionalDataLiteral(NUdf::TDataTypeId schemeType) {
@@ -5043,6 +5047,16 @@ TRuntimeNode TProgramBuilder::PgResolvedCall(const std::string_view& name, ui32 
 }
 
 TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType) {
+    if constexpr (RuntimeVersion < 30U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(input);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::FromPg(TRuntimeNode input, TType* returnType) {
     if constexpr (RuntimeVersion < 30U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }

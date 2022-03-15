@@ -26,8 +26,8 @@ Y_UNIT_TEST_SUITE(Redo) {
             .Col(0, 5,  ETypes::String)
             .Key({ 1 });
 
-        const auto foo = *TNatural(*lay).Col("foo", 33_u64);
-        const auto bar = *TNatural(*lay).Col("bar", 11_u64);
+        const auto foo = *TSchemedCookRow(*lay).Col("foo", 33_u64);
+        const auto bar = *TSchemedCookRow(*lay).Col("bar", 11_u64);
 
         const auto raw = NResource::Find("abi/008_basics_db.redo");
 

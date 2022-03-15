@@ -26,10 +26,10 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
             .Col(0, 3,  NScheme::NTypeIds::Bool)
             .Key({0, 1});
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
-        const auto baz = *TNatural(*lay).Col(888_u32, "baz", 5.42, false);
-        const auto zzz = *TNatural(*lay).Col(999_u32, "zzz", 4.11, false);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
+        const auto baz = *TSchemedCookRow(*lay).Col(888_u32, "baz", 5.42, false);
+        const auto zzz = *TSchemedCookRow(*lay).Col(999_u32, "zzz", 4.11, false);
 
         NTest::TPartEggs eggs = {
             nullptr,
@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
         TCheckIt wrap(eggs, { });
 
         wrap.To(10).Has(foo).Has(bar);
-        wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.));
-        wrap.To(12).NoKey(*TNatural(*lay).Col(888_u32, "foo", 3.14));
+        wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
+        wrap.To(12).NoKey(*TSchemedCookRow(*lay).Col(888_u32, "foo", 3.14));
 
         /*_ Basic lower and upper bounds lookup semantic  */
 
@@ -66,21 +66,21 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
         /* ... but incomplete keys are padded with +inf instead of nulls
             on lookup. Check that it really happens for Seek()'s */
 
-        wrap.To(33).Seek(*TNatural(*lay).Col(555_u32), ESeek::Lower).Is(bar);
-        wrap.To(34).Seek(*TNatural(*lay).Col(555_u32), ESeek::Upper).Is(bar);
-        wrap.To(35).Seek(*TNatural(*lay).Col(777_u32), ESeek::Lower).Is(baz);
-        wrap.To(36).Seek(*TNatural(*lay).Col(777_u32), ESeek::Upper).Is(baz);
+        wrap.To(33).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Lower).Is(bar);
+        wrap.To(34).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Upper).Is(bar);
+        wrap.To(35).Seek(*TSchemedCookRow(*lay).Col(777_u32), ESeek::Lower).Is(baz);
+        wrap.To(36).Seek(*TSchemedCookRow(*lay).Col(777_u32), ESeek::Upper).Is(baz);
 
         /*_ Next should move to the next part correctly */
 
-        wrap.To(40).Seek(*TNatural(*lay).Col(777_u32, "aaa"), ESeek::Lower).Is(bar)
+        wrap.To(40).Seek(*TSchemedCookRow(*lay).Col(777_u32, "aaa"), ESeek::Lower).Is(bar)
             .To(41).Next().Is(baz)
             .To(42).Next().Is(zzz)
             .To(43).Next().Is(EReady::Gone);
 
         /*_ Next must not be confused by a failed exact seek */
 
-        wrap.To(50).Seek(*TNatural(*lay).Col(777_u32, "aaa"), ESeek::Exact).Is(EReady::Gone)
+        wrap.To(50).Seek(*TSchemedCookRow(*lay).Col(777_u32, "aaa"), ESeek::Exact).Is(EReady::Gone)
             .To(51).Next().Is(EReady::Gone);
     }
 
@@ -95,10 +95,10 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
             .Col(0, 3,  NScheme::NTypeIds::Bool)
             .Key({0, 1});
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
-        const auto baz = *TNatural(*lay).Col(888_u32, "baz", 5.42, false);
-        const auto zzz = *TNatural(*lay).Col(999_u32, "zzz", 4.11, false);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
+        const auto baz = *TSchemedCookRow(*lay).Col(888_u32, "baz", 5.42, false);
+        const auto zzz = *TSchemedCookRow(*lay).Col(999_u32, "zzz", 4.11, false);
 
         NTest::TPartEggs eggs = {
             nullptr,
@@ -112,8 +112,8 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
         TCheckReverseIt wrap(eggs, { });
 
         wrap.To(10).Has(foo).Has(bar);
-        wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.));
-        wrap.To(12).NoKey(*TNatural(*lay).Col(888_u32, "foo", 3.14));
+        wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
+        wrap.To(12).NoKey(*TSchemedCookRow(*lay).Col(888_u32, "foo", 3.14));
 
         /*_ Basic lower and upper bounds lookup semantic  */
 
@@ -135,21 +135,21 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
         /* ... but incomplete keys are padded with +inf instead of nulls
             on lookup. Check that it really happens for Seek()'s */
 
-        wrap.To(33).Seek(*TNatural(*lay).Col(555_u32), ESeek::Lower).Is(foo);
-        wrap.To(34).Seek(*TNatural(*lay).Col(555_u32), ESeek::Upper).Is(foo);
-        wrap.To(35).Seek(*TNatural(*lay).Col(777_u32), ESeek::Lower).Is(bar);
-        wrap.To(36).Seek(*TNatural(*lay).Col(777_u32), ESeek::Upper).Is(bar);
+        wrap.To(33).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Lower).Is(foo);
+        wrap.To(34).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Upper).Is(foo);
+        wrap.To(35).Seek(*TSchemedCookRow(*lay).Col(777_u32), ESeek::Lower).Is(bar);
+        wrap.To(36).Seek(*TSchemedCookRow(*lay).Col(777_u32), ESeek::Upper).Is(bar);
 
         /*_ Prev should move to the previous part correctly */
 
-        wrap.To(40).Seek(*TNatural(*lay).Col(999_u32, "aaa"), ESeek::Lower).Is(baz)
+        wrap.To(40).Seek(*TSchemedCookRow(*lay).Col(999_u32, "aaa"), ESeek::Lower).Is(baz)
             .To(41).Next().Is(bar)
             .To(42).Next().Is(foo)
             .To(43).Next().Is(EReady::Gone);
 
         /*_ Prev must not be confused by a failed exact seek */
 
-        wrap.To(50).Seek(*TNatural(*lay).Col(777_u32, "aaa"), ESeek::Exact).Is(EReady::Gone)
+        wrap.To(50).Seek(*TSchemedCookRow(*lay).Col(777_u32, "aaa"), ESeek::Exact).Is(EReady::Gone)
             .To(51).Next().Is(EReady::Gone);
     }
 }

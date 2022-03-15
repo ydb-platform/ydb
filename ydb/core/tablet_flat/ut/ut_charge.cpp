@@ -189,9 +189,9 @@ Y_UNIT_TEST_SUITE(Charge) {
             .Col(0, 1,  NScheme::NTypeIds::String)
             .Key({0, 1});
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo");
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar");
-        const auto baz = *TNatural(*lay).Col(999_u32, "baz");
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo");
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar");
+        const auto baz = *TSchemedCookRow(*lay).Col(999_u32, "baz");
 
         NPage::TIndex me(
             TCooker(*lay)

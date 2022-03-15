@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(NOther) {
     {
         NWriter::TConf conf;
 
-        conf.Groups[0].Block = 128;       /* Page collection blob size */
+        conf.Groups[0].MaxBlobSize = 128;       /* Page collection blob size */
         conf.Slots = { { 1, 11 }, { 3, 13 }, { 5, 17 } };
         conf.Groups[0].Channel = 3;     /* Put data to channel 3 grp 13 */
         conf.BlobsChannel = 5;    /* Put blobs to channel 5 grp 17 */

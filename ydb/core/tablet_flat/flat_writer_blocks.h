@@ -98,7 +98,7 @@ namespace NWriter {
 
         NPageCollection::TLargeGlobId CutToChunks(TArrayRef<const char> body)
         {
-            return Cone->Put(0, Channel, body, Writer.Block);
+            return Cone->Put(0, Channel, body, Writer.MaxBlobSize);
         }
 
     private:

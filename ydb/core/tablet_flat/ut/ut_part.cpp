@@ -101,14 +101,14 @@ Y_UNIT_TEST_SUITE(TPart) {
             .Col(0, 3,  NScheme::NTypeIds::Bool)
             .Key({0, 1});
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
 
         TCheckIt wrap(TPartCook(lay, { }).Add(foo).Add(bar).Finish(), { });
 
         wrap.To(10).Has(foo).Has(bar);
-        wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.));
-        wrap.To(12).NoKey(*TNatural(*lay).Col(888_u32, "foo", 3.14));
+        wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
+        wrap.To(12).NoKey(*TSchemedCookRow(*lay).Col(888_u32, "foo", 3.14));
 
         /*_ Basic lower and upper bounds lookup semantic  */
 
@@ -125,8 +125,8 @@ Y_UNIT_TEST_SUITE(TPart) {
         /* ... but incomplete keys are padded with +inf instead of nulls
             on lookup. Check that it really happens for Seek()'s */
 
-        wrap.To(33).Seek(*TNatural(*lay).Col(555_u32), ESeek::Lower).Is(bar);
-        wrap.To(34).Seek(*TNatural(*lay).Col(555_u32), ESeek::Upper).Is(bar);
+        wrap.To(33).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Lower).Is(bar);
+        wrap.To(34).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Upper).Is(bar);
 
         /* Verify part has correct first and last key in the index */
 
@@ -152,8 +152,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             .Col(2, 3, NScheme::NTypeIds::Bool)
             .Key({ 0 });
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
 
         auto eggs = TPartCook(lay, PageConf(/* groups = */ 3)).Add(foo).Add(bar).Finish();
         auto part = eggs.Lone();
@@ -193,14 +193,14 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         TCheckIt wrap(std::move(eggs), { });
 
-        auto trA = *TNatural(*fake).Col(10_u64, 3_u32, 7_u32, 77_u32);
-        auto trB = *TNatural(*fake).Col(12_u64, 3_u32, 7_u32, 44_u32);
-        auto trC = *TNatural(*fake).Col(17_u64, 3_u32, 7_u32, nullptr);
-        auto trD = *TNatural(*fake).Col(19_u64, 3_u32, 7_u32, 99_u32);
+        auto trA = *TSchemedCookRow(*fake).Col(10_u64, 3_u32, 7_u32, 77_u32);
+        auto trB = *TSchemedCookRow(*fake).Col(12_u64, 3_u32, 7_u32, 44_u32);
+        auto trC = *TSchemedCookRow(*fake).Col(17_u64, 3_u32, 7_u32, nullptr);
+        auto trD = *TSchemedCookRow(*fake).Col(19_u64, 3_u32, 7_u32, 99_u32);
 
-        auto low = *TNatural(*fake).Col(10_u64, 2_u32, 2_u32);
-        auto mid = *TNatural(*fake).Col(10_u64, 3_u32, 5_u32);
-        auto upp = *TNatural(*fake).Col(10_u64, 3_u32, 8_u32);
+        auto low = *TSchemedCookRow(*fake).Col(10_u64, 2_u32, 2_u32);
+        auto mid = *TSchemedCookRow(*fake).Col(10_u64, 3_u32, 5_u32);
+        auto upp = *TSchemedCookRow(*fake).Col(10_u64, 3_u32, 8_u32);
 
         wrap.To(10).Has(trA);   /* default values in key    */
         wrap.To(11).Has(trB);   /* default values in key    */
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         lay.Col(0, 0, ETypes::Uint32).Col(0, 1, ETypes::String).Key({ 0 });
 
-        const auto foo = *TNatural(*lay).Col(7_u32, TString(128, 'x'));
+        const auto foo = *TSchemedCookRow(*lay).Col(7_u32, TString(128, 'x'));
 
         TCheckIt wrap(TPartCook(lay, { true, 99, 32 }).Add(foo).Finish(), { });
 
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         { /*_ Check marker of absent external blob in TCell */
             wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No });
 
-            auto marked = *TNatural(*lay).Col(7_u32, glob);
+            auto marked = *TSchemedCookRow(*lay).Col(7_u32, glob);
 
             wrap.To(16).Seek(foo, ESeek::Exact).Is(marked);
         }
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         TPartCook cook(lay, { });
 
         const auto glob = cook.PutBlob(TString(128, 'x'), 0);
-        const auto foo = *TNatural(*lay).Col(7_u32,  glob);
+        const auto foo = *TSchemedCookRow(*lay).Col(7_u32,  glob);
 
         TCheckIt wrap(cook.Add(foo).Finish(), { });
 
@@ -307,8 +307,8 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         TPartCook cook(lay, PageConf());
 
-        const auto foo = *TNatural(*lay).Col(7_u32, TString(24, 'x'));
-        const auto bar = *TNatural(*lay).Col(8_u32, TString(10, 'x'));
+        const auto foo = *TSchemedCookRow(*lay).Col(7_u32, TString(24, 'x'));
+        const auto bar = *TSchemedCookRow(*lay).Col(8_u32, TString(10, 'x'));
 
         TCheckIt wrap(cook.Add(foo).Add(bar).Finish(), { });
 
@@ -432,13 +432,13 @@ Y_UNIT_TEST_SUITE(TPart) {
             .Col(2, 3, NScheme::NTypeIds::Bool)
             .Key({ 0 });
 
-        const auto hey = *TNatural(*lay).Col(333_u32, "hey", 0.25, true);
-        const auto foo = *TNatural(*lay).Col(555_u32);
-        const auto foo1 = *TNatural(*lay).Col(555_u32, "foo1", 3.14, nullptr);
-        const auto foo2 = *TNatural(*lay).Col(555_u32, "foo2", 4.25, false);
-        const auto foo3 = *TNatural(*lay).Col(555_u32, "foo3", 7.75, true);
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
-        const auto baz = *TNatural(*lay).Col(999_u32, "baz", 0.0, false);
+        const auto hey = *TSchemedCookRow(*lay).Col(333_u32, "hey", 0.25, true);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32);
+        const auto foo1 = *TSchemedCookRow(*lay).Col(555_u32, "foo1", 3.14, nullptr);
+        const auto foo2 = *TSchemedCookRow(*lay).Col(555_u32, "foo2", 4.25, false);
+        const auto foo3 = *TSchemedCookRow(*lay).Col(555_u32, "foo3", 7.75, true);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
+        const auto baz = *TSchemedCookRow(*lay).Col(999_u32, "baz", 0.0, false);
 
         auto conf = PageConf(/* groups = */ 3);
         conf.MinRowVersion = TRowVersion(0, 50);
@@ -516,8 +516,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             .Col(2, 3, NScheme::NTypeIds::Bool)
             .Key({ 0 });
 
-        const auto foo = *TNatural(*lay).Col(555_u32);
-        const auto bar = *TNatural(*lay).Col(777_u32);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32);
 
         auto conf = PageConf(/* groups = */ 3);
         auto cook = TPartCook(lay, conf);
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         for (int i = 0; i <= 1000; ++i) {
             TString s = TStringBuilder() << "foo_xxxxxxxxxxxxxxxx" << i;
             foov.emplace_back(1, 1000-i);
-            foos.emplace_back(*TNatural(*lay).Col(555_u32, s.c_str(), i * 0.1, nullptr));
+            foos.emplace_back(*TSchemedCookRow(*lay).Col(555_u32, s.c_str(), i * 0.1, nullptr));
             cook.Ver(foov.back()).Add(foos.back());
         }
 
@@ -536,12 +536,12 @@ Y_UNIT_TEST_SUITE(TPart) {
         for (int i = 0; i <= 1000; ++i) {
             TString s = TStringBuilder() << "bar_xxxxxxxxxxxxxxxx" << i;
             barv.emplace_back(2, 1000-i);
-            bars.emplace_back(*TNatural(*lay).Col(777_u32, s.c_str(), i * 0.2, i % 2 == 0));
+            bars.emplace_back(*TSchemedCookRow(*lay).Col(777_u32, s.c_str(), i * 0.2, i % 2 == 0));
             cook.Ver(barv.back()).Add(bars.back());
         }
 
         // This row lowers min version, so we can trigger necessary search paths
-        const auto baz = *TNatural(*lay).Col(999_u32, "baz", 0.42, true);
+        const auto baz = *TSchemedCookRow(*lay).Col(999_u32, "baz", 0.42, true);
         cook.Ver({0, 42}).Add(baz);
 
         auto eggs = cook.Finish();
@@ -583,8 +583,8 @@ Y_UNIT_TEST_SUITE(TPart) {
         auto conf = PageConf();
         auto cook = TPartCook(lay, conf);
 
-        const auto foo = *TNatural(*lay).Col(555_u32);
-        const auto bar = *TNatural(*lay).Col(777_u32);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32);
 
         for (int i = 1; i <= 1000; ++i) {
             TTag tag = 1 + (i - 1) % 3;

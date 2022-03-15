@@ -80,7 +80,7 @@ namespace NTest {
         template<typename ...TArgs>
         inline TChecker& IsOpN(ERowOp op, TArgs&&...args)
         {
-            auto row = *TNatural(Scheme).Col(std::forward<TArgs>(args)...);
+            auto row = *TSchemedCookRow(Scheme).Col(std::forward<TArgs>(args)...);
 
             return Is(row, true, op);
         }
@@ -88,7 +88,7 @@ namespace NTest {
         template<typename ...TArgs>
         inline TChecker& HasN(TArgs&&...args)
         {
-            return Has(*TNatural(Scheme).Col(std::forward<TArgs>(args)...));
+            return Has(*TSchemedCookRow(Scheme).Col(std::forward<TArgs>(args)...));
         }
 
         template<typename ...TArgs>

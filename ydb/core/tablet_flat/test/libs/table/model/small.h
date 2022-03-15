@@ -23,7 +23,7 @@ namespace NTest {
 
         TRow Make(ui64 seq, bool hole) noexcept override
         {
-            TNatural row(*Scheme);
+            TSchemedCookRow row(*Scheme);
 
             row.Col(seq, (Saved += hole ? 0 : 1));
 

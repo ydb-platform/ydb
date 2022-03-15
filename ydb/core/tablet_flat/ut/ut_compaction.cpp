@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
             .Col(0, 8,  NScheme::NTypeIds::Uint32, Cimple<ui32>(7))
             .Key({ 0 });
 
-        auto one = *TNatural(*lay).Col<ui64,ui32>(1, 3);
+        auto one = *TSchemedCookRow(*lay).Col<ui64,ui32>(1, 3);
 
         auto eggs =
             TPartCook(lay, { false, 4096 })

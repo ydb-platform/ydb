@@ -193,70 +193,84 @@ namespace {
     }
 
     SIMPLE_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
-        TString result(args[0].AsStringRef());
-        TStringBuf what(args[1].AsStringRef());
-        TStringBuf with(args[2].AsStringRef());
-        if (what.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument");
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.find(what); index != std::string::npos) {
+            result.replace(index, what.size(), std::string_view(args[2].AsStringRef()));
+            return valueBuilder->NewString(result);
         }
-        if (with.size() != 1) {
-            UdfTerminate("Only one char is supported as third argument");
-        }
-        if (const auto index = result.find(what[0]); index != TStringBuf::npos) {
-            result.replace(index, 1, with.data());
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.find(what); index != std::string::npos) {
+            result.erase(index, what.size());
             return valueBuilder->NewString(result);
         }
         return args[0];
     }
 
     SIMPLE_UDF(TReplaceLast, char*(TAutoMap<char*>, char*, char*)) {
-        TString result(args[0].AsStringRef());
-        TStringBuf what(args[1].AsStringRef());
-        TStringBuf with(args[2].AsStringRef());
-        if (what.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument");
-        }
-        if (with.size() != 1) {
-            UdfTerminate("Only one char is supported as third argument");
-        }
-        if (const auto index = result.rfind(what[0]); index != TStringBuf::npos) {
-            result.replace(index, 1, with.data());
-            return valueBuilder->NewString(result);
-        }
-        return args[0];
-    }
-
-    SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
-        TString result(args[0].AsStringRef());
-        TStringBuf remove(args[1].AsStringRef());
-        for (const char c : remove) {
-            RemoveAll(result, c);
-        }
-        return valueBuilder->NewString(result);
-    }
-
-    SIMPLE_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
-        TString result(args[0].AsStringRef());
-        TStringBuf remove(args[1].AsStringRef());
-        if (remove.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument");
-        }
-        if (const auto index = result.find(remove[0]); index != TStringBuf::npos) {
-            result.remove(index, 1);
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.rfind(what); index != std::string::npos) {
+            result.replace(index, what.size(), std::string_view(args[2].AsStringRef()));
             return valueBuilder->NewString(result);
         }
         return args[0];
     }
 
     SIMPLE_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
-        TString result(args[0].AsStringRef());
-        TStringBuf remove(args[1].AsStringRef());
-        if (remove.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument");
-        }
-        if (const auto index = result.rfind(remove[0]); index != TStringBuf::npos) {
-            result.remove(index, 1);
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.rfind(what); index != std::string::npos) {
+            result.erase(index, what.size());
             return valueBuilder->NewString(result);
+        }
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
+        std::string input(args[0].AsStringRef());
+        const std::string_view remove(args[1].AsStringRef());
+        const std::unordered_set<char> chars(remove.cbegin(), remove.cend());
+        size_t tpos = 0;
+        for (const char c : input) {
+            if (!chars.contains(c)) {
+                input[tpos++] = c;
+            }
+        }
+        if (tpos != input.size()) {
+            input.resize(tpos);
+            return valueBuilder->NewString(input);
+        }
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveFirstAnyOf, char*(TAutoMap<char*>, char*)) {
+        std::string input(args[0].AsStringRef());
+        const std::string_view remove(args[1].AsStringRef());
+        std::unordered_set<char> chars(remove.cbegin(), remove.cend());
+        for (auto it = input.cbegin(); it != input.cend(); ++it) {
+            if (chars.contains(*it)) {
+                input.erase(it);
+                return valueBuilder->NewString(input);
+            }
+        }
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveLastAnyOf, char*(TAutoMap<char*>, char*)) {
+        std::string input(args[0].AsStringRef());
+        const std::string_view remove(args[1].AsStringRef());
+        std::unordered_set<char> chars(remove.cbegin(), remove.cend());
+        for (auto it = input.crbegin(); it != input.crend(); ++it) {
+            if (chars.contains(*it)) {
+                input.erase(std::distance(it, input.crend()) - 1, 1);
+                return valueBuilder->NewString(input);
+            }
         }
         return args[0];
     }
@@ -532,7 +546,9 @@ namespace {
         TReplaceLast,
         TRemoveAll,
         TRemoveFirst,
+        TRemoveFirstAnyOf,
         TRemoveLast,
+        TRemoveLastAnyOf,
         TContains,
         TFind,
         TReverseFind,

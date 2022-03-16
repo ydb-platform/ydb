@@ -230,7 +230,7 @@ TRestoreResult TRestoreClient::RestoreFolder(const TFsPath& fsPath, const TStrin
     }
 
     if (!result) {
-        return Result<TRestoreResult>(EStatus::SUCCESS);
+        return Result<TRestoreResult>();
     }
 
     return *result;
@@ -273,7 +273,7 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
     TMaybe<TTableDescription> actualDesc;
     auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
     if (!descResult.IsSuccess()) {
-        return Result<TRestoreResult>(std::move(descResult));
+        return Result<TRestoreResult>(dbPath, std::move(descResult));
     }
 
     auto unorderedColumns = [](const TVector<TColumn>& orderedColumns) {
@@ -293,19 +293,19 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
     };
 
     if (unorderedColumns(desc.GetColumns()) != unorderedColumns(actualDesc->GetColumns())) {
-        return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder() << "Columns differ"
+        return Result<TRestoreResult>(dbPath, EStatus::SCHEME_ERROR, TStringBuilder() << "Columns differ"
             << ": dumped# " << JoinSeq(", ", desc.GetColumns())
             << ", actual# " << JoinSeq(", ", actualDesc->GetColumns()));
     }
 
     if (desc.GetPrimaryKeyColumns() != actualDesc->GetPrimaryKeyColumns()) {
-        return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder() << "Primary key columns differ"
+        return Result<TRestoreResult>(dbPath, EStatus::SCHEME_ERROR, TStringBuilder() << "Primary key columns differ"
             << ": dumped# " << JoinSeq(", ", desc.GetPrimaryKeyColumns())
             << ", actual# " << JoinSeq(", ", actualDesc->GetPrimaryKeyColumns()));
     }
 
     if (unorderedIndexes(desc.GetIndexDescriptions()) != unorderedIndexes(actualDesc->GetIndexDescriptions())) {
-        return Result<TRestoreResult>(EStatus::SCHEME_ERROR, TStringBuilder() << "Indexes differ"
+        return Result<TRestoreResult>(dbPath, EStatus::SCHEME_ERROR, TStringBuilder() << "Indexes differ"
             << ": dumped# " << JoinSeq(", ", desc.GetIndexDescriptions())
             << ", actual# " << JoinSeq(", ", actualDesc->GetIndexDescriptions()));
     }
@@ -323,7 +323,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
             TCreateTableSettings().RequestType(DOC_API_REQUEST_TYPE)).GetValueSync();
     });
     if (!createResult.IsSuccess()) {
-        return Result<TRestoreResult>(std::move(createResult));
+        return Result<TRestoreResult>(dbPath, std::move(createResult));
     }
 
     THolder<NPrivate::IDataAccumulator> accumulator;
@@ -342,7 +342,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
             TMaybe<TTableDescription> actualDesc;
             auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
             if (!descResult.IsSuccess()) {
-                return Result<TRestoreResult>(std::move(descResult));
+                return Result<TRestoreResult>(dbPath, std::move(descResult));
             }
 
             accumulator.Reset(CreateImportDataAccumulator(desc, *actualDesc, settings));
@@ -362,18 +362,18 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
         while (input.ReadLine(line)) {
             while (!accumulator->Fits(line)) {
                 if (!accumulator->Ready(true)) {
-                    return Result<TRestoreResult>(EStatus::INTERNAL_ERROR, "Data is not ready");
+                    return Result<TRestoreResult>(dbPath, EStatus::INTERNAL_ERROR, "Data is not ready");
                 }
 
                 if (!writer->Push(accumulator->GetData(true))) {
-                    return Result<TRestoreResult>(EStatus::GENERIC_ERROR, "Cannot write data #1");
+                    return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #1");
                 }
             }
 
             accumulator->Feed(std::move(line));
             if (accumulator->Ready()) {
                 if (!writer->Push(accumulator->GetData())) {
-                    return Result<TRestoreResult>(EStatus::GENERIC_ERROR, "Cannot write data #2");
+                    return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #2");
                 }
             }
         }
@@ -383,7 +383,7 @@ TRestoreResult TRestoreClient::RestoreData(const TFsPath& fsPath, const TString&
 
     while (accumulator->Ready(true)) {
         if (!writer->Push(accumulator->GetData(true))) {
-            return Result<TRestoreResult>(EStatus::GENERIC_ERROR, "Cannot write data #3");
+            return Result<TRestoreResult>(dbPath, EStatus::GENERIC_ERROR, "Cannot write data #3");
         }
     }
 
@@ -405,7 +405,7 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
         if (!actualDesc) {
             auto descResult = DescribeTable(TableClient, dbPath, actualDesc);
             if (!descResult.IsSuccess()) {
-                return Result<TRestoreResult>(std::move(descResult));
+                return Result<TRestoreResult>(dbPath, std::move(descResult));
             }
         }
 
@@ -418,7 +418,7 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
             return session.AlterTableLong(dbPath, settings).GetValueSync().Status();
         });
         if (!status.IsSuccess() && status.GetStatus() != EStatus::STATUS_UNDEFINED) {
-            return Result<TRestoreResult>(std::move(status));
+            return Result<TRestoreResult>(dbPath, std::move(status));
         }
 
         // wait for expected index build

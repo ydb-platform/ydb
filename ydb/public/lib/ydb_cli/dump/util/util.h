@@ -5,13 +5,22 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <util/generic/maybe.h>
+#include <util/string/builder.h>
 
 namespace NYdb {
 namespace NDump {
 
+inline void AddPath(NYql::TIssues& issues, const TString& path) {
+    issues.AddIssue(NYql::TIssue(TStringBuilder() << "Path: " << path)
+        .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO));
+}
+
 template <typename TResult>
-inline TResult Result(EStatus code = EStatus::SUCCESS, const TString& error = {}) {
+inline TResult Result(const TMaybe<TString>& path = Nothing(), EStatus code = EStatus::SUCCESS, const TString& error = {}) {
     NYql::TIssues issues;
+    if (path) {
+        AddPath(issues, *path);
+    }
     if (error) {
         issues.AddIssue(NYql::TIssue(error));
     }
@@ -19,8 +28,16 @@ inline TResult Result(EStatus code = EStatus::SUCCESS, const TString& error = {}
 }
 
 template <typename TResult>
-inline TResult Result(TStatus&& status) {
-    return TResult(std::move(status));
+inline TResult Result(EStatus code, const TString& error) {
+    return Result<TResult>(Nothing(), code, error);
+}
+
+template <typename TResult>
+inline TResult Result(const TString& path, TStatus&& status) {
+    NYql::TIssues issues;
+    AddPath(issues, path);
+    issues.AddIssues(status.GetIssues());
+    return TResult(TStatus(status.GetStatus(), std::move(issues)));
 }
 
 TStatus DescribeTable(NTable::TTableClient& tableClient, const TString& path, TMaybe<NTable::TTableDescription>& out);

@@ -18,7 +18,7 @@ TDumpResult TDumpClient::Dump(const TString& dbPath, const TString& fsPath, cons
     Y_UNUSED(TableClient);
     Y_UNUSED(fsPath);
     Y_UNUSED(settings);
-    return Result<TDumpResult>(EStatus::CLIENT_CALL_UNIMPLEMENTED);
+    return Result<TDumpResult>(EStatus::CLIENT_CALL_UNIMPLEMENTED, "Not implemented");
 }
 
 } // NDump

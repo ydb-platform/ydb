@@ -342,8 +342,17 @@ private:
     void Kill() override {
         try {
             // see YQL-13760
-            TShellCommand cmd(PortoCtl, {"set", ContainerName, "anon_limit", "0"});
-            cmd.Run().Wait();
+            TShellCommand cmd1(PortoCtl, {"get", ContainerName, "anon_limit"});
+            cmd1.Run().Wait();
+            i64 anonLimit = FromString<i64>(cmd1.GetOutput());
+            TShellCommand cmd2(PortoCtl, {"get", ContainerName, "anon_usage"});
+            cmd2.Run().Wait();
+            i64 anonUsage = FromString<i64>(cmd2.GetOutput());
+            if (anonUsage >= anonLimit) {
+                TShellCommand cmd3(PortoCtl, {"set", ContainerName, "anon_limit",
+                        ToString(anonUsage+(1<<20))});
+                cmd3.Run().Wait();
+            }
         } catch (...) {
             YQL_LOG(DEBUG) << "Cannot set anon_limit: " << CurrentExceptionMessage();
         }

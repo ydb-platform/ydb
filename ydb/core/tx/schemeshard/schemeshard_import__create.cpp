@@ -100,11 +100,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
                 TString explain;
                 if (!FillItems(importInfo, settings, explain)) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
-                    );
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
                 }
             }
             break;
@@ -201,6 +197,7 @@ private:
                 }
 
                 if (!checks) {
+                    explain = TStringBuilder() << "Failed item check for path " << item.destination_path();
                     checks.GetStatus(&explain);
                     return false;
                 }

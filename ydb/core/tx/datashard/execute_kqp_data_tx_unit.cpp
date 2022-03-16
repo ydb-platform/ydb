@@ -77,9 +77,22 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
             case ERestoreDataStatus::Ok:
                 break;
+
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
+
             case ERestoreDataStatus::Error:
+                // For immediate transactions we want to translate this into a propose failure
+                if (op->IsImmediate()) {
+                    const auto& dataTx = tx->GetDataTx();
+                    Y_VERIFY(!dataTx->Ready());
+                    op->SetAbortedFlag();
+                    BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+                    op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
+                    return EExecutionStatus::Executed;
+                }
+
+                // For planned transactions errors are not expected
                 Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
         }
     }

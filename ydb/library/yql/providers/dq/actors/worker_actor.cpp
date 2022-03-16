@@ -1,5 +1,8 @@
 #include "worker_actor.h"
 
+#include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
+
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 #include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 
@@ -136,7 +139,10 @@ private:
         HFunc(TEvTaskRunFinished, OnRunFinished);
         HFunc(TEvSourcePushFinished, OnSourcePushFinished);
 
-        HFunc(TEvDqFailure, OnErrorFromPipe)
+        // weird to have two events for error handling, but we need to use TEvDqFailure
+        // between worker_actor <-> executer_actor, cause it transmits statistics in 'Metric' field 
+        HFunc(NDq::TEvDq::TEvAbortExecution, OnErrorFromPipe);  // received from task_runner_actor
+        HFunc(TEvDqFailure, OnError); // received from this actor itself
         HFunc(TEvContinueRun, OnContinueRun);
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup);
 
@@ -144,7 +150,57 @@ private:
         hFunc(IDqSourceActor::TEvSourceError, OnSourceError);
     })
 
-    void OnErrorFromPipe(TEvDqFailure::TPtr& ev, const TActorContext&) {
+    void ExtractStats(::Ydb::Issue::IssueMessage* issue) {
+        TString filteredMessage;
+        for (auto line : StringSplitter(TString(issue->message().data(), issue->message().size())).SplitByString("\n").SkipEmpty()) {
+            if (line.StartsWith("Counter1:")) {
+                TVector<TString> parts;
+                Split(TString(line), " ", parts);
+                if (parts.size() >= 3) {
+                    auto name = parts[1];
+                    i64 value;
+                    if (TryFromString<i64>(parts[2], value)) {
+                        Stat.AddCounter(name, TDuration::MilliSeconds(value));
+                    }
+                }
+            } else if (line.StartsWith("Counter:")) {
+                TVector<TString> parts;
+                Split(TString(line), " ", parts);
+                // name sum min max avg count
+                if (parts.size() >= 7) {
+                    auto name = parts[1];
+                    TCounters::TEntry entry;
+                    if (
+                        TryFromString<i64>(parts[2], entry.Sum) &&
+                        TryFromString<i64>(parts[3], entry.Min) &&
+                        TryFromString<i64>(parts[4], entry.Max) &&
+                        TryFromString<i64>(parts[5], entry.Avg) &&
+                        TryFromString<i64>(parts[6], entry.Count))
+                    {
+                        Stat.AddCounter(name, entry);
+                    }
+                }
+            } else {
+                filteredMessage += line;
+                filteredMessage += "\n";
+            }
+        }
+        issue->set_message(filteredMessage);
+    }
+
+    void OnErrorFromPipe(NDq::TEvDq::TEvAbortExecution::TPtr& ev, const TActorContext&) {
+        for (size_t i = 0; i < ev->Get()->Record.IssuesSize(); i++) {
+            ExtractStats(ev->Get()->Record.MutableIssues(i));
+        }
+        // hacky conversion to TEvDqFailure
+        auto convertedError = MakeHolder<TEvDqFailure>();
+        convertedError->Record.SetRetriable(NCommon::IsRetriable(ev));
+        convertedError->Record.SetNeedFallback(NCommon::NeedFallback(ev));
+        convertedError->Record.MutableIssues()->Swap(ev->Get()->Record.MutableIssues());
+        SendFailure(std::move(convertedError));  // enreached with stats inside
+    }
+
+    void OnError(TEvDqFailure::TPtr& ev, const TActorContext&) {
         SendFailure(ev->Release());
     }
 

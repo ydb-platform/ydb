@@ -2,15 +2,13 @@
 
 #include <ydb/core/protos/services.pb.h>
 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+
 #include <ydb/library/yql/dq/actors/dq.h>
 
 #include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
-
-#include <ydb/library/yql/providers/dq/actors/events.h>
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -32,7 +30,6 @@ public:
         , Parent(parent)
         , Factory(factory)
         , TraceId(traceId)
-        , Settings(MakeIntrusive<TDqConfiguration>())
     { }
 
     ~TLocalTaskRunnerActor()
@@ -222,13 +219,6 @@ private:
     }
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev, const NActors::TActorContext& ctx) {
-        {
-            Yql::DqsProto::TTaskMeta taskMeta;
-            ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
-            Settings->Dispatch(taskMeta.GetSettings());
-            Settings->FreezeDefaults();
-        }
-
         ParentId = ev->Sender;
         TaskRunner = Factory(ev->Get()->Task, [](const TString& message) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, message);
@@ -274,12 +264,8 @@ private:
         }
     }
 
-    THolder<IEventBase> GetError(const TString& message) {
-        const auto issue = TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR);
-        if (Settings->EnableComputeActor.Get().GetOrElse(false)) {
-            return MakeHolder<NDq::TEvDq::TEvAbortExecution>(Ydb::StatusIds::BAD_REQUEST, TVector<TIssue>{issue});
-        }
-        return MakeHolder<NDqs::TEvDqFailure>(issue, false, false);
+    THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {
+        return MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::BAD_REQUEST, TVector<TIssue>{TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR)});
     }
 
     NActors::TActorId ParentId;
@@ -289,7 +275,6 @@ private:
     THashSet<ui32> Inputs;
     THashSet<ui32> Sources;
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
-    TIntrusivePtr<TDqConfiguration> Settings;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

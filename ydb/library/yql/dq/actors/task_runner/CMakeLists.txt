@@ -22,7 +22,6 @@ target_link_libraries(dq-actors-task_runner PUBLIC
   yql-minikql-computation
   yql-utils-actors
   ydb-core-protos
-  dq-api-protos
 )
 target_sources(dq-actors-task_runner PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/task_runner/events.cpp

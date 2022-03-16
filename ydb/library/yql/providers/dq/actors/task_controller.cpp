@@ -107,18 +107,7 @@ private:
         auto ydbStatusId = ev->Get()->Record.GetStatusCode();
         TIssues issues = ev->Get()->GetIssues();
         YQL_LOG(DEBUG) << "AbortExecution from " << ev->Sender << ":" << ydbStatusId << " " << issues.ToOneLineString();
-        auto retry = true;
-        if (ydbStatusId == Ydb::StatusIds::BAD_REQUEST) {
-            retry = false;
-        }
-        auto fallback = false;
-        for (auto it = issues.begin(); it < issues.end(); it++) {
-            if (it->GetCode() == TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR) {
-                fallback = true;
-                break;
-            }
-        }
-        OnError(issues, retry, fallback);
+        OnError(issues, NCommon::IsRetriable(ev), NCommon::NeedFallback(ev));
     }
 
     void OnComputeActorState(NDq::TEvDqCompute::TEvState::TPtr& ev) {

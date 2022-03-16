@@ -19,6 +19,7 @@ target_link_libraries(providers-dq-common PUBLIC
   library-yql-sql
   library-yql-utils
   yql-utils-log
+  yql-dq-actors
 )
 target_sources(providers-dq-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/common/attrs.cpp

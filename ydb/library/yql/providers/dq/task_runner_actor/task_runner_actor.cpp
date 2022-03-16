@@ -82,9 +82,8 @@ private:
         bool Retriable;
         bool Fallback;
         TString FilteredStderr;
-        NDqProto::TDqFailure MetricContainer;
 
-        TRunResult() : Retriable(false), Fallback(false), FilteredStderr(), MetricContainer() {
+        TRunResult() : Retriable(false), Fallback(false), FilteredStderr() {
         }
     };
 
@@ -98,36 +97,8 @@ private:
         }
 
         TRunResult result;
-        NYql::TCounters stat;
         for (TStringBuf line: StringSplitter(input).SplitByString("\n").SkipEmpty()) {
-            if (line.StartsWith("Counter1:")) {
-                TVector<TString> parts;
-                Split(TString(line), " ", parts);
-                if (parts.size() >= 3) {
-                    auto name = parts[1];
-                    i64 value;
-                    if (TryFromString<i64>(parts[2], value)) {
-                        stat.AddCounter(name, TDuration::MilliSeconds(value));
-                    }
-                }
-            } else if (line.StartsWith("Counter:")) {
-                TVector<TString> parts;
-                Split(TString(line), " ", parts);
-                // name sum min max avg count
-                if (parts.size() >= 7) {
-                    auto name = parts[1];
-                    TCounters::TEntry entry;
-                    if (
-                        TryFromString<i64>(parts[2], entry.Sum) &&
-                        TryFromString<i64>(parts[3], entry.Min) &&
-                        TryFromString<i64>(parts[4], entry.Max) &&
-                        TryFromString<i64>(parts[5], entry.Avg) &&
-                        TryFromString<i64>(parts[6], entry.Count))
-                    {
-                        stat.AddCounter(name, entry);
-                    }
-                }
-            } else if (line.Contains("mlockall failed")) {
+            if (line.Contains("mlockall failed")) {
                 // skip
             } else {
                 if (!result.Fallback) {
@@ -178,11 +149,10 @@ private:
                 result.FilteredStderr += "\n";
             }
         }
-        stat.FlushCounters(result.MetricContainer);
         return result;
     }
     
-    static THolder<IEventBase> StatusToError(
+    static THolder<TEvDq::TEvAbortExecution> StatusToError(
         const TEvError::TStatus& status, 
         TIntrusivePtr<TDqConfiguration> settings,
         ui64 stageId,
@@ -209,13 +179,7 @@ private:
                 issue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.GetOrElse(TPosition()), TIssuesIds::DQ_GATEWAY_ERROR, TString{terminationMessage})));
             }
         }
-
-        if (settings->EnableComputeActor.Get().GetOrElse(false)) {
-            return MakeHolder<NDq::TEvDq::TEvAbortExecution>(runResult.Retriable ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::BAD_REQUEST, TVector<TIssue>{issue});
-        }
-        auto dqFailure = MakeHolder<TEvDqFailure>(issue, runResult.Retriable, runResult.Fallback);
-        dqFailure->Record.MutableMetric()->Swap(runResult.MetricContainer.MutableMetric());
-        return dqFailure;
+        return MakeHolder<NDq::TEvDq::TEvAbortExecution>(runResult.Retriable ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::BAD_REQUEST, TVector<TIssue>{issue});
     }
 
     void PassAway() override {

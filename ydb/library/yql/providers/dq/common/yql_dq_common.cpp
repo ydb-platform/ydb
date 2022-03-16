@@ -1,5 +1,7 @@
 #include "yql_dq_common.h"
 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -92,6 +94,20 @@ bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TStri
     return !name->empty();
 }
 
+bool IsRetriable(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
+    const auto& ydbStatusId = ev->Get()->Record.GetStatusCode();
+    return ydbStatusId != Ydb::StatusIds::BAD_REQUEST;
+}
+
+bool NeedFallback(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
+    const auto& issues = ev->Get()->GetIssues();
+    for (auto it = issues.begin(); it < issues.end(); it++) {
+        if (it->GetCode() == TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR) {
+            return true;
+        }
+    }
+    return false;
+}
 
 } // namespace NCommon
 } // namespace NYql

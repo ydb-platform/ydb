@@ -139,7 +139,14 @@ private:
             case NDqProto::COMPUTE_STATE_FAILURE: {
                 // TODO: don't convert issues to string
                 NYql::IssuesFromMessage(state.GetIssues(), Issues);
-                OnError(Issues, true, false);
+                bool retriable = true;
+                for (const auto& issue : Issues) {
+                    if (issue.IssueCode == TIssuesIds::UNEXPECTED) {
+                        retriable = false;
+                        break;
+                    }
+                }
+                OnError(Issues, retriable, false);
                 break;
             }
             case NDqProto::COMPUTE_STATE_EXECUTING: {

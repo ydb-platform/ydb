@@ -909,17 +909,17 @@ public:
         switch (NodeTag(val)) {
         case T_Integer: {
             return Settings.PgTypes ?
-                L(A("PgConst"), QA("int4"), QA(ToString(IntVal(val)))) :
+                L(A("PgConst"), L(A("PgType"), QA("int4")), QA(ToString(IntVal(val)))) :
                 L(A("Just"), L(A("Int32"), QA(ToString(IntVal(val)))));
         }
         case T_Float: {
             return Settings.PgTypes ?
-                L(A("PgConst"), QA("float8"), QA(ToString(StrFloatVal(val)))) :
+                L(A("PgConst"), L(A("PgType"), QA("float8")), QA(ToString(StrFloatVal(val)))) :
                 L(A("Just"), L(A("Double"), QA(ToString(StrFloatVal(val)))));
         }
         case T_String: {
             return Settings.PgTypes ?
-                L(A("PgConst"), QA("text"), QA(ToString(StrVal(val)))) :
+                L(A("PgConst"), L(A("PgType"), QA("text")), QA(ToString(StrVal(val)))) :
                 L(A("Just"), L(A("Utf8"), QA(ToString(StrVal(val)))));
         }
         case T_Null: {
@@ -1102,7 +1102,7 @@ public:
             if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
                 auto str = StrVal(CAST_NODE(A_Const, arg)->val);
                 if (Settings.PgTypes) {
-                    return L(A("PgConst"), QA("bool"), QA(str));
+                    return L(A("PgConst"), L(A("PgType"), QA("bool")), QA(str));
                 }
 
                 if (!StrCompare(str, "t")) {
@@ -1145,7 +1145,7 @@ public:
                 finalType = "_" + finalType;
             }
 
-            return L(A("PgCast"), input, QA(finalType));
+            return L(A("PgCast"), input, L(A("PgType"), QA(finalType)));
         }
 
         AddError("Unsupported form of type cast");

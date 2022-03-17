@@ -212,8 +212,7 @@ protected:
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const std::exception& e) {
-            const TString message = e.what();
-            InternalError(message.find("Terminate was called, reason(") != TString::npos ? TIssuesIds::UNEXPECTED : TIssuesIds::DEFAULT_ERROR, message);
+            InternalError(TIssuesIds::UNEXPECTED, e.what());
         }
 
         if (reportTime) {

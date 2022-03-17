@@ -791,7 +791,7 @@ void ExecuteReadRange(TTestContext &tc,
 
 template <NKikimrKeyValue::Statuses::ReplyStatus ExpectedStatus = NKikimrKeyValue::Statuses::RSTATUS_OK>
 void ExecuteGetStatus(TTestContext &tc, const TDeque<ui32> &channels, ui64 lock_generation) {
-    TDesiredPair<TEvKeyValue::TEvGetStatus> dp;
+    TDesiredPair<TEvKeyValue::TEvGetBlobStorageChannelStatus> dp;
     dp.Request.set_lock_generation(lock_generation);
     dp.Request.set_tablet_id(tc.TabletId);
     for (ui32 channel : channels) {
@@ -811,7 +811,7 @@ void ExecuteGetStatus(TTestContext &tc, const TDeque<ui32> &channels, ui64 lock_
 }
 
 void ExecuteObtainLock(TTestContext &tc, ui64 expectedLockGeneration) {
-    TDesiredPair<TEvKeyValue::TEvObtainLock> dp;
+    TDesiredPair<TEvKeyValue::TEvAcquireLock> dp;
     dp.Request.set_tablet_id(tc.TabletId);
     ExecuteEvent(dp, tc);
     UNIT_ASSERT_VALUES_EQUAL(dp.Response.lock_generation(), expectedLockGeneration);

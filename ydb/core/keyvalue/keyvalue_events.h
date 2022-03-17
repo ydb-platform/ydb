@@ -27,16 +27,16 @@ struct TEvKeyValue {
         EvRead = EvRequest + 16,
         EvReadRange,
         EvExecuteTransaction,
-        EvGetStatus,
-        EvObtainLock,
+        EvGetBlobStorageChannelStatus,
+        EvAcquireLock,
 
         EvResponse = EvRequest + 512,
 
         EvReadResponse = EvResponse + 16,
         EvReadRangeResponse,
         EvExecuteTransactionResponse,
-        EvGetStatusResponse,
-        EvObtainLockResponse,
+        EvGetBlobStorageChannelStatusResponse,
+        EvAcquireLockResponse,
 
         EvEnd
     };
@@ -87,32 +87,32 @@ struct TEvKeyValue {
         TEvExecuteTransactionResponse() { }
     };
 
-    struct TEvGetStatusResponse;
+    struct TEvGetBlobStorageChannelStatusResponse;
 
-    struct TEvGetStatus : public TEventPB<TEvGetStatus,
-            NKikimrKeyValue::GetStatusRequest, EvGetStatus> {
+    struct TEvGetBlobStorageChannelStatus : public TEventPB<TEvGetBlobStorageChannelStatus,
+            NKikimrKeyValue::GetBlobStorageChannelStatusRequest, EvGetBlobStorageChannelStatus> {
 
-        using TResponse = TEvGetStatusResponse;
-        TEvGetStatus() { }
+        using TResponse = TEvGetBlobStorageChannelStatusResponse;
+        TEvGetBlobStorageChannelStatus() { }
     };
 
-    struct TEvGetStatusResponse : public TEventPB<TEvGetStatusResponse,
-            NKikimrKeyValue::GetStatusResult, EvGetStatusResponse> {
-        TEvGetStatusResponse() { }
+    struct TEvGetBlobStorageChannelStatusResponse : public TEventPB<TEvGetBlobStorageChannelStatusResponse,
+            NKikimrKeyValue::GetBlobStorageChannelStatusResult, EvGetBlobStorageChannelStatusResponse> {
+        TEvGetBlobStorageChannelStatusResponse() { }
     };
 
-    struct TEvObtainLockResponse;
+    struct TEvAcquireLockResponse;
 
-    struct TEvObtainLock : public TEventPB<TEvObtainLock,
-            NKikimrKeyValue::ObtainLockRequest, EvObtainLock> {
+    struct TEvAcquireLock : public TEventPB<TEvAcquireLock,
+            NKikimrKeyValue::AcquireLockRequest, EvAcquireLock> {
 
-        using TResponse = TEvObtainLockResponse;
-        TEvObtainLock() { }
+        using TResponse = TEvAcquireLockResponse;
+        TEvAcquireLock() { }
     };
 
-    struct TEvObtainLockResponse : public TEventPB<TEvObtainLockResponse,
-            NKikimrKeyValue::ObtainLockResult, EvObtainLockResponse> {
-        TEvObtainLockResponse() { }
+    struct TEvAcquireLockResponse : public TEventPB<TEvAcquireLockResponse,
+            NKikimrKeyValue::AcquireLockResult, EvAcquireLockResponse> {
+        TEvAcquireLockResponse() { }
     };
 
     struct TEvRequest : public TEventPB<TEvRequest,

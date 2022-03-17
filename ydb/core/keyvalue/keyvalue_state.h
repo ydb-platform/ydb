@@ -423,9 +423,9 @@ public:
             const TTabletStorageInfo *info);
     void OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
-    void OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TActorContext &ctx,
+    void OnEvGetBlobStorageChannelStatus(TEvKeyValue::TEvGetBlobStorageChannelStatus::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
-    void OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const TActorContext &ctx,
+    void OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
 
     void OnPeriodicRefresh(const TActorContext &ctx);
@@ -555,7 +555,7 @@ public:
             response->Record.set_requested_size(interRead.ValueSize);
             response->Record.set_requested_key(interRead.Key);
         }
-        if constexpr (!std::is_same_v<TResponse, TEvKeyValue::TEvGetStatusResponse>) {
+        if constexpr (!std::is_same_v<TResponse, TEvKeyValue::TEvGetBlobStorageChannelStatusResponse>) {
             if (intermediate->HasCookie) {
                 response->Record.set_cookie(intermediate->Cookie);
             }
@@ -587,9 +587,9 @@ public:
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     TPrepareResult PrepareOneGetStatus(TIntermediate::TGetStatus &cmd, ui64 publicStorageChannel,
         const TTabletStorageInfo *info);
-    bool PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStatus::TPtr &ev,
+    bool PrepareGetBlobStorageChannelStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetBlobStorageChannelStatus::TPtr &ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
-    bool PrepareObtainLockRequest(const TActorContext &ctx, TEvKeyValue::TEvObtainLock::TPtr &ev,
+    bool PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
         THolder<TIntermediate> &intermediate);
 
     template <typename TRequestType>

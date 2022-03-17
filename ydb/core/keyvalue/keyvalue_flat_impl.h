@@ -293,12 +293,12 @@ protected:
         State.OnEvExecuteTransaction(ev, TActivationContext::AsActorContext(), Info());
     }
 
-    void Handle(TEvKeyValue::TEvGetStatus::TPtr &ev) {
-        State.OnEvGetStatus(ev, TActivationContext::AsActorContext(), Info());
+    void Handle(TEvKeyValue::TEvGetBlobStorageChannelStatus::TPtr &ev) {
+        State.OnEvGetBlobStorageChannelStatus(ev, TActivationContext::AsActorContext(), Info());
     }
 
-    void Handle(TEvKeyValue::TEvObtainLock::TPtr &ev) {
-        State.OnEvObtainLock(ev, TActivationContext::AsActorContext(), Info());
+    void Handle(TEvKeyValue::TEvAcquireLock::TPtr &ev) {
+        State.OnEvAcquireLock(ev, TActivationContext::AsActorContext(), Info());
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -472,8 +472,8 @@ public:
             hFunc(TEvKeyValue::TEvRead, Handle);
             hFunc(TEvKeyValue::TEvReadRange, Handle);
             hFunc(TEvKeyValue::TEvExecuteTransaction, Handle);
-            hFunc(TEvKeyValue::TEvGetStatus, Handle);
-            hFunc(TEvKeyValue::TEvObtainLock, Handle);
+            hFunc(TEvKeyValue::TEvGetBlobStorageChannelStatus, Handle);
+            hFunc(TEvKeyValue::TEvAcquireLock, Handle);
 
             HFunc(TEvKeyValue::TEvEraseCollect, Handle);
             HFunc(TEvKeyValue::TEvCollect, Handle);

@@ -49,13 +49,13 @@ message Channel {
 
 message KVRange {
     oneof from_bound {
-        bytes from_key_inclusive = 1;
-        bytes from_key_exclusive = 2;
+        string from_key_inclusive = 1;
+        string from_key_exclusive = 2;
     }
 
     oneof to_bound {
-        bytes to_key_inclusive = 3;
-        bytes to_key_exclusive = 4;
+        string to_key_inclusive = 3;
+        string to_key_exclusive = 4;
     }
 }
 
@@ -166,25 +166,25 @@ message ExecuteTransactionResult {
     uint64 cookie = 4;
 }
 
-message GetStatusRequest {
+message GetBlobStorageChannelStatusRequest {
     uint64 tablet_id = 1;
     uint64 lock_generation = 2;
     repeated uint32 storage_channel = 3;
     uint64 deadline_instant_ms = 4;
 }
 
-message GetStatusResult {
+message GetBlobStorageChannelStatusResult {
     repeated Channel channel = 1;
     Statuses.ReplyStatus status = 2;
     string msg = 3;
 }
 
-message ObtainLockRequest {
+message AcquireLockRequest {
     uint64 tablet_id = 1;
     uint64 cookie = 2;
 }
 
-message ObtainLockResult {
+message AcquireLockResult {
     uint64 lock_generation = 1;
     uint64 cookie = 2;
 }

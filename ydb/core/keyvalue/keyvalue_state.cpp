@@ -868,14 +868,14 @@ void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorCon
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
             ctx.Send(intermediate->RespondTo, response.Release());
         }
-        if (intermediate->EvType == TEvKeyValue::TEvGetStatus::EventType) {
-            THolder<TEvKeyValue::TEvGetStatusResponse> response(new TEvKeyValue::TEvGetStatusResponse);
-            response->Record = intermediate->GetStatusResponse;
+        if (intermediate->EvType == TEvKeyValue::TEvGetBlobStorageChannelStatus::EventType) {
+            THolder<TEvKeyValue::TEvGetBlobStorageChannelStatusResponse> response(new TEvKeyValue::TEvGetBlobStorageChannelStatusResponse);
+            response->Record = intermediate->GetBlobStorageChannelStatusResponse;
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
             ctx.Send(intermediate->RespondTo, response.Release());
         }
-        if (intermediate->EvType == TEvKeyValue::TEvObtainLock::EventType) {
-            THolder<TEvKeyValue::TEvObtainLockResponse> response(new TEvKeyValue::TEvObtainLockResponse);
+        if (intermediate->EvType == TEvKeyValue::TEvAcquireLock::EventType) {
+            THolder<TEvKeyValue::TEvAcquireLockResponse> response(new TEvKeyValue::TEvAcquireLockResponse);
             response->Record.set_lock_generation(StoredState.GetUserGeneration());
             response->Record.set_cookie(intermediate->Cookie);
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
@@ -1256,8 +1256,8 @@ void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleD
             response.SetStatus(request.Status);
             response.SetStorageChannel(request.StorageChannel);
             response.SetStatusFlags(request.StatusFlags.Raw);
-        } else if ((intermediate->EvType == TEvKeyValue::TEvGetStatus::EventType)) {
-            auto response = intermediate->GetStatusResponse.add_channel();
+        } else if ((intermediate->EvType == TEvKeyValue::TEvGetBlobStorageChannelStatus::EventType)) {
+            auto response = intermediate->GetBlobStorageChannelStatusResponse.add_channel();
 
             if (request.Status == NKikimrProto::OK) {
                 response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
@@ -1276,7 +1276,7 @@ void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleD
             SetStatusFlags(response->mutable_status_flags(), request.StatusFlags);
         }
     }
-    intermediate->GetStatusResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
+    intermediate->GetBlobStorageChannelStatusResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
 }
 
 void TKeyValueState::CmdCopyRange(THolder<TIntermediate>& intermediate, ISimpleDb& db, const TActorContext& ctx) {
@@ -2742,12 +2742,12 @@ TKeyValueState::TPrepareResult TKeyValueState::PrepareOneGetStatus(TIntermediate
 }
 
 
-bool TKeyValueState::PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStatus::TPtr &ev,
+bool TKeyValueState::PrepareGetBlobStorageChannelStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetBlobStorageChannelStatus::TPtr &ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareGetStatusRequest Marker# KV78");
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareGetBlobStorageChannelStatusRequest Marker# KV78");
 
-    NKikimrKeyValue::GetStatusRequest &request = ev->Get()->Record;
+    NKikimrKeyValue::GetBlobStorageChannelStatusRequest &request = ev->Get()->Record;
     StoredState.SetChannelGeneration(ExecutorGeneration);
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
 
@@ -2758,7 +2758,7 @@ bool TKeyValueState::PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyVal
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
-    intermediate->EvType = TEvKeyValue::TEvGetStatus::EventType;
+    intermediate->EvType = TEvKeyValue::TEvGetBlobStorageChannelStatus::EventType;
 
     if (CheckDeadline(ctx, ev->Get(), intermediate)) {
         return false;
@@ -2778,10 +2778,10 @@ bool TKeyValueState::PrepareGetStatusRequest(const TActorContext &ctx, TEvKeyVal
     return true;
 }
 
-bool TKeyValueState::PrepareObtainLockRequest(const TActorContext &ctx, TEvKeyValue::TEvObtainLock::TPtr &ev,
+bool TKeyValueState::PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
         THolder<TIntermediate> &intermediate)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareObtainLockRequest Marker# KV79");
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId << " PrepareAcquireLockRequest Marker# KV79");
 
     StoredState.SetChannelGeneration(ExecutorGeneration);
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
@@ -2793,7 +2793,7 @@ bool TKeyValueState::PrepareObtainLockRequest(const TActorContext &ctx, TEvKeyVa
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
-    intermediate->EvType = TEvKeyValue::TEvObtainLock::EventType;
+    intermediate->EvType = TEvKeyValue::TEvAcquireLock::EventType;
     intermediate->HasIncrementGeneration = true;
     return true;
 }
@@ -2923,7 +2923,7 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
     }
 }
 
-void TKeyValueState::OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TActorContext &ctx,
+void TKeyValueState::OnEvGetBlobStorageChannelStatus(TEvKeyValue::TEvGetBlobStorageChannelStatus::TPtr &ev, const TActorContext &ctx,
         const TTabletStorageInfo *info)
 {
     THolder<TIntermediate> intermediate;
@@ -2934,10 +2934,10 @@ void TKeyValueState::OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TA
     TRequestType::EType requestType = TRequestType::ReadOnlyInline;
     CountRequestIncoming(requestType);
 
-    if (PrepareGetStatusRequest(ctx, ev, intermediate, info)) {
+    if (PrepareGetBlobStorageChannelStatusRequest(ctx, ev, intermediate, info)) {
         ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-            << " Create GetStatus request, Marker# KV75");
+            << " Create GetBlobStorageChannelStatus request, Marker# KV75");
         RegisterRequestActor(ctx, std::move(intermediate), info);
         ++RoInlineIntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
@@ -2947,7 +2947,7 @@ void TKeyValueState::OnEvGetStatus(TEvKeyValue::TEvGetStatus::TPtr &ev, const TA
     }
 }
 
-void TKeyValueState::OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const TActorContext &ctx,
+void TKeyValueState::OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, const TActorContext &ctx,
         const TTabletStorageInfo *info)
 {
     THolder<TIntermediate> intermediate;
@@ -2958,10 +2958,10 @@ void TKeyValueState::OnEvObtainLock(TEvKeyValue::TEvObtainLock::TPtr &ev, const 
     TRequestType::EType requestType = TRequestType::ReadOnlyInline;
 
     CountRequestIncoming(requestType);
-    if (PrepareObtainLockRequest(ctx, ev, intermediate)) {
+    if (PrepareAcquireLockRequest(ctx, ev, intermediate)) {
         ++InFlightForStep[StoredState.GetChannelStep()];
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-            << " Create ObtainLock request, Marker# KV80");
+            << " Create AcquireLock request, Marker# KV80");
         RegisterRequestActor(ctx, std::move(intermediate), info);
         ++RoInlineIntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);

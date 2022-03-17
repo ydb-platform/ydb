@@ -80,7 +80,7 @@ LEFT  JOIN c_table AS c ON c.ref = a.key and c.column1 = b.value;
 If the statement filters data in addition to `JOIN`, we recommend that you wrap the criteria that would return `true` for most of the rows in the `LIKELY(...)` function call. If your assumption that positive values prevail for the criteria is correct, such a hint might speed up your query. `LIKELY` can be useful when the predicate calculation is a resource-intensive operation and JOIN significantly reduces the number of rows.
 
 In front of any data source for `JOIN`, you can add the `ANY` keyword to suppress duplicate `JOIN`  keys on the given side. In this case, only one row is left from the set of rows with the same `JOIN` key value (no matter which one, that's why the keyword is called `ANY`).
-This differs from the [ClickHouse](https://clickhouse.tech/docs/ru/sql-reference/statements/select/join/) syntax where `ANY` precedes the `JOIN` type and only applies to the right side.
+This syntax differs from the one used in [ClickHouse]{% if lang == "en" %}(https://clickhouse.com/docs/en/sql-reference/statements/select/join/){% endif %}{% if lang == "ru" %}(https://clickhouse.tech/docs/ru/sql-reference/statements/select/join/){% endif %}where `ANY` is placed before the `JOIN` type and applies to the right side only.
 
 Request
 

@@ -11,4 +11,3 @@
 An experimental pragma that allows you to reduce the isolation level of the current YDB transaction.
 
 {% endif %}
-

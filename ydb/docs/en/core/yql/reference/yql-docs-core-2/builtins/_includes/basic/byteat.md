@@ -7,7 +7,7 @@ Arguments:
 1. String: `String` or `Utf8`.
 2. Index: `Uint32`.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT
@@ -15,4 +15,3 @@ SELECT
     ByteAt("foo", 1), -- 111
     ByteAt("foo", 9); -- NULL
 ```
-

@@ -13,4 +13,3 @@ _A {{ ydb-short-name }} database ({{ ydb-short-name }} DB)_ is an isolated consi
 * Generates metrics that can be used to monitor the DB performance.
 
 Resources for the {{ ydb-short-name }} database (CPU, RAM, nodes, and disk space) are allocated within a {{ ydb-short-name }} cluster.
-

@@ -20,7 +20,7 @@ Use cases:
 * `SELECT RANDOM(some_column), RANDOM(some_column) FROM table;`: Different random numbers for each row of the table, but two identical numbers within the same row.
 * `SELECT RANDOM(some_column), RANDOM(some_column + 1) FROM table;` or `SELECT RANDOM(some_column), RANDOM(other_column) FROM table;`: Two columns, with different numbers in both.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT
@@ -48,4 +48,3 @@ SELECT
     RANDOM(column, 2) AS randAnd2 -- different from randAnd1
 FROM my_table;
 ```
-

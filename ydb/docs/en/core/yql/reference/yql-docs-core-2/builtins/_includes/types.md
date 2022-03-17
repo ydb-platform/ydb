@@ -8,7 +8,7 @@ Serializing a type {% if feature_codegen %} or a handle type{% endif %} to a hum
 
 Building a type from a string with description. [Documentation for its format](../../types/type_string.md).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
@@ -18,7 +18,7 @@ SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
 
 Getting the type of value passed to the argument.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(TypeOf("foo"));  -- String
@@ -34,7 +34,7 @@ Returns an instance of the specified type that can only be used to get the type 
 
 If this instance remains in the computation graph by the end of optimization, the operation fails.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(TypeOf(
@@ -47,7 +47,7 @@ SELECT FormatType(TypeOf(
 
 Returns a type for [primitive data types](../../types/primitive.md) based on type name.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(DataType("Bool")); -- Bool
@@ -58,7 +58,7 @@ SELECT FormatType(DataType("Decimal","5","1")); -- Decimal(5,1)
 
 Adds the option to assign `NULL` to the passed type.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
@@ -68,7 +68,7 @@ SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
 
 Builds a list type or stream type based on the passed element type.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
@@ -78,7 +78,7 @@ SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
 
 Builds a dictionary type based on the passed key types (first argument) and value types (second argument).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(DictType(
@@ -91,7 +91,7 @@ SELECT FormatType(DictType(
 
 Builds the tuple type from the passed element types.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(TupleType(
@@ -105,7 +105,7 @@ SELECT FormatType(TupleType(
 
 Builds the structure type based on the passed element types. The standard syntax of named arguments is used to specify the element names.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(StructType(
@@ -118,7 +118,7 @@ SELECT FormatType(StructType(
 
 Returns the type of a variant based on the underlying type (structure or tuple).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(VariantType(
@@ -130,7 +130,7 @@ SELECT FormatType(VariantType(
 
 Returns the type of the [resource](../../types/special.md) based on the passed string label.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(ResourceType("Foo")); -- Resource<'Foo'>
@@ -144,7 +144,7 @@ Constructs the type of the called value using the following arguments:
 2. Result type.
 3. All the next arguments of CallableType are treated as types of arguments of the callable value, but with a shift for two required arguments (for example, the third argument of the CallableType describes the type of the first argument in the callable value).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(CallableType(
@@ -155,11 +155,11 @@ SELECT FormatType(CallableType(
 )); -- Callable<(String,[Int64?])->Double>
 ```
 
-## GenericType, UnitType, and VoidType {#generictype}
+## GenericType, UnitType and VoidType {#generictype}
 
 Return the same-name [special data types](../../types/special.md). They have no arguments because they are not parameterized.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(VoidType()); -- Void
@@ -167,33 +167,31 @@ SELECT FormatType(VoidType()); -- Void
 
 ## OptionalItemType, ListItemType and StreamItemType {#optionalitemtype}
 
-{% if feature_codegen %} If a type is passed to these functions, then they perform {% else %}Perform{% endif %} the action reverse to [OptionalType](#optionaltype), [ListType](#listtype), and [StreamType](#streamtype): return the item type based on its container type.
+{% if feature_codegen %} If a type is passed to these functions, then they {% else %}Do{% endif %} the action reverse to [OptionalType](#optionaltype), [ListType](#listtype), and [StreamType](#streamtype): return the element type based on its container type.
 {% if feature_codegen %}
-If a type handle is passed to these functions, then they perform the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#listtypehandle), and [StreamTypeHandle](#streamtypehandle):  they return the handle of the element type based on the type handle of its container. {% endif %}
+If a type handle is passed to these functions, then they do the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#listtypehandle), and [StreamTypeHandle](#streamtypehandle): they return the handle of the element type based on the type handle of its container.
+{% endif %}
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(ListItemType(
   ParseType("List<Int32>")
 )); -- Int32
 ```
-
 {% if feature_codegen %}
-
 ```yql
 SELECT FormatType(ListItemType(
   ParseTypeHandle("List<Int32>")
 )); -- Int32
 ```
-
 {% endif %}
 
 ## DictKeyType and DictPayloadType {#dictkeytype}
 
 Returns the type of the key or value based on the dictionary type.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(DictKeyType(
@@ -205,7 +203,7 @@ SELECT FormatType(DictKeyType(
 
 Returns the tuple's element type based on the tuple type and the element index (index starts from zero).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(TupleElementType(
@@ -217,7 +215,7 @@ SELECT FormatType(TupleElementType(
 
 Returns the type of the structure element based on the structure type and element name.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(StructMemberType(
@@ -229,7 +227,7 @@ SELECT FormatType(StructMemberType(
 
 `CallableResultType` returns the result type based on the type of the called value. `CallableArgumentType` returns the argument type based on the called value type and its index (index starts from zero).
 
-**Examples**
+**Examples:**
 
 ```yql
 $callable_type = ParseType("(String,Bool)->Double");
@@ -244,11 +242,12 @@ FormatType(CallableArgumentType(
 
 ## VariantUnderlyingType {#variantunderlyingtype}
 
-{% if feature_codegen %}If a type is passed to this function, then it {% else %}Performs{% endif %} an action reverse to [VariantType](#varianttype): it returns the underlying type based on the variant type.
+{% if feature_codegen %}If a type is passed to this function, then it {% else %}Does{% endif %} an action reverse to [VariantType](#varianttype): it returns the underlying type based on the variant type.
 {% if feature_codegen %}
-If a type handle is passed to this function, it performs the action reverse to [VariantTypeHandle](#varianttypehandle): returns the handle of the underlying type based on the handle of the variant type. {% endif %}
+If a type handle is passed to this function, it does the action reverse to[VariantTypeHandle](#varianttypehandle): returns the handle of the underlying type based on the handle of the variant type.
+{% endif %}
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT FormatType(VariantUnderlyingType(
@@ -258,9 +257,7 @@ FormatType(VariantUnderlyingType(
   ParseType("Variant<Int32,Double>")
 )); -- Tuple<Int32,Double>
 ```
-
 {% if feature_codegen %}
-
 ```yql
 SELECT FormatType(VariantUnderlyingType(
   ParseTypeHandle("Variant<foo:Int32,bar:Double>")
@@ -269,11 +266,9 @@ FormatType(VariantUnderlyingType(
   ParseTypeHandle("Variant<Int32,Double>")
 )); -- Tuple<Int32,Double>
 ```
-
 {% endif %}
 
 {% if feature_codegen %}
-
 # Functions for data types during calculations
 
 To work with data types during calculations, use handle types: these are [resources](../../types/special.md) that contain an opaque type definition. After constructing the type handle, you can revert to the regular type using the [EvaluateType](#evaluatetype) function. For debug purposes, you can convert a handle type to a string using the [FormatType](#formattype) function.
@@ -627,4 +622,3 @@ SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 ```
 
 {% endif %}
-

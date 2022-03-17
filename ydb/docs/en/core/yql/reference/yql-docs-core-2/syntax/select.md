@@ -47,4 +47,3 @@
 {% include [x](_includes/select/temporary_table.md) %}
 
 {% include [x](_includes/select/from_as_table.md) %}
-

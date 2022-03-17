@@ -22,7 +22,7 @@ During data replication, the load on all the group's VDisks increases, and respo
 
 3. Run the wipe command for the VDisk.
 
-    All data stored by the VDisk will be permanently deleted, and after that, the VDisk will begin restoring the data by reading it from the other VDisks in the group.
+    All data stored on a VDisk will be permanently deleted, whereupon the VDisk will begin restoring the data by reading them from the other VDisks in the group.
 
     ```bash
     kikimr admin blobstorage group reconfigure wipe --domain <Domain number> --node <Node ID> --pdisk <pdisk-id> --vslot <Slot number>
@@ -38,19 +38,19 @@ If the block store volume is running out of space, you can apply defragmentation
 
 3. Check if you can [restart the process](node_restarting.md#restart_process).
 
-4. Stop the process
+4. Stop the process.
 
     ```bash
     sudo systemctl stop kikimr
     ```
 
-5. Format the block store volume
+5. Format the block store volume.
 
     ```bash
     sudo kikimr admin blobstorage disk obliterate <path to the store volume part label>
     ```
 
-6. Run the process
+6. Run the process.
 
     ```bash
     sudo systemctl start kikimr
@@ -59,4 +59,3 @@ If the block store volume is running out of space, you can apply defragmentation
 ## Moving individual VDisks from full block store volumes
 
 If defragmentation can't help freeing up space on the block store volume, you can [move](moving_vdisks.md#moving_disk) individual VDisks.
-

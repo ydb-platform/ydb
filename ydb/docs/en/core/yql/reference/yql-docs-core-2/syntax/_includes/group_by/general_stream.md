@@ -54,6 +54,6 @@ SELECT STREAM
 FROM my_stream
 GROUP BY
     key + key AS double_key,
-    HOP(ts, "PT1М", "PT1M", "PT1M");
+    HOP(ts, "PT1M", "PT1M", "PT1M");
 ```
 

@@ -8,7 +8,7 @@ You can use existing TLS certificates. It's important that certificates support 
 
 ## Create a CA key {# generate-ca}
 
-Create a directory named `secure` to store the CA key and a directory named `certs` for certificates and node keys:
+Create a directory named `secure` to store the CA key and one named `certs` for certificates and node keys:
 
 ```bash
 mkdir secure
@@ -108,4 +108,3 @@ openssl ca -config ca.cnf -keyfile secure/ca.key -cert certs/ca.crt -policy sign
 ```
 
 Create similar certificate-key pairs for each node.
-

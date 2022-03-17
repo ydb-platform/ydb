@@ -4,7 +4,7 @@
 
 The reverse operation is [Unwrap](#unwrap).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT
@@ -22,7 +22,7 @@ Arguments:
 
 Reverse operation is [Just](#just).
 
-**Examples**
+**Examples:**
 
 ```yql
 $value = Just("value");
@@ -32,7 +32,7 @@ SELECT Unwrap($value, "Unexpected NULL for $value");
 
 `Nothing()`: Create an empty value for the specified [Optional](../../../types/optional.md) data type.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT
@@ -40,4 +40,3 @@ SELECT
 ```
 
 [Learn more about ParseType and other functions for data types](../../types.md).
-

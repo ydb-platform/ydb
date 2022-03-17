@@ -2,7 +2,7 @@
 
 #### How do secondary indexes affect the request cost?
 
-Operations with indexes are estimated according to the same rules as operations with tables. They are reflected in the request statistics and included in the total indicators that are used to calculate the cost in Request Units (RU). For more information, see the [pricing policy for the serverless {{ ydb-short-name }} API](https://cloud.yandex.com/en/docs/ydb/pricing/request_units_yql).
+Operations with indexes are estimated according to the same rules as operations with tables. They are reflected in the request statistics and included in the total indicators that are used to calculate the cost in Request Units (RU). For more information, see the [pricing policy for the serverless {{ ydb-short-name }} API]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/ydb/pricing/request_units_yql){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/ydb/pricing/request_units_yql){% endif %}.
 
 When reading data from a table using an index, the request statistics will show the number of rows read from the index and their volume.
 

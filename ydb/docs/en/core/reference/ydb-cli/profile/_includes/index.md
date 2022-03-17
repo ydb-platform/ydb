@@ -2,7 +2,7 @@
 
 A profile is a saved and locally named configuration of DB connection parameters. With profiles, you can reuse data about DB location and authentication parameters, making a CLI call much shorter:
 
-- Calling the `scheme ls` command without a profile:
+* Calling the `scheme ls` command without a profile:
 
   ```bash
   {{ ydb-cli }} \
@@ -12,7 +12,7 @@ A profile is a saved and locally named configuration of DB connection parameters
   scheme ls
   ```
 
-- Calling the same `scheme ls` command using a profile:
+* Calling the same `scheme ls` command using a profile:
 
   ```bash
   {{ ydb-cli }} --profile db1 scheme ls
@@ -20,15 +20,14 @@ A profile is a saved and locally named configuration of DB connection parameters
 
 ## Profile management commands {#commands}
 
-- [Creating a profile](../create.md)
-- [Using a profile](../use.md)
-- [Getting a list of profiles and profile parameters](../list-and-get.md)
-- [Deleting a profile](../delete.md)
-- [Activating a profile and using the activated profile](../activate.md)
+* [Creating a profile](../create.md).
+* [Using a profile](../use.md).
+* [Getting a list of profiles and profile parameters](../list-and-get.md).
+* [Deleting a profile](../delete.md).
+* [Activating a profile and using the activated profile](../activate.md).
 
 ## Where profiles are stored {#location}
 
 Profiles are stored locally in a file named `~/ydb/config/config.yaml`.
 
 {% include [location_overlay.md](location_overlay.md) %}
-

@@ -2,7 +2,7 @@
 
 The documentation is built using the [YFM-Docs](https://github.com/yandex-cloud/yfm-docs) utility.
 
-Learn how to install YFM-Docs on the [introductory page of the utility documentation](https://ydocs.tech/tools/docs/).
+The procedure for installing YFM-Docs is described on the [introductory page of the documentation for this utility]{% if lang == "en" %}(https://ydocs.tech/en/tools/docs/){% endif %}{% if lang == "ru" %}(https://ydocs.tech/ru/tools/docs/){% endif %}.
 
 To build the {{ ydb-short-name }} OpenSource documentation, run the command:
 
@@ -12,8 +12,8 @@ $ yfm -i <source_dir> -o <output_dir> --allowHTML
 
 Where:
 
-- `source_dir` is the directory where the contents of [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs) is cloned.
-- `output_dir` is the output directory for HTML files.
+* `source_dir` is the directory where the contents of [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs) is cloned.
+* `output_dir` is the output directory for HTML files.
 
 Building the documentation takes a few seconds and there should be no errors logged to the stdout log.
 
@@ -31,6 +31,6 @@ python3 -m http.server 8888 -d ~/docs/ydboss
 
 With the server run in this way, the locally built documentation is available at the links:
 
-- [http://localhost:8888/ru](http://localhost:8888/ru) (in Russian)
-- [http://localhost:8888/en](http://localhost:8888/en) (in English)
+* [http://localhost:8888/ru](http://localhost:8888/ru) (in Russian)
+* [http://localhost:8888/en](http://localhost:8888/en) (in English)
 

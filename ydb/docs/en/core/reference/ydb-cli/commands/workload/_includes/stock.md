@@ -88,8 +88,12 @@ See the description of the command to run the data load:
 | `--threads <value>` | `-t <value>` | The number of parallel threads creating the load. Default value: 10. |
 | `--quiet` | - | Outputs only the final test result. |
 | `--print-timestamp` | - | Print the time together with the statistics of each time window. |
+| `--client-timeout` | - | [Transport timeout in milliseconds](../../../../../best_practices/timeouts.md). |
+| `--operation-timeout` | - | [Operation timeout in milliseconds](../../../../../best_practices/timeouts.md). |
+| `--cancel-after` | - | [Timeout for canceling an operation in milliseconds](../../../../../best_practices/timeouts.md). |
+| `--window` | - | Statistics collection window in seconds. Default: 1. |
 
-## getCustomerHistory load {#getCustomerHistory}
+## getCustomerHistory load{#getCustomerHistory}
 
 This type of load reads the specified number of orders for the customer with id = 10000.
 
@@ -120,7 +124,7 @@ To run this type of load, execute the command:
 | --- | --- | --- |
 | `--limit <value>` | `-l <value>` | The required number of orders. Default value: 10. |
 
-## getRandomCustomerHistory load {#getRandomCustomerHistory}
+## getRandomCustomerHistory load{#getRandomCustomerHistory}
 
 This type of load reads the specified number of orders from randomly selected customers.
 
@@ -151,7 +155,7 @@ To run this type of load, execute the command:
 | --- | --- | --- |
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
-## insertRandomOrder load {#insertRandomOrder}
+## insertRandomOrder load{#insertRandomOrder}
 
 This type of load creates a randomly generated order. The order includes several different products, 1 item per product. The number of products in the order is generated randomly based on an exponential distribution.
 
@@ -241,7 +245,7 @@ To run this type of load, execute the command:
 | --- | --- | --- |
 | `--products <value>` | `-p <value>` | Number of products in the test. The default value is 100. |
 
-## submitSameOrder load {#submitSameOrder}
+## submitSameOrder load{#submitSameOrder}
 
 This type of load creates an order with the same set of products and processes it. Order processing consists in decreasing the number of ordered products in stock.
 
@@ -290,13 +294,13 @@ To run this type of load, execute the command:
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
-* `specific workload options`: [Parameters of a specific type of load](#submit_same_order_options)
+* `specific workload options`: [Parameters of a specific type of load](#submit_same_order_options).
 
 ### Parameters for submitSameOrder {#submit_same_order_options}
 
 | Parameter name | Short name | Parameter description |
 | --- | --- | --- |
-| `--products <value>` | `-p <value>` | Number of products per order. The default value is 100. |
+| `--products <value>` | `-p <value>`| | Number of products per order. The default value is 100. |
 
 ## Examples of running the loads
 
@@ -364,4 +368,3 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 * `p99(ms)`: 99th percentile of request latency, in ms.
 * `pMax(ms)`: 100th percentile of request latency, in ms.
 * `Timestamp`: Timestamp of the end of the time window.
-

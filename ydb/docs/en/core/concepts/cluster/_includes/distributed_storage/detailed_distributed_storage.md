@@ -37,12 +37,12 @@
 All information stored in BS_CONTROLLER can be grouped into:
 
 1. BS_CONTROLLER settings.
-2. Low-level configuration (PDisks, VDisks, and groups).
-3. Top-level configuration (Boxes and StoragePools).
-4. Runtime information (persistent disk and group metrics, the status of scrubbing of individual VDisks, information about node drive serial numbers).
-5. OperationLogs.
+1. Low-level configuration (PDisks, VDisks, and groups).
+1. Top-level configuration (Boxes and StoragePools).
+1. Runtime information (persistent disk and group metrics, the status of scrubbing of individual VDisks, information about node drive serial numbers).
+1. OperationLogs.
 
-The operation logic is built so that all table data at the start of the BS_CONTROLLER tablet is loaded into memory and stored there for the entire time of its operation (with the exception of OperationLog). When executing transactions, the data is updated in tables and in memory.
+The functional logic is built to load all table data (with the exception of OperationLog) into memory when the BS_CONTROLLER tablet starts and to keep them there for the entire time it is up. When executing transactions, the data is updated in tables and in memory.
 
 The tables are discussed in more detail below.
 
@@ -354,4 +354,3 @@ VSlot
 ### Messages via pipe
 
 ### Transaction types
-

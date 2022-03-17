@@ -19,4 +19,3 @@ This overlay allows redefining the content, preserving the placement of articles
 Since the overlay of the `core` and `overlay` directories is only done when building the documentation, links from the articles in `overlay` to the articles in `core` won't be clickable in an integrated development environment (IDE) that knows nothing about the fact that some directories will be overlaid on top of each other during the build.
 
 {% endnote %}
-

@@ -31,4 +31,3 @@ Command {
 ```
 kikimr -s <endpoint> admin bs config invoke --proto-file DefineStoragePool.txt
 ```
-

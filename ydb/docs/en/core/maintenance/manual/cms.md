@@ -41,4 +41,3 @@ The UsageScope field is optional and is needed to use settings for a specific te
 ```
 ./kikimr -s <endpoint> admin console configs update <protobuf-file>
 ```
-

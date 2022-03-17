@@ -7,4 +7,3 @@ To delete the table copies from the DB and the completed operation from the list
 ```
 {{ ydb-cli }} -e $YDB_ENDPOINT -d $YDB_DB_PATH operation forget 'ydb://export/6?id=283824558378666&kind=s3'
 ```
-

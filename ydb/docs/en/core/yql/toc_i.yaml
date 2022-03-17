@@ -1,6 +1,6 @@
 items:
-- name: Обзор
+- name: Overview
   href: reference/index.md
 - include: { mode: link, path: reference/toc_i.yaml }
-- name: Туториал YQL
+- name: YQL tutorial
   include: { mode: link, path: tutorial/toc_i.yaml }

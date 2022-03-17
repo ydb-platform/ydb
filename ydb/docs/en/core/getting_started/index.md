@@ -1,1 +1,6 @@
-{% include [index.md](_includes/index.md) %}
+---
+title: Getting started with Yandex Database (YDB). Overview
+---
+
+# Getting started with {{ ydb-name }}
+

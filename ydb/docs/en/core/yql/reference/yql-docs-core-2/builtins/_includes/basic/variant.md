@@ -8,7 +8,7 @@ Arguments:
 * String with a field name or tuple index
 * Variant type
 
-**Example**
+**Example:**
 
 ```yql
 $var_type = Variant<foo: Int32, bar: Bool>;
@@ -25,7 +25,7 @@ Arguments:
 * Value
 * A string with the field name
 
-**Example**
+**Example:**
 
 ```yql
 SELECT

@@ -6,19 +6,18 @@ OpenSource SDKs in the following programming languages are available to work wit
 
 {% if oss %}
 
-- C++ [https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp)
+* C++ [https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp)
 {% endif %}
-- C# (.NET) [https://github.com/ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk)
-- Go [https://github.com/ydb-platform/ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk) (archived versions: [v1](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) and [v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2))
-- Java [https://github.com/yandex-cloud/ydb-java-sdk](https://github.com/yandex-cloud/ydb-java-sdk)
-- Node.js [https://github.com/yandex-cloud/ydb-nodejs-sdk](https://github.com/yandex-cloud/ydb-nodejs-sdk)
-- PHP [https://github.com/yandex-cloud/ydb-php-sdk](https://github.com/yandex-cloud/ydb-php-sdk)
-- Python [https://github.com/yandex-cloud/ydb-python-sdk](https://github.com/yandex-cloud/ydb-python-sdk)
+* C# (.NET) [https://github.com/ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk)
+* Go [https://github.com/ydb-platform/ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk) (archived versions: [v1](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) and [v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2))
+* Java [https://github.com/yandex-cloud/ydb-java-sdk](https://github.com/yandex-cloud/ydb-java-sdk)
+* Node.js [https://github.com/yandex-cloud/ydb-nodejs-sdk](https://github.com/yandex-cloud/ydb-nodejs-sdk)
+* PHP [https://github.com/yandex-cloud/ydb-php-sdk](https://github.com/yandex-cloud/ydb-php-sdk)
+* Python [https://github.com/yandex-cloud/ydb-python-sdk](https://github.com/yandex-cloud/ydb-python-sdk)
 
 The SDK documentation contains the following sections:
 
-- [Installation](../install.md)
-- [Authentication](../auth.md)
-- [Test app](../example/index.md)
-- [Code recipes](../recipes/index.md)
-
+* [Installation](../install.md)
+* [Authentication](../auth.md)
+* [Test app](../example/index.md)
+* [Code recipes](../recipes/index.md)

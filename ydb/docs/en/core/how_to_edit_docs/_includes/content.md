@@ -2,7 +2,7 @@
 
 ## Introduction {#intro}
 
-The source code of the documentation is created in [Markdown](https://en.wikipedia.org/wiki/Markdown) format with [YFM (Yandex Flavoured Markdown)](https://ydocs.tech/) extensions. An effective way to quickly learn these formats is to study the source code of the available {{ ydb-short-name }} documentation.
+Documentation source code is created as [Markdown]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Markdown){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Markdown){% endif %} with the [YFM (Yandex Flavoured Markdown)]{% if lang == "en" %}(https://ydocs.tech/en/){% endif %}{% if lang == "ru" %}(https://ydocs.tech/ru/){% endif %} extensions. An effective way to quickly learn these formats is to study the source code of the available {{ ydb-short-name }} documentation.
 
 In addition to the formal rules described here, always keep in mind the following: if a rule is not formally described for some topic, you should look at how this has been done elsewhere in the documentation and do it by analogy.
 
@@ -10,7 +10,7 @@ Also remember that there are exceptions to any rules and it is impossible to des
 
 ## Documentation core and customization
 
-The OpenSource {{ ydb-short-name }} documentation lets you create customized documentation based on it for enterprise environments using {{ ydb-short-name }} or for cloud providers that provide the {{ ydb-short-name }} service in their ecosystems.
+The OpenSource {{ ydb-short-name }} documentation lets you create customized derivative documentation sets for enterprise environments using {{ ydb-short-name }} or for cloud providers that provide access to the {{ ydb-short-name }} service through their ecosystems.
 
 When adding content, you should first choose where to add it: to the OpenSource core or to some customization. The general recommendation is to add content to the OpenSource block in such a way that it can be read in different contexts without the need for its specific adaptation. Only when this can't be done or the placement of some content in the OpenSource core is explicitly prohibited (for example, links to intranet resources in an enterprise context), you can proceed to adding content to the source code of the documentation customization.
 
@@ -18,8 +18,8 @@ When adding content, you should first choose where to add it: to the OpenSource 
 
 In the sections where the requirements differ for basic content and customization, there are two corresponding bookmarks:
 
-- **Core**: The core of any documentation, the basic content.
-- **Overlay**: Content that is overlaid on top of the core and adapting it to a custom build.
+* **Core**: The core of any documentation, the basic content.
+* **Overlay**: Content that is overlaid on top of the core and adapting it to a custom build.
 
 All the content of the OpenSource build is part of the core, and zero customization is applied when building it, so when you change it, you'll only need the "Core" bookmark.
 
@@ -31,9 +31,9 @@ The basic structure of the source code directories is based on the subject of th
 
 Each subject directory must contain the "Overview" article with the `index.md` filename. The "Overview" article:
 
-- Describes what the articles in this directory tell about.
-- Optionally, provides a list of links to all or some of the most important articles.
-- Optionally, provides a set of "See also" links to other related articles and sections.
+* Describes what the articles in this directory tell about.
+* Optionally, provides a list of links to all or some of the most important articles.
+* Optionally, provides a set of "See also" links to other related articles and sections.
 
 The presence of the "Overview" article lets you refer to the entire directory rather than a specific article and convert articles into directories without losing the referential integrity.
 
@@ -78,9 +78,9 @@ The presence of the "Overview" article lets you refer to the entire directory ra
   `subject1/article1.md`:
 
   ```markdown
-  
+
   {% include [definition.md](_includes/article1/definition.md) %}
-  
+
   {% include [examples.md](_includes/article1/examples.md) %}
   ```
 
@@ -106,7 +106,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
   When redefining the content, you can:
 
-  - Add additional content to the beginning or end of an article.
+  * Add additional content to the beginning or end of an article.
 
     `subject1/article1.md`:
 
@@ -117,7 +117,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
     In addition to the basic authorization methods, our company uses nanotube-based authorization.
     ```
 
-  - Insert additional content between include directives.
+  * Insert additional content between include directives.
 
     `subject1/article1.md`:
 
@@ -133,7 +133,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
     The quick brown fox jumps over the lazy dog.
     ```
 
-  - Remove some of the content of the original article from the build by removing the corresponding include directive.
+  * Remove some of the content of the original article from the build by removing the corresponding include directive.
 
     `subject1/article1.md`:
 
@@ -155,10 +155,10 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
 ### Specifics of using the include directive {#include-hints}
 
-- The `_includes` contents are not published, so it is useless and forbidden to refer to them, it can only be included in articles by the `{% include ... %}` directive. Unfortunately, when building documentation locally, the contents of _includes remain available and operational, and the error only occurs when deploying the documentation on the farm.
-- Make sure to leave empty lines around the `{% include ... %}` directive, otherwise, it won't be executed during the build.
-- Write a file name in square brackets so that there is something to click on when viewing it in the default viewer on github (which does not understand what include is), and so that one include in it visually differs from the other.
-- After `{%` at the beginning and before `%}`, a space is required at the end, otherwise the include won't be executed during the build.
+* The `_includes` contents are not published, so it is useless and forbidden to refer to them, it can only be included in articles by the `{% include ... %}` directive. Unfortunately, when building documentation locally, the contents of _includes remain available and operational, and the error only occurs when deploying the documentation on the farm.
+* Make sure to leave empty lines around the `{% include ... %}` directive, otherwise, it won't be executed during the build.
+* Write a file name in square brackets so that there is something to click on when viewing it in the default viewer on github (which does not understand what include is), and so that one include in it visually differs from the other.
+* After `{%` at the beginning and before `%}`, a space is required at the end, otherwise the include won't be executed during the build.
 
 ### Other use cases for include {#include-reuse}
 
@@ -187,7 +187,7 @@ Each article must be mentioned in the Table Of Contents (TOC) file, otherwise it
       ...
       ```
 
-  1. `toc_p.yaml`: Contains fixed content including the "Overview" article and a link to `toc_i.yaml`:
+  2. `toc_p.yaml`: Contains fixed content including the "Overview" article and a link to `toc_i.yaml`:
 
       ```yaml
       items:
@@ -263,9 +263,9 @@ There are two types of links:
 1. To the source code of the documentation. These are always relative links to some .md file. The more transitions "to a level up" or entries to nested directories this link has, the more likely it is that the documentation is poorly structured. Ideally, links should not navigate more than one level up or one directory down the hierarchy:
 
    ```md
-   To keep a kitten active, you [need to feed it](../feeding/index.md).
+   To keep a kitten active, you [need to feed it] (../feeding/index.md).
    ```
-1. To resources external to the documentation. These are fully-qualified URLs in which no index is ever added:
+2. To resources external to the documentation. These are fully-qualified URLs in which no index is ever added:
 
    ```md
    You can find a good choice of cat food at the [Pushok store](http://www.pushok.ru/catalog).
@@ -276,7 +276,7 @@ Text inside the square brackets displayed when rendering documentation should be
 There are situations when the URL of a resource has its own value and should be displayed in the documentation, for example, when publishing links to a repository on Github. In this case, it must be duplicated inside both square and regular brackets, since YFM, unlike standard Markdown, does not automatically recognize URLs in text:
 
 ```md
- {{ ydb-short-name }} repository on Github: [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
+{{ ydb-short-name }} repository on Github: [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
 ```
 
 ## Images {#pictures}
@@ -291,15 +291,15 @@ The text specified in square brackets is displayed in the browser until the imag
 
 Desirable image formats:
 
-- Charts: [.SVG](https://en.wikipedia.org/wiki/SVG)
-- Screenshots: [.PNG](https://en.wikipedia.org/wiki/Portable_Network_Graphics)
+* Charts: [.SVG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Scalable_Vector_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/SVG){% endif %}
+* Screenshots: [.PNG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Portable_Network_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/PNG){% endif %}
 
 Since an image is part of an article, it is impossible to post the image without this article. If there is no text of the article yet, determine the subject directory for its placement and the file name of the future article and only specify a link to the image in the text (keep in mind that the [text of the article is placed in the `_includes` subdirectory](#articles)!), and do not include the article itself in the TOC until it is ready for publication.
 
 When inserting images, you can also specify:
 
-- A hint to be shown when hovering over an image: `![Text](path/file "Hint")`. We don't recommend using it, since lots of modern devices have no mouse pointer.
-- Image size: `![Text](path/file =XSIZExYSIZE)`. We recommend that you use it when specifying the XSIZE for SVG images so that they are expanded properly by the width of the documentation screen, regardless of the resolution they were saved with: `![Diagram1](../_assets/diagram1.svg =800x)`. If you only specify the X-size in this way, the Y-size is selected automatically with the proportions maintained.
+* A hint to be shown when hovering over an image: `![Text](path/file "Hint")`. We don't recommend using it, since lots of modern devices have no mouse pointer.
+* Image size: `![Text](path/file =XSIZExYSIZE)`. We recommend that you use it when specifying the XSIZE for SVG images  so that they are expanded properly by the width of the documentation screen, regardless of the resolution they were saved with: `![Diagram1](../_assets/diagram1.svg =800x)`. If you only specify the X-size in this way, the Y-size is selected automatically with the proportions maintained.
 
 ## Backward compatibility {#compatibility}
 
@@ -312,7 +312,7 @@ If you need to convert an article into a set of articles within a new directory,
 If you cannot but move an article, do the following:
 
 1. At the previous location, publish an article saying "This article no longer exists, a new location is <here>, please update the link" or something like that. The main thing is to ensure that, when following the old link, the user does not receive the HTTP 404 Not found error and can understand where it has been moved, what it has been broken into, or that it has been actually deleted and why.
-1. At the old location of the article in the TOC, give a link to it with the `hidden` flag enabled:
+2. At the old location of the article in the TOC, give a link to it with the `hidden` flag enabled:
 
    ```yaml
    - name: Deprecated article
@@ -321,4 +321,3 @@ If you cannot but move an article, do the following:
    ```
 
 As a result, this article won't be listed anywhere in the TOC, but will be available when following a direct link provided that you keep it somewhere.
-

@@ -7,4 +7,3 @@ The absolute value of the number.
 ```yql
 SELECT Abs(-123); -- 123
 ```
-

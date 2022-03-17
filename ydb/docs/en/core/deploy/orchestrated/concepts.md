@@ -9,7 +9,7 @@ Deploying {{ ydb-short-name }} in {{ k8s }} is a simple and easy way to install 
 1. The kubectl command line tool is installed and cluster access is configured.
 1. [Dynamic Volume Provisioning](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/) is supported in clusters.
 
-For more information about Helm, see the [documentation](https://helm.sh/ru/docs/).
+For more about Helm, review [documentation]{% if lang == "en" %}(https://helm.sh/docs/){% endif %}{% if lang == "ru" %}(https://helm.sh/ru/docs/){% endif %}.
 
 A Helm chart installs a controller in the {{ k8s }} cluster. It implements the logic required for deploying {{ ydb-short-name }} components. The controller is based on the [Operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) pattern.
 

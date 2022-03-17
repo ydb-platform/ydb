@@ -11,4 +11,3 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
   {% include [go.md](jaeger/go.md) %}
 
 {% endlist %}
-

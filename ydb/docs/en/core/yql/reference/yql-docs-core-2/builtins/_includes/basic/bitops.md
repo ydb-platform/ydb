@@ -16,4 +16,3 @@ SELECT
     TestBit(1u, 0), -- true
     SetBit(8u, 0); -- 9
 ```
-

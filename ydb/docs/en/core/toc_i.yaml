@@ -6,13 +6,14 @@ items:
   include: { mode: link, path: getting_started/toc_p.yaml }
 
 # Main
-# - { name: Сценарии использования,                  include: { mode: link, path: solutions/toc_i.yaml },       when: audience == "external" }
+# - { name: Solutions,                  include: { mode: link, path: solutions/toc_i.yaml },       when: audience == "external" }
 - { name: Concepts,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Step-by-step instructions,                    include: { mode: link, path: operations/toc_p.yaml } }
 
 - { name: Recommendations,                            include: { mode: link, path: best_practices/toc_p.yaml } }
 - { name: Maintenance,                            include: { mode: link, path: maintenance/toc_p.yaml } }
 - { name: Diagnostics,                             include: { mode: link, path: troubleshooting/toc_p.yaml } }
+- { name: Admin,                       include: { mode: link, path: deploy/toc_p.yaml } }
 
 # References  
 - { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }

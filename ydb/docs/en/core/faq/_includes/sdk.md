@@ -1,15 +1,14 @@
 # SDK
 
-#### What may cause the error <q>Status: OVERLOADED Error: Pending previous query completion</q> in the C++ SDK?
+#### What may cause the error "Status: OVERLOADED Error: Pending previous query completion" in the C++ SDK?
 
-Q: When running two queries, I try to get a response from the future method of the second one. It returns: ```Status: OVERLOADED Why: <main>: Error: Pending previous query completion```
+Q: When running two queries, I try to get a response from the future method of the second one. It returns: `Status: OVERLOADED Why: <main>: Error: Pending previous query completion`.
 
 A: Sessions in the SDK are single-threaded. To run multiple queries at once, you need to create multiple sessions.
 
 #### What should I do if the SDK crashes when shutting down an application? {#what-to-do-if-the-sdk-crashes-urgently-when-the-app-is-shut-down}
 
-Make sure not to wrap SDK components in a singleton, since their lifetime shouldn't exceed the execution time of the `main()` function. When a client is destroyed, session pools are emptied, so network navigation is required. But gRPC contains global static variables that might already be destroyed by this time. This disables gRPC.
-If you need to declare a driver as a global object, invoke the `Stop(true)` function on the driver before exiting the `main()` function.
+Make sure not to wrap SDK components in a singleton, since their lifetime shouldn't exceed the execution time of the `main()` function. When a client is destroyed, session pools are emptied, so network navigation is required. But gRPC contains global static variables that might already be destroyed by this time. This disables gRPC. If you need to declare a driver as a global object, invoke the `Stop(true)` function on the driver before exiting the `main()` function.
 
 #### What should I do if, when using a `fork()` system call, a program does not work properly in a child process? {#program-does-not-work-correctly-when-calling-fork}
 

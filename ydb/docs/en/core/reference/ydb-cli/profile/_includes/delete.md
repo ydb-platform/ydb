@@ -6,7 +6,7 @@ Currently, you can only delete profiles interactively with the following command
 {{ ydb-cli }} config profile delete <profile_name>
 ```
 
-, where `<profile_name>` is the profile name.
+where `<profile_name>` is the profile name.
 
 The {{ ydb-short-name }} CLI will request confirmation to delete the profile:
 
@@ -35,4 +35,3 @@ echo y | {{ ydb-cli }} config profile delete my_profile
 ```
 
 The efficiency of this method is not guaranteed in any way.
-

@@ -2,10 +2,10 @@
 
 ## Prerequisites {#prerequisites}
 
-To execute commands via the CLI, you need the database connection parameters you've got when [creating](../create_db.md) it:
+To run commands via the CLI, you will need database connection settings you can retrieve when [creating](../create_db.md) a connection:
 
-- [Endpoint](../../concepts/connect.md#endpoint)
-- [Database name](../../concepts/connect.md#database).
+* [Endpoint](../../concepts/connect.md#endpoint).
+* [Database name](../../concepts/connect.md#database).
 
 You may also need a token or login/password if the database requires [authentication](../auth.md). To execute the below scenario, you need to select an option for saving them in an environment variable.
 
@@ -50,7 +50,7 @@ If the command is successful, a list of objects in the database is shown in resp
 
 ## Creating a connection profile {#profile}
 
-To avoid specifying connection parameters every time you call the YDB CLI, use the [profile](../../reference/ydb-cli/profile/index.md). Creating the profile described below will also let you copy subsequent commands through the clipboard without editing them, regardless of what database you're using to complete the "Getting started" step.
+To avoid specifying connection parameters every time you call the YDB CLI, use the [profile](../../reference/ydb-cli/profile/index.md). Creating the profile described below will also let you copy subsequent commands through the clipboard without editing them regardless of which database you're using to complete the "Getting started" scenario.
 
 [Create the profile](../../reference/ydb-cli/profile/create.md) `db1` using the following command:
 
@@ -76,27 +76,27 @@ The {{ ydb-short-name }} CLI `scripting yql` command lets you execute any comman
 
 For example:
 
-- Creating a table
+* Creating a table:
 
   ```bash
-  {{ ydb-cli }} --profile db1 yql -s "create table t1(id uint64, primary key(id))"
+  {{ ydb-cli }} --profile db1 yql -s "create table t1( id uint64, primary key(id))"
   ```
 
-- Adding a record
+* Adding a record:
 
   ```bash
   {{ ydb-cli }} --profile db1 yql -s "insert into t1(id) values (1)"
   ```
 
-- Data selections
+* Data selects:
 
   ```bash
   {{ ydb-cli }} --profile db1 yql -s "select * from t1"
   ```
 
-If you get the error `Profile db1 does not exist`, it means that you failed to create it in the [previous step](#profile).
+If you get the `Profile db1 does not exist` error, that means you neglected to create a profile in the [previous step](#profile).
 
-## Specialized CLI сommands {#ydb-api}
+## Specialized CLI commands {#ydb-api}
 
 Executing commands via `ydb yql` is a nice and easy way to get started. However, the YQL interface supports a part of the function set provided by the YDB API, and has to sacrifice efficiency for universality.
 
@@ -105,4 +105,3 @@ The YDB CLI supports individual commands with complete sets of options for any e
 ## Learn more about YDB {#next}
 
 Proceed to the [YQL - Getting started](../yql.md) article to learn more about YDB.
-

@@ -11,4 +11,3 @@ Below are examples of the code for setting the "prefer the availability zone" ba
   {% include [go.md](prefer_location/go.md) %}
 
 {% endlist %}
-

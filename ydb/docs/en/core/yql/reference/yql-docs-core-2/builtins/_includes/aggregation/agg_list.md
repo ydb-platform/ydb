@@ -10,7 +10,7 @@ To return a list of multiple values from one line, *DO NOT* use the `AGGREGATE_L
 
 For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../../../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../../../syntax/group_by.md).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT  
@@ -33,7 +33,7 @@ These functions also have a short notation: `AGG_LIST` and `AGG_LIST_DISTINCT`.
 
 {% note alert %}
 
-Execution is **NOT** lazy, so when you use it, be sure that the list has a reasonable size (about a thousand items or less). To stay on the safe side, better use a second optional numeric argument that limits the number of items in the list.
+Execution is **NOT** lazy, so when you use it, be sure that the list has a reasonable size (about a thousand elements or less). To stay on the safe side, better use a second optional numeric argument that limits the number of items in the list.
 
 {% endnote %}
 

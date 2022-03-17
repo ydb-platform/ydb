@@ -1,4 +1,4 @@
-## {{ ydb-short-name }} architecture in different operating modes
+## {{ ydb-short-name }} architecture in different operating modes {#arch-diff}
 
 ### Separate compute and storage layers {#separate-layers}
 
@@ -10,7 +10,7 @@ It should be noted that the concept of a database comprises user tables and, acc
 
 ### {{ ydb-short-name }} Dedicated mode {#dedicated}
 
-Dedicated mode assumes that resources for tablet instances and for executing YQL queries are selected from the compute resources explicitly allocated to the database. Compute resources are VMs that have a certain amount of vCPUs and memory. The task of selecting the optimal amount of resources for the DB is currently the user's responsibility. If there aren't enough resources to serve the load, the latency of requests increases, which may eventually lead to the denial of service for requests, such as that with the ```OVERLOADED``` return code. The user can add compute resources (VMs) to the database in the UI or CLI to ensure it has the necessary amount of computing resources. Adding compute resources to the DB is relatively fast and comparable to the time it takes to start a VM. After that, {{ ydb-short-name }} automatically balances tablet instances across the cluster based on the resources added.
+Dedicated mode assumes that resources for tablet instances and for executing YQL queries are selected from the compute resources explicitly allocated to the database. Compute resources are VMs that have a certain amount of vCPUs and memory. The task of selecting the optimal amount of resources for the DB is currently the user's responsibility. If there aren't enough resources to serve the load, the latency of requests increases, which may eventually lead to the denial of service for requests, such as that with the `OVERLOADED` return code. The user can add compute resources (VMs) to the database in the UI or CLI to ensure it has the necessary amount of computing resources. Adding compute resources to the DB is relatively fast and comparable to the time it takes to start a VM. After that, {{ ydb-short-name }} automatically balances tablet instances across the cluster based on the resources added.
 
 ### {{ ydb-short-name }} Serverless mode {#serverless}
 

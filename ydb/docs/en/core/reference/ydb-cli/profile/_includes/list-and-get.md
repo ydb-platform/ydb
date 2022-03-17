@@ -42,4 +42,3 @@ Full information on all profiles and parameters stored in them:
 ```
 
 The output of this command combines the output of the command to get a list of profiles (with the active profile marked) and the parameters of each profile in the lines following its name.
-

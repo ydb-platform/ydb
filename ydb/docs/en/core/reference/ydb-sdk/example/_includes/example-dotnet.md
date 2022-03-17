@@ -1,6 +1,6 @@
 # App in C# (.NET)
 
-This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples), that uses the [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples), that is available as part of the [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk) {{ ydb-short-name }}.
 
 {% include [addition.md](auxilary/addition.md) %}
 

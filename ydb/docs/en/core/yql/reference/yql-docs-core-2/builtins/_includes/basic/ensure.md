@@ -16,7 +16,7 @@ Arguments:
 
 To check the conditions based on the final calculation result, it's convenient to combine Ensure with [DISCARD SELECT](../../../syntax/discard.md).
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT Ensure(
@@ -41,4 +41,3 @@ SELECT EnsureConvertibleTo(
     "expected value to be numeric"
 ) AS value FROM my_table;
 ```
-

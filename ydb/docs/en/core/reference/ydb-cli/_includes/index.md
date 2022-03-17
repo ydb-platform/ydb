@@ -18,4 +18,3 @@ For a full description of {{ ydb-short-name }} CLI commands, see the following a
 * [Working with secondary indexes](../commands/index-ops.md).
 * [Getting a list of DB endpoints](../commands/discovery-list.md).
 * [Load testing](../commands/workload/index.md).
-

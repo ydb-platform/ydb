@@ -1,2 +1,2 @@
-- [Built-in web interface](#embedded)
+* [Built-in web interface](#embedded)
 

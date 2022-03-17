@@ -36,7 +36,7 @@ Arguments:
 * The first argument passes the source structure to be expanded.
 * All the other arguments must be named, each argument adds a new field and the argument's name is used as the field's name (as in [AsStruct](../basic.md#asstruct)).
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1|>;
@@ -60,7 +60,7 @@ Arguments:
 2. Name of the new field.
 3. Value of the new field.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1|>;
@@ -83,7 +83,7 @@ Arguments:
 1. Source structure.
 2. Field name.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -105,7 +105,7 @@ Arguments:
 1. Source structure.
 2. Field name.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -127,7 +127,7 @@ Arguments:
 1. Source structure.
 2. List of field names.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2, c:3|>;
@@ -149,7 +149,7 @@ Arguments:
 1. Source structure.
 2. List of field names.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2, c:3|>;
@@ -171,7 +171,7 @@ Arguments:
 1. Source structure.
 2. List of field names.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2, c:3|>;
@@ -190,7 +190,7 @@ If the resulting field set contains duplicate values, an error is returned.
 
 Arguments: two or more structures.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct1 = <|a:1, b:2|>;
@@ -208,9 +208,9 @@ Combining the fields from multiple new structures into another new structure wit
 
 If the resulting field set contains duplicate values, an error is returned.
 
-Arguments: two or more tuples of two items: prefix and structure.
+Arguments: two or more tuples of two elements: prefix and structure.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct1 = <|a:1, b:2|>;
@@ -228,7 +228,7 @@ Returns an unordered list of field names (possibly removing one Optional level) 
 
 Argument: structure
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -245,7 +245,7 @@ Arguments:
 1. Source structure.
 2. A tuple of field names: the original name, the new name.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -262,7 +262,7 @@ Arguments:
 1. Source structure.
 2. A tuple of field names: the original name, the new name.
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -272,11 +272,11 @@ SELECT
 
 ## GatherMembers {#gathermembers}
 
-Returns an unordered list of tuples including the field name and value. For the `NULL` argument, `EmptyList` is returned. It can be used only in the cases when the types of items in the structure are the same or compatible. Returns an optional list for an optional structure.
+Returns an unordered list of tuples including the field name and value. For the `NULL` argument, `EmptyList` is returned. It can be used only in the cases when the types of elements in the structure are the same or compatible. Returns an optional list for an optional structure.
 
 Argument: structure
 
-**Examples**
+**Examples:**
 
 ```yql
 $struct = <|a:1, b:2|>;
@@ -286,14 +286,14 @@ SELECT
 
 ## SpreadMembers {#spreadmembers}
 
-Creates a structure with a specified list of fields and applies a specified list of edits to it in the format (field name, field value). All types of fields in the resulting structure are the same and equal to the type of values in the update list with added Optional (unless they are optional already). If the field wasn't mentioned among the list of updated fields, it's returned as `NULL`. Among all updates for a field, the latest one is written. If the update list is Optional or `NULL`, the result has the same type. If the list of edits includes a field that is not in the list of expected fields, an error is returned.
+Creates a structure with a specified list of fields and applies to it the specified list of updates in the format (field name, field value). All types of fields in the resulting structure are the same and equal to the type of values in the update list with added Optional (unless they are optional already). If the field wasn't mentioned among the list of updated fields, it's returned as `NULL`. Among all updates for a field, the latest one is written. If the update list is Optional or `NULL`, the result has the same type. If the list of edits includes a field that is not in the list of expected fields, an error is returned.
 
 Arguments:
 
 1. List of tuples: field name, field value.
 2. A list of all possible field names in the structure.
 
-**Examples**
+**Examples:**
 
 ```yql
 
@@ -303,18 +303,17 @@ SELECT
 
 ## ForceSpreadMembers {#forcespreadmembers}
 
-Creates a structure with a specified list of fields and applies to it the specified list of updates in the format (field name, field value). All types of fields in the resulting structure are the same and equal to the type of values in the update list with added Optional (unless they are optional already). If the field wasn't mentioned among the list of updated fields, it's returned as `NULL`. Among all updates for a field, the latest one is written. If the update list is optional or equal to `NULL`, the result has the same type. If the list of updates includes a field that is not in the list of expected fields, this edit is ignored.
+Creates a structure with a specified list of fields and applies to it the specified list of updates in the format (field name, field value). All types of fields in the resulting structure are the same and equal to the type of values in the update list with added Optional (unless they are optional already). If the field wasn't mentioned among the list of updated fields, it's returned as `NULL`. Among all updates for a field, the latest one is written. If the update list is Optional or `NULL`, the result has the same type. If the list of updates includes a field that is not in the list of expected fields, this edit is ignored.
 
 Arguments:
 
 1. List of tuples: field name, field value.
 2. A list of all possible field names in the structure.
 
-**Examples**
+**Examples:**
 
 ```yql
 
 SELECT
   ForceSpreadMembers([('a',1),('a',2),('c',100)],['a','b']); -- (a: 2, b: null)
 ```
-

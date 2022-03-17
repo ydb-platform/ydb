@@ -7,7 +7,7 @@ The {{ ydb-short-name }} SDK uses an object that is responsible for generating t
 1. Ad-hoc methods for different [authentication modes](../../../concepts/connect.md#auth-modes) with explicit parameter transfer.
 2. A method that determines the authentication mode and the necessary parameters from the environment where the application is run.
 
-Usually, a token generation object is created before initializing the {{ ydb-short-name }} driver and passed as a parameter to its builder. The C++ and Go SDKs additionally let you work with multiple databases and token generation objects through a single driver.
+Usually, you create a token generation object before you initialize the {{ ydb-short-name }} driver, and you pass the object to the driver constructor as a parameter. The C++ and Go SDKs additionally let you work with multiple databases and token generation objects through a single driver.
 
 If a token generation object is not defined, the driver won't add any authentication information to requests. This may let you successfully connect to locally deployed {{ ydb-short-name }} clusters that require no authentication. For all databases available over the network, such requests will be rejected with an authentication error returned.
 
@@ -42,9 +42,9 @@ You can click on any of the methods described below to go to the source code of 
   | [Mode](../../../concepts/connect.md#auth-modes) | Method |
   | ----- | ----- |
   | Anonymous | [`com.yandex.ydb.core.auth.NopAuthProvider.INSTANCE`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/anonymous_credentials) |
-  | Access Token | [`com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(`</br>&nbsp;&nbsp;&nbsp;&nbsp;`yandex.cloud.sdk.auth.provider.IamTokenCredentialProvider`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.builder()`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.token(accessToken)`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.build()`</br>`);`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/access_token_credentials) |
-  | Metadata | [`com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(`</br>&nbsp;&nbsp;&nbsp;&nbsp;`yandex.cloud.sdk.auth.provider.ComputeEngineCredentialProvider`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.builder()`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.build()`</br>`);`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/metadata_credentials) |
-  | Service Account Key | [`com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(`</br>&nbsp;&nbsp;&nbsp;&nbsp;`yandex.cloud.sdk.auth.provider.ApiKeyCredentialProvider`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.builder()`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.fromFile(Paths.get(saKeyFile))`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.build()`</br>`);`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/service_account_credentials) |
+  | Access Token | [`com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(`</br> `yandex.cloud.sdk.auth.provider.IamTokenCredentialProvider`</br> `.builder()`</br> `.token(accessToken)`</br> `.build()`</br>`);`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/access_token_credentials) |
+  | Metadata | [`com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(`</br> `yandex.cloud.sdk.auth.provider.ComputeEngineCredentialProvider`</br> `.builder()`</br> `.build()`</br>`);`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/metadata_credentials) |
+  | Service Account Key | [`com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(`</br> `yandex.cloud.sdk.auth.provider.ApiKeyCredentialProvider`</br> `.builder()`</br> `.fromFile(Paths.get(saKeyFile))`</br> `.build()`</br>`);`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/service_account_credentials) |
   | Determined by environment variables | [`com.yandex.ydb.auth.iam.CloudAuthHelper.getAuthProviderFromEnviron();`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/environ/src/main/java/com/yandex/ydb/example) |
 
 - Node.js
@@ -80,9 +80,8 @@ The behavior of the Python SDK differs from the one described above.
 {% endnote %}
 
 1. The algorithm for determining the authentication mode and the necessary parameters from the environment variables in the `construct_credentials_from_environ()` method differs from the one used in other SDKs:
-   - If the value of the `USE_METADATA_CREDENTIALS` environment variable is set to 1, the **Metadata** authentication mode is used.
-   - Otherwise, if the value of the `YDB_TOKEN`  environment variable is set, the **Access Token** authentication mode is used, where this variable value is passed.
-   - Otherwise, if the value of the `SA_KEY_FILE` environment variable is set, the **System Account Key** authentication mode is used and the key is taken from the file whose name is specified in this variable.
-   - Or else, no authentication information is added to requests.
+   * If the value of the `USE_METADATA_CREDENTIALS` environment variable is set to 1, the **Metadata** authentication mode is used.
+   * Otherwise, if the value of the `YDB_TOKEN`  environment variable is set, the **Access Token** authentication mode is used, where this variable value is passed.
+   * Otherwise, if the value of the `SA_KEY_FILE` environment variable is set, the **System Account Key** authentication mode is used and the key is taken from the file whose name is specified in this variable.
+   * Or else, no authentication information is added to requests.
 2. If no object responsible for generating tokens is passed when initializing the driver, the [general procedure](#env) for reading environment variable values applies.
-

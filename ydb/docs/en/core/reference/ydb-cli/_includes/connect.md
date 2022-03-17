@@ -23,8 +23,8 @@ DB connection options in the command line are specified before defining the comm
 {{ ydb-cli }} <connection_options> <command> <command_options>
 ```
 
-- `-e, --endpoint <endpoint>` : [Endpoint](../../../concepts/connect.md#endpoint): The main connection parameter that allows finding the {{ ydb-short-name }} server on the network. If no port is specified, port 2135 is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
-- `-d, --database <database>` : [DB location](../../../concepts/connect.md#database).
+* `-e, --endpoint <endpoint>` : [Endpoint](../../../concepts/connect.md#endpoint): The main connection parameter that allows finding the {{ ydb-short-name }} server on the network. If no port is specified, port 2135 is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
+* `-d, --database <database>` : [DB location](../../../concepts/connect.md#database).
 
 {% include [auth/options.md](auth/options.md) %}
 
@@ -36,13 +36,13 @@ The profile may define most variables similar to the options from the [Command l
 
 ## Parameters from environment variables {#env}
 
-If the profile is not explicitly specified in the command line or the authentication parameters are not set in it, the {{ ydb-short-name }} CLI tries to determine the authentication mode and parameters by the {{ ydb-short-name }} CLI environment as follows:
+If you did not explicitly specify a profile or authentication parameters at the command line, the {{ ydb-short-name }} CLI attempts to determine the authentication mode and parameters from the {{ ydb-short-name }} CLI environment as follows:
 
 {% include [env.md](auth/env.md) %}
 
 ## Parameters from the activated profile {#activated-profile}
 
-If any connection parameter could not be determined in the previous steps and the profile was not explicitly specified in the command line with the `--profile` option, the {{ ydb-short-name }} CLI tries to use the connection parameters from the [activated profile](../profile/activate.md).
+If some connection parameter could not be determined in the previous steps, and you did not explicitly specify a profile at the command line with the `--profile` option, the {{ ydb-short-name }} CLI attempts to use the connection parameters from the [activated profile](../profile/activate.md).
 
 ## Error messages {#errors}
 
@@ -54,17 +54,16 @@ If all the steps described in the beginning of this article are completed, but t
 
 If the authentication mode is known, but the necessary additional parameters are not, the command is aborted and an error message describing the issue is returned:
 
-- `(No such file or directory) util/system/file.cpp:857: can't open "<filepath>" with mode RdOnly|Seq (0x00000028)`: Couldn't open and read the `<filepath>` file specified in one of the parameters with the file name and path.
+* `(No such file or directory) util/system/file.cpp:857: can't open "<filepath>" with mode RdOnly|Seq (0x00000028)`: Couldn't open and read the `<filepath>` file specified in one of the parameters with the file name and path.
 
 ## Additional parameters {#additional}
 
 When using gRPCs (with encryption), you may need to [select a root certificate](../../../concepts/connect.md#tls-cert):
 
-- `--ca-file <filepath>` : Root certificate PEM file for a TLS connection.
+* `--ca-file <filepath>` : Root certificate PEM file for a TLS connection.
 
 Currently, root certificates are not stored in profiles and can only be defined by command line options.
 
-## Authentication {#whoami}
+## Verifying authentication {#whoami}
 
 The {{ ydb-short-name }} CLI [`discovery whoami`](../commands/discovery-whoami.md) auxiliary command lets you check the account that you actually used to authenticate with the server.
-

@@ -195,7 +195,7 @@ Test how {{ ydb-short-name }} works:
       └─────────┘
       ```
 
-      Learn more about {{ ydb-short-name }} CLI commands in the [documentation](https://cloud.yandex.com/en/docs/ydb/oss/public/reference/ydb-cli/commands/).
+      For more on {{ ydb-short-name }} CLI commands, see the [documentation](../../../reference/ydb-cli/index.md).
 
 {% endlist %}
 

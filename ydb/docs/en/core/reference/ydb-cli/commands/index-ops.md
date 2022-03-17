@@ -1,6 +1,6 @@
 {% include [intro.md](_includes/operations-index/intro.md) %}
 
-{% include [operation-index.md](_includes/operations-index/operation-index.md) %}
+{% include [operation-index.md](_includes/operations-index/operation-index.md %}
 
 {% include [operations-index-exp.md](_includes/operations-index/operations-index-exp.md) %}
 

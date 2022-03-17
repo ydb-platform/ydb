@@ -89,7 +89,7 @@ func describeTable(ctx context.Context, sp *table.SessionPool, path string) (err
 {% include [query_processing.md](../_includes/steps/04_query_processing.md) %}
 
 To execute YQL queries, use the `Session.Execute()` method.
-The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the ```TxControl``` class.
+The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxControl` class.
 
 ```go
 var (
@@ -211,4 +211,3 @@ Query results:
 ```
 
 {% include [error_handling.md](../_includes/steps/50_error_handling.md) %}
-

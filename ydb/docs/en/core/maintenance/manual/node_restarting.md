@@ -6,7 +6,7 @@ To make sure that the process is stoppable, follow these steps.
 
 1. Access the node via SSH.
 
-1. Execute the command
+1. Execute the command:
 
     ```bash
     kikimr cms request restart host {node_id} --user {user} --duration 60 --dry --reason 'some-reason'
@@ -14,13 +14,13 @@ To make sure that the process is stoppable, follow these steps.
 
     If the process is stoppable, you'll see `ALLOW`.
 
-1. Stop the process
+1. Stop the process:
 
     ```bash
     sudo service kikimr stop
     ```
 
-1. Restart the process if needed
+1. Restart the process if needed:
 
    ```bash
     sudo service kikimr start
@@ -38,4 +38,3 @@ Go to the [Hive web-viewer](../embedded_monitoring/hive.md) page.
 Click "View Nodes" to see a list of all nodes.
 
 Before disabling the node, first disable the transfer of tablets through the Active button, then click Drain, and wait for all the tablets to be moved away.
-

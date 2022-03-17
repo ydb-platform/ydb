@@ -7,7 +7,7 @@
 | `Yson` | [YSON](https://yt.yandex-team.ru/docs/description/common/yson.html) in a textual or binary representation. | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) | Not supported for table columns |
 
-{% note info "Cell size restrictions" %}
+{% note info %}
 
 The maximum value size for a {% if feature_map_tables %}non-key {% endif %} column cell with any string data type is 8 MB.
 

@@ -27,7 +27,6 @@ Attach a set of files to the query by URL. Works similarly to adding multiple fi
 | One or two arguments: the file name and an optional URL | — | Static |
 
 Treat the specified attached file as a library from which you can do [IMPORT](../../export_import.md). The syntax type for the library is determined from the file extension:
-
 * `.sql`: For the YQL dialect of SQL <span style="color: green;">(recommended)</span>.
 * `.yql`: For [s-expressions](/docs/s_expressions).
 
@@ -57,4 +56,3 @@ SELECT $x;
 ```
 
 {% endif %}
-

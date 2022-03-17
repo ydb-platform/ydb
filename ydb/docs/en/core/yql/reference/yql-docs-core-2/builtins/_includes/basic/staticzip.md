@@ -13,4 +13,3 @@ $two = <|k1:3.0, k2:4|>;
 -- Adding two structures item-by-item
 SELECT StaticMap(StaticZip($one, $two), ($tuple)->($tuple.0 + $tuple.1)) AS sum;
 ```
-

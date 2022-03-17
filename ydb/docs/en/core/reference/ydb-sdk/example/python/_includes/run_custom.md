@@ -9,12 +9,12 @@ Run the command as follows:
 python3 ydb-python-sdk/examples/basic_example_v1/ -e <endpoint> -d <database>
 ```
 
-, where
+Where:
 
-- `<endpoint>` is the [Endpoint](../../../../../concepts/connect.md#endpoint).
-- `<database>` is the [DB location](../../../../../concepts/connect.md#database).
-- `<auth_mode_var`> is the [Environment variable](../../../auth.md#env) that determines the authentication mode.
-- `<auth_mode_value>` is the authentication parameter value for the selected mode.
+* `<endpoint>` is the [Endpoint](../../../../../concepts/connect.md#endpoint)
+* `<database>` is the [DB location](../../../../../concepts/connect.md#database).
+* `<auth_mode_var`> is the [Environment variable](../../../auth.md#env) that determines the authentication mode.
+* `<auth_mode_value>` is the authentication parameter value for the selected mode.
 
 For example:
 
@@ -24,4 +24,3 @@ python3 ydb-python-sdk/examples/basic_example_v1/ -e grpcs://ydb.example.com:213
 ```
 
 {% include [../../_includes/pars_from_profile_hint.md](../../_includes/pars_from_profile_hint.md) %}
-

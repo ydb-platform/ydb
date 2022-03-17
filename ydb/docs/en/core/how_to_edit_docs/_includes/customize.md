@@ -8,9 +8,9 @@ The `overlay` subdirectory is designed for customizing content and is technical 
 
 A file with an article in `core` never contains content directly, it only contains one or more instructions of include blocks of this content stored in the `_includes` subdirectory. As a result, replacing this file in `overlay` does not lead to the need to copy the content, but lets you make the following types of its adaptation:
 
-- Add additional content to the beginning or end of an article.
-- Insert additional content between include directives.
-- Remove some of the content of the original article from the build by removing the corresponding include directive.
+* Add additional content to the beginning or end of an article.
+* Insert additional content between include directives.
+* Remove some of the content of the original article from the build by removing the corresponding include directive.
 
 Instructions for placing articles in core and overlay are given in the [Content creation guide - Articles](content.md#articles).
 
@@ -26,7 +26,7 @@ As with articles, a proxy approach is used for TOC files as follows:
 1. If there is no need to adjust the contents of the TOC in a certain directory, no toc* files are created in `overlay`. This results in using toc_p --> toc_i from core in the build.
 1. If the contents of the TOC need to be adjusted in a certain directory, a file named `toc_p.yaml` is created in `overlay` with the `- include: { mode: link, path: toc_i.yaml }` from core added to its content and additional items for the adapted build added above or below.
 
-It is a good practice to exclude the "Overview" item from toc_i.yaml and include it directly in toc_p.yaml. This article must be the first in each submenu and always has the same article name (index.md). Including a separate item in toc_p lets you add new articles to the adapted documentation before the articles from core, but keeping the "Overview" in the first place:
+It is good practice not to include the "Overview" in toc_i.yaml but rather include it directly in toc_p.yaml instead. This article must be the first in each submenu and always has the same article name (index.md). Including a separate item in toc_p lets you add new articles to the adapted documentation before the articles from core, but keeping the "Overview" in the first place:
 
 toc_p.yaml in some corporate overlay:
 
@@ -56,4 +56,3 @@ A TOC file name may not be `toc.yaml`, since the build tool searches for files w
 The only exception is the initial `toc.yaml` that is placed in the documentation build root and always contains the command to copy the core content and proceed to TOC handling in core: `include: { mode: merge, path: core/toc_m.yaml }`.
 
 Instructions for making a TOC in core and overlay are given in the [Content creation guide - TOC](content.md#toc).
-

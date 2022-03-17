@@ -10,7 +10,7 @@ Make sure you have SSH access to all servers. This is necessary to install artif
 Your network configuration must allow TCP connections on the following ports (by default):
 
 * 2135, 2136: GRPC for client-cluster interaction.
-* 19001, 19002: Interconnect  for intra-cluster node interaction.
+* 19001, 19002 - Interconnect for intra-cluster node interaction.
 * 8765, 8766: The HTTP interface for cluster monitoring.
 
 Check out the [Production checklist](../production_checklist.md) and the recommended cluster topology and select the servers and disks to be used for data storage:
@@ -29,7 +29,7 @@ sudo groupadd ydb
 sudo useradd ydb -g ydb
 ```
 
-To make sure the {{ ydb-short-name }} server has access to block store disks to run, add the user to start the process under to the disk group.
+To make sure the {{ ydb-short-name }} server has access to block store disks to run, add the user to start the process under to the disk group:
 
 ```bash
 sudo usermod -aG disk ydb
@@ -43,11 +43,11 @@ We don't recommend using disks that are used by other processes (including the O
 
 {% endnote %}
 
-1. Create a partition on the selected disk
+1. Create a partition on the selected disk.
 
 {% note alert %}
 
-Be careful! The following operation will delete all partitions on the specified disks!
+Be careful! The following step will delete all partitions on the specified disks!
 Make sure that you specified the disks that have no other data!
 
 {% endnote %}
@@ -87,7 +87,7 @@ sudo cp -i ydbd-main-linux-amd64/lib/libiconv.so /opt/ydb/lib/
 sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
 ```
 
-3. Format the disk with the built-in command
+3. Format the disk with the built-in command:
 
 ```bash
 sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_01 
@@ -101,11 +101,11 @@ Prepare the configuration files:
 
 - Unprotected mode
 
-  In this mode, traffic between cluster nodes and between the client and cluster uses an unencrypted connection. Use this mode for testing purposes.
+  In this mode, traffic between cluster nodes and between client and cluster uses an unencrypted connection. Use this mode for testing purposes.
 
   {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
-  Save the {{ ydb-short-name }} configuration file as `/opt/ydb/cfg/config.yaml`
+  Save the {{ ydb-short-name }} configuration file as `/opt/ydb/cfg/config.yaml`.
 
 - Protected mode
 
@@ -113,14 +113,14 @@ Prepare the configuration files:
 
   {% include [generate-ssl.md](_includes/generate-ssl.md) %}
 
-  Create directories for certificates on each node
+  Create directories for certificates on each node:
 
   ```bash
   mkdir /opt/ydb/certs
   chmod 0750 /opt/ydb/certs
   ```
 
-  Copy the node certificates and keys
+  Copy the node certificates and keys:
 
   ```bash
   sudo -u ydb cp certs/ca.crt certs/node.crt certs/node.key /opt/ydb/certs/
@@ -137,7 +137,7 @@ Prepare the configuration files:
         path_to_certificate_file: "/opt/ydb/certs/node.crt"
         path_to_private_key_file: "/opt/ydb/certs/node.key"
         path_to_ca_file: "/opt/ydb/certs/ca.crt"
-  
+
     grpc_config:
         cert: "/opt/ydb/certs/node.crt"
         key: "/opt/ydb/certs/node.key"
@@ -153,7 +153,6 @@ Prepare the configuration files:
 {% list tabs %}
 
 - Manual
-
   1. Run {{ ydb-short-name }} storage on each node:
 
   ```bash
@@ -167,7 +166,6 @@ Prepare the configuration files:
   TBD: how and where to write logs? Log rotation
 
 - Using systemd
-
   1. On each node, create a configuration file named `/etc/systemd/system/ydbd-storage.service` with the following content:
 
   ```text
@@ -177,7 +175,7 @@ Prepare the configuration files:
   Wants=network-online.target
   StartLimitInterval=10
   StartLimitBurst=15
-  
+
   [Service]
   Restart=always
   RestartSec=1
@@ -193,7 +191,7 @@ Prepare the configuration files:
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=3221225472
-  
+
   [Install]
   WantedBy=multi-user.target
   ```
@@ -210,7 +208,7 @@ Prepare the configuration files:
 On one of the cluster nodes, run the command:
 
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml ; echo $?
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file /opt/ydb/cfg/config.yaml ; echo $?
 ```
 
 The command execution code should be null.
@@ -228,7 +226,6 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
 {% list tabs %}
 
 - Manual
-
   1. Start the {{ ydb-short-name }} dynamic node for the /Root/testdb database:
 
   ```bash
@@ -242,7 +239,6 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   Run additional dynamic nodes on other servers to ensure database availability.
 
 - Using systemd
-
   1. Create a configuration file named `/etc/systemd/system/ydbd-testdb.service` with the following content:
 
   ```text
@@ -283,7 +279,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
 
 ## Test the created database {# try-first-db}
 
-1. Install the YDB CLI as described in [Installing the YDB CLI](../../reference/ydb-cli/install.md)
+1. Install the YDB CLI as described in [Installing the YDB CLI](../../reference/ydb-cli/install.md).
 2. Create a `test_table`:
 
 ```bash
@@ -291,5 +287,4 @@ ydb -e grpc://<node1.domain>:2136 -d /Root/testdb scripting yql \
 --script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
 ```
 
-Where node.domain is the FQDN of the server where the dynamic nodes serving the `/Root/testdb` database are running.
-
+Where node.domain is the FQDN of the server running the dynamic nodes that support the `/Root/testdb` database.

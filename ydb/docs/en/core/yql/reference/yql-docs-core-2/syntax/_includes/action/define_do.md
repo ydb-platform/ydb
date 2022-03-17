@@ -4,7 +4,7 @@ Specifies a named action that is a parameterizable block of multiple top-level e
 
 **Syntax**
 
-1. `DEFINE ACTION`: action definition.
+1. `DEFINE ACTION`: Action definition.
 1. [Action name](../../expressions.md#named-nodes) that will be used to access the defined action further in the query.
 1. The values of parameter names are listed in parentheses.
 1. `AS` keyword.
@@ -48,4 +48,3 @@ DO $hello_world(NULL);
 DO $hello_world("John");
 DO $hello_world(NULL, "Earth");
 ```
-

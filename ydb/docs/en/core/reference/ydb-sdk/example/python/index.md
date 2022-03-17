@@ -8,7 +8,7 @@ The start scenario given below uses [git](https://git-scm.com/downloads) and [Py
 
 Create a working directory and use it to run from the command line the command to clone the GitHub repository and install the necessary Python packages:
 
-```bash
+``` bash
 git clone https://github.com/ydb-platform/ydb-python-sdk.git
 python3 -m pip install iso8601
 ```
@@ -79,7 +79,6 @@ The given code snippet outputs the following text to the console at startup:
 ('column, name:', 'series_info', ',', 'type_id: UTF8')
 ('column, name:', 'release_date', ',', 'type_id: UINT64')
 ```
-
 {% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
 Code snippet for inserting and updating data:
@@ -133,6 +132,7 @@ When the query is executed, `result_set` is returned whose iteration outputs the
 > SelectSimple:
 series, Id: 1, title: IT Crowd, Release date: 2006-02-03
 ```
+
 
 {% include [param_prep_queries.md](../_includes/steps/07_param_prep_queries.md) %}
 

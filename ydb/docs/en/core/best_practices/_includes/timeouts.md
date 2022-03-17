@@ -1,8 +1,17 @@
 ---
-title: Using timeouts in YDB
+title: Using timeouts in Yandex Database (YDB)
 description: 'The operation_timeout value determines the time during which the query result is interesting to the user. If the operation has not been performed during this time, the server returns an error with the Timeout code and tries to terminate the execution of the request, but the cancellation of the request is not guaranteed. It is always recommended to set both the operation timeout and the transport timeout.'
 ---
+
 This section describes available timeouts and provides examples of their usage in various programming languages.
+
+## Prerequisites for using timeouts
+
+The timeout mechanism in YDB is designed to:
+1) Make sure the query execution time doesn't exceed a certain interval after which its result is not interesting for further use.
+2) Detect network connectivity issues.
+
+Both of these use cases are important for ensuring the fault tolerance of the entire system. Let's take a closer look at timeouts.
 
 ## Operation timeout
 
@@ -14,7 +23,7 @@ The ``cancel_after`` value shows the time after which the server will start canc
 
 ## Transport timeout
 
-The client can set a transport timeout for each query. This value lets you determine the amount of time that the client is ready to wait for a response from the server. If the server doesn't respond during this time, the client will get a transport error with the ``DeadlineExceeded`` code.
+The client can set a transport timeout for each query. This value lets you determine the amount of time that the client is ready to wait for a response from the server. If the server doesn't respond during this time, the client will get a transport error with the ``DeadlineExceeded`` code. Be sure to set such a client timeout value that won't trigger transport timeouts under the normal operation of the application and network.
 
 ## Using timeouts
 
@@ -28,7 +37,7 @@ Timeout usage example:
 
   ```python
   from kikimr.public.sdk.python import client as ydb
-  
+
   def execute_in_tx(session, query):
     settings = ydb.BaseRequestSettings()
     settings = settings.with_timeout(0.5)  # transport timeout
@@ -49,10 +58,10 @@ Timeout usage example:
   #include <ydb/public/sdk/cpp/client/ydb.h>
   #include <ydb/public/sdk/cpp/client/ydb_table.h>
   #include <ydb/public/sdk/cpp/client/ydb_value.h>
-  
+
   using namespace NYdb;
   using namespace NYdb::NTable;
-  
+
   TAsyncStatus ExecuteInTx(TSession& session, TString query, TParams params) {
     return session.ExecuteDataQuery(
         query
@@ -74,7 +83,7 @@ Timeout usage example:
       "a.yandex-team.ru/kikimr/public/sdk/go/ydb"
       "a.yandex-team.ru/kikimr/public/sdk/go/ydb/table"
   )
-  
+
   func executeInTx(ctx context.Context, s *table.Session, query string) {
       newCtx, close := context.WithTimeout(ctx, time.Millisecond*300)         // client and by default operation timeout
       newCtx2 := ydb.WithOperationTimeout(newCtx, time.Millisecond*400)       // operation timeout override
@@ -86,4 +95,3 @@ Timeout usage example:
   ```
 
 {% endlist %}
-

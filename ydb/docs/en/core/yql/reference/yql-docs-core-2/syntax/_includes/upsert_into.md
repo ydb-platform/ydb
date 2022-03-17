@@ -5,7 +5,7 @@ Adds or updates multiple rows in a table based on primary key matching. Missing 
 {% if feature_mapreduce %} The table is searched by name in the database specified by the [USE](../use.md) operator.{% endif %}
 
 {% if feature_replace %}
-`UPSERT` and [`REPLACE`](../replace_into.md) are data modification operations that don't require a prefetch and run faster and cheaper than other operations because of that.
+`UPSERT` and [`REPLACE`](../replace_into.md) are data modification operations that don't require a pre-fetch and run faster and cheaper than other operations because of that.
 {% else %}
 `UPSERT` is the only data modification operation that doesn't require prefetching and runs faster and cheaper than other operations because of that.
 {% endif %}

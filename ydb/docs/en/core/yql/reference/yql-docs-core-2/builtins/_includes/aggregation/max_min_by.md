@@ -19,7 +19,7 @@ If the second argument is always NULL, the aggregation result is NULL.
 
 When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregateby) argument.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT

@@ -4,7 +4,7 @@
 
 #### How do I select table rows by a list of keys? {#explicit-keys}
 
-You can select table rows from the specified list of values of the table's primary key (or key prefix) using the IN operator:
+You can select table rows from the specified list of values of the table's primary key (or key prefix) using the `IN` operator:
 
 ```sql
 DECLARE $keys AS List<UInt64>;
@@ -26,7 +26,7 @@ To select rows effectively, make sure that the value types in the parameters mat
 
 #### Is search by index performed for conditions containing the LIKE operator? {#like-index}
 
-You can only use the LIKE operator to search by table index if it sets the row prefix:
+You can only use the `LIKE` operator to search by table index if it sets the row prefix:
 
 ```sql
 SELECT * FROM string_key_table
@@ -37,7 +37,7 @@ WHERE Key LIKE "some_prefix%";
 
 1000 rows is the response size limit per YQL query. If a response is shortened, it is flagged as `Truncated`. To output more table rows, you can use [paginated output](../../best_practices/paging.md) or the `ReadTable` operation.
 
-#### What should I do if I get the <q>Datashard: Reply size limit exceeded</q> error? {#reply-size-exceeded}
+#### What should I do if I get the "Datashard: Reply size limit exceeded" error? {#reply-size-exceeded}
 
 This error means that, when executing the query, an attempt was made to return more than 50 MB of data from one of the involved datashards, which exceeds the allowed limit.
 
@@ -47,7 +47,7 @@ Recommendations:
 * If a Join operation is running, make sure that its method is [Index Lookup Join](#index-lookup-join).
 * If a simple selection is performed, make sure that it is done by keys, or add `LIMIT` in the query.
 
-#### What should I do if I get the <q>Datashard program size limit exceeded</q> error? {#program-size-exceeded}
+#### What should I do if I get the "Datashard program size limit exceeded" error? {#program-size-exceeded}
 
 This error means that the size of the program (including the parameter values) for one of the datashards exceeded the 50 MB limit. In most cases, this indicates an attempt to write more than 50 MB of records to database tables in one transaction. All modifying operations in a transaction such as `UPSERT`, `REPLACE`, `INSERT`, or `UPDATE` count as records.
 
@@ -55,7 +55,7 @@ You need to reduce the total size of records in one transaction. Normally, we do
 
 #### How do I update only those values whose keys are not in the table? {#update-non-existent}
 
-You can use LEFT JOIN to mark the keys that are missing from the table and then update their values:
+You can use `LEFT JOIN` to mark the keys that are missing from the table and then update their values:
 
 ```sql
 DECLARE $values AS List<Struct<Key: UInt64, Value: String>>;
@@ -74,8 +74,8 @@ WHERE t.Key IS NULL;
 
 Join operations in {{ ydb-short-name }} are performed in one of two ways:
 
-* Common Join
-* Index Lookup Join
+* Common Join.
+* Index Lookup Join.
 
 #### Common Join {#common-join}
 
@@ -83,7 +83,7 @@ The contents of both tables (the left and right parts of a Join) are sent to the
 
 #### Index Lookup Join {#index-lookup-join}
 
-For rows from the left part of a Join operation, a lookup is performed for the corresponding values in the right part. This method is used when the right part is a table and the Join operation key is the prefix of its primary key or of the secondary index key. In this method, limited selections are made from the right table instead of full reads. This lets you use it when working with large tables.
+For rows from the left part of a `Join` operation, a lookup is performed for the corresponding values in the right part. This method is used when the right part is a table and the `Join` operation key is the prefix of its primary key or of the secondary index key. In this method, limited selections are made from the right table instead of full reads. This lets you use it when working with large tables.
 
 {% note info %}
 
@@ -105,7 +105,7 @@ ON t.Key1 = d.Key1 AND t.Key2 = d.Key2;
 
 There is no explicit limit on the number of entries in the constant table, but mind the standard limit on the total size of query parameters (50 MB).
 
-#### What is the best way to implement a query like (key1, key2) IN ((v1, v2), (v3, v4), ...) {#key-pairs-in}?
+#### What is the best way to implement a query like (key1, key2) IN ((v1, v2), (v3, v4), ...)? {#key-pairs-in}
 
 It's better to write it using a JOIN with a constant table:
 

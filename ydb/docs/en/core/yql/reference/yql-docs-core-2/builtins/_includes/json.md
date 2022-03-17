@@ -85,9 +85,9 @@ In this query:
 
 The result of executing all JsonPath expressions is a sequence of JSON values. For example:
 
-- The result of executing the `"Bobbie"` expression is a sequence with the only element `"Bobbie"`. Its length is 1.
-- The result of executing the `$` expression (that takes the entire JSON object) in JSON `[1, 2, 3]` is `[1, 2, 3]`. A sequence of 1 element of the array `[1, 2, 3]`
-- The result of executing the `$[*]` expression (retrieving all array elements) in JSON `[1, 2, 3]` is `1, 2, 3`. A sequence of three items:`1`, `2`, and `3`
+* The result of executing the `"Bobbie"` expression is a sequence with the only element `"Bobbie"`. Its length is 1.
+* The result of executing the `$` expression (that takes the entire JSON object) in JSON `[1, 2, 3]` is `[1, 2, 3]`. A sequence of 1 element of the array `[1, 2, 3]`.
+* The result of executing the `$[*]` expression (retrieving all array elements) in JSON `[1, 2, 3]` is `1, 2, 3`. A sequence of three items:`1`, `2`, and `3`.
 
 If the input sequence consists of multiple values, some operations are performed for each element (for example, accessing a JSON object key). However, other operations require a sequence of one element as input (for example, binary arithmetic operations).
 
@@ -159,7 +159,7 @@ JsonPath supports accessing JSON object keys, such as `$.session.user.name`.
 
 {% note info %}
 
-Accessing keys without quotes is only supported for keys that start with an English letter or underscore and only contain English letters, underscores, numbers, and a dollar sign. Use quotes for all other keys. For example, `$.profile."this string has spaces"` or `$.user."42 is the answer"`
+Accessing keys without quotes is only supported for keys that start with an English letter or underscore and only contain English letters, underscores, numbers, and a dollar sign. Use quotes for all other keys. For example, `$.profile."this string has spaces"` or `$.user."42 is the answer"`.
 
 {% endnote %}
 
@@ -241,7 +241,7 @@ For each value from the input sequence:
 6. If a segment is specified and its start index is greater than the end index (for example, `$[20 to 1]`), the query fails in `strict` mode. In `lax` mode, this segment is ignored.
 7. All elements by the specified indexes are added to the result. Segments include **both ends**.
 
-**Examples**:
+**Examples:**
 
 ```json
 [
@@ -356,7 +356,7 @@ If each argument of a binary operation is not a single number or a number is div
 
 Unlike some other programming languages, Boolean values in JsonPath are not only `true` and `false`, but also `null` (uncertainty).
 
-JsonPath considers any values received from a JSON document to be non-Boolean. For example, a query like `! $.is_valid_user` (a logical negation applied to the `is_valid_user`)  field is syntactically invalid because the `is_valid_user` field value is not Boolean (even when it actually stores `true` or `false`). The correct way to write this kind of query is to explicitly use a comparison with a Boolean value, such as `$.is_valid_user == false`.
+JsonPath considers any values received from a JSON document to be non-Boolean. For example, a query like `! $.is_valid_user` (a logical negation applied to the `is_valid_user`) field is syntactically invalid because the `is_valid_user` field value is not Boolean (even when it actually stores `true` or `false`). The correct way to write this kind of query is to explicitly use a comparison with a Boolean value, such as `$.is_valid_user == false`.
 
 ### Logical operations
 
@@ -405,10 +405,10 @@ In the truth table, the first column is the left argument, the first row is the 
 
 JsonPath implements comparison operators for values:
 
-- Equality, `==`
-- Inequality, `!=`and `<>`
-- Less than and less than or equal to, `<` and `=`
-- Greater than and greater than or equal to, `>` and `>=`
+* Equality, `==`
+* Inequality, `!=`and `<>`
+* Less than and less than or equal to, `<` and `=`
+* Greater than and greater than or equal to, `>` and `>=`
 
 All comparison operators return a Boolean value. Both operator arguments support multiple values.
 
@@ -418,30 +418,30 @@ The arrays of each of the arguments are automatically unpacked. After that, for 
 
 1. The elements of the pair are compared
 2. If an error occurs during the comparison, the `ERROR` flag is set.
-3. If the comparison result is true, the flag set is `FOUND`
+3. If the comparison result is true, the flag set is `FOUND`.
 4. If either the `ERROR` or `FOUND` flag is set and the query is executed in `lax` mode, no more pairs are analyzed.
 
 If the pair analysis results in:
 
-1. The `ERROR` flag is set, the operator returns `null`
-2. The `FOUND` flag is set, the operator returns `true`
-3. Otherwise, it returns `false`
+1. The `ERROR` flag is set, the operator returns `null`.
+2. The `FOUND` flag is set, the operator returns `true`.
+3. Otherwise, it returns `false`.
 
 We can say that this algorithm considers all pairs from the Cartesian product of the left and right arguments, trying to find the pair whose comparison returns true.
 
 Elements in a pair are compared according to the following rules:
 
 1. If the left or right argument is an array or object, the comparison fails.
-2. `null == null` returns true
+2. `null == null` returns true.
 3. In all other cases, if one of the arguments is `null`, false is returned.
 4. If the left and right arguments are of different types, the comparison fails.
 5. Strings are compared byte by byte.
-6. `true` is considered greater than `false`
-7. Numbers are compared with the accuracy of `1e-20`
+6. `true` is considered greater than `false`.
+7. Numbers are compared with the accuracy of `1e-20`.
 
 **Example:**
 
-Let's take a JSON document as an example
+Let's take a JSON document as an example:
 
 ```json
 {
@@ -452,19 +452,19 @@ Let's take a JSON document as an example
 
 and analyze the steps for executing the `lax $.left < $.right` query:
 
-1. Auto unpacking of arrays in the left and right arguments. As a result, the left argument is the sequence `1, 2` and the right argument is `4, "Iranos"`
-2. Let's take the pair `(1, 4)`. The comparison is successful as `1 < 4` is true. Set the flag `FOUND`
+1. Auto unpacking of arrays in the left and right arguments. As a result, the left argument is the sequence `1, 2` and the right argument is `4, "Iranos"`.
+2. Let's take the pair `(1, 4)`. The comparison is successful as `1 < 4` is true. Set the flag `FOUND`.
 3. Since the query is executed in `lax` mode and the `FOUND` flag is set, we aren't analyzing any more pairs.
 4. Since we have the `FOUND` flag set, the operator returns true.
 
 Let's take the same query in a different execution mode: `strict $.left < $.right`:
 
-1. Auto unpacking of arrays in the left and right arguments. As a result, the left argument is the sequence `1, 2` and the right argument is `4, "Iranos"`
-2. Let's take the pair `(1, 4)`. The comparison is successful as `1 < 4` is true. Set the flag `FOUND`
-3. Let's take the pair `(2, 4)`. The comparison is successful as `2 < 4` is true. Set the flag `FOUND`
-4. Let's take the pair `(1, "Iranos")`. The comparison fails as a number can't be compared with a string. Set the flag `ERROR`
-5. Let's take the pair `(2, "Iranos")`. The comparison fails as a number can't be compared with a string. Set the flag `ERROR`
-6. Since we have the `ERROR` flag set, the operator returns `null`
+1. Auto unpacking of arrays in the left and right arguments. As a result, the left argument is the sequence `1, 2` and the right argument is `4, "Iranos"`.
+2. Let's take the pair `(1, 4)`. The comparison is successful as `1 < 4` is true. Set the flag `FOUND`.
+3. Let's take the pair `(2, 4)`. The comparison is successful as `2 < 4` is true. Set the flag `FOUND`.
+4. Let's take the pair `(1, "Iranos")`. The comparison fails as a number can't be compared with a string. Set the flag `ERROR`.
+5. Let's take the pair `(2, "Iranos")`. The comparison fails as a number can't be compared with a string. Set the flag `ERROR`.
+6. Since we have the `ERROR` flag set, the operator returns `null`.
 
 ### Predicates
 
@@ -507,7 +507,7 @@ If the pair analysis results in:
 2. Setting the `FOUND` flag, the predicate returns `true`
 3. Otherwise, the predicate returns `false`
 
-**Examples**
+**Examples:**
 
 1. `"123456" like_regex "^[0-9]+$"` returns `true`
 2. `"123abcd456" like_regex "^[0-9]+$"` returns `false`
@@ -539,21 +539,21 @@ The second argument of the predicate must be a sequence of (possibly, multiple) 
 
 For each element in a sequence of prefix strings:
 
-1. A check is made for whether "an element is a prefix of an input string"
+1. A check is made for whether "an element is a prefix of an input string".
 2. If the element isn't a string, the `ERROR` flag is set.
 3. If the check result is true, the `FOUND` flag is set.
 4. If either the `ERROR` or `FOUND` flag is set and the query is executed in `lax` mode, no more pairs are analyzed.
 
 If the pair analysis results in:
 
-1. Setting the `ERROR` flag, the predicate returns `null`
-2. Setting the `FOUND` flag, the predicate returns `true`
-3. Otherwise, the predicate returns `false`
+1. Setting the `ERROR` flag, the predicate returns `null`.
+2. Setting the `FOUND` flag, the predicate returns `true`.
+3. Otherwise, the predicate returns `false`.
 
-**Examples**
+**Examples:**
 
-1. `"James Holden" starts with "James"` returns `true`
-2. `"James Holden" starts with "Amos"` returns `false`
+1. `"James Holden" starts with "James"` returns `true`.
+2. `"James Holden" starts with "Amos"` returns `false`.
 
 #### `exists`
 
@@ -570,11 +570,11 @@ Where `<expression>` is the JsonPath expression to be checked. Parentheses aroun
 **Execution**
 
 1. The passed JsonPath expression is executed.
-2. If an error occurs, the predicate returns `null`
-3. If an empty sequence is obtained as a result of the execution, the predicate returns `false`
-4. Otherwise, the predicate returns `true`
+2. If an error occurs, the predicate returns `null`.
+3. If an empty sequence is obtained as a result of the execution, the predicate returns `false`.
+4. Otherwise, the predicate returns `true`.
 
-**Examples**
+**Examples:**
 
 Let's take a JSON document:
 
@@ -605,12 +605,12 @@ Where `<expression>` is the JsonPath expression to be checked. Only expressions 
 
 **Execution**
 
-1. If the passed expression returns `null`, the predicate returns `true`
-2. Otherwise, the predicate returns `false`
+1. If the passed expression returns `null`, the predicate returns `true`.
+2. Otherwise, the predicate returns `false`.
 
-**Examples**
+**Examples:**
 
-1. `(1 == 2) is unknown` returns `false`. The `1 == 2` expression returned `false`, which is not `null`
+1. `(1 == 2) is unknown` returns `false`. The `1 == 2` expression returned `false`, which is not `null`.
 2. `(1 == "string") is unknown` returns `true`. The `1 == "string"` expression returned `null`, because strings and numbers can't be compared in JsonPath.
 
 ### Filters
@@ -623,13 +623,13 @@ Before filtering, the input sequence arrays are automatically unpacked.
 For each element of the input sequence:
 
 1. The value of the current filtered `@` object becomes equal to the current element of the input sequence.
-2. Executing the expression in the filter
+2. Executing the expression in the filter.
 3. If an error occurs during the expression execution, the current element of the input sequence is skipped.
 4. If the expression execution result is the only `true` value, the current element is added to the filter result.
 
 **Example:**
 
-Suppose we have a JSON document describing the user's friends
+Suppose we have a JSON document describing the user's friends:
 
 ```json
 {
@@ -710,10 +710,10 @@ For each element of the input sequence, the method adds this string to the outpu
 | Array | `"array"` |
 | Object | `"object"` |
 
-**Examples**
+**Examples:**
 
-1. `"Naomi".type()` returns `"string"`
-2. `false.type()` returns `"boolean"`
+1. `"Naomi".type()` returns `"string"`.
+2. `false.type()` returns `"boolean"`.
 
 #### `size`
 
@@ -722,9 +722,9 @@ The `size` method returns the size of the array.
 For each element of the input sequence, the method adds the following to the output sequence:
 
 1. The size of the array if the element type is an array.
-2. For all other types (including objects), it adds `1`
+2. For all other types (including objects), it adds `1`.
 
-**Examples**
+**Examples:**
 
 Let's take a JSON document:
 
@@ -741,9 +741,9 @@ Let's take a JSON document:
 
 And queries to it:
 
-1. `$.array.size()` returns `3`
-2. `$.object.size()` returns `1`
-3. `$.scalar.size()` returns `1`
+1. `$.array.size()` returns `3`.
+2. `$.object.size()` returns `1`.
+3. `$.scalar.size()` returns `1`.
 
 #### `Double`
 
@@ -753,11 +753,11 @@ Before its execution, the input sequence arrays are automatically unpacked.
 
 All elements in the input sequence must be strings that contain decimal numbers. It's allowed to specify the fractional part and exponent.
 
-**Examples**
+**Examples:**
 
-1. `"125".double()` returns `125`
-2. `"125.456".double()` returns `125.456`
-3. `"125.456e-3".double()` returns `0.125456`
+1. `"125".double()` returns `125`.
+2. `"125.456".double()` returns `125.456`.
+3. `"125.456e-3".double()` returns `0.125456`.
 
 #### `ceiling`
 
@@ -767,12 +767,12 @@ Before its execution, the input sequence arrays are automatically unpacked.
 
 All elements in the input sequence must be numbers.
 
-**Examples**
+**Examples:**
 
-1. `(1.3).ceiling()` returns `2`
-2. `(1.8).ceiling()` returns `2`
-3. `(1.5).ceiling()` returns `2`
-4. `(1.0).ceiling()` returns `1`
+1. `(1.3).ceiling()` returns `2`.
+2. `(1.8).ceiling()` returns `2`.
+3. `(1.5).ceiling()` returns `2`.
+4. `(1.0).ceiling()` returns `1`.
 
 #### `floor`
 
@@ -782,12 +782,12 @@ Before its execution, the input sequence arrays are automatically unpacked.
 
 All elements in the input sequence must be numbers.
 
-**Examples**
+**Examples:**
 
-1. `(1.3).floor()` returns `1`
-2. `(1.8).floor()` returns `1`
-3. `(1.5).floor()` returns `1`
-4. `(1.0).floor()` returns `1`
+1. `(1.3).floor()` returns `1`.
+2. `(1.8).floor()` returns `1`.
+3. `(1.5).floor()` returns `1`.
+4. `(1.0).floor()` returns `1`.
 
 #### `abs`
 
@@ -797,11 +797,11 @@ Before its execution, the input sequence arrays are automatically unpacked.
 
 All elements in the input sequence must be numbers.
 
-**Examples**
+**Examples:**
 
-1. `(0.0).abs()` returns `0`
-2. `(1.0).abs()` returns `1`
-3. `(-1.0).abs()` returns `1`
+1. `(0.0).abs()` returns `0`.
+2. `(1.0).abs()` returns `1`.
+3. `(-1.0).abs()` returns `1`.
 
 #### `keyvalue`
 
@@ -819,7 +819,7 @@ For each element of the input sequence:
 4. `value` stores the value from the pair.
 5. All objects for this element are added to the output sequence.
 
-**Examples**
+**Examples:**
 
 Let's take a JSON document:
 
@@ -871,9 +871,9 @@ Unlike many programming languages, JsonPath doesn't support creating new variabl
 
 All functions for JSON accept:
 
-1. A JSON value (can be an arbitrary `Json` or `Json?` expression)
-2. A JsonPath query (must be explicitly specified with a string literal)
-3. **(Optional)** `PASSING` section
+1. A JSON value (can be an arbitrary `Json` or `Json?` expression).
+2. A JsonPath query (must be explicitly specified with a string literal).
+3. **(Optional)** `PASSING` section.
 
 ### PASSING section
 
@@ -890,13 +890,13 @@ PASSING
 
 `<expression>` can have the following types:
 
-- Numbers, `Date`, `DateTime`, and `Timestamp` (a `CAST` into `Double` will be made before passing a value to JsonPath)
-- `Utf8`, `Bool`, and `Json`
+* Numbers, `Date`, `DateTime`, and `Timestamp` (a `CAST` into `Double` will be made before passing a value to JsonPath)
+* `Utf8`, `Bool`, and `Json`
 
 You can set a `<variable name>` in several ways:
 
-- As an SQL name like `variable`
-- In quotes, for example, `"variable"`
+* As an SQL name like `variable`
+* In quotes, for example, `"variable"`
 
 **Example:**
 
@@ -988,37 +988,37 @@ JSON_VALUE(
 
 **Default values:**
 
-1. If the `ON EMPTY` section isn't specified, the section used is `NULL ON EMPTY`
-2. If the `ON ERROR` section isn't specified, the section used is `NULL ON ERROR`
-3. If the `RETURNING` section isn't specified, then for `<type>`, the type used is `Utf8`
+1. If the `ON EMPTY` section isn't specified, the section used is `NULL ON EMPTY`.
+2. If the `ON ERROR` section isn't specified, the section used is `NULL ON ERROR`.
+3. If the `RETURNING` section isn't specified, then for `<type>`, the type used is `Utf8`.
 
 **Behavior:**
 
-1. If `<JSON expression>` is `NULL` or an empty `Json?`, it returns an empty `<type>?`
+1. If `<JSON expression>` is `NULL` or an empty `Json?`, it returns an empty `<type>?`.
 2. If an error occurs, the returned value depends on the `ON ERROR` section:
-    - `NULL`: Return an empty `<type>?`
-    - `ERROR`: Abort the entire query
-    - `DEFAULT <expr>`: Return `<expr>` after running the `CAST` function to convert the data type to `<type>?`. If the `CAST` fails, the entire query fails, too.
+    * `NULL`: Return an empty `<type>?`.
+    * `ERROR`: Abort the entire query.
+    * `DEFAULT <expr>`: Return `<expr>` after running the `CAST` function to convert the data type to `<type>?`. If the `CAST` fails, the entire query fails, too.
 3. If the JsonPath execution result is empty, the returned value depends on the `ON EMPTY` section:
-    - `NULL`: Return an empty `<type>?`
-    - `ERROR`: Abort the entire query
-    - `DEFAULT <expr>`: Return `<expr>` after running the `CAST` function to convert the data type to `<type>?`. If the `CAST` fails, the behavior matches the `ON ERROR` section.
+    * `NULL`: Return an empty `<type>?`.
+    * `ERROR`: Abort the entire query.
+    * `DEFAULT <expr>`: Return `<expr>` after running the `CAST` function to convert the data type to `<type>?`. If the `CAST` fails, the behavior matches the `ON ERROR` section.
 4. If the result of JsonPath execution is a single value, then:
-    - If the `RETURNING` section isn't specified, the value is converted to `Utf8`.
-    - Otherwise, the `CAST` function is run to convert the value to `<type>`. If the `CAST` fails, the behavior matches the `ON ERROR` section. In this case, the value from JSON must match the `<type>` type.
-5. Return the result
+    * If the `RETURNING` section isn't specified, the value is converted to `Utf8`.
+    * Otherwise, the `CAST` function is run to convert the value to `<type>`. If the `CAST` fails, the behavior matches the `ON ERROR` section. In this case, the value from JSON must match the `<type>` type.
+5. Return the result.
 
 Correlation between JSON and YQL types:
 
-- JSON Number: Numeric types, `Date`, `DateTime`, and `Timestamp`
-- JSON Bool: `Bool`
-- JSON String: `Utf8` and `String`
+* JSON Number: Numeric types, `Date`, `DateTime`, and `Timestamp`.
+* JSON Bool: `Bool`.
+* JSON String: `Utf8` and `String`.
 
 Errors executing `JSON_VALUE` are as follows:
 
-- Errors evaluating JsonPath
-- The result of JsonPath execution is a number of values or a non-scalar value.
-- The type of value returned by JSON doesn't match the expected one.
+* Errors evaluating JsonPath.
+* The result of JsonPath execution is a number of values or a non-scalar value.
+* The type of value returned by JSON doesn't match the expected one.
 
 `The RETURNING` section supports such types as numbers, `Date`, `DateTime`, `Timestamp`, `Utf8`, `String`, and `Bool`.
 
@@ -1086,10 +1086,10 @@ JSON_QUERY(
 
 **Default values:**
 
-1. If the `ON EMPTY` section isn't specified, the section used is `NULL ON EMPTY`
-2. If the `ON ERROR` section isn't specified, the section used is `NULL ON ERROR`
-3. If the `WRAPPER` section isn't specified, the section used is `WITHOUT WRAPPER`
-4. If the `WITH WRAPPER` section is specified but `CONDITIONAL` or `UNCONDITIONAL` is omitted, then the section used is `UNCONDITIONAL`
+1. If the `ON EMPTY` section isn't specified, the section used is `NULL ON EMPTY`.
+2. If the `ON ERROR` section isn't specified, the section used is `NULL ON ERROR`.
+3. If the `WRAPPER` section isn't specified, the section used is `WITHOUT WRAPPER`.
+4. If the `WITH WRAPPER` section is specified but `CONDITIONAL` or `UNCONDITIONAL` is omitted, then the section used is `UNCONDITIONAL`.
 
 **Behavior:**
 
@@ -1099,27 +1099,27 @@ You can't specify the `WITH ... WRAPPER` and `ON EMPTY` sections at the same tim
 
 {% endnote %}
 
-1. If `<JSON expression>` is `NULL` or an empty `Json?`, it returns an empty `Json?`
+1. If `<JSON expression>` is `NULL` or an empty `Json?`, it returns an empty `Json?`.
 2. If the `WRAPPER` section is specified, then:
-    - `WITHOUT WRAPPER` or `WITHOUT ARRAY WRAPPER`: Don't convert the result of JsonPath execution in any way.
-    - `WITH UNCONDITIONAL WRAPPER` or `WITH UNCONDITIONAL ARRAY WRAPPER`: Wrap the result of JsonPath execution in an array.
-    - `WITH CONDITIONAL WRAPPER` or `WITH CONDITIONAL ARRAY WRAPPER`: Wrap the result of JsonPath execution in an array if it isn't the only array or object.
+    * `WITHOUT WRAPPER` or `WITHOUT ARRAY WRAPPER`: Don't convert the result of JsonPath execution in any way.
+    * `WITH UNCONDITIONAL WRAPPER` or `WITH UNCONDITIONAL ARRAY WRAPPER`: Wrap the result of JsonPath execution in an array.
+    * `WITH CONDITIONAL WRAPPER` or `WITH CONDITIONAL ARRAY WRAPPER`: Wrap the result of JsonPath execution in an array if it isn't the only array or object.
 3. If the JsonPath execution result is empty, the returned value depends on the `ON EMPTY` section:
-    - `NULL`: Return an empty `Json?`
-    - `ERROR`: Abort the entire query
-    - `EMPTY ARRAY`: Return an empty JSON array, `[]`
-    - `EMPTY OBJECT`: Return an empty JSON object, `{}`
+    * `NULL`: Return an empty `Json?`.
+    * `ERROR`: Abort the entire query.
+    * `EMPTY ARRAY`: Return an empty JSON array, `[]`.
+    * `EMPTY OBJECT`: Return an empty JSON object, `{}`.
 4. If an error occurs, the returned value depends on the `ON ERROR` section:
-    - `NULL`: Return an empty `Json?`
-    - `ERROR`: Abort the entire query
-    - `EMPTY ARRAY`: Return an empty JSON array, `[]`
-    - `EMPTY OBJECT`: Return an empty JSON object, `{}`
-5. Return the result
+    * `NULL`: Return an empty `Json?`.
+    * `ERROR`: Abort the entire query.
+    * `EMPTY ARRAY`: Return an empty JSON array, `[]`.
+    * `EMPTY OBJECT`: Return an empty JSON object, `{}`.
+5. Return the result.
 
 Errors running a `JSON_QUERY`:
 
-- Errors evaluating JsonPath
-- The result of JsonPath execution is a number of values (even after using the `WRAPPER` section) or a scalar value.
+* Errors evaluating JsonPath.
+* The result of JsonPath execution is a number of values (even after using the `WRAPPER` section) or a scalar value.
 
 **Examples:**
 
@@ -1147,4 +1147,3 @@ SELECT
     JSON_QUERY($json, "$.friends[0]" WITH CONDITIONAL WRAPPER), -- {"name": "James Holden", "age": 35}
     JSON_QUERY($json, "$.friends.name" WITH CONDITIONAL WRAPPER); -- ["James Holden", "Naomi Nagata"]
 ```
-

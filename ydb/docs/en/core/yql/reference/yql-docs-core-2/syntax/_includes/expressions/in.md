@@ -2,7 +2,7 @@
 
 Checking whether a value is inside of a set of values. It's logically equivalent to a chain of equality comparisons using `OR` but implemented more efficiently.
 
-{% note warning "Warning" %}
+{% note warning %}
 
 Unlike a similar keyword in Python, in YQL `IN ` **DOES NOT** searches for a substring inside a string. To search for a substring, use the function [String::Contains](../../../udf/list/string.md) or [LIKE/REGEXP](#like) mentioned above.
 
@@ -17,7 +17,7 @@ The `COMPACT` hint must be used with care. Since the hash table is built in-memo
 {% if feature_mapreduce %} Since YQL imposes a limit on the query size in bytes (it's about 1Mb), add large lists of values to your query by URLs and use the [ParseFile](../../../builtins/basic.md#parsefile) function.
 {% endif %}
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT column IN (1, 2, 3)

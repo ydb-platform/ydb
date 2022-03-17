@@ -1,6 +1,6 @@
 # Scan queries in {{ ydb-short-name }}
 
-*Scan Queries* is a separate data access interface designed primarily for performing analytical ad hoc queries on a DB.
+Scan Queries is a separate data access interface designed primarily for performing analytical ad hoc queries on a DB.
 
 This method of executing queries has the following unique features:
 
@@ -30,15 +30,15 @@ Despite the fact that *Scan Queries* obviously don't interfere with the executio
 
 {% endnote %}
 
-## How do I use it?
+## How do I use it? {#how-use}
 
 Like other types of queries, *Scan Queries* are available via the [management console]({{ link-console-main }}) (the query must specify `PRAGMA Kikimr.ScanQuery = "true";`), [CLI](../../reference/ydb-cli/commands/scan-query.md), and [SDK](../../reference/ydb-sdk/index.md).
 
 {% if oss %}
 
-### C++ SDK
+### C++ SDK {#cpp}
 
-To run a query using *Scan Queries*, use 2 methods from the `Ydb::TTableClient` class.
+To run a query using *Scan Queries*, use 2 methods from the `Ydb::TTableClient` class:
 
 ```cpp
 class TTableClient {
@@ -53,4 +53,3 @@ class TTableClient {
 ```
 
 {% endif %}
-

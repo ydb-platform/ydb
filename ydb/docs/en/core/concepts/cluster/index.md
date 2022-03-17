@@ -2,7 +2,6 @@
 
 The information in this section is mainly intended for {{ ydb-short-name }} administrators and developers.
 
-In ["General {{ ydb-short-name }} schema"](common_scheme_ydb.md), you can find an overview about nodes and tablets.
+The [General schema {{ ydb-short-name }}](common_scheme_ydb.md) provides general information on nodes and tablets.
 
-From ["Cluster's disk subsystem"](distributed_storage.md), you can learn about the {{ ydb-short-name }} distributed storage system.
-
+The [Cluster disk subsystem](distributed_storage.md) section presents more detail on the features of a distributed {{ ydb-short-name }} storage system.

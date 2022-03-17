@@ -1,8 +1,8 @@
 ## TOP and BOTTOM {#top-bottom}
 
-Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
+Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of elements.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT
@@ -27,7 +27,7 @@ Return a list of values of the first argument for the rows containing the maximu
 
 When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregateby) argument. In this case, the limit for the number of items is passed by the second argument at factory creation.
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT

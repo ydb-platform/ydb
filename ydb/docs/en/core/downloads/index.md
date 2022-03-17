@@ -1,9 +1,9 @@
-# Загрузки
+# Downloads
 
 ## {{ ydb-short-name }} CLI
 
-The {{ ydb-short-name }} CLI  provides software for managing your data in {{ ydb-short-name }}.
-To learn how to use, see the [{{ ydb-short-name }} CLI documentation](../reference/ydb-cli/index.md).
+The {{ ydb-short-name }} CLI provides software for managing your data in {{ ydb-short-name }}.
+Review the documentation on using the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md).
 
 {% list tabs %}
 
@@ -23,12 +23,11 @@ To learn how to use, see the [{{ ydb-short-name }} CLI documentation](../referen
 
   {% include notitle [Windows](_includes/ydb-cli/windows.md) %}
 
-
 {% endlist %}
 
-## {{ ydb-short-name }} Server
+## {{ ydb-short-name }} server
 
-Software to run {{ ydb-short-name }} server.
+Software to run a {{ ydb-short-name }} server.
 
 {% list tabs %}
 
@@ -43,6 +42,5 @@ Software to run {{ ydb-short-name }} server.
 - Source code
 
   {% include notitle [docker](_includes/server/source_code.md) %}
-
 
 {% endlist %}

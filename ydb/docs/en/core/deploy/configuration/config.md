@@ -206,5 +206,4 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 ## Sample cluster configurations
 
-The [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)  provides model examples of cluster configurations for self-deployment. Check them out before deploying a cluster.
-
+The [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/) provides model examples of cluster configurations for self-deployment. Check them out before deploying a cluster.

@@ -42,4 +42,3 @@ hosts:
     data_center: 'zone-c'
     rack: '1'
 ```
-

@@ -13,4 +13,3 @@ View all the included components and their licenses:
 ```bash
 docker run --rm -it --entrypoint cat {{ ydb_local_docker_image }} THIRD_PARTY_LICENSES
 ```
-

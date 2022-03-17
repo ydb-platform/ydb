@@ -25,4 +25,3 @@ Running the `{{ ydb-cli }} tools dump` command with the `--scheme-only` option o
 ```
 {{ ydb-cli }} -e $YDB_ENDPOINT -d $YDB_DB_PATH tools dump -p $YDB_DB_PATH/examples -o my_backup_of_basic_example/ --scheme-only
 ```
-

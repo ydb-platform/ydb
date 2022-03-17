@@ -1,6 +1,6 @@
 # Deploying {{ ydb-short-name }} in AWS EKS
 
-To create a [{{ ydb-short-name }}](https://cloud.yandex.com/en/docs/ydb/) cluster using [{{ k8s }}](https://kubernetes.io/), follow these steps.
+To use [{{ k8s }}](https://kubernetes.io/) to create a cluster [{{ ydb-short-name }}]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/ydb/){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/ydb/){% endif %}, follow the steps below.
 
 ## Before you start {#before-begin}
 

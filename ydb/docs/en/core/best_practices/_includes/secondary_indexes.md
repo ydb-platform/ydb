@@ -127,4 +127,3 @@ SELECT series_id,
 FROM series view views_index
 WHERE views == 0;
 ```
-

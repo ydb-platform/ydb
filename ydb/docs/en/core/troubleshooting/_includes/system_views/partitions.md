@@ -3,4 +3,3 @@
 Examples:
 
 {% include [example_yql](partitions_example_yql.md) %}
-

@@ -59,7 +59,6 @@ In {{ ydb-short-name }}, all columns, including key ones, may have a NULL value.
 ## Examples of paginated output implementation
 
 {% if oss %}
-
 * [C++](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/pagination)
 {% endif %}
 * [Java](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/src/main/java/com/yandex/ydb/examples/pagination)

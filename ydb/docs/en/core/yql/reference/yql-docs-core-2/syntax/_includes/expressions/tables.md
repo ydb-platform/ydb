@@ -35,7 +35,7 @@ SELECT $process[0].key; -- that returns 1
 SELECT FormatType(TypeOf($input)); -- throws an error: $input in a scalar context must contain one column
 ```
 
-{% note warning "Warning" %}
+{% note warning %}
 
 A common error is to use an expression in a scalar context rather than a table context or vector context. For example:
 

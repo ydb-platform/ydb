@@ -49,9 +49,9 @@ The first step of the interactive scenario is different in the `init` and `profi
 
 Next, you'll be prompted to sequentially perform the following actions with each connection parameter that can be saved in the profile:
 
-- Don't save
-- Set a new value or Use <value>
-- Use current value (this option is available when updating an existing profile)
+* Don't save.
+* Set a new value or Use - Set a new value or Use <value>.
+* Use current value (this option is available when updating an existing profile).
 
 ## Example
 
@@ -72,7 +72,7 @@ Creating a new `mydb1` profile:
     Please enter your numeric choice: 
     ```
 
-1. Enter the [DB name](../../../../concepts/connect.md#database)  or don't save this parameter for the profile:
+1. Enter the [DB name](../../../../concepts/connect.md#database) or don't save this parameter for the profile:
 
     ```text
     Pick desired action to configure database:
@@ -85,10 +85,10 @@ Creating a new `mydb1` profile:
 
     ```text
     Pick desired action to configure authentication method:
-     [1] Use IAM token (iam-token) cloud.yandex.com/en/docs/iam/concepts/authorization/iam-token
-     [2] Use OAuth token of a Yandex Passport user (yc-token) cloud.yandex.com/en/docs/iam/concepts/authorization/oauth-token
-     [3] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.com/en/docs/compute/operations/vm-connect/auth-inside-vm
-     [4] Use security account key file (sa-key-file) cloud.yandex.com/en/docs/iam/operations/iam-token/create-for-sa
+     [1] Use IAM token (iam-token) cloud.yandex.ru/docs/iam/concepts/authorization/iam-token
+     [2] Use OAuth token of a Yandex Passport user (yc-token) cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token
+     [3] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm
+     [4] Use security account key file (sa-key-file) cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa
      [5] Don't save authentication data for profile "mydb1"
     Please enter your numeric choice:
     ```
@@ -108,4 +108,3 @@ Creating a new `mydb1` profile:
     ```text
     Activate profile "mydb1" to use by default? (current active profile is not set) y/n: n
     ```
-

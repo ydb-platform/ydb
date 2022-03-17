@@ -6,13 +6,13 @@ No arguments. Returns a string with the full path or an empty string and warning
 
 {% note info %}
 
-The [TablePath](#tablepath), [TableName](#tablename), and [TableRecordIndex](#tablerecordindex) functions don't support temporary and anonymous tables (they return an empty string or 0 for [TableRecordIndex](#tablerecordindex)).
+The functions [TablePath](#tablepath), [TableName](#tablename), and [TableRecordIndex](#tablerecordindex) don't support temporary and anonymous tables (they return an empty row or 0 for [TableRecordIndex](#tablerecordindex)).
 These functions are calculated when [executing](../../../syntax/select.md#selectexec) projections in `SELECT`, and by that time the current table may already be temporary.
 To avoid such a situation, create a subquery for calculating these functions, as shown in the second example below.
 
 {% endnote %}
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT TablePath() FROM CONCAT(table_a, table_b);
@@ -32,7 +32,7 @@ Optional arguments:
 * Path to the table, `TablePath()` is used by default (see also its limitations).
 * Specifying the system ("yt") whose rules are used to determine the table name. You need to specify the system only if [USE](../../../syntax/select.md#use) doesn't specify the current cluster.
 
-**Examples**
+**Examples:**
 
 ```yql
 USE hahn;
@@ -49,9 +49,8 @@ Access to the current sequence number of a row in the physical source table, **s
 
 No arguments. When used in combination with [CONCAT](../../../syntax/select.md#concat), [RANGE](../../../syntax/select.md#range) and other similar mechanisms, numbering restarts for each input table. If used in an incorrect context, it returns 0.
 
-**Example**
+**Example:**
 
 ```yql
 SELECT TableRecordIndex() FROM my_table;
 ```
-

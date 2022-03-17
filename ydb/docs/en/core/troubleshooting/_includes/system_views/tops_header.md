@@ -50,4 +50,3 @@ Restrictions:
 * Query text limit is 4 KB.
 * Tables with minute intervals contain the history for the last 6 hours.
 * Tables with hourly intervals contain the history for the last 2 weeks.
-

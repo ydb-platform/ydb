@@ -21,12 +21,12 @@ FROM my_table;
 
 ## AggregateTransform... {#aggregatetransform}
 
-`AggregateTransformInput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of input items is performed before starting aggregation.
+`AggregateTransformInput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of input elements is performed before starting aggregation.
 
 Arguments:
 
 1. Aggregation factory.
-2. A lambda function with one argument that converts an input item.
+2. A lambda function with one argument that converts an input element.
 
 **Examples:**
 
@@ -57,7 +57,7 @@ select ListAggregate([1,2,3], $g); -- 12
 
 ## AggregateFlatten {#aggregateflatten}
 
-Adapts a factory for [aggregation functions](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function in a way that allows aggregation of list input items. This operation is similar to [FLATTEN LIST BY](../../../syntax/flatten.md): Each list item is aggregated.
+Adapts a factory for [aggregation functions](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function in a way that allows aggregation of list input elements. This operation is similar to [FLATTEN LIST BY](../../../syntax/flatten.md): Each list element is aggregated.
 
 Arguments:
 

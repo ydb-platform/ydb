@@ -76,4 +76,3 @@
     ```
     kikimr -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
     ```
-

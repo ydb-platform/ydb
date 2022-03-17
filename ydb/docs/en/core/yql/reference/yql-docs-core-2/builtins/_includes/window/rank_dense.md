@@ -11,7 +11,7 @@ Passing an argument to `RANK`/`DENSE_RANK` is a non-standard extension in YQL.
 
 {% endnote %}
 
-**Examples**
+**Examples:**
 
 ```yql
 SELECT
@@ -25,5 +25,4 @@ SELECT
    RANK() OVER w
 FROM my_table
 WINDOW w AS (ORDER BY my_column);
-
-
+```

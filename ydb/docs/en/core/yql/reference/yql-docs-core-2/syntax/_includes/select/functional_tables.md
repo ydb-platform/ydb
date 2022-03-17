@@ -18,7 +18,7 @@ The following functions are defined for these purposes:
 
 ```FILTER(`prefix`, `callable`, `suffix`, `view`)```: The `callable` argument must be a callable expression with the `(String)->Bool` signature that will be called for each table/subdirectory in the prefix folder. The query will only include those tables for which the callable value returned `true`. It is most convenient to use, as callable values, [lambda functions](../../expressions.md#lambda){% if yql == true %} or user-defined functions (UDF) written in [Python](../../../udf/python.md) or [JavaScript](../../../udf/javascript.md){% endif %}.
 
-{% note warning "Attention" %}
+{% note warning %}
 
 All of the above functions don't guarantee the order of the table union.
 
@@ -111,4 +111,3 @@ SELECT * FROM FILTER(
   $callable
 );
 ```
-

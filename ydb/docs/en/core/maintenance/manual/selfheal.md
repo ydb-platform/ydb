@@ -7,7 +7,7 @@ SelfHeal includes two parts. Detecting faulty disks and moving them carefully to
 SelfHeal is enabled by default.
 Below are instructions how to enable or disable SelfHeal.
 
-1. Enabling detection
+1. Enabling detection:
 
     Open the page
 
@@ -17,11 +17,11 @@ Below are instructions how to enable or disable SelfHeal.
 
     Status field: Enable
 
-    Or via the CLI
+    Or via the CLI:
 
-    * Go to any node
+    * Go to any node.
 
-    * Create a file with modified configurations
+    * Create a file with modified configurations.
 
         Sample config.txt file
 
@@ -41,13 +41,13 @@ Below are instructions how to enable or disable SelfHeal.
         }
         ```
 
-    * Update the config on the cluster
+    * Update the config on the cluster:
 
         ```bash
         kikimr admin console configs update config.txt
         ```
 
-2. Enable SelfHeal
+2. Enable SelfHeal:
 
     ```bash
     kikimr -s <endpoint> admin bs config invoke --proto 'Command{EnableSelfHeal{Enable: true}}'
@@ -60,12 +60,12 @@ Disabled in a similar way by setting the value to false.
 viewer -> Cluster Management System -> CmsConfigItems
 If there are no settings yet, click Create, if there are, click the "pencil" icon in the corner.
 
-* **Status**:  Enables/disables Self Heal in the CMS.
+* **Status**: Enables/disables Self Heal in the CMS.
 * **Dry run**: Enables/disables the mode in which the CMS doesn't change the BSC setting.
 * **Config update interval (sec.)**: BSC config update interval.
 * **Retry interval (sec.)**: Config update retry interval.
-* **State update interval (sec.)**: PDisk state update interval, the State is what we're monitoring (through a whiteboard, for example)
-* **Timeout (sec.)**: PDisk state update timeout.
+* **State update interval (sec.)**: PDisk state update interval, the State is what we're monitoring (through a whiteboard, for example).
+* **Timeout (sec.)**: PDisk state update timeout
 * **Change status retries**: The number of retries to change the PDisk Status in the BSC, the Status is what is stored in the BSC (ACTIVE, FAULTY, BROKEN, and so on).
 * **Change status retry interval (sec.)**: Interval between retries to change the PDisk Status in the BSC. The CMS is monitoring the disk state with the **State update interval**. If the disk remains in the same state for several **Status update interval** cycles, the CMS changes its Status in the BSC.
 Next are the settings for the number of update cycles through which the CMS will change the disk Status. If the disk State is Normal, the disk is switched to the ACTIVE Status. Otherwise, the disk is switched to the FAULTY status. The 0 value disables changing the Status for the state (this is done for Unknown by default).
@@ -107,4 +107,3 @@ To enable the donor disks, run the following command:
 `$ kikimr admin bs config invoke --proto 'Command { UpdateSettings { EnableDonorMode: true } }'`
 
 Similarly, when changing the setting to `false`, the command disables the mode.
-

@@ -6,13 +6,13 @@ General syntax for calling {{ ydb-short-name }} CLI commands:
 {{ ydb-cli }} [global options] <command> [<subcommand> ...] [command options]
 ```
 
-, where:
+Where:
 
-- `{{ ydb-cli}}` is the command to run the {{ ydb-short-name }} CLI from the OS command line.
-- `[global options]` are [global options](../commands/global-options.md) that are common for all {{ ydb-short-name }} CLI commands.
-- `<command>` is the command.
-- `[<subcomand>  ...]` are subcommands specified if the selected command contains subcommands.
-- `[command options]` are command options specific to each command and subcommands.
+* `{{ ydb-cli}}` is the command to run the {{ ydb-short-name }} CLI from the OS command line.
+* `[global options]` are [global options](../commands/global-options.md) that are common for all {{ ydb-short-name }} CLI commands.
+* `<command>` is the command.
+* `[<subcomand> ...]` are subcommands specified if the selected command contains subcommands.
+* `[command options]` are command options specific to each command and subcommands.
 
 ## Commands {#list}
 
@@ -67,10 +67,8 @@ Any command can be run from the command line with the `--help` option to get hel
 | tools dump | Dumping a directory or table to the file system |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
 | tools restore | Restoring data from the file system |
-
 {% if ydb-cli == "ydb" %}
-[update](../commands/service.md) | Updating the {{ ydb-short-name }} CLI
-[version](../commands/service.md) | Displaying the version of the {{ ydb-short-name }} CLI
+|[update](../commands/service.md) | Updating the {{ ydb-short-name }} CLI |
+|[version](../commands/service.md) | Displaying the version of the {{ ydb-short-name }} CLI |
 {% endif %}
-[workload](../commands/workload/index.md) | Generating YQL load | Running a YQL script (with streaming support)
-
+|[workload](../commands/workload/index.md) | Generating YQL load | Running a YQL script (with streaming support) |

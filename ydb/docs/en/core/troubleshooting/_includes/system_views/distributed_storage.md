@@ -100,4 +100,3 @@ Unlike other tables that show physical entities, the `ds_storage_stats` table sh
 | AvailableSizeToCreate | Uint64 |  | Number of available bytes that will be obtained when creating all groups from AvailableGroupsToCreate. |
 
 It should be noted that AvailableGroupsToCreate shows the maximum number of groups that can be created if no other types of groups are created. So when extending a storage pool, the count of AvailableGroupsToCreate in several rows of statistics may change.
-

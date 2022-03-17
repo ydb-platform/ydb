@@ -12,20 +12,6 @@ items:
 - name: YDB SDK
   href: sdk.md
 - name: Self-deployment
-  items:
-  - name: Docker
-    href: ydb_docker.md
-  - name: Starting a local cluster
-    href: ydb_local.md
-    # when: audience == "tech"
-  - name: Creating a cluster configuration
-    include: { mode: link, path: ../deploy/configuration/toc_i.yaml }
-    # when: audience == "tech"
-  - name: Kubernetes
-    include: { mode: link, path: ../deploy/orchestrated/toc_p.yaml }
-  - name: Manual
-    include: { mode: link, path: ../deploy/manual/toc_p.yaml }
-  - name: Production checklist
-    href: ../deploy/production_checklist.md
+  include: { mode: link, path: self_hosted/toc_p.yaml }
 - name: Useful links
   href: useful_links.md

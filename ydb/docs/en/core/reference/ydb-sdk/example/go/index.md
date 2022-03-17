@@ -18,7 +18,7 @@ Next, from the same working directory, run the command to start the test app. Th
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-To work with YDB in `Go`, import the `ydb-go-sdk` driver package:
+To work with `YDB` in `Go`, import the `ydb-go-sdk` driver package:
 
 ```go
 import (
@@ -65,7 +65,7 @@ defer func() {
 }
 ```
 
-The `db` object is an input point for working with YDB services.
+The `db` object is an input point for working with `YDB` services.
 To work with the table service, use the `db.Table()` client.
 The client of the table service provides an `API` for making queries to tables.
 The most popular method is `db.Table().Do(ctx, op)`. It implements background session creation and repeated attempts to perform the `op` user operation where the created session is passed to the user-defined code.
@@ -264,8 +264,7 @@ if err != nil {
 
 Sample code of a test app that uses archived of versions the Go SDK:
 
-- [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) is available at this [link](../archive/example-go-v1.md),
-- [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) is available at this [link](../archive/example-go-v2.md).
+* [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) is available at this [link](../archive/example-go-v1.md),
+* [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) is available at this [link](../archive/example-go-v2.md).
 
 {% endnote %}
-

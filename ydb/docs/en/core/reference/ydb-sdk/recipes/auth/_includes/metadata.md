@@ -11,4 +11,3 @@ Below are examples of the code for authentication using environment variables in
   {% include [go.md](metadata/go.md) %}
 
 {% endlist %}
-

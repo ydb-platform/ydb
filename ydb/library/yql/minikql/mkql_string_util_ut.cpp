@@ -17,5 +17,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
         UNIT_ASSERT(sub0.AsStringValue().Data() == sub1.AsStringValue().Data());
         UNIT_ASSERT(sub1.AsStringValue().Data() != sub2.AsStringValue().Data());
     }
+
+    Y_UNIT_TEST(MakeStringWithPad) {
+        TScopedAlloc alloc;
+
+        {
+            const auto buf= MakeStringNotFilled(NUdf::TUnboxedValuePod::InternalBufferSize - 1U, 1U);
+            UNIT_ASSERT(buf.IsEmbedded());
+            UNIT_ASSERT_VALUES_EQUAL(buf.AsStringRef().Size(), NUdf::TUnboxedValuePod::InternalBufferSize - 1U);
+        }
+
+        {
+            const auto buf= MakeStringNotFilled(NUdf::TUnboxedValuePod::InternalBufferSize, 1U);
+            UNIT_ASSERT(buf.IsString());
+            UNIT_ASSERT_VALUES_EQUAL(buf.AsStringRef().Size(), NUdf::TUnboxedValuePod::InternalBufferSize);
+            UNIT_ASSERT_VALUES_EQUAL(buf.AsStringValue().Size(), NUdf::TUnboxedValuePod::InternalBufferSize + 1U);
+        }
+    }
 }
 

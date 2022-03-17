@@ -10,7 +10,7 @@ NUdf::TUnboxedValuePod PrependString(const NUdf::TStringRef ref, const NUdf::TUn
 NUdf::TUnboxedValuePod ConcatStrings(const NUdf::TUnboxedValuePod first, const NUdf::TUnboxedValuePod second);
 NUdf::TUnboxedValuePod SubString(const NUdf::TUnboxedValuePod value, ui32 offset, ui32 size);
 NUdf::TUnboxedValuePod MakeString(const NUdf::TStringRef ref);
-NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size);
+NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size, ui32 pad = 0U);
 
 }
 }

@@ -146,12 +146,13 @@ NUdf::TUnboxedValuePod MakeString(const NUdf::TStringRef ref)
     return NUdf::TUnboxedValuePod(std::move(str));
 }
 
-NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size)
+NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size, ui32 pad)
 {
-    if (size <= NUdf::TUnboxedValuePod::InternalBufferSize)
+    const auto fullSize = size + pad;
+    if (fullSize <= NUdf::TUnboxedValuePod::InternalBufferSize)
         return NUdf::TUnboxedValuePod::Embedded(size);
 
-    return NUdf::TUnboxedValuePod(NUdf::TStringValue(size));
+    return NUdf::TUnboxedValuePod(NUdf::TStringValue(fullSize), size);
 }
 
 }

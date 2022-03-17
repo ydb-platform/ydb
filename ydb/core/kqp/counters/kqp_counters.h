@@ -81,7 +81,6 @@ protected:
     void ReportQueriesPerSessionActor(ui32 queryId);
 
     void ReportProxyForwardedRequest();
-    void ReportSessionBalancerCV(ui32 value);
 
     void ReportBeginTransaction(ui32 evictedTx, ui32 currentActiveTx, ui32 currentAbortedTx);
 
@@ -264,7 +263,6 @@ public:
     explicit TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx = nullptr);
 
     void ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters);
-    void ReportSessionBalancerCV(TKqpDbCountersPtr dbCounters, ui32 val);
     void ReportSessionShutdownRequest(TKqpDbCountersPtr dbCounters);
     void ReportCreateSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
     void ReportPingSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);

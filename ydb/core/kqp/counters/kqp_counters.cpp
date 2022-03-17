@@ -441,9 +441,6 @@ void TKqpCountersBase::ReportWorkerCreated() {
     YdbSessionsActiveCount->Inc();
 }
 
-void TKqpCountersBase::ReportSessionBalancerCV(ui32 value) {
-    SessionBalancerCV->Set(value);
-}
 
 void TKqpCountersBase::ReportProxyForwardedRequest() {
     ProxyForwardedRequests->Inc();
@@ -804,14 +801,6 @@ TKqpCounters::TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, cons
 
 NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const {
     return QueryReplayGroup;
-}
-
-
-void TKqpCounters::ReportSessionBalancerCV(TKqpDbCountersPtr dbCounters, ui32 val) {
-    TKqpCountersBase::ReportSessionBalancerCV(val);
-    if (dbCounters) {
-        dbCounters->ReportSessionBalancerCV(val);
-    }
 }
 
 

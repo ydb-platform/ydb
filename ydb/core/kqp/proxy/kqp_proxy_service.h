@@ -111,12 +111,20 @@ struct TSimpleResourceStats {
 };
 
 struct TPeerStats {
-    TSimpleResourceStats SessionCount;
-    TSimpleResourceStats Cpu;
+    TSimpleResourceStats LocalSessionCount;
+    TSimpleResourceStats CrossAZSessionCount;
 
-    TPeerStats(TSimpleResourceStats sessionsCount, TSimpleResourceStats cpu)
-        : SessionCount(sessionsCount)
-        , Cpu(cpu)
+    TSimpleResourceStats LocalCpu;
+    TSimpleResourceStats CrossAZCpu;
+
+
+    TPeerStats(TSimpleResourceStats localSessionsCount, TSimpleResourceStats crossAZSessionCount,
+               TSimpleResourceStats localCpu, TSimpleResourceStats crossAZCpu)
+
+        : LocalSessionCount(localSessionsCount)
+        , CrossAZSessionCount(crossAZSessionCount)
+        , LocalCpu(localCpu)
+        , CrossAZCpu(crossAZCpu)
     {}
 };
 
@@ -124,6 +132,6 @@ struct TPeerStats {
 TSimpleResourceStats CalcPeerStats(
     const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId, bool localDatacenterPolicy,
     std::function<double(const NKikimrKqp::TKqpProxyNodeResources& entry)> ExtractValue);
-TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId, bool localDatacenterPolicy);
+TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId);
 
 }  // namespace NKikimr::NKqp

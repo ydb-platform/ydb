@@ -765,13 +765,7 @@ public:
         }
 
         Y_VERIFY(SelfDataCenterId, "Unexpected case: empty info about DC!");
-        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-        PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId, sbs.GetLocalDatacenterPolicy());
-        if (!Tenants.empty()) {
-            auto counters = Counters->GetDbCounters(*Tenants.begin());
-            Counters->ReportSessionBalancerCV(counters, (ui32)PeerStats->SessionCount.CV);
-        }
-
+        PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
     }
 
@@ -803,13 +797,20 @@ public:
 
         bool isReasonableToKick = false;
 
-        isReasonableToKick |= ShouldStartBalancing(PeerStats->SessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions.size()));
-        isReasonableToKick |= ShouldStartBalancing(PeerStats->Cpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
+        if (sbs.GetLocalDatacenterPolicy()) {
+            isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions.size()));
+            isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
+        } else {
+            isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions.size()));
+            isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
+        }
 
         if (!isReasonableToKick) {
             // Start balancing
-            ServerWorkerBalancerComplete = false;
+            ServerWorkerBalancerComplete = true;
             return;
+        } else {
+            ServerWorkerBalancerComplete = false;
         }
 
         while(LocalSessions.GetShutdownInFlightSize() < maxInFlightSize) {
@@ -925,8 +926,13 @@ public:
                     str << "No peer proxy data available." << Endl;
                 } else {
                     str << Endl << "Peer Proxy data: " << Endl;
-                    str << "Session count stats: " << PeerStats->SessionCount << Endl;
-                    str << "Cpu stats: " << PeerStats->Cpu << Endl;
+                    str << "Session count stats: " << Endl;
+                    str << "Local: " << PeerStats->LocalSessionCount << Endl;
+                    str << "Cross AZ: " << PeerStats->CrossAZSessionCount << Endl;
+
+                    str << Endl << "CPU usage stats:" << Endl;
+                    str << "Local: " << PeerStats->LocalCpu << Endl;
+                    str << "Cross AZ: " << PeerStats->CrossAZCpu << Endl;
 
                     str << Endl;
                     for(const auto& entry : PeerProxyNodeResources) {

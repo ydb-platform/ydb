@@ -1,0 +1,23 @@
+items:
+- name: Способы предотвращения выхода за модель отказа
+  href: failure_model.md
+- name: Балансировка нагрузки на диски
+  href: balancing_load.md
+- name: Способы освобождения места на физических устройствах
+  href: disk_end_space.md
+- name: Расширение кластера
+  href: cluster_expansion.md
+- name: Добавление групп хранения
+  href: adding_storage_groups.md
+- name: Безопасные рестарт и выключение узлов
+  href: node_restarting.md
+- name: Включение/выключение SelfHeal
+  href: selfheal.md
+- name: Включение/выключение Scrubbing
+  href: scrubbing.md
+- name: Перевоз VDisk'ов
+  href: moving_vdisks.md
+- name: Изменение конфигураций через CMS
+  href: cms.md
+- name: Изменение конфигурации акторсистемы
+  href: change_actorsystem_configs.md

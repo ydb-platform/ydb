@@ -1,47 +1,11 @@
 items:
-  - name: Резервное копирование
-    href: backup_and_recovery.md
-  - name: Средства интроспекции при самостоятельном развертывании
-    items:
-    - name: Обзор
-      href: embedded_monitoring/overview.md
-    - name: Viewer
-      href: embedded_monitoring/viewer.md
-      when: false
-    - name: YDB Monitoring
-      href: embedded_monitoring/ydb_monitoring.md
-    - name: Hive web-viewer
-      href: embedded_monitoring/hive.md
-    - name: Обзор соединений
-      href: embedded_monitoring/interconnect_overview.md
-      # when: false
-    - name: Логи
-      href: embedded_monitoring/logs.md
-    - name: Графики
-      href: embedded_monitoring/charts.md
+- name: Резервное копирование
+  href: backup_and_recovery.md
+- name: Диагностика
+  include: { mode: link, path: ../troubleshooting/toc_p.yaml }
+- name: Обслуживание кластера
+  items:
+  - name: Встроенный UI
+    include: { mode: link, path: embedded_monitoring/toc_p.yaml }
   - name: Обслуживание дисковой подсистемы кластера
-    items:
-    - name: Обзор
-      href: manual/index.md
-    - name: Способы предотвращения выхода за модель отказа
-      href: manual/failure_model.md
-    - name: Балансировка нагрузки на диски
-      href: manual/balancing_load.md
-    - name: Способы освобождения места на физических устройствах
-      href: manual/disk_end_space.md
-    - name: Расширение кластера
-      href: manual/cluster_expansion.md
-    - name: Добавление групп хранения
-      href: manual/adding_storage_groups.md
-    - name: Безопасные рестарт и выключение узлов
-      href: manual/node_restarting.md
-    - name: Включение/выключение SelfHeal
-      href: manual/selfheal.md
-    - name: Включение/выключение Scrubbing
-      href: manual/scrubbing.md
-    - name: Перевоз VDisk'ов
-      href: manual/moving_vdisks.md
-    - name: Изменение конфигураций через CMS
-      href: manual/cms.md
-    - name: Изменение конфигурации акторсистемы
-      href: manual/change_actorsystem_configs.md
+    include: { mode: link, path: manual/toc_p.yaml }

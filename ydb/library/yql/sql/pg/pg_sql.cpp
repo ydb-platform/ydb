@@ -2,6 +2,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/parser.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/generic/stack.h>
@@ -1004,7 +1005,13 @@ public:
         }
 
         auto name = names.back();
-        bool isAggregateFunc = AggregateFuncs.count(name) > 0;
+        bool isAggregateFunc;
+        if (Settings.PgTypes) {
+            isAggregateFunc = NYql::NPg::HasAggregation(name);
+        } else {
+            isAggregateFunc = AggregateFuncs.count(name) > 0;
+        }
+
         if (isAggregateFunc && !settings.AllowAggregates) {
             AddError(TStringBuilder() << "Aggregate functions are not allowed in: " << settings.Scope);
             return nullptr;

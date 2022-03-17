@@ -2224,6 +2224,10 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
 }
 
+TExprNode::TPtr ExpandCurrentStream(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.NewCallable(input->Pos(), "Void", {});
+}
+
 template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
@@ -5770,7 +5774,8 @@ struct TPeepHoleRules {
         {"RangeEmpty", &ExpandRangeEmpty},
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
-        {"ToFlow", &DropToFlowDeps}
+        {"ToFlow", &DropToFlowDeps},
+        {"CurrentStream", &ExpandCurrentStream}
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {

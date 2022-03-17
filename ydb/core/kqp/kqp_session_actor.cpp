@@ -492,6 +492,18 @@ public:
         CreateNewTx();
     }
 
+    static std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
+        TVector<NKqpProto::TKqpTableOp> operations(query.GetTableOps().begin(), query.GetTableOps().end());
+        TVector<NKqpProto::TKqpTableInfo> tableInfos(query.GetTableInfos().begin(), query.GetTableInfos().end());
+
+        auto isolationLevel = *txCtx->EffectiveIsolationLevel;
+        bool strictDml = true;
+
+        TExprContext ctx;
+        bool success = txCtx->ApplyTableOperations(operations, tableInfos, isolationLevel, strictDml, EKikimrQueryType::Dml, ctx);
+        return {success, ctx.IssueManager.GetIssues()};
+    }
+
     void PrepareQueryContext() {
         YQL_ENSURE(QueryState);
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
@@ -524,8 +536,17 @@ public:
         QueryState->QueryCtx->TimeProvider = TAppData::TimeProvider;
         QueryState->QueryCtx->RandomProvider = TAppData::RandomProvider;
 
-        //const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        //ApplyTableOperations(QueryState->QueryCtx.Get(), phyQuery);
+        const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+        auto [success, issues] = ApplyTableOperations(QueryState->TxCtx.Get(), phyQuery);
+        if (!success) {
+            YQL_ENSURE(!issues.Empty());
+            google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> message;
+            for (const auto& i : issues) {
+                IssueToMessage(i, message.Add());
+            }
+            ReplyProcessError(requestInfo, *GetYdbStatus(issues.back()), "", &message);
+            return;
+        }
 
         auto action = queryRequest.GetAction();
         auto queryType = queryRequest.GetType();
@@ -884,20 +905,6 @@ public:
         //resStats->SetWorkerCpuTimeUs();
         resStats->MutableCompilation()->Swap(&QueryState->CompileStats);
     }
-
-    /*
-    void ApplyTableOperations(TKikimrQueryContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
-        TVector<NKqpProto::TKqpTableOp> operations(query.GetTableOps().begin(), query.GetTableOps().end());
-        TVector<NKqpProto::TKqpTableInfo> tableInfos(query.GetTableInfos().begin(), query.GetTableInfos().end());
-
-        auto isolationLevel = *txCtx->EffectiveIsolationLevel;
-        bool strictDml = true;
-
-        TExprContext ctx;
-        txCtx->ApplyTableOperations(operations, tableInfos, isolationLevel, strictDml,
-                EKikimrQueryType::Dml, ctx);
-    }
-    */
 
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         Y_VERIFY(QueryState);

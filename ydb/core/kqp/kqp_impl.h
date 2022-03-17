@@ -86,6 +86,7 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const T
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters,
     const TActorId& MkqlCompileService);
 
+TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const NYql::TIssue& issue);
 Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult);
 void AddQueryIssues(NKikimrKqp::TQueryResponse& response, const NYql::TIssues& issues);
 bool HasSchemeOrFatalIssues(const NYql::TIssues& issues);

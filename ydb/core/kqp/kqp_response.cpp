@@ -9,6 +9,48 @@ using namespace NYql;
 
 namespace {
 
+void CollectYdbStatuses(const TIssue& issue, TSet<Ydb::StatusIds::StatusCode>& statuses) {
+    if (issue.GetSeverity() == TSeverityIds::S_WARNING) {
+        return;
+    }
+
+    if (auto status = GetYdbStatus(issue)) {
+        statuses.insert(*status);
+        return;
+    }
+
+    const auto& subIssues = issue.GetSubIssues();
+    if (subIssues.empty()) {
+        statuses.insert(Ydb::StatusIds::GENERIC_ERROR);
+    }
+
+    for (auto& subIssue : subIssues) {
+        CollectYdbStatuses(*subIssue, statuses);
+    }
+}
+
+bool HasSchemeOrFatalIssues(const TIssue& issue) {
+    if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
+        return true;
+    }
+
+    switch (issue.GetCode()) {
+        case TIssuesIds::KIKIMR_SCHEME_MISMATCH:
+        case TIssuesIds::KIKIMR_SCHEME_ERROR:
+            return true;
+    }
+
+    for (auto& subIssue : issue.GetSubIssues()) {
+        if (HasSchemeOrFatalIssues(*subIssue)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+} // namespace
+
 TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const TIssue& issue) {
     if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
         return Ydb::StatusIds::INTERNAL_ERROR;
@@ -71,48 +113,6 @@ TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const TIssue& issue) {
 
     return TMaybe<Ydb::StatusIds::StatusCode>();
 }
-
-void CollectYdbStatuses(const TIssue& issue, TSet<Ydb::StatusIds::StatusCode>& statuses) {
-    if (issue.GetSeverity() == TSeverityIds::S_WARNING) {
-        return;
-    }
-
-    if (auto status = GetYdbStatus(issue)) {
-        statuses.insert(*status);
-        return;
-    }
-
-    const auto& subIssues = issue.GetSubIssues();
-    if (subIssues.empty()) {
-        statuses.insert(Ydb::StatusIds::GENERIC_ERROR);
-    }
-
-    for (auto& subIssue : subIssues) {
-        CollectYdbStatuses(*subIssue, statuses);
-    }
-}
-
-bool HasSchemeOrFatalIssues(const TIssue& issue) {
-    if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
-        return true;
-    }
-
-    switch (issue.GetCode()) {
-        case TIssuesIds::KIKIMR_SCHEME_MISMATCH:
-        case TIssuesIds::KIKIMR_SCHEME_ERROR:
-            return true;
-    }
-
-    for (auto& subIssue : issue.GetSubIssues()) {
-        if (HasSchemeOrFatalIssues(*subIssue)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-} // namespace
 
 Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult) {
     if (queryResult.Success()) {

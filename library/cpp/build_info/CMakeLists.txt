@@ -32,23 +32,3 @@ add_custom_command(
   \"${CMAKE_CXX_COMPILER}\"
   \"${CMAKE_CXX_FLAGS}\"
 )
-set(
-  KOSHER_SVN_VERSION
-  
-)
-set(
-  SANDBOX_TASK_ID
-  0
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/library/cpp/build_info/sandbox.cpp.in
-  ${CMAKE_BINARY_DIR}/library/cpp/build_info/sandbox.cpp
-)
-set(
-  BUILD_TYPE
-  RELEASE
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/library/cpp/build_info/build_info.cpp.in
-  ${CMAKE_BINARY_DIR}/library/cpp/build_info/build_info.cpp
-)

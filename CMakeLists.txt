@@ -7,7 +7,7 @@
 
 
 cmake_minimum_required(VERSION 3.15)
-project(YDB LANGUAGES C CXX ASM)
+project(YDB LANGUAGES)
 
 set(BUILD_SHARED_LIBS Off)
 set(CMAKE_CXX_STANDARD 20)
@@ -117,6 +117,43 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/cmake)
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR})
 list(APPEND CMAKE_CTEST_ARGUMENTS "--output-on-failure")
 enable_testing()
+include(cmake/FindAIO.cmake)
+include(cmake/antlr.cmake)
+include(cmake/bison.cmake)
+include(cmake/conan.cmake)
+include(cmake/protobuf.cmake)
+include(cmake/yandex_common.cmake)
+include(cmake/global_vars.cmake)
+
+conan_cmake_configure(
+  GENERATORS cmake_find_package
+  REQUIRES
+    bison/3.5.3
+    c-ares/1.17.2
+    libiconv/1.15
+    libidn/1.36
+    openssl/1.1.1l
+    ragel/6.10
+    yasm/1.3.0
+    zlib/1.2.11
+  IMPORTS
+    "bin, *yasm* -> ./bin"
+    "bin, bison* -> ./bin/bison/bin"
+    "bin, ragel* -> ./bin"
+    "bin, ytasm* -> ./bin"
+    "res, * -> ./bin/bison/res"
+  OPTIONS
+    libiconv:shared=True
+    libidn:shared=True
+)
+conan_cmake_autodetect(settings)
+conan_cmake_install(
+  PATH_OR_REFERENCE .
+  BUILD missing
+  REMOTE conancenter
+  SETTINGS ${settings}
+)
+
 if (UNIX)
   include(CMakeLists.linux.txt)
 elseif (APPLE)

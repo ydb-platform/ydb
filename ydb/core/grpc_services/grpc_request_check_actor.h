@@ -1,6 +1,5 @@
 #pragma once
 #include "defs.h"
-#include "grpc_proxy_counters.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
 #include "rpc_calls.h"
@@ -10,6 +9,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/kikimr_issue.h>
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/security/secure_request.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -74,7 +74,7 @@ public:
         const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
         TIntrusivePtr<TSecurityObject> securityObject,
         TAutoPtr<TEventHandle<TEvent>> request,
-        TGrpcProxyCounters::TPtr counters,
+        IGRpcProxyCounters::TPtr counters,
         bool skipCheckConnectRigths)
         : Owner_(owner)
         , Request_(std::move(request))
@@ -95,6 +95,10 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Become(&TSelf::DbAccessStateFunc);
+
+        if (AppData()->FeatureFlags.GetEnableDbCounters()) {
+            Counters_ = WrapGRpcProxyDbCounters(Counters_);
+        }
 
         {
             auto [error, issue] = CheckConnectRight();
@@ -171,6 +175,7 @@ public:
         GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_OK);
         GrpcRequestBaseCtx_->SetInternalToken(TBase::GetSerializedToken());
         GrpcRequestBaseCtx_->UseDatabase(database);
+        Counters_->UseDatabase(database);
         ReplyBackAndDie();
     }
 
@@ -201,6 +206,7 @@ private:
             TDuration delay = TInstant::Now() - time;
             switch (resp.operation().status()) {
                 case Ydb::StatusIds::SUCCESS:
+                    Counters_->ReportThrottleDelay(delay);
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Request delayed for " << delay << " by ratelimiter");
                     SetTokenAndDie(CheckedDatabaseName_);
                     break;
@@ -237,11 +243,14 @@ private:
     TRespHook CreateRlRespHook(Ydb::RateLimiter::AcquireResourceRequest&& req) {
         const auto& databasename = CheckedDatabaseName_;
         auto token = TBase::GetSerializedToken();
-        return [req{std::move(req)}, databasename, token](TRespHookCtx::TPtr ctx) mutable {
+        auto counters = Counters_;
+        return [req{std::move(req)}, databasename, token, counters](TRespHookCtx::TPtr ctx) mutable {
 
             LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
                 "Response hook called to report RU usage, database: %s, request: %s, consumed: %d",
                 databasename.c_str(), ctx->GetRequestName().c_str(), ctx->GetConsumedRu());
+
+            counters->AddConsumedRequestUnits(ctx->GetConsumedRu());
 
             if (ctx->GetConsumedRu() >= 1) {
                 // We already count '1' on start request
@@ -391,7 +400,7 @@ private:
 
     const TActorId Owner_;
     TAutoPtr<TEventHandle<TEvent>> Request_;
-    TGrpcProxyCounters::TPtr Counters_;
+    IGRpcProxyCounters::TPtr Counters_;
     TIntrusivePtr<TSecurityObject> SecurityObject_;
     TString CheckedDatabaseName_;
     IRequestProxyCtx* GrpcRequestBaseCtx_;
@@ -441,7 +450,7 @@ IActor* CreateGrpcRequestCheckActor(
     const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
     TIntrusivePtr<TSecurityObject> securityObject,
     TAutoPtr<TEventHandle<TEvent>> request,
-    TGrpcProxyCounters::TPtr counters,
+    IGRpcProxyCounters::TPtr counters,
     bool skipCheckConnectRigths) {
 
     return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths);

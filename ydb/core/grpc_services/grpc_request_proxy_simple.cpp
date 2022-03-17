@@ -1,9 +1,9 @@
-#include "grpc_proxy_counters.h"
 #include "grpc_request_check_actor.h"
 #include "grpc_request_proxy.h"
 #include "operation_helpers.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
 
 #include <util/system/hostname.h>
 
@@ -140,7 +140,7 @@ private:
     }
 
     NKikimrConfig::TAppConfig AppConfig;
-    TIntrusivePtr<TGrpcProxyCounters> Counters;
+    IGRpcProxyCounters::TPtr Counters;
 };
 
 void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
@@ -148,7 +148,8 @@ void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
 
     LOG_NOTICE(ctx, NKikimrServices::GRPC_SERVER, "Grpc simple request proxy started, nodeid# %d", nodeID);
 
-    Counters = MakeIntrusive<TGrpcProxyCounters>(AppData()->Counters);
+    Counters = CreateGRpcProxyCounters(AppData()->Counters);
+    InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
 
     Become(&TThis::StateFunc);
 }

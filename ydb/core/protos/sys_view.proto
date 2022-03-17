@@ -512,18 +512,24 @@ message TDbGRpcCounters {
     optional TDbCounters RequestCounters = 3;
 }
 
+message TDbGRpcProxyCounters {
+    optional TDbCounters RequestCounters = 1;
+}
+
 message TDbServiceCounters {
     optional TDbCounters Main = 1;
     repeated TDbTabletCounters TabletCounters = 2;
     repeated TDbGRpcCounters GRpcCounters = 3;
+    optional TDbGRpcProxyCounters GRpcProxyCounters = 4;
 }
 
 enum EDbCountersService {
     KQP = 1;
     TABLETS = 2;
     GRPC = 3;
-    RESERVED_1 = 4;
+    GRPC_PROXY = 4;
     RESERVED_2 = 5;
+    RESERVED_3 = 6;
 }
 
 // node -> sysview processor tablet

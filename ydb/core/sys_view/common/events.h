@@ -13,7 +13,7 @@ namespace NSysView {
 
 using TShardIdx = std::pair<ui64, ui64>;
 
-class IDbCounters : public TThrRefBase {
+class IDbCounters : public virtual TThrRefBase {
 public:
     virtual void ToProto(NKikimr::NSysView::TDbServiceCounters& counters) = 0;
     virtual void FromProto(NKikimr::NSysView::TDbServiceCounters& counters) = 0;

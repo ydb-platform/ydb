@@ -28,7 +28,7 @@
 # FILE_IGNORE - ignore file (do nothing)
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
-IGNORE_FILES icudt67l.rodata
+IGNORE_FILES icudt67_dat.rodata
 
 KEEP     Unicode              0285f1da3a441f34fd441c30fe7aa87e
 BELONGS ya.make

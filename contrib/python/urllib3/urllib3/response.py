@@ -8,9 +8,11 @@ from socket import error as SocketError
 from socket import timeout as SocketTimeout
 
 try:
-    import brotli
-    brotli.error
-except (ImportError, Exception):
+    try:
+        import brotlicffi as brotli
+    except ImportError:
+        import brotli
+except ImportError:
     brotli = None
 
 from ._collections import HTTPHeaderDict

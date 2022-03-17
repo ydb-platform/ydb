@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: urllib3
-Version: 1.26.8
+Version: 1.26.9
 Summary: HTTP library with thread-safe connection pooling, file post, and more.
 Home-page: https://urllib3.readthedocs.io/
 Author: Andrey Petrov
@@ -34,7 +34,9 @@ Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <4
 Description-Content-Type: text/x-rst
 License-File: LICENSE.txt
 Provides-Extra: brotli
-Requires-Dist: brotlipy (>=0.6.0) ; extra == 'brotli'
+Requires-Dist: brotlicffi (>=0.8.0) ; ((os_name != "nt" or python_version >= "3") and platform_python_implementation != "CPython") and extra == 'brotli'
+Requires-Dist: brotli (>=1.0.9) ; ((os_name != "nt" or python_version >= "3") and platform_python_implementation == "CPython") and extra == 'brotli'
+Requires-Dist: brotlipy (>=0.6.0) ; (os_name == "nt" and python_version < "3") and extra == 'brotli'
 Provides-Extra: secure
 Requires-Dist: pyOpenSSL (>=0.14) ; extra == 'secure'
 Requires-Dist: cryptography (>=1.3.4) ; extra == 'secure'
@@ -82,7 +84,7 @@ urllib3 can be installed with `pip <https://pip.pypa.io>`_::
 Alternatively, you can grab the latest source code from `GitHub <https://github.com/urllib3/urllib3>`_::
 
     $ git clone git://github.com/urllib3/urllib3.git
-    $ python setup.py install
+    $ pip install .
 
 
 Documentation
@@ -151,10 +153,21 @@ For Enterprise
 Changes
 =======
 
+1.26.9 (2022-03-16)
+-------------------
+
+* Changed ``urllib3[brotli]`` extra to favor installing Brotli libraries that are still
+  receiving updates like ``brotli`` and ``brotlicffi`` instead of ``brotlipy``.
+  This change does not impact behavior of urllib3, only which dependencies are installed.
+* Fixed a socket leaking when ``HTTPSConnection.connect()`` raises an exception.
+* Fixed ``server_hostname`` being forwarded from ``PoolManager`` to ``HTTPConnectionPool``
+  when requesting an HTTP URL. Should only be forwarded when requesting an HTTPS URL.
+
+
 1.26.8 (2022-01-07)
 -------------------
 
-* Added extra message to``urllib3.exceptions.ProxyError`` when urllib3 detects that
+* Added extra message to ``urllib3.exceptions.ProxyError`` when urllib3 detects that
   a proxy is configured to use HTTPS but the proxy itself appears to only use HTTP.
 * Added a mention of the size of the connection pool when discarding a connection due to the pool being full.
 * Added explicit support for Python 3.11.

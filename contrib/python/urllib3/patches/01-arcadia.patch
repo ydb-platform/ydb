@@ -10,15 +10,3 @@
          self.ca_cert_dir = ca_cert_dir and os.path.expanduser(ca_cert_dir)
          self.ca_cert_data = ca_cert_data
  
---- contrib/python/urllib3/urllib3/response.py	(index)
-+++ contrib/python/urllib3/urllib3/response.py	(working tree)
-@@ -9,7 +9,8 @@ from socket import timeout as SocketTimeout
- 
- try:
-     import brotli
--except ImportError:
-+    brotli.error
-+except (ImportError, Exception):
-     brotli = None
- 
- from ._collections import HTTPHeaderDict

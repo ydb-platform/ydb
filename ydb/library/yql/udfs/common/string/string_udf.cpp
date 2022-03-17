@@ -192,28 +192,11 @@ namespace {
             return args[0];
     }
 
-    SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
-        if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), ""))
-            return valueBuilder->NewString(result);
-        else
-            return args[0];
-    }
-
     SIMPLE_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.find(what); index != std::string::npos) {
             result.replace(index, what.size(), std::string_view(args[2].AsStringRef()));
-            return valueBuilder->NewString(result);
-        }
-        return args[0];
-    }
-
-    SIMPLE_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
-        std::string result(args[0].AsStringRef());
-        const std::string_view what(args[1].AsStringRef());
-        if (const auto index = result.find(what); index != std::string::npos) {
-            result.erase(index, what.size());
             return valueBuilder->NewString(result);
         }
         return args[0];
@@ -229,17 +212,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
-        std::string result(args[0].AsStringRef());
-        const std::string_view what(args[1].AsStringRef());
-        if (const auto index = result.rfind(what); index != std::string::npos) {
-            result.erase(index, what.size());
-            return valueBuilder->NewString(result);
-        }
-        return args[0];
-    }
-
-    SIMPLE_UDF(TRemoveAllAnyOf, char*(TAutoMap<char*>, char*)) {
+    SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         const std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -256,7 +229,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveFirstAnyOf, char*(TAutoMap<char*>, char*)) {
+    SIMPLE_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -269,13 +242,13 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveLastAnyOf, char*(TAutoMap<char*>, char*)) {
+    SIMPLE_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         std::unordered_set<char> chars(remove.cbegin(), remove.cend());
         for (auto it = input.crbegin(); it != input.crend(); ++it) {
             if (chars.contains(*it)) {
-                input.erase(std::distance(it, input.crend()) - 1, 1);
+                input.erase(input.crend() - it - 1, 1);
                 return valueBuilder->NewString(input);
             }
         }
@@ -552,11 +525,8 @@ namespace {
         TReplaceFirst,
         TReplaceLast,
         TRemoveAll,
-        TRemoveAllAnyOf,
         TRemoveFirst,
-        TRemoveFirstAnyOf,
         TRemoveLast,
-        TRemoveLastAnyOf,
         TContains,
         TFind,
         TReverseFind,

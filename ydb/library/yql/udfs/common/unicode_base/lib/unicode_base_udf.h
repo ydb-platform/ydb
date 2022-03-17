@@ -272,28 +272,11 @@ namespace {
             return args[0];
     }
 
-    SIMPLE_UDF(TRemoveAll, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), ""))
-            return valueBuilder->NewString(result);
-        else
-            return args[0];
-    }
-
     SIMPLE_UDF(TReplaceFirst, TUtf8(TAutoMap<TUtf8>, TUtf8, TUtf8)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
         if (const auto index = result.find(what); index != std::string::npos) {
             result.replace(index, what.size(), std::string_view(args[2].AsStringRef()));
-            return valueBuilder->NewString(result);
-        }
-        return args[0];
-    }
-
-    SIMPLE_UDF(TRemoveFirst, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        std::string result(args[0].AsStringRef());
-        const std::string_view what(args[1].AsStringRef());
-        if (const auto index = result.find(what); index != std::string::npos) {
-            result.erase(index, what.size());
             return valueBuilder->NewString(result);
         }
         return args[0];
@@ -309,22 +292,12 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveLast, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        std::string result(args[0].AsStringRef());
-        const std::string_view what(args[1].AsStringRef());
-        if (const auto index = result.rfind(what); index != std::string::npos) {
-            result.erase(index, what.size());
-            return valueBuilder->NewString(result);
-        }
-        return args[0];
-    }
-
-    SIMPLE_UDF(TRemoveAllAnyOf, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        TUtf16String input = UTF8ToWide(args[0].AsStringRef());
-        const TUtf16String remove = UTF8ToWide(args[1].AsStringRef());
-        const std::unordered_set<wchar16> chars(remove.cbegin(), remove.cend());
+    SIMPLE_UDF(TRemoveAll, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        TUtf32String input = UTF8ToUTF32<true>(args[0].AsStringRef());
+        const TUtf32String remove = UTF8ToUTF32<true>(args[1].AsStringRef());
+        const std::unordered_set<wchar32> chars(remove.cbegin(), remove.cend());
         size_t tpos = 0;
-        for (const wchar16 c : input) {
+        for (const wchar32 c : input) {
             if (!chars.contains(c)) {
                 input[tpos++] = c;
             }
@@ -336,10 +309,10 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveFirstAnyOf, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        TUtf16String input = UTF8ToWide(args[0].AsStringRef());
-        const TUtf16String remove = UTF8ToWide(args[1].AsStringRef());
-        const std::unordered_set<wchar16> chars(remove.cbegin(), remove.cend());
+    SIMPLE_UDF(TRemoveFirst, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        TUtf32String input = UTF8ToUTF32<true>(args[0].AsStringRef());
+        const TUtf32String remove =  UTF8ToUTF32<true>(args[1].AsStringRef());
+        const std::unordered_set<wchar32> chars(remove.cbegin(), remove.cend());
         for (auto it = input.cbegin(); it != input.cend(); ++it) {
             if (chars.contains(*it)) {
                 input.erase(it);
@@ -349,10 +322,10 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveLastAnyOf, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        TUtf16String input = UTF8ToWide(args[0].AsStringRef());
-        const TUtf16String remove = UTF8ToWide(args[1].AsStringRef());
-        const std::unordered_set<wchar16> chars(remove.cbegin(), remove.cend());
+    SIMPLE_UDF(TRemoveLast, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        TUtf32String input = UTF8ToUTF32<true>(args[0].AsStringRef());
+        const TUtf32String remove = UTF8ToUTF32<true>(args[1].AsStringRef());
+        const std::unordered_set<wchar32> chars(remove.cbegin(), remove.cend());
         for (auto it = input.crbegin(); it != input.crend(); ++it) {
             if (chars.contains(*it)) {
                 input.erase(input.crend() - it - 1, 1);
@@ -472,9 +445,6 @@ namespace {
     TRemoveAll, \
     TRemoveFirst, \
     TRemoveLast, \
-    TRemoveAllAnyOf, \
-    TRemoveFirstAnyOf, \
-    TRemoveLastAnyOf, \
     TToCodePointList, \
     TFromCodePointList, \
     TReverse, \

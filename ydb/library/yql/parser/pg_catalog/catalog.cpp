@@ -16,6 +16,8 @@ using TTypes = THashMap<ui32, TTypeDesc>;
 
 using TCasts = THashMap<ui32, TCastDesc>;
 
+using TAggregations = THashMap<ui32, TAggregateDesc>;
+
 class TParser {
 public:
     void Do(const TString& dat) {
@@ -383,8 +385,8 @@ public:
 
     void OnFinish() override {
         if (IsSupported) {
-            LastCast.CastId = 1 + Casts.size();
-            Casts[LastCast.CastId] = LastCast;
+            auto id = 1 + Casts.size();
+            Casts[id] = LastCast;
         }
 
         LastCast = TCastDesc();
@@ -400,10 +402,203 @@ private:
     bool IsSupported = true;
 };
 
+class TAggregationsParser : public TParser {
+public:
+    TAggregationsParser(TAggregations& aggregations, const THashMap<TString, ui32>& typeByName,
+        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
+        : Aggregations(aggregations)
+        , TypeByName(typeByName)
+        , ProcByName(procByName)
+        , Procs(procs)
+    {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        Y_UNUSED(ProcByName);
+        if (key == "aggtranstype") {
+            auto typeId = TypeByName.FindPtr(value);
+            Y_ENSURE(typeId);
+            LastAggregation.TransTypeId = *typeId;
+        } else if (key == "aggfnoid") {
+            LastOid = value;
+        } else if (key == "aggtransfn") {
+            LastTransFunc = value;
+        } else if (key == "aggfinalfn") {
+            LastFinalFunc = value;
+        } else if (key == "aggcombinefn") {
+            LastCombineFunc = value;
+        } else if (key == "aggserialfn") {
+            LastSerializeFunc = value;
+        } else if (key == "aggdeserialfn") {
+            LastDeserializeFunc = value;
+        } else if (key == "aggkind") {
+            if (value == "n") {
+                LastAggregation.Kind = EAggKind::Normal;
+            } else if (value == "o") {
+                LastAggregation.Kind = EAggKind::OrderedSet;
+            } else if (value == "h") {
+                LastAggregation.Kind = EAggKind::Hypothetical;
+            } else {
+                ythrow yexception() << "Unknown aggkind value: " << value;
+            }
+        }
+    }
+
+    void OnFinish() override {
+        if (IsSupported) {
+            if (FillSupported()) {
+                auto id = Aggregations.size() + 1;
+                Aggregations[id] = LastAggregation;
+            }
+        }
+
+        LastAggregation = TAggregateDesc();
+        IsSupported = true;
+        LastOid = "";
+        LastTransFunc = "";
+        LastFinalFunc = "";
+        LastCombineFunc = "";
+        LastSerializeFunc = "";
+        LastDeserializeFunc = "";
+    }
+
+    bool FillSupported() {
+        Y_ENSURE(LastAggregation.TransTypeId);
+        Y_ENSURE(LastOid);
+        Y_ENSURE(LastTransFunc);
+        auto transFuncIdsPtr = ProcByName.FindPtr(LastTransFunc);
+        if (!transFuncIdsPtr) {
+            // e.g. variadic ordered_set_transition_multi
+            return false;
+        }
+
+        for (const auto id : *transFuncIdsPtr) {
+            auto procPtr = Procs.FindPtr(id);
+            Y_ENSURE(procPtr);
+            if (procPtr->ArgTypes.size() >= 1 && procPtr->ArgTypes[0] == LastAggregation.TransTypeId) {
+                Y_ENSURE(!LastAggregation.TransFuncId);
+                LastAggregation.TransFuncId = id;
+            }
+        }
+
+        Y_ENSURE(LastAggregation.TransFuncId);
+
+        // oid format: name(arg1,arg2...)
+        auto pos1 = LastOid.find('(');
+        if (pos1 != TString::npos) {
+            LastAggregation.Name = LastOid.substr(0, pos1);
+            auto pos = pos1 + 1;
+            for (;;) {
+                auto nextPos = Min(LastOid.find(',', pos), LastOid.find(')', pos));
+                Y_ENSURE(nextPos != TString::npos);
+                if (pos == nextPos) {
+                    break;
+                }
+
+                auto arg = LastOid.substr(pos, nextPos - pos);
+                auto argTypeId = TypeByName.FindPtr(arg);
+                Y_ENSURE(argTypeId);
+                LastAggregation.ArgTypes.push_back(*argTypeId);
+                pos = nextPos;
+                if (LastOid[pos] == ')') {
+                    break;
+                } else {
+                    ++pos;
+                }
+            }
+        } else {
+            // no signature in oid, use transfunc
+            LastAggregation.Name = LastOid;
+            auto procPtr = Procs.FindPtr(LastAggregation.TransFuncId);
+            Y_ENSURE(procPtr);
+            LastAggregation.ArgTypes = procPtr->ArgTypes;
+            Y_ENSURE(LastAggregation.ArgTypes.size() >= 1);
+            Y_ENSURE(LastAggregation.ArgTypes[0] == LastAggregation.TransTypeId);
+            LastAggregation.ArgTypes.erase(LastAggregation.ArgTypes.begin());
+        }
+
+        Y_ENSURE(!LastAggregation.Name.empty());
+        if (!ResolveFunc(LastFinalFunc, LastAggregation.FinalFuncId, 1)) {
+            return false;
+        }
+
+        if (!ResolveFunc(LastCombineFunc, LastAggregation.CombineFuncId, 2)) {
+            return false;
+        }
+
+        if (!ResolveFunc(LastSerializeFunc, LastAggregation.SerializeFuncId, 1)) {
+            return false;
+        }
+
+        if (!ResolveFunc(LastDeserializeFunc, LastAggregation.DeserializeFuncId, 0)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ResolveFunc(const TString& name, ui32& funcId, ui32 stateArgsCount) {
+        if (name) {
+            auto funcIdsPtr = ProcByName.FindPtr(name);
+            if (!funcIdsPtr) {
+                return false;
+            }
+
+            if (!stateArgsCount) {
+                Y_ENSURE(funcIdsPtr->size() == 1);
+            }
+
+            for (const auto id : *funcIdsPtr) {
+                auto procPtr = Procs.FindPtr(id);
+                Y_ENSURE(procPtr);
+                bool found = true;
+                if (stateArgsCount > 0 && procPtr->ArgTypes.size() == stateArgsCount) {
+                    for (ui32 i = 0; i < stateArgsCount; ++i) {
+                        if (procPtr->ArgTypes[i] != LastAggregation.TransTypeId) {
+                            found = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (found) {
+                    Y_ENSURE(!funcId);
+                    funcId = id;
+                }
+            }
+
+            Y_ENSURE(funcId);
+        }
+
+        return true;
+    }
+
+private:
+    TAggregations& Aggregations;
+    const THashMap<TString, ui32>& TypeByName;
+    const THashMap<TString, TVector<ui32>>& ProcByName;
+    const TProcs& Procs;
+    TAggregateDesc LastAggregation;
+    bool IsSupported = true;
+    TString LastOid;
+    TString LastTransFunc;
+    TString LastFinalFunc;
+    TString LastCombineFunc;
+    TString LastSerializeFunc;
+    TString LastDeserializeFunc;
+};
+
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
     const THashMap<TString, TVector<ui32>>& procByName) {
     TOperators ret;
     TOperatorsParser parser(ret, typeByName, procByName);
+    parser.Do(dat);
+    return ret;
+}
+
+TAggregations ParseAggregations(const TString& dat, const THashMap<TString, ui32>& typeByName,
+    const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
+    TAggregations ret;
+    TAggregationsParser parser(ret, typeByName, procByName, procs);
     parser.Do(dat);
     return ret;
 }
@@ -440,6 +635,8 @@ struct TCatalog {
         Y_ENSURE(NResource::FindExact("pg_proc.dat", &procData));
         TString castData;
         Y_ENSURE(NResource::FindExact("pg_cast.dat", &castData));
+        TString aggData;
+        Y_ENSURE(NResource::FindExact("pg_aggregate.dat", &aggData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
         Types = ParseTypes(typeData, lazyTypeInfos);
         for (const auto& [k, v] : Types) {
@@ -527,6 +724,11 @@ struct TCatalog {
         for (const auto&[k, v] : Operators) {
             OperatorsByName[v.Name].push_back(k);
         }
+
+        Aggregations = ParseAggregations(aggData, TypeByName, ProcByName, Procs);
+        for (const auto&[k, v] : Aggregations) {
+            AggregationsByName[v.Name].push_back(k);
+        }
     }
 
     static const TCatalog& Instance() {
@@ -537,14 +739,16 @@ struct TCatalog {
     TProcs Procs;
     TTypes Types;
     TCasts Casts;
+    TAggregations Aggregations;
     THashMap<TString, TVector<ui32>> ProcByName;
     THashMap<TString, ui32> TypeByName;
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
     THashMap<TString, TVector<ui32>> OperatorsByName;
+    THashMap<TString, TVector<ui32>> AggregationsByName;
 };
 
-bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
-    if (argTypeIds.size() != d.ArgTypes.size()) {
+bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argTypeIds) {
+    if (argTypeIds.size() != descArgTypeIds.size()) {
         return false;
     }
 
@@ -554,13 +758,17 @@ bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
             continue; // NULL
         }
 
-        if (argTypeIds[i] != d.ArgTypes[i]) {
+        if (argTypeIds[i] != descArgTypeIds[i]) {
             found = false;
             break;
         }
     }
 
     return found;
+}
+
+bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
+    return ValidateArgs(d.ArgTypes, argTypeIds);
 }
 
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
@@ -651,16 +859,6 @@ const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId) {
     return *castPtr;
 }
 
-const TCastDesc& LookupCast(ui32 castId) {
-    const auto& catalog = TCatalog::Instance();
-    auto castPtr = catalog.Casts.FindPtr(castId);
-    if (!castPtr) {
-        throw yexception() << "No such cast: " << castId;
-    }
-
-    return *castPtr;
-}
-
 bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds) {
     ui32 size = d.Kind == EOperKind::Binary ? 2 : 1;
     if (argTypeIds.size() != size) {
@@ -731,6 +929,35 @@ const TOperDesc& LookupOper(ui32 operId) {
     }
 
     return *operPtr;
+}
+
+bool HasAggregation(const TStringBuf& name) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.AggregationsByName.contains(name);
+}
+
+bool ValidateAggregateArgs(const TAggregateDesc& d, const TVector<ui32>& argTypeIds) {
+    return ValidateArgs(d.ArgTypes, argTypeIds);
+}
+
+const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui32>& argTypeIds) {
+    const auto& catalog = TCatalog::Instance();
+    auto aggIdPtr = catalog.AggregationsByName.FindPtr(name);
+    if (!aggIdPtr) {
+        throw yexception() << "No such aggregate: " << name;
+    }
+
+    for (const auto& id : *aggIdPtr) {
+        const auto& d = catalog.Aggregations.FindPtr(id);
+        Y_ENSURE(d);
+        if (!ValidateAggregateArgs(*d, argTypeIds)) {
+            continue;
+        }
+
+        return *d;
+    }
+
+    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types";
 }
 
 }

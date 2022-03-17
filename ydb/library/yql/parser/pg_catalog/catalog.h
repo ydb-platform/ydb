@@ -51,11 +51,28 @@ enum class ECastMethod {
 };
 
 struct TCastDesc {
-    ui32 CastId = 0;
     ui32 SourceId = 0;
     ui32 TargetId = 0;
     ECastMethod Method = ECastMethod::Function;
     ui32 FunctionId = 0;
+};
+
+enum class EAggKind {
+    Normal,
+    OrderedSet,
+    Hypothetical
+};
+
+struct TAggregateDesc {
+    TString Name;
+    TVector<ui32> ArgTypes;
+    EAggKind Kind = EAggKind::Normal;
+    ui32 TransTypeId = 0;
+    ui32 TransFuncId = 0;
+    ui32 FinalFuncId = 0;
+    ui32 CombineFuncId = 0;
+    ui32 SerializeFuncId = 0;
+    ui32 DeserializeFuncId = 0;
 };
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
@@ -68,10 +85,12 @@ const TTypeDesc& LookupType(ui32 typeId);
 
 bool HasCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId);
-const TCastDesc& LookupCast(ui32 castId);
 
 const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds);
 const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds);
 const TOperDesc& LookupOper(ui32 operId);
+
+bool HasAggregation(const TStringBuf& name);
+const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui32>& argTypeIds);
 
 }

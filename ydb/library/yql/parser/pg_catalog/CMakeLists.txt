@@ -28,6 +28,7 @@ target_sources(yql-parser-pg_catalog.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f1a4bc0ed0162412cffb7ad89af053b9.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/1ecd65c896f36a3990d870644a6da9c8.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/46b25697572e7e60703079b71cd18295.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/15e039bc35a86f84476091e328dd74ea.cpp
 )
 resources(yql-parser-pg_catalog.global
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/99bdd9e510834dd355c2457fcccc53d5.cpp
@@ -56,4 +57,11 @@ resources(yql-parser-pg_catalog.global
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_cast.dat
   KEYS
   pg_cast.dat
+)
+resources(yql-parser-pg_catalog.global
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/15e039bc35a86f84476091e328dd74ea.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_aggregate.dat
+  KEYS
+  pg_aggregate.dat
 )

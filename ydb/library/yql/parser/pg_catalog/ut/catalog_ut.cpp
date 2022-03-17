@@ -34,10 +34,10 @@ Y_UNIT_TEST_SUITE(TTypesTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, LookupType("float8").TypeId);
 
         ret = LookupType(1009);
-        UNIT_ASSERT_VALUES_EQUAL(ret.TypeId, 25);
+        UNIT_ASSERT_VALUES_EQUAL(ret.TypeId, 1009);
         UNIT_ASSERT_VALUES_EQUAL(ret.ArrayTypeId, 1009);
-        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "text");
-        UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "_text");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, 25);
     }
 }
 
@@ -97,5 +97,59 @@ Y_UNIT_TEST_SUITE(TCastsTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.SourceId, LookupType("json").TypeId);
         UNIT_ASSERT_VALUES_EQUAL(ret.TargetId, LookupType("jsonb").TypeId);
         UNIT_ASSERT_VALUES_EQUAL(ret.FunctionId, 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TAggregationsTests) {
+    Y_UNIT_TEST(TestMissing) {
+        UNIT_ASSERT_EXCEPTION(LookupAggregation("foo", {}), yexception);
+    }
+
+    Y_UNIT_TEST(TestOk) {
+        auto ret = LookupAggregation("sum", {LookupType("int4").TypeId});
+        UNIT_ASSERT_VALUES_EQUAL(ret.TransTypeId, LookupType("int8").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "sum");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("int4").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.TransFuncId).Name, "int4_sum");
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.CombineFuncId).Name, "int8pl");
+        UNIT_ASSERT_VALUES_EQUAL(ret.FinalFuncId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ret.SerializeFuncId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ret.DeserializeFuncId, 0);
+
+        ret = LookupAggregation("sum", {LookupType("int8").TypeId});
+        UNIT_ASSERT_VALUES_EQUAL(ret.TransTypeId, LookupType("internal").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "sum");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("int8").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.TransFuncId).Name, "int8_avg_accum");
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.CombineFuncId).Name, "int8_avg_combine");
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.FinalFuncId).Name, "numeric_poly_sum");
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.SerializeFuncId).Name, "int8_avg_serialize");
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.DeserializeFuncId).Name, "int8_avg_deserialize");
+
+        ret = LookupAggregation("string_agg", {LookupType("text").TypeId, LookupType("text").TypeId});
+        UNIT_ASSERT_VALUES_EQUAL(ret.TransTypeId, LookupType("internal").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "string_agg");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("text").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[1], LookupType("text").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.TransFuncId).Name, "string_agg_transfn");
+        UNIT_ASSERT_VALUES_EQUAL(ret.CombineFuncId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.FinalFuncId).Name, "string_agg_finalfn");
+        UNIT_ASSERT_VALUES_EQUAL(ret.SerializeFuncId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ret.DeserializeFuncId, 0);
+
+        ret = LookupAggregation("regr_count", {LookupType("float8").TypeId, LookupType("float8").TypeId});
+        UNIT_ASSERT_VALUES_EQUAL(ret.TransTypeId, LookupType("int8").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "regr_count");
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("float8").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[1], LookupType("float8").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.TransFuncId).Name, "int8inc_float8_float8");
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(ret.CombineFuncId).Name, "int8pl");
+        UNIT_ASSERT_VALUES_EQUAL(ret.FinalFuncId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ret.SerializeFuncId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ret.DeserializeFuncId, 0);
     }
 }

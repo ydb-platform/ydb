@@ -2616,6 +2616,19 @@ IGraphTransformer::TStatus EnsureTypeOrAtomRewrite(TExprNode::TPtr& node, TExprC
     return IGraphTransformer::TStatus::Ok;
 }
 
+bool EnsureTypePg(const TExprNode& node, TExprContext& ctx) {
+    if (!EnsureType(node, ctx)) {
+        return false;
+    }
+
+    if (node.GetTypeAnn()->Cast<TTypeExprType>()->GetType()->GetKind() != ETypeAnnotationKind::Pg) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected pg type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
     if (const auto dry = DryType(&type, ctx); !(dry && IsSameAnnotation(*dry, type))) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected dry type, but got: " << type));

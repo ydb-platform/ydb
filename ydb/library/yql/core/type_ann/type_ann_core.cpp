@@ -9660,33 +9660,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        ui32 typeId;
-        if (input->Child(0)->IsAtom()) {
-            auto type = input->Child(0)->Content();
-            if (!NPg::HasType(type)) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
-                    TStringBuilder() << "Unknown type: '" << type << "'"));
-                return IGraphTransformer::TStatus::Error;
-            }
-            typeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
-        } else {
-            if (!EnsureType(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            auto typeAnn = input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            if (typeAnn->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
-                    TStringBuilder() << "Expecting Pg type, got: " << *typeAnn));
-                return IGraphTransformer::TStatus::Error;
-            }
-            typeId = typeAnn->Cast<TPgExprType>()->GetId();
+        if (!EnsureTypePg(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
+        // TODO: validate value
         if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(typeId));
+        input->SetTypeAnn(input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -9696,17 +9679,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto targetTypeId = NPg::LookupType(TString(input->Child(0)->Content())).TypeId;
-
-        auto type = input->Tail().GetTypeAnn();
+        auto type = input->Head().GetTypeAnn();
         ui32 inputTypeId = 0;
         if (!ExtractPgType(type, inputTypeId, input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
+
+        if (!EnsureTypePg(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto targetTypeId = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>()->GetId();
 
         if (inputTypeId != 0 && inputTypeId != targetTypeId) {
             if (NPg::LookupType(inputTypeId).Category != 'S' &&

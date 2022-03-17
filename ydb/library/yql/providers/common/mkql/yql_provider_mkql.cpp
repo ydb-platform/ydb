@@ -2270,7 +2270,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("PgCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto input = MkqlBuildExpr(*node.Child(1), ctx);
+        auto input = MkqlBuildExpr(*node.Child(0), ctx);
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.PgCast(input, returnType);
     });

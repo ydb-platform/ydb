@@ -1145,7 +1145,7 @@ public:
                 finalType = "_" + finalType;
             }
 
-            return L(A("PgCast"), QA(finalType), input);
+            return L(A("PgCast"), input, QA(finalType));
         }
 
         AddError("Unsupported form of type cast");

@@ -114,6 +114,7 @@ bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& typ
 bool EnsureType(const TExprNode& node, TExprContext& ctx);
 IGraphTransformer::TStatus EnsureTypeRewrite(TExprNode::TPtr& node, TExprContext& ctx);
 IGraphTransformer::TStatus EnsureTypeOrAtomRewrite(TExprNode::TPtr& node, TExprContext& ctx);
+bool EnsureTypePg(const TExprNode& node, TExprContext& ctx);
 bool EnsureDryType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureDryType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx);

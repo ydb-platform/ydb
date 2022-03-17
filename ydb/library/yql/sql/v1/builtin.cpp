@@ -610,7 +610,7 @@ public:
     {
     }
 
-    bool DoInit(TContext& ctx, ISource* src) override {
+    bool DoInit(TContext& ctx, ISource* src) final {
         if (!ValidateArguments(ctx)) {
             return false;
         }
@@ -630,10 +630,39 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlPgConst(Pos, Args);
+        return new TYqlPgConst(Pos, CloneContainer(Args));
     }
 };
 
+class TYqlPgOp : public TCallNode {
+public:
+    TYqlPgOp(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "PgOp", 2, 3, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[0]->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!Args[0]->IsLiteral() || Args[0]->GetLiteralType() != "String") {
+            ctx.Error(Args[0]->GetPos()) << "Expecting string literal as first argument";
+            return false;
+        }
+
+        Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlPgOp(Pos, CloneContainer(Args));
+    }
+};
 
 template <const char* Name>
 class TYqlSubqueryFor : public TCallNode {
@@ -2656,6 +2685,10 @@ struct TBuiltinFuncData {
             {"formattype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatType", 1, 1) },
             {"pgtype", BuildSimpleBuiltinFactoryCallback<TYqlPgType>() },
             {"pgconst", BuildSimpleBuiltinFactoryCallback<TYqlPgConst>() },
+            {"pgop", BuildSimpleBuiltinFactoryCallback<TYqlPgOp>() },
+            {"pgcast", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgCast", 2, 3) },
+            {"frompg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromPg", 1, 1) },
+            {"topg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToPg", 1, 1) },
             {"typeof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeOf", 1, 1) },
             {"instanceof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1) },
             {"datatype", BuildSimpleBuiltinFactoryCallback<TYqlDataType>() },

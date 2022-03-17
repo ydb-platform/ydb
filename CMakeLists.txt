@@ -7,7 +7,7 @@
 
 
 cmake_minimum_required(VERSION 3.15)
-project(YDB LANGUAGES)
+project(YDB LANGUAGES ASM C CXX)
 
 set(BUILD_SHARED_LIBS Off)
 set(CMAKE_CXX_STANDARD 20)

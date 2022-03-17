@@ -37,6 +37,30 @@ run_antlr(
   -language
   protobuf
 )
+set(
+  ANTLR_PACKAGE_NAME
+  NJsonPathGenerated
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NJsonPathGenerated
+)
+set(
+  LEXER_PARSER_NAMESPACE
+  NALP
+)
+set(
+  PROTOBUF_HEADER_PATH
+  ydb/library/yql/parser/proto_ast/gen/jsonpath
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
+)
 run_antlr(
   OUTPUT
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp

@@ -17,6 +17,22 @@ target_sources(proto_ast-gen-v1 PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.cpp
 )
+set(
+  ANTLR_PACKAGE_NAME
+  NSQLv1Generated
+)
+set(
+  LEXER_PARSER_NAMESPACE
+  NALPDefault
+)
+set(
+  PROTOBUF_HEADER_PATH
+  ydb/library/yql/parser/proto_ast/gen/v1_proto
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1/org/antlr/codegen/templates/Cpp/Cpp.stg
+)
 run_antlr(
   OUTPUT
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.cpp

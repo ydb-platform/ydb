@@ -664,6 +664,36 @@ public:
     }
 };
 
+class TYqlPgCall : public TCallNode {
+public:
+    TYqlPgCall(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "PgCall", 1, -1, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[0]->Init(ctx, src)) {
+            return false;
+        }
+
+        if (!Args[0]->IsLiteral() || Args[0]->GetLiteralType() != "String") {
+            ctx.Error(Args[0]->GetPos()) << "Expecting string literal as first argument";
+            return false;
+        }
+
+        Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlPgCall(Pos, CloneContainer(Args));
+    }
+};
+
 template <const char* Name>
 class TYqlSubqueryFor : public TCallNode {
 public:
@@ -2686,6 +2716,7 @@ struct TBuiltinFuncData {
             {"pgtype", BuildSimpleBuiltinFactoryCallback<TYqlPgType>() },
             {"pgconst", BuildSimpleBuiltinFactoryCallback<TYqlPgConst>() },
             {"pgop", BuildSimpleBuiltinFactoryCallback<TYqlPgOp>() },
+            {"pgcall", BuildSimpleBuiltinFactoryCallback<TYqlPgCall>() },
             {"pgcast", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgCast", 2, 3) },
             {"frompg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromPg", 1, 1) },
             {"topg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToPg", 1, 1) },
@@ -3092,6 +3123,11 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
+    } else if (ns == "pg") {
+        TVector<TNodePtr> pgCallArgs;
+        pgCallArgs.push_back(BuildLiteralRawString(pos, name));
+        pgCallArgs.insert(pgCallArgs.end(), args.begin(), args.end());
+        return new TYqlPgCall(pos, pgCallArgs);
     } else if (name == "MakeLibraPreprocessor") {
         if (args.size() != 1) {
             return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires exactly one argument");

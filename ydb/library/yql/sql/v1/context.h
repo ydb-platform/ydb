@@ -259,6 +259,7 @@ namespace NSQLTranslationV1 {
         bool FlexibleTypes = false;
         // see YQL-10265
         bool AnsiCurrentRow = false;
+        bool PgTypes = false;
         THashMap<TString, TMaybe<TString>> Libraries; // alias -> optional file
         THashMap<TString, ui32> PackageVersions;
         NYql::TWarningPolicy WarningPolicy;

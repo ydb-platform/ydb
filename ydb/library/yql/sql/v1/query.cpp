@@ -1775,6 +1775,11 @@ public:
                             BuildQuotedAtom(Pos, "Attr"), BuildQuotedAtom(Pos, "Dummy_"), BuildQuotedAtom(Pos, "1"))));
                     }
                 }
+
+                if (ctx.PgTypes) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "PgTypes"))));
+                }
             }
         }
 

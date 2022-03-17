@@ -50,6 +50,7 @@ target_sources(cpp-actors-core PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/memory_track.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/memory_tracker.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/monotonic.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/monotonic_provider.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/worker_context.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/probes.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/core/process_stats.cpp

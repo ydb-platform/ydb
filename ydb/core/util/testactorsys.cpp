@@ -208,4 +208,12 @@ TIntrusivePtr<ITimeProvider> TTestActorSystem::CreateTimeProvider() {
     return MakeIntrusive<TTestActorTimeProvider>();
 }
 
+TIntrusivePtr<IMonotonicTimeProvider> TTestActorSystem::CreateMonotonicTimeProvider() {
+    class TTestActorMonotonicTimeProvider : public IMonotonicTimeProvider {
+    public:
+        TMonotonic Now() override { return TMonotonic::MicroSeconds(CurrentTestActorSystem->Clock.MicroSeconds()); }
+    };
+    return MakeIntrusive<TTestActorMonotonicTimeProvider>();
+}
+
 }

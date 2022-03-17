@@ -187,6 +187,8 @@ public:
 
         Y_VERIFY(!CurrentTestActorSystem);
         CurrentTestActorSystem = this;
+
+        AppData.MonotonicTimeProvider = CreateMonotonicTimeProvider();
     }
 
     ~TTestActorSystem() {
@@ -195,6 +197,7 @@ public:
     }
 
     static TIntrusivePtr<ITimeProvider> CreateTimeProvider();
+    static TIntrusivePtr<IMonotonicTimeProvider> CreateMonotonicTimeProvider();
 
     TAppData *GetAppData() {
         return &AppData;

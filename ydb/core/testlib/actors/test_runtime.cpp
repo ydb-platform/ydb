@@ -120,6 +120,9 @@ namespace NActors {
             node->LogSettings->MessagePrefix = " node " + ToString(nodeId);
 
             auto* nodeAppData = node->GetAppData<NKikimr::TAppData>();
+            if (!UseRealThreads) {
+                nodeAppData->MonotonicTimeProvider = MonotonicTimeProvider;
+            }
             nodeAppData->DataShardExportFactory = app0->DataShardExportFactory;
             nodeAppData->DomainsInfo = app0->DomainsInfo;
             nodeAppData->ChannelProfiles = app0->ChannelProfiles;

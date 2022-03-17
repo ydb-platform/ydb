@@ -6,6 +6,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/executor_thread.h>
 #include <library/cpp/actors/core/mailbox.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/actors/util/should_continue.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/interconnect/mock/ic_mock.h>
@@ -188,6 +189,7 @@ namespace NActors {
         class TSchedulerThreadStub;
         class TExecutorPoolStub;
         class TTimeProvider;
+        class TMonotonicTimeProvider;
 
         enum class EEventAction {
             PROCESS,
@@ -229,7 +231,9 @@ namespace NActors {
         void SetLogBackend(const TAutoPtr<TLogBackend> logBackend);
         void SetLogPriority(NActors::NLog::EComponent component, NActors::NLog::EPriority priority);
         TIntrusivePtr<ITimeProvider> GetTimeProvider();
+        TIntrusivePtr<IMonotonicTimeProvider> GetMonotonicTimeProvider();
         TInstant GetCurrentTime() const;
+        TMonotonic GetCurrentMonotonicTime() const;
         void UpdateCurrentTime(TInstant newTime);
         void AdvanceCurrentTime(TDuration duration);
         void AddLocalService(const TActorId& actorId, const TActorSetupCmd& cmd, ui32 nodeIndex = 0);
@@ -534,6 +538,7 @@ namespace NActors {
 
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
+        TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;
 
     protected:
         struct TNodeDataBase: public TThrRefBase {

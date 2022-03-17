@@ -244,7 +244,6 @@ struct TFixedIntervalPolicy : IRetryPolicy<TArgs...> {
         , RetryClassFunction(std::move(retryClassFunction))
     {
         Y_ASSERT(RetryClassFunction);
-        Y_ASSERT(MaxRetries > 0);
         Y_ASSERT(MaxTime > Delay);
         Y_ASSERT(MaxTime > LongRetryDelay);
         Y_ASSERT(LongRetryDelay >= Delay);

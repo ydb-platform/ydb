@@ -577,11 +577,26 @@ public:
     {
     }
 
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        auto call = dynamic_cast<TCallNode*>(Args[0].Get());
+        if (!call || call->GetOpName() != "PgType") {
+            ctx.Error(Args[0]->GetPos()) << "Expecting pg type name";
+            return false;
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+
     TNodePtr DoClone() const final {
         return new TYqlPgType(Pos, CloneContainer(Args));
     }
 
-    TAstNode* Translate(TContext& ctx) const override {
+    TAstNode* Translate(TContext& ctx) const final {
         // argument is already a proper PgType callable - here we just return argument
         YQL_ENSURE(Nodes.size() == 2);
         return Nodes.back()->Translate(ctx);
@@ -603,8 +618,13 @@ public:
         if (!Args[1]->Init(ctx, src)) {
             return false;
         }
-        auto value = MakeAtomFromExpression(ctx, Args[1]).Build();
-        Args[1] = value;
+
+        if (Args[1]->IsLiteral()) {
+            Args[1] = BuildQuotedAtom(Args[1]->GetPos(), Args[1]->GetLiteralValue());
+        } else {
+            auto value = MakeAtomFromExpression(ctx, Args[1]).Build();
+            Args[1] = value;
+        }
 
         return TCallNode::DoInit(ctx, src);
     }

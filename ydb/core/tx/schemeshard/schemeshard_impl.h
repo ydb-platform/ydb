@@ -205,6 +205,7 @@ public:
 
     TCompactionStarter CompactionStarter;
     TCompactionQueue* CompactionQueue = nullptr;
+    THashSet<TShardIdx> ShardsWithBorrowed;
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
 

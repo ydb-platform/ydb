@@ -289,6 +289,7 @@ void TSchemeShard::Clear() {
         CompactionQueue->Clear();
         UpdateBackgroundCompactionQueueMetrics();
     }
+    ShardsWithBorrowed.clear();
     PersQueueGroups.clear();
     RtmrVolumes.clear();
     SubDomains.clear();

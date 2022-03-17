@@ -153,6 +153,7 @@ enum ESimpleCounters {
     COUNTER_COMPACTION_QUEUE_SIZE_DELETES = 124           [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeByRowDeletes"}];
     COUNTER_COMPACTION_QUEUE_RUNNING = 125                [(CounterOpts) = {Name: "BackgroundCompactionQueueRunning"}];
     COUNTER_COMPACTION_QUEUE_WAITING_REPEAT = 126         [(CounterOpts) = {Name: "BackgroundCompactionQueueWaitingRepeat"}];
+    COUNTER_SHARDS_WITH_BORROWED_DATA = 127               [(CounterOpts) = {Name: "TableShardsWithBorrowedData"}];
 }
 
 enum ECumulativeCounters {

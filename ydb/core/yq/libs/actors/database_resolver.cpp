@@ -35,7 +35,7 @@ class TResponseProcessor : public TActorBootstrapped<TResponseProcessor>
 {
 public:
     enum EWakeUp {
-        WU_Die_On_Ttl
+        WU_DIE_ON_TTL
     };
 
     TResponseProcessor(
@@ -58,7 +58,7 @@ public:
     static constexpr char ActorName[] = "YQ_RESPONSE_PROCESSOR";
 
     void Bootstrap() {
-        Schedule(ResolvingTtl, new NActors::TEvents::TEvWakeup(WU_Die_On_Ttl));
+        Schedule(ResolvingTtl, new NActors::TEvents::TEvWakeup(WU_DIE_ON_TTL));
         Become(&TResponseProcessor::StateFunc);
     }
 
@@ -72,7 +72,7 @@ private:
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
         auto tag = ev->Get()->Tag;
         switch (tag) {
-        case WU_Die_On_Ttl:
+        case WU_DIE_ON_TTL:
             DieOnTtl();
             break;
         }

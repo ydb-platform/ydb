@@ -192,6 +192,13 @@ namespace {
             return args[0];
     }
 
+    SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
+        if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), ""))
+            return valueBuilder->NewString(result);
+        else
+            return args[0];
+    }
+
     SIMPLE_UDF(TReplaceFirst, char*(TAutoMap<char*>, char*, char*)) {
         std::string result(args[0].AsStringRef());
         const std::string_view what(args[1].AsStringRef());
@@ -232,7 +239,7 @@ namespace {
         return args[0];
     }
 
-    SIMPLE_UDF(TRemoveAll, char*(TAutoMap<char*>, char*)) {
+    SIMPLE_UDF(TRemoveAllAnyOf, char*(TAutoMap<char*>, char*)) {
         std::string input(args[0].AsStringRef());
         const std::string_view remove(args[1].AsStringRef());
         const std::unordered_set<char> chars(remove.cbegin(), remove.cend());
@@ -545,6 +552,7 @@ namespace {
         TReplaceFirst,
         TReplaceLast,
         TRemoveAll,
+        TRemoveAllAnyOf,
         TRemoveFirst,
         TRemoveFirstAnyOf,
         TRemoveLast,

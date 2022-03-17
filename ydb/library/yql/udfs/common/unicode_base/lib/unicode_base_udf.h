@@ -266,95 +266,98 @@ namespace {
     }
 
     SIMPLE_UDF(TReplaceAll, TUtf8(TAutoMap<TUtf8>, TUtf8, TUtf8)) {
-        const TStringBuf input(args[0].AsStringRef());
-        const TStringBuf whatBuf(args[1].AsStringRef());
-        const TStringBuf withBuf(args[2].AsStringRef());
-        TUtf16String result = UTF8ToWide(input);
-        const TUtf16String& what = UTF8ToWide(whatBuf);
-        const TUtf16String& with = UTF8ToWide(withBuf);
-        if (TUtf16String result = UTF8ToWide(input); SubstGlobal(result, what, with))
-            return valueBuilder->NewString(WideToUTF8(result));
+        if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), args[2].AsStringRef()))
+            return valueBuilder->NewString(result);
+        else
+            return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveAll, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        if (TString result(args[0].AsStringRef()); SubstGlobal(result, args[1].AsStringRef(), ""))
+            return valueBuilder->NewString(result);
         else
             return args[0];
     }
 
     SIMPLE_UDF(TReplaceFirst, TUtf8(TAutoMap<TUtf8>, TUtf8, TUtf8)) {
-        const TStringBuf input(args[0].AsStringRef());
-        const TStringBuf whatBuf(args[1].AsStringRef());
-        const TStringBuf withBuf(args[2].AsStringRef());
-        TUtf16String result = UTF8ToWide(input);
-        const TUtf16String& what = UTF8ToWide(whatBuf);
-        const TUtf16String& with = UTF8ToWide(withBuf);
-        if (what.size() != 1) {
-            ythrow yexception() << "Only one char is supported as second argument";
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.find(what); index != std::string::npos) {
+            result.replace(index, what.size(), std::string_view(args[2].AsStringRef()));
+            return valueBuilder->NewString(result);
         }
-        if (with.size() != 1) {
-            ythrow yexception() << "Only one char is supported as third argument";
-        }
-        if (const auto index = result.find(what[0]); index != TUtf16String::npos) {
-            result.replace(index, 1, with.data());
-            return valueBuilder->NewString(WideToUTF8(result));
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveFirst, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.find(what); index != std::string::npos) {
+            result.erase(index, what.size());
+            return valueBuilder->NewString(result);
         }
         return args[0];
     }
 
     SIMPLE_UDF(TReplaceLast, TUtf8(TAutoMap<TUtf8>, TUtf8, TUtf8)) {
-        const TStringBuf input(args[0].AsStringRef());
-        const TStringBuf whatBuf(args[1].AsStringRef());
-        const TStringBuf withBuf(args[2].AsStringRef());
-        TUtf16String result = UTF8ToWide(input);
-        const TUtf16String& what = UTF8ToWide(whatBuf);
-        const TUtf16String& with = UTF8ToWide(withBuf);
-        if (what.size() != 1) {
-            ythrow yexception() << "Only one char is supported as second argument";
-        }
-        if (with.size() != 1) {
-            ythrow yexception() << "Only one char is supported as third argument";
-        }
-        if (const auto index = result.rfind(what[0]); index != TUtf16String::npos) {
-            result.replace(index, 1, with.data());
-            return valueBuilder->NewString(WideToUTF8(result));
-        }
-        return args[0];
-    }
-
-    SIMPLE_UDF(TRemoveAll, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        const TStringBuf input(args[0].AsStringRef());
-        const TStringBuf removeBuf(args[1].AsStringRef());
-        TUtf16String result = UTF8ToWide(input);
-        const TUtf16String& remove = UTF8ToWide(removeBuf);
-        for (const wchar16 c : remove) {
-            RemoveAll(result, c);
-        }
-        return valueBuilder->NewString(WideToUTF8(result));
-    }
-
-    SIMPLE_UDF(TRemoveFirst, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        const TStringBuf input(args[0].AsStringRef());
-        const TStringBuf removeBuf(args[1].AsStringRef());
-        TUtf16String result = UTF8ToWide(input);
-        const TUtf16String& remove = UTF8ToWide(removeBuf);
-        if (remove.size() != 1) {
-            ythrow yexception() << "Only one char is supported as second argument";
-        }
-        if (const auto index = result.find(remove[0]); index != TUtf16String::npos) {
-            result.remove(index, 1);
-            return valueBuilder->NewString(WideToUTF8(result));
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.rfind(what); index != std::string::npos) {
+            result.replace(index, what.size(), std::string_view(args[2].AsStringRef()));
+            return valueBuilder->NewString(result);
         }
         return args[0];
     }
 
     SIMPLE_UDF(TRemoveLast, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
-        const TStringBuf input(args[0].AsStringRef());
-        const TStringBuf removeBuf(args[1].AsStringRef());
-        TUtf16String result = UTF8ToWide(input);
-        const TUtf16String& remove = UTF8ToWide(removeBuf);
-        if (remove.size() != 1) {
-            ythrow yexception() << "Only one char is supported as second argument";
+        std::string result(args[0].AsStringRef());
+        const std::string_view what(args[1].AsStringRef());
+        if (const auto index = result.rfind(what); index != std::string::npos) {
+            result.erase(index, what.size());
+            return valueBuilder->NewString(result);
         }
-        if (const auto index = result.rfind(remove[0]); index != TUtf16String::npos) {
-            result.remove(index, 1);
-            return valueBuilder->NewString(WideToUTF8(result));
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveAllAnyOf, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        TUtf16String input = UTF8ToWide(args[0].AsStringRef());
+        const TUtf16String remove = UTF8ToWide(args[1].AsStringRef());
+        const std::unordered_set<wchar16> chars(remove.cbegin(), remove.cend());
+        size_t tpos = 0;
+        for (const wchar16 c : input) {
+            if (!chars.contains(c)) {
+                input[tpos++] = c;
+            }
+        }
+        if (tpos != input.size()) {
+            input.resize(tpos);
+            return valueBuilder->NewString(WideToUTF8(input));
+        }
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveFirstAnyOf, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        TUtf16String input = UTF8ToWide(args[0].AsStringRef());
+        const TUtf16String remove = UTF8ToWide(args[1].AsStringRef());
+        const std::unordered_set<wchar16> chars(remove.cbegin(), remove.cend());
+        for (auto it = input.cbegin(); it != input.cend(); ++it) {
+            if (chars.contains(*it)) {
+                input.erase(it);
+                return valueBuilder->NewString(WideToUTF8(input));
+            }
+        }
+        return args[0];
+    }
+
+    SIMPLE_UDF(TRemoveLastAnyOf, TUtf8(TAutoMap<TUtf8>, TUtf8)) {
+        TUtf16String input = UTF8ToWide(args[0].AsStringRef());
+        const TUtf16String remove = UTF8ToWide(args[1].AsStringRef());
+        const std::unordered_set<wchar16> chars(remove.cbegin(), remove.cend());
+        for (auto it = input.crbegin(); it != input.crend(); ++it) {
+            if (chars.contains(*it)) {
+                input.erase(input.crend() - it - 1, 1);
+                return valueBuilder->NewString(WideToUTF8(input));
+            }
         }
         return args[0];
     }
@@ -469,6 +472,9 @@ namespace {
     TRemoveAll, \
     TRemoveFirst, \
     TRemoveLast, \
+    TRemoveAllAnyOf, \
+    TRemoveFirstAnyOf, \
+    TRemoveLastAnyOf, \
     TToCodePointList, \
     TFromCodePointList, \
     TReverse, \

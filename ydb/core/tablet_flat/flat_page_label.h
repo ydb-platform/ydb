@@ -12,9 +12,13 @@ namespace NKikimr {
 namespace NTable {
 namespace NPage {
 
+    // N.B. this struct includes only fields from old style label,
+    // new style label (most significant bit is set is Format) contains
+    // extra 8 bytes, first one is codec, the rest is reserved.
+    // See TLabelWrapper::Read()
     struct TLabel {
         EPage Type;
-        ui16 Format;
+        ui16 Format; // most significant bit is format indicator, the rest is version
         TSize Size;
 
         void Init(EPage type, ui16 format, ui64 size) noexcept;

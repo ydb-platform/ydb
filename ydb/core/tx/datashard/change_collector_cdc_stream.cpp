@@ -186,7 +186,7 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
             if (it != updates.end()) {
                 newState.Set(pos, it->second.Op, it->second.AsCell());
             } else if (rop == ERowOp::Upsert) {
-                newState.Set(pos, oldState.GetOp(pos), oldState.Get(pos));
+                newState.Set(pos, oldState.GetCellOp(pos), oldState.Get(pos));
             } else {
                 newState.Set(pos, ECellOp::Null, TCell());
             }

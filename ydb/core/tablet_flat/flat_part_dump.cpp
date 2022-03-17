@@ -173,7 +173,7 @@ namespace {
                 if (info.IsKey())
                     continue;
 
-                const auto op = iter->GetOp(info);
+                const auto op = iter->GetCellOp(info);
 
                 if (op == ECellOp::Empty)
                     continue;

@@ -40,7 +40,9 @@ namespace NPage {
                 in-place crc (may be) or other pages common metadata.
              */
 
+            // this ugly construct is just to get ui8 at raw.begin() + sizeof(TLabel)
             auto codec = ECodec(*TDeref<ui8>::At(TDeref<TLabel>::At(raw.begin(), 0) + 1, 0));
+
             auto *on = raw.begin() + sizeof(TLabel) + 8;
 
             return { label.Type, version, codec, { on, raw.end() } };

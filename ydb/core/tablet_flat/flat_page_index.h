@@ -28,9 +28,11 @@ namespace NPage {
 #pragma pack(push,1)
 
         struct TItem {
-            TCellOp GetOp(bool) const noexcept
+            TCellOp GetCellOp(bool) const noexcept
             {
-                return { Null ? ECellOp::Null : ECellOp::Set, ELargeObj::Inline };
+                if (Null)
+                    return TCellOp(ECellOp::Null);
+                return TCellOp(ECellOp::Set, ELargeObj::Inline);
             }
 
             bool Null;

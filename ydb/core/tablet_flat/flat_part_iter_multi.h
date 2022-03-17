@@ -1127,7 +1127,7 @@ namespace NTable {
                 const NPage::TDataPage::TRecord* data,
                 const TPartScheme::TColumn& info) const noexcept
         {
-            auto op = data->GetOp(info);
+            auto op = data->GetCellOp(info);
 
             if (op == ECellOp::Empty) {
                 Y_VERIFY(!info.IsKey(), "Got an absent key cell");

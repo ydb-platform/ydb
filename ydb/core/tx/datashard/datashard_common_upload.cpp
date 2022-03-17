@@ -156,7 +156,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             bool allowUpdate = true;
-            if (readForTableShadow && rowState == NTable::ERowOp::Upsert && rowState.GetOp(vi) != NTable::ECellOp::Empty) {
+            if (readForTableShadow && rowState == NTable::ERowOp::Upsert && rowState.GetCellOp(vi) != NTable::ECellOp::Empty) {
                 // We don't want to overwrite columns that already has some value
                 allowUpdate = false;
             }

@@ -48,6 +48,11 @@ namespace NMonitoring {
         Metrics_.erase(labels);
     }
 
+    bool TFakeMetricRegistry::HasMetric(const ILabels &labels) noexcept {
+        TReadGuard g{Lock_};
+        return Metrics_.contains(labels);
+    }
+
     void TFakeMetricRegistry::Accept(TInstant time, IMetricConsumer* consumer) const {
         Y_UNUSED(time);
         consumer->OnStreamBegin();

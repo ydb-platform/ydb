@@ -44,6 +44,7 @@ namespace NMonitoring {
     public:
         virtual const TLabels& CommonLabels() const noexcept = 0;
         virtual void RemoveMetric(const ILabels& labels) noexcept = 0;
+        virtual bool HasMetric(const ILabels& labels) noexcept = 0;
     };
 
 
@@ -101,6 +102,7 @@ namespace NMonitoring {
         }
 
         void RemoveMetric(const ILabels& labels) noexcept override;
+        bool HasMetric(const ILabels &labels) noexcept override;
 
     private:
         TGauge* Gauge(ILabelsPtr labels) override;

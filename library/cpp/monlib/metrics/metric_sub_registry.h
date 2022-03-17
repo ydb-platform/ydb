@@ -100,6 +100,15 @@ public:
         DelegatePtr_->RemoveMetric(toRemove);
     }
 
+    bool HasMetric(const ILabels &labels) noexcept override {
+        TLabelsImpl<TStringBuf> toCheck;
+        for (auto& l: labels) {
+            toCheck.Add(l);
+        }
+        AddCommonLabels(&toCheck);
+        return DelegatePtr_->HasMetric(toCheck);
+    }
+
 private:
     void AddCommonLabels(ILabels* labels) const {
         for (auto& label: CommonLabels_) {

@@ -341,4 +341,14 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT(commonLabels[0].GetName() == "common");
         UNIT_ASSERT(commonLabels[0].GetValue() == "label");
     }
+
+    Y_UNIT_TEST(HasMetricTest) {
+        TMetricRegistry registry;
+        TLabels labels{{"some", "labels"}};
+        TLabels anotherLabels{{"another", "label"}};
+
+        registry.Gauge(labels);
+        UNIT_ASSERT_EQUAL(registry.HasMetric(labels), true);
+        UNIT_ASSERT_EQUAL(registry.HasMetric(anotherLabels), false);
+    }
 }

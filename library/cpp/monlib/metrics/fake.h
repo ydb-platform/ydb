@@ -37,6 +37,7 @@ namespace NMonitoring {
 
         const TLabels& CommonLabels() const noexcept override;
         void RemoveMetric(const ILabels& labels) noexcept override;
+        bool HasMetric(const ILabels &labels) noexcept override;
 
     private:
         TRWMutex Lock_;

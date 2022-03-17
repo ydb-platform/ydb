@@ -194,6 +194,12 @@ namespace NMonitoring {
         Metrics_.erase(labels);
     }
 
+    bool TMetricRegistry::HasMetric(const ILabels &labels) noexcept {
+        TReadGuard g{*Lock_};
+
+        return Metrics_.contains(labels);
+    }
+
     void TMetricRegistry::Accept(TInstant time, IMetricConsumer* consumer) const {
         consumer->OnStreamBegin();
 

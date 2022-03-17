@@ -8,6 +8,20 @@
 
 namespace NYql::NPg {
 
+constexpr ui32 AnyOid = 2276;
+
+bool IsCompatibleTo(ui32 actualType, ui32 expectedType) {
+    if (!actualType) {
+        return true;
+    }
+
+    if (expectedType == AnyOid) {
+        return true;
+    }
+
+    return actualType == expectedType;
+}
+
 using TOperators = THashMap<ui32, TOperDesc>;
 
 using TProcs = THashMap<ui32, TProcDesc>;
@@ -352,7 +366,7 @@ public:
                             continue;
                         }
 
-                        if (procPtr->ArgTypes.at(0) == *inputTypeIdPtr) {
+                        if (IsCompatibleTo(*inputTypeIdPtr, procPtr->ArgTypes[0])) {
                             LastCast.FunctionId = procPtr->ProcId;
                             found = true;
                             break;
@@ -474,7 +488,7 @@ public:
         for (const auto id : *transFuncIdsPtr) {
             auto procPtr = Procs.FindPtr(id);
             Y_ENSURE(procPtr);
-            if (procPtr->ArgTypes.size() >= 1 && procPtr->ArgTypes[0] == LastAggregation.TransTypeId) {
+            if (procPtr->ArgTypes.size() >= 1 && IsCompatibleTo(LastAggregation.TransTypeId, procPtr->ArgTypes[0])) {
                 Y_ENSURE(!LastAggregation.TransFuncId);
                 LastAggregation.TransFuncId = id;
             }
@@ -512,7 +526,7 @@ public:
             Y_ENSURE(procPtr);
             LastAggregation.ArgTypes = procPtr->ArgTypes;
             Y_ENSURE(LastAggregation.ArgTypes.size() >= 1);
-            Y_ENSURE(LastAggregation.ArgTypes[0] == LastAggregation.TransTypeId);
+            Y_ENSURE(IsCompatibleTo(LastAggregation.TransTypeId, LastAggregation.ArgTypes[0]));
             LastAggregation.ArgTypes.erase(LastAggregation.ArgTypes.begin());
         }
 
@@ -553,7 +567,7 @@ public:
                 bool found = true;
                 if (stateArgsCount > 0 && procPtr->ArgTypes.size() == stateArgsCount) {
                     for (ui32 i = 0; i < stateArgsCount; ++i) {
-                        if (procPtr->ArgTypes[i] != LastAggregation.TransTypeId) {
+                        if (!IsCompatibleTo(LastAggregation.TransTypeId, procPtr->ArgTypes[i])) {
                             found = false;
                             break;
                         }
@@ -752,19 +766,13 @@ bool ValidateArgs(const TVector<ui32>& descArgTypeIds, const TVector<ui32>& argT
         return false;
     }
 
-    bool found = true;
     for (size_t i = 0; i < argTypeIds.size(); ++i) {
-        if (argTypeIds[i] == 0) {
-            continue; // NULL
-        }
-
-        if (argTypeIds[i] != descArgTypeIds[i]) {
-            found = false;
-            break;
+        if (!IsCompatibleTo(argTypeIds[i], descArgTypeIds[i])) {
+            return false;
         }
     }
 
-    return found;
+    return true;
 }
 
 bool ValidateProcArgs(const TProcDesc& d, const TVector<ui32>& argTypeIds) {
@@ -865,12 +873,7 @@ bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds) {
         return false;
     }
 
-    bool found = true;
     for (size_t i = 0; i < argTypeIds.size(); ++i) {
-        if (argTypeIds[i] == 0) {
-            continue; // NULL
-        }
-
         ui32 expectedArgType;
         if (d.Kind == EOperKind::RightUnary || (d.Kind == EOperKind::Binary && i == 0)) {
             expectedArgType = d.LeftType;
@@ -878,13 +881,12 @@ bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds) {
             expectedArgType = d.RightType;
         }
 
-        if (argTypeIds[i] != expectedArgType) {
-            found = false;
-            break;
+        if (!IsCompatibleTo(argTypeIds[i], expectedArgType)) {
+            return false;
         }
     }
 
-    return found;
+    return true;
 }
 
 const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds) {

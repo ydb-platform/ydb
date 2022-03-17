@@ -93,4 +93,6 @@ const TOperDesc& LookupOper(ui32 operId);
 bool HasAggregation(const TStringBuf& name);
 const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui32>& argTypeIds);
 
+bool IsCompatibleTo(ui32 actualType, ui32 expectedType);
+
 }

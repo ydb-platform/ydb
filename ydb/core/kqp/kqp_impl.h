@@ -88,6 +88,7 @@ TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const T
 
 TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const NYql::TIssue& issue);
 Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& queryResult);
+Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::TIssues& issues);
 void AddQueryIssues(NKikimrKqp::TQueryResponse& response, const NYql::TIssues& issues);
 bool HasSchemeOrFatalIssues(const NYql::TIssues& issues);
 

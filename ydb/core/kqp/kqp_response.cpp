@@ -118,9 +118,12 @@ Ydb::StatusIds::StatusCode GetYdbStatus(const NYql::NCommon::TOperationResult& q
     if (queryResult.Success()) {
         return Ydb::StatusIds::SUCCESS;
     }
+    return GetYdbStatus(queryResult.Issues());
+}
 
+Ydb::StatusIds::StatusCode GetYdbStatus(const TIssues& issues) {
     TSet<Ydb::StatusIds::StatusCode> statuses;
-    for (const auto& topIssue : queryResult.Issues()) {
+    for (const auto& topIssue : issues) {
         CollectYdbStatuses(topIssue, statuses);
     }
 

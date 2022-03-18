@@ -3705,8 +3705,6 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
         return new TLiteralNumberNode<i32>(ctx.Pos(), "PgInt4", ToString(value));
     } else if (suffix == "pb") {
         return new TLiteralNumberNode<i64>(ctx.Pos(), "PgInt8", ToString(value));
-    } else if (suffix == "pn") {
-        return new TLiteralNode(ctx.Pos(), "PgNumeric", ToString(value));
     } else {
         ctx.Error(ctx.Pos()) << "Failed to parse number from string: " << intergerString << ", invalid suffix: " << suffix;
         return {};
@@ -3723,6 +3721,8 @@ TNodePtr LiteralReal(TContext& ctx, const TRule_real& node) {
         return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat4", value.substr(0, value.size()-3));
     } else if (lower.EndsWith("pf8")) {
         return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat8", value.substr(0, value.size()-3));
+    } else if (lower.EndsWith("pn")) {
+        return new TLiteralNode(ctx.Pos(), "PgNumeric", value.substr(0, value.size()-2));
     } else {
         return new TLiteralNumberNode<double>(ctx.Pos(), "Double", value);
     }

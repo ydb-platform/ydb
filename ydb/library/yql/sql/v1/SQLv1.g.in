@@ -1361,9 +1361,11 @@ INTEGER_VALUE: DIGITS ((P | U)? (L | S | T | I | B | N)?);
 
 fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
 REAL:
-      DECDIGITS DOT DIGIT* FLOAT_EXP? (F | P F ('4'|'8'))?
-    |   DECDIGITS FLOAT_EXP F?
-//    |   DOT DECDIGITS FLOAT_EXP?    // Conflicts with tuple element access through DOT
+    (
+        DECDIGITS DOT DIGIT* FLOAT_EXP?
+    |   DECDIGITS FLOAT_EXP
+//  |   DOT DECDIGITS FLOAT_EXP?    // Conflicts with tuple element access through DOT
+    ) (F | P F ('4'|'8') | P N)?
     ;
 
 BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;

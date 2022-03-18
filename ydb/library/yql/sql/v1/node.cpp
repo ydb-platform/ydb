@@ -2184,19 +2184,32 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
 
     TString str = input;
     if (mode == EStringContentMode::TypedStringLiteral) {
-        if (str.EndsWith("u") || str.EndsWith("U")) {
+        auto lower = to_lower(str);
+        if (lower.EndsWith("u")) {
             str = str.substr(0, str.Size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Utf8;
-        } else if (str.EndsWith("y")) {
+        } else if (lower.EndsWith("y")) {
             str = str.substr(0, str.Size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Yson;
-        } else if (str.EndsWith("j")) {
+        } else if (lower.EndsWith("j")) {
             str = str.substr(0, str.Size() - 1);
             result.Type = NKikimr::NUdf::EDataSlot::Json;
+        } else if (lower.EndsWith("p")) {
+            str = str.substr(0, str.Size() - 1);
+            result.PgType = "PgText";
+        } else if (lower.EndsWith("pt")) {
+            str = str.substr(0, str.Size() - 2);
+            result.PgType = "PgText";
+        } else if (lower.EndsWith("pb")) {
+            str = str.substr(0, str.Size() - 2);
+            result.PgType = "PgBytea";
+        } else if (lower.EndsWith("pv")) {
+            str = str.substr(0, str.Size() - 2);
+            result.PgType = "PgVarchar";
         }
     }
 
-    if (mode == EStringContentMode::Default && result.Type != NKikimr::NUdf::EDataSlot::String) {
+    if (mode == EStringContentMode::Default && (result.Type != NKikimr::NUdf::EDataSlot::String || result.PgType)) {
         ctx.Error(pos) << "Type suffix is not allowed here";
         return {};
     }
@@ -2226,7 +2239,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
         return {};
     }
 
-    if (!NKikimr::NMiniKQL::IsValidStringValue(result.Type, result.Content)) {
+    if (!result.PgType.Defined() && !NKikimr::NMiniKQL::IsValidStringValue(result.Type, result.Content)) {
         ctx.Error() << "Invalid value " << result.Content.Quote() << " for type " << result.Type;
         return {};
     }
@@ -2347,7 +2360,11 @@ TLiteralNode::TLiteralNode(TPosition pos, const TString& type, const TString& va
     , Type(type)
     , Value(value)
 {
-    Add(Type, BuildQuotedAtom(Pos, Value));
+    if (Type.StartsWith("Pg")) {
+        Add("PgConst", Y("PgType", Q(to_lower(Type.substr(2)))), BuildQuotedAtom(Pos, Value));
+    } else {
+        Add(Type, BuildQuotedAtom(Pos, Value));
+    }
 }
 
 TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags)
@@ -2367,7 +2384,11 @@ TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags, 
     , Type(type)
     , Value(value)
 {
-    Add(Type, BuildQuotedAtom(pos, Value, nodeFlags));
+    if (Type.StartsWith("Pg")) {
+        Add("PgConst", Y("PgType", Q(to_lower(Type.substr(2)))), BuildQuotedAtom(Pos, Value, nodeFlags));
+    } else {
+        Add(Type, BuildQuotedAtom(pos, Value, nodeFlags));
+    }
 }
 
 bool TLiteralNode::IsNull() const {
@@ -2438,13 +2459,13 @@ TNodePtr TLiteralNumberNode<T>::ApplyUnaryOp(TContext& ctx, TPosition pos, const
                 // negated value fits in Int32
                 i32 v;
                 YQL_ENSURE(TryFromString(negated, v));
-                return new TLiteralNumberNode<i32>(pos, "Int32", negated);
+                return new TLiteralNumberNode<i32>(pos, Type.StartsWith("Pg") ? "PgInt4" : "Int32", negated);
             }
             if (val <= ui64(std::numeric_limits<i64>::max()) + 1) {
                 // negated value fits in Int64
                 i64 v;
                 YQL_ENSURE(TryFromString(negated, v));
-                return new TLiteralNumberNode<i64>(pos, "Int64", negated);
+                return new TLiteralNumberNode<i64>(pos, Type.StartsWith("Pg") ? "PgInt8" : "Int64", negated);
             }
 
             ctx.Error(pos) << "Failed to parse negative integer: " << negated << ", number limit overflow";
@@ -2503,7 +2524,7 @@ TMaybe<TExprOrIdent> BuildLiteralTypedSmartStringOrId(TContext& ctx, const TStri
         return {};
     }
 
-    TString type = ToString(unescaped->Type);
+    TString type = unescaped->PgType ? *unescaped->PgType : ToString(unescaped->Type);
     result.Expr = new TLiteralNode(ctx.Pos(), unescaped->Content, unescaped->Flags, type);
     return result;
 }

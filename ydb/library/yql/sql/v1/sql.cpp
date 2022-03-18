@@ -3618,10 +3618,10 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
     }
     if (strLen > 1) {
         auto iter = str.cend() - 1;
-        if (*iter == 'l' || *iter == 's' || *iter == 't' || /* deprecated */ *iter == 'b') {
+        if (*iter == 'l' || *iter == 's' || *iter == 't' || *iter == 's' || *iter == 'i' ||  *iter == 'b' || *iter == 'n') {
             --iter;
         }
-        if (*iter == 'u') {
+        if (*iter == 'u' || *iter == 'p') {
             --iter;
         }
         suffix = TString(++iter, str.cend());
@@ -3655,6 +3655,11 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
     const TString intergerString = ctx.Token(node.GetToken1());
+    if (to_lower(intergerString).EndsWith("pn")) {
+        // TODO: add validation
+        return new TLiteralNode(ctx.Pos(), "PgNumeric", intergerString.substr(0, intergerString.size() - 2));
+    }
+
     ui64 value;
     TString suffix;
     if (!ParseNumbers(ctx, intergerString, value, suffix)) {
@@ -3671,6 +3676,15 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
             return new TLiteralNumberNode<i64>(ctx.Pos(), "Int64", ToString(value), implicitType);
         }
         return new TLiteralNumberNode<i32>(ctx.Pos(), "Int32", ToString(value), implicitType);
+    } else if (suffix == "p") {
+        bool implicitType = true;
+        if (noSpaceForInt64) {
+            ctx.Error(ctx.Pos()) << "Failed to parse number from string: " << intergerString << ", 64 bit signed integer overflow";
+            return {};
+        } else if (noSpaceForInt32) {
+            return new TLiteralNumberNode<i64>(ctx.Pos(), "PgInt8", ToString(value), implicitType);
+        }
+        return new TLiteralNumberNode<i32>(ctx.Pos(), "PgInt4", ToString(value), implicitType);
     } else if (suffix == "u") {
         return new TLiteralNumberNode<ui32>(ctx.Pos(), "Uint32", ToString(value));
     } else if (suffix == "ul") {
@@ -3685,6 +3699,14 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
         return new TLiteralNumberNode<ui16>(ctx.Pos(), "Uint16", ToString(value));
     } else if (suffix == "s") {
         return new TLiteralNumberNode<i16>(ctx.Pos(), "Int16", ToString(value));
+    } else if (suffix == "ps") {
+        return new TLiteralNumberNode<i16>(ctx.Pos(), "PgInt2", ToString(value));
+    } else if (suffix == "pi") {
+        return new TLiteralNumberNode<i32>(ctx.Pos(), "PgInt4", ToString(value));
+    } else if (suffix == "pb") {
+        return new TLiteralNumberNode<i64>(ctx.Pos(), "PgInt8", ToString(value));
+    } else if (suffix == "pn") {
+        return new TLiteralNode(ctx.Pos(), "PgNumeric", ToString(value));
     } else {
         ctx.Error(ctx.Pos()) << "Failed to parse number from string: " << intergerString << ", invalid suffix: " << suffix;
         return {};
@@ -3694,9 +3716,13 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
 TNodePtr LiteralReal(TContext& ctx, const TRule_real& node) {
     const TString value(ctx.Token(node.GetToken1()));
     YQL_ENSURE(!value.empty());
-    const auto lastValue = value[value.size() - 1];
-    if (lastValue == 'f' || lastValue == 'F') {
+    auto lower = to_lower(value);
+    if (lower.EndsWith("f")) {
         return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size()-1));
+    } else if (lower.EndsWith("pf4")) {
+        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat4", value.substr(0, value.size()-3));
+    } else if (lower.EndsWith("pf8")) {
+        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat8", value.substr(0, value.size()-3));
     } else {
         return new TLiteralNumberNode<double>(ctx.Pos(), "Double", value);
     }

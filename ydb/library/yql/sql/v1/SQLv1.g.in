@@ -1341,7 +1341,7 @@ fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
 fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
 
-STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (U | Y | J)?);
+STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (U | Y | J | P (T | B | V)?)?);
 
 ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 
@@ -1356,11 +1356,12 @@ fragment BINDIGITS: '0' B ('0' | '1')+;
 fragment DECDIGITS: DIGIT+;
 DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
 
-INTEGER_VALUE: DIGITS (U? (L | S | T)?);
+// not all combinations of P/U with L/S/T/I/B/N are actually valid - this is resolved in sql.cpp
+INTEGER_VALUE: DIGITS ((P | U)? (L | S | T | I | B | N)?);
 
 fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
 REAL:
-      DECDIGITS DOT DIGIT* FLOAT_EXP? F?
+      DECDIGITS DOT DIGIT* FLOAT_EXP? (F | P F ('4'|'8'))?
     |   DECDIGITS FLOAT_EXP F?
 //    |   DOT DECDIGITS FLOAT_EXP?    // Conflicts with tuple element access through DOT
     ;

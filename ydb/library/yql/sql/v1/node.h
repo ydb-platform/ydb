@@ -1046,6 +1046,7 @@ namespace NSQLTranslationV1 {
     struct TStringContent {
         TString Content;
         NYql::NUdf::EDataSlot Type = NYql::NUdf::EDataSlot::String;
+        TMaybe<TString> PgType;
         ui32 Flags = NYql::TNodeFlags::Default;
     };
 

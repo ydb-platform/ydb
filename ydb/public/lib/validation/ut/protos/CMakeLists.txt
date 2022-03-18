@@ -15,7 +15,7 @@ target_link_libraries(validation-ut-protos PUBLIC
   contrib-libs-protobuf
 )
 target_proto_messages(validation-ut-protos PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/validation/ut/protos/validation_test.proto
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/ut/protos/validation_test.proto
 )
 target_proto_plugin(validation-ut-protos
   validation

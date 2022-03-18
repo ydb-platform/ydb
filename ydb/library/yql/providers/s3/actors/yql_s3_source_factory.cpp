@@ -12,7 +12,7 @@ void RegisterS3ReadActorFactory(
         const std::shared_ptr<NYql::NS3::TRetryConfig>& retryConfig) {
     factory.Register<NS3::TSource>("S3Source",
         [credentialsFactory, gateway, retryConfig](NS3::TSource&& settings, IDqSourceActorFactory::TArguments&& args) {
-                return CreateS3ReadActor(gateway, std::move(settings), args.InputIndex, args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory, retryConfig);
+                return CreateS3ReadActor(args.TypeEnv, *args.HolderFactory.GetFunctionRegistry(), gateway, std::move(settings), args.InputIndex, args.SecureParams, args.TaskParams, args.ComputeActorId, credentialsFactory, retryConfig);
         });
 }
 

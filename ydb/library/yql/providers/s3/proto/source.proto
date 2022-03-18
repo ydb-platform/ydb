@@ -12,4 +12,7 @@ message TSource {
     string Url = 1;
     string Token = 2;
     repeated TPath Path = 3;
+    optional string RowType = 4;
+    optional string Format = 5;
+    optional string Compression = 6;
 }

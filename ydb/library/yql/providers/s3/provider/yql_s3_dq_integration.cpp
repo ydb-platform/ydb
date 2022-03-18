@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -149,6 +150,15 @@ public:
                 const auto p = srcDesc.AddPath();
                 p->SetPath(paths.Item(i).Path().StringValue());
                 p->SetSize(FromString<ui64>(paths.Item(i).Size().Value()));
+            }
+
+            if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
+                const auto parseSettings = mayParseSettings.Cast();
+                srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
+                srcDesc.SetRowType(NCommon::WriteTypeToYson(parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), NYT::NYson::EYsonFormat::Text));
+
+                if (const auto compression = parseSettings.Compression())
+                    srcDesc.SetCompression(compression.Cast().StringValue().c_str());
             }
 
             protoSettings.PackFrom(srcDesc);

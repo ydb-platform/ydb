@@ -16,6 +16,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   yutil
   yql-minikql-computation
   common-token_accessor-client
+  common-schema-mkql
   yql-public-types
   dq-actors-compute
   providers-common-http_gateway

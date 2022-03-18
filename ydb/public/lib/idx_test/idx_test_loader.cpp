@@ -144,6 +144,9 @@ public:
             // Nothing to add, skip
             return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
         }
+
+        ChooseColumnsForIndex();
+
         return Client_.RetryOperation([this](TSession session) {
             auto settings = TAlterTableSettings()
                 .AppendAddIndexes(Description_.GetRef())
@@ -1231,10 +1234,6 @@ private:
         return result;
     }
 
-    static bool CompareWorkTaskEntry(const TWorkTaskEntry& a, const TWorkTaskEntry& b) {
-        return a.second < b.second;
-    }
-
     static bool CompareValueWorkTaskEntry(ui32 a, const TWorkTaskEntry& b) {
         return a < b.second;
     }
@@ -1245,8 +1244,6 @@ private:
             s += t.second;
             t.second = s;
         }
-
-        std::sort(tasks.begin(), tasks.end(), &CompareWorkTaskEntry);
     }
 
     static IWorkTask* GetRandomTask(TVector<TWorkTaskEntry>& tasks) {

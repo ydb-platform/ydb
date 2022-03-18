@@ -18,6 +18,7 @@ extern "C" {
 #include "postgres.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
+#include "utils/fmgrprotos.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "lib/stringinfo.h"
@@ -208,8 +209,36 @@ public:
             return PointerDatumToPod(PointerGetDatum(cstring_to_text_with_len(Value.data(), Value.size())));
         } else if (TypeId == BOOLOID) {
             return ScalarDatumToPod(BoolGetDatum(!Value.empty() && Value[0] == 't'));
+        } else if (TypeId == NUMERICOID) {
+            LOCAL_FCINFO(callInfo, 3);
+            Zero(*callInfo);
+            callInfo->nargs = 3;
+            callInfo->fncollation = DEFAULT_COLLATION_OID;
+            callInfo->isnull = false;
+            callInfo->args[0] = { (Datum)Value.c_str(), false };
+            callInfo->args[1] = { ObjectIdGetDatum(NUMERICOID), false };
+            callInfo->args[2] = { Int32GetDatum(-1), false };
+
+            SET_MEMORY_CONTEXT;
+            TPAllocScope call;
+            PG_TRY();
+            {
+                auto x = numeric_in(callInfo);
+                Y_ENSURE(!callInfo->isnull);
+                return PointerDatumToPod(x);
+            }
+            PG_CATCH();
+            {
+                auto error_data = CopyErrorData();
+                TStringBuilder errMsg;
+                errMsg << "Error in function: numeric_in, reason: " << error_data->message;
+                FreeErrorData(error_data);
+                FlushErrorState();
+                UdfTerminate(errMsg.c_str());
+            }
+            PG_END_TRY();
         } else {
-            UdfTerminate((TStringBuilder() << "Unsupported pg type id:" << TypeId).c_str());
+            UdfTerminate((TStringBuilder() << "Unsupported pg type:" << NPg::LookupType(TypeId).Name).c_str());
         }
     }
 
@@ -218,7 +247,7 @@ private:
     }
 
     const ui32 TypeId;
-    const std::string_view Value;
+    const TString Value;
 };
 
 class TFunctionCallInfo {
@@ -311,9 +340,9 @@ public:
         }
 
         inputArgs.Detach();
+        TPAllocScope call;
         PG_TRY();
         {
-            TPAllocScope call;
             auto ret = FInfo.fn_addr(&callInfo);
             if (callInfo.isnull) {
                 return NUdf::TUnboxedValuePod();
@@ -482,6 +511,18 @@ public:
         callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
         callInfo1.args[2] = { Int32GetDatum(-1), false };
 
+        void* freeMem = nullptr;
+        void* freeMem2 = nullptr;
+        Y_DEFER {
+            if (freeMem) {
+                pfree(freeMem);
+            }
+
+            if (freeMem2) {
+                pfree(freeMem2);
+            }
+        };
+
         PG_TRY();
         {
             auto ret = FInfo1.fn_addr(&callInfo1);
@@ -489,14 +530,9 @@ public:
                 return NUdf::TUnboxedValuePod();
             }
 
-            void* freeMem = nullptr;
             if (ConvertResFromCString) {
                 freeMem = (void*)ret;
                 ret = (Datum)cstring_to_text((const char*)ret);
-
-                Y_DEFER {
-                    pfree(freeMem);
-                };
             }
 
             if (FInfo2.fn_addr) {
@@ -515,14 +551,9 @@ public:
                 ret = ret2;
             }
 
-            void* freeMem2 = nullptr;
             if (ConvertResFromCString2) {
                 freeMem2 = (void*)ret;
                 ret = (Datum)cstring_to_text((const char*)ret);
-
-                Y_DEFER{
-                    pfree(freeMem2);
-                };
             }
 
             return TargetTypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);

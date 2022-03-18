@@ -196,6 +196,30 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 
         if (request.execute_mode() != YandexQuery::SAVE) {
             // TODO: move to run actor priority selection
+
+            TSet<TString> disabledConnections;
+            for (const auto& connection: GetEntities<YandexQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME)) {
+                if (!Config.AvailableConnections.contains(connection.content().setting().connection_case())) {
+                    disabledConnections.insert(connection.meta().id());
+                    continue;
+                }
+
+                if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
+                    disabledConnections.insert(connection.meta().id());
+                    continue;
+                }
+            }
+
+            if (permissions.Check(TPermissions::CONNECTIONS_USE)) {
+                auto connections = GetEntitiesWithVisibilityPriority<YandexQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME);
+                for (const auto& [_, connection]: connections) {
+                    if (disabledConnections.contains(connection.meta().id())) {
+                        continue;
+                    }
+                    *queryInternal.add_connection() = connection;
+                }
+            }
+
             if (permissions.Check(TPermissions::BINDINGS_USE)) {
                 auto bindings = GetEntitiesWithVisibilityPriority<YandexQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME);
                 for (const auto& [_, binding]: bindings) {
@@ -203,21 +227,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
                         continue;
                     }
 
+                    if (disabledConnections.contains(binding.content().connection_id())) {
+                        continue;
+                    }
+
+                    Cerr << "PAM: " << binding.content().connection_id() << Endl;
                     *queryInternal.add_binding() = binding;
-                }
-            }
-
-            if (permissions.Check(TPermissions::CONNECTIONS_USE)) {
-                auto connections = GetEntitiesWithVisibilityPriority<YandexQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME);
-                for (const auto& [_, connection]: connections) {
-                    if (!Config.AvailableConnections.contains(connection.content().setting().connection_case())) {
-                        continue;
-                    }
-
-                    if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
-                        continue;
-                    }
-                    *queryInternal.add_connection() = connection;
                 }
             }
         }
@@ -830,7 +845,31 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
             internal.clear_binding();
             internal.clear_connection();
+
             // TODO: move to run actor priority selection
+            TSet<TString> disabledConnections;
+            for (const auto& connection: GetEntities<YandexQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME)) {
+                if (!Config.AvailableConnections.contains(connection.content().setting().connection_case())) {
+                    disabledConnections.insert(connection.meta().id());
+                    continue;
+                }
+
+                if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
+                    disabledConnections.insert(connection.meta().id());
+                    continue;
+                }
+            }
+
+            if (permissions.Check(TPermissions::CONNECTIONS_USE)) {
+                auto connections = GetEntitiesWithVisibilityPriority<YandexQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME);
+                for (const auto& [_, connection]: connections) {
+                    if (disabledConnections.contains(connection.meta().id())) {
+                        continue;
+                    }
+                    *internal.add_connection() = connection;
+                }
+            }
+
             if (permissions.Check(TPermissions::BINDINGS_USE)) {
                 auto bindings = GetEntitiesWithVisibilityPriority<YandexQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME);
                 for (const auto& [_, binding]: bindings) {
@@ -838,22 +877,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
                         continue;
                     }
 
+                    if (disabledConnections.contains(binding.content().connection_id())) {
+                        continue;
+                    }
+
                     *internal.add_binding() = binding;
-                }
-            }
-
-            if (permissions.Check(TPermissions::CONNECTIONS_USE)) {
-                auto connections = GetEntitiesWithVisibilityPriority<YandexQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME);
-                for (const auto& [_, connection]: connections) {
-                    if (!Config.AvailableConnections.contains(connection.content().setting().connection_case())) {
-                        continue;
-                    }
-
-                    if (GetIamAuth(connection) == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
-                        continue;
-                    }
-
-                    *internal.add_connection() = connection;
                 }
             }
         }

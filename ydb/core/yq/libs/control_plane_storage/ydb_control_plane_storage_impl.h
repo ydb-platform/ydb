@@ -577,7 +577,7 @@ private:
         TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
             T entity;
-            Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString())); // TODO: move to run actor
+            Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
             const TString name = entity.content().name();
             if (auto it = entities.find(name); it != entities.end()) {
                 const auto visibility = entity.content().acl().visibility();
@@ -589,6 +589,17 @@ private:
             }
         }
 
+        return entities;
+    }
+
+    template<typename T>
+    TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName)
+    {
+        TVector<T> entities;
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            Y_VERIFY(entities.emplace_back().ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        }
         return entities;
     }
 

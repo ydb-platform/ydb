@@ -55,6 +55,8 @@ struct TAllocState : public TAlignedPagePool
     static TAllocPageHeader EmptyPageHeader;
     TAllocPageHeader* CurrentPage = &EmptyPageHeader;
     TListEntry OffloadedBlocksRoot;
+    TListEntry GlobalPAllocList;
+    TListEntry* CurrentPAllocList;
 
     ::NKikimr::NUdf::TBoxedValueLink Root;
 
@@ -66,9 +68,42 @@ struct TAllocState : public TAlignedPagePool
     void KillAllBoxed();
     void InvalidateMemInfo();
     size_t GetDeallocatedInPages() const;
+    static void CleanupPAllocList(TListEntry* root);
 };
 
 extern Y_POD_THREAD(TAllocState*) TlsAllocState;
+
+class TPAllocScope {
+public:
+    TPAllocScope() {
+        PAllocList.InitLinks();
+        Attach();
+    }
+
+    ~TPAllocScope() {
+        TAllocState::CleanupPAllocList(&PAllocList);
+        Detach();
+    }
+
+    void Attach() {
+        Y_VERIFY(!Prev);
+        Prev = TlsAllocState->CurrentPAllocList;
+        Y_VERIFY(Prev);
+        TlsAllocState->CurrentPAllocList = &PAllocList;
+    }
+
+    void Detach() {
+        if (Prev) {
+           Y_VERIFY(TlsAllocState->CurrentPAllocList == &PAllocList);
+           TlsAllocState->CurrentPAllocList = Prev;
+           Prev = nullptr;
+        }
+    }
+
+private:
+    TAllocState::TListEntry PAllocList;
+    TAllocState::TListEntry* Prev = nullptr;
+};
 
 class TScopedAlloc {
 public:

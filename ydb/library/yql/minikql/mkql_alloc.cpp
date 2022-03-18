@@ -25,9 +25,21 @@ void TAllocState::TListEntry::Unlink() noexcept {
 TAllocState::TAllocState(const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
     : TAlignedPagePool(counters)
     , SupportsSizedAllocators(supportsSizedAllocators)
+    , CurrentPAllocList(&GlobalPAllocList)
 {
     GetRoot()->InitLinks();
     OffloadedBlocksRoot.InitLinks();
+    GlobalPAllocList.InitLinks();
+}
+
+void TAllocState::CleanupPAllocList(TListEntry* root) {
+    for (auto curr = root->Right; curr != root; ) {
+        auto next = curr->Right;
+        MKQLFreeDeprecated(curr); // may free items from OffloadedBlocksRoot
+        curr = next;
+    }
+
+    root->InitLinks();
 }
 
 void TAllocState::KillAllBoxed() {
@@ -37,6 +49,13 @@ void TAllocState::KillAllBoxed() {
             next->Ref();
             next->~TBoxedValueLink();
         }
+
+        GetRoot()->InitLinks();
+    }
+
+    {
+        Y_VERIFY(CurrentPAllocList == &GlobalPAllocList);
+        CleanupPAllocList(&GlobalPAllocList);
     }
 
     {
@@ -46,6 +65,8 @@ void TAllocState::KillAllBoxed() {
             free(curr);
             curr = next;
         }
+
+        OffloadedBlocksRoot.InitLinks();
     }
 
 #ifndef NDEBUG

@@ -44,14 +44,8 @@ namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
 
-struct TPAllocListItem {
-    TPAllocListItem* Next = nullptr;
-    TPAllocListItem* Prev = nullptr;
-};
-
-static_assert(sizeof(TPAllocListItem) == 16);
-
-Y_POD_THREAD(TPAllocListItem*) PAllocList;
+// allow to construct TListEntry in the space for IBoxedValue
+static_assert(sizeof(NUdf::IBoxedValue) >= sizeof(TAllocState::TListEntry));
 
 constexpr size_t PallocHdrSize = sizeof(void*) + sizeof(NUdf::IBoxedValue);
 
@@ -72,12 +66,8 @@ public:
 
 NUdf::TUnboxedValuePod PointerDatumToPod(Datum datum) {
     auto original = (char*)datum - PallocHdrSize;
-    if (PAllocList) {
-        // remove this block from list
-        auto current = (TPAllocListItem*)original;
-        current->Prev->Next = current->Next;
-        current->Next->Prev = current->Prev;
-    }
+    // remove this block from list
+    ((TAllocState::TListEntry*)original)->Unlink();
 
     auto raw = (NUdf::IBoxedValue*)original;
     new(raw) TBoxedValueWithFree();
@@ -90,7 +80,7 @@ Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value, bool isVar) {
         return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
     }
 
-    // temporary palloc, should be handled by LeakGuard
+    // temporary palloc, should be handled by TPAllocScope
     const auto& ref = value.AsStringRef();
     if (isVar) {
         return (Datum)cstring_to_text_with_len(ref.Data(), ref.Size());
@@ -102,57 +92,20 @@ Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value, bool isVar) {
     }
 }
 
-struct TPAllocLeakGuard {
-    TPAllocLeakGuard() {
-        PrevList = PAllocList;
-        PAllocList = &Root;
-        Root.Next = &Root;
-        Root.Prev = &Root;
-    }
-
-    ~TPAllocLeakGuard() {
-        auto current = Root.Next;
-        while (current != &Root) {
-            auto next = current->Next;
-            MKQLFreeDeprecated((void*)current);
-            current = next;
-        }
-
-        Y_VERIFY(PAllocList == &Root);
-        PAllocList = PrevList;
-    }
-
-    TPAllocListItem* PrevList;
-    TPAllocListItem Root;
-};
-
 void *MkqlAllocSetAlloc(MemoryContext context, Size size) {
     auto fullSize = size + PallocHdrSize;
     auto ptr = (char *)NKikimr::NMiniKQL::MKQLAllocDeprecated(fullSize);
     auto ret = (void*)(ptr + PallocHdrSize);
     *(MemoryContext *)(((char *)ret) - sizeof(void *)) = context;
-    if (PAllocList) {
-        // add to linked list
-        auto current = (TPAllocListItem*)ptr;
-        PAllocList->Prev->Next = current;
-        current->Prev = PAllocList->Prev;
-        current->Next = PAllocList;
-        PAllocList->Prev = current;
-    }
-
+    ((TAllocState::TListEntry*)ptr)->Link(TlsAllocState->CurrentPAllocList);
     return ret;
 }
 
 void MkqlAllocSetFree(MemoryContext context, void* pointer) {
     if (pointer) {
         auto original = (void*)((char*)pointer - PallocHdrSize);
-        if (PAllocList) {
-            // remove this block from list
-            auto current = (TPAllocListItem*)original;
-            current->Prev->Next = current->Next;
-            current->Next->Prev = current->Prev;
-        }
-
+        // remove this block from list
+        ((TAllocState::TListEntry*)original)->Unlink();
         MKQLFreeDeprecated(original);
     }
 }
@@ -334,7 +287,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope inputArgs;
 
         auto& state = GetState(compCtx);
         auto& callInfo = state.CallInfo.Ref();
@@ -357,8 +310,10 @@ public:
             callInfo.args[i] = argDatum;
         }
 
+        inputArgs.Detach();
         PG_TRY();
         {
+            TPAllocScope call;
             auto ret = FInfo.fn_addr(&callInfo);
             if (callInfo.isnull) {
                 return NUdf::TUnboxedValuePod();
@@ -509,7 +464,7 @@ public:
         }
 
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         auto& state = GetState(compCtx);
         auto& callInfo1 = state.CallInfo1.Ref();
         callInfo1.isnull = false;
@@ -879,7 +834,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     case VARCHAROID:
     case TEXTOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto x = (const text*)PointerDatumFromPod(value, true);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         TString s;
@@ -895,7 +850,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     }
     case CSTRINGOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         auto s = (const char*)PointerDatumFromPod(value, false);
         auto len = strlen(s);
         buf.Write(StringMarker);
@@ -905,7 +860,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     }
     default:
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
         Zero(finfo);
@@ -974,7 +929,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     case VARCHAROID:
     case TEXTOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto x = (const text*)PointerDatumFromPod(value, true);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         if (len) {
@@ -985,14 +940,14 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     }
     case CSTRINGOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         auto str = (const char*)PointerDatumFromPod(value, false);
         ret = str;
         break;
     }
     default:
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
         Zero(finfo);
@@ -1080,7 +1035,7 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
     }
     default:
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         auto s = buf.ReadYtString();
         StringInfoData stringInfo;
         stringInfo.data = (char*)s.Data();
@@ -1184,7 +1139,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
     }
     default:
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
@@ -1268,7 +1223,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
     case VARCHAROID:
     case TEXTOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto x = (const text*)PointerDatumFromPod(value, true);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         buf.WriteMany((const char*)&len, sizeof(len));
@@ -1283,7 +1238,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
     }
     case CSTRINGOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto x = (const char*)PointerDatumFromPod(value, false);
         ui32 len = strlen(x);
         buf.WriteMany((const char*)&len, sizeof(len));
@@ -1292,7 +1247,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
     }
     default:
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
         Zero(finfo);
@@ -1427,7 +1382,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
     case VARCHAROID:
     case TEXTOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto x = (const text*)PointerDatumFromPod(value, true);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         NDetails::PackUInt32(len, buf);
@@ -1439,7 +1394,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
     }
     case CSTRINGOID: {
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto x = (const char*)PointerDatumFromPod(value, false);
         const auto len = strlen(x);
         NDetails::PackUInt32(len, buf);
@@ -1448,7 +1403,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
     }
     default:
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
         Zero(finfo);
@@ -1531,7 +1486,7 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
     }
     default:
         SET_MEMORY_CONTEXT;
-        TPAllocLeakGuard leakGuard;
+        TPAllocScope call;
         auto size = NDetails::UnpackUInt32(buf);
         MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
         StringInfoData stringInfo;

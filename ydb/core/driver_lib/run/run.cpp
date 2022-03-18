@@ -99,6 +99,7 @@
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
+#include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/yq/grpc_service.h>
 
 #include <ydb/core/yq/libs/init/init.h>
@@ -503,6 +504,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["monitoring"] = &hasMonitoring;
         bool hasDiscovery = services.empty();
         names["discovery"] = &hasDiscovery;
+        bool hasLocalDiscovery = false;
+        names["local_discovery"] = &hasLocalDiscovery;
         bool hasTableService = services.empty();
         names["table_service"] = &hasTableService;
         bool hasSchemeService = false;
@@ -537,6 +540,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["datastreams"] = &hasDataStreams;
         bool hasYandexQuery = false;
         names["yq"] = &hasYandexQuery;
+        bool hasYandexQueryPrivate = false;
+        names["yq_private"] = &hasYandexQueryPrivate;
         bool hasLogStore = false;
         names["logstore"] = &hasLogStore;
         bool hasAuth = services.empty();
@@ -699,6 +704,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcDiscoveryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
+        if (hasLocalDiscovery) {
+            server.AddService(new NGRpcService::TGRpcLocalDiscoveryService(grpcConfig, ActorSystem.Get(), Counters, grpcRequestProxyId));
+        }
+
         if (hasRateLimiter) {
             server.AddService(new NQuoter::TRateLimiterGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
@@ -717,6 +726,9 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasYandexQuery) {
             server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            // TODO: REMOVE next line after migration to "yq_private"
+            server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+        }   /* REMOVE */ else /* THIS else as well and separate ifs */ if (hasYandexQueryPrivate) {
             server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
@@ -793,7 +805,6 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             if (ex.GetPort()) {
                 NGrpc::TServerOptions xopts = opts;
                 xopts.SetPort(ex.GetPort());
-
                 if (ex.GetHost())
                     xopts.SetHost(ex.GetHost());
 

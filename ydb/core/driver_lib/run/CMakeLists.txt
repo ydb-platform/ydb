@@ -114,6 +114,7 @@ target_link_libraries(run PUBLIC
   ydb-services-datastreams
   ydb-services-discovery
   ydb-services-kesus
+  ydb-services-local_discovery
   ydb-services-monitoring
   ydb-services-persqueue_cluster_discovery
   ydb-services-persqueue_v1

@@ -34,6 +34,10 @@ class KikimrNodePortAllocatorInterface(object):
     def sqs_port(self):
         pass
 
+    @abc.abstractproperty
+    def ext_port(self):
+        pass
+
 
 class KikimrPortAllocatorInterface(object):
     __metaclass__ = abc.ABCMeta
@@ -74,6 +78,7 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         self.__ic_port = None
         self.__sqs_port = None
         self.__grpc_ssl_port = None
+        self.__ext_port = None
 
     @property
     def mon_port(self):
@@ -110,6 +115,12 @@ class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
         if self.__sqs_port is None:
             self.__sqs_port = self.__port_manager.get_port()
         return self.__sqs_port
+
+    @property
+    def ext_port(self):
+        if self.__ext_port is None:
+            self.__ext_port = self.__port_manager.get_port()
+        return self.__ext_port
 
 
 class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):

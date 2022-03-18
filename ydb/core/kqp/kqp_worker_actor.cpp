@@ -1027,10 +1027,14 @@ private:
                     bool newEngineCompatibleTx = !QueryState->OldEngineFallback
                         && QueryState->ForceNewEngineState.ForceNewEnginePercent > 0;
 
-                    if (QueryState->ForceNewEngineState.ForcedNewEngine.has_value() &&
+                    bool forcedOldEngine = false;
+
+                    if (newEngineCompatibleTx &&
+                        QueryState->ForceNewEngineState.ForcedNewEngine.has_value() &&
                         QueryState->ForceNewEngineState.ForcedNewEngine.value() == false)
                     {
-                        newEngineCompatibleTx = false;
+                        // newEngineCompatibleTx = false;
+                        forcedOldEngine = true;
                     }
 
                     QueryState->NewEngineCompatibleQuery = (bool) QueryState->QueryCompileResult->PreparedQueryNewEngine
@@ -1102,7 +1106,7 @@ private:
                         << ", commit: " << commit
                         << ", text: " << queryRequest.GetQuery());
 
-                    if (newEngineCompatibleTx) {
+                    if (newEngineCompatibleTx && !forcedOldEngine) {
                         if (QueryState->NewEngineCompatibleQuery) {
                             if (QueryState->ForceNewEngineState.ForcedNewEngine && *QueryState->ForceNewEngineState.ForcedNewEngine) {
                                 preparedQuery = QueryState->QueryCompileResult->PreparedQueryNewEngine;

@@ -4,6 +4,7 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/core/persqueue/key.h>
 
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/actorid.h>
@@ -22,10 +23,11 @@ namespace NPQ {
         ui32 Size;
         TString Value;
         bool Cached;
+        TKey Key;
 
         TRequestedBlob() = delete;
 
-        TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value)
+        TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key)
             : Offset(offset)
             , PartNo(partNo)
             , Count(count)
@@ -33,6 +35,7 @@ namespace NPQ {
             , Size(size)
             , Value(value)
             , Cached(false)
+            , Key(key)
         {}
     };
 

@@ -358,8 +358,8 @@ public:
     TConverterPtr GetWriteTopicConverter(const TString& clientName, const TString& database);
     TConverterFactoryPtr GetConverterFactory() const;
 
-    bool GetHaveClusters() const { return HaveClusters;};
-
+    bool GetHaveClusters() const { return HaveClusters; }
+    TString GetLocalCluster() const { return LocalCluster; }
 private:
     TConverterFactoryPtr ConverterFactory;
     bool HaveClusters;

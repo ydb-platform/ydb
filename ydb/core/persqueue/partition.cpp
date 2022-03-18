@@ -2324,9 +2324,28 @@ TReadAnswer TReadInfo::FormAnswer(
 
     AddResultDebugInfo(response, readResult);
 
-    ui32 cnt = 0, pcnt = 0;
-    ui32 size = 0, psize = 0;
+    ui32 cnt = 0;
+    ui32 size = 0;
+
+    ui32 lastBlobSize = 0;
     const TVector<TRequestedBlob>& blobs = response->GetBlobs();
+
+    auto updateUsage = [&](const TClientBlob& blob){
+        size += blob.GetBlobSize();
+        lastBlobSize += blob.GetBlobSize();
+        if (blob.IsLastPart()) {
+            bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
+                    ReadTimestampMs > blob.WriteTimestamp.MilliSeconds();
+            ++cnt;
+            if (messageSkippingBehaviour) {
+                --cnt;
+                size -= lastBlobSize;
+            }
+            lastBlobSize = 0;
+            return (size >= Size || cnt >= Count);
+        }
+        return !AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && (size >= Size || cnt >= Count);
+    };
 
     Y_VERIFY(blobs.size() == Blobs.size());
     response->Check();
@@ -2381,12 +2400,10 @@ TReadAnswer TReadInfo::FormAnswer(
                 << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount() << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
             ui32 i = 0;
-            for (i = pos; i < batch.Blobs.size() && size < Size && cnt < Count; ++i) {
-                pcnt = cnt;
-                psize = size;
+            for (i = pos; i < batch.Blobs.size(); ++i) {
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
-                size += res.GetBlobSize();
+
                 Y_VERIFY(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu32 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
                          pos, i, Offset, PartNo, offset, res.GetPartNo());
 
@@ -2398,15 +2415,15 @@ TReadAnswer TReadInfo::FormAnswer(
                 }
 
                 AddResultBlob(readResult, res, Offset);
-                if (res.IsLastPart()) {
-                    ++cnt;
-                }
 
                 if (res.IsLastPart()) {
                     PartNo = 0;
                     ++Offset;
                 } else {
                     ++PartNo;
+                }
+                if (updateUsage(res)) {
+                    break;
                 }
             }
 
@@ -2415,24 +2432,18 @@ TReadAnswer TReadInfo::FormAnswer(
             }
         }
     }
-    Y_VERIFY(pcnt <= Count && psize <= Size);
-    Y_VERIFY(pcnt <= cnt && psize <= size);
-    if (!needStop) { // body blobs are fully processed
 
+    if (!needStop && cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
         if (CachedOffset > Offset) {
+            lastBlobSize = 0;
             Offset = CachedOffset;
         }
 
         for (const auto& writeBlob : Cached) {
-            if (cnt >= Count || size >= Size)
-                break;
-            pcnt = cnt;
-            psize = size;
             VERIFY_RESULT_BLOB(writeBlob, 0u);
 
             readResult->SetBlobsCachedSize(readResult->GetBlobsCachedSize() + writeBlob.GetBlobSize());
 
-            size += writeBlob.GetBlobSize();
             if (userInfo) {
                 userInfo->AddTimestampToCache(
                     Offset, writeBlob.WriteTimestamp, writeBlob.CreateTimestamp,
@@ -2440,14 +2451,15 @@ TReadAnswer TReadInfo::FormAnswer(
                 );
             }
             AddResultBlob(readResult, writeBlob, Offset);
+
             if (writeBlob.IsLastPart()) {
                 ++Offset;
-                ++cnt;
+            }
+            if (updateUsage(writeBlob)) {
+                break;
             }
         }
     }
-    Y_VERIFY(pcnt <= Count && psize <= Size);
-    Y_VERIFY(pcnt <= cnt && psize <= size);
     Y_VERIFY(Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, Offset);
     ui64 answerSize = answer->Response.ByteSize();
     if (userInfo && Destination != 0) {
@@ -2508,11 +2520,11 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(const ui64 startOffse
             cnt = it->Key.GetCount() - (startOffset - it->Key.GetOffset()); //don't count all elements from first blob
             sz = (cnt == it->Key.GetCount() ? it->Size : 0); //not readed client blobs can be of ~8Mb, so don't count this size at all
         }
-        while (it != DataKeysBody.end() && size < maxSize && count < maxCount) {
+        while (it != DataKeysBody.end() && (size < maxSize && count < maxCount || count == 0)) { //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
             size += sz;
             count += cnt;
             TRequestedBlob reqBlob(it->Key.GetOffset(), it->Key.GetPartNo(), it->Key.GetCount(),
-                                   it->Key.GetInternalPartsCount(), it->Size, TString());
+                                   it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key);
             blobs.push_back(reqBlob);
 
             ++it;
@@ -2539,6 +2551,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
         pos = Head.FindPos(startOffset, partNo);
         Y_VERIFY(pos != Max<ui32>());
     }
+    ui32 lastBlobSize = 0;
     for (;pos < Head.Batches.size(); ++pos)
     {
 
@@ -2557,21 +2570,32 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
             if (blobs[i].IsLastPart()) {
                 ++offset;
                 pno = 0;
-                if (!skip)
-                    ++count;
             } else {
                 ++pno;
             }
-            if (skip)
-                continue;
-            if (count > maxCount) // blob is counted already
-                break;
-            if (size >= maxSize)
-                break;
+            if (skip) continue;
+            if (blobs[i].IsLastPart()) {
+                bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
+                        readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
+                ++count;
+                if (messageSkippingBehaviour) { //do not count in limits; message will be skippend in proxy
+                    --count;
+                    size -= lastBlobSize;
+                }
+                lastBlobSize = 0;
+
+                if (count > maxCount) // blob is counted already
+                    break;
+                if (size > maxSize)
+                    break;
+            }
             size += blobs[i].GetBlobSize();
+            lastBlobSize += blobs[i].GetBlobSize();
             res.push_back(blobs[i]);
+
             if (!firstAddedBlobOffset)
                 firstAddedBlobOffset = curOffset;
+
         }
         if (i < blobs.size()) // already got limit
             break;
@@ -4593,10 +4617,11 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "read cookie " << cookie << " added " << info.Blobs.size()
                 << " blobs, size " << size << " count " << count << " last offset " << lastOffset);
 
-    ui64 insideHeadOffset{0};
-    info.Cached = GetReadRequestFromHead(info.Offset, info.PartNo, info.Count, info.Size, info.ReadTimestampMs, &count, &size, &insideHeadOffset);
-    info.CachedOffset = insideHeadOffset;
-
+    if (blobs.empty() || blobs.back().Key == DataKeysBody.back().Key) { // read from head only when all blobs from body processed
+        ui64 insideHeadOffset{0};
+        info.Cached = GetReadRequestFromHead(info.Offset, info.PartNo, info.Count, info.Size, info.ReadTimestampMs, &count, &size, &insideHeadOffset);
+        info.CachedOffset = insideHeadOffset;
+    }
     if (info.Destination != 0) {
         ++userInfo.ActiveReads;
         userInfo.UpdateReadingTimeAndState(ctx.Now());

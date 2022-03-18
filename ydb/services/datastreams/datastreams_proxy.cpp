@@ -1079,14 +1079,16 @@ namespace NKikimr::NDataStreams::V1 {
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            NACLib::TUserToken token(this->Request_->GetInternalToken());
+
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
-                                                        this->Request_->GetInternalToken())) {
+                                                        token)) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << this->Request_->GetInternalToken(), ctx);
+                                            << token.GetUserSID(), ctx);
             }
         }
 
@@ -1223,14 +1225,16 @@ namespace NKikimr::NDataStreams::V1 {
         const auto response = result->ResultSet.front();
 
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            NACLib::TUserToken token(this->Request_->GetInternalToken());
+
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
-                                                      this->Request_->GetInternalToken())) {
+                                                      token)) {
                 return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
                                       Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                       TStringBuilder() << "Access to stream "
                                       << ShardIterator.GetStreamName()
                                       << " is denied for subject "
-                                      << this->Request_->GetInternalToken(), ctx);
+                                      << token.GetUserSID(), ctx);
             }
         }
 
@@ -1402,14 +1406,16 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            NACLib::TUserToken token(this->Request_->GetInternalToken());
+
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
-                                                        this->Request_->GetInternalToken())) {
+                                                        token)) {
                 return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
                                             Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << this->Request_->GetInternalToken(), ctx);
+                                            << token.GetUserSID(), ctx);
             }
         }
 

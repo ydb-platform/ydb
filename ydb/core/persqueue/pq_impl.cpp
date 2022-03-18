@@ -150,6 +150,8 @@ private:
         partResp->SetSizeLag(res.GetSizeLag());
         partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + res.GetWaitQuotaTimeMs());
 
+        partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), res.GetRealReadOffset()));
+
         for (ui32 i = 0; i < res.ResultSize(); ++i) {
             bool isNewMsg = !res.GetResult(i).HasPartNo() || res.GetResult(i).GetPartNo() == 0;
             if (!isStart) {
@@ -207,6 +209,7 @@ private:
         records.Swap(partResp->MutableResult());
         partResp->ClearResult();
         for (auto & rec : records) {
+            partResp->SetRealReadOffset(Max(partResp->GetRealReadOffset(), rec.GetOffset()));
             if (rec.GetWriteTimestampMS() >= readFromTimestampMs) {
                 auto result = partResp->AddResult();
                 result->CopyFrom(rec);

@@ -87,8 +87,8 @@
 
 В специализированных статьях описано, как определять параметры соединения на клиенте:
 
-* [Соединение с БД и аутентификация в {{ ydb-short-name }} CLI](../../reference/ydb-cli/connect.md)
-* [Аутентификация в {{ ydb-short-name }} SDK](../../reference/ydb-sdk/auth.md)
+* [Соединение с БД и аутентификация в {{ ydb-short-name }} CLI](../../reference/ydb-cli/connect.md).
+* [Аутентификация в {{ ydb-short-name }} SDK](../../reference/ydb-sdk/auth.md).
 
 ## Дополнительная информация {#addition}
 

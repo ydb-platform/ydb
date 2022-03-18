@@ -226,7 +226,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
 
-    bool PgTypes = false;
+    bool PgTypes = true;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);

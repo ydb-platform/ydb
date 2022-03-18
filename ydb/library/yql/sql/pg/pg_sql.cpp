@@ -149,9 +149,9 @@ public:
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
-        if (Settings.PgTypes) {
+        if (!Settings.PgTypes) {
             Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                QA("PgTypes"))));
+                QA("DisablePgTypes"))));
         }
 
         if (DqEngineEnabled) {

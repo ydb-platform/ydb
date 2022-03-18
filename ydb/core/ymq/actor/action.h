@@ -221,18 +221,17 @@ protected:
         } else if (UserCounters_) {
             INC_COUNTER(UserCounters_, RequestTimeouts);
         } else {
-            TIntrusivePtrCntrCouple rootCounters {
+            TIntrusivePtrCntrCouple rootCounters{
                     SqsCoreCounters_ ? SqsCoreCounters_ : GetSqsServiceCounters(AppData()->Counters, "core"),
                     GetYmqPublicCounters(AppData()->Counters)
             };
-            auto [userCounters, queueCounters] = GetUserAndQueueCounters(rootCounters, TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName()));
+            auto[userCounters, queueCounters] = GetUserAndQueueCounters(rootCounters,
+                                                                        TQueuePath(Cfg().GetRoot(), UserName_,
+                                                                                   GetQueueName()));
             if (queueCounters.SqsCounters) {
                 queueCounters.SqsCounters->GetCounter("RequestTimeouts", true)->Inc();
             } else if (userCounters.SqsCounters) {
                 userCounters.SqsCounters->GetCounter("RequestTimeouts", true)->Inc();
-            }
-            if (queueCounters.YmqCounters) {
-                queueCounters.YmqCounters->GetCounter("RequestTimeouts", true)->Inc();
             }
         }
 

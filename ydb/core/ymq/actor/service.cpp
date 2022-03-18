@@ -71,6 +71,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TQueueInfo(
             TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, TString customName,
             TString folderId, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
+            const TIntrusivePtr<TFolderCounters>& folderCounters,
             const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser,
             bool insertCounters
     )
@@ -84,6 +85,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         , LeaderTabletId_(leaderTabletId)
         , Counters_(userCounters->CreateQueueCounters(QueueName_, FolderId_, insertCounters))
         , UserCounters_(userCounters)
+        , FolderCounters_(folderCounters)
         , SchemeCache_(schemeCache)
         , QuoterResourcesForUser_(std::move(quoterResourcesForUser))
     {
@@ -129,14 +131,10 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             LocalLeader_ = TActivationContext::Register(new TQueueLeader(UserName_, QueueName_, FolderId_, RootUrl_, Counters_, UserCounters_, SchemeCache_, QuoterResourcesForUser_));
             LOG_SQS_INFO("Start local leader [" << UserName_ << "/" << QueueName_ << "] actor " << LocalLeader_);
 
-            // ToDo: Should better make TFolderCounters struct and move it there.
-            // Will have to refactor TQueueCounters a bit, since it directly works with TUserCounters
             if (FolderId_) {
-                auto folderCounters = GetFolderCounters(UserCounters_->UserCounters, FolderId_);
-                if (folderCounters.YmqCounters) {
-                    auto counter = folderCounters.YmqCounters->GetCounter("queue.total_count", false);
-                    (*counter)++;
-                }
+                Y_VERIFY(FolderCounters_);
+                FolderCounters_->InitCounters();
+                INC_COUNTER(FolderCounters_, total_count);
             }
         }
     }
@@ -149,14 +147,8 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
             TActivationContext::Send(new IEventHandle(LocalLeader_, SelfId(), new TEvPoisonPill()));
             LocalLeader_ = TActorId();
             if (FolderId_) {
-                auto folderCounters = GetFolderCounters(UserCounters_->UserCounters, FolderId_);
-                if (folderCounters.YmqCounters) {
-                    auto counter = folderCounters.YmqCounters->GetCounter("queue.total_count", false);
-                    counter->Dec();
-                    if (counter->Val() == 0) {
-                        RemoveFolderCounters(UserCounters_->UserCounters, FolderId_);
-                    }
-                }
+                Y_VERIFY(FolderCounters_);
+                DEC_COUNTER(FolderCounters_, total_count);
             }
         }
     }
@@ -188,6 +180,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     ui64 LeaderTabletId_ = 0;
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<TUserCounters> UserCounters_;
+    TIntrusivePtr<TFolderCounters> FolderCounters_;
     TActorId PipeClient_;
     TActorId LeaderPipeServer_;
     TActorId LocalLeader_;
@@ -251,6 +244,7 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
     std::shared_ptr<const std::map<TString, TString>> Settings_ = std::make_shared<const std::map<TString, TString>>();
     TIntrusivePtr<TUserCounters> Counters_;
     std::map<TString, TSqsService::TQueueInfoPtr> Queues_;
+    std::map<TString, TIntrusivePtr<TFolderCounters>> FolderCounters_;
     THashMap<std::pair<TString, TString>, TSqsService::TQueueInfoPtr> QueueByNameAndFolder_; // <custom name, folder id> -> queue info
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     TLocalRateLimiterResource CreateObjectsQuoterResource_;
@@ -1024,7 +1018,10 @@ void TSqsService::RemoveQueue(const TString& userName, const TString& queue) {
     queuePtr->GetLeaderNodeRequests_.clear();
     LeaderTabletIdToQueue_.erase(queuePtr->LeaderTabletId_);
     userIt->second->QueueByNameAndFolder_.erase(std::make_pair(queuePtr->CustomName_, queuePtr->FolderId_));
-
+    auto queuesCount = userIt->second->CountQueuesInFolder(queuePtr->FolderId_);
+    if (!queuesCount) {
+        userIt->second->FolderCounters_.erase(queuePtr->FolderId_);
+    }
     userIt->second->Queues_.erase(queueIt);
     queuePtr->Counters_->RemoveCounters();
 }
@@ -1041,14 +1038,23 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
     const TInstant now = TActivationContext::Now();
     const TInstant timeToInsertCounters = createdTimestamp + TDuration::MilliSeconds(Cfg().GetQueueCountersExportDelayMs());
     const bool insertCounters = now >= timeToInsertCounters;
-    auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(userName, queue, RootUrl_, leaderTabletId, customName, folderId, version, shardsCount, user->Counters_, SchemeCache_, user->QuoterResources_, insertCounters)))).first;
-    auto queueInfo = ret->second;
-    LeaderTabletIdToQueue_[leaderTabletId] = queueInfo;
-    user->QueueByNameAndFolder_.emplace(std::make_pair(customName, folderId), queueInfo);
 
+    auto folderCntrIter = user->FolderCounters_.find(folderId);
+    if (folderCntrIter == user->FolderCounters_.end()) {
+        folderCntrIter = user->FolderCounters_.insert(std::make_pair(folderId, user->Counters_->CreateFolderCounters(folderId, true))).first;
+    }
     if (!insertCounters) {
         Schedule(timeToInsertCounters - now, new TSqsEvents::TEvInsertQueueCounters(userName, queue, leaderTabletId));
     }
+
+    auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(
+            userName, queue, RootUrl_, leaderTabletId, customName, folderId, version, shardsCount,
+            user->Counters_, folderCntrIter->second, SchemeCache_, user->QuoterResources_, insertCounters)))
+    ).first;
+
+    auto queueInfo = ret->second;
+    LeaderTabletIdToQueue_[leaderTabletId] = queueInfo;
+    user->QueueByNameAndFolder_.emplace(std::make_pair(customName, folderId), queueInfo);
 
     {
         auto requests = user->GetLeaderNodeRequests_.equal_range(queue);

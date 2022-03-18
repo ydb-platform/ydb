@@ -223,14 +223,14 @@ TCheckFunc DomainSettings(ui32 planResolution, ui32 timeCastBucketsPerMediator) 
     };
 }
 
-TCheckFunc DatabaseSizeIs(ui64 bytes) {
+TCheckFunc DatabaseSizeIs(ui64 expectedBytes) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
 
         const auto& pathDescr = record.GetPathDescription();
         const auto& totalSize = pathDescr.GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize();
 
-        UNIT_ASSERT_VALUES_EQUAL(totalSize, bytes);
+        UNIT_ASSERT_VALUES_EQUAL(totalSize, expectedBytes);
     };
 }
 

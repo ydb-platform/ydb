@@ -967,7 +967,6 @@ public:
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
     TControlWrapper EnableAsyncIndexes;
-    TControlWrapper EnableSchemeTransactionsAtSchemeShard;
 
     THashMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
     THashMap<TString, TIndexBuildInfo::TPtr> IndexBuildsByUid;

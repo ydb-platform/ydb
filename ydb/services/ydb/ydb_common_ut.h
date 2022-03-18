@@ -76,7 +76,6 @@ public:
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
-        ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();

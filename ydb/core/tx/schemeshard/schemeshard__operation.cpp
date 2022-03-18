@@ -99,15 +99,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
          context.UserToken.Reset(new NACLib::TUserToken(tokenPb));
     }
 
-    if (!EnableSchemeTransactionsAtSchemeShard && record.TransactionSize() > 1) {
-        response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
-            NKikimrScheme::StatusInvalidParameter, ui64(txId), ui64(selfId)));
-        response->SetError(NKikimrScheme::StatusInvalidParameter,
-                           "Do not accept several transactions as one until EnableSchemeTransactionsAtSchemeShard isn't set");
-        Operations.erase(operation->GetTxId());
-        return std::move(response);
-    }
-
     for (const auto& transaction: record.GetTransaction()) {
         auto quotaResult = operation->ConsumeQuota(transaction, context);
         if (quotaResult.Status != NKikimrScheme::StatusSuccess) {

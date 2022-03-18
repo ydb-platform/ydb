@@ -197,18 +197,8 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        if (context.SS->EnableSchemeTransactionsAtSchemeShard) {
-
-            // only persist step, but do not set drop plan step for the path
-            NextState = TTxState::WaitShadowPathPublication;
-            context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
-            return true;
-        }
-
-        DropPath(db, context, OperationId, *txState, path);
-
-        NextState = TTxState::ProposedWaitParts;
-        context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
+        NextState = TTxState::WaitShadowPathPublication;
+        context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
         return true;
     }
 

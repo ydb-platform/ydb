@@ -465,4 +465,8 @@ namespace NSchemeShardUT_Private {
     TTestActorRuntimeBase::TEventObserver SetSuppressObserver(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 type);
     void WaitForSuppressed(TTestActorRuntime& runtime, TVector<THolder<IEventHandle>>& suppressed, ui32 count, TTestActorRuntime::TEventObserver prevObserver);
 
+
+    NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+        TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
+
 } //NSchemeShardUT_Private

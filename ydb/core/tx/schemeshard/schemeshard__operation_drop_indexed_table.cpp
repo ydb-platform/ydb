@@ -92,17 +92,9 @@ public:
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         Y_VERIFY(path.IsResolved());
 
-        if (context.SS->EnableSchemeTransactionsAtSchemeShard) {
-            // only persist step, but do not set it for the path
-            NextState = TTxState::WaitShadowPathPublication;
-            context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
-            return true;
-        }
 
-        DropPath(db, context, OperationId, *txState, path);
-
-        NextState = TTxState::Done;
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        NextState = TTxState::WaitShadowPathPublication;
+        context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
         return true;
     }
 

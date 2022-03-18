@@ -3657,7 +3657,6 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , ShardDeleter(info->TabletID)
     , AllowDataColumnForIndexTable(0, 0, 1)
     , EnableAsyncIndexes(0, 0, 1)
-    , EnableSchemeTransactionsAtSchemeShard(0, 0, 1)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -3780,9 +3779,6 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     EnableAsyncIndexes = appData->FeatureFlags.GetEnableAsyncIndexes();
     appData->Icb->RegisterSharedControl(EnableAsyncIndexes, "SchemeShard_EnableAsyncIndexes");
-
-    EnableSchemeTransactionsAtSchemeShard = appData->FeatureFlags.GetEnableSchemeTransactionsAtSchemeShard();
-    appData->Icb->RegisterSharedControl(EnableSchemeTransactionsAtSchemeShard, "SchemeShard_EnableSchemeTransactionsAtSchemeShard");
 
     for (const auto& sid : appData->MeteringConfig.GetSystemBackupSIDs()) {
         SystemBackupSIDs.insert(sid);
@@ -5976,15 +5972,6 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
                      << ", old: " << (bool)AllowServerlessStorageBilling
                      << ", new: " << (bool)featureFlags.GetAllowServerlessStorageBillingForSchemeShard());
         AllowServerlessStorageBilling = (i64)featureFlags.GetAllowServerlessStorageBillingForSchemeShard();
-    }
-
-    if (featureFlags.GetEnableSchemeTransactionsAtSchemeShard() != (bool)EnableSchemeTransactionsAtSchemeShard) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "ApplyConsoleConfigs: EnableSchemeTransactionsAtSchemeShard has been changed"
-                     << ", schemeshardId: " << SelfTabletId()
-                     << ", old: " << (bool)EnableSchemeTransactionsAtSchemeShard
-                     << ", new: " << (bool)featureFlags.GetEnableSchemeTransactionsAtSchemeShard());
-        EnableSchemeTransactionsAtSchemeShard = (i64)featureFlags.GetEnableSchemeTransactionsAtSchemeShard();
     }
 
     EnableBackgroundCompaction = featureFlags.GetEnableBackgroundCompaction();

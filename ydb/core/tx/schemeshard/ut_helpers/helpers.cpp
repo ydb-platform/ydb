@@ -2055,4 +2055,16 @@ namespace NSchemeShardUT_Private {
 
         runtime.SetObserverFunc(prevObserver);
     }
+
+    NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+        TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+    {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+        request->Record.SetCompactBorrowed(compactBorrowed);
+        runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+        return ev->Get()->Record;
+    }
 }

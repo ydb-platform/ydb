@@ -18,43 +18,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestEnv env(runtime);
     }
 
-    Y_UNIT_TEST(FeatureFlagReject) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime,
-                     TTestEnvOptions()
-                     .EnableAsyncIndexes(true)
-                     .EnableSchemeTransactionsAtSchemeShard(false));
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "Table1"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Utf8" }
-              Columns { Name: "value1" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "Table2"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value0" Type: "Utf8" }
-              Columns { Name: "value1" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        {
-            ++txId;
-            auto first = MoveTableRequest(txId,  "/MyRoot/Table1", "/MyRoot/Moved1");
-            auto second = MoveTableRequest(txId,  "/MyRoot/Table2", "/MyRoot/Moved2");
-            auto combination = CombineSchemeTransactions({first, second});
-
-            AsyncSendTransaction(runtime, TTestTxConfig::SchemeShard, combination);
-            TestModificationResult(runtime, txId, NKikimrScheme::StatusInvalidParameter);
-        }
-    }
-
     Y_UNIT_TEST(Reject) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
@@ -299,8 +262,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     Y_UNIT_TEST(TwoTables) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
-                     TTestEnvOptions()
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     TTestEnvOptions());
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -368,8 +330,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true)
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     .EnableAsyncIndexes(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -497,8 +458,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true)
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     .EnableAsyncIndexes(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -578,8 +538,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true)
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     .EnableAsyncIndexes(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -706,8 +665,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true)
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     .EnableAsyncIndexes(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -774,8 +732,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true)
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     .EnableAsyncIndexes(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

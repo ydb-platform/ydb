@@ -244,19 +244,8 @@ public:
         dstPath.Activate();
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
 
-        if (context.SS->EnableSchemeTransactionsAtSchemeShard) {
-            // only persist step, but do not set drop step for the src path, wait for replacement publication first
-            NextState = TTxState::WaitShadowPathPublication;
-            context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
-            return true;
-        }
-
-        MarkSrcDropped(db, context, OperationId, *txState, srcPath);
-
-        Y_VERIFY(!context.SS->TablesWithSnaphots.contains(srcPath.Base()->PathId));
-
-        NextState = TTxState::ProposedWaitParts;
-        context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
+        NextState = TTxState::WaitShadowPathPublication;
+        context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
         return true;
     }
 

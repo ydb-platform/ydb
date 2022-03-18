@@ -107,7 +107,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableDataColumnForIndexTable(true);
     ServerSettings->SetKeepSnapshotTimeout(settings.KeepSnapshotTimeout);
     ServerSettings->SetFrFactory(&UdfFrFactory);
-    ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
     ServerSettings->SetEnableNotNullColumns(true);
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));

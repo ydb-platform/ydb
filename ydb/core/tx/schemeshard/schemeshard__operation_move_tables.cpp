@@ -47,11 +47,6 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, 
 
     TVector<ISubOperationBase::TPtr> result;
 
-    if (!context.SS->EnableSchemeTransactionsAtSchemeShard) {
-        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                             "Do not accept move table operation until EnableSchemeTransactionsAtSchemeShard isn't set")};
-    }
-
     {
         TString errStr;
         if (!context.SS->CheckApplyIf(tx, errStr)) {

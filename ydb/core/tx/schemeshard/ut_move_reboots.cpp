@@ -17,6 +17,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
     }
+
     Y_UNIT_TEST(WithData) {
         TTestWithReboots t;
 
@@ -50,9 +51,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                                 {NLs::PathExist,
-                                                 NLs::ChildrenCount(2),
-                                                 NLs::ShardsInsideDomain(1)});
+                                   {NLs::PathExist,
+                                    NLs::ChildrenCount(2),
+                                    NLs::ShardsInsideDomain(1)});
+
+                auto tableVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                                                      {NLs::PathExist});
+                {
+                    const auto result = CompactTable(runtime, TTestTxConfig::FakeHiveTablets, tableVersion.PathId);
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+                }
 
                 { //wait stats
                     TVector<THolder<IEventHandle>> suppressed;
@@ -66,7 +74,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 }
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::DatabaseSizeIs(624)});
+                                   {NLs::DatabaseSizeIs(120)});
 
             }
 
@@ -98,7 +106,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 }
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::DatabaseSizeIs(624)});
+                                   {NLs::DatabaseSizeIs(120)});
             }
         });
     }
@@ -137,9 +145,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 fnWriteRow(TTestTxConfig::FakeHiveTablets);
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                                 {NLs::PathExist,
-                                                 NLs::ChildrenCount(2),
-                                                 NLs::ShardsInsideDomain(1)});
+                                   {NLs::PathExist,
+                                    NLs::ChildrenCount(2),
+                                    NLs::ShardsInsideDomain(1)});
+
+                auto tableVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                                                      {NLs::PathExist});
+                {
+                    const auto result = CompactTable(runtime, TTestTxConfig::FakeHiveTablets, tableVersion.PathId);
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+                }
 
                 { //wait stats
                     TVector<THolder<IEventHandle>> suppressed;
@@ -153,7 +168,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 }
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::DatabaseSizeIs(624)});
+                                   {NLs::DatabaseSizeIs(120)});
 
             }
 
@@ -161,7 +176,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                               {NLs::DatabaseSizeIs(624)});
+                               {NLs::DatabaseSizeIs(120)});
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -188,7 +203,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 }
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::DatabaseSizeIs(624)});
+                                   {NLs::DatabaseSizeIs(120)});
             }
         });
     }

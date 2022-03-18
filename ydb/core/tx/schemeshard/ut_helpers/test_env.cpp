@@ -501,7 +501,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
     app.SetEnableAsyncIndexes(opts.EnableAsyncIndexes_);
     app.SetEnableNotNullColumns(opts.EnableNotNullColumns_);
-    app.SetEnableSchemeTransactionsAtSchemeShard(opts.EnableSchemeTransactionsAtSchemeShard_);
     app.SetEnableOlapSchemaOperations(opts.EnableOlapSchemaOperations_);
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
@@ -1008,6 +1007,5 @@ NSchemeShardUT_Private::TTestEnvOptions NSchemeShardUT_Private::TTestWithReboots
             .EnablePipeRetries(false)
             .EnableAsyncIndexes(true)
             .EnableNotNullColumns(true)
-            .EnableSchemeTransactionsAtSchemeShard(true)
             .EnableProtoSourceIdInfo(true);
 }

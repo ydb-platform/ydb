@@ -2,6 +2,7 @@
 #include "yql_opt_proposed_by_data.h"
 #include "yql_opt_rewrite_io.h"
 #include "yql_opt_utils.h"
+#include "yql_pg_utils.h"
 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/dom/json.h>
@@ -4960,5 +4961,40 @@ bool IsCallableTypeHasStreams(const TCallableExprType* callableType) {
     }
     return false;
 }
+
+bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, TPositionHandle pos, TExprContext& ctx) {
+    pgType = 0;
+    if (type->GetKind() == ETypeAnnotationKind::Null) {
+        return true;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Data || type->GetKind() == ETypeAnnotationKind::Optional) {
+        const TTypeAnnotationNode* unpacked = RemoveOptionalType(type);
+        if (unpacked->GetKind() != ETypeAnnotationKind::Data) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "Nested optional type is not compatible to PG"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto slot = unpacked->Cast<TDataExprType>()->GetSlot();
+        auto convertedTypeId = ConvertToPgType(slot);
+        if (!convertedTypeId) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                TStringBuilder() << "Type is not compatible to PG: " << slot));
+            return false;
+        }
+
+        pgType = *convertedTypeId;
+        return true;
+    } else if (type->GetKind() != ETypeAnnotationKind::Pg) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Expected PG type, but got: " << type->GetKind()));
+        return false;
+    } else {
+        pgType = type->Cast<TPgExprType>()->GetId();
+        return true;
+    }
+}
+
 
 } // NYql

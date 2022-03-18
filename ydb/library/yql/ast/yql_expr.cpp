@@ -3021,6 +3021,7 @@ const TListExprType* TMakeTypeImpl<TListExprType>::Make(TExprContext& ctx, const
 }
 
 const TOptionalExprType* TMakeTypeImpl<TOptionalExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
+    Y_ENSURE(itemType->GetKind() != ETypeAnnotationKind::Pg);
     const auto hash = TOptionalExprType::MakeHash(itemType);
     TOptionalExprType sample(hash, itemType);
     if (const auto found = FindType(sample, ctx))

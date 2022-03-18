@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <util/generic/map.h>
 #include <util/generic/bitmap.h>
@@ -6692,30 +6693,52 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                     TNodeOnNodeOwnedMap deepClones;
                     TExprNode::TListType payloadItems;
                     for (ui32 i = 0; i < aggs.size(); ++i) {
-                        const auto& exports = exportsPtr->Symbols();
                         auto func = aggs[i].first->Head().Content();
-                        if (func == "count" && aggs[i].first->ChildrenSize() == 1) {
-                            func = "count_all";
-                        }
+                        TExprNode::TPtr traits;
+                        if (optCtx.Types->PgTypes) {
+                            auto arg = ctx.NewArgument(node->Pos(), "row");
+                            auto arguments = ctx.NewArguments(node->Pos(), { arg });
+                            TExprNode::TListType aggFuncArgs;
+                            for (ui32 j = 1; j < aggs[i].first->ChildrenSize(); ++j) {
+                                aggFuncArgs.push_back(ctx.ReplaceNode(aggs[i].first->ChildPtr(j), *aggs[i].second, arg));
+                            }
 
-                        TString factory = TString(func) + "_traits_factory";
-                        const auto ex = exports.find(factory);
-                        YQL_ENSURE(exports.cend() != ex);
-                        auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
-                        auto arg = ctx.NewArgument(node->Pos(), "row");
-                        auto arguments = ctx.NewArguments(node->Pos(), { arg });
-                        auto extractor = ctx.NewLambda(node->Pos(), std::move(arguments),
-                            ctx.ReplaceNode(aggs[i].first->TailPtr(), *aggs[i].second, arg));
+                            auto extractor = ctx.NewLambda(node->Pos(), std::move(arguments), std::move(aggFuncArgs));
 
-                        auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
-                            {lambda->Head().Child(0), listTypeNode},
-                            {lambda->Head().Child(1), extractor}
-                        });
+                            traits = ctx.Builder(node->Pos())
+                                .Callable("PgAggregationTraits")
+                                    .Atom(0, func)
+                                    .Callable(1, "ListItemType")
+                                        .Add(0, listTypeNode)
+                                    .Seal()
+                                    .Add(2, extractor)
+                                .Seal()
+                                .Build();
+                        } else {
+                            const auto& exports = exportsPtr->Symbols();
+                            if (func == "count" && aggs[i].first->ChildrenSize() == 1) {
+                                func = "count_all";
+                            }
 
-                        ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                        auto status = ExpandApply(traits, traits, ctx);
-                        if (status == IGraphTransformer::TStatus::Error) {
-                            return {};
+                            TString factory = TString(func) + "_traits_factory";
+                            const auto ex = exports.find(factory);
+                            YQL_ENSURE(exports.cend() != ex);
+                            auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+                            auto arg = ctx.NewArgument(node->Pos(), "row");
+                            auto arguments = ctx.NewArguments(node->Pos(), { arg });
+                            auto extractor = ctx.NewLambda(node->Pos(), std::move(arguments),
+                                ctx.ReplaceNode(aggs[i].first->TailPtr(), *aggs[i].second, arg));
+
+                            traits = ctx.ReplaceNodes(lambda->TailPtr(), {
+                                {lambda->Head().Child(0), listTypeNode},
+                                {lambda->Head().Child(1), extractor}
+                            });
+
+                            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+                            auto status = ExpandApply(traits, traits, ctx);
+                            if (status == IGraphTransformer::TStatus::Error) {
+                                return {};
+                            }
                         }
 
                         payloadItems.push_back(ctx.Builder(node->Pos())
@@ -6759,7 +6782,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                         .Atom(1, "_yql_agg_" + ToString(it->second))
                                     .Seal()
                                     .Build();
-                                if (node->Head().Content() == "count") {
+                                if (!optCtx.Types->PgTypes && node->Head().Content() == "count") {
                                     ret = ctx.Builder(node->Pos())
                                         .Callable("SafeCast")
                                             .Add(0, ret)
@@ -7073,7 +7096,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                 .Seal()
                                 .Build();
 
-                            if (node->Head().Content() == "row_number" || node->Head().Content() == "count") {
+                            if (!optCtx.Types->PgTypes && (node->Head().Content() == "row_number" || node->Head().Content() == "count")) {
                                 ret = ctx.Builder(node->Pos())
                                     .Callable("SafeCast")
                                         .Add(0, ret)

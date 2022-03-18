@@ -454,6 +454,8 @@ public:
             } else {
                 ythrow yexception() << "Unknown aggkind value: " << value;
             }
+        } else if (key == "agginitval") {
+            LastAggregation.InitValue = value;
         }
     }
 

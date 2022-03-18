@@ -73,6 +73,7 @@ struct TAggregateDesc {
     ui32 CombineFuncId = 0;
     ui32 SerializeFuncId = 0;
     ui32 DeserializeFuncId = 0;
+    TString InitValue;
 };
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);

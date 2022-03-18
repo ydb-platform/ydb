@@ -4264,7 +4264,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!IsSameAnnotation(*lambdaMerge->GetTypeAnn(), *reduceStateType)) {
+        if (!lambdaMerge->Tail().IsCallable("Void") && !IsSameAnnotation(*lambdaMerge->GetTypeAnn(), *reduceStateType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch merge lambda result type, expected: "
                 << *reduceStateType << ", but got: " << *lambdaMerge->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
@@ -4581,7 +4581,8 @@ namespace {
             } else {
                 auto defVal = child->Child(1)->Child(7);
                 if (defVal->IsCallable("Null") && !isOptional && !isHopping && input->Child(1)->ChildrenSize() == 0) {
-                    if (finishType->GetKind() != ETypeAnnotationKind::Null) {
+                    if (finishType->GetKind() != ETypeAnnotationKind::Null &&
+                        finishType->GetKind() != ETypeAnnotationKind::Pg) {
                         finishType = ctx.Expr.MakeType<TOptionalExprType>(finishType);
                     }
                 } else if (!defVal->IsCallable("Null") && defVal->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional

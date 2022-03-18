@@ -94,6 +94,7 @@ target_link_libraries(yql-parser-pg_wrapper PUBLIC
   yql-minikql-computation
   yql-parser-pg_catalog
   library-yql-core
+  providers-common-codec
   library-cpp-yson
   contrib-libs-icu
   contrib-libs-libc_compat

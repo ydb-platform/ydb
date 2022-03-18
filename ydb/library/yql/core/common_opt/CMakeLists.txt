@@ -16,6 +16,7 @@ target_link_libraries(yql-core-common_opt PUBLIC
   yutil
   library-yql-core
   yql-core-expr_nodes
+  yql-parser-pg_catalog
 )
 target_sources(yql-core-common_opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_extr_members.cpp

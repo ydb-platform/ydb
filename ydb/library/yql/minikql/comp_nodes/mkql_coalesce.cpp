@@ -64,7 +64,7 @@ IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactor
 
     bool isLeftOptional = false;
     const auto& leftType = UnpackOptional(callable.GetInput(0), isLeftOptional);
-    MKQL_ENSURE(isLeftOptional, "Expected optional");
+    MKQL_ENSURE(isLeftOptional || leftType->IsPg(), "Expected optional or pg");
 
     bool isRightOptional = false;
     if (!leftType->IsSameType(*callable.GetInput(1).GetStaticType())) {

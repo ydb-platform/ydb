@@ -26,6 +26,14 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
     TExprNode::TPtr sortOrder = voidNode;
 
     bool effectiveCompact = forceCompact || HasSetting(*settings, "compact");
+    for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) {
+        auto trait = aggregatedColumns->Child(index)->Child(1);
+        auto mergeLambda = trait->Child(5);
+        if (mergeLambda->Tail().IsCallable("Void")) {
+            effectiveCompact = true;
+            break;
+        }
+    }
 
     const TStructExprType* originalRowType = GetSeqItemType(node->Head().GetTypeAnn())->Cast<TStructExprType>();
     TVector<const TItemExprType*> rowItems = originalRowType->GetItems();

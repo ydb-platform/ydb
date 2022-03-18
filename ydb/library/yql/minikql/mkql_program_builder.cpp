@@ -348,7 +348,7 @@ TRuntimeNode TProgramBuilder::Member(TRuntimeNode structObj, const std::string_v
     const auto type = AS_TYPE(TStructType, UnpackOptional(structObj.GetStaticType(), isOptional));
     const auto memberIndex = type->GetMemberIndex(memberName);
     auto memberType = type->GetMemberType(memberIndex);
-    if (isOptional && !memberType->IsOptional() && !memberType->IsNull()) {
+    if (isOptional && !memberType->IsOptional() && !memberType->IsNull() && !memberType->IsPg()) {
         memberType = NewOptionalType(memberType);
     }
 
@@ -2146,7 +2146,7 @@ TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, const std::string_vi
 TRuntimeNode TProgramBuilder::Coalesce(TRuntimeNode data, TRuntimeNode defaultData) {
     bool isOptional = false;
     const auto dataType = UnpackOptional(data, isOptional);
-    if (!isOptional) {
+    if (!isOptional && !data.GetStaticType()->IsPg()) {
         MKQL_ENSURE(data.GetStaticType()->IsSameType(*defaultData.GetStaticType()), "Mismatch operand types");
         return data;
     }
@@ -2685,7 +2685,7 @@ TRuntimeNode TProgramBuilder::Exists(TRuntimeNode data) {
         return NewDataLiteral(false);
     }
 
-    if (!nodeType->IsOptional()) {
+    if (!nodeType->IsOptional() && !nodeType->IsPg()) {
         return NewDataLiteral(true);
     }
 

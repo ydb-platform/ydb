@@ -1281,7 +1281,8 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  
         return MakeBool<false>(node->Pos(), ctx);
     }
 
-    if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
+    if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional &&
+        node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
         return MakeBool<true>(node->Pos(), ctx);
     }

@@ -104,7 +104,7 @@ Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value, bool isVar) {
 
 struct TPAllocLeakGuard {
     TPAllocLeakGuard() {
-        Y_ENSURE(!PAllocList);
+        PrevList = PAllocList;
         PAllocList = &Root;
         Root.Next = &Root;
         Root.Prev = &Root;
@@ -118,9 +118,11 @@ struct TPAllocLeakGuard {
             current = next;
         }
 
-        PAllocList = nullptr;
+        Y_VERIFY(PAllocList == &Root);
+        PAllocList = PrevList;
     }
 
+    TPAllocListItem* PrevList;
     TPAllocListItem Root;
 };
 
@@ -239,8 +241,14 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         SET_MEMORY_CONTEXT;
 
-        if (TypeId == INT4OID) {
+        if (TypeId == INT2OID) {
+            return ScalarDatumToPod(Int16GetDatum(FromString<i16>(Value)));
+        } else if (TypeId == INT4OID) {
             return ScalarDatumToPod(Int32GetDatum(FromString<i32>(Value)));
+        } else if (TypeId == INT8OID) {
+            return ScalarDatumToPod(Int64GetDatum(FromString<i64>(Value)));
+        } else if (TypeId == FLOAT4OID) {
+            return ScalarDatumToPod(Float4GetDatum(FromString<float>(Value)));
         } else if (TypeId == FLOAT8OID) {
             return ScalarDatumToPod(Float8GetDatum(FromString<double>(Value)));
         } else if (TypeId == TEXTOID) {
@@ -311,6 +319,7 @@ public:
         , RetTypeDesc(NPg::LookupType(ProcDesc.ResultType))
     {
         Zero(FInfo);
+        Y_ENSURE(Id);
         fmgr_info(Id, &FInfo);
         Y_ENSURE(!FInfo.fn_retset);
         Y_ENSURE(FInfo.fn_addr);
@@ -456,6 +465,7 @@ public:
             }
         }
 
+        Y_ENSURE(funcId);
         fmgr_info(funcId, &FInfo1);
         Y_ENSURE(!FInfo1.fn_retset);
         Y_ENSURE(FInfo1.fn_addr);
@@ -467,6 +477,7 @@ public:
         }
 
         if (funcId2) {
+            Y_ENSURE(funcId2);
             fmgr_info(funcId2, &FInfo2);
             Y_ENSURE(!FInfo2.fn_retset);
             Y_ENSURE(FInfo2.fn_addr);
@@ -896,9 +907,9 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         SET_MEMORY_CONTEXT;
         TPAllocLeakGuard leakGuard;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
-        Y_ENSURE(typeInfo.SendFuncId);
         FmgrInfo finfo;
         Zero(finfo);
+        Y_ENSURE(typeInfo.SendFuncId);
         fmgr_info(typeInfo.SendFuncId, &finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
@@ -985,6 +996,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
         Zero(finfo);
+        Y_ENSURE(typeInfo.OutFuncId);
         fmgr_info(typeInfo.OutFuncId, &finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
@@ -1078,9 +1090,9 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
 
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         auto typeIOParam = MakeTypeIOParam(typeInfo);
-        Y_ENSURE(typeInfo.ReceiveFuncId);
         FmgrInfo finfo;
         Zero(finfo);
+        Y_ENSURE(typeInfo.ReceiveFuncId);
         fmgr_info(typeInfo.ReceiveFuncId, &finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
@@ -1190,9 +1202,9 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
 
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         auto typeIOParam = MakeTypeIOParam(typeInfo);
-        Y_ENSURE(typeInfo.ReceiveFuncId);
         FmgrInfo finfo;
         Zero(finfo);
+        Y_ENSURE(typeInfo.ReceiveFuncId);
         fmgr_info(typeInfo.ReceiveFuncId, &finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
@@ -1282,9 +1294,9 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
         SET_MEMORY_CONTEXT;
         TPAllocLeakGuard leakGuard;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
-        Y_ENSURE(typeInfo.SendFuncId);
         FmgrInfo finfo;
         Zero(finfo);
+        Y_ENSURE(typeInfo.SendFuncId);
         fmgr_info(typeInfo.SendFuncId, &finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
@@ -1438,9 +1450,9 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         SET_MEMORY_CONTEXT;
         TPAllocLeakGuard leakGuard;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
-        Y_ENSURE(typeInfo.SendFuncId);
         FmgrInfo finfo;
         Zero(finfo);
+        Y_ENSURE(typeInfo.SendFuncId);
         fmgr_info(typeInfo.SendFuncId, &finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);
@@ -1530,9 +1542,9 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
 
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         auto typeIOParam = MakeTypeIOParam(typeInfo);
-        Y_ENSURE(typeInfo.ReceiveFuncId);
         FmgrInfo finfo;
         Zero(finfo);
+        Y_ENSURE(typeInfo.ReceiveFuncId);
         fmgr_info(typeInfo.ReceiveFuncId, &finfo);
         Y_ENSURE(!finfo.fn_retset);
         Y_ENSURE(finfo.fn_addr);

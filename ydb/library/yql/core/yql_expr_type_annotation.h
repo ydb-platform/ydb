@@ -280,5 +280,6 @@ std::optional<ui32> GetFieldPosition(const TTupleExprType& tupleType, const TStr
 std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TStringBuf& field);
 
 bool IsCallableTypeHasStreams(const TCallableExprType* callableType);
+bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, TPositionHandle pos, TExprContext& ctx);
 
 }

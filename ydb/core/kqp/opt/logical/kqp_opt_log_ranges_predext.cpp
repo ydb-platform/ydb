@@ -16,6 +16,137 @@ using namespace NYql::NCommon;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+
+TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTableRanges readTable,
+    TMaybeNode<TCoFilterNullMembers>& filterNull, TMaybeNode<TCoSkipNullMembers>& skipNull,
+    const TKikimrTableDescription& tableDesc, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+{
+    switch (tableDesc.Metadata->Kind) {
+        case EKikimrTableKind::Datashard:
+        case EKikimrTableKind::SysView:
+            break;
+        case EKikimrTableKind::Olap:
+        case EKikimrTableKind::Unspecified:
+            return {};
+    }
+
+    auto row = flatmap.Lambda().Args().Arg(0);
+    auto predicate = TExprBase(flatmap.Lambda().Body().Ref().ChildPtr(0));
+    TTableLookup lookup = ExtractTableLookup(row, predicate, tableDesc.Metadata->KeyColumnNames,
+        &KiTableLookupGetValue, &KiTableLookupCanCompare, &KiTableLookupCompare, ctx,
+        kqpCtx.Config->HasAllowNullCompareInIndex());
+
+    if (lookup.IsFullScan()) {
+        return {};
+    }
+
+    if (kqpCtx.IsScanQuery() && lookup.GetKeyRanges().size() > 1) {
+        return {}; // optimize trivial cases only
+    }
+
+    auto isTrivialExpr = [](const TExprBase& expr) {
+        if (!expr.Maybe<TCoExists>()) {
+            return false;
+        }
+        auto opt = expr.Cast<TCoExists>().Optional();
+        if (opt.Maybe<TCoDataCtor>()) {
+            return true;
+        }
+        if (opt.Maybe<TCoParameter>()) {
+            return opt.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Data;
+        }
+        return false;
+    };
+
+    auto isTrivialPredicate = [&isTrivialExpr](const TExprBase& expr) {
+        if (isTrivialExpr(expr)) {
+            return true;
+        }
+        if (expr.Maybe<TCoAnd>()) {
+            for (auto& predicate : expr.Cast<TCoAnd>().Args()) {
+                if (!isTrivialExpr(TExprBase(predicate))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    };
+
+    TVector<TExprBase> fetches;
+    fetches.reserve(lookup.GetKeyRanges().size());
+    auto readSettings = TKqpReadTableSettings::Parse(readTable);
+
+    for (const auto& keyRange : lookup.GetKeyRanges()) {
+        if (keyRange.HasResidualPredicate()) {
+            // In trivial cases the residual predicate look like:
+            //  * (Exists <KeyValue>)
+            //  * (And (Exists <Key1Value>) (Exists Key2Value) ...)
+            // where `KeyValue` is either explicit `Data` (so `Exists` is always true)
+            //   or Parameter value (in that case we ensure that type is not optional)
+            if (!isTrivialPredicate(keyRange.GetResidualPredicate().Cast())) {
+                return {};
+            }
+        }
+
+        auto keyRangeExpr = BuildKeyRangeExpr(keyRange, tableDesc, readTable.Pos(), ctx);
+
+        TKqpReadTableSettings settings = readSettings;
+        for (size_t i = 0; i < keyRange.GetColumnRangesCount(); ++i) {
+            const auto& column = tableDesc.Metadata->KeyColumnNames[i];
+            auto& range = keyRange.GetColumnRange(i);
+            if (range.IsDefined() && !range.IsNull()) {
+                settings.AddSkipNullKey(column);
+            }
+        }
+
+        TExprBase input = Build<TKqlReadTable>(ctx, readTable.Pos())
+            .Table(readTable.Table())
+            .Range(keyRangeExpr)
+            .Columns(readTable.Columns())
+            .Settings(settings.BuildNode(ctx, readTable.Pos()))
+            .Done();
+
+        if (filterNull) {
+            input = Build<TCoFilterNullMembers>(ctx, readTable.Pos())
+                .Input(input)
+                .Members(filterNull.Cast().Members())
+                .Done();
+        }
+
+        if (skipNull) {
+            input = Build<TCoSkipNullMembers>(ctx, readTable.Pos())
+                .Input(input)
+                .Members(skipNull.Cast().Members())
+                .Done();
+        }
+
+        input = Build<TCoFlatMap>(ctx, readTable.Pos())
+            .Input(input)
+            .Lambda()
+                .Args({"item"})
+                .Body<TExprApplier>()
+                    .Apply(TExprBase(ctx.ChangeChild(flatmap.Lambda().Body().Ref(), 0, MakeBool<true>(readTable.Pos(), ctx))))
+                    .With(flatmap.Lambda().Args().Arg(0), "item")
+                    .Build()
+                .Build()
+            .Done();
+
+        if (lookup.GetKeyRanges().size() == 1) {
+            return input;
+        }
+
+        fetches.emplace_back(input);
+    }
+
+    return Build<TCoExtend>(ctx, readTable.Pos())
+        .Add(fetches)
+        .Done();
+}
+
+} // namespace
+
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
 {
@@ -67,7 +198,12 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         return node;
     }
 
-    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+
+    // test for trivial cases (explicit literals or parameters)
+    if (auto expr = TryBuildTrivialReadTable(flatmap, read, filterNull, skipNull, tableDesc, ctx, kqpCtx)) {
+        return expr.Cast();
+    }
 
     THashSet<TString> possibleKeys;
     TPredicateExtractorSettings settings;
@@ -103,15 +239,13 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     YQL_CLOG(DEBUG, ProviderKqp) << "Ranges extracted: " << KqpExprToPrettyString(*ranges, ctx);
     YQL_CLOG(DEBUG, ProviderKqp) << "Residual lambda: " << KqpExprToPrettyString(*residualLambda, ctx);
 
-    TMaybeNode<TExprBase> readInput = Build<TKqlReadTableRanges>(ctx, read.Pos())
+    TExprBase input = Build<TKqlReadTableRanges>(ctx, read.Pos())
         .Table(read.Table())
         .Ranges(ranges)
         .Columns(read.Columns())
         .Settings(read.Settings())
         .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
         .Done();
-
-    auto input = readInput.Cast();
 
     if (filterNull) {
         input = Build<TCoFilterNullMembers>(ctx, node.Pos())

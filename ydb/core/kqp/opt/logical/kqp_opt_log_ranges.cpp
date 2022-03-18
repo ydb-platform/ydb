@@ -62,6 +62,8 @@ TExprBase BuildEquiRangeLookup(const TKeyRange& keyRange, const TKikimrTableDesc
         .Done();
 }
 
+} // namespace
+
 TKqlKeyRange BuildKeyRangeExpr(const TKeyRange& keyRange, const TKikimrTableDescription& tableDesc,
     TPositionHandle pos, TExprContext& ctx)
 {
@@ -112,8 +114,6 @@ TKqlKeyRange BuildKeyRangeExpr(const TKeyRange& keyRange, const TKikimrTableDesc
         .To(toExpr)
         .Done();
 }
-
-} // namespace
 
 TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoFlatMap>()) {

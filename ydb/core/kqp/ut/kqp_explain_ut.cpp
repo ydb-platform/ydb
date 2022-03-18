@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         settings.Explain(true);
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
+            SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 149 + 1 AND 266 ORDER BY Data LIMIT 4;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto scanSort = FindPlanNodeByKv(plan, "Node Type", "Sort-TableRangesScan");
+        auto scanSort = FindPlanNodeByKv(plan, "Node Type", "Sort-TableRangeScan");
         UNIT_ASSERT(scanSort.IsDefined());
     }
 
@@ -626,7 +626,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT * FROM `/Root/KeyValue`
-            WHERE Key >= 2000 OR Key < 100;
+            WHERE Key >= 2000 OR Key < 99 + 1;
         )", settings).GetValueSync();
 
         auto res = CollectStreamResult(it);

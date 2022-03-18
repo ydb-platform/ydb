@@ -91,10 +91,10 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
             [[302u];["Value2"];["Value-302"]]
         ])", StreamResultToYson(result, &profiles));
 
-    UNIT_ASSERT_EQUAL(2, profiles.size());
+    UNIT_ASSERT_EQUAL(1, profiles.size());
 
     NYql::NDqProto::TDqExecutionStats stats;
-    google::protobuf::TextFormat::ParseFromString(profiles[1], &stats);
+    google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
     UNIT_ASSERT(stats.IsInitialized());
 
     ui32 blockedByCapacity = 0;

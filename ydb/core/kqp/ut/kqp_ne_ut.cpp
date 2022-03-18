@@ -3041,7 +3041,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
         UNIT_ASSERT_VALUES_EQUAL("/Root/Logs", stats.query_phases()[0].table_access()[0].name());
 
-        // mix param and literal
+        // mix non-optional param and literal
         auto params = TParamsBuilder()
             .AddParam("$app").Utf8("nginx").Build()
             .Build();
@@ -3058,11 +3058,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         CompareYson(R"([[["nginx"];["nginx-23"];["PUT /form HTTP/1.1"];[2]]])", FormatResultSetYson(result.GetResultSet(0)));
 
         stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(2, stats.query_phases().size()); // with LiteralExecuter phase
-        UNIT_ASSERT_VALUES_EQUAL(0, stats.query_phases()[0].table_access().size());
-        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[1].table_access().size());
-        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[1].affected_shards());
-        UNIT_ASSERT_VALUES_EQUAL("/Root/Logs", stats.query_phases()[1].table_access()[0].name());
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases().size()); // no LiteralExecuter phase
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access().size());
+        UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
+        UNIT_ASSERT_VALUES_EQUAL("/Root/Logs", stats.query_phases()[0].table_access()[0].name());
     }
 }
 

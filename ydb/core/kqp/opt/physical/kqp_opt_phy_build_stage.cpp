@@ -73,7 +73,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                 return false;
             }
 
-            if (!value.Maybe<TCoDataCtor>()) {
+            if (!value.Maybe<TCoDataCtor>() && !value.Maybe<TCoParameter>()) {
                 literalRange = false;
             }
 

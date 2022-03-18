@@ -203,7 +203,7 @@ void ExecuteStreamQueryAndCheck(NExperimental::TStreamQueryClient& db, const TSt
 
     NYql::NDqProto::TDqExecutionStats stats;
     // First stage is computation, second scan read.
-    google::protobuf::TextFormat::ParseFromString(profiles[1], &stats);
+    google::protobuf::TextFormat::ParseFromString(profiles.back(), &stats);
 
     ui64 resultRows = stats.GetResultRows();
     ui64 readRows = stats.GetTables(0).GetReadRows();

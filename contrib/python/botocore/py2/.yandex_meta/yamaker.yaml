@@ -1,4 +1,5 @@
 additional_requirements:
+- certifi
 - six
 - library/python/resource
 exclude:

@@ -1,6 +1,6 @@
 --- contrib/python/botocore/py2/ya.make	(index)
 +++ contrib/python/botocore/py2/ya.make	(working tree)
-@@ -99,283 +97,283 @@ RESOURCE_FILES(
+@@ -100,283 +98,283 @@ RESOURCE_FILES(
      .dist-info/top_level.txt
      botocore/cacert.pem
      botocore/data/_retry.json
@@ -561,7 +561,7 @@
      botocore/data/ec2-instance-connect/2018-04-02/paginators-1.json
      botocore/data/ec2-instance-connect/2018-04-02/service-2.json
      botocore/data/ec2/2014-09-01/paginators-1.json
-@@ -404,364 +402,364 @@ RESOURCE_FILES(
+@@ -405,364 +403,364 @@ RESOURCE_FILES(
      botocore/data/ec2/2016-11-15/paginators-1.json
      botocore/data/ec2/2016-11-15/service-2.json
      botocore/data/ec2/2016-11-15/waiters-2.json
@@ -1276,7 +1276,7 @@
      botocore/data/route53/2013-04-01/examples-1.json
      botocore/data/route53/2013-04-01/paginators-1.json
      botocore/data/route53/2013-04-01/service-2.json
-@@ -776,146 +774,146 @@ RESOURCE_FILES(
+@@ -777,146 +775,146 @@ RESOURCE_FILES(
      botocore/data/s3/2006-03-01/paginators-1.json
      botocore/data/s3/2006-03-01/service-2.json
      botocore/data/s3/2006-03-01/waiters-2.json

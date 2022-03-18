@@ -6,7 +6,7 @@
  PY3_LIBRARY()
  
  OWNER(g:python-contrib)
-@@ -99,303 +97,303 @@ RESOURCE_FILES(
+@@ -100,303 +98,303 @@ RESOURCE_FILES(
      .dist-info/top_level.txt
      botocore/cacert.pem
      botocore/data/_retry.json
@@ -607,7 +607,7 @@
      botocore/data/ec2-instance-connect/2018-04-02/paginators-1.json
      botocore/data/ec2-instance-connect/2018-04-02/service-2.json
      botocore/data/ec2/2014-09-01/paginators-1.json
-@@ -424,401 +422,401 @@ RESOURCE_FILES(
+@@ -425,401 +423,401 @@ RESOURCE_FILES(
      botocore/data/ec2/2016-11-15/paginators-1.json
      botocore/data/ec2/2016-11-15/service-2.json
      botocore/data/ec2/2016-11-15/waiters-2.json
@@ -1396,7 +1396,7 @@
      botocore/data/route53/2013-04-01/examples-1.json
      botocore/data/route53/2013-04-01/paginators-1.json
      botocore/data/route53/2013-04-01/service-2.json
-@@ -829,161 +827,161 @@ RESOURCE_FILES(
+@@ -830,161 +828,161 @@ RESOURCE_FILES(
      botocore/data/route53resolver/2018-04-01/paginators-1.json
      botocore/data/route53resolver/2018-04-01/paginators-1.sdk-extras.json
      botocore/data/route53resolver/2018-04-01/service-2.json
@@ -1432,7 +1432,6 @@
 -    botocore/data/schemas/2019-12-02/waiters-2.json
 -    botocore/data/sdb/2009-04-15/paginators-1.json
 -    botocore/data/sdb/2009-04-15/service-2.json
--    botocore/data/sdk-default-configuration.json
 +    #botocore/data/s3control/2018-08-20/paginators-1.json
 +    #botocore/data/s3control/2018-08-20/service-2.json
 +    #botocore/data/s3outposts/2017-07-25/paginators-1.json
@@ -1457,7 +1456,7 @@
 +    #botocore/data/schemas/2019-12-02/waiters-2.json
 +    #botocore/data/sdb/2009-04-15/paginators-1.json
 +    #botocore/data/sdb/2009-04-15/service-2.json
-+    #botocore/data/sdk-default-configuration.json
+     botocore/data/sdk-default-configuration.json
      botocore/data/secretsmanager/2017-10-17/examples-1.json
      botocore/data/secretsmanager/2017-10-17/paginators-1.json
      botocore/data/secretsmanager/2017-10-17/service-2.json

@@ -67,9 +67,9 @@ while getopts "hi:r:na" opt ; do
 done
 
 YDB_STORAGE_URL="${YDB_STORAGE_URL:-"https://binaries.ydb.tech"}"
-YDB_VERSION="main"
-# YDB_VERSION="${YDB_VERSION:-$(curl_with_retry -s "${YDB_STORAGE_URL}/release/stable" | tr -d [:space:])}"
+YDB_VERSION="$(curl -s "${YDB_STORAGE_URL}/release/current" | tr -d [:space:])"
 
+echo "YDB version: $YDB_VERSION"
 echo "Preparing temporary directory"
 
 # Download to temp dir, check that executable is healthy, only then move to install path.
@@ -86,7 +86,7 @@ mkdir -p "${TMP_INSTALL_PATH}/ydbd"
 echo "Downloading and extracting binary archive to temporary directory"
 
 # Download and show progress.
-curl "${YDB_STORAGE_URL}/ydbd-${YDB_VERSION}-${GOOS}-${GOARCH}.tar.gz" | tar -xz --strip-components=1 -C "${TMP_INSTALL_PATH}/ydbd"
+curl "${YDB_STORAGE_URL}/release/${YDB_VERSION}/ydbd-${YDB_VERSION}-${GOOS}-${GOARCH}.tar.gz" | tar -xz --strip-components=1 -C "${TMP_INSTALL_PATH}/ydbd"
 
 echo "Downloading and extracting scripts and configs to temporary directory"
 curl "${YDB_STORAGE_URL}/local_scripts/${GOOS}.tar.gz" | tar -xz -C "${TMP_INSTALL_PATH}"
@@ -101,5 +101,9 @@ echo "Moving files from temporary to target directory"
 
 mv -f "${TMP_INSTALL_PATH}"/* "${YDB}"
 
-echo "Installation complete. You may run 'start.sh ram' or 'start.sh disk' in the ${YDB_INSTALL_PATH} diretory to start server, stop.sh to stop."
+echo "
+Installation completed successfully.
+
+You may run 'start.sh ram' or 'start.sh disk' in the ${YDB_INSTALL_PATH} directory to start server/database, stop.sh to stop.
+"
 

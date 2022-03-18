@@ -41,4 +41,8 @@ if [[ $? -eq 0 ]]; then
   echo Errors found when starting database process, cancelling start script
   exit
 fi
-echo Database started
+echo "
+Database started. Connection options for YDB CLI:
+
+-e grpc://localhost:2136 -d /Root/test
+"

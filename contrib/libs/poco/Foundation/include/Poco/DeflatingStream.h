@@ -23,7 +23,7 @@
 #include <istream>
 #include <ostream>
 #if defined(POCO_UNBUNDLED)
-#include <contrib/libs/zlib/zlib.h>
+#include <zlib.h>
 #else
 #error #include "Poco/zlib.h"
 #endif

@@ -219,7 +219,6 @@ public:
             callInfo->args[1] = { ObjectIdGetDatum(NUMERICOID), false };
             callInfo->args[2] = { Int32GetDatum(-1), false };
 
-            SET_MEMORY_CONTEXT;
             TPAllocScope call;
             PG_TRY();
             {
@@ -291,12 +290,14 @@ private:
 class TPgResolvedCall : public TMutableComputationNode<TPgResolvedCall> {
     typedef TMutableComputationNode<TPgResolvedCall> TBaseComputation;
 public:
-    TPgResolvedCall(TComputationMutables& mutables, const std::string_view& name, ui32 id, TComputationNodePtrVector&& argNodes)
+    TPgResolvedCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
         : TBaseComputation(mutables)
         , StateIndex(mutables.CurValueIndex++)
         , Name(name)
         , Id(id)
         , ArgNodes(std::move(argNodes))
+        , ArgTypes(std::move(argTypes))
         , ProcDesc(NPg::LookupProc(id))
         , RetTypeDesc(NPg::LookupType(ProcDesc.ResultType))
     {
@@ -307,8 +308,22 @@ public:
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(FInfo.fn_nargs == ArgNodes.size());
         ArgDesc.reserve(ProcDesc.ArgTypes.size());
-        for (const auto& x : ProcDesc.ArgTypes) {
-            ArgDesc.emplace_back(NPg::LookupType(x));
+        for (ui32 i = 0; i < ProcDesc.ArgTypes.size(); ++i) {
+            ui32 type;
+            // extract real type from input args
+            auto argType = ArgTypes[i];
+            if (argType->IsPg()) {
+                type = static_cast<TPgType*>(argType)->GetTypeId();
+            } else if (!argType->IsNull()) {
+                bool isOptional;
+                auto dataType = UnpackOptionalData(argType, isOptional);
+                type = *ConvertToPgType(*dataType->GetDataSlot());
+            } else {
+                // keep original description for nulls
+                type = ProcDesc.ArgTypes[i];
+            }
+
+            ArgDesc.emplace_back(NPg::LookupType(type));
         }
 
         Y_ENSURE(ArgDesc.size() == ArgNodes.size());
@@ -395,6 +410,7 @@ private:
     const NPg::TProcDesc ProcDesc;
     const NPg::TTypeDesc RetTypeDesc;
     const TComputationNodePtrVector ArgNodes;
+    const TVector<TType*> ArgTypes;
     TVector<NPg::TTypeDesc> ArgDesc;
 };
 
@@ -740,11 +756,13 @@ TComputationNodeFactory GetPgFactory() {
                 auto name = nameData->AsValue().AsStringRef();
                 ui32 id = idData->AsValue().Get<ui32>();
                 TComputationNodePtrVector argNodes;
+                TVector<TType*> argTypes;
                 for (ui32 i = 2; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
+                    argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
 
-                return new TPgResolvedCall(ctx.Mutables, name, id, std::move(argNodes));
+                return new TPgResolvedCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
             }
 
             if (name == "PgCast") {

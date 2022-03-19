@@ -3717,6 +3717,8 @@ TNodePtr LiteralReal(TContext& ctx, const TRule_real& node) {
     auto lower = to_lower(value);
     if (lower.EndsWith("f")) {
         return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size()-1));
+    } else if (lower.EndsWith("p")) {
+        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat8", value.substr(0, value.size()-1));
     } else if (lower.EndsWith("pf4")) {
         return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat4", value.substr(0, value.size()-3));
     } else if (lower.EndsWith("pf8")) {

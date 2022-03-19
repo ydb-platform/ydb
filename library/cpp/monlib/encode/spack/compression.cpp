@@ -11,7 +11,7 @@
 
 #include <contrib/libs/lz4/lz4.h>
 #include <contrib/libs/xxhash/xxhash.h>
-#include <contrib/libs/zlib/zlib.h>
+#include <zlib.h>
 #define ZSTD_STATIC_LINKING_ONLY
 #include <contrib/libs/zstd/include/zstd.h>
 

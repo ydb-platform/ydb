@@ -1,7 +1,7 @@
 #include "uri.h"
 #include "parse.h"
 
-#include <contrib/libs/libidn/lib/idna.h>
+#include <idna.h>
 
 #include <library/cpp/charset/recyr.hh>
 #include <util/charset/wide.h>

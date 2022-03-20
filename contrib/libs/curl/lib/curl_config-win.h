@@ -951,11 +951,6 @@
 /* The size of `curl_off_t', as computed by sizeof. */
 #define SIZEOF_CURL_OFF_T 8
 
-/* The size of `size_t', as computed by sizeof. */
-#ifndef SIZEOF_SIZE_T
-#error undefined SIZEOF_SIZE_T
-#endif
-
 /* The size of `time_t', as computed by sizeof. */
 #define SIZEOF_TIME_T 8
 

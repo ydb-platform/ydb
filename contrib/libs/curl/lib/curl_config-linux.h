@@ -968,9 +968,7 @@
 #endif
 
 /* The number of bytes in type size_t */
-#ifndef SIZEOF_SIZE_T
-#error undefined SIZEOF_SIZE_T
-#endif
+#define SIZEOF_SIZE_T 8
 
 /* The number of bytes in type time_t */
 #define SIZEOF_TIME_T SIZEOF_LONG

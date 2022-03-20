@@ -149,7 +149,8 @@ class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
 #
 
 class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
-    def __init__(self, mon_port=8765, grpc_port=2135, mbus_port=2134, ic_port=19001, sqs_port=8771, grpc_ssl_port=2137):
+    def __init__(self, mon_port=8765, grpc_port=2135, mbus_port=2134, ic_port=19001, sqs_port=8771, grpc_ssl_port=2137,
+                 ext_port=2237):
         super(KikimrFixedNodePortAllocator, self).__init__()
         if os.getenv('MON_PORT') is not None:
             self.__mon_port = int(os.getenv('MON_PORT'))
@@ -169,6 +170,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
             self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT'))
         else:
             self.__grpc_ssl_port = grpc_ssl_port
+        if os.getenv('GRPC_EXT_PORT') is not None:
+            self.__ext_port = int(os.getenv('GRPC_EXT_PORT'))
+        else:
+            self.__ext_port = ext_port
 
     @property
     def mon_port(self):
@@ -193,6 +198,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
     @property
     def sqs_port(self):
         return self.__sqs_port
+
+    @property
+    def ext_port(self):
+        return self.__ext_port
 
 
 class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):

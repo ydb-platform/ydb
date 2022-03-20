@@ -10,7 +10,7 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/system/file.h>
 #include <util/stream/format.h>
-#include <contrib/libs/libaio/libaio.h>
+#include <libaio.h>
 
 #include <linux/fs.h>
 #include <sys/ioctl.h>

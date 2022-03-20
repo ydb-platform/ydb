@@ -1,6 +1,6 @@
 #include "data_query.h"
 
-#include <contrib/libs/openssl/include/openssl/sha.h>
+#include <openssl/sha.h>
 
 namespace NYdb {
 namespace NTable {

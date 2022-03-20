@@ -1,6 +1,6 @@
 #include "hmac.h"
 
-#include <contrib/libs/openssl/include/openssl/hmac.h>
+#include <openssl/hmac.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/generic/yexception.h>
 

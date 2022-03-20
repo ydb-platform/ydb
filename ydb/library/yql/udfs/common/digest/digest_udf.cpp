@@ -19,7 +19,7 @@
 #include <contrib/libs/farmhash/farmhash.h>
 #include <contrib/libs/xxhash/xxhash.h>
 
-#include <contrib/libs/openssl/include/openssl/sha.h>
+#include <openssl/sha.h>
 
 using namespace NKikimr;
 using namespace NUdf;

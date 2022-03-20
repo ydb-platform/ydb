@@ -4,9 +4,9 @@
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/parsed_request.h>
 
-#include <contrib/libs/openssl/include/openssl/evp.h>
-#include <contrib/libs/openssl/include/openssl/hmac.h>
-#include <contrib/libs/openssl/include/openssl/sha.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
 
 #include <util/generic/algorithm.h>
 #include <util/stream/str.h>

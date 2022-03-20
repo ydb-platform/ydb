@@ -2361,7 +2361,7 @@ TLiteralNode::TLiteralNode(TPosition pos, const TString& type, const TString& va
     , Value(value)
 {
     if (Type.StartsWith("Pg")) {
-        Add("PgConst", Y("PgType", Q(to_lower(Type.substr(2)))), BuildQuotedAtom(Pos, Value));
+        Add("PgConst", BuildQuotedAtom(Pos, Value), Y("PgType", Q(to_lower(Type.substr(2)))));
     } else {
         Add(Type, BuildQuotedAtom(Pos, Value));
     }
@@ -2385,7 +2385,7 @@ TLiteralNode::TLiteralNode(TPosition pos, const TString& value, ui32 nodeFlags, 
     , Value(value)
 {
     if (Type.StartsWith("Pg")) {
-        Add("PgConst", Y("PgType", Q(to_lower(Type.substr(2)))), BuildQuotedAtom(Pos, Value, nodeFlags));
+        Add("PgConst", BuildQuotedAtom(Pos, Value, nodeFlags), Y("PgType", Q(to_lower(Type.substr(2)))));
     } else {
         Add(Type, BuildQuotedAtom(pos, Value, nodeFlags));
     }

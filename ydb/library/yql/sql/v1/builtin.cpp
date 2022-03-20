@@ -615,15 +615,15 @@ public:
             return false;
         }
 
-        if (!Args[1]->Init(ctx, src)) {
+        if (!Args[0]->Init(ctx, src)) {
             return false;
         }
 
-        if (Args[1]->IsLiteral()) {
-            Args[1] = BuildQuotedAtom(Args[1]->GetPos(), Args[1]->GetLiteralValue());
+        if (Args[0]->IsLiteral()) {
+            Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
         } else {
-            auto value = MakeAtomFromExpression(ctx, Args[1]).Build();
-            Args[1] = value;
+            auto value = MakeAtomFromExpression(ctx, Args[0]).Build();
+            Args[0] = value;
         }
 
         return TCallNode::DoInit(ctx, src);

@@ -9628,16 +9628,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureTypePg(input->Head(), ctx.Expr)) {
+        if (!EnsureTypePg(input->Tail(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         // TODO: validate value
-        if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        if (!EnsureAtom(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+        input->SetTypeAnn(input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -9746,10 +9746,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             initValue = ctx.Expr.Builder(input->Pos())
                 .Callable("PgCast")
                     .Callable(0, "PgConst")
-                        .Callable(0, "PgType")
+                        .Atom(0, aggDesc.InitValue)
+                        .Callable(1, "PgType")
                             .Atom(0, "text")
                         .Seal()
-                        .Atom(1, aggDesc.InitValue)
                     .Seal()
                     .Callable(1, "PgType")
                         .Atom(0, NPg::LookupType(aggDesc.TransTypeId).Name)
@@ -9850,10 +9850,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto zero = ctx.Expr.Builder(input->Pos())
                 .Callable("PgConst")
-                    .Callable(0, "PgType")
+                    .Atom(0, "0")
+                    .Callable(1, "PgType")
                         .Atom(0, "int8")
                     .Seal()
-                    .Atom(1, "0")
                 .Seal()
                 .Build();
 

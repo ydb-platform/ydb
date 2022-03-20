@@ -2239,7 +2239,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("PgConst", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto type = AS_TYPE(TPgType, BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder));
-        return ctx.ProgramBuilder.PgConst(type, node.Tail().Content());
+        return ctx.ProgramBuilder.PgConst(type, node.Head().Content());
     });
 
     AddCallable("PgResolvedCall", [](const TExprNode& node, TMkqlBuildContext& ctx) {

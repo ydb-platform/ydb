@@ -41,7 +41,7 @@ message Flags {
     bool disk_space_black = 7;
 }
 
-message Channel {
+message StorageChannel {
     Statuses.ReplyStatus status = 1;
     uint32 storage_channel = 2;
     optional Flags status_flags = 3;
@@ -160,21 +160,21 @@ message ExecuteTransactionRequest {
 }
 
 message ExecuteTransactionResult {
-    repeated Channel channel = 1;
+    repeated StorageChannel storage_channel = 1;
     Statuses.ReplyStatus status = 2;
     string msg = 3;
     uint64 cookie = 4;
 }
 
-message GetBlobStorageChannelStatusRequest {
+message GetStorageChannelStatusRequest {
     uint64 tablet_id = 1;
     uint64 lock_generation = 2;
     repeated uint32 storage_channel = 3;
     uint64 deadline_instant_ms = 4;
 }
 
-message GetBlobStorageChannelStatusResult {
-    repeated Channel channel = 1;
+message GetStorageChannelStatusResult {
+    repeated StorageChannel storage_channel = 1;
     Statuses.ReplyStatus status = 2;
     string msg = 3;
 }

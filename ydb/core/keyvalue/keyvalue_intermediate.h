@@ -152,9 +152,9 @@ struct TIntermediate {
 
     NKikimrClient::TResponse Response;
     NKikimrKeyValue::ExecuteTransactionResult ExecuteTransactionResponse;
-    NKikimrKeyValue::GetBlobStorageChannelStatusResult GetBlobStorageChannelStatusResponse;
+    NKikimrKeyValue::GetStorageChannelStatusResult GetStorageChannelStatusResponse;
 
-    THashMap<ui32, NKikimrKeyValue::Channel*> Channels;
+    THashMap<ui32, NKikimrKeyValue::StorageChannel*> Channels;
 
     ui32 EvType = 0;
 

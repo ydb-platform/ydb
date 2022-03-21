@@ -27,7 +27,7 @@ struct TEvKeyValue {
         EvRead = EvRequest + 16,
         EvReadRange,
         EvExecuteTransaction,
-        EvGetBlobStorageChannelStatus,
+        EvGetStorageChannelStatus,
         EvAcquireLock,
 
         EvResponse = EvRequest + 512,
@@ -35,7 +35,7 @@ struct TEvKeyValue {
         EvReadResponse = EvResponse + 16,
         EvReadRangeResponse,
         EvExecuteTransactionResponse,
-        EvGetBlobStorageChannelStatusResponse,
+        EvGetStorageChannelStatusResponse,
         EvAcquireLockResponse,
 
         EvEnd
@@ -87,18 +87,18 @@ struct TEvKeyValue {
         TEvExecuteTransactionResponse() { }
     };
 
-    struct TEvGetBlobStorageChannelStatusResponse;
+    struct TEvGetStorageChannelStatusResponse;
 
-    struct TEvGetBlobStorageChannelStatus : public TEventPB<TEvGetBlobStorageChannelStatus,
-            NKikimrKeyValue::GetBlobStorageChannelStatusRequest, EvGetBlobStorageChannelStatus> {
+    struct TEvGetStorageChannelStatus : public TEventPB<TEvGetStorageChannelStatus,
+            NKikimrKeyValue::GetStorageChannelStatusRequest, EvGetStorageChannelStatus> {
 
-        using TResponse = TEvGetBlobStorageChannelStatusResponse;
-        TEvGetBlobStorageChannelStatus() { }
+        using TResponse = TEvGetStorageChannelStatusResponse;
+        TEvGetStorageChannelStatus() { }
     };
 
-    struct TEvGetBlobStorageChannelStatusResponse : public TEventPB<TEvGetBlobStorageChannelStatusResponse,
-            NKikimrKeyValue::GetBlobStorageChannelStatusResult, EvGetBlobStorageChannelStatusResponse> {
-        TEvGetBlobStorageChannelStatusResponse() { }
+    struct TEvGetStorageChannelStatusResponse : public TEventPB<TEvGetStorageChannelStatusResponse,
+            NKikimrKeyValue::GetStorageChannelStatusResult, EvGetStorageChannelStatusResponse> {
+        TEvGetStorageChannelStatusResponse() { }
     };
 
     struct TEvAcquireLockResponse;

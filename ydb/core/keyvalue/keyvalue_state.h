@@ -336,31 +336,31 @@ public:
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,
         NKikimrClient::TKeyValueResponse::TReadResult *legacyResponse,
-        NKikimrKeyValue::Channel *response,
+        NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(TIntermediate::TRangeRead &request,
         NKikimrClient::TKeyValueResponse::TReadRangeResult *legacyResponse,
-        NKikimrKeyValue::Channel *response,
+        NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(TIntermediate::TWrite &request,
         NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse,
-        NKikimrKeyValue::Channel *response,
+        NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TDelete &request,
         NKikimrClient::TKeyValueResponse::TDeleteRangeResult *legacyResponse,
-        NKikimrKeyValue::Channel *response,
+        NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TRename &request,
         NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse,
-        NKikimrKeyValue::Channel *response,
+        NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TCopyRange &request,
         NKikimrClient::TKeyValueResponse::TCopyRangeResult *legacyResponse,
-        NKikimrKeyValue::Channel *response,
+        NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void ProcessCmd(const TIntermediate::TConcat &request,
         NKikimrClient::TKeyValueResponse::TConcatResult *resplegacyResponseonse,
-        NKikimrKeyValue::Channel *response,
+        NKikimrKeyValue::StorageChannel *response,
         ISimpleDb &db, const TActorContext &ctx, TRequestStat &stat, ui64 unixTime, TIntermediate *intermediate);
     void CmdRead(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
     void CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
@@ -423,7 +423,7 @@ public:
             const TTabletStorageInfo *info);
     void OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
-    void OnEvGetBlobStorageChannelStatus(TEvKeyValue::TEvGetBlobStorageChannelStatus::TPtr &ev, const TActorContext &ctx,
+    void OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChannelStatus::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
     void OnEvAcquireLock(TEvKeyValue::TEvAcquireLock::TPtr &ev, const TActorContext &ctx,
             const TTabletStorageInfo *info);
@@ -555,7 +555,7 @@ public:
             response->Record.set_requested_size(interRead.ValueSize);
             response->Record.set_requested_key(interRead.Key);
         }
-        if constexpr (!std::is_same_v<TResponse, TEvKeyValue::TEvGetBlobStorageChannelStatusResponse>) {
+        if constexpr (!std::is_same_v<TResponse, TEvKeyValue::TEvGetStorageChannelStatusResponse>) {
             if (intermediate->HasCookie) {
                 response->Record.set_cookie(intermediate->Cookie);
             }
@@ -587,7 +587,7 @@ public:
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     TPrepareResult PrepareOneGetStatus(TIntermediate::TGetStatus &cmd, ui64 publicStorageChannel,
         const TTabletStorageInfo *info);
-    bool PrepareGetBlobStorageChannelStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetBlobStorageChannelStatus::TPtr &ev,
+    bool PrepareGetStorageChannelStatusRequest(const TActorContext &ctx, TEvKeyValue::TEvGetStorageChannelStatus::TPtr &ev,
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info);
     bool PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
         THolder<TIntermediate> &intermediate);

@@ -104,32 +104,33 @@ public:
 
             const auto token = "cluster:default_" + clusterName;
             YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
-/*
-            return Build<TDqSourceWrap>(ctx, read->Pos())
-                .Input<TS3ParseSettings>()
-                    .Paths(s3ReadObject.Object().Paths())
-                    .Token<TCoSecureParam>()
-                        .Name().Build(token)
+
+            if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); useCoro && *useCoro && !s3ReadObject.Object().Format().Ref().IsAtom({"raw", "json_list"}))
+                return Build<TDqSourceWrap>(ctx, read->Pos())
+                    .Input<TS3ParseSettings>()
+                        .Paths(s3ReadObject.Object().Paths())
+                        .Token<TCoSecureParam>()
+                            .Name().Build(token)
+                            .Build()
+                        .Format(s3ReadObject.Object().Format())
+                        .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .Build()
-                    .Format(s3ReadObject.Object().Format())
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                    .Build()
-                .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
-                .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
-                .Done().Ptr();
-/*/
-            return Build<TDqSourceWrap>(ctx, read->Pos())
-                .Input<TS3SourceSettings>()
-                    .Paths(s3ReadObject.Object().Paths())
-                    .Token<TCoSecureParam>()
-                        .Name().Build(token)
+                    .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
+                    .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
+                    .Done().Ptr();
+            else
+                return Build<TDqSourceWrap>(ctx, read->Pos())
+                    .Input<TS3SourceSettings>()
+                        .Paths(s3ReadObject.Object().Paths())
+                        .Token<TCoSecureParam>()
+                            .Name().Build(token)
+                            .Build()
                         .Build()
-                    .Build()
-                .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
-                .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
-                .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
-                .Done().Ptr();
+                    .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                    .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
+                    .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
+                    .Done().Ptr();
         }
         return read;
     }

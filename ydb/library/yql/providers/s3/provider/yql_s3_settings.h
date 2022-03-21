@@ -10,7 +10,7 @@ namespace NYql {
 struct TS3Settings {
     using TConstPtr = std::shared_ptr<const TS3Settings>;
 
-    NCommon::TConfSetting<bool, false> SourceActor;
+    NCommon::TConfSetting<bool, false> SourceCoroActor;
 };
 
 struct TS3ClusterSettings {

@@ -8,7 +8,7 @@ using namespace NCommon;
 
 TS3Configuration::TS3Configuration()
 {
-    REGISTER_SETTING(*this, SourceActor);
+    REGISTER_SETTING(*this, SourceCoroActor);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

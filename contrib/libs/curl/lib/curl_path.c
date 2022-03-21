@@ -26,7 +26,7 @@
 
 #include <curl/curl.h>
 #include "curl_memory.h"
-#include "curl_path.h"
+#error #include "curl_path.h"
 #include "escape.h"
 #include "memdebug.h"
 

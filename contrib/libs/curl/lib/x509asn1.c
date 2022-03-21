@@ -33,7 +33,7 @@
 #include "sendf.h"
 #include "inet_pton.h"
 #include "curl_base64.h"
-#include "x509asn1.h"
+#error #include "x509asn1.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"

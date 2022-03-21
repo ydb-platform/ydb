@@ -31,7 +31,7 @@
 #include "vauth/vauth.h"
 #include "urldata.h"
 #include "curl_base64.h"
-#include "curl_gssapi.h"
+#error #include "curl_gssapi.h"
 #include "warnless.h"
 #include "curl_multibyte.h"
 #include "sendf.h"

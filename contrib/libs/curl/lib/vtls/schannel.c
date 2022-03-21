@@ -47,7 +47,7 @@
 #include "inet_pton.h" /* for IP addr SNI check */
 #include "curl_multibyte.h"
 #include "warnless.h"
-#include "x509asn1.h"
+#error #include "x509asn1.h"
 #include "curl_printf.h"
 #include "multiif.h"
 #include "version_win32.h"

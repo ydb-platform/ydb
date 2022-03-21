@@ -43,7 +43,7 @@
 #include "urldata.h"
 #include "curl_base64.h"
 #include "ftp.h"
-#include "curl_gssapi.h"
+#error #include "curl_gssapi.h"
 #include "sendf.h"
 #include "curl_krb5.h"
 #include "warnless.h"

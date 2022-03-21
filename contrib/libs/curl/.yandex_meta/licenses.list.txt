@@ -31,14 +31,6 @@
  * SUCH DAMAGE.  */
 
 
-====================BSD-3-Clause====================
-/*               BSD-style lwIP TCP/IP stack SPECIFIC               */
-
-
-====================BSD-3-Clause====================
-/* Define to use BSD-style lwIP TCP/IP stack. */
-
-
 ====================COPYRIGHT====================
  *   Copyright (C) 1998 - 2017, Daniel Stenberg, <daniel@haxx.se>, et al.
 

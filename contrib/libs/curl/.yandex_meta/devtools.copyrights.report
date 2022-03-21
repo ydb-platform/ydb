@@ -402,16 +402,6 @@ BELONGS ya.make
         lib/asyn-thread.c [8:8]
         lib/asyn.h [10:10]
         lib/base64.c [8:8]
-        lib/config-amigaos.h [10:10]
-        lib/config-dos.h [10:10]
-        lib/config-mac.h [10:10]
-        lib/config-os400.h [10:10]
-        lib/config-plan9.h [10:10]
-        lib/config-riscos.h [10:10]
-        lib/config-tpf.h [10:10]
-        lib/config-vxworks.h [10:10]
-        lib/config-win32.h [10:10]
-        lib/config-win32ce.h [10:10]
         lib/connect.c [8:8]
         lib/connect.h [10:10]
         lib/content_encoding.c [8:8]
@@ -446,7 +436,6 @@ BELONGS ya.make
         lib/curl_ntlm_wb.c [8:8]
         lib/curl_ntlm_wb.h [10:10]
         lib/curl_path.c [8:8]
-        lib/curl_path.h [10:10]
         lib/curl_printf.h [10:10]
         lib/curl_range.c [8:8]
         lib/curl_range.h [10:10]
@@ -548,8 +537,6 @@ BELONGS ya.make
         lib/sendf.h [10:10]
         lib/setopt.c [8:8]
         lib/setopt.h [10:10]
-        lib/setup-os400.h [10:10]
-        lib/setup-vms.h [10:10]
         lib/setup-win32.h [10:10]
         lib/share.c [8:8]
         lib/share.h [10:10]
@@ -620,7 +607,6 @@ BELONGS ya.make
         lib/warnless.h [10:10]
         lib/wildcard.c [8:8]
         lib/x509asn1.c [8:8]
-        lib/x509asn1.h [11:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 87014353af9fe7d866b14d24d84b2406
 BELONGS ya.make
@@ -694,7 +680,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/curl_gssapi.c [8:8]
-        lib/curl_gssapi.h [10:10]
         lib/openldap.c [8:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL aa5c639ebb1d16024e37af0e0fff3962

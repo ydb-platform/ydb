@@ -33,7 +33,7 @@
 #include "curl_sasl.h"
 #include "urldata.h"
 #include "curl_base64.h"
-#include "curl_gssapi.h"
+#error #include "curl_gssapi.h"
 #include "sendf.h"
 #include "curl_printf.h"
 

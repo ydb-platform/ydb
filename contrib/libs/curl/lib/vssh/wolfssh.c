@@ -32,7 +32,7 @@
 #include "connect.h"
 #include "sendf.h"
 #include "progress.h"
-#include "curl_path.h"
+#error #include "curl_path.h"
 #include "strtoofft.h"
 #include "transfer.h"
 #include "speedcheck.h"

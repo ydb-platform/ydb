@@ -25,7 +25,7 @@
 
 #if defined(HAVE_GSSAPI) && !defined(CURL_DISABLE_PROXY)
 
-#include "curl_gssapi.h"
+#error #include "curl_gssapi.h"
 #include "urldata.h"
 #include "sendf.h"
 #include "connect.h"

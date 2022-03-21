@@ -68,39 +68,39 @@
 #else /* HAVE_CONFIG_H */
 
 #ifdef _WIN32_WCE
-#  include "config-win32ce.h"
+#  error #include "config-win32ce.h"
 #else
 #  ifdef WIN32
-#    include "config-win32.h"
+#    error #include "config-win32.h"
 #  endif
 #endif
 
 #if defined(macintosh) && defined(__MRC__)
-#  include "config-mac.h"
+#  error #include "config-mac.h"
 #endif
 
 #ifdef __riscos__
-#  include "config-riscos.h"
+#  error #include "config-riscos.h"
 #endif
 
 #ifdef __AMIGA__
-#  include "config-amigaos.h"
+#  error #include "config-amigaos.h"
 #endif
 
 #ifdef __OS400__
-#  include "config-os400.h"
+#  error #include "config-os400.h"
 #endif
 
 #ifdef TPF
-#  include "config-tpf.h"
+#  error #include "config-tpf.h"
 #endif
 
 #ifdef __VXWORKS__
-#  include "config-vxworks.h"
+#  error #include "config-vxworks.h"
 #endif
 
 #ifdef __PLAN9__
-#  include "config-plan9.h"
+#  error #include "config-plan9.h"
 #endif
 
 #endif /* HAVE_CONFIG_H */
@@ -214,7 +214,7 @@
  */
 
 #ifdef __OS400__
-#  include "setup-os400.h"
+#  error #include "setup-os400.h"
 #endif
 
 /*
@@ -222,7 +222,7 @@
  */
 
 #ifdef __VMS
-#  include "setup-vms.h"
+#  error #include "setup-vms.h"
 #endif
 
 /*

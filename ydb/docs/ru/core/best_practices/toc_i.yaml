@@ -3,7 +3,7 @@ items:
   href: index.md
 - name: Проектирование схемы
   href: schema_design.md
-- name: Партицирование таблиц
+- name: Партиционирование таблиц
   href: table_sharding.md
 - name: Вторичные индексы
   href: secondary_indexes.md

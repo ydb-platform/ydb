@@ -9,7 +9,7 @@
 {% endnote %}
 
 ```sql
- CREATE TABLE series        -- series — имя таблицы.
+CREATE TABLE series         -- series — имя таблицы.
 (                           -- Должно быть уникальным в пределах каталога.
     series_id Uint64,
     title Utf8,

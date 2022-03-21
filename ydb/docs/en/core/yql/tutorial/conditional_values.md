@@ -43,7 +43,7 @@ GROUP BY
                                 -- and in clauses such as IN, WHERE, and ORDER BY.
         WHEN series_id = 1
         THEN "IT Crowd"
-        ELSE "Other serial"
+        ELSE "Other series"
     END AS series_title         -- GROUP BY can be performed on
                                 -- an arbitrary expression.
                                 -- The result is available in a SELECT

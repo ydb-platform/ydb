@@ -43,7 +43,7 @@ GROUP BY
                                 -- и с операторами IN, WHERE, ORDER BY.
         WHEN series_id = 1
         THEN "IT Crowd"
-        ELSE "Other serial"
+        ELSE "Other series"
     END AS series_title         -- GROUP BY можно выполнить
                                 -- для произвольного выражения.
                                 -- Результат будет доступен в SELECT

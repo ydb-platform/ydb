@@ -59,15 +59,15 @@ public:
 
     class TDictIterator : public TComputationValue<TDictIterator> {
     public:
-        TDictIterator(TMemoryUsageInfo* memInfo, TIterator iter)
+        TDictIterator(TMemoryUsageInfo* memInfo, THolder<TIterator>&& iter)
             : TComputationValue<TDictIterator>(memInfo)
-            , Iter(iter)
+            , Iter(std::move(iter))
             , Index(Max<ui64>())
         {}
 
     private:
         bool Next(NUdf::TUnboxedValue& key) override {
-            if (NUdf::TBoxedValueAccessor::Skip(Iter)) {
+            if (NUdf::TBoxedValueAccessor::Skip(*Iter)) {
                 key = NUdf::TUnboxedValuePod(++Index);
                 return true;
             }
@@ -76,7 +76,7 @@ public:
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
-            if (NUdf::TBoxedValueAccessor::Next(Iter, payload)) {
+            if (NUdf::TBoxedValueAccessor::Next(*Iter, payload)) {
                 key = NUdf::TUnboxedValuePod(++Index);
                 return true;
             }
@@ -85,7 +85,7 @@ public:
         }
 
         bool Skip() override {
-            if (NUdf::TBoxedValueAccessor::Skip(Iter)) {
+            if (NUdf::TBoxedValueAccessor::Skip(*Iter)) {
                 ++Index;
                 return true;
             }
@@ -93,7 +93,7 @@ public:
             return false;
         }
 
-        TIterator Iter;
+        THolder<TIterator> Iter;
         ui64 Index;
     };
 
@@ -180,11 +180,11 @@ private:
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override {
-        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), TIterator(this->GetMemInfo(), List, ItemFactory, Start, Finish, Reversed)));
+        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List, ItemFactory, Start, Finish, Reversed)));
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override {
-        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), TIterator(this->GetMemInfo(), List, ItemFactory, Start, Finish, Reversed)));
+        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List, ItemFactory, Start, Finish, Reversed)));
     }
 
     ui64 GetDictLength() const override {

@@ -1,1 +1,1 @@
-В данном разделе собраны статьи с рекомендациями по использованию функций {{ ydb-short-name }}.
+{% include [_includes/index.md](_includes/index.md) %}

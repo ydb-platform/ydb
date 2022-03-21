@@ -54,10 +54,9 @@ scripting yql | Выполнение YQL-скрипта
 table attribute add | Добавление атрибута таблицы
 table attribute drop | Удаление атрибута таблицы
 table drop | Удаление таблицы
-[table index add global](../commands/index-ops.md) | Добавление синхронного индекса 
-[table index add global-async](../commands/index-ops.md) | Добавление асинхронного индекса 
-[table index add global-sync](../commands/index-ops.md) | Добавление синхронного индекса 
-[table index drop](../commands/index-ops.md) | Удаление индекса
+[table index add global-async](../commands/secondary_index.md#add) | Добавление асинхронного индекса 
+[table index add global-sync](../commands/secondary_index.md#add) | Добавление синхронного индекса 
+[table index drop](../commands/secondary_index.md#drop) | Удаление индекса
 [table query execute](../commands/query.md) | Исполнение YQL-запроса
 [table query explain](../commands/explain-plan.md) | План исполнения YQL-запроса
 [table readtable](../commands/readtable.md) | Потоковое чтение таблицы

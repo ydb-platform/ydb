@@ -37,7 +37,7 @@
 
     Индекс готов к использованию.
 
-Возможные влияния на пользовательские транзакции:
+Возможное влияние на пользовательские транзакции:
 
 * Может наблюдаться увеличение задержек из-за того, что транзакции становятся распределенными (при создании синхронного индекса).
 * Возможен повышенный фон ошибок `OVERLOADED` из-за того, что во время записи данных активно работает автоматическое разделение шардов индексной таблицы.
@@ -46,189 +46,15 @@
 
 Создание индекса — асинхронная операция. Если после запуска операции произойдет разрыв клиент-серверной связности, то построение индекса будет продолжено. Управлять асинхронной операцией можно через {{ ydb-short-name }} CLI.
 
-## Примеры работы со вторичным индексом {#example}
+## Создаени и удаление вторичных индексов {#ddl}
 
-### Создание вторичного индекса {#add}
+Вторичный индекс может быть:
 
-{% list tabs %}
+- Создан ири создании таблицы командой YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table.md).
+- Добавлен к существующей таблице командой YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) или командой YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add)
+- Удален у существующей таблицы командой YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) или командой YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop).
+- Удален вместе с таблицей командой YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table.md) или командой YDB CLI `table drop`.
 
-- CLI
+## Назначение и применение вторичных индексов {#best_practices}
 
-  Выполните команду:
-
-  ```bash
-  {{ ydb-cli }} \
-    --endpoint ydb.serverless.yandexcloud.net:2135 \
-    --database /ru-central1/b1g4ej5ju4rf5kelpk4b/etn01lrprvnlnhv8v5kj \
-    table index add global[-sync|-async] \
-    --index-name title_index \
-    --columns title \
-    series
-  ```
-
-  * `--endpoint` — эндпоинт БД.
-  * `--database` — полный путь к БД.
-  * `-sync|-async` — тип индекса.
-  * `--index-name` — имя создаваемого индекса.
-  * `--columns` — список колонок, по которым будет создан индекс.
-
-  При необходимости можно продублировать данные в индекс, добавив опцию `--cover` — список колонок, данные из которых будут скопированы в данный индекс.
-
-  Таким образом, команда создания индекса принимает вид:
-
-  ```bash
-  {{ ydb-cli }} \
-    --endpoint ydb.serverless.yandexcloud.net:2135 \
-    --database /ru-central1/b1g4ej5ju4rf5kelpk4b/etn01lrprvnlnhv8v5kj \
-    table index add global[-sync|-async] \
-    --index-name title_index \
-    --columns title \
-    --cover release_date \
-    series
-  ```
-
-  Результат:
-
-  ```text
-  ┌────────────────────────────────────────┬───────┬────────┐
-  | id                                     | ready | status |
-  ├────────────────────────────────────────┼───────┼────────┤
-  | ydb://buildindex/7?id=1407375091598308 | false |        |
-  └────────────────────────────────────────┴───────┴────────┘
-  ```
-
-  Будет запущена операция построения индекса, `id` — идентификатор операции.
-
-- YQL
-
-  Выполните запрос:
-
-  ```sql
-  ALTER TABLE `series` ADD INDEX `title_index` GLOBAL [SYNC|ASYNC] ON (`title`);
-  ```
-
-  При необходимости можно продублировать данные в индекс, использовав ключевое слово `COVER`:
-
-  ```sql
-  ALTER TABLE `series` ADD INDEX `title_index` GLOBAL [SYNC|ASYNC] ON (`title`) COVER(`release_date`);
-  ```
-
-  Будет запущено построение индекса, дождитесь завершения операции.
-  
-  {% note warning %}
-  
-  Отменить построение средствами YQL невозможно, при необходимости используйте {{ ydb-short-name }} CLI.
-
-  {% endnote %}
-
-{% endlist %}
-
-{% note info %}
-
-Если не указать тип индекса, то по умолчанию будет создан синхронный индекс.
-
-{% endnote %}
-
-### Получение состояния операции построения вторичного индекса {#get}
-
-{% list tabs %}
-
-- CLI
-
-  Выполните команду:
-
-  ```bash
-  {{ ydb-cli }} \
-    --endpoint ydb.serverless.yandexcloud.net:2135 \
-    --database /ru-central1/b1g4ej5ju4rf5kelpk4b/etn01lrprvnlnhv8v5kj \
-    operation get ydb://buildindex/7?id=1407375091598308
-  ```
-
-  * `--endpoint` — эндпоинт БД.
-  * `--database` — полный путь к БД.
-
-  Результат:
-
-  ```text
-  ┌────────────────────────────────────────┬───────┬─────────┬───────┬──────────┬───────────────────────────────────────────────────────────────┬─────────────┐
-  | id                                     | ready | status  | state | progress | table                                                         | index       |
-  ├────────────────────────────────────────┼───────┼─────────┼───────┼──────────┼───────────────────────────────────────────────────────────────┼─────────────┤
-  | ydb://buildindex/7?id=1407375091598308 | true  | SUCCESS | Done  | 100.00%  | /ru-central1/b1g4ej5ju4rf5kelpk4b/etn01lrprvnlnhv8v5kj/series | title_index |
-  └────────────────────────────────────────┴───────┴─────────┴───────┴──────────┴───────────────────────────────────────────────────────────────┴─────────────┘
-  ```
-
-{% endlist %}
-
-### Отмена операции построения вторичного индекса {#cancel}
-
-{% list tabs %}
-
-- CLI
-
-  Выполните команду:
-
-  ```bash
-  {{ ydb-cli }} \
-    --endpoint ydb.serverless.yandexcloud.net:2135 \
-    --database /ru-central1/b1g4ej5ju4rf5kelpk4b/etn01lrprvnlnhv8v5kj \
-    operation cancel ydb://buildindex/7?id=1407375091598308
-  ```
-
-  * `--endpoint` — эндпоинт БД.
-  * `--database` — полный путь к БД.
-
-{% endlist %}
-
-### Удаление завершенной или отмененной операции построения вторичного индекса {#forget}
-
-{% list tabs %}
-
-- CLI
-
-  Выполните команду:
-
-  ```bash
-  {{ ydb-cli }} \
-    --endpoint ydb.serverless.yandexcloud.net:2135 \
-    --database /ru-central1/b1g4ej5ju4rf5kelpk4b/etn01lrprvnlnhv8v5kj \
-    operation forget ydb://buildindex/7?id=1407375091598308
-  ```
-
-  * `--endpoint` — эндпоинт БД.
-  * `--database` — полный путь к БД.
-
-{% endlist %}
-
-### Удаление вторичного индекса {#drop}
-
-{% list tabs %}
-
-- CLI
-
-  Выполните команду:
-
-  ```bash
-    --endpoint ydb.serverless.yandexcloud.net:2135 \
-    --database /ru-central1/b1g4ej5ju4rf5kelpk4b/etn01lrprvnlnhv8v5kj \
-    table index drop \
-    --index-name title_index \
-    series
-  ```
-
-  * `--endpoint` — эндпоинт БД.
-  * `--database` — полный путь к БД.
-  * `--index-name` — имя удаляемого индекса.
-
-- YQL
-
-  Выполните запрос:
-
-  ```sql
-  ALTER TABLE `series` DROP INDEX `title_index`;
-  ```
-
-{% endlist %}
-
-#### Что дальше
-
-Другие примеры работы с вторичными индексами смотрите в [рекомендациях](../../best_practices/secondary_indexes.md).
+О нзначении и применении вторичных индексов при разработке приложений смотрите в [рекомендациях](../../best_practices/secondary_indexes.md).

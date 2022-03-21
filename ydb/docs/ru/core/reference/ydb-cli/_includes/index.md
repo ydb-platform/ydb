@@ -15,6 +15,6 @@
 * [Работа с директориями](../commands/dir.md).
 * [Выполнение запроса к данным](../commands/query.md).
 * [Потоковое чтение таблицы](../commands/readtable.md).
-* [Работа со вторичными индексами](../commands/index-ops.md).
+* [Работа со вторичными индексами](../commands/secondary_index.md).
 * [Получение списка эндпоинтов для базы данных](../commands/discovery-list.md).
 * [Нагрузочное тестирование](../commands/workload/index.md).

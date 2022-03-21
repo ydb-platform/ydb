@@ -1,5 +1,6 @@
 # Yson
-[YSON](https://yt.yandex-team.ru/docs/description/common/yson.html) — разработанный в Яндексе формат данных, похожий на JSON:
+
+{% include [_includes/yson/intro_header.md](_includes/yson/intro_header.md) %}
 
 * Сходства с JSON:
     * не имеет строгой схемы;
@@ -20,8 +21,7 @@
     * `Yson::Lookup***` — получение одного элемента списка или словаря с опциональным преобразованием в нужный тип данных;
     * `Yson::YPath***` — получение одного элемента дерева документа по указанному относительному пути с опциональным преобразованием в нужный тип данных;
     * `Yson::Serialize***` — получить из ресурса копию его данных, сериализованную в одном из форматов;
-* Для удобства при передаче сериализованного Yson и Json в функции, ожидающие на входе ресурс с DOM-объектом, неявное преобразование через `Yson::Parse` или `Yson::ParseJson` происходит автоматически. Также в SQL синтаксисе оператор точки или квадратных скобок автоматически добавляет вызов `Yson::Lookup`. Для сериализации ресурса по-прежнему нужно вызывать `Yson::ConvertTo***` ([тикет про поддержку синтаксиса CAST](https://st.yandex-team.ru/YQL-2610)) или `Yson::Serialize***`. Таким образом, например, получения элемента "foo" словаря из колонки mycolumn типа Yson в виде строки может выглядеть так: `SELECT Yson::ConvertToString(mycolumn["foo"]) FROM mytable;` или `SELECT Yson::ConvertToString(mycolumn.foo) FROM mytable;`. В варианте с точкой можно экранировать спецсимволы по [общим правилам для индентификаторов](../../syntax/expressions.md#escape).
-* Технически модуль реализован на основе снепшота кодовой базы [YT](https://wiki.yandex-team.ru/yt/) в Аркадии.
+* Для удобства при передаче сериализованного Yson и Json в функции, ожидающие на входе ресурс с DOM-объектом, неявное преобразование через `Yson::Parse` или `Yson::ParseJson` происходит автоматически. Также в SQL синтаксисе оператор точки или квадратных скобок автоматически добавляет вызов `Yson::Lookup`. Для сериализации ресурса по-прежнему нужно вызывать `Yson::ConvertTo***` или `Yson::Serialize***`. Таким образом, например, получение элемента "foo" словаря из колонки mycolumn типа Yson в виде строки может выглядеть так: `SELECT Yson::ConvertToString(mycolumn["foo"]) FROM mytable;` или `SELECT Yson::ConvertToString(mycolumn.foo) FROM mytable;`. В варианте с точкой можно экранировать спецсимволы по [общим правилам для индентификаторов](../../syntax/expressions.md#escape).
 
 Функции модуля стоит рассматривать как «кубики», из которых можно собирать разные конструкции, например:
 
@@ -29,7 +29,7 @@
 * `Yson::Parse*** -> Yson::Lookup -> Yson::Serialize***` — извлечение значения указанного поддерева в исходном дереве YSON;
 * `Yson::Parse*** -> Yson::ConvertToList -> ListMap -> Yson::Lookup***` — извлечение элементов по ключу из YSON списка.
 
-См. также примеры комбинирования YSON-функций в [tutorial](https://yql.yandex-team.ru/Tutorial/yt_17_Yson_and_Json).
+{% include [_includes/yson/intro_footer.md](_includes/yson/intro_footer.md) %}
 
 **Примеры**
 
@@ -78,7 +78,7 @@ Yson::ParseJsonDecodeUtf8(String{Flags:AutoMap}) -> Resource<'Yson2.Node'>?
 
 {% note info "Примечание" %}
 
-Функция `Yson::ParseJsonDecodeUtf8` ожидает, что символы, выходящие за пределы ASCII, должны быть дополнительно заэкранированы. Подробности о правилах экранирования можно найти в [коде YT](https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/core/misc/utf8_decoder.cpp).
+Функция `Yson::ParseJsonDecodeUtf8` ожидает, что символы, выходящие за пределы ASCII, должны быть дополнительно заэкранированы.
 
 {% endnote %}
 
@@ -88,7 +88,13 @@ Yson::ParseJsonDecodeUtf8(String{Flags:AutoMap}) -> Resource<'Yson2.Node'>?
 Yson::From(T) -> Resource<'Yson2.Node'>
 ```
 
-`Yson::From` является полиморфной функцией, преобразующей в Yson ресурс большинство примитивных типов данных и контейнеров (списки, словари, кортежи, структуры и т.п.), [пример](https://yql.yandex-team.ru/Operations/X5sdMpdg8tLNyOczX6J8qtBTJv7iItZt01ExReYM0o0=). Тип исходного объекта должен быть совместим с Yson. Например, в ключах словарей допустимы только типы `String` или `Utf8`, а вот `String?` или `Utf8?` уже нет.
+`Yson::From` является полиморфной функцией, преобразующей в Yson ресурс большинство примитивных типов данных и контейнеров (списки, словари, кортежи, структуры и т.п.). Тип исходного объекта должен быть совместим с Yson. Например, в ключах словарей допустимы только типы `String` или `Utf8`, а вот `String?` или `Utf8?` уже нет.
+
+**Пример**
+
+```sql
+SELECT Yson::Serialize(Yson::From(TableRow())) FROM table1;
+```
 
 ## Yson::WithAttributes
 ``` yql
@@ -156,7 +162,29 @@ Yson::ConvertToStringDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,
 
 {% endnote %}
 
-`Yson::ConvertTo` является полиморфной функцией, преобразующей Yson ресурс в указанный во втором аргументе тип данных с поддержкой вложенных контейнеров (списки, словари, кортежи, структуры и т.п.), [пример](https://yql.yandex-team.ru/Operations/X5AsHC--PI3cxBmdA89P5XVtX5m6tn9P2l31MAFsqNo=).
+`Yson::ConvertTo` является полиморфной функцией, преобразующей Yson ресурс в указанный во втором аргументе тип данных с поддержкой вложенных контейнеров (списки, словари, кортежи, структуры и т.п.).
+
+**Пример**
+
+```sql
+$data = Yson(@@{
+    "name" = "Anya";
+    "age" = 15u;
+    "params" = {
+        "ip" = "95.106.17.32";
+        "last_time_on_site" = 0.5;
+        "region" = 213;
+        "user_agent" = "Mozilla/5.0"
+    }
+}@@);
+SELECT Yson::ConvertTo($data, 
+    Struct<
+        name: String,
+        age: Uint32,
+        params: Dict<String,Yson>
+    >
+);
+```
 
 ## Yson::Contains {#ysoncontains}
 ``` yql
@@ -191,7 +219,9 @@ Yson::YPathString(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> String?
 Yson::YPathDict(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Dict<String,Resource<'Yson2.Node'>>?
 Yson::YPathList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<'Yson2.Node'>>?
 ```
-Позволяет по входному ресурсу и пути на языке [YPath](https://yt.yandex-team.ru/docs/description/common/ypath.html) получить ресурс, указывающий на соответствующую пути часть исходного ресурса.
+Позволяет по входному ресурсу и пути на языке YPath получить ресурс, указывающий на соответствующую пути часть исходного ресурса.
+
+{% include [_includes/yson/ypath_overlay.md](_includes/yson/ypath_overlay.md) %}
 
 ## Yson::Attributes {#ysonattributes}
 ``` yql
@@ -212,7 +242,7 @@ Yson::SerializeJson(Resource<'Yson2.Node'>{Flags:AutoMap}, [Resource<'Yson2.Opti
 ```
 
 * `SkipMapEntity` отвечает за сериализацию значений в словарях, имеющих значение `#`. На значение атрибутов флаг не влияет. По умолчанию `false`.
-* `EncodeUtf8` отвечает за экранирование символов, выходящих за пределы ASCII. Детали о правилах экранирования можно найти в [коде YT](https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/core/misc/utf8_decoder.cpp). По умолчанию `false`.
+* `EncodeUtf8` отвечает за экранирование символов, выходящих за пределы ASCII. По умолчанию `false`.
 
 Типы данных `Yson` и `Json`, возвращаемые функциями сериализации, представляет собой частный случай строки, про которую известно, что в ней находятся данные в соответствующем формате (Yson/Json).
 

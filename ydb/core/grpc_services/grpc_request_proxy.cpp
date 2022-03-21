@@ -607,36 +607,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvLongTxRollbackRequest, PreHandle);
         HFunc(TEvLongTxWriteRequest, PreHandle);
         HFunc(TEvLongTxReadRequest, PreHandle);
-        HFunc(TEvDataStreamsCreateStreamRequest, PreHandle);
-        HFunc(TEvDataStreamsDeleteStreamRequest, PreHandle);
-        HFunc(TEvDataStreamsDescribeStreamRequest, PreHandle);
-        HFunc(TEvDataStreamsRegisterStreamConsumerRequest, PreHandle);
-        HFunc(TEvDataStreamsDeregisterStreamConsumerRequest, PreHandle);
-        HFunc(TEvDataStreamsDescribeStreamConsumerRequest, PreHandle);
-        HFunc(TEvDataStreamsPutRecordRequest, PreHandle);
-        HFunc(TEvDataStreamsListStreamsRequest, PreHandle);
-        HFunc(TEvDataStreamsListShardsRequest, PreHandle);
-        HFunc(TEvDataStreamsPutRecordsRequest, PreHandle);
-        HFunc(TEvDataStreamsGetRecordsRequest, PreHandle);
-        HFunc(TEvDataStreamsGetShardIteratorRequest, PreHandle);
-        HFunc(TEvDataStreamsSubscribeToShardRequest, PreHandle);
-        HFunc(TEvDataStreamsDescribeLimitsRequest, PreHandle);
-        HFunc(TEvDataStreamsDescribeStreamSummaryRequest, PreHandle);
-        HFunc(TEvDataStreamsDecreaseStreamRetentionPeriodRequest, PreHandle);
-        HFunc(TEvDataStreamsIncreaseStreamRetentionPeriodRequest, PreHandle);
-        HFunc(TEvDataStreamsUpdateShardCountRequest, PreHandle);
-        HFunc(TEvDataStreamsUpdateStreamRequest, PreHandle);
-        HFunc(TEvDataStreamsSetWriteQuotaRequest, PreHandle);
-        HFunc(TEvDataStreamsListStreamConsumersRequest, PreHandle);
-        HFunc(TEvDataStreamsAddTagsToStreamRequest, PreHandle);
-        HFunc(TEvDataStreamsDisableEnhancedMonitoringRequest, PreHandle);
-        HFunc(TEvDataStreamsEnableEnhancedMonitoringRequest, PreHandle);
-        HFunc(TEvDataStreamsListTagsForStreamRequest, PreHandle);
-        HFunc(TEvDataStreamsMergeShardsRequest, PreHandle);
-        HFunc(TEvDataStreamsRemoveTagsFromStreamRequest, PreHandle);
-        HFunc(TEvDataStreamsSplitShardRequest, PreHandle);
-        HFunc(TEvDataStreamsStartStreamEncryptionRequest, PreHandle);
-        HFunc(TEvDataStreamsStopStreamEncryptionRequest, PreHandle);
 
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 

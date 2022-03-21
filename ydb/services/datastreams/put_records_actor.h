@@ -1,8 +1,8 @@
 #pragma once
 
+#include "datastreams_proxy.h"
 #include "events.h"
 
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
@@ -16,8 +16,6 @@
 #define PUT_UNIT_SIZE 40960u // 40Kb
 
 namespace NKikimr::NDataStreams::V1 {
-
-
 
     struct TPutRecordsItem {
         TString Data;

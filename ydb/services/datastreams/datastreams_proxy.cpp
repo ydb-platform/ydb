@@ -3,6 +3,7 @@
 #include "shard_iterator.h"
 #include "next_token.h"
 
+#include <ydb/core/grpc_services/service_datastreams.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
@@ -21,11 +22,13 @@ using namespace NKikimrClient;
 
 using grpc::Status;
 
+
 namespace NKikimr::NDataStreams::V1 {
     const TString YDS_SERVICE_TYPE = "data-streams";
 
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
+
 
     namespace {
 
@@ -1668,7 +1671,7 @@ namespace NKikimr::NDataStreams::V1 {
         using TBase = TRpcSchemeRequestActor<TNotImplementedRequestActor, TEvRequest>;
 
     public:
-        TNotImplementedRequestActor(TEvRequest* request)
+        TNotImplementedRequestActor(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TBase(request)
         {
         }
@@ -1681,258 +1684,166 @@ namespace NKikimr::NDataStreams::V1 {
             this->Die(ctx);
         }
     };
-
-    //-----------------------------------------------------------------------------------
-
-    IActor* CreateDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache) {
-        return new TDataStreamsService(counters, newSchemeCache);
-    }
-
-    TDataStreamsService::TDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache)
-        : Counters(counters)
-        , NewSchemeCache(newSchemeCache)
-    {
-    }
-
-    void TDataStreamsService::Bootstrap(const TActorContext&) {
-        Become(&TThis::StateFunc);
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TCreateStreamActor(ev->Release().Release(), NewSchemeCache));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TDeleteStreamActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TDescribeStreamActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TRegisterStreamConsumerActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TDeregisterStreamConsumerActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TPutRecordActor(ev->Release().Release(), NewSchemeCache));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TListStreamsActor(ev->Release().Release(), NewSchemeCache));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TListShardsActor(ev->Release().Release(), NewSchemeCache));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TPutRecordsActor(ev->Release().Release(), NewSchemeCache));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TGetRecordsActor(ev->Release().Release(), NewSchemeCache));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TGetShardIteratorActor(ev->Release().Release(), NewSchemeCache));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TDescribeStreamSummaryActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsDecreaseStreamRetentionPeriodRequest>(ev->Release().Release(), false));
-    }
-
-    void TDataStreamsService::Handle(TEvDataStreamsIncreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsIncreaseStreamRetentionPeriodRequest>(ev->Release().Release(), true));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TUpdateShardCountActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TUpdateStreamActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TListStreamConsumersActor(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest>(ev->Release().Release()));
-    }
-
-    void TDataStreamsService::Handle(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
-        ctx.Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest>(ev->Release().Release()));
-    }
-
 }
 
+namespace NKikimr::NGRpcService {
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+using namespace NDataStreams::V1;
+
+void DoDataStreamsCreateStreamRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const NActors::TActorId& schemeCache) {
+    auto* req = dynamic_cast<TEvDataStreamsCreateStreamRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TCreateStreamActor(req, schemeCache));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDeleteStreamRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsDeleteStreamRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TDeleteStreamActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDescribeStreamRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsDescribeStreamRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TDescribeStreamActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsPutRecordRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const NActors::TActorId& schemeCache) {
+    auto* req = dynamic_cast<TEvDataStreamsPutRecordRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TPutRecordActor(req, schemeCache));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsRegisterStreamConsumerRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsRegisterStreamConsumerRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TRegisterStreamConsumerActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDeregisterStreamConsumerRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsDeregisterStreamConsumerRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TDeregisterStreamConsumerActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDescribeStreamConsumerRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsListStreamsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const NActors::TActorId& schemeCache) {
+    auto* req = dynamic_cast<TEvDataStreamsListStreamsRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TListStreamsActor(req, schemeCache));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsListShardsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const NActors::TActorId& schemeCache) {
+    auto* req = dynamic_cast<TEvDataStreamsListShardsRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TListShardsActor(req, schemeCache));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsPutRecordsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const NActors::TActorId& schemeCache) {
+    auto* req = dynamic_cast<TEvDataStreamsPutRecordsRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TPutRecordsActor(req, schemeCache));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsGetRecordsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const NActors::TActorId& schemeCache) {
+    auto* req = dynamic_cast<TEvDataStreamsGetRecordsRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TGetRecordsActor(req, schemeCache));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsGetShardIteratorRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&, const NActors::TActorId& schemeCache) {
+    auto* req = dynamic_cast<TEvDataStreamsGetShardIteratorRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TGetShardIteratorActor(req, schemeCache));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsSubscribeToShardRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDescribeLimitsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDescribeStreamSummaryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsDescribeStreamSummaryRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TDescribeStreamSummaryActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDecreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsDecreaseStreamRetentionPeriodRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsDecreaseStreamRetentionPeriodRequest>(req, false));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsIncreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsIncreaseStreamRetentionPeriodRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsIncreaseStreamRetentionPeriodRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TSetStreamRetentionPeriodActor<TEvDataStreamsIncreaseStreamRetentionPeriodRequest>(req, true));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsUpdateShardCountRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsUpdateShardCountRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TUpdateShardCountActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsListStreamConsumersRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsListStreamConsumersRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TListStreamConsumersActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsAddTagsToStreamRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<TEvDataStreamsAddTagsToStreamRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsDisableEnhancedMonitoringRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<TEvDataStreamsDisableEnhancedMonitoringRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsEnableEnhancedMonitoringRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<TEvDataStreamsEnableEnhancedMonitoringRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsListTagsForStreamRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsUpdateStreamRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsUpdateStreamRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TUpdateStreamActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSetWriteQuotaRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsSetWriteQuotaRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    auto* req = dynamic_cast<TEvDataStreamsSetWriteQuotaRequest*>(p.release());
+    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    TActivationContext::AsActorContext().Register(new TSetWriteQuotaActor(req));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsMergeShardsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsRemoveTagsFromStreamRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsSplitShardRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsStartStreamEncryptionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest>(p.release()));
 }
 
-void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NDataStreams::V1::GetDataStreamsServiceActorID(), ev->Release().Release());
+void DoDataStreamsStopStreamEncryptionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest>(p.release()));
+}
+
 }

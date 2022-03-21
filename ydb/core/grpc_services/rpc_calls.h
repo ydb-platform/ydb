@@ -24,7 +24,6 @@
 
 #include <ydb/public/api/grpc/draft/dummy.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
-#include <ydb/public/api/grpc/draft/ydb_datastreams_v1.pb.h>
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 
@@ -88,36 +87,6 @@ using TEvLongTxCommitRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxCommit,
 using TEvLongTxRollbackRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxRollback, Ydb::LongTx::RollbackTransactionRequest, Ydb::LongTx::RollbackTransactionResponse, true>;
 using TEvLongTxWriteRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxWrite, Ydb::LongTx::WriteRequest, Ydb::LongTx::WriteResponse, true>;
 using TEvLongTxReadRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxRead, Ydb::LongTx::ReadRequest, Ydb::LongTx::ReadResponse, true>;
-using TEvDataStreamsCreateStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsCreateStream, Ydb::DataStreams::V1::CreateStreamRequest, Ydb::DataStreams::V1::CreateStreamResponse, true>;
-using TEvDataStreamsDeleteStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDeleteStream, Ydb::DataStreams::V1::DeleteStreamRequest, Ydb::DataStreams::V1::DeleteStreamResponse, true>;
-using TEvDataStreamsDescribeStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeStream, Ydb::DataStreams::V1::DescribeStreamRequest, Ydb::DataStreams::V1::DescribeStreamResponse, true>;
-using TEvDataStreamsRegisterStreamConsumerRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsRegisterStreamConsumer, Ydb::DataStreams::V1::RegisterStreamConsumerRequest, Ydb::DataStreams::V1::RegisterStreamConsumerResponse, true>;
-using TEvDataStreamsDeregisterStreamConsumerRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDeregisterStreamConsumer, Ydb::DataStreams::V1::DeregisterStreamConsumerRequest, Ydb::DataStreams::V1::DeregisterStreamConsumerResponse, true>;
-using TEvDataStreamsDescribeStreamConsumerRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeStreamConsumer, Ydb::DataStreams::V1::DescribeStreamConsumerRequest, Ydb::DataStreams::V1::DescribeStreamConsumerResponse, true>;
-using TEvDataStreamsPutRecordRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsPutRecord, Ydb::DataStreams::V1::PutRecordRequest, Ydb::DataStreams::V1::PutRecordResponse, true>;
-using TEvDataStreamsListStreamsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListStreams, Ydb::DataStreams::V1::ListStreamsRequest, Ydb::DataStreams::V1::ListStreamsResponse, true>;
-using TEvDataStreamsListShardsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListShards, Ydb::DataStreams::V1::ListShardsRequest, Ydb::DataStreams::V1::ListShardsResponse, true>;
-using TEvDataStreamsPutRecordsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsPutRecords, Ydb::DataStreams::V1::PutRecordsRequest, Ydb::DataStreams::V1::PutRecordsResponse, true>;
-using TEvDataStreamsGetRecordsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsGetRecords, Ydb::DataStreams::V1::GetRecordsRequest, Ydb::DataStreams::V1::GetRecordsResponse, true>;
-using TEvDataStreamsGetShardIteratorRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsGetShardIterator, Ydb::DataStreams::V1::GetShardIteratorRequest, Ydb::DataStreams::V1::GetShardIteratorResponse, true>;
-using TEvDataStreamsSubscribeToShardRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsSubscribeToShard, Ydb::DataStreams::V1::SubscribeToShardRequest, Ydb::DataStreams::V1::SubscribeToShardResponse, true>;
-using TEvDataStreamsDescribeLimitsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeLimits, Ydb::DataStreams::V1::DescribeLimitsRequest, Ydb::DataStreams::V1::DescribeLimitsResponse, true>;
-using TEvDataStreamsDescribeStreamSummaryRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeStreamSummary, Ydb::DataStreams::V1::DescribeStreamSummaryRequest, Ydb::DataStreams::V1::DescribeStreamSummaryResponse, true>;
-using TEvDataStreamsDecreaseStreamRetentionPeriodRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDecreaseStreamRetentionPeriod, Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest, Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResponse, true>;
-using TEvDataStreamsIncreaseStreamRetentionPeriodRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsIncreaseStreamRetentionPeriod, Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest, Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResponse, true>;
-using TEvDataStreamsUpdateShardCountRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsUpdateShardCount, Ydb::DataStreams::V1::UpdateShardCountRequest, Ydb::DataStreams::V1::UpdateShardCountResponse, true>;
-using TEvDataStreamsUpdateStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsUpdateStream, Ydb::DataStreams::V1::UpdateStreamRequest, Ydb::DataStreams::V1::UpdateStreamResponse, true>;
-using TEvDataStreamsSetWriteQuotaRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsSetWriteQuota, Ydb::DataStreams::V1::SetWriteQuotaRequest, Ydb::DataStreams::V1::SetWriteQuotaResponse, true>;
-using TEvDataStreamsListStreamConsumersRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListStreamConsumers, Ydb::DataStreams::V1::ListStreamConsumersRequest, Ydb::DataStreams::V1::ListStreamConsumersResponse, true>;
-using TEvDataStreamsAddTagsToStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsAddTagsToStream, Ydb::DataStreams::V1::AddTagsToStreamRequest, Ydb::DataStreams::V1::AddTagsToStreamResponse, true>;
-using TEvDataStreamsDisableEnhancedMonitoringRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDisableEnhancedMonitoring, Ydb::DataStreams::V1::DisableEnhancedMonitoringRequest, Ydb::DataStreams::V1::DisableEnhancedMonitoringResponse, true>;
-using TEvDataStreamsEnableEnhancedMonitoringRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsEnableEnhancedMonitoring, Ydb::DataStreams::V1::EnableEnhancedMonitoringRequest, Ydb::DataStreams::V1::EnableEnhancedMonitoringResponse, true>;
-using TEvDataStreamsListTagsForStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListTagsForStream, Ydb::DataStreams::V1::ListTagsForStreamRequest, Ydb::DataStreams::V1::ListTagsForStreamResponse, true>;
-using TEvDataStreamsMergeShardsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsMergeShards, Ydb::DataStreams::V1::MergeShardsRequest, Ydb::DataStreams::V1::MergeShardsResponse, true>;
-using TEvDataStreamsRemoveTagsFromStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsRemoveTagsFromStream, Ydb::DataStreams::V1::RemoveTagsFromStreamRequest, Ydb::DataStreams::V1::RemoveTagsFromStreamResponse, true>;
-using TEvDataStreamsSplitShardRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsSplitShard, Ydb::DataStreams::V1::SplitShardRequest, Ydb::DataStreams::V1::SplitShardResponse, true>;
-using TEvDataStreamsStartStreamEncryptionRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsStartStreamEncryption, Ydb::DataStreams::V1::StartStreamEncryptionRequest, Ydb::DataStreams::V1::StartStreamEncryptionResponse, true>;
-using TEvDataStreamsStopStreamEncryptionRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsStopStreamEncryption, Ydb::DataStreams::V1::StopStreamEncryptionRequest, Ydb::DataStreams::V1::StopStreamEncryptionResponse, true>;
 
 } // namespace NGRpcService
 } // namespace NKikimr

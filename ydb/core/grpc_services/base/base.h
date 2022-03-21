@@ -1111,6 +1111,13 @@ public:
         , AuxSettings(std::move(auxSettings))
     { }
 
+    TGrpcRequestCall(NGrpc::IRequestContextBase* ctx,
+        std::function<void(std::unique_ptr<TRequestIface>, const IFacilityProvider&)> cb, TRequestAuxSettings auxSettings = {})
+        : TBase(ctx)
+        , PassMethod(cb)
+        , AuxSettings(std::move(auxSettings))
+    { }
+
     void Pass(const IFacilityProvider& facility) override {
         PassMethod(std::move(std::unique_ptr<TRequestIface>(this)), facility);
     }
@@ -1130,7 +1137,7 @@ public:
         }
     }
 private:
-    void (*PassMethod)(std::unique_ptr<TRequestIface>, const IFacilityProvider&);
+    std::function<void(std::unique_ptr<TRequestIface>, const IFacilityProvider&)> PassMethod;
     const TRequestAuxSettings AuxSettings;
 };
 

@@ -51,7 +51,6 @@ class TBlobStorageQueue {
         const ui64 QueueCookie;
         ui64 Cost;
         bool DirtyCost;
-        bool Discarded;
         THPTimer ProcessingTimer;
         TTrackableList<TItem>::iterator Iterator;
 
@@ -71,7 +70,6 @@ class TBlobStorageQueue {
             , QueueCookie(RandomNumber<ui64>())
             , Cost(0)
             , DirtyCost(true)
-            , Discarded(false)
         {}
 
         ~TItem() {
@@ -80,11 +78,6 @@ class TBlobStorageQueue {
 
         ui32 GetByteSize() const {
             return Event.GetByteSize();
-        }
-
-        void Discard() {
-            Discarded = true;
-            Event.Discard();
         }
     };
 
@@ -231,7 +224,6 @@ public:
     }
 
     TItemList::iterator EraseItem(TItemList& queue, TItemList::iterator it);
-    void Prune(const TActorId& sender);
     TMaybe<TDuration> GetWorstRequestProcessingTime() const;
 };
 

@@ -131,6 +131,12 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             continue;
         }
 
+        if (!item.Event.Relevant()) {
+            ++*QueueItemsPruned;
+            it = EraseItem(Queues.Waiting, it);
+            continue;
+        }
+
         // update item parameters
         item.MsgId = NextMsgId;
         item.SequenceId = CurrentSequenceId;
@@ -231,13 +237,13 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
     Y_VERIFY(InFlightCost >= it->Cost);
     InFlightCost -= it->Cost;
 
-    const bool discard = it->Discarded;
+    const bool relevant = it->Event.Relevant();
 
     *outSender = it->Event.GetSender();
     *outCookie = it->Event.GetCookie();
     *processingTime = TDuration::Seconds(it->ProcessingTimer.Passed());
     LWTRACK(DSQueueVPutResultRecieved, it->Event.GetOrbit(), processingTime->SecondsFloat() * 1e3,
-            it->Event.GetByteSize(), discard);
+            it->Event.GetByteSize(), !relevant);
 
     InFlightLookup.erase(lookupIt);
     EraseItem(Queues.InFlight, it);
@@ -248,7 +254,7 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
     }
 
     ++*QueueItemsProcessed;
-    return !discard;
+    return relevant;
 }
 
 void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 expectedMsgId, ui64 expectedSequenceId) {
@@ -263,7 +269,7 @@ void TBlobStorageQueue::Unwind(ui64 failedMsgId, ui64 failedSequenceId, ui64 exp
         const ui32 erased = InFlightLookup.erase(std::make_pair(x->SequenceId, x->MsgId));
         Y_VERIFY(erased);
         cost += x->Cost; // count item's cost
-        if (x->Discarded) {
+        if (!x->Event.Relevant()) {
             if (x == it) {
                 ++it; // advance starting iterator as the item pointed to is being erased
             }
@@ -296,7 +302,7 @@ void TBlobStorageQueue::DrainQueue(NKikimrProto::EReplyStatus status, const TStr
 
     auto flushQueue = [&](TItemList& queue) {
         for (auto it = queue.begin(); it != queue.end(); it = EraseItem(queue, it)) {
-            if (!it->Discarded) {
+            if (it->Event.Relevant()) {
                 ReplyWithError(*it, status, errorReason, ctx);
             }
         }
@@ -326,29 +332,6 @@ TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& q
         --*QueueSize;
     }
     return nextIter;
-}
-
-void TBlobStorageQueue::Prune(const TActorId& sender) {
-    TSenderMap::TIterator it = SenderToItems.LowerBound(sender);
-    while (it != SenderToItems.End()) {
-        TItem& item = static_cast<TItem&>(*it++);
-        if (item.Event.GetSender() != sender) {
-            break;
-        }
-        switch (item.Queue) {
-            case EItemQueue::Waiting:
-                EraseItem(Queues.Waiting, item.Iterator);
-                break;
-
-            case EItemQueue::InFlight:
-                item.Discard();
-                break;
-
-            default:
-                Y_FAIL("incorrect item queue state");
-        }
-        ++*QueueItemsPruned;
-    }
 }
 
 TMaybe<TDuration> TBlobStorageQueue::GetWorstRequestProcessingTime() const {

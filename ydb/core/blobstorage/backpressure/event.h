@@ -40,6 +40,7 @@ class TEventHolder {
     TIntrusivePtr<TEventSerializedData> Buffer;
     TBSProxyContextPtr BSProxyCtx;
     std::unique_ptr<IEventBase> LocalEvent;
+    std::optional<std::weak_ptr<TMessageRelevanceTracker>> Tracker;
 
 public:
     TEventHolder()
@@ -59,6 +60,7 @@ public:
         , InterconnectChannel(interconnectChannel)
         , Orbit(MoveOrbit(ev))
         , BSProxyCtx(bspctx)
+        , Tracker(std::move(ev->Get()->MessageRelevanceTracker))
     {
         // trace the event
         if constexpr (std::is_same_v<TPtr, TEvBlobStorage::TEvVPut::TPtr>) {
@@ -88,6 +90,10 @@ public:
 
     ~TEventHolder() {
         Discard();
+    }
+
+    bool Relevant() const {
+        return !Tracker || !Tracker->expired();
     }
 
     ui32 GetByteSize() const {

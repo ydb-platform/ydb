@@ -315,19 +315,16 @@ public:
 
     template<typename T>
     void SendToQueue(std::unique_ptr<T> event, ui64 cookie, NWilson::TTraceId traceId, bool timeStatsEnabled = false) {
+        if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus>) {
+            event->MessageRelevanceTracker = MessageRelevanceTracker;
+        }
         const TActorId queueId = GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, std::move(traceId),
             timeStatsEnabled);
-        ++InvolvedQueues[queueId];
         ++RequestsInFlight;
     }
 
     template<typename TPtr>
-    void ProcessReplyFromQueue(const TPtr& ev) {
-        auto it = InvolvedQueues.find(ev->Sender);
-        Y_VERIFY(it != InvolvedQueues.end());
-        if (!--it->second) {
-            InvolvedQueues.erase(it);
-        }
+    void ProcessReplyFromQueue(const TPtr& /*ev*/) {
         Y_VERIFY(RequestsInFlight);
         --RequestsInFlight;
         CheckPostponedQueue();
@@ -406,9 +403,6 @@ public:
         Y_VERIFY(!std::exchange(Dead, true));
         TDerived::ActiveCounter(Mon)->Dec();
         Derived().Send(GetProxyActorId(), new TEvDeathNote(Responsiveness));
-        for (const auto& [queueId, numUnrepliedRequests] : InvolvedQueues) {
-            Derived().Send(queueId, new TEvPruneQueue);
-        }
         TActorBootstrapped<TDerived>::PassAway();
     }
 
@@ -508,7 +502,7 @@ protected:
 private:
     const TActorId Source;
     const ui64 Cookie;
-    THashMap<TActorId, ui32> InvolvedQueues;
+    std::shared_ptr<TMessageRelevanceTracker> MessageRelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;

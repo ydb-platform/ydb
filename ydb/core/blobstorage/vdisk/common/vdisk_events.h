@@ -495,8 +495,16 @@ namespace NKikimr {
     // TEvVPut
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    struct TMessageRelevanceTracker {};
+
+    struct TEventWithRelevanceTracker {
+        std::optional<std::weak_ptr<TMessageRelevanceTracker>> MessageRelevanceTracker;
+    };
+
     struct TEvBlobStorage::TEvVPut
-            : public TEventPB<TEvBlobStorage::TEvVPut, NKikimrBlobStorage::TEvVPut, TEvBlobStorage::EvVPut> {
+        : TEventPB<TEvBlobStorage::TEvVPut, NKikimrBlobStorage::TEvVPut, TEvBlobStorage::EvVPut>
+        , TEventWithRelevanceTracker
+    {
         // In current realization it is intentionaly lost on event serialization since
         // LWTrace doesn't support distributed shuttels yet
         mutable NLWTrace::TOrbit Orbit;
@@ -762,7 +770,8 @@ namespace NKikimr {
     };
 
     struct TEvBlobStorage::TEvVMultiPut
-        : public TEventPB<TEvBlobStorage::TEvVMultiPut, NKikimrBlobStorage::TEvVMultiPut, TEvBlobStorage::EvVMultiPut>
+        : TEventPB<TEvBlobStorage::TEvVMultiPut, NKikimrBlobStorage::TEvVMultiPut, TEvBlobStorage::EvVMultiPut>
+        , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
 
@@ -1023,7 +1032,8 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TEvBlobStorage::TEvVGet
-        : public TEventPB<TEvBlobStorage::TEvVGet, NKikimrBlobStorage::TEvVGet, TEvBlobStorage::EvVGet>
+        : TEventPB<TEvBlobStorage::TEvVGet, NKikimrBlobStorage::TEvVGet, TEvBlobStorage::EvVGet>
+        , TEventWithRelevanceTracker
     {
         TEvVGet() = default;
 
@@ -1392,7 +1402,9 @@ namespace NKikimr {
 
     template <typename TEv, typename TRecord, ui32 EventType>
     struct TEvVSpecialPatchBase
-            : public TEventPB<TEv, TRecord, EventType> {
+        : TEventPB<TEv, TRecord, EventType>
+        , TEventWithRelevanceTracker
+    {
         mutable NLWTrace::TOrbit Orbit;
 
         TEvVSpecialPatchBase() = default;
@@ -1678,7 +1690,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TEvBlobStorage::TEvVBlock
-        : public TEventPB<TEvBlobStorage::TEvVBlock, NKikimrBlobStorage::TEvVBlock, TEvBlobStorage::EvVBlock> {
+        : TEventPB<TEvBlobStorage::TEvVBlock, NKikimrBlobStorage::TEvVBlock, TEvBlobStorage::EvVBlock>
+        , TEventWithRelevanceTracker
+    {
         TEvVBlock()
         {}
 
@@ -1770,9 +1784,8 @@ namespace NKikimr {
     //////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TEvBlobStorage::TEvVPatchStart
-        : public TEventPB<TEvBlobStorage::TEvVPatchStart,
-                NKikimrBlobStorage::TEvVPatchStart,
-                TEvBlobStorage::EvVPatchStart>
+        : TEventPB<TEvBlobStorage::TEvVPatchStart, NKikimrBlobStorage::TEvVPatchStart, TEvBlobStorage::EvVPatchStart>
+        , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
 
@@ -1856,9 +1869,8 @@ namespace NKikimr {
     };
 
     struct TEvBlobStorage::TEvVPatchDiff
-        : public TEventPB<TEvBlobStorage::TEvVPatchDiff,
-                NKikimrBlobStorage::TEvVPatchDiff,
-                TEvBlobStorage::EvVPatchDiff>
+        : TEventPB<TEvBlobStorage::TEvVPatchDiff, NKikimrBlobStorage::TEvVPatchDiff, TEvBlobStorage::EvVPatchDiff>
+        , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
 
@@ -1923,9 +1935,8 @@ namespace NKikimr {
 
 
     struct TEvBlobStorage::TEvVPatchXorDiff
-        : public TEventPB<TEvBlobStorage::TEvVPatchXorDiff,
-                NKikimrBlobStorage::TEvVPatchXorDiff,
-                TEvBlobStorage::EvVPatchXorDiff>
+        : TEventPB<TEvBlobStorage::TEvVPatchXorDiff, NKikimrBlobStorage::TEvVPatchXorDiff, TEvBlobStorage::EvVPatchXorDiff>
+        , TEventWithRelevanceTracker
     {
         mutable NLWTrace::TOrbit Orbit;
 
@@ -2063,9 +2074,9 @@ namespace NKikimr {
     };
 
     struct TEvBlobStorage::TEvVGetBlock
-        : public TEventPB<TEvBlobStorage::TEvVGetBlock,
-                    NKikimrBlobStorage::TEvVGetBlock,
-                    TEvBlobStorage::EvVGetBlock> {
+        : TEventPB<TEvBlobStorage::TEvVGetBlock, NKikimrBlobStorage::TEvVGetBlock, TEvBlobStorage::EvVGetBlock>
+        , TEventWithRelevanceTracker
+    {
         TEvVGetBlock()
         {}
 
@@ -2141,9 +2152,9 @@ namespace NKikimr {
 
 
     struct TEvBlobStorage::TEvVCollectGarbage
-        : public TEventPB<TEvBlobStorage::TEvVCollectGarbage,
-                        NKikimrBlobStorage::TEvVCollectGarbage,
-                        TEvBlobStorage::EvVCollectGarbage> {
+        : TEventPB<TEvBlobStorage::TEvVCollectGarbage, NKikimrBlobStorage::TEvVCollectGarbage, TEvBlobStorage::EvVCollectGarbage>
+        , TEventWithRelevanceTracker
+    {
         TEvVCollectGarbage()
         {}
 
@@ -2267,9 +2278,9 @@ namespace NKikimr {
     };
 
     struct TEvBlobStorage::TEvVGetBarrier
-        : public TEventPB<TEvBlobStorage::TEvVGetBarrier,
-                        NKikimrBlobStorage::TEvVGetBarrier,
-                        TEvBlobStorage::EvVGetBarrier> {
+        : TEventPB<TEvBlobStorage::TEvVGetBarrier, NKikimrBlobStorage::TEvVGetBarrier, TEvBlobStorage::EvVGetBarrier>
+        , TEventWithRelevanceTracker
+    {
         TEvVGetBarrier()
         {}
 
@@ -2332,9 +2343,7 @@ namespace NKikimr {
     };
 
     struct TEvBlobStorage::TEvVCheckReadiness
-        : public TEventPB<TEvBlobStorage::TEvVCheckReadiness,
-                    NKikimrBlobStorage::TEvVCheckReadiness,
-                    TEvBlobStorage::EvVCheckReadiness>
+        : TEventPB<TEvBlobStorage::TEvVCheckReadiness, NKikimrBlobStorage::TEvVCheckReadiness, TEvBlobStorage::EvVCheckReadiness>
     {
         TEvVCheckReadiness() = default;
 

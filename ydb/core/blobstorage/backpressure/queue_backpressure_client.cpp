@@ -417,10 +417,6 @@ private:
     ////////////////////////////////////////////////////////////////////////
     // CONTROL SECTOR
     ////////////////////////////////////////////////////////////////////////
-    void Handle(TEvPruneQueue::TPtr& ev, const TActorContext& /*ctx*/) {
-        Queue.Prune(ev->Sender);
-    }
-
     void HandleWindow(const TActorContext& ctx, const NKikimrBlobStorage::TWindowFeedback& window) {
         if (window.HasMaxWindowSize()) {
             const ui64 maxWindowSize = window.GetMaxWindowSize();
@@ -808,7 +804,6 @@ private:
     XX(TEvBlobStorage::EvVReadyNotify, EvVReadyNotify) \
     XX(TEvBlobStorage::EvVStatus, EvVStatus) \
     XX(TEvBlobStorage::EvVStatusResult, EvVStatusResult) \
-    XX(TEvBlobStorage::EvPruneQueue, EvPruneQueue) \
     XX(TEvBlobStorage::EvRequestProxyQueueState, EvRequestProxyQueueState) \
     XX(TEvBlobStorage::EvVWindowChange, EvVWindowChange) \
     XX(TEvInterconnect::EvNodeConnected, EvNodeConnected) \
@@ -881,7 +876,6 @@ private:
             HFunc(TEvBlobStorage::TEvVStatus, Handle)
             HFunc(TEvBlobStorage::TEvVStatusResult, Handle)
 
-            HFunc(TEvPruneQueue, Handle)
             HFunc(TEvRequestProxyQueueState, Handle)
 
             HFunc(TEvBlobStorage::TEvVWindowChange, Handle)

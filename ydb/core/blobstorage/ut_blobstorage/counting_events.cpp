@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
 
-    void CountingEventsTest(TString typeOperation, ui32 eventsCount, TBlobStorageGroupType groupType)
+    void CountingEventsTest(TString typeOperation, ui32 eventsCount, TBlobStorageGroupType groupType, ui32 alternative = 0)
     {
         TEnvironmentSetup env(true, groupType);
         auto& runtime = env.Runtime;
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
             SendPut(test, originalBlobId3, data, NKikimrProto::OK);
             finishEventsCount = test.Runtime->GetEventsProcessed();
 
-            UNIT_ASSERT_VALUES_EQUAL(finishEventsCount - startEventsCount, eventsCount);
+            UNIT_ASSERT_VALUES_EQUAL(finishEventsCount - startEventsCount, alternative ? alternative : eventsCount);
         } else if (typeOperation == "get") {
             TLogoBlobID originalBlobId(tabletId, 1, 0, 0, size, 0);
             NormalizePredictedDelays(queues);
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Put_Mirror3of4) {
-        CountingEventsTest("put", 116, TBlobStorageGroupType::ErasureMirror3of4);
+        CountingEventsTest("put", 115, TBlobStorageGroupType::ErasureMirror3of4, 114);
     }
 
     Y_UNIT_TEST(Put_Mirror3dc) {
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Get_Mirror3of4) {
-        CountingEventsTest("get", 38, TBlobStorageGroupType::ErasureMirror3of4);
+        CountingEventsTest("get", 36, TBlobStorageGroupType::ErasureMirror3of4);
     }
 
     Y_UNIT_TEST(Get_Mirror3dc) {
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
     }
 
     Y_UNIT_TEST(Collect_Mirror3of4) {
-        CountingEventsTest("collect", 113, TBlobStorageGroupType::ErasureMirror3of4);
+        CountingEventsTest("collect", 112, TBlobStorageGroupType::ErasureMirror3of4);
     }
 
     Y_UNIT_TEST(Collect_Mirror3dc) {

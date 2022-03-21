@@ -128,6 +128,7 @@ namespace NKikimr {
             ui64 NextSendCookie;
             ui64 NextReceiveCookie;
             TResultQueue ResultQueue;
+            std::shared_ptr<TMessageRelevanceTracker> Tracker = std::make_shared<TMessageRelevanceTracker>();
 
             TQueue<std::unique_ptr<TEvBlobStorage::TEvVGet>> SchedulerRequestQ;
             THashMap<ui64, TReplMemTokenId> RequestTokens;
@@ -158,6 +159,7 @@ namespace NKikimr {
                 auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskId, deadline,
                         NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None,
                         getCookie);
+                req->MessageRelevanceTracker = Tracker;
 
                 ui64 maxResponseSize = ReplCtx->VDiskCfg->ReplMaxResponseSize;
                 if (const auto& quoter = ReplCtx->VCtx->ReplNodeRequestQuoter) {
@@ -225,7 +227,6 @@ namespace NKikimr {
                     PrefetchDataSize = 0;
                     RequestFromVDiskProxyPending = false;
                     if (Finished) {
-                        Send(ServiceId, new TEvPruneQueue);
                         Send(MakeBlobStorageReplBrokerID(), new TEvPruneQueue);
                         RequestTokens.clear();
                         return PassAway(); // TODO(alexvru): check correctness of invocations

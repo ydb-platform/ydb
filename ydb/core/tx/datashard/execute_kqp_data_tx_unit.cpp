@@ -100,6 +100,15 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
     ui64 tabletId = DataShard.TabletID();
     const TValidatedDataTx::TPtr& dataTx = tx->GetDataTx();
 
+    if (op->IsImmediate() && !dataTx->ReValidateKeys()) {
+        // Immediate transactions may be reordered with schema changes and become invalid
+        Y_VERIFY(!dataTx->Ready());
+        op->SetAbortedFlag();
+        BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
+        op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
+        return EExecutionStatus::Executed;
+    }
+
     if (dataTx->CheckCancelled()) {
         tx->ReleaseTxData(txc, ctx);
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED)

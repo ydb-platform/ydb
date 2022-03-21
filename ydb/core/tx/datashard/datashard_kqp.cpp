@@ -281,7 +281,7 @@ namespace {
 
 template <bool Read>
 void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo,
-    const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind, const TVector<ui32>& columns,
+    const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind, const TVector<NTable::TColumn>& columns,
     ui64 itemsLimit, bool reverse, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx,
     TEngineBay& engineBay)
 {
@@ -368,10 +368,10 @@ void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo,
         tableMeta.GetSchemaVersion());
 
     for (auto& read : meta.GetReads()) {
-        TVector<ui32> columns;
+        TVector<NTable::TColumn> columns;
         columns.reserve(read.GetColumns().size());
         for (auto& c : read.GetColumns()) {
-            columns.push_back(c.GetId());
+            columns.emplace_back(NTable::TColumn(c.GetName(), c.GetId(), c.GetType()));
         }
 
         KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), columns, read.GetItemsLimit(),

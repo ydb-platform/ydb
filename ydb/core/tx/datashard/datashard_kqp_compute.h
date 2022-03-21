@@ -52,6 +52,8 @@ public:
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
     TEngineHostCounters& GetDatashardCounters() { return EngineHost.GetCounters(); }
 
+    std::pair<IEngineFlat::EResult, TString> ValidateKeys(const IEngineFlat::TValidationInfo& validationInfo);
+
     bool IsTabletNotReady() const { return TabletNotReady; }
 
     bool ReadRow(const TTableId& tableId, TArrayRef<const TCell> key, const TSmallVec<NTable::TTag>& columnTags,

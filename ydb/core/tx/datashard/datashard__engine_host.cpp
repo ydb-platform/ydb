@@ -571,15 +571,16 @@ TEngineBay::~TEngineBay() {
     }
 }
 
-void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range,
+void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range,
                               const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit, bool reverse)
 {
     TVector<TKeyDesc::TColumnOp> columnOps;
     columnOps.reserve(columns.size());
-    for (ui32 column : columns) {
+    for (auto& column : columns) {
         TKeyDesc::TColumnOp op;
-        op.Column = column;
+        op.Column = column.Id;
         op.Operation = TKeyDesc::EColumnOperation::Read;
+        op.ExpectedType = column.PType;
         columnOps.emplace_back(std::move(op));
     }
 

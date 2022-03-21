@@ -310,9 +310,12 @@ class TViewerInitializer : public IKikimrServicesInitializer {
     const TKikimrRunConfig& KikimrRunConfig;
 
 public:
-    TViewerInitializer(const TKikimrRunConfig& runConfig);
+    TViewerInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
+
+private:
+    std::shared_ptr<TModuleFactories> Factories;
 };
 
 class TLoadInitializer : public IKikimrServicesInitializer {

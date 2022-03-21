@@ -1791,15 +1791,18 @@ void TTabletMonitorInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
 // TViewerInitializer
 
-TViewerInitializer::TViewerInitializer(const TKikimrRunConfig& runConfig)
+TViewerInitializer::TViewerInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories)
     : IKikimrServicesInitializer(runConfig)
     , KikimrRunConfig(runConfig)
+    , Factories(factories)
 {}
 
-void TViewerInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
-                                            const NKikimr::TAppData* appData) {
+void TViewerInitializer::InitializeServices(
+    NActors::TActorSystemSetup* setup,
+    const NKikimr::TAppData* appData
+) {
     using namespace NViewer;
-    IActor* viewer = CreateViewer(KikimrRunConfig);
+    IActor* viewer = CreateViewer(KikimrRunConfig, Factories->PQReadSessionsInfoWorkerFactory);
     SetupPQVirtualHandlers(dynamic_cast<IViewer*>(viewer));
     SetupDBVirtualHandlers(dynamic_cast<IViewer*>(viewer));
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeViewerID(NodeId),

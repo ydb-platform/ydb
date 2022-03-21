@@ -7,8 +7,11 @@
 
 
 
-add_library(common-math-lib INTERFACE)
-target_link_libraries(common-math-lib INTERFACE
+add_library(common-math-lib)
+target_link_libraries(common-math-lib PUBLIC
   contrib-libs-cxxsupp
   yutil
+)
+target_sources(common-math-lib PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/math/lib/erfinv.cpp
 )

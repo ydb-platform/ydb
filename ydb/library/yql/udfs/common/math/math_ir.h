@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/udfs/common/math/lib/round.h>
+#include <ydb/library/yql/udfs/common/math/lib/erfinv.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <util/generic/ymath.h>
@@ -11,9 +12,10 @@
 namespace NYql {
 namespace NUdf {
 
-#define CONST_FUNCS(XX)                 \
-    XX(Pi, M_PI)                        \
-    XX(E, M_E)
+#define CONST_FUNCS(XX)                             \
+    XX(Pi, M_PI)                                    \
+    XX(E, M_E)                                      \
+    XX(Eps, std::numeric_limits<double>::epsilon())
 
 #define SINGLE_ARG_FUNCS(XX)            \
     XX(Abs, Abs)                        \
@@ -96,7 +98,6 @@ void SigmoidIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IVa
     *result = TUnboxedValuePod(1. / (1. + exp(-args[0].Get<double>())));
 }
 
-
 extern "C" UDF_ALWAYS_INLINE
 void FuzzyEqualsIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
     if (!args[2]) {
@@ -111,6 +112,16 @@ extern "C" UDF_ALWAYS_INLINE
 void RoundIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
     const double val = NMathUdf::RoundToDecimal<long double>(args[0].Get<double>(), args[1].GetOrDefault<int>(0));
     *result = TUnboxedValuePod(val);
+}
+
+extern "C" UDF_ALWAYS_INLINE
+void ErfInvIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
+    *result = TUnboxedValuePod(NMathUdf::ErfInv(args[0].Get<double>()));
+}
+
+extern "C" UDF_ALWAYS_INLINE
+void ErfcInvIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
+    *result = TUnboxedValuePod(NMathUdf::ErfInv(1. - args[0].Get<double>()));
 }
 
 extern "C" UDF_ALWAYS_INLINE

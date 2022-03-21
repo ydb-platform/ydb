@@ -6,6 +6,7 @@
 #define MATH_UDF_MAP(XX, XXL)                                                                       \
     XX(Pi, double(), ;)                                                                             \
     XX(E, double(), ;)                                                                              \
+    XX(Eps, double(), ;)                                                                            \
     XX(Abs, double(TAutoMap<double>), ;)                                                            \
     XX(Acos, double(TAutoMap<double>), ;)                                                           \
     XX(Asin, double(TAutoMap<double>), ;)                                                           \
@@ -16,6 +17,8 @@
     XX(Cos, double(TAutoMap<double>), ;)                                                            \
     XX(Cosh, double(TAutoMap<double>), ;)                                                           \
     XX(Erf, double(TAutoMap<double>), ;)                                                            \
+    XX(ErfInv, double(TAutoMap<double>), ;)                                                         \
+    XX(ErfcInv, double(TAutoMap<double>), ;)                                                        \
     XX(Exp, double(TAutoMap<double>), ;)                                                            \
     XX(Exp2, double(TAutoMap<double>), ;)                                                           \
     XX(Fabs, double(TAutoMap<double>), ;)                                                           \
@@ -43,8 +46,8 @@
     XX(IsNaN, bool(TAutoMap<double>), ;)                                                            \
     XX(Sigmoid, double(TAutoMap<double>), ;)                                                        \
     XX(FuzzyEquals, bool(TAutoMap<double>, TAutoMap<double>, TEpsilon), builder.OptionalArgs(1))    \
-    XX(Mod, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \
-    XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                             \
+    XX(Mod, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                  \
+    XX(Rem, TOptional<i64>(TAutoMap<i64>, i64), ;)                                                  \
     XXL(Round, double(TAutoMap<double>, TPrecision), builder.OptionalArgs(1))
 
 #define MATH_UDF_IMPL(name, signature, options)                                                             \

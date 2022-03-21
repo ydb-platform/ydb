@@ -2,8 +2,7 @@
 
 ## {{ ydb-short-name }} CLI
 
-The {{ ydb-short-name }} CLI provides software for managing your data in {{ ydb-short-name }}.
-Review the documentation on using the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md).
+[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is a client-side command line interface for YDB databases.
 
 {% list tabs %}
 
@@ -25,9 +24,9 @@ Review the documentation on using the [{{ ydb-short-name }} CLI](../reference/yd
 
 {% endlist %}
 
-## {{ ydb-short-name }} server
+## {{ ydb-short-name }} Server
 
-Software to run a {{ ydb-short-name }} server.
+{{ ydb-short-name }} Server is a server-side [YDB cluster](../concepts/databases.md#cluster) node executable.
 
 {% list tabs %}
 

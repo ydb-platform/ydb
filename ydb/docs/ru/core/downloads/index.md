@@ -2,8 +2,7 @@
 
 ## {{ ydb-short-name }} CLI
 
-Интерфейс командной строки {{ ydb-short-name }} CLI — программа для управления вашими данными в {{ ydb-short-name }}.
-Ознакомьтесь с документацией по работе с [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md).
+[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) — утилита командной строки для работы с базами данных YDB.
 
 {% list tabs %}
 
@@ -28,7 +27,7 @@
 
 ## {{ ydb-short-name }} Server
 
-Программа для запуска {{ ydb-short-name }} сервера.
+{{ ydb-short-name }} Server - сборка для запуска узла [кластера YDB](../concepts/databases.md#cluster).
 
 {% list tabs %}
 

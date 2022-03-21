@@ -239,6 +239,8 @@ public:
 class IRequestCtxBase {
 public:
     virtual ~IRequestCtxBase() = default;
+    // Returns true if client has the specified capability
+    virtual bool HasClientCapability(const TString& capability) const = 0;
     // Returns client provided database name
     virtual const TMaybe<TString> GetDatabaseName() const = 0;
     // Returns "internal" token (result of ticket parser authentication)
@@ -436,6 +438,10 @@ public:
         InternalToken_ = token;
     }
 
+    bool HasClientCapability(const TString&) const override {
+        return false;
+    }
+
     const TMaybe<TString> GetDatabaseName() const override {
         return Database_;
     }
@@ -570,6 +576,16 @@ public:
             return {};
         }
         return TString{res[0]};
+    }
+
+    bool HasClientCapability(const TString& capability) const override {
+        const auto& values = Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES);
+        for(auto& value: values) {
+            if (value == capability)
+                return true;
+        }
+
+        return false;
     }
 
     const TMaybe<TString> GetDatabaseName() const override {
@@ -816,6 +832,16 @@ public:
             return {};
         }
         return TString{res[0]};
+    }
+
+    bool HasClientCapability(const TString& capability) const override {
+        const auto& values = Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES);
+        for(auto& value: values) {
+            if (capability == value)
+                return true;
+        }
+
+        return false;
     }
 
     const TMaybe<TString> GetDatabaseName() const override {

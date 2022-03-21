@@ -37,6 +37,10 @@ public:
         , InternalToken(token)
     {}
 
+    bool HasClientCapability(const TString&) const override {
+        return false;
+    }
+
     const TMaybe<TString> GetDatabaseName() const override {
         if (DatabaseName.empty())
             return Nothing();

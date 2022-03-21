@@ -22,6 +22,8 @@ const char* YDB_SESSION_CLOSE = "session-close";
 // The client should send a feature capability-header in order to enable a feature on the server side.
 // Send ("x-ydb-client-capabilities", "session-balancer") pair in metadata with a СreateSession request to enable server side session balancing feature.
 const char* YDB_CLIENT_CAPABILITIES = "x-ydb-client-capabilities";
+const char* YDB_CLIENT_CAPABILITY_SESSION_BALANCER = "session-balancer";
+
 
 TString GetSdkSemver() {
     return NResource::Find("ydb_sdk_version.txt");

@@ -9,6 +9,7 @@
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -61,6 +62,10 @@ private:
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
+        }
+
+        if (Request().HasClientCapability(NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER)) {
+            ev->Record.SetCanCreateRemoteSession(true);
         }
 
         SetDatabase(ev, Request());

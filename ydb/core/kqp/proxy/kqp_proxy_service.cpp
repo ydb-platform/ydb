@@ -53,6 +53,7 @@ static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(10);
 static constexpr TDuration DEFAULT_PUBLISH_BATCHING_INTERVAL = TDuration::MilliSeconds(1000);
 static constexpr TDuration DEFAUL_BOARD_LOOKUP_INTERVAL = TDuration::MilliSeconds(5000);
+static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
 
 std::optional<ui32> GetDefaultStateStorageGroupId(const TString& database) {
@@ -285,6 +286,7 @@ public:
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
+        RandomProvider = AppData()->RandomProvider;
         if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
             TStringStream errorStream;
             ModuleResolverState->ExprCtx.IssueManager.GetIssues().PrintTo(errorStream);
@@ -503,6 +505,12 @@ public:
                 KQP_PROXY_LOG_D("Failed to get system details");
                 break;
 
+            case TKqpEvents::EvCreateSessionRequest: {
+                KQP_PROXY_LOG_D("Remote create session request failed");
+                ReplyProcessError(Ydb::StatusIds::UNAVAILABLE, "Session not found.", ev->Cookie);
+                break;
+            }
+
             case TKqpEvents::EvQueryRequest:
             case TKqpEvents::EvPingSessionRequest: {
                 KQP_PROXY_LOG_D("Session not found, targetId: " << ev->Sender << " requestId: " << ev->Cookie);
@@ -531,10 +539,37 @@ public:
         }
     }
 
+    bool CreateRemoteSession(TEvKqp::TEvCreateSessionRequest::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        if (!event.GetCanCreateRemoteSession() || LocalDatacenterProxies.empty()) {
+            return false;
+        }
+
+        ui64 randomNumber = RandomProvider->GenRand();
+        ui32 nodeId = LocalDatacenterProxies[randomNumber % LocalDatacenterProxies.size()];
+        if (nodeId == SelfId().NodeId()){
+            return false;
+        }
+
+        std::unique_ptr<TEvKqp::TEvCreateSessionRequest> remoteRequest = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
+        remoteRequest->Record.SetDeadlineUs(event.GetDeadlineUs());
+        remoteRequest->Record.SetTraceId(event.GetTraceId());
+        remoteRequest->Record.MutableRequest()->SetDatabase(event.GetRequest().GetDatabase());
+
+        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, event.GetTraceId(), TKqpEvents::EvCreateSessionRequest);
+        Send(MakeKqpProxyID(nodeId), remoteRequest.release(), IEventHandle::FlagTrackDelivery, requestId);
+        TDuration timeout = DEFAULT_CREATE_SESSION_TIMEOUT;
+        StartQueryTimeout(requestId, timeout);
+        return true;
+    }
+
     void Handle(TEvKqp::TEvCreateSessionRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
         auto& request = event.GetRequest();
         TKqpRequestInfo requestInfo(event.GetTraceId());
+        if (CreateRemoteSession(ev)) {
+            return;
+        }
 
         auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
 
@@ -757,14 +792,22 @@ public:
             return;
         }
 
+        Y_VERIFY(SelfDataCenterId);
         PeerProxyNodeResources.resize(boardInfo->InfoEntries.size());
         size_t idx = 0;
+        auto getDataCenterId = [](const auto& entry) {
+            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
+        };
+
+        LocalDatacenterProxies.clear();
         for(auto& [ownerId, entry] : boardInfo->InfoEntries) {
             Y_PROTOBUF_SUPPRESS_NODISCARD PeerProxyNodeResources[idx].ParseFromString(entry.Payload);
+            if (getDataCenterId(PeerProxyNodeResources[idx]) == *SelfDataCenterId) {
+                LocalDatacenterProxies.emplace_back(PeerProxyNodeResources[idx].GetNodeId());
+            }
             ++idx;
         }
 
-        Y_VERIFY(SelfDataCenterId, "Unexpected case: empty info about DC!");
         PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
     }
@@ -1016,6 +1059,7 @@ public:
             hFunc(TEvKqp::TEvInitiateShutdownRequest, Handle);
             hFunc(TEvPrivate::TEvOnRequestTimeout, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
@@ -1299,6 +1343,8 @@ private:
 
     bool ServerWorkerBalancerComplete = false;
     std::optional<TString> SelfDataCenterId;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
+    std::vector<ui64> LocalDatacenterProxies;
     TVector<NKikimrKqp::TKqpProxyNodeResources> PeerProxyNodeResources;
     bool ResourcesPublishScheduled = false;
     TString PublishBoardPath;

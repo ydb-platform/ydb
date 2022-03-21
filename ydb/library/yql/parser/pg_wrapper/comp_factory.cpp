@@ -13,6 +13,8 @@
 
 #define TypeName PG_TypeName
 #define SortBy PG_SortBy
+#define Sort PG_Sort
+#define Unique PG_Unique
 #undef SIZEOF_SIZE_T
 extern "C" {
 #include "postgres.h"
@@ -21,6 +23,7 @@ extern "C" {
 #include "utils/fmgrprotos.h"
 #include "utils/builtins.h"
 #include "utils/memutils.h"
+#include "nodes/execnodes.h"
 #include "lib/stringinfo.h"
 #include "thread_inits.h"
 #undef Abs
@@ -28,6 +31,8 @@ extern "C" {
 #undef Max
 #undef TypeName
 #undef SortBy
+#undef Sort
+#undef Unique
 #undef LOG
 #undef INFO
 #undef NOTICE
@@ -290,10 +295,11 @@ private:
 class TPgResolvedCall : public TMutableComputationNode<TPgResolvedCall> {
     typedef TMutableComputationNode<TPgResolvedCall> TBaseComputation;
 public:
-    TPgResolvedCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
+    TPgResolvedCall(TComputationMutables& mutables, bool useContext, const std::string_view& name, ui32 id,
         TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
         : TBaseComputation(mutables)
         , StateIndex(mutables.CurValueIndex++)
+        , UseContext(useContext)
         , Name(name)
         , Id(id)
         , ArgNodes(std::move(argNodes))
@@ -335,6 +341,10 @@ public:
 
         auto& state = GetState(compCtx);
         auto& callInfo = state.CallInfo.Ref();
+        if (UseContext) {
+            callInfo.context = (Node*)TlsAllocState->CurrentContext;
+        }
+
         callInfo.isnull = false;
         for (ui32 i = 0; i < ArgNodes.size(); ++i) {
             auto value = ArgNodes[i]->GetValue(compCtx);
@@ -355,7 +365,11 @@ public:
         }
 
         inputArgs.Detach();
-        TPAllocScope call;
+        TMaybe<TPAllocScope> call;
+        if (!callInfo.context) {
+            call.ConstructInPlace();
+        }
+
         PG_TRY();
         {
             auto ret = FInfo.fn_addr(&callInfo);
@@ -404,6 +418,7 @@ private:
     }
 
     const ui32 StateIndex;
+    const bool UseContext;
     const std::string_view Name;
     const ui32 Id;
     FmgrInfo FInfo;
@@ -751,18 +766,20 @@ TComputationNodeFactory GetPgFactory() {
             }
 
             if (name == "PgResolvedCall") {
-                const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(0));
-                const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(1));
+                const auto useContextData = AS_VALUE(TDataLiteral, callable.GetInput(0));
+                const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(1));
+                const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(2));
+                auto useContext = useContextData->AsValue().Get<bool>();
                 auto name = nameData->AsValue().AsStringRef();
-                ui32 id = idData->AsValue().Get<ui32>();
+                auto id = idData->AsValue().Get<ui32>();
                 TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
-                for (ui32 i = 2; i < callable.GetInputsCount(); ++i) {
+                for (ui32 i = 3; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
                     argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
 
-                return new TPgResolvedCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
+                return new TPgResolvedCall(ctx.Mutables, useContext, name, id, std::move(argNodes), std::move(argTypes));
             }
 
             if (name == "PgCast") {
@@ -1567,6 +1584,37 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         Y_ENSURE(!callInfo->isnull);
         buf.Skip(stringInfo.cursor);
         return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+    }
+}
+
+void* PgInitializeContext(const std::string_view& contextType) {
+    if (contextType == "Agg") {
+        auto ctx = (AggState*)MKQLAllocWithSize(sizeof(AggState));
+        Zero(*ctx);
+        *(NodeTag*)ctx = T_AggState;
+        ctx->curaggcontext = (ExprContext*)MKQLAllocWithSize(sizeof(ExprContext));
+        Zero(*ctx->curaggcontext);
+        ctx->curaggcontext->ecxt_per_tuple_memory = TMkqlPgAdapter::Instance();
+        return ctx;
+    } else if (contextType == "WinAgg") {
+        auto ctx = (WindowAggState*)MKQLAllocWithSize(sizeof(WindowAggState));
+        Zero(*ctx);
+        *(NodeTag*)ctx = T_WindowAggState;
+        ctx->curaggcontext = TMkqlPgAdapter::Instance();
+        return ctx;
+    } else {
+        ythrow yexception() << "Unsupported context type: " << contextType;
+    }
+}
+
+void PgDestroyContext(const std::string_view& contextType, void* ctx) {
+    if (contextType == "Agg") {
+        MKQLFreeWithSize(((AggState*)ctx)->curaggcontext, sizeof(ExprContext));
+        MKQLFreeWithSize(ctx, sizeof(AggState));
+    } else if (contextType == "WinAgg") {
+        MKQLFreeWithSize(ctx, sizeof(WindowAggState));
+    } else {
+        Y_FAIL("Unsupported context type");
     }
 }
 

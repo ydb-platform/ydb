@@ -96,6 +96,7 @@
 #include "mkql_wide_condense.h"
 #include "mkql_wide_filter.h"
 #include "mkql_wide_map.h"
+#include "mkql_withcontext.h"
 #include "mkql_zip.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
@@ -184,6 +185,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Not", &WrapNot},
         {"Zip", &WrapZip<false>},
         {"ZipAll", &WrapZip<true>},
+        {"WithContext", &WrapWithContext},
         {"Reduce", &WrapReduce},
         {"Length", &WrapLength},
         {"Iterable", &WrapIterable},

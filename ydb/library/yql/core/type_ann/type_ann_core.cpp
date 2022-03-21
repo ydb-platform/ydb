@@ -3195,13 +3195,40 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus CurrentStreamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+    IGraphTransformer::TStatus WithContextWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TVoidExprType>());
+        if (!EnsureAtom(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().Content() != "Agg" && input->Head().Content() != "WinAgg") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
+                "Unexpected context type: " << input->Head().Content()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("FromFlow")
+                    .Callable("WithContext")
+                        .Add(0, input->HeadPtr())
+                        .Callable(1, "ToFlow")
+                            .Add(0, input->TailPtr())
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        input->SetTypeAnn(input->Tail().GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -8800,7 +8827,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     };
 
     IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        bool isResolved = input->Content() == "PgResolvedCall";
+        bool isResolved = input->Content().StartsWith("PgResolvedCall");
         if (!EnsureMinArgsCount(*input, isResolved ? 2 : 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -9731,7 +9758,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             finishLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                 .Param("state")
-                .Callable("PgResolvedCall")
+                .Callable("PgResolvedCallCtx")
                     .Atom(0, NPg::LookupProc(aggDesc.FinalFuncId).Name)
                     .Atom(1, ToString(aggDesc.FinalFuncId))
                     .Arg(2, "state")
@@ -9771,7 +9798,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             initLambda = ctx.Expr.Builder(input->Pos())
                 .Lambda()
                     .Param("row")
-                    .Callable("PgResolvedCall")
+                    .Callable("PgResolvedCallCtx")
                         .Atom(0, transFuncDesc.Name)
                         .Atom(1, ToString(aggDesc.TransFuncId))
                         .Add(2, initValue)
@@ -9787,7 +9814,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     .Param("row")
                     .Param("state")
                     .Callable("Coalesce")
-                        .Callable(0, "PgResolvedCall")
+                        .Callable(0, "PgResolvedCallCtx")
                             .Atom(0, transFuncDesc.Name)
                             .Atom(1, ToString(aggDesc.TransFuncId))
                             .Callable(2, "Coalesce")
@@ -9821,7 +9848,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Arg(0, "state")
                         .Seal()
                         .Callable(1, "Coalesce")
-                            .Callable(0, "PgResolvedCall")
+                            .Callable(0, "PgResolvedCallCtx")
                                 .Atom(0, transFuncDesc.Name)
                                 .Atom(1, ToString(aggDesc.TransFuncId))
                                 .Arg(2, "state")
@@ -13677,7 +13704,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["FromFlow"] = &FromFlowWrapper;
         Functions["BuildTablePath"] = &BuildTablePathWrapper;
         Functions["WithOptionalArgs"] = &WithOptionalArgsWrapper;
-        Functions["CurrentStream"] = &CurrentStreamWrapper;
+        Functions["WithContext"] = &WithContextWrapper;
 
         Functions["DecimalDiv"] = &DecimalBinaryWrapper;
         Functions["DecimalMod"] = &DecimalBinaryWrapper;
@@ -13745,6 +13772,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgAggWindowCall"] = &PgAggWrapper;
         ExtFunctions["PgCall"] = &PgCallWrapper;
         ExtFunctions["PgResolvedCall"] = &PgCallWrapper;
+        ExtFunctions["PgResolvedCallCtx"] = &PgCallWrapper;
         ExtFunctions["PgOp"] = &PgOpWrapper;
         ExtFunctions["PgResolvedOp"] = &PgOpWrapper;
         ExtFunctions["PgSelect"] = &PgSelectWrapper;

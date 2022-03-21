@@ -2242,7 +2242,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.PgConst(type, node.Head().Content());
     });
 
-    AddCallable("PgResolvedCall", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"PgResolvedCall","PgResolvedCallCtx" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto name = node.Head().Content();
         auto id = FromString<ui32>(node.Child(1)->Content());
         std::vector<TRuntimeNode> args;
@@ -2252,7 +2252,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.PgResolvedCall(name, id, args, returnType);
+        return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType);
     });
 
     AddCallable("PgResolvedOp", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2266,7 +2266,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.PgResolvedCall(procName, procId, args, returnType);
+        return ctx.ProgramBuilder.PgResolvedCall(false, procName, procId, args, returnType);
     });
 
     AddCallable("PgCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2285,6 +2285,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto input = MkqlBuildExpr(*node.Child(0), ctx);
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.ToPg(input, returnType);
+    });
+
+    AddCallable("WithContext", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto input = MkqlBuildExpr(*node.Child(1), ctx);
+        return ctx.ProgramBuilder.WithContext(node.Child(0)->Content(), input);
     });
 
     AddCallable("QueueCreate", [](const TExprNode& node, TMkqlBuildContext& ctx) {

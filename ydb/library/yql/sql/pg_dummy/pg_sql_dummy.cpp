@@ -87,6 +87,16 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
    throw yexception() << "PG types are not supported";
 }
 
+void* PgInitializeContext(const std::string_view& contextType) {
+   Y_UNUSED(contextType);
+   return nullptr;
+}
+
+void PgDestroyContext(const std::string_view& contextType, void* ctx) {
+   Y_UNUSED(contextType);
+   Y_UNUSED(ctx);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr
 

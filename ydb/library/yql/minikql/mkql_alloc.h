@@ -57,6 +57,7 @@ struct TAllocState : public TAlignedPagePool
     TListEntry OffloadedBlocksRoot;
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
+    void* CurrentContext = nullptr;
 
     ::NKikimr::NUdf::TBoxedValueLink Root;
 
@@ -81,7 +82,7 @@ public:
     }
 
     ~TPAllocScope() {
-        TAllocState::CleanupPAllocList(&PAllocList);
+        Cleanup();
         Detach();
     }
 
@@ -98,6 +99,10 @@ public:
            TlsAllocState->CurrentPAllocList = Prev;
            Prev = nullptr;
         }
+    }
+
+    void Cleanup() {
+        TAllocState::CleanupPAllocList(&PAllocList);
     }
 
 private:

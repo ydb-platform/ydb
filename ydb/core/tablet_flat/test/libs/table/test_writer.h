@@ -151,13 +151,13 @@ namespace NTest {
 
         }
 
-        TPartEggs Flush(TIntrusiveConstPtr<TRowScheme> scheme, const TWritten &written)
+        TPartEggs Flush(TIntrusiveConstPtr<TRowScheme> scheme, const TWriteStats &written)
         {
             Y_VERIFY(!Store, "Writer has not been flushed");
             Y_VERIFY(written.Parts == Parts.size());
 
             return
-                { new TWritten(written), std::move(scheme), std::move(Parts) };
+                { new TWriteStats(written), std::move(scheme), std::move(Parts) };
         }
 
     private:
@@ -260,7 +260,7 @@ namespace NTest {
             if (const auto *written = eggs.Written.Get()) {
                 mass.Model->Check({ &written->Rows, 1 });
             } else {
-                Y_FAIL("Got part eggs without TWritten result");
+                Y_FAIL("Got part eggs without TWriteStats result");
             }
 
             return eggs;

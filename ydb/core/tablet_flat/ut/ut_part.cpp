@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             auto eggs = TPartCook(lay, { true, 4096 }).Finish();
 
             if (eggs.Written->Rows > 0) {
-                ythrow yexception() << "Unexpected trivial TWritten result";
+                ythrow yexception() << "Unexpected trivial TWriteStats result";
             } else if (eggs.Parts) {
                 ythrow yexception() << "Writer produced parts with trival data";
             }

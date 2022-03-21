@@ -157,11 +157,11 @@ namespace NTable {
             return row.GetRowState();
         }
 
-        TWritten Finish() noexcept
+        TWriteStats Finish() noexcept
         {
             Flush(true);
 
-            return std::move(Result);
+            return std::move(WriteStats);
         }
 
     private:
@@ -478,12 +478,12 @@ namespace NTable {
             if (Current.Rows > 0) {
                 Y_VERIFY(Phase == 2, "Missed the last Save call");
 
-                Result.Rows += Current.Rows;
-                Result.Drops += Current.Drops;
-                Result.Bytes += Current.Bytes;
-                Result.Coded += Current.Coded;
-                Result.HiddenRows += Current.HiddenRows;
-                Result.HiddenDrops += Current.HiddenDrops;
+                WriteStats.Rows += Current.Rows;
+                WriteStats.Drops += Current.Drops;
+                WriteStats.Bytes += Current.Bytes;
+                WriteStats.Coded += Current.Coded;
+                WriteStats.HiddenRows += Current.HiddenRows;
+                WriteStats.HiddenDrops += Current.HiddenDrops;
 
                 if (Current.HistoryWritten > 0) {
                     Current.HistoricIndexes.clear();
@@ -524,7 +524,7 @@ namespace NTable {
                 Y_VERIFY(Slices && *Slices, "Flushing bundle without a run");
 
                 Pager.Finish(TOverlay{ nullptr, std::move(Slices) }.Encode());
-                ++Result.Parts;
+                ++WriteStats.Parts;
             }
 
             if (!last) {
@@ -572,7 +572,7 @@ namespace NTable {
                 if (Current.Small != Max<TPageId>())
                     head = Max(head, ui32(15) /* ELargeObj:Outer packed blobs */);
 
-                if (!last || Result.Parts > 0)
+                if (!last || WriteStats.Parts > 0)
                     head = Max(head, ui32(20) /* Multiple part outputs */);
 
                 if (!Current.GroupIndexes.empty())
@@ -891,7 +891,7 @@ namespace NTable {
         NPage::TFrameWriter FrameS; /* Packed blobs invertedi index */
         NPage::TExtBlobsWriter Globs;
         THolder<NBloom::IWriter> ByKey;
-        TWritten Result;
+        TWriteStats WriteStats;
         TStackVec<TCell, 16> Key;
         ui32 Phase = 0;
 

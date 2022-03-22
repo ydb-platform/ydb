@@ -2103,6 +2103,15 @@
             "Name": "TCoCurrentTzTimestamp",
             "Base": "TCoTzTimeBase",
             "Match": {"Type": "Callable", "Name": "CurrentTzTimestamp"}
+        },
+        {
+            "Name": "TCoWithContext",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "WithContext"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"}
+            ]
         }
     ]
 }

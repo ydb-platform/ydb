@@ -2,7 +2,6 @@
 #include "yql_opt_utils.h"
 #include "yql_opt_window.h"
 #include "yql_expr_type_annotation.h"
-#include "yql_expr_optimize.h"
 
 namespace NYql {
 
@@ -36,17 +35,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
         }
     }
 
-    bool needCtx = false;
-    VisitExpr(*aggregatedColumns, [&needCtx](const TExprNode& node) {
-        if (node.IsCallable("PgResolvedCallCtx")) {
-            needCtx = true;
-            return false;
-        }
-
-        return true;
-    });
-
-    auto contextLambda = needCtx ?
+    auto contextLambda = HasContextFuncs(*aggregatedColumns) ?
         ctx.Builder(node->Pos())
             .Lambda()
                 .Param("stream")

@@ -2,6 +2,7 @@
 #include "yql_opt_proposed_by_data.h"
 #include "yql_opt_rewrite_io.h"
 #include "yql_opt_utils.h"
+#include "yql_expr_optimize.h"
 #include "yql_pg_utils.h"
 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
@@ -4996,5 +4997,18 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, TPositionHandl
     }
 }
 
+bool HasContextFuncs(const TExprNode& input) {
+    bool needCtx = false;
+    VisitExpr(input, [&needCtx](const TExprNode& node) {
+        if (node.IsCallable("PgResolvedCallCtx")) {
+            needCtx = true;
+            return false;
+        }
+
+        return true;
+    });
+
+    return needCtx;
+}
 
 } // NYql

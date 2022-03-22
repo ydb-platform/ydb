@@ -6,7 +6,6 @@ namespace NHive {
 
 class TTxTabletOwnersReply : public TTransactionBase<THive> {
     THolder<TEvHive::TEvTabletOwnersReply::THandle> Request;
-    TVector<TTabletId> TabletIds;
 
 public:
     TTxTabletOwnersReply(THolder<TEvHive::TEvTabletOwnersReply::THandle> event, THive *hive)
@@ -29,6 +28,8 @@ public:
                 db.Table<Schema::TabletOwners>().Key(seq.Begin, seq.End).Update<Schema::TabletOwners::OwnerId>(ownerId);
             }
         }
+        db.Table<Schema::State>().Key(TSchemeIds::State::TabletOwnersSynced).Update<Schema::State::Value>(true);
+        Self->TabletOwnersSynced = true;
         return true;
     }
 

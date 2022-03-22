@@ -164,6 +164,9 @@ public:
                     case TSchemeIds::State::ResourceOvercommitment:
                         Self->DatabaseConfig.SetResourceOvercommitment((double)stateRowset.GetValue<Schema::State::Value>() / 100);
                         break;
+                    case TSchemeIds::State::TabletOwnersSynced:
+                        Self->TabletOwnersSynced = (bool)stateRowset.GetValue<Schema::State::Value>();
+                        break;
                     }
                 }
                 stateRowset.Next();

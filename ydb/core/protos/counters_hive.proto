@@ -106,4 +106,5 @@ enum ETxTypes {
     TXTYPE_RESTART_TABLET = 56                            [(TxTypeOpts) = {Name: "TxRestartTablet"}];
     TXTYPE_MON_MOVE_TABLET = 57                           [(TxTypeOpts) = {Name: "TxMonMoveTablet"}];
     TXTYPE_TABLET_OWNERS_REPLY = 58                       [(TxTypeOpts) = {Name: "TxTabletOwnersReply"}];
+    TXTYPE_REQUEST_TABLET_OWNERS = 59                     [(TxTypeOpts) = {Name: "TxRequestTabletOwners"}];
 }

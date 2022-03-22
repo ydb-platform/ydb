@@ -62,6 +62,7 @@ target_sources(core-mind-hive PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__register_node.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__release_tablets.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__release_tablets_reply.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__request_tablet_owners.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__request_tablet_seq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__response_tablet_seq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/tx__restart_tablet.cpp

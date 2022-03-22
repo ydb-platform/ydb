@@ -452,12 +452,14 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     } else {
         BLOG_D("SubDomain Hive is ready");
 
-        // this code should be removed later
-        THolder<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
-        request->Record.SetOwnerID(TabletID());
-        BLOG_D("Requesting TabletOwners from the Root");
-        SendToRootHivePipe(request.Release());
-        // this code should be removed later
+        if (!TabletOwnersSynced) {
+            // this code should be removed later
+            THolder<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
+            request->Record.SetOwnerID(TabletID());
+            BLOG_D("Requesting TabletOwners from the Root");
+            SendToRootHivePipe(request.Release());
+            // this code should be removed later
+        }
     }
     if (!tabletsToReleaseFromParent.empty()) {
         THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
@@ -2551,18 +2553,7 @@ void THive::Handle(TEvHive::TEvReleaseTabletsReply::TPtr& ev) {
 
 void THive::Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvRequestTabletOwners(" << ev->Get()->Record.ShortDebugString() << ")");
-    auto ownerId = ev->Get()->Record.GetOwnerID();
-    std::vector<TSequencer::TSequence> sequences;
-    Keeper.GetOwnedSequences(ownerId, sequences);
-    BLOG_D("TEvHive::TEvRequestTabletOwners() - replying with " << sequences.size() << " sequences");
-    THolder<TEvHive::TEvTabletOwnersReply> reply(new TEvHive::TEvTabletOwnersReply());
-    for (const auto& seq : sequences) {
-        auto* tabletOwners = reply->Record.AddTabletOwners();
-        tabletOwners->SetOwnerID(ownerId);
-        tabletOwners->SetBegin(seq.Begin);
-        tabletOwners->SetEnd(seq.End);
-    }
-    Send(ev->Sender, reply.Release());
+    Execute(CreateRequestTabletOwners(std::move(ev)));
 }
 
 void THive::Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev) {

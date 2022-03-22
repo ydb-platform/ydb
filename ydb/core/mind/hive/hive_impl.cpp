@@ -451,6 +451,13 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         BLOG_D("Root Hive is ready");
     } else {
         BLOG_D("SubDomain Hive is ready");
+
+        // this code should be removed later
+        THolder<TEvHive::TEvRequestTabletOwners> request(new TEvHive::TEvRequestTabletOwners());
+        request->Record.SetOwnerID(TabletID());
+        BLOG_D("Requesting TabletOwners from the Root");
+        SendToRootHivePipe(request.Release());
+        // this code should be removed later
     }
     if (!tabletsToReleaseFromParent.empty()) {
         THolder<TEvHive::TEvReleaseTablets> request(new TEvHive::TEvReleaseTablets());
@@ -2324,6 +2331,8 @@ STFUNC(THive::StateWork) {
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NSysView::TEvSysView::TEvGetTabletIdsRequest, Handle);
         hFunc(NSysView::TEvSysView::TEvGetTabletsRequest, Handle);
+        hFunc(TEvHive::TEvRequestTabletOwners, Handle);
+        hFunc(TEvHive::TEvTabletOwnersReply, Handle);
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
             BLOG_W("THive::StateWork unhandled event type: " << ev->GetTypeRewrite()
@@ -2538,6 +2547,27 @@ void THive::Handle(TEvHive::TEvReleaseTablets::TPtr& ev) {
 void THive::Handle(TEvHive::TEvReleaseTabletsReply::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvReleaseTabletsReply(" << ev->Get()->Record.ShortDebugString() << ")");
     Execute(CreateReleaseTabletsReply(ev));
+}
+
+void THive::Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvRequestTabletOwners(" << ev->Get()->Record.ShortDebugString() << ")");
+    auto ownerId = ev->Get()->Record.GetOwnerID();
+    std::vector<TSequencer::TSequence> sequences;
+    Keeper.GetOwnedSequences(ownerId, sequences);
+    BLOG_D("TEvHive::TEvRequestTabletOwners() - replying with " << sequences.size() << " sequences");
+    THolder<TEvHive::TEvTabletOwnersReply> reply(new TEvHive::TEvTabletOwnersReply());
+    for (const auto& seq : sequences) {
+        auto* tabletOwners = reply->Record.AddTabletOwners();
+        tabletOwners->SetOwnerID(ownerId);
+        tabletOwners->SetBegin(seq.Begin);
+        tabletOwners->SetEnd(seq.End);
+    }
+    Send(ev->Sender, reply.Release());
+}
+
+void THive::Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvTabletOwnersReply()");
+    Execute(CreateTabletOwnersReply(std::move(ev)));
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

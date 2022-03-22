@@ -234,6 +234,7 @@ protected:
     friend class TTxStatus;
     friend class TTxSwitchDrainOn;
     friend class TTxSwitchDrainOff;
+    friend class TTxTabletOwnersReply;
 
     friend class TDeleteTabletActor;
 
@@ -288,6 +289,7 @@ protected:
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
     ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator);
     ITransaction* CreateSwitchDrainOff(TNodeId nodeId, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
+    ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -500,6 +502,8 @@ protected:
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev);
     void Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev);
+    void Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev);
+    void Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

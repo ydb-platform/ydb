@@ -140,6 +140,13 @@ public:
                 }
             }
 
+            ui64 uniqPart = UniqPartFromTabletID(tabletId);
+            TOwnershipKeeper::TOwnerType newOwnerId = Self->TabletID();
+            TSequencer::TSequence pointSeq(uniqPart);
+
+            db.Table<Schema::TabletOwners>().Key(pointSeq.Begin, pointSeq.End).Update<Schema::TabletOwners::OwnerId>(newOwnerId);
+            Self->Keeper.AddOwnedSequence(newOwnerId, pointSeq);
+
             if (Self->OwnerToTablet.emplace(owner, tabletId).second) {
                 Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
                 Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();

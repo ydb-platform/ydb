@@ -145,13 +145,14 @@ void TSequenceGenerator::Clear() {
     FreeSequencesIndex = 0;
 }
 
-void TOwnershipKeeper::AddOwnedSequence(TOwnerType owner, TSequence sequence) {
+bool TOwnershipKeeper::AddOwnedSequence(TOwnerType owner, TSequence sequence) {
     Y_VERIFY(owner != NO_OWNER);
     Y_VERIFY(sequence.Begin != NO_ELEMENT);
-    {
-        auto [it, inserted] = OwnedSequences.emplace(sequence, owner);
-        Y_VERIFY(inserted || it->second == owner);
-    }
+
+    auto [it, inserted] = OwnedSequences.emplace(sequence, owner);
+    Y_VERIFY(inserted || it->second == owner);
+
+    return inserted;
 }
 
 TOwnershipKeeper::TOwnerType TOwnershipKeeper::GetOwner(TSequencer::TElementType element) {
@@ -170,6 +171,15 @@ TOwnershipKeeper::TOwnerType TOwnershipKeeper::GetOwner(TSequencer::TElementType
     }
 
     return NO_OWNER;
+}
+
+void TOwnershipKeeper::GetOwnedSequences(TOwnerType owner, std::vector<TSequence>& sequences) const {
+    sequences.clear();
+    for (const auto& [seq, own] : OwnedSequences) {
+        if (own == owner) {
+            sequences.emplace_back(seq);
+        }
+    }
 }
 
 void TOwnershipKeeper::Clear() {

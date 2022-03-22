@@ -2,6 +2,7 @@
 #include "yql_opt_utils.h"
 #include "yql_opt_window.h"
 #include "yql_expr_type_annotation.h"
+#include "yql_expr_optimize.h"
 
 namespace NYql {
 
@@ -34,6 +35,33 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
             break;
         }
     }
+
+    bool needCtx = false;
+    VisitExpr(*aggregatedColumns, [&needCtx](const TExprNode& node) {
+        if (node.IsCallable("PgResolvedCallCtx")) {
+            needCtx = true;
+            return false;
+        }
+
+        return true;
+    });
+
+    auto contextLambda = needCtx ?
+        ctx.Builder(node->Pos())
+            .Lambda()
+                .Param("stream")
+                .Callable("WithContext")
+                    .Atom(0, "Agg")
+                    .Arg(1, "stream")
+                .Seal()
+            .Seal()
+            .Build() :
+        ctx.Builder(node->Pos())
+            .Lambda()
+                .Param("stream")
+                .Arg("stream")
+            .Seal()
+            .Build();
 
     const TStructExprType* originalRowType = GetSeqItemType(node->Head().GetTypeAnn())->Cast<TStructExprType>();
     TVector<const TItemExprType*> rowItems = originalRowType->GetItems();
@@ -1512,16 +1540,20 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Add(3, sortKey)
             .Lambda(4)
                 .Param("stream")
-                .Callable("Map")
-                    .Callable(0, "Condense1")
-                        .Apply(0, preprocessLambda)
-                            .With(0, "stream")
+                .Apply(contextLambda)
+                    .With(0)
+                        .Callable("Map")
+                            .Callable(0, "Condense1")
+                                .Apply(0, preprocessLambda)
+                                    .With(0, "stream")
+                                .Seal()
+                                .Add(1, std::move(groupInit))
+                                .Add(2, condenseSwitch)
+                                .Add(3, std::move(groupMerge))
+                            .Seal()
+                            .Add(1, std::move(groupSave))
                         .Seal()
-                        .Add(1, std::move(groupInit))
-                        .Add(2, condenseSwitch)
-                        .Add(3, std::move(groupMerge))
-                    .Seal()
-                    .Add(1, std::move(groupSave))
+                    .Done()
                 .Seal()
             .Seal()
         .Seal().Build();

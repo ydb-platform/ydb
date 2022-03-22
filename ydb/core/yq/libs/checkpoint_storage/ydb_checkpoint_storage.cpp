@@ -1009,8 +1009,8 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
                   SELECT
                     checkpoints_graphs_description.id AS id,
                     checkpoints_graphs_description.ref_count - refs.refs AS ref_count
-                  FROM {checkpoints_graphs_description_table_name}
-                    INNER JOIN (SELECT * FROM $refs) AS refs
+                  FROM $refs AS refs
+                    INNER JOIN {checkpoints_graphs_description_table_name}
                       ON refs.graph_description_id = checkpoints_graphs_description.id;
 
                 UPDATE {checkpoints_graphs_description_table_name}

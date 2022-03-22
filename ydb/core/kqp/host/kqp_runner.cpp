@@ -653,8 +653,11 @@ public:
     TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) override {
         output = input;
 
-        if (!NeedSnapshot())
+        if (!NeedSnapshot(TxState->Tx(), *TransformCtx->Config, TransformCtx->Settings.GetRollbackTx(),
+                TransformCtx->Settings.GetCommitTx(), NewEngine ? TransformCtx->PhysicalQuery.get() : nullptr,
+                NewEngine ? nullptr : TransformCtx->PreparedKql)) {
             return TStatus::Ok;
+        }
 
         auto timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();
         if (!timeout) {
@@ -713,70 +716,6 @@ public:
     }
 
 private:
-    bool NeedSnapshot() {
-        if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
-            return false;
-
-        if (!TransformCtx->Config->FeatureFlags.GetEnableMvccSnapshotReads())
-            return false;
-
-        if (TxState->Tx().GetSnapshot().IsValid())
-            return false;
-
-        auto settings = TransformCtx->Settings;
-        if (settings.GetRollbackTx())
-            return false;
-        if (!settings.GetCommitTx())
-            return true;
-
-        size_t readPhases = 0;
-        bool hasEffects = false;
-
-        if (NewEngine) {
-            YQL_ENSURE(TransformCtx->PhysicalQuery);
-            auto &query = *TransformCtx->PhysicalQuery;
-
-            for (const auto &tx : query.GetTransactions()) {
-                switch (tx.GetType()) {
-                    case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                        // ignore pure computations
-                        break;
-
-                    default:
-                        ++readPhases;
-                        break;
-                }
-
-                if (tx.GetHasEffects()) {
-                    hasEffects = true;
-                }
-            }
-        } else {
-            YQL_ENSURE(TransformCtx->PreparedKql);
-
-            auto &kql = *TransformCtx->PreparedKql;
-
-            readPhases += kql.GetMkqls().size();
-            hasEffects = !kql.GetEffects().empty();
-        }
-
-        // We don't want snapshot when there are effects at the moment,
-        // because it hurts performance when there are multiple single-shard
-        // reads and a single distributed commit. Taking snapshot costs
-        // similar to an additional distributed transaction, and it's very
-        // hard to predict when that happens, causing performance
-        // degradation.
-        if (hasEffects) {
-            return false;
-        }
-
-        // We need snapshot when there are multiple table read phases, most
-        // likely it involves multiple tables and we would have to use a
-        // distributed commit otherwise. Taking snapshot helps as avoid TLI
-        // for read-only transactions, and costs less than a final distributed
-        // commit.
-        return readPhases > 1;
-    }
 
 private:
     TIntrusivePtr<IKqpGateway> Gateway;

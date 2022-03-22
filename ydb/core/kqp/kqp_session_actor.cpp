@@ -10,12 +10,13 @@
 #include <ydb/core/kqp/prepare/kqp_prepare.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
-#include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
@@ -119,6 +120,14 @@ public:
         auto cfg = MakeIntrusive<TKikimrConfiguration>();
         cfg->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), workerSettings.Cluster,
                 kqpSettings->Settings, false);
+
+        if (!workerSettings.Database.empty()) {
+            cfg->_KqpTablePathPrefix = workerSettings.Database;
+        }
+
+        ApplyServiceConfig(*cfg, workerSettings.Service);
+
+        cfg->FreezeDefaults();
         return cfg;
     }
 
@@ -145,6 +154,8 @@ public:
     void Bootstrap() {
         Counters->ReportSessionActorCreated(Settings.DbCounters);
         CreationTime = TInstant::Now();
+
+        Config->FeatureFlags = AppData()->FeatureFlags;
 
         Become(&TKqpSessionActor::ReadyState);
         StartIdleTimer();
@@ -186,16 +197,16 @@ public:
         Cleanup();
     }
 
-     TIntrusivePtr<TKqpTransactionContext> FindTransaction(const TString& id) {
-         auto it = ExplicitTransactions.Find(id);
-         if (it != ExplicitTransactions.End()) {
-             auto& value = it.Value();
-             value->Touch();
-             return value;
-         }
+    TIntrusivePtr<TKqpTransactionContext> FindTransaction(const TString& id) {
+        auto it = ExplicitTransactions.Find(id);
+        if (it != ExplicitTransactions.End()) {
+            auto& value = it.Value();
+            value->Touch();
+            return value;
+        }
 
-         return {};
-     }
+        return {};
+    }
 
     void RemoveTransaction(const TString& txId) {
         auto it = ExplicitTransactions.FindWithoutPromote(txId);
@@ -439,34 +450,67 @@ public:
         }
 
         Become(&TKqpSessionActor::ExecuteState);
+
+        if (NeedSnapshot(*QueryState->TxCtx, *Config, /*rollback*/ false, QueryState->Commit,
+                &QueryState->PreparedQuery->GetPhysicalQuery(), /*preparedKql*/ nullptr)) {
+            AcquireMvccSnapshot();
+            return;
+        }
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();
     }
 
-     void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
-         YQL_ENSURE(QueryState->TxCtx);
-         auto& txCtx = QueryState->TxCtx;
-         switch (settings.tx_mode_case()) {
-             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
-                 txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-                 txCtx->Readonly = false;
-                 break;
+    void AcquireMvccSnapshot() {
+        LOG_D("AcquireMvccSnapshot");
+        auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
-             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
-                 txCtx->EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
-                     ? NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED
-                     : NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED;
-                 txCtx->Readonly = true;
-                 break;
+        auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
+        auto snapMgrActorId = TlsActivationContext->ExecutorThread.RegisterActor(snapMgr);
 
-             case Ydb::Table::TransactionSettings::kStaleReadOnly:
-                 txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
-                 txCtx->Readonly = true;
-                 break;
-             case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
-                 YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
-                 break;
-         };
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>();
+        Send(snapMgrActorId, ev.release());
+    }
+
+    void HandleExecute(TEvKqpSnapshot::TEvCreateSnapshotResponse::TPtr& ev) {
+        auto *response = ev->Get();
+
+        if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
+            (void)response->Issues;
+            return;
+        }
+
+        QueryState->TxCtx->SnapshotHandle = IKqpGateway::TKqpSnapshotHandle{
+            .Snapshot = response->Snapshot,
+        };
+
+        // Can reply inside (in case of deferred-only transactions) and become ReadyState
+        ExecuteOrDefer();
+    }
+
+    void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
+        YQL_ENSURE(QueryState->TxCtx);
+        auto& txCtx = QueryState->TxCtx;
+        switch (settings.tx_mode_case()) {
+            case Ydb::Table::TransactionSettings::kSerializableReadWrite:
+                txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                txCtx->Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kOnlineReadOnly:
+                txCtx->EffectiveIsolationLevel = settings.online_read_only().allow_inconsistent_reads()
+                    ? NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED
+                    : NKikimrKqp::ISOLATION_LEVEL_READ_COMMITTED;
+                txCtx->Readonly = true;
+                break;
+
+            case Ydb::Table::TransactionSettings::kStaleReadOnly:
+                txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
+                txCtx->Readonly = true;
+                break;
+            case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
+                YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
+                break;
+        };
     }
 
     void RemoveOldTransactions() {
@@ -1445,6 +1489,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
+                hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, HandleExecute);
 
                 hFunc(TEvKqp::TEvPingSessionRequest, Handle);
                 hFunc(TEvKqp::TEvCloseSessionRequest, Handle);

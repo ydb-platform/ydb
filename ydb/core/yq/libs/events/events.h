@@ -218,6 +218,15 @@ struct TEvents {
 
         NYql::TIssues TransientIssues;
     };
+
+    struct TEvSchemaCreated : public NActors::TEventLocal<TEvSchemaCreated, TEventIds::EvSchemaCreated> {
+        explicit TEvSchemaCreated(NYdb::TStatus result)
+            : Result(std::move(result))
+        {
+        }
+
+        NYdb::TStatus Result;
+    };
 };
 
 } // namespace NYq

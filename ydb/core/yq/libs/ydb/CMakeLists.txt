@@ -8,16 +8,23 @@
 
 
 add_library(yq-libs-ydb)
+target_compile_options(yq-libs-ydb PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(yq-libs-ydb PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-actors-core
+  library-cpp-retry
   yq-libs-config
+  yq-libs-events
   ydb-library-security
   cpp-client-ydb_scheme
   cpp-client-ydb_table
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yq-libs-ydb PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/create_schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.cpp
 )

@@ -43,6 +43,7 @@ struct TEventIds {
         EvForwardPingResponse,
         EvGraphParams,
         EvRaiseTransientIssues,
+        EvSchemaCreated,
 
         // Special events
         EvEnd

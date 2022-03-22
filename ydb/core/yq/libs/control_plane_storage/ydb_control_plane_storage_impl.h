@@ -512,16 +512,18 @@ public:
     /*
     * Creating tables
     */
-    TAsyncStatus CreateDirectory(TActorSystem* as);
-    TAsyncStatus CreateQueriesTable(TActorSystem* as);
-    TAsyncStatus CreatePendingTable(TActorSystem* as);
-    TAsyncStatus CreatePendingSmallTable(TActorSystem* as);
-    TAsyncStatus CreateConnectionsTable(TActorSystem* as);
-    TAsyncStatus CreateJobsTable(TActorSystem* as);
-    TAsyncStatus CreateNodesTable(TActorSystem* as);
-    TAsyncStatus CreateBindingsTable(TActorSystem* as);
-    TAsyncStatus CreateIdempotencyKeysTable(TActorSystem* as);
-    TAsyncStatus CreateResultSetsTable(TActorSystem* as);
+    void CreateDirectory();
+    void CreateQueriesTable();
+    void CreatePendingTable();
+    void CreatePendingSmallTable();
+    void CreateConnectionsTable();
+    void CreateJobsTable();
+    void CreateNodesTable();
+    void CreateBindingsTable();
+    void CreateIdempotencyKeysTable();
+    void CreateResultSetsTable();
+
+    void RunCreateTableActor(const TString& path, NYdb::NTable::TTableDescription desc);
 
 private:
     /*

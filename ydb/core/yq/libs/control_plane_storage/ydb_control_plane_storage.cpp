@@ -2,6 +2,8 @@
 #include "validators.h"
 #include "ydb_control_plane_storage_impl.h"
 
+#include <ydb/core/yq/libs/ydb/create_schema.h>
+
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 namespace NYq {
@@ -31,6 +33,14 @@ inline YandexQuery::BindingSetting::BindingCase GetBindingType(const TString& ty
     return static_cast<YandexQuery::BindingSetting::BindingCase>(type);
 }
 
+ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
+    return status.GetStatus() == NYdb::EStatus::OVERLOADED ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
+}
+
+TYdbSdkRetryPolicy::TPtr MakeCreateSchemaRetryPolicy() {
+    return TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
+}
+
 } // namespace
 
 void TYdbControlPlaneStorageActor::Bootstrap() {
@@ -39,16 +49,15 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
 
     DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10);
     YdbConnection = NewYdbConnection(Config.Proto.GetStorage(), CredProviderFactory);
-    auto as = NActors::TActivationContext::ActorSystem();
-    CreateDirectory(as);
-    CreateQueriesTable(as);
-    CreatePendingSmallTable(as);
-    CreateConnectionsTable(as);
-    CreateBindingsTable(as);
-    CreateIdempotencyKeysTable(as);
-    CreateResultSetsTable(as);
-    CreateJobsTable(as);
-    CreateNodesTable(as);
+    CreateDirectory();
+    CreateQueriesTable();
+    CreatePendingSmallTable();
+    CreateConnectionsTable();
+    CreateBindingsTable();
+    CreateIdempotencyKeysTable();
+    CreateResultSetsTable();
+    CreateJobsTable();
+    CreateNodesTable();
     Become(&TThis::StateFunc);
 }
 
@@ -74,7 +83,11 @@ TYdbControlPlaneStorageActor::TConfig::TConfig(const NConfig::TControlPlaneStora
 /*
 * Creating tables
 */
-TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::RunCreateTableActor(const TString& path, NYdb::NTable::TTableDescription desc) {
+    Register(MakeCreateTableActor({}, NKikimrServices::YQ_CONTROL_PLANE_STORAGE, YdbConnection, path, std::move(desc), MakeCreateSchemaRetryPolicy()));
+}
+
+void TYdbControlPlaneStorageActor::CreateQueriesTable()
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, QUERIES_TABLE_NAME);
 
@@ -102,21 +115,10 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create quries table error: " << status.GetIssues().ToString());
-                return CreateQueriesTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreatePendingSmallTable()
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, PENDING_SMALL_TABLE_NAME);
 
@@ -134,21 +136,10 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem*
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create pending table error: " << status.GetIssues().ToString());
-                return CreatePendingSmallTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateConnectionsTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreateConnectionsTable()
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, CONNECTIONS_TABLE_NAME);
 
@@ -165,34 +156,15 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateConnectionsTable(TActorSystem* 
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, CONNECTION_ID_COLUMN_NAME})
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create connections table error: " << status.GetIssues().ToString());
-                return CreateConnectionsTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateDirectory(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreateDirectory()
 {
-    auto schemeClient = NYdb::NScheme::TSchemeClient(YdbConnection->Driver);
-    return schemeClient.MakeDirectory(YdbConnection->TablePathPrefix).Apply([=](const auto& future) {
-        auto status = future.GetValue();
-        if (!IsTableCreated(status)) {
-            CPS_LOG_AS_E(*as, "create directory error: " << status.GetIssues().ToString());
-            return CreateDirectory(as);
-        }
-        return future;
-    });
+    Register(MakeCreateDirectoryActor({}, NKikimrServices::YQ_CONTROL_PLANE_STORAGE, YdbConnection, YdbConnection->TablePathPrefix, MakeCreateSchemaRetryPolicy()));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreateJobsTable()
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, JOBS_TABLE_NAME);
 
@@ -208,21 +180,10 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create jobs table error: " << status.GetIssues().ToString());
-                return CreateJobsTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreateNodesTable()
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, NODES_TABLE_NAME);
 
@@ -241,21 +202,10 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, NODE_ID_COLUMN_NAME})
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create nodes table error: " << status.GetIssues().ToString());
-                return CreateNodesTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreateBindingsTable()
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, BINDINGS_TABLE_NAME);
 
@@ -272,21 +222,10 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, BINDING_ID_COLUMN_NAME})
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create bindings table error: " << status.GetIssues().ToString());
-                return CreateBindingsTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable()
 {
 
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, IDEMPOTENCY_KEYS_TABLE_NAME);
@@ -300,21 +239,10 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSyst
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, IDEMPOTENCY_KEY_COLUMN_NAME})
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create idempotency keys table error: " << status.GetIssues().ToString());
-                return CreateIdempotencyKeysTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateResultSetsTable(TActorSystem* as)
+void TYdbControlPlaneStorageActor::CreateResultSetsTable()
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, RESULT_SETS_TABLE_NAME);
 
@@ -328,18 +256,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateResultSetsTable(TActorSystem* a
         .SetPrimaryKeyColumns({RESULT_ID_COLUMN_NAME, RESULT_SET_ID_COLUMN_NAME, ROW_ID_COLUMN_NAME})
         .Build();
 
-    return YdbConnection->Client.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
-        })
-        .Apply([=](const auto& future) {
-            auto status = future.GetValue();
-            if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create result sets table error: " << status.GetIssues().ToString());
-                return CreateResultSetsTable(as);
-            }
-            return future;
-        });
+    RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
 bool TYdbControlPlaneStorageActor::IsSuperUser(const TString& user)

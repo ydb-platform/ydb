@@ -22,6 +22,7 @@ extern "C" {
 #include "catalog/pg_collation_d.h"
 #include "utils/fmgrprotos.h"
 #include "utils/builtins.h"
+#include "utils/datum.h"
 #include "utils/memutils.h"
 #include "nodes/execnodes.h"
 #include "lib/stringinfo.h"
@@ -377,7 +378,18 @@ public:
                 return NUdf::TUnboxedValuePod();
             }
 
-            return RetTypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);
+            if (RetTypeDesc.PassByValue) {
+                return ScalarDatumToPod(ret);
+            }
+
+            for (ui32 i = 0; i < ArgNodes.size(); ++i) {
+                if (!ArgDesc[i].PassByValue && !callInfo.args[i].isnull && callInfo.args[i].value == ret) {
+                    ret = datumCopy(ret, RetTypeDesc.PassByValue, RetTypeDesc.TypeLen);
+                    break;
+                }
+            }
+
+            return PointerDatumToPod(ret);
         }
         PG_CATCH();
         {

@@ -148,7 +148,7 @@ public:
             auto abiVersionFunc = reinterpret_cast<NUdf::TAbiVersionFunctionPtr>(
                         lib->Lib.Sym(AbiVersionFuncName));
             ui32 version = abiVersionFunc();
-            Y_ENSURE(NUdf::IsAbiCompatible(version),
+            Y_ENSURE(NUdf::IsAbiCompatible(version) && version >= NUdf::MakeAbiVersion(2, 8, 0),
                      "Non compatible ABI version of UDF library " << libraryPath
                      << ", expected up to " << NUdf::AbiVersionToStr(NUdf::CurrentCompatibilityAbiVersion() * 100)
                      << ", got " << NUdf::AbiVersionToStr(version)

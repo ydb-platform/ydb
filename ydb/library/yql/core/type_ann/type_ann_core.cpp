@@ -9886,6 +9886,77 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto defaultValue = (func != "count") ? nullValue : zero;
 
+        if (aggDesc.SerializeFuncId) {
+            const auto& serializeFuncDesc = NPg::LookupProc(aggDesc.SerializeFuncId);
+            saveLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("state")
+                    .Callable("PgResolvedCallCtx")
+                        .Atom(0, serializeFuncDesc.Name)
+                        .Atom(1, ToString(aggDesc.SerializeFuncId))
+                        .Arg(2, "state")
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        if (aggDesc.DeserializeFuncId) {
+            const auto& deserializeFuncDesc = NPg::LookupProc(aggDesc.DeserializeFuncId);
+            loadLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("state")
+                    .Callable("PgResolvedCallCtx")
+                        .Atom(0, deserializeFuncDesc.Name)
+                        .Atom(1, ToString(aggDesc.DeserializeFuncId))
+                        .Arg(2, "state")
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
+        if (aggDesc.CombineFuncId) {
+            const auto& combineFuncDesc = NPg::LookupProc(aggDesc.CombineFuncId);
+            if (combineFuncDesc.IsStrict) {
+                mergeLambda = ctx.Expr.Builder(input->Pos())
+                    .Lambda()
+                        .Param("state1")
+                        .Param("state2")
+                        .Callable("If")
+                            .Callable(0, "Exists")
+                                .Arg(0, "state1")
+                            .Seal()
+                            .Callable(1, "If")
+                                .Callable(0, "Exists")
+                                    .Arg(0, "state2")
+                                .Seal()
+                                .Callable(1, "PgResolvedCallCtx")
+                                    .Atom(0, combineFuncDesc.Name)
+                                    .Atom(1, ToString(aggDesc.CombineFuncId))
+                                    .Arg(2, "state1")
+                                    .Arg(3, "state2")
+                                .Seal()
+                                .Arg(2, "state1")
+                            .Seal()
+                            .Arg(2, "state2")
+                        .Seal()
+                    .Seal()
+                    .Build();
+            } else {
+                mergeLambda = ctx.Expr.Builder(input->Pos())
+                    .Lambda()
+                        .Param("state1")
+                        .Param("state2")
+                        .Callable("PgResolvedCallCtx")
+                            .Atom(0, combineFuncDesc.Name)
+                            .Atom(1, ToString(aggDesc.CombineFuncId))
+                            .Arg(2, "state1")
+                            .Arg(3, "state2")
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+        }
+
         auto typeNode = ExpandType(input->Pos(), *itemType, ctx.Expr);
         output = ctx.Expr.Builder(input->Pos())
             .Callable("AggregationTraits")

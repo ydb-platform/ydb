@@ -29,8 +29,8 @@ struct TRequestMonItem {
 
         NMonitoring::TBucketBounds bounds = GetCommonLatencyHistBounds(type);
 
-        ResponseTime = counters->GetNamedHistogram("sensor", "responseTimeMs",
-                NMonitoring::ExplicitHistogram(std::move(bounds)));
+        ResponseTime = counters->GetHistogram("responseTimeMs",
+            NMonitoring::ExplicitHistogram(std::move(bounds)));
     }
 
     void Register(ui32 requestBytes, ui32 generatedSubrequests, ui32 generatedSubrequestBytes, double durationSeconds) {
@@ -54,6 +54,7 @@ public:
         HcCount = 7
     };
 
+private:
     static TString GetHandleClassName(EHandleClass handleClass) {
         switch (handleClass) {
             case HcPutTabletLog:
@@ -76,12 +77,22 @@ public:
         return "Unknown";
     }
 
+    static bool IsReducedHandleClass(EHandleClass handleClass) {
+        return (handleClass == HcPutAsync
+            || handleClass == HcGetAsync
+            || handleClass == HcGetDiscover
+            || handleClass == HcGetLow);
+    }
+
+    // common size classes
+
     // Old buckets are: 64 128 256 512 1k 2k 4k 8k 16k 32k 64k 128k 256k 512k 1M 2M 4M 8M 16M -- 19 buckets
     // Buckets are: 256 4k 256k 1M 4M 16M -- 6 buckets
     static constexpr ui32 MaxSizeClassBucketIdx = 5;
     static constexpr const char *const SizeClassNameList[MaxSizeClassBucketIdx + 1] =
       {"256", "4096", "262144", "1048576", "4194304", "16777216"};
 
+public:
     static ui32 SizeClassFromSizeBytes(ui32 requestBytes) {
         if (requestBytes <= 4*1024) {
             if (requestBytes <= 256) {
@@ -106,16 +117,49 @@ public:
         }
     }
 
+private:
     static const char* SizeClassName(ui32 sizeClass) {
         return SizeClassNameList[Min<ui32>(MaxSizeClassBucketIdx, sizeClass)];
     }
 
+    // reduced size classes for PutAsync, GetAsync, GetLow, GetDiscover
+
+    static constexpr ui32 MaxReducedSizeClassBucketIdx = 2;
+    static constexpr const char *const ReducedSizeClassNameList[MaxReducedSizeClassBucketIdx + 1] =
+      {"262144", "1048576", "16777216"};
+
+public:
+    static ui32 ReducedSizeClassFromSizeBytes(ui32 requestBytes) {
+        if (requestBytes <= 256*1024) {
+            return 0;
+        } else if (requestBytes <= 1*1024*1024) {
+            return 1;
+        } else {
+            return 2;
+        }
+    }
+
+private:
+    static const char* ReducedSizeClassName(ui32 sizeClass) {
+        return ReducedSizeClassNameList[Min<ui32>(MaxReducedSizeClassBucketIdx, sizeClass)];
+    }
+
+    static_assert(MaxReducedSizeClassBucketIdx < MaxSizeClassBucketIdx);
+
     TRequestMonItem RequestMon[HcCount][MaxSizeClassBucketIdx + 1];
     TString StoragePoolName;
 
+public:
     TRequestMonItem& GetItem(EHandleClass handleClass, ui32 requestBytes) {
-        ui32 sizeClassIdx = SizeClassFromSizeBytes(requestBytes);
-        Y_VERIFY((ui32)handleClass < (ui32)HcCount && sizeClassIdx <= MaxSizeClassBucketIdx);
+        Y_VERIFY((ui32)handleClass < (ui32)HcCount);
+        ui32 sizeClassIdx = 0;
+        if (IsReducedHandleClass(handleClass)) {
+            sizeClassIdx = ReducedSizeClassFromSizeBytes(requestBytes);
+            Y_VERIFY(sizeClassIdx <= MaxReducedSizeClassBucketIdx);
+        } else {
+            sizeClassIdx = SizeClassFromSizeBytes(requestBytes);
+            Y_VERIFY(sizeClassIdx <= MaxSizeClassBucketIdx);
+        }
         return RequestMon[(ui32)handleClass][sizeClassIdx];
     }
 
@@ -126,9 +170,16 @@ public:
         for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
             TString handleClassName = GetHandleClassName((EHandleClass)handleClass);
             TIntrusivePtr<NMonitoring::TDynamicCounters> hcGroup = poolGroup->GetSubgroup("handleClass", handleClassName);
-            for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxSizeClassBucketIdx; ++sizeClassIdx) {
-                TString sizeClassName = SizeClassName(sizeClassIdx);
-                RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
+            if (IsReducedHandleClass((EHandleClass)handleClass)) {
+                for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxReducedSizeClassBucketIdx; ++sizeClassIdx) {
+                    TString sizeClassName = ReducedSizeClassName(sizeClassIdx);
+                    RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
+                }
+            } else {
+                for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxSizeClassBucketIdx; ++sizeClassIdx) {
+                    TString sizeClassName = SizeClassName(sizeClassIdx);
+                    RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
+                }
             }
         }
     }

@@ -369,9 +369,9 @@ private:
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
-        RunActorMap[runActorId] = params.QueryId;
-        if (!params.Automatic) {
-            CountersMap[params.QueryId] = { rootCountersParent, publicCountersParent, runActorId };
+        RunActorMap[runActorId] = queryId;
+        if (!task.automatic()) {
+            CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
         }
     }
 

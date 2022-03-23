@@ -41,7 +41,7 @@ TSimpleResourceStats CalcPeerStats(
         if (getDataCenterId(entry) != selfDataCenterId && localDatacenterPolicy)
             continue;
 
-        xadd = static_cast<double> (entry.GetActiveWorkersCount()) - mean;
+        xadd = ExtractValue(entry) - mean;
         deviation += xadd * xadd;
     }
 
@@ -49,9 +49,7 @@ TSimpleResourceStats CalcPeerStats(
     return TSimpleResourceStats(mean, deviation, static_cast<ui64>(std::llround(100.0f * deviation / mean)));
 }
 
-TPeerStats CalcPeerStats(
-    const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId, bool localDatacenterPolicy)
-{
+TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data, const TString& selfDataCenterId) {
     auto getCpu = [](const NKikimrKqp::TKqpProxyNodeResources& entry) {
         return entry.GetCpuUsage();
     };
@@ -60,7 +58,13 @@ TPeerStats CalcPeerStats(
         return static_cast<double>(entry.GetActiveWorkersCount());
     };
 
-    return TPeerStats(CalcPeerStats(data, selfDataCenterId, localDatacenterPolicy, getSessionCount), CalcPeerStats(data, selfDataCenterId, localDatacenterPolicy, getCpu));
+    return TPeerStats(
+        CalcPeerStats(data, selfDataCenterId, true, getSessionCount),
+        CalcPeerStats(data, selfDataCenterId, false, getSessionCount),
+
+        CalcPeerStats(data, selfDataCenterId, true, getCpu),
+        CalcPeerStats(data, selfDataCenterId, false, getCpu)
+    );
 }
 
 
@@ -68,5 +72,5 @@ TPeerStats CalcPeerStats(
 
 template<>
 void Out<NKikimr::NKqp::TSimpleResourceStats>(IOutputStream& out, const NKikimr::NKqp::TSimpleResourceStats& v) {
-    out << "ResourceStats<Mean: " << v.Mean << ", CV: " << v.CV << ", Deviation: " << v.Deviation << ">" << Endl;
+    out << "ResourceStats(Mean: " << v.Mean << ", CV: " << v.CV << ", Deviation: " << v.Deviation << ")";
 }

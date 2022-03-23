@@ -14,7 +14,6 @@
 
 #ifndef _win_
 #include <sys/user.h>
-#include <sys/sysctl.h>
 #endif
 
 namespace NActors {

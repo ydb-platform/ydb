@@ -173,8 +173,17 @@ struct TRecordsEntry {
     TPgSize Offset;
 } Y_PACKED;
 
+// The idea is that every page record consists from its header defined in TRecord
+// and TItems each located at its own TPartScheme::TColumn::Offset.
+// TItem::GetCellOp specifies TCell location/value:
+//   * empty/null/reset (just CellOp code, no actual bytes)
+//   * fixed size right after TItem
+//   * variable size at some page position, TDataRef is after TItem and contains position and size
+//   * in external blob
 template <class TRecord, class TItem>
 struct TDataPageRecord {
+    // TRecord acts as record's header holder, Base() skips header
+    // and returns pointer to the beginning of data where items stored
     void* Base() {
         return NextPtr((TRecord*)this);
     }
@@ -192,11 +201,6 @@ struct TDataPageRecord {
     }
 
     template <class T>
-    const T* GetTail(const TPartScheme::TGroupInfo& group) const {
-        return TDeref<T>::At(Base(), group.FixedSize);
-    }
-
-    template <class T>
     T* GetFixed(TItem* item) const {
         return reinterpret_cast<T*>(NextPtr(item));
     }
@@ -206,15 +210,15 @@ struct TDataPageRecord {
         return reinterpret_cast<const T*>(NextPtr(item));
     }
 
-    TCellOp GetOp(const TPartScheme::TColumn &info) const
+    TCellOp GetCellOp(const TPartScheme::TColumn &info) const
     {
-        return GetItem(info)->GetOp(info.IsKey());
+        return GetItem(info)->GetCellOp(info.IsKey());
     }
 
     TCell Cell(const TPartScheme::TColumn& info) const
     {
         const TItem* item = GetItem(info);
-        const auto op = item->GetOp(info.IsKey());
+        const auto op = item->GetCellOp(info.IsKey());
 
         if (op == ECellOp::Empty || op == ECellOp::Null || op == ECellOp::Reset) {
             return { };

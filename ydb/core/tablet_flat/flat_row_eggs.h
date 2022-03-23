@@ -76,7 +76,7 @@ namespace NTable {
     struct TCellOp {
         constexpr TCellOp() = default;
 
-        static constexpr TCellOp By(ui8 raw) noexcept
+        static constexpr TCellOp Decode(ui8 raw) noexcept
         {
             return { ECellOp(raw & 0x3f), ELargeObj(raw >> 6) };
         }

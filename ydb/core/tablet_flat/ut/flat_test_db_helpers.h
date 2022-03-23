@@ -52,7 +52,7 @@ public:
         return Val;
     }
 
-    ECellOp GetOp() const {
+    ECellOp GetCellOp() const {
         return Op;
     }
 };
@@ -224,7 +224,7 @@ public:
 
         TVector<TUpdateOp> ops;
         for (const auto& op : update.GetTagOps()) {
-            ops.push_back(TUpdateOp(op.first, op.second.GetOp(), op.second.Get()));
+            ops.push_back(TUpdateOp(op.first, op.second.GetCellOp(), op.second.Get()));
         }
 
         Db.Update(update.GetRoot(), ERowOp::Upsert, key, ops);

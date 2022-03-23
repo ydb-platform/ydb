@@ -21,7 +21,7 @@ namespace NPage {
         /*
                 TRecord binary layout v1
             .-------------------------.
-            | ERowOp                  | header
+            | ERowOp and bit-flags    | header
             .---------.---------------.       -.
             | cell op | value OR offs | cell_1 |
             .---------.---------------.        |
@@ -36,10 +36,11 @@ namespace NPage {
 #pragma pack(push,1)
 
         struct TItem {
-            TCellOp GetOp(bool key) const noexcept
+            TCellOp GetCellOp(bool key) const noexcept
             {
-                return
-                    key ? TCellOp(Null ? ECellOp::Null : ECellOp::Set) : TCellOp::By(Flg);
+                if (key)
+                    return Null ? ECellOp::Null : ECellOp::Set;
+                return TCellOp::Decode(Flg);
             }
 
             union {
@@ -110,6 +111,9 @@ namespace NPage {
                 Fields_ |= 0x20;
             }
 
+            // N.B. Get Min/Max version and GetDeltaTxId below read from the same record position
+            // right after column entries. Up to caller to decide what kind of data is there
+
             TRowVersion GetMaxVersion(const TPartScheme::TGroupInfo& group) const noexcept {
                 Y_VERIFY_DEBUG(IsErased());
                 return GetTail<TVersion>(group)->Get();
@@ -140,6 +144,13 @@ namespace NPage {
                 } else {
                     return nullptr;
                 }
+            }
+
+        private:
+            // returns pointer to the data right after all column entries
+            template <class T>
+            const T* GetTail(const TPartScheme::TGroupInfo& group) const {
+                return TDeref<T>::At(Base(), group.FixedSize);
             }
         } Y_PACKED;
 

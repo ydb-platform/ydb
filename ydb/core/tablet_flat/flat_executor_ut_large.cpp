@@ -131,8 +131,8 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
                 DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value
-                    << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2 << Endl;
+                    << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value
+                    << " value2 = " << NTable::ECellOp(row.GetCellOp(2)) << " " << value2 << Endl;
             }
 
             Data = builder;

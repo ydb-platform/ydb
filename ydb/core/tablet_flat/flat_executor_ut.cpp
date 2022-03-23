@@ -2724,7 +2724,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorKeepEraseMarkers) {
                 DbgPrintValue(value, row.Get(0), NScheme::TString::TypeId);
 
                 builder << "Key " << keyId << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(0)) << " " << value << Endl;
+                    << " value = " << NTable::ECellOp(row.GetCellOp(0)) << " " << value << Endl;
             }
 
             Data = builder;
@@ -2985,7 +2985,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
                 DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value << Endl;
+                    << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value << Endl;
             }
 
             Data = builder;
@@ -3298,7 +3298,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorFollower) {
                 DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value << Endl;
+                    << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value << Endl;
             }
 
             Data = builder;
@@ -4078,8 +4078,8 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
                 DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value
-                    << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2 << Endl;
+                    << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value
+                    << " value2 = " << NTable::ECellOp(row.GetCellOp(2)) << " " << value2 << Endl;
             }
 
             Data = builder;
@@ -4127,8 +4127,8 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
                     DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
 
                     builder << "Key " << key << " = " << row.GetRowState()
-                        << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value
-                        << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2;
+                        << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value
+                        << " value2 = " << NTable::ECellOp(row.GetCellOp(2)) << " " << value2;
                     if (it->IsUncommitted()) {
                         builder << " txId " << it->GetUncommittedTxId();
                     }

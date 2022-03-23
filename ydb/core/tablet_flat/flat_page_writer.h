@@ -357,7 +357,7 @@ namespace NPage {
 
                 if (!row.IsFinalized(pin.To) || info.IsKey() || info.IsFixed) {
 
-                } else if (row.GetOp(pin.To) != ELargeObj::Inline) {
+                } else if (row.GetCellOp(pin.To) != ELargeObj::Inline) {
                     /* External blob occupies only fixed technical field */
                     ++ret.ReusedLargeRefs;
                 } else if (!isDelta && IsLargeSize(row.Get(pin.To).Size())) {
@@ -366,7 +366,7 @@ namespace NPage {
                 } else if (!isDelta && IsSmallSize(row.Get(pin.To).Size())) {
                     ret.SmallSize += row.Get(pin.To).Size();
                     ++ret.NewSmallRefs;
-                } else if (isDelta || !finalRow || row.GetOp(pin.To) != ECellOp::Reset) {
+                } else if (isDelta || !finalRow || row.GetCellOp(pin.To) != ECellOp::Reset) {
                     ret.DataPageSize += row.Get(pin.To).Size();
                 }
             }
@@ -484,11 +484,11 @@ namespace NPage {
 
                 if (!row.IsFinalized(pin.To) || info.IsKey()) {
 
-                } else if (row.GetOp(pin.To) == ECellOp::Reset) {
+                } else if (row.GetCellOp(pin.To) == ECellOp::Reset) {
                     if (!finalRow)
                         rec.GetItem(info)->Flg = ui8(ECellOp::Reset);
                 } else if (auto cell = row.Get(pin.To)) {
-                    auto cellOp = row.GetOp(pin.To);
+                    auto cellOp = row.GetCellOp(pin.To);
 
                     if (info.IsFixed /* may place only as ELargeObj::Inline */) {
                         Y_VERIFY(cellOp == ELargeObj::Inline, "Got fixed non-inlined");

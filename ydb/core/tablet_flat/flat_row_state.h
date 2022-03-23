@@ -130,7 +130,7 @@ namespace NTable {
             return Cells[pos];
         }
 
-        TCellOp GetOp(TPos pos) const noexcept
+        TCellOp GetCellOp(TPos pos) const noexcept
         {
             return State[pos];
         }
@@ -144,7 +144,7 @@ namespace NTable {
 
         bool IsFinalized(TPos pos) const noexcept
         {
-            return GetOp(pos) != ECellOp::Empty;
+            return GetCellOp(pos) != ECellOp::Empty;
         }
 
     private:

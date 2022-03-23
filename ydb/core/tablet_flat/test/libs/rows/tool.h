@@ -115,13 +115,13 @@ namespace NTest {
 
                 if (keys && !info->IsKey()) {
                     continue; /* Skip non-keys columns */
-                } else if (ELargeObj(val.Op) != ELargeObj(state.GetOp(pos))) {
+                } else if (ELargeObj(val.Op) != ELargeObj(state.GetCellOp(pos))) {
                     return false; /* Missmatched value storage method */
                 } else if (val.Op != ELargeObj::Inline) {
                     if (!(val.Cell.AsRef() == cell.AsRef()))
                         return false;
                 } else if (val.Op == ECellOp::Empty || val.Op == ECellOp::Reset) {
-                    if (ECellOp(val.Op) != state.GetOp(pos))
+                    if (ECellOp(val.Op) != state.GetCellOp(pos))
                         return false;
                 } else if (CompareTypedCells(val.Cell, cell, info->TypeId)) {
                     return false; /* Literal comparison has been failed */

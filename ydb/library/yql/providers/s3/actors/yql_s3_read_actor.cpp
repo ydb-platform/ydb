@@ -290,11 +290,15 @@ public:
     {}
 
     bool Next(NUdf::TUnboxedValue& value) {
+        if (Finished)
+            return false;
+
         TypeEnv.GetAllocator().Release();
         const auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadResult, TEvPrivate::TEvReadError, TEvPrivate::TEvReadFinished>();
         TypeEnv.GetAllocator().Acquire();
         switch (const auto etype = ev->GetTypeRewrite()) {
             case TEvPrivate::TEvReadFinished::EventType:
+                Finished = true;
                 return false;
             case TEvPrivate::TEvReadError::EventType:
                 Send(ComputeActorId, new IDqSourceActor::TEvSourceError(InputIndex, ev->Get<TEvPrivate::TEvReadError>()->Error, true));
@@ -354,6 +358,7 @@ private:
     const TString Format, RowType, Compression;
     const NActors::TActorId ComputeActorId;
     TOutput::TPtr Outputs;
+    bool Finished = false;
 };
 
 class TS3ReadCoroActor : public TActorCoro {

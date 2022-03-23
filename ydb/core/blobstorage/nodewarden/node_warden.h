@@ -64,6 +64,6 @@ namespace NKikimr {
     bool ObtainStaticKey(TEncryptionKey *key);
     bool ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
 
-    std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TFsPath& cacheFilePath);
+    std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TString& templ, const std::unordered_map<char, TString>& vars);
 
 } // NKikimr

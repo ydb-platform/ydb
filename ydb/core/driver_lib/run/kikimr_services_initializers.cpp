@@ -804,7 +804,23 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             nodeWardenConfig->AllDriveModels->Merge(Config.GetDriveModelConfig());
         }
         if (bsc.HasCacheFilePath()) {
-            nodeWardenConfig->CacheAccessor = CreateFileCacheAccessor(bsc.GetCacheFilePath());
+            std::unordered_map<char, TString> vars{{'n', ToString(NodeId)}};
+            for (const auto& node : Config.GetNameserviceConfig().GetNode()) {
+                if (node.GetNodeId() == NodeId) {
+                    vars['h'] = node.GetHost();
+                    vars['p'] = ToString(node.GetPort());
+                    break;
+                }
+            }
+            if (Config.HasDynamicNodeConfig()) {
+                const auto& dyn = Config.GetDynamicNodeConfig();
+                if (dyn.HasNodeInfo()) {
+                    const auto& ni = dyn.GetNodeInfo();
+                    vars['h'] = ni.GetHost();
+                    vars['p'] = ToString(ni.GetPort());
+                }
+            }
+            nodeWardenConfig->CacheAccessor = CreateFileCacheAccessor(bsc.GetCacheFilePath(), vars);
         }
         nodeWardenConfig->CachePDisks = bsc.GetCachePDisks();
         nodeWardenConfig->CacheVDisks = bsc.GetCacheVDisks();

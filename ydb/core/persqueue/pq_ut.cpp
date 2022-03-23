@@ -2058,6 +2058,50 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
 
 }
 
+void CheckEventSequence(TTestContext& tc, std::function<void()> scenario, std::deque<ui32> expectedEvents) {
+    tc.Runtime->SetObserverFunc([&expectedEvents](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        if (!expectedEvents.empty() && ev->Type == expectedEvents.front()) {
+            expectedEvents.pop_front();
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
 
-} // TKeyValueTest
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&expectedEvents](){
+        return expectedEvents.empty();
+    };
+    options.FinalEvents.emplace_back(TEvPQ::EvEnd);  // dummy event to prevent early return from DispatchEvents
+
+    scenario();
+
+    UNIT_ASSERT(tc.Runtime->DispatchEvents(options));
+    UNIT_ASSERT(expectedEvents.empty());
+}
+
+Y_UNIT_TEST(TestTabletRestoreEventsOrder) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    // Scenario 1: expect EvTabletActive after empty tablet reboot
+    CheckEventSequence(tc, /*scenario=*/[&tc]() {
+        ForwardToTablet(*tc.Runtime, tc.TabletId, tc.Edge, new TEvents::TEvPoisonPill());
+    }, /*expectedEvents=*/{
+        TEvTablet::TEvRestored::EventType,
+        TEvTablet::TEvTabletActive::EventType,
+    });
+
+    // Scenario 2: expect EvTabletActive only after partitions init complete
+    CheckEventSequence(tc, /*scenario=*/[&tc]() {
+        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc, /*partitions=*/2);
+        ForwardToTablet(*tc.Runtime, tc.TabletId, tc.Edge, new TEvents::TEvPoisonPill());
+    }, /*expectedEvents=*/{
+        TEvTablet::TEvRestored::EventType,
+        TEvPQ::TEvInitComplete::EventType,
+        TEvPQ::TEvInitComplete::EventType,
+        TEvTablet::TEvTabletActive::EventType,
+    });
+}
+
+} // TPQTest
 } // NKikimr

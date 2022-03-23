@@ -789,6 +789,9 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
     HasDataRequests.clear();
 
+    if (Partitions.empty()) {
+        SignalTabletActive(ctx);
+    }
 }
 
 void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx)
@@ -980,11 +983,19 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     it->second.InitDone = true;
     ++PartitionsInited;
     Y_VERIFY(ConfigInited);//partitions are inited only after config
+
+    if (PartitionsInited == Partitions.size()) {
+        SignalTabletActive(ctx);
+    }
+
     if (NewConfigShouldBeApplied && PartitionsInited == Partitions.size()) {
         ApplyNewConfigAndReply(ctx);
     }
 }
 
+void TPersQueue::DefaultSignalTabletActive(const TActorContext &ctx) {
+    Y_UNUSED(ctx);
+}
 
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
 {

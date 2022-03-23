@@ -103,6 +103,9 @@ struct TOperationStarter : public TPriorityQueue::IStarter, public NOperationQue
         WakeupHistory.push_back(t);
     }
 
+    void OnTimeout(const TPriorityItem&) override
+    {}
+
     TInstant Now() override
     {
         return TimeProvider.Now();

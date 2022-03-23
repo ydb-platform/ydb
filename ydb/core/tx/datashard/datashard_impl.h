@@ -1250,8 +1250,6 @@ public:
     NMiniKQL::IKeyAccessSampler::TPtr GetKeyAccessSampler();
     void EnableKeyAccessSampling(const TActorContext &ctx, TInstant until);
     void UpdateTableStats(const TActorContext& ctx);
-    void UpdateSearchHeightStats(TUserTable::TStats& stats, ui64 newSearchHeight);
-    void UpdateFullCompactionTsMetric(TUserTable::TStats& stats);
     void CollectCpuUsage(const TActorContext& ctx);
 
     void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
@@ -2341,6 +2339,7 @@ protected:
             ev->Record.SetRound(StatsReportRound++);
             ev->Record.MutableTableStats()->SetRowCount(ti.Stats.DataStats.RowCount + ti.Stats.MemRowCount);
             ev->Record.MutableTableStats()->SetDataSize(ti.Stats.DataStats.DataSize + ti.Stats.MemDataSize);
+            ev->Record.MutableTableStats()->SetInMemSize(ti.Stats.MemDataSize);
             ev->Record.MutableTableStats()->SetIndexSize(ti.Stats.IndexSize);
             ev->Record.MutableTableStats()->SetLastAccessTime(ti.Stats.AccessTime.MilliSeconds());
             ev->Record.MutableTableStats()->SetLastUpdateTime(ti.Stats.UpdateTime.MilliSeconds());

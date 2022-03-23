@@ -176,6 +176,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     newStats.PartCount = tableStats.GetPartCount();
     newStats.SearchHeight = tableStats.GetSearchHeight();
     newStats.FullCompactionTs = tableStats.GetLastFullCompactionTs();
+    newStats.MemDataSize = tableStats.GetInMemSize();
     newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime());
     for (ui64 tabletId : rec.GetUserTablePartOwners()) {
         newStats.PartOwners.insert(TTabletId(tabletId));
@@ -191,11 +192,9 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     auto oldAggrStats = table->GetStats().Aggregated;
     table->UpdateShardStats(shardIdx, newStats);
 
-    if (Self->CompactionQueue) {
-        TShardCompactionInfo compactionInfo(shardIdx, newStats);
-        if (!Self->CompactionQueue->Update(compactionInfo))
-            Self->CompactionQueue->Enqueue(std::move(compactionInfo));
-        Self->UpdateBackgroundCompactionQueueMetrics();
+    if (!table->IsBackup) {
+        Self->UpdateCompaction(shardIdx, newStats);
+        Self->UpdateShardMetrics(shardIdx, newStats);
     }
 
     NIceDb::TNiceDb db(txc.DB);

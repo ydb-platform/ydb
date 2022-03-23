@@ -394,6 +394,7 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
             context.SS->ShardInfos.erase(shard.Idx);
             domainInfo->RemoveInternalShard(shard.Idx);
             context.SS->DecrementPathDbRefCount(pathId, "remove shard from txState");
+            context.SS->ShardRemoved(shard.Idx);
         }
     }
     txState.Shards.clear();

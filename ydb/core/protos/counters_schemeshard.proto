@@ -240,6 +240,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateReplication = 70         [(CounterOpts) = {Name: "FinishedOps/CreateReplication"}];
     COUNTER_FINISHED_OPS_TxAlterReplication = 71          [(CounterOpts) = {Name: "FinishedOps/AlterReplication"}];
     COUNTER_FINISHED_OPS_TxDropReplication = 72           [(CounterOpts) = {Name: "FinishedOps/DropReplication"}];
+
+    COUNTER_BACKGROUND_COMPACTION_BORROWED = 73           [(CounterOpts) = {Name: "BackgroundCompactionBorrowed"}];
+    COUNTER_BACKGROUND_COMPACTION_NOT_NEEDED = 74         [(CounterOpts) = {Name: "BackgroundCompactionNotNeeded"}];
 }
 
 enum EPercentileCounters {
@@ -264,7 +267,9 @@ enum EPercentileCounters {
         Ranges { Value: 32000000    Name: "(18) 32 < s"         }
     };
 
-    COUNTER_BACKGROUND_COMPACTION_OK_LATENCY = 0          [(CounterOpts) = {Name: "BackgroundCompactionOkLatency"}];
+    COUNTER_BACKGROUND_COMPACTION_OK_LATENCY = 0 [(CounterOpts) = {
+        Name: "BackgroundCompactionOkLatency"
+    }];
 
     COUNTER_NUM_SHARDS_BY_TTL_LAG = 1 [(CounterOpts) = {
         Name: "NumShardsByTtlLag"
@@ -278,6 +283,57 @@ enum EPercentileCounters {
         Ranges { Value: 28800 Name: "28800" }
         Ranges { Value: 57600 Name: "57600" }
         Ranges { Value: 86400 Name: "inf"   }
+    }];
+
+    COUNTER_SHARDS_WITH_SEARCH_HEIGHT = 2 [(CounterOpts) = {
+        Name: "ShardsWithSearchHeight",
+        Integral: true,
+        Ranges: { Value: 0        Name: "0"  },
+        Ranges: { Value: 1        Name: "1"  },
+        Ranges: { Value: 2        Name: "2"  },
+        Ranges: { Value: 3        Name: "3"  },
+        Ranges: { Value: 4        Name: "4"  },
+        Ranges: { Value: 5        Name: "5"  },
+        Ranges: { Value: 6        Name: "6"  },
+        Ranges: { Value: 7        Name: "7"  },
+        Ranges: { Value: 8        Name: "8"  },
+        Ranges: { Value: 9        Name: "9"  },
+        Ranges: { Value: 10       Name: "10" },
+        Ranges: { Value: 11       Name: "11" },
+        Ranges: { Value: 12       Name: "12" },
+        Ranges: { Value: 13       Name: "13" },
+        Ranges: { Value: 14       Name: "14" },
+        Ranges: { Value: 15       Name: "15" },
+        Ranges: { Value: 20       Name: "20" },
+    }];
+
+    // buckets are hours since last full compaction ts, i.e. number of shards
+    // compacted within 1 hour or within 24 hours
+    COUNTER_SHARDS_WITH_FULL_COMPACTION = 3 [(CounterOpts) = {
+        Name: "ShardsFullCompactionAgeHours",
+        Integral: true,
+        Ranges: { Value: 0        Name: "0"   },
+        Ranges: { Value: 1        Name: "1"   },
+        Ranges: { Value: 6        Name: "6"   },
+        Ranges: { Value: 12       Name: "12"  },
+        Ranges: { Value: 24       Name: "24"  },
+        Ranges: { Value: 48       Name: "48"  },
+        Ranges: { Value: 72       Name: "72"  },
+        Ranges: { Value: 168      Name: "inf" },
+    }];
+
+    COUNTER_SHARDS_WITH_ROW_DELETES = 4 [(CounterOpts) = {
+        Name: "ShardsWithRowDeletes",
+        Integral: true,
+        Ranges: { Value: 0            Name: "0"         },
+        Ranges: { Value: 100          Name: "100"       },
+        Ranges: { Value: 1000         Name: "1000"      },
+        Ranges: { Value: 10000        Name: "10000"     },
+        Ranges: { Value: 100000       Name: "100000"    },
+        Ranges: { Value: 1000000      Name: "1000000"   },
+        Ranges: { Value: 10000000     Name: "10000000"  },
+        Ranges: { Value: 100000000    Name: "100000000" },
+        Ranges: { Value: 1000000000   Name: "inf"       },
     }];
 }
 

@@ -1401,6 +1401,7 @@ message TEvKqpScan {
 message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool CompactBorrowed = 2;
+    optional bool CompactSinglePartedShards = 3;
 }
 
 message TEvCompactTableResult {
@@ -1408,6 +1409,7 @@ message TEvCompactTableResult {
         OK = 0;
         NOT_NEEDED = 1;
         FAILED = 2;
+        BORROWED = 3;
     };
 
     optional uint64 TabletId = 1;
@@ -1688,7 +1690,7 @@ message TEvReplicationSourceOffsetsAck {
     optional uint64 ReadId = 1;
 
     // The client is acknowledging every SeqNo <= AckSeqNo has been received and processed
-    // This will remove their corresponding 
+    // This will remove their corresponding
     optional uint64 AckSeqNo = 2;
 
     // The client may optionally change the current window size

@@ -154,6 +154,8 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistUnknownShardDeleted(db, ShardIdx);
         }
+
+        Self->ShardRemoved(ShardIdx);
     }
 
     void DoComplete(const TActorContext &ctx) override {

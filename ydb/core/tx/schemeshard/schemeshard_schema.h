@@ -346,6 +346,7 @@ struct Schema : NIceDb::Schema {
 
         struct SearchHeight: Column<30, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
         struct FullCompactionTs: Column<31, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
+        struct MemDataSize: Column<32, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 0; };
 
         // PartCount, PartOwners & ShardState are volatile data
 
@@ -381,7 +382,8 @@ struct Schema : NIceDb::Schema {
             ReadIops,
             WriteIops,
             SearchHeight,
-            FullCompactionTs
+            FullCompactionTs,
+            MemDataSize
         >;
     };
 

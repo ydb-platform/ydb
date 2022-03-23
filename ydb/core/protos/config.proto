@@ -1345,6 +1345,9 @@ message TCompactionConfig {
         // rest 2/3 can be shards compacted multiple times, i.e. all shards
         // must be compacted within at most RoundSeconds*3.
         optional uint64 RoundSeconds = 9 [default = 86400];
+
+        // Compact even if shard has single part and empty memtable
+        optional bool CompactSinglePartedShards = 10 [default = false];
     }
 
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;

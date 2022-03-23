@@ -86,8 +86,12 @@ private:
             : Self(self)
         { }
 
-        NOperationQueue::EStartStatus StartOperation(const TShardCompactionInfo& info) {
+        NOperationQueue::EStartStatus StartOperation(const TShardCompactionInfo& info) override {
             return Self->StartBackgroundCompaction(info.ShardIdx);
+        }
+
+        void OnTimeout(const TShardCompactionInfo& info) override {
+            Self->OnBackgroundCompactionTimeout(info.ShardIdx);
         }
 
     private:
@@ -181,6 +185,14 @@ public:
     THashMap<TShardIdx, TAdoptedShard> AdoptedShards;
     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
+
+    // in case of integral hists we need to remember what values we have set
+    struct TPartitionMetrics {
+        ui64 SearchHeight = 0;
+        ui64 RowDeletes = 0;
+        ui32 HoursSinceFullCompaction = 0;
+    };
+    THashMap<TShardIdx, TPartitionMetrics> PartitionMetricsMap;
 
     TActorId SchemeBoardPopulator;
 
@@ -623,7 +635,17 @@ public:
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
 
+    void EnqueueCompaction(const TShardIdx& shardIdx, const TTableInfo::TPartitionStats& stats);
+    void UpdateCompaction(const TShardIdx& shardIdx, const TTableInfo::TPartitionStats& stats);
+    void RemoveCompaction(const TShardIdx& shardIdx);
+
+    void UpdateShardMetrics(const TShardIdx& shardIdx, const TTableInfo::TPartitionStats& newStats);
+    void RemoveShardMetrics(const TShardIdx& shardIdx);
+
+    void ShardRemoved(const TShardIdx& shardIdx);
+
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardIdx& shardId);
+    void OnBackgroundCompactionTimeout(const TShardIdx& shardId);
     void UpdateBackgroundCompactionQueueMetrics();
 
     struct TTxCleanDroppedSubDomains;

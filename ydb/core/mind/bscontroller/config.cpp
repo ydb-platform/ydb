@@ -23,7 +23,7 @@ namespace NKikimr::NBsController {
                 for (auto &pair : Services) {
                     const TNodeId &nodeId = pair.first;
 
-                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->IsRegistered) {
+                    if (TNodeInfo *node = Self->FindNode(nodeId); node && node->ConnectedCount) {
                         auto event = MakeHolder<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
                         auto& record = event->Record;
                         pair.second.Swap(&record);

@@ -730,7 +730,7 @@ public:
     public:
         using Table = Schema::Node;
 
-        bool IsRegistered = false;
+        ui32 ConnectedCount = 0;
         Table::NextPDiskID::Type NextPDiskID;
         // in-mem only
         std::map<TString, NPDisk::TDriveData> KnownDrives;

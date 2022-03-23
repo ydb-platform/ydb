@@ -46,7 +46,7 @@ public:
             db.Table<Schema::VSlot>().Key(id.GetKey()).Update<Schema::VSlot::Mood>(info->Mood);
 
             // Prepare results for nodes
-            if (TNodeInfo *node = Self->FindNode(id.NodeId); node && node->IsRegistered) {
+            if (TNodeInfo *node = Self->FindNode(id.NodeId); node && node->ConnectedCount) {
                 auto& msg = ResultForNode[id.NodeId];
                 msg = MakeHolder<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, id.NodeId);
                 Self->ReadVSlot(*info, msg.Get());

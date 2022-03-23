@@ -233,8 +233,6 @@ public:
             }
         }
 
-        TNodeInfo& nodeInfo = Self->GetNode(nodeId);
-
         auto res = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
 
         TSet<ui32> groupIDsToRead;
@@ -284,8 +282,6 @@ public:
         Y_VERIFY(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, res.get());
-
-        nodeInfo.IsRegistered = true;
 
         for (auto it = Self->PDisks.lower_bound(minPDiskId); it != Self->PDisks.end() && it->first.NodeId == nodeId; ++it) {
             Self->ReadPDisk(it->first, *it->second, res.get(), NKikimrBlobStorage::INITIAL);
@@ -426,6 +422,9 @@ void TBlobStorageController::OnRegisterNode(const TActorId& serverId, TNodeId no
 }
 
 void TBlobStorageController::OnWardenConnected(TNodeId nodeId) {
+    TNodeInfo& node = GetNode(nodeId);
+    ++node.ConnectedCount;
+
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
         it->second->UpdateOperational(true);
         SysViewChangedPDisks.insert(it->first);
@@ -433,6 +432,11 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId) {
 }
 
 void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
+    TNodeInfo& node = GetNode(nodeId);
+    if (--node.ConnectedCount) {
+        return; // there are still some connections from this NW
+    }
+
     const TInstant now = TActivationContext::Now();
     std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
@@ -461,8 +465,6 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
         Send(SelfHealId, sh.Release());
     }
     ScrubState.OnNodeDisconnected(nodeId);
-    TNodeInfo& node = GetNode(nodeId);
-    node.IsRegistered = false;
     EraseKnownDrivesOnDisconnected(&node);
     if (!lastSeenReadyQ.empty()) {
         Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));

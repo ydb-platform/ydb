@@ -201,7 +201,7 @@ private:
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
-                if (!AllowYdbRequestsWithoutDatabase) {
+                if (!AllowYdbRequestsWithoutDatabase && DynamicNode) {
                     requestBaseCtx->ReplyUnauthenticated("Requests without specified database is not allowed");
                     return;
                 } else {

@@ -1002,7 +1002,8 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             };
             auto status = client.RetryOperationSync(call);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+            // KIKIMR-14509 - reslore old behaviour allow requests without database for storage nodes
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
 
         }
         TString location = TStringBuilder() << "localhost:" << grpc;

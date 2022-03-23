@@ -293,5 +293,44 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
+TExprBase KqpDropTakeOverLookupTable(const TExprBase& node, TExprContext&, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TCoTake>().Input().Maybe<TKqlLookupTableBase>()) {
+        return node;
+    }
+
+    auto take = node.Cast<TCoTake>();
+    auto lookupTable = take.Input().Cast<TKqlLookupTableBase>();
+
+    if (!take.Count().Maybe<TCoUint64>()) {
+        return node;
+    }
+
+    const ui64 count = FromString<ui64>(take.Count().Cast<TCoUint64>().Literal().Value());
+    YQL_ENSURE(count > 0);
+
+    auto maybeAsList = lookupTable.LookupKeys().Maybe<TCoAsList>();
+    if (!maybeAsList) {
+        maybeAsList = lookupTable.LookupKeys().Maybe<TCoIterator>().List().Maybe<TCoAsList>();
+    }
+
+    if (!maybeAsList) {
+        return node;
+    }
+
+    if (maybeAsList.Cast().ArgCount() > count) {
+        return node;
+    }
+
+    const auto tablePath = lookupTable.Table().Path().Value();
+    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, tablePath);
+
+    const auto& lookupKeys = GetSeqItemType(lookupTable.LookupKeys().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
+    if (table.Metadata->KeyColumnNames.size() != lookupKeys.size()) {
+        return node;
+    }
+
+    return lookupTable;
+}
+
 } // namespace NKikimr::NKqp::NOpt
 

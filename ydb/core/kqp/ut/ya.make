@@ -32,6 +32,7 @@ SRCS(
     kqp_locks_ut.cpp
     kqp_merge_connection_ut.cpp
     kqp_mvcc_ut.cpp
+    kqp_ne_inplace_update_ut.cpp
     kqp_ne_effects_ut.cpp
     kqp_ne_flowcontrol_ut.cpp
     kqp_ne_perf_ut.cpp

@@ -24,18 +24,110 @@ bool InplaceUpdateEnabled(const TKikimrConfiguration& config) {
     return true;
 }
 
-bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input) {
-    // TODO: Check for non-deterministic & unsafe functions (like UDF).
-    // TODO: Once we have partitioning constraints implemented in query optimizer,
-    // use them to detect map writes.
-    if (!input.Maybe<TCoFlatMap>().Input().Maybe<TKqlReadTableBase>()) {
+bool IsSingleKeyStream(const TExprBase& stream, TExprContext&) {
+    auto asList = stream.Maybe<TCoIterator>().List().Maybe<TCoAsList>();
+    if (!asList) {
         return false;
     }
 
-    auto flatmap = input.Cast<TCoFlatMap>();
-    auto read = flatmap.Input().Cast<TKqlReadTableBase>();
+    if (asList.Cast().ArgCount() > 1) {
+        return false;
+    }
 
+    auto asStruct = asList.Cast().Arg(0).Maybe<TCoAsStruct>();
+    if (!asStruct) {
+        return false;
+    }
+
+    return true;
+}
+
+const THashSet<TStringBuf> SafeCallables {
+    TCoJust::CallableName(),
+    TCoCoalesce::CallableName(),
+    TCoToOptional::CallableName(),
+    TCoHead::CallableName(),
+    TCoLast::CallableName(),
+    TCoNth::CallableName(),
+    TCoToList::CallableName(),
+    TCoAsList::CallableName(),
+
+    TCoMember::CallableName(),
+    TCoAsStruct::CallableName(),
+
+    TCoNothing::CallableName(),
+    TCoNull::CallableName(),
+    TCoDefault::CallableName(),
+    TCoExists::CallableName(),
+
+    TCoIf::CallableName(),
+
+    TCoDataType::CallableName(),
+    TCoOptionalType::CallableName(),
+
+    TCoParameter::CallableName(),
+
+    "Concat",
+    "Substring",
+};
+
+bool IsStructOrOptionalStruct(const NYql::TTypeAnnotationNode* type) {
+    if (type->GetKind() == ETypeAnnotationKind::Struct) {
+        return true;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        return type->Cast<TOptionalExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct;
+    }
+
+    return false;
+}
+
+bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input, TExprContext& ctx) {
+// #define DBG YQL_CLOG(ERROR, ProviderKqp)
+#define DBG TStringBuilder()
+
+    DBG << "--> " << KqpExprToPrettyString(input, ctx);
+
+    auto maybeFlatMap = input.Maybe<TCoFlatMap>();
+    if (!maybeFlatMap) {
+        return false;
+    }
+    auto flatmap = maybeFlatMap.Cast();
+
+    if (!IsStructOrOptionalStruct(flatmap.Lambda().Ref().GetTypeAnn())) {
+        DBG << " --> FlatMap with expanding lambda: " << *flatmap.Lambda().Ref().GetTypeAnn();
+        return false;
+    }
+
+    auto maybeLookupTable = flatmap.Input().Maybe<TKqpLookupTable>();
+    if (!maybeLookupTable) {
+        maybeLookupTable = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqpLookupTable>();
+    }
+
+    if (!maybeLookupTable) {
+        DBG << " --> not FlatMap over KqpLookupTable";
+        return false;
+    }
+
+    auto read = maybeLookupTable.Cast();
+
+    // check same table
     if (table.Metadata->PathId.ToString() != read.Table().PathId().Value()) {
+        DBG << " --> not same table";
+        return false;
+    }
+
+    // check keys count
+    if (!IsSingleKeyStream(read.LookupKeys(), ctx)) {
+        DBG << " --> not single key stream";
+        return false;
+    }
+
+    // full key (not prefix)
+    auto* lookupKeyType = GetSeqItemType(read.LookupKeys().Ref().GetTypeAnn());
+    if (table.Metadata->KeyColumnNames.size() != lookupKeyType->Cast<TStructExprType>()->GetSize()) {
+        DBG << " --> not full key";
         return false;
     }
 
@@ -52,7 +144,62 @@ bool IsMapWrite(const TKikimrTableDescription& table, TExprBase input) {
         }
     }
 
-    return true;
+    auto lambda = flatmap.Lambda();
+    if (!lambda.Ref().IsComplete()) {
+        return false;
+    }
+
+    TMaybeNode<TExprBase> notSafeNode;
+    // white list of callables in lambda
+    VisitExpr(lambda.Body().Ptr(),
+        [&notSafeNode] (const TExprNode::TPtr&) {
+            return !notSafeNode;
+        },
+        [&notSafeNode](const TExprNode::TPtr& node) {
+            if (notSafeNode) {
+                return false;
+            }
+            if (node->IsCallable()) {
+                DBG << " --> visit: " << node->Content();
+
+                auto expr = TExprBase(node);
+
+                if (expr.Maybe<TCoDataCtor>()) {
+                    return true;
+                }
+                if (expr.Maybe<TCoCompare>()) {
+                    return true;
+                }
+                if (expr.Maybe<TCoAnd>()) {
+                    return true;
+                }
+                if (expr.Maybe<TCoOr>()) {
+                    return true;
+                }
+                if (expr.Maybe<TCoBinaryArithmetic>()) {
+                    return true;
+                }
+                if (expr.Maybe<TCoCountBase>()) {
+                    return true;
+                }
+
+                if (SafeCallables.contains(node->Content())) {
+                    return true;
+                }
+
+                // TODO: allowed UDFs
+
+                notSafeNode = expr;
+                DBG << " --> not safe node: " << node->Content();
+                return false;
+            }
+
+            return true;
+        });
+
+    return !notSafeNode;
+
+#undef DBG
 }
 
 TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
@@ -108,9 +255,10 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto input = dqUnion.Output().Stage().Program().Body();
+    auto program = dqUnion.Output().Stage().Program();
+    auto input = program.Body();
 
-    if (InplaceUpdateEnabled(*kqpCtx.Config) && IsMapWrite(table, input)) {
+    if (InplaceUpdateEnabled(*kqpCtx.Config) && IsMapWrite(table, input, ctx)) {
         stageInput = Build<TKqpCnMapShard>(ctx, node.Pos())
             .Output()
                 .Stage(dqUnion.Output().Stage())
@@ -171,7 +319,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
     auto input = dqUnion.Output().Stage().Program().Body();
 
-    if (InplaceUpdateEnabled(*kqpCtx.Config) && IsMapWrite(table, input)) {
+    if (InplaceUpdateEnabled(*kqpCtx.Config) && IsMapWrite(table, input, ctx)) {
         stageInput = Build<TKqpCnMapShard>(ctx, node.Pos())
             .Output()
                 .Stage(dqUnion.Output().Stage())

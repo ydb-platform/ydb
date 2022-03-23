@@ -123,6 +123,7 @@ public:
         TKqpSnapshot Snapshot = TKqpSnapshot();
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
+        bool NeedTxId = true;
     };
 
     struct TExecPhysicalResult : public TGenericResult {

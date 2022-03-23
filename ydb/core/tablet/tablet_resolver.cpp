@@ -692,6 +692,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         case TEntry::StInitResolve:
         case TEntry::StNormal:
         case TEntry::StProblemResolve:
+        case TEntry::StFollowerUpdate:
             break;
         case TEntry::StProblemPing:
             if (ev->Sender == entry.KnownLeader) {

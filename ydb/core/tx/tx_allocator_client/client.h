@@ -34,7 +34,7 @@ public:
     explicit TTxAllocatorClient(
         NKikimrServices::EServiceKikimr service,
         NTabletPipe::IClientCache* pipeClientCache,
-        const TVector<TTabletId>& txAllocators);
+        TVector<TTabletId> txAllocators);
 
     void Bootstrap(const TActorContext& ctx);
 

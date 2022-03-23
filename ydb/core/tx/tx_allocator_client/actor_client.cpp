@@ -34,7 +34,13 @@ class TTxAllocatorClientActor: public TActorBootstrapped<TTxAllocatorClientActor
     }
 
     void Handle(TEvTxAllocatorClient::TEvAllocate::TPtr& ev, const TActorContext& ctx) {
-        TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(ev->Get()->Count, ctx);
+        auto count = ev->Get()->Count;
+        if (0 == count) {
+            Send(ev->Sender, new TEvTxAllocatorClient::TEvAllocateResult(TVector<ui64>{}), 0, ev->Cookie);
+            return;
+        }
+
+        TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(count, ctx);
 
         if (txIds) {
             Send(ev->Sender, new TEvTxAllocatorClient::TEvAllocateResult(std::move(txIds)), 0, ev->Cookie);
@@ -83,9 +89,9 @@ public:
         return NKikimrServices::TActivity::TX_ALLOCATOR_CLIENT_ACTOR;
     }
 
-    explicit TTxAllocatorClientActor(const TVector<ui64>& txAllocators)
+    explicit TTxAllocatorClientActor(TVector<ui64> txAllocators)
         : PipeClientCache(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
-        , TxAllocatorClient(NKikimrServices::TX_ALLOCATOR_CLIENT, PipeClientCache.Get(), txAllocators)
+        , TxAllocatorClient(NKikimrServices::TX_ALLOCATOR_CLIENT, PipeClientCache.Get(), std::move(txAllocators))
     {
     }
 
@@ -115,8 +121,8 @@ private:
 
 }; // TTxAllocatorClientActor
 
-IActor* CreateTxAllocatorClient(const TVector<ui64>& txAllocators) {
-    return new TTxAllocatorClientActor(txAllocators);
+IActor* CreateTxAllocatorClient(TVector<ui64> txAllocators) {
+    return new TTxAllocatorClientActor(std::move(txAllocators));
 }
 
 } // NKikimr

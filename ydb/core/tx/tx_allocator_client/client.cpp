@@ -5,10 +5,10 @@ void NKikimr::TTxAllocatorClient::AddAllocationRange(const NKikimr::TTxAllocator
     Capacity += ReservedRanges.back().Capacity();
 }
 
-NKikimr::TTxAllocatorClient::TTxAllocatorClient(NKikimrServices::EServiceKikimr service, NKikimr::NTabletPipe::IClientCache *pipeClientCache, const TVector<NKikimr::TTxAllocatorClient::TTabletId> &txAllocators)
+NKikimr::TTxAllocatorClient::TTxAllocatorClient(NKikimrServices::EServiceKikimr service, NKikimr::NTabletPipe::IClientCache *pipeClientCache, TVector<NKikimr::TTxAllocatorClient::TTabletId> txAllocators)
     : Service(service)
     , PipeClientCache(pipeClientCache)
-    , TxAllocators(txAllocators)
+    , TxAllocators(std::move(txAllocators))
     , MaxCapacity(TxAllocators.size() * RequestPerAllocator)
 {
     Y_VERIFY(!TxAllocators.empty());
@@ -52,10 +52,10 @@ TVector<ui64> NKikimr::TTxAllocatorClient::AllocateTxIds(ui64 count, const NActo
             txIds.push_back(head.Allocate());
             --Capacity;
             --count;
-        }
 
-        if (head.Capacity() <= PreRequestThreshhold) {
-            RegisterRequest(head.AllocatedFrom(), ctx);
+            if (head.Capacity() == PreRequestThreshhold) {
+                RegisterRequest(head.AllocatedFrom(), ctx);
+            }
         }
 
         if (head.Empty()) {

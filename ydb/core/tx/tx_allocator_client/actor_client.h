@@ -27,7 +27,6 @@ struct TEvTxAllocatorClient {
         explicit TEvAllocate(ui32 count)
             : Count(count)
         {
-            Y_VERIFY(count > 0);
         }
     };
 
@@ -49,6 +48,6 @@ struct TEvTxAllocatorClient {
 
 }; // TTxAllocatorClientEvents
 
-IActor* CreateTxAllocatorClient(const TVector<ui64>& txAllocators);
+IActor* CreateTxAllocatorClient(TVector<ui64> txAllocators);
 
 } // NKikimr

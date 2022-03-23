@@ -225,11 +225,20 @@ bool TValidatedDataTx::ReValidateKeys()
 {
     using EResult = NMiniKQL::IEngineFlat::EResult;
 
-    EResult result = EngineBay.ReValidateKeys();
-    if (result != EResult::Ok) {
-        ErrStr = EngineBay.GetEngine()->GetErrors();
-        ErrCode = ConvertErrCode(result);
-        return false;
+    if (IsKqpTx()) {
+        auto [result, error] = EngineBay.GetKqpComputeCtx().ValidateKeys(EngineBay.TxInfo());
+        if (result != EResult::Ok) {
+            ErrStr = std::move(error);
+            ErrCode = ConvertErrCode(result);
+            return false;
+        }
+    } else {
+        EResult result = EngineBay.ReValidateKeys();
+        if (result != EResult::Ok) {
+            ErrStr = EngineBay.GetEngine()->GetErrors();
+            ErrCode = ConvertErrCode(result);
+            return false;
+        }
     }
 
     return true;

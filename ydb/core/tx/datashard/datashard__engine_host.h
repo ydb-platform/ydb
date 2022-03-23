@@ -60,7 +60,7 @@ public:
         return Engine->ValidateKeys(Info);
     }
 
-    void AddReadRange(const TTableId& tableId, const TVector<ui32>& columns, const TTableRange& range,
+    void AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range,
                       const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
 
     void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes);

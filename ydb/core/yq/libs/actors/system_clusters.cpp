@@ -102,7 +102,7 @@ void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TStrin
         clusterCfg->SetConfigManagerEndpoint("cm.global.logbroker.cloud.yandex.net:1111");
         clusterCfg->SetDatabase("/global/b1gvcqr959dbmi1jltep/etn03iai600jur7pipla");
         clusterCfg->SetUseSsl(true);
-        clusterCfg->SetServiceAccountId("aje0ir9755dd4ia9mpu5");
+        clusterCfg->SetServiceAccountId("ajeg8dpl3e4ckjfj1qoq"); // yc-logbroker-reader
         clusterCfg->SetServiceAccountIdSignature("xxx");
         clusterCfg->SetClusterType(TPqClusterConfig::CT_PERS_QUEUE);
         clusters.emplace(clusterCfg->GetName(), PqProviderName);

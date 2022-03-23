@@ -119,16 +119,25 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         return EExecutionStatus::Executed;
     }
 
+
     try {
         auto& kqpTx = dataTx->GetKqpTransaction();
+        auto& tasksRunner = dataTx->GetKqpTasksRunner();
+
+        ui64 consumedMemory = dataTx->GetTxSize() + tasksRunner.GetAllocatedMemory();
+        if (MaybeRequestMoreTxMemory(consumedMemory, txc)) {
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
+                << " requested " << txc.GetRequestedMemory() << " more memory");
+
+            DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
+            return EExecutionStatus::Restart;
+        }
 
         if (!KqpValidateLocks(tabletId, tx, DataShard.SysLocksTable())) {
             KqpEraseLocks(tabletId, tx, DataShard.SysLocksTable());
             DataShard.SysLocksTable().ApplyLocks();
             return EExecutionStatus::Executed;
         }
-
-        auto& tasksRunner = dataTx->GetKqpTasksRunner();
 
         auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - dataTx->GetTxSize());
 

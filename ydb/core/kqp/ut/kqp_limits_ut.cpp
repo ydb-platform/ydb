@@ -184,6 +184,56 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED));
     }
 
+    Y_UNIT_TEST_NEW_ENGINE(BigParameter) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `ManyColumns` (
+                    Key Int32,
+                    Str0 String, Str1 String, Str2 String, Str3 String, Str4 String,
+                    Str5 String, Str6 String, Str7 String, Str8 String, Str9 String,
+                    PRIMARY KEY (Key)
+                )
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto query = Q1_(R"(
+            DECLARE $str0 AS String;
+            DECLARE $str1 AS String;
+            DECLARE $str2 AS String;
+            DECLARE $str3 AS String;
+            DECLARE $str4 AS String;
+            DECLARE $str5 AS String;
+            DECLARE $str6 AS String;
+            DECLARE $str7 AS String;
+            DECLARE $str8 AS String;
+            DECLARE $str9 AS String;
+
+            UPSERT INTO `/Root/ManyColumns` (Key, Str0, Str1, Str2, Str3, Str4, Str5, Str6, Str7, Str8, Str9) VALUES
+                (1, $str0, $str1, $str2, $str3, $str4, $str5, $str6, $str7, $str8, $str9)
+        )");
+
+        auto params = TParamsBuilder()
+            .AddParam("$str0").String(TString(5_MB, 'd')).Build()
+            .AddParam("$str1").String(TString(5_MB, 'o')).Build()
+            .AddParam("$str2").String(TString(5_MB, 'n')).Build()
+            .AddParam("$str3").String(TString(5_MB, 't')).Build()
+            .AddParam("$str4").String(TString(5_MB, 'g')).Build()
+            .AddParam("$str5").String(TString(5_MB, 'i')).Build()
+            .AddParam("$str6").String(TString(5_MB, 'v')).Build()
+            .AddParam("$str7").String(TString(5_MB, 'e')).Build()
+            .AddParam("$str8").String(TString(5_MB, 'u')).Build()
+            .AddParam("$str9").String(TString(1_MB, 'p')).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), std::move(params)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(AffectedShardsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();

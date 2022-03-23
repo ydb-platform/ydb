@@ -96,7 +96,7 @@ private:
                     InternalError("Unexpected event");
                 }
             }
-        } catch (const TMemoryLimitExceededException& e) {
+        } catch (const TMemoryLimitExceededException&) {
             LOG_W("TKqpLiteralExecuter, memory limit exceeded.");
             ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
@@ -159,6 +159,14 @@ private:
             ? std::min(Request.MkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit())
             : rmConfig.GetMkqlLightProgramMemoryLimit();
         alloc.SetLimit(limit);
+
+        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc](ui64 limit, ui64 required) {
+            if (required < 100_MB) {
+                LOG_D("Increase memory limit from " << limit << " to " << required);
+                alloc.SetLimit(required);
+            }
+        });
+
 
         // task runner settings
         NMiniKQL::TKqpComputeContextBase computeCtx;

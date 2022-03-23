@@ -47,6 +47,8 @@ public:
     // otherwise use particular memory limit
     TGuard<NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit = Nothing());
 
+    ui64 GetAllocatedMemory() const { return Alloc->GetAllocated(); }
+
     const TMap<ui64, const NYql::NDq::TDqTaskRunnerStats*> GetTasksStats() const { return Stats; };
 
 private:

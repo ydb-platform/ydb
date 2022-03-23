@@ -3979,7 +3979,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         pageGroup.PageSize = policy->MinDataPageSize;
 
         writeGroup.Cache = Max(family->Cache, cache);
-        writeGroup.Block = NBlockIO::BlockSize;
+        writeGroup.MaxBlobSize = NBlockIO::BlockSize;
         writeGroup.Channel = room->Main;
         addChannel(room->Main);
 

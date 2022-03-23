@@ -285,7 +285,7 @@ namespace NTest {
         template<typename ...TArgs>
         inline TPartCook& AddOpN(ERowOp op, TArgs&&...args)
         {
-            auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...);
+            auto row = *TSchemedCookRow(*Scheme).Col(std::forward<TArgs>(args)...);
 
             return Add(std::move(row), op);
         }
@@ -293,7 +293,7 @@ namespace NTest {
         template<typename ...TArgs>
         inline TPartCook& AddN(TArgs&&...args)
         {
-            auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...);
+            auto row = *TSchemedCookRow(*Scheme).Col(std::forward<TArgs>(args)...);
 
             return Add(std::move(row), ERowOp::Upsert);
         }

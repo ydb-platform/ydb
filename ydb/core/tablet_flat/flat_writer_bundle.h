@@ -32,9 +32,10 @@ namespace NWriter {
 
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
-                Blocks[group].Reset(new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].Block));
+                Blocks[group].Reset(
+                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].MaxBlobSize));
             }
-            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].Block));
+            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].MaxBlobSize));
 
             Growth = new NTable::TScreen::TCook;
         }
@@ -60,7 +61,7 @@ namespace NWriter {
 
         NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body) noexcept
         {
-            return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].Block);
+            return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].MaxBlobSize);
         }
 
     private:

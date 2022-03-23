@@ -131,7 +131,7 @@ namespace NTest {
             return Base->TxSnapTable(table), *this;
         }
 
-        NTest::TNatural Natural(ui32 table) noexcept
+        NTest::TSchemedCookRow SchemedCookRow(ui32 table) noexcept
         {
             return { RowSchemeFor(table) };
         }

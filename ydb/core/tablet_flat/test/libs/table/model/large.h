@@ -25,7 +25,7 @@ namespace NTest {
         {
             const ui64 up = hole ? 0 : 1;
 
-            TNatural row(*Scheme);
+            TSchemedCookRow row(*Scheme);
 
             {
                 Sub[0] += up, row.Col(Seq * 3 + 7, ui32(Seq + 10), Sub[0]);

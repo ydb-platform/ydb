@@ -9,8 +9,8 @@ namespace NPageCollection {
 
     class TWriter {
     public:
-        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 block)
-            : Block(block)
+        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 maxBlobSize)
+            : MaxBlobSize(maxBlobSize)
             , Channel(channel)
             , CookieAllocator(cookieAllocator)
             , Record(cookieAllocator.GroupBy(channel))
@@ -26,16 +26,16 @@ namespace NPageCollection {
         ui32 AddPage(const TArrayRef<const char> body, ui32 type)
         {
             for (size_t offset = 0; offset < body.size(); ) {
-                if (Buffer.capacity() == 0 && Block != Max<ui32>())
-                    Buffer.reserve(Min(Block, ui32(16 * 1024 * 1024)));
+                if (Buffer.capacity() == 0 && MaxBlobSize != Max<ui32>())
+                    Buffer.reserve(Min(MaxBlobSize, ui32(16 * 1024 * 1024)));
 
-                auto piece = Min(body.size() - offset, Block - Buffer.size());
+                auto piece = Min(body.size() - offset, MaxBlobSize - Buffer.size());
                 auto chunk = body.Slice(offset, piece);
 
                 Buffer.append(chunk.data(), chunk.size());
                 offset += piece;
 
-                if (Buffer.size() >= Block) Flush();
+                if (Buffer.size() >= MaxBlobSize) Flush();
             }
 
             return Record.Push(type, body);
@@ -95,7 +95,7 @@ namespace NPageCollection {
         }
 
     public:
-        const ui32 Block = Max<ui32>();
+        const ui32 MaxBlobSize = Max<ui32>();
         const ui8 Channel = Max<ui8>();
     private:
         TString Buffer;

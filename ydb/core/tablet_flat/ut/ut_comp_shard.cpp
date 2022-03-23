@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TRowTool tool(*lay);
         TRowsHeap rows(64 * 1024);
         for (ui64 seq = 0; seq < 4*4; ++seq) {
-            rows.Put(*TNatural(*lay).Col(seq, 500_u32, 42_u32));
+            rows.Put(*TSchemedCookRow(*lay).Col(seq, 500_u32, 42_u32));
         }
 
         auto partView = CreatePart(lay, rows, 4);
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TRowTool tool(*lay);
         TRowsHeap rows(64 * 1024);
         for (ui64 seq = 0; seq < 4*4+2; ++seq) {
-            rows.Put(*TNatural(*lay).Col(seq, 500_u32, 42_u32));
+            rows.Put(*TSchemedCookRow(*lay).Col(seq, 500_u32, 42_u32));
         }
 
         auto partView = CreatePart(lay, rows, 4);
@@ -390,7 +390,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TRowTool tool(*lay);
         TRowsHeap rows(64 * 1024);
         for (ui64 seq = 0; seq < 10*4+3; ++seq) {
-            rows.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
         }
 
         auto partView = CreatePart(lay, rows, 4);
@@ -405,9 +405,9 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         TRowId splitRow = rows.Size() / 2;
         TVector<TSerializedCellVec> splitKeys;
-        splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(*TNatural(*lay).Col(500_u64, 42_u32))));
+        splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(*TSchemedCookRow(*lay).Col(500_u64, 42_u32))));
         splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(rows[splitRow])));
-        splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(*TNatural(*lay).Col(5000_u64, 42_u32))));
+        splitKeys.emplace_back(TSerializedCellVec::Serialize(tool.KeyCells(*TSchemedCookRow(*lay).Col(5000_u64, 42_u32))));
 
         TTableInfo table;
         table.RowScheme = lay.RowScheme();
@@ -467,7 +467,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TRowTool tool(*lay);
         TRowsHeap rows(64 * 1024);
         for (ui64 seq = 0; seq < rowsPerPage * pageCount; ++seq) {
-            rows.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
         }
 
         auto partView = CreatePart(lay, rows, rowsPerPage);
@@ -529,17 +529,17 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         TRowsHeap rows1(64 * 1024);
         for (ui64 seq = 0; seq < 4 * pageCount; ++seq) {
-            rows1.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows1.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
         }
 
         TRowsHeap rows2(64 * 1024);
         for (ui64 seq = 0; seq < 2 * pageCount; ++seq) {
-            rows2.Put(*TNatural(*lay).Col(1002 + seq * 2, 42_u32));
+            rows2.Put(*TSchemedCookRow(*lay).Col(1002 + seq * 2, 42_u32));
         }
 
         TRowsHeap rows3(64 * 1024);
         for (ui64 seq = 0; seq < 1 * pageCount; ++seq) {
-            rows3.Put(*TNatural(*lay).Col(1003 + seq * 4, 42_u32));
+            rows3.Put(*TSchemedCookRow(*lay).Col(1003 + seq * 4, 42_u32));
         }
 
         auto partView1 = CreatePart(lay, rows1, 4);
@@ -601,12 +601,12 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         TRowsHeap rows1(64 * 1024);
         for (ui64 seq = 0; seq < 4 * pageCount; ++seq) {
-            rows1.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows1.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
         }
 
         TRowsHeap rows2(64 * 1024);
         for (ui64 seq = 0; seq < 2 * pageCount; ++seq) {
-            rows2.Put(*TNatural(*lay).Col(1006 + seq * 2, 42_u32));
+            rows2.Put(*TSchemedCookRow(*lay).Col(1006 + seq * 2, 42_u32));
         }
 
         auto partView1 = CreatePart(lay, rows1, 4);
@@ -668,12 +668,12 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         TRowsHeap rows1(64 * 1024);
         for (ui64 seq = 0; seq < 4 * pageCount; ++seq) {
-            rows1.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows1.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
         }
 
         TRowsHeap rows2(64 * 1024);
-        rows2.Put(*TNatural(*lay).Col(1005_u64, 42_u32));
-        rows2.Put(*TNatural(*lay).Col(1006_u64, 42_u32));
+        rows2.Put(*TSchemedCookRow(*lay).Col(1005_u64, 42_u32));
+        rows2.Put(*TSchemedCookRow(*lay).Col(1006_u64, 42_u32));
 
         auto partView1 = CreatePart(lay, rows1, 4);
         auto partView2 = CreatePart(lay, rows2, 4);
@@ -716,12 +716,12 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
 
         TRowsHeap rows1(64 * 1024);
         for (ui64 seq = 0; seq < 4 * pageCount; ++seq) {
-            rows1.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows1.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
         }
 
         TRowsHeap rows2(64 * 1024);
         for (ui64 seq = 0; seq < 5; ++seq) {
-            rows2.Put(*TNatural(*lay).Col(1009 + seq, 42_u32));
+            rows2.Put(*TSchemedCookRow(*lay).Col(1009 + seq, 42_u32));
         }
 
         auto partView1 = CreatePart(lay, rows1, 4);
@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TRowsHeap rows(64 * 1024);
         TPartCook cook(lay, { false, 4096 });
         for (ui64 seq = 0; seq < rowsCount; ++seq) {
-            rows.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
             cook.AddOpN(ERowOp::Erase, 1000 + seq);
         }
 
@@ -838,7 +838,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TRowTool tool(*lay);
         TRowsHeap rows(64 * 1024);
         for (ui64 seq = 0; seq < 4 * pageCount; ++seq) {
-            rows.Put(*TNatural(*lay).Col(1000 + seq, 42_u32));
+            rows.Put(*TSchemedCookRow(*lay).Col(1000 + seq, 42_u32));
         }
 
         auto source = TPartCook(lay, CreateConf(4))

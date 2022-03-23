@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
 
         TRowsHeap rows(nrows);
         for (int i = 0; i < nrows; ++i) {
-            rows.Put(*TNatural(*lay).Col(ui64(i), ui64(i * 10)));
+            rows.Put(*TSchemedCookRow(*lay).Col(ui64(i), ui64(i * 10)));
         }
 
         auto initialConf = NPage::TConf{ false, 2044 };
@@ -211,9 +211,9 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         for (int i = 0; i < nrows; ++i) {
             if (i >= nrows-10) {
                 // last 10 rows are strings offloaded to small blobs
-                rows.Put(*TNatural(*lay).Col(ui64(i), TString("Hello, world!")));
+                rows.Put(*TSchemedCookRow(*lay).Col(ui64(i), TString("Hello, world!")));
             } else {
-                rows.Put(*TNatural(*lay).Col(ui64(i), nullptr));
+                rows.Put(*TSchemedCookRow(*lay).Col(ui64(i), nullptr));
             }
         }
 
@@ -241,9 +241,9 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         for (int i = 0; i < nrows; ++i) {
             if (i >= nrows-10) {
                 // last 10 rows are strings offloaded to small blobs
-                rows.Put(*TNatural(*lay).Col(ui64(i), TString("Hello, world!")));
+                rows.Put(*TSchemedCookRow(*lay).Col(ui64(i), TString("Hello, world!")));
             } else {
-                rows.Put(*TNatural(*lay).Col(ui64(i), nullptr));
+                rows.Put(*TSchemedCookRow(*lay).Col(ui64(i), nullptr));
             }
         }
 

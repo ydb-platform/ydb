@@ -23,7 +23,7 @@ namespace NWriter {
         struct TGroup {
             ui8 Channel = 1;              /* Data channel for page collection */
             ECache Cache = ECache::None;  /* Keep data pages in memory */
-            ui32 Block = 8 * 1024 * 1024; /* Page collection max blob size */
+            ui32 MaxBlobSize = 8 * 1024 * 1024; /* Page collection max blob size */
         };
 
         ui8 BlobsChannel = 1;   /* Channel for external blobs */

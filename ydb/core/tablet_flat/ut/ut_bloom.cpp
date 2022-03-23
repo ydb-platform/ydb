@@ -159,18 +159,18 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         me.To(10).Begin().Apply(*MakeAlter()).Commit();
 
-        const auto ru1 = *me.Natural(1).Col("ba0_huxu", 01234_u64);
-        const auto rw1 = *me.Natural(1).Col("ba2_d7mj", 12340_u64);
-        const auto ru2 = *me.Natural(1).Col("ba4_tfcr", 23401_u64);
-        const auto rw2 = *me.Natural(1).Col("ba6_fdy4", 34012_u64);
-        const auto rw3 = *me.Natural(1).Col("ba8_digr", 40123_u64);
+        const auto ru1 = *me.SchemedCookRow(1).Col("ba0_huxu", 01234_u64);
+        const auto rw1 = *me.SchemedCookRow(1).Col("ba2_d7mj", 12340_u64);
+        const auto ru2 = *me.SchemedCookRow(1).Col("ba4_tfcr", 23401_u64);
+        const auto rw2 = *me.SchemedCookRow(1).Col("ba6_fdy4", 34012_u64);
+        const auto rw3 = *me.SchemedCookRow(1).Col("ba8_digr", 40123_u64);
 
         /* These keys are fitted to be filtered in all parts with
             ByKey Bloom filter enabled, thus in Pw and Pz parts. */
 
-        const auto no1 = *me.Natural(1).Col("ba1_p9lw", 53543_u64);
-        const auto no2 = *me.Natural(1).Col("ba3_g0ny", 53442_u64);
-        const auto no3 = *me.Natural(1).Col("ba5_3hpx", 50894_u64);
+        const auto no1 = *me.SchemedCookRow(1).Col("ba1_p9lw", 53543_u64);
+        const auto no2 = *me.SchemedCookRow(1).Col("ba3_g0ny", 53442_u64);
+        const auto no3 = *me.SchemedCookRow(1).Col("ba5_3hpx", 50894_u64);
 
         /*_ 10: Filter shouldn't be used when it is not enabled, Pu */
 

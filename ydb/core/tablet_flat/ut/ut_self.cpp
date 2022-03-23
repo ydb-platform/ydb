@@ -24,8 +24,8 @@ Y_UNIT_TEST_SUITE(Self) {
             .Key({0, 1});
 
         auto put = *TPut().Do(0, "foo").Do<double>(2, 3.14).Do<ui32>(1, 42);
-        auto natTail = *TNatural(*lay).Col("foo", 42_u32, 3.14);
-        auto natNull = *TNatural(*lay).Col("foo", 42_u32, 3.14, nullptr);
+        auto natTail = *TSchemedCookRow(*lay).Col("foo", 42_u32, 3.14);
+        auto natNull = *TSchemedCookRow(*lay).Col("foo", 42_u32, 3.14, nullptr);
 
         /*_ Different binary rows representations should have the same
             textual output. Along with check that test rows wrappers

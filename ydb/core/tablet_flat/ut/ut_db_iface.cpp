@@ -31,13 +31,13 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
 
-        const auto nil = *me.Natural(1).Col(nullptr);
-        const auto foo = *me.Natural(1).Col("foo", 33_u64);
-        const auto bar = *me.Natural(1).Col("bar", 11_u64);
-        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo");
-        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me");
-        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset);
-        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh");
+        const auto nil = *me.SchemedCookRow(1).Col(nullptr);
+        const auto foo = *me.SchemedCookRow(1).Col("foo", 33_u64);
+        const auto bar = *me.SchemedCookRow(1).Col("bar", 11_u64);
+        const auto ba1 = *me.SchemedCookRow(1).Col("bar", ECellOp::Empty, "yo");
+        const auto ba2 = *me.SchemedCookRow(1).Col("bar", ECellOp::Reset, "me");
+        const auto ba3 = *me.SchemedCookRow(1).Col("bar", 99_u64, ECellOp::Reset);
+        const auto ba4 = *me.SchemedCookRow(1).Col("bar", ECellOp::Null, "eh");
 
         me.To(11).Iter(1).NoKey(foo).NoKey(bar);
 
@@ -101,11 +101,11 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
 
-        const auto bar = *me.Natural(1).Col("bar", 11_u64);
-        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo");
-        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me");
-        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset);
-        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh");
+        const auto bar = *me.SchemedCookRow(1).Col("bar", 11_u64);
+        const auto ba1 = *me.SchemedCookRow(1).Col("bar", ECellOp::Empty, "yo");
+        const auto ba2 = *me.SchemedCookRow(1).Col("bar", ECellOp::Reset, "me");
+        const auto ba3 = *me.SchemedCookRow(1).Col("bar", 99_u64, ECellOp::Reset);
+        const auto ba4 = *me.SchemedCookRow(1).Col("bar", ECellOp::Null, "eh");
 
         me.To(11).Begin().Add(1, bar).Commit().Select(1).Has(bar);
         me.To(12).Snap(1).Compact(1, false).Select(1).Has(bar);
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(10).Begin().Apply(*MakeAlter().Flush());
 
-        const auto nuke = *me.Natural(1).Col(nullptr, 11_u64);
+        const auto nuke = *me.SchemedCookRow(1).Col(nullptr, 11_u64);
 
         me.To(11).Add(1, nuke).Commit().Iter(1).Has(nuke);
 
@@ -151,11 +151,11 @@ Y_UNIT_TEST_SUITE(DBase) {
                 .DropColumn(1, 5)
                 .AddColumnToKey(1, 2));
 
-        const auto foo = *me.Natural(1).Col("foo", nullptr, 33_u64);
-        const auto cap = *me.Natural(1).Col("cap", TOmit{ }, 33_u64);
-        const auto bar = *me.Natural(1).Col("bar", 11_u32, 33_u64, "me", "you");
-        const auto ba8 = *me.Natural(1).Col("bar", 11_u32, 33_u64, "");
-        const auto ba9 = *me.Natural(1).Col("bar", 11_u32, 33_u64, nullptr);
+        const auto foo = *me.SchemedCookRow(1).Col("foo", nullptr, 33_u64);
+        const auto cap = *me.SchemedCookRow(1).Col("cap", TOmit{ }, 33_u64);
+        const auto bar = *me.SchemedCookRow(1).Col("bar", 11_u32, 33_u64, "me", "you");
+        const auto ba8 = *me.SchemedCookRow(1).Col("bar", 11_u32, 33_u64, "");
+        const auto ba9 = *me.SchemedCookRow(1).Col("bar", 11_u32, 33_u64, nullptr);
 
         me.To(13).Put(1, foo, cap, bar).Commit();
         me.Iter(1)
@@ -180,10 +180,10 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
 
-        const auto ro1 = *me.Natural(1).Col("row1", 11_u64, "foo");
-        const auto ro2 = *me.Natural(1).Col("row2", 22_u64, "bar");
-        const auto ro3 = *me.Natural(1).Col("row3", 33_u64, "foo");
-        const auto ro4 = *me.Natural(1).Col("row4", 44_u64, "bar");
+        const auto ro1 = *me.SchemedCookRow(1).Col("row1", 11_u64, "foo");
+        const auto ro2 = *me.SchemedCookRow(1).Col("row2", 22_u64, "bar");
+        const auto ro3 = *me.SchemedCookRow(1).Col("row3", 33_u64, "foo");
+        const auto ro4 = *me.SchemedCookRow(1).Col("row4", 44_u64, "bar");
 
         me.Begin().Put(1, ro1, ro2).Commit().Snap(1).Compact(1, false);
         me.Begin().Put(1, ro3, ro4).Commit().Snap(1).Compact(1, false);
@@ -223,10 +223,10 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
 
-        const auto ro1 = *me.Natural(1).Col("foo", 11_u64, "boo");
-        const auto ro2 = *me.Natural(1).Col("foo", 22_u64);
-        const auto ro3 = *me.Natural(1).Col("foo");
-        const auto ro4 = *me.Natural(1).Col("foo", 99_u64);
+        const auto ro1 = *me.SchemedCookRow(1).Col("foo", 11_u64, "boo");
+        const auto ro2 = *me.SchemedCookRow(1).Col("foo", 22_u64);
+        const auto ro3 = *me.SchemedCookRow(1).Col("foo");
+        const auto ro4 = *me.SchemedCookRow(1).Col("foo", 99_u64);
 
         /*_ 10: Cut columns from table updating reduced row each time   */
 
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(10).Begin().Apply(*MakeAlter(2)).Commit();
 
-        const auto row = *me.Natural(2).Col("foo", 11_u64, "bar");
+        const auto row = *me.SchemedCookRow(2).Col("foo", 11_u64, "bar");
 
         /*_ 10: Basic affects on one table modification */
 
@@ -364,12 +364,12 @@ Y_UNIT_TEST_SUITE(DBase) {
         const TString large42("0123456789abcdef0123456789abcdef0123456789");
         const TString large44("0123456789abcdef0123456789abcdef0123456789ab");
 
-        const auto foo  = *me.Natural(1).Col("foo", 77_u64, "foo");
-        const auto ro30 = *me.Natural(1).Col("l30", 30_u64, large30);
-        const auto ro35 = *me.Natural(1).Col("l35", 35_u64, large35);
-        const auto ro42 = *me.Natural(1).Col("l42", 42_u64, large42);
-        const auto ro44 = *me.Natural(1).Col("l44", 44_u64, large44);
-        const auto zap  = *me.Natural(1).Col("zap", 55_u64, "zap");
+        const auto foo  = *me.SchemedCookRow(1).Col("foo", 77_u64, "foo");
+        const auto ro30 = *me.SchemedCookRow(1).Col("l30", 30_u64, large30);
+        const auto ro35 = *me.SchemedCookRow(1).Col("l35", 35_u64, large35);
+        const auto ro42 = *me.SchemedCookRow(1).Col("l42", 42_u64, large42);
+        const auto ro44 = *me.SchemedCookRow(1).Col("l44", 44_u64, large44);
+        const auto zap  = *me.SchemedCookRow(1).Col("zap", 55_u64, "zap");
 
         /*_ 10: Regular write without producing annex to redo log */
 
@@ -450,9 +450,9 @@ Y_UNIT_TEST_SUITE(DBase) {
         const TString small17("0123456789abcdef0");
         const TString small21("0123456789abcdef01234");
 
-        const auto foo  = *me.Natural(1).Col("foo", 77_u64, "foo");
-        const auto ro17 = *me.Natural(1).Col("s17", 17_u64, small17);
-        const auto ro21 = *me.Natural(1).Col("s21", 21_u64, small21);
+        const auto foo  = *me.SchemedCookRow(1).Col("foo", 77_u64, "foo");
+        const auto ro17 = *me.SchemedCookRow(1).Col("s17", 17_u64, small17);
+        const auto ro21 = *me.SchemedCookRow(1).Col("s21", 21_u64, small21);
 
         /*_ 10: Prepare two parts with attached outer blobs */
 
@@ -494,13 +494,13 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(10).Begin().Apply(*MakeAlter().Flush()).Commit();
 
-        const auto nil = *me.Natural(1).Col(nullptr);
-        const auto foo = *me.Natural(1).Col("foo", 33_u64);
-        const auto bar = *me.Natural(1).Col("bar", 11_u64);
-        const auto ba1 = *me.Natural(1).Col("bar", ECellOp::Empty, "yo");
-        const auto ba2 = *me.Natural(1).Col("bar", ECellOp::Reset, "me");
-        const auto ba3 = *me.Natural(1).Col("bar", 99_u64, ECellOp::Reset);
-        const auto ba4 = *me.Natural(1).Col("bar", ECellOp::Null, "eh");
+        const auto nil = *me.SchemedCookRow(1).Col(nullptr);
+        const auto foo = *me.SchemedCookRow(1).Col("foo", 33_u64);
+        const auto bar = *me.SchemedCookRow(1).Col("bar", 11_u64);
+        const auto ba1 = *me.SchemedCookRow(1).Col("bar", ECellOp::Empty, "yo");
+        const auto ba2 = *me.SchemedCookRow(1).Col("bar", ECellOp::Reset, "me");
+        const auto ba3 = *me.SchemedCookRow(1).Col("bar", 99_u64, ECellOp::Reset);
+        const auto ba4 = *me.SchemedCookRow(1).Col("bar", ECellOp::Null, "eh");
 
         me.To(11).Iter(1).NoKey(foo).NoKey(bar);
 
@@ -601,17 +601,17 @@ Y_UNIT_TEST_SUITE(DBase) {
         // Add a "null" key with a 0/40 version, for a better code coverage in
         // the version iteration cases, so compaction would actually try
         // descending below 1/50 and won't bail out.
-        me.To(15).Begin().WriteVer({0, 40}).Put(table, *me.Natural(table).Col(nullptr)).Commit();
+        me.To(15).Begin().WriteVer({0, 40}).Put(table, *me.SchemedCookRow(table).Col(nullptr)).Commit();
 
         // Create 1000 rows with 3 consecutive versions each, filling different columns
         me.To(20).Begin();
         for (ui64 i = 1000; i < 2000; ++i) {
             // Version 1/50, keys added, but all columns are empty (default)
-            me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty));
+            me.WriteVer({1, 50}).Put(table, *me.SchemedCookRow(table).Col(i, ECellOp::Empty, ECellOp::Empty));
             // Version 2/60, keys updated with arg1=i
-            me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty));
+            me.WriteVer({2, 60}).Put(table, *me.SchemedCookRow(table).Col(i, i, ECellOp::Empty));
             // Version 3/70, keys updated with arg2=3000-i
-            me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i));
+            me.WriteVer({3, 70}).Put(table, *me.SchemedCookRow(table).Col(i, ECellOp::Empty, 3000-i));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {
@@ -621,7 +621,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         // Create 1000 more rows using different memtables
         me.To(22).Begin();
         for (ui64 i = 2000; i < 3000; ++i) {
-            me.WriteVer({1, 50}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, ECellOp::Empty));
+            me.WriteVer({1, 50}).Put(table, *me.SchemedCookRow(table).Col(i, ECellOp::Empty, ECellOp::Empty));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {
@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(23).Begin();
         for (ui64 i = 2000; i < 3000; ++i) {
-            me.WriteVer({2, 60}).Put(table, *me.Natural(table).Col(i, i, ECellOp::Empty));
+            me.WriteVer({2, 60}).Put(table, *me.SchemedCookRow(table).Col(i, i, ECellOp::Empty));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {
@@ -639,7 +639,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(24).Begin();
         for (ui64 i = 2000; i < 3000; ++i) {
-            me.WriteVer({3, 70}).Put(table, *me.Natural(table).Col(i, ECellOp::Empty, 3000-i));
+            me.WriteVer({3, 70}).Put(table, *me.SchemedCookRow(table).Col(i, ECellOp::Empty, 3000-i));
         }
         me.Commit().Snap(table);
         if (compactMemTables) {
@@ -655,8 +655,8 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(30);
         for (ui64 i = 1000; i < 3000; ++i) {
             // No key before 1/50
-            me.ReadVer({1, 49}).Select(table).NoKey(*me.Natural(table).Col(i));
-            me.ReadVer({1, 49}).Iter(table).NoKey(*me.Natural(table).Col(i));
+            me.ReadVer({1, 49}).Select(table).NoKey(*me.SchemedCookRow(table).Col(i));
+            me.ReadVer({1, 49}).Iter(table).NoKey(*me.SchemedCookRow(table).Col(i));
             // Key with default values until 2/60
             me.ReadVer({2, 59}).Select(table).HasN(i, 10004_u64, 10005_u64);
             me.ReadVer({2, 59}).Iter(table).HasN(i, 10004_u64, 10005_u64);
@@ -674,15 +674,15 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         // Verify iteration before 1/50
         me.To(32).ReadVer({1, 49}).Iter(table, false)
-            .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64))
+            .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(nullptr, 10004_u64, 10005_u64))
             .Next().Is(EReady::Gone);
 
         // Verify iteration before 2/60
         {
             auto checker = me.To(33).ReadVer({2, 59}).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
+                .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(nullptr, 10004_u64, 10005_u64));
             for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, 10004_u64, 10005_u64));
+                checker.Next().Is(*me.SchemedCookRow(table).Col(i, 10004_u64, 10005_u64));
             }
             checker.Next().Is(EReady::Gone);
         }
@@ -690,9 +690,9 @@ Y_UNIT_TEST_SUITE(DBase) {
         // Verify iteration before 3/70
         {
             auto checker = me.To(34).ReadVer({3, 69}).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
+                .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(nullptr, 10004_u64, 10005_u64));
             for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, i, 10005_u64));
+                checker.Next().Is(*me.SchemedCookRow(table).Col(i, i, 10005_u64));
             }
             checker.Next().Is(EReady::Gone);
         }
@@ -700,9 +700,9 @@ Y_UNIT_TEST_SUITE(DBase) {
         // Verify iteration at 3/70
         {
             auto checker = me.To(35).ReadVer({3, 70}).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
+                .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(nullptr, 10004_u64, 10005_u64));
             for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, i, 3000-i));
+                checker.Next().Is(*me.SchemedCookRow(table).Col(i, i, 3000-i));
             }
             checker.Next().Is(EReady::Gone);
         }
@@ -710,9 +710,9 @@ Y_UNIT_TEST_SUITE(DBase) {
         // Verify iteration at HEAD
         {
             auto checker = me.To(36).ReadVer(TRowVersion::Max()).Iter(table, false)
-                .Seek({ }, ESeek::Lower).Is(*me.Natural(table).Col(nullptr, 10004_u64, 10005_u64));
+                .Seek({ }, ESeek::Lower).Is(*me.SchemedCookRow(table).Col(nullptr, 10004_u64, 10005_u64));
             for (ui64 i = 1000; i < 3000; ++i) {
-                checker.Next().Is(*me.Natural(table).Col(i, i, 3000-i));
+                checker.Next().Is(*me.SchemedCookRow(table).Col(i, i, 3000-i));
             }
             checker.Next().Is(EReady::Gone);
         }

@@ -18,10 +18,11 @@ namespace NTest {
             Y_VERIFY(!*row, "Cooked row hasn't been grabbed to TRow");
         }
 
-        template<typename ...TArgs>
-        inline TCookRow& Do(NTable::TTag tag, TArgs&& ...args)
+        template<typename TVal>
+        inline TCookRow& Do(NTable::TTag tag, TVal&& val)
         {
-            return row.Do(tag, std::forward<TArgs>(args)...), *this;
+            row.Do(tag, std::move(val));
+            return *this;
         }
 
         TRow operator *() noexcept
@@ -33,9 +34,9 @@ namespace NTest {
         TRow row;
     };
 
-    class TNatural {
+    class TSchemedCookRow {
     public:
-        TNatural(const TRowScheme &scheme, TPos skip = 0)
+        TSchemedCookRow(const TRowScheme &scheme, TPos skip = 0)
             : On(skip), Scheme(scheme) { }
 
         inline TRow operator*() noexcept
@@ -43,18 +44,18 @@ namespace NTest {
             return std::move(Row);
         }
 
-        TNatural& To(TPos to) noexcept
+        TSchemedCookRow& To(TPos to) noexcept
         {
-            if(to < On || to >= Scheme.Cols.size()) {
-
-                Y_FAIL("TNatural row builder skip position is out of range");
+            if (to < On || to >= Scheme.Cols.size()) {
+                Y_FAIL("TSchemedCookRow row builder skip position is out of range");
             }
 
-            return On = to, *this;
+            On = to;
+            return *this;
         }
 
         template<typename TVal, typename ...TArgs>
-        inline TNatural& Col(const TVal &val, TArgs&&...args)
+        inline TSchemedCookRow& Col(const TVal &val, TArgs&&...args)
         {
             if (On >= Scheme.Cols.size()) {
                 Y_FAIL("NO more columns left in row scheme");

@@ -35,8 +35,8 @@ Y_UNIT_TEST_SUITE(NPage) {
             .Col(0, 1,  NScheme::NTypeIds::String)
             .Key({ 0 });
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo");
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar");
+        const TRow foo = *TSchemedCookRow(*lay).Col(555_u32, "foo");
+        const TRow bar = *TSchemedCookRow(*lay).Col(777_u32, "bar");
 
         NPage::TConf conf{ true, 2 * 1024 };
 

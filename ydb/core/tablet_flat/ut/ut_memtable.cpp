@@ -40,14 +40,14 @@ Y_UNIT_TEST_SUITE(Memtable)
 
         /* Test copied from TPart::Basics with except of iteration */
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
 
         TCheckIt wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { });
 
         wrap.To(10).Has(foo).Has(bar);
-        wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.));
-        wrap.To(12).NoKey(*TNatural(*lay).Col(888_u32, "foo", 3.14));
+        wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
+        wrap.To(12).NoKey(*TSchemedCookRow(*lay).Col(888_u32, "foo", 3.14));
 
         /*_ Basic lower and upper bounds lookup semantic  */
 
@@ -64,8 +64,8 @@ Y_UNIT_TEST_SUITE(Memtable)
         /* ... but incomplete keys are padded with +inf instead of nulls
             on lookup. Check that it really happens for Seek()'s */
 
-        wrap.To(33).Seek(*TNatural(*lay).Col(555_u32), ESeek::Lower).Is(bar);
-        wrap.To(34).Seek(*TNatural(*lay).Col(555_u32), ESeek::Upper).Is(bar);
+        wrap.To(33).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Lower).Is(bar);
+        wrap.To(34).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Upper).Is(bar);
 
         /*_ Basic iteration over two rows in tables */
 
@@ -79,14 +79,14 @@ Y_UNIT_TEST_SUITE(Memtable)
 
         /* Test copied from TPart::Basics with except of iteration */
 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
+        const auto foo = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        const auto bar = *TSchemedCookRow(*lay).Col(777_u32, "bar", 2.72, true);
 
         TCheckReverseIt wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { });
 
         wrap.To(10).Has(foo).Has(bar);
-        wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.));
-        wrap.To(12).NoKey(*TNatural(*lay).Col(888_u32, "foo", 3.14));
+        wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
+        wrap.To(12).NoKey(*TSchemedCookRow(*lay).Col(888_u32, "foo", 3.14));
 
         /*_ Basic lower and upper bounds lookup semantic  */
 
@@ -104,8 +104,8 @@ Y_UNIT_TEST_SUITE(Memtable)
         /* ... but incomplete keys are padded with +inf instead of nulls
             on lookup. Check that it really happens for Seek()'s */
 
-        wrap.To(33).Seek(*TNatural(*lay).Col(555_u32), ESeek::Lower).Is(foo);
-        wrap.To(34).Seek(*TNatural(*lay).Col(555_u32), ESeek::Upper).Is(foo);
+        wrap.To(33).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Lower).Is(foo);
+        wrap.To(34).Seek(*TSchemedCookRow(*lay).Col(555_u32), ESeek::Upper).Is(foo);
 
         /*_ Basic iteration over two rows in tables */
 
@@ -117,8 +117,8 @@ Y_UNIT_TEST_SUITE(Memtable)
     {
         const auto lay = BasicRowLayout();
 
-        auto reset = *TNatural(*lay).Col(555_u32, "foo", ECellOp::Reset);
-        auto null  = *TNatural(*lay).Col(556_u32, "foo", ECellOp::Null);
+        auto reset = *TSchemedCookRow(*lay).Col(555_u32, "foo", ECellOp::Reset);
+        auto null  = *TSchemedCookRow(*lay).Col(556_u32, "foo", ECellOp::Null);
 
         TCooker cooker(lay);
 
@@ -130,13 +130,13 @@ Y_UNIT_TEST_SUITE(Memtable)
     {
         const auto lay = BasicRowLayout();
 
-        auto r0W = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
-        auto r1W = *TNatural(*lay).Col(555_u32, "foo", nullptr, false);
-        auto r2W = *TNatural(*lay).Col(555_u32, "foo", 2.72);
-        auto r2R = *TNatural(*lay).Col(555_u32, "foo", 2.72, false);
-        auto r3W = *TNatural(*lay).Col(555_u32, "foo", nullptr, true);
-        auto r4W = *TNatural(*lay).Col(555_u32, "foo", ECellOp::Reset);
-        auto r4R = *TNatural(*lay).Col(555_u32, "foo", 3.14, true);
+        auto r0W = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        auto r1W = *TSchemedCookRow(*lay).Col(555_u32, "foo", nullptr, false);
+        auto r2W = *TSchemedCookRow(*lay).Col(555_u32, "foo", 2.72);
+        auto r2R = *TSchemedCookRow(*lay).Col(555_u32, "foo", 2.72, false);
+        auto r3W = *TSchemedCookRow(*lay).Col(555_u32, "foo", nullptr, true);
+        auto r4W = *TSchemedCookRow(*lay).Col(555_u32, "foo", ECellOp::Reset);
+        auto r4R = *TSchemedCookRow(*lay).Col(555_u32, "foo", 3.14, true);
 
         TCooker cooker(lay);
 

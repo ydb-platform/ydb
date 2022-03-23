@@ -191,6 +191,12 @@ void TSchemeShard::UpdateShardMetrics(
     const TShardIdx& shardIdx,
     const TTableInfo::TPartitionStats& newStats)
 {
+    if (newStats.HasBorrowed)
+        ShardsWithBorrowed.insert(shardIdx);
+    else
+        ShardsWithBorrowed.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_BORROWED_DATA].Set(ShardsWithBorrowed.size());
+
     THashMap<TShardIdx, TPartitionMetrics>::insert_ctx insertCtx;
     auto it = PartitionMetricsMap.find(shardIdx, insertCtx);
     if (it != PartitionMetricsMap.end()) {
@@ -221,6 +227,9 @@ void TSchemeShard::UpdateShardMetrics(
 }
 
 void TSchemeShard::RemoveShardMetrics(const TShardIdx& shardIdx) {
+    ShardsWithBorrowed.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_BORROWED_DATA].Set(ShardsWithBorrowed.size());
+
     auto it = PartitionMetricsMap.find(shardIdx);
     if (it == PartitionMetricsMap.end())
         return;

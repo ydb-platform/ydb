@@ -49,6 +49,7 @@ enum EServiceKikimr {
     BS_PROXY_PATCH = 343;
     BS_VDISK_SCRUB = 344;
     BS_VDISK_PATCH = 345;
+    BS_VDISK_DEFRAG = 346;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //

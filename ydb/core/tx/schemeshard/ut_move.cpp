@@ -22,7 +22,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true));
+                     .EnableAsyncIndexes(true)
+                     .EnableSchemeTransactionsAtSchemeShard(false));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -58,8 +59,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
                      TTestEnvOptions()
-                     .EnableAsyncIndexes(true)
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     .EnableAsyncIndexes(true));
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
@@ -243,8 +243,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     Y_UNIT_TEST(MoveTableForBackup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime,
-                     TTestEnvOptions()
-                     .EnableSchemeTransactionsAtSchemeShard(true));
+                     TTestEnvOptions());
 
         ui64 txId = 100;
 

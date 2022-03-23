@@ -660,7 +660,7 @@ message TFeatureFlags {
     optional bool EnableVPatch = 45 [default = false];
     optional bool EnableMvccSnapshotReads = 46 [default = false];
     optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
-    optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = false];
+    optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
     optional bool EnableBackgroundCompaction = 51 [default = false];

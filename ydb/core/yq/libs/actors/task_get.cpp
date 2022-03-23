@@ -161,6 +161,7 @@ private:
                 newTask->set_status(task.Query.meta().status());
                 *newTask->mutable_created_topic_consumers() = task.Internal.created_topic_consumers();
                 newTask->mutable_sensor_labels()->insert({"cloud_id", task.Internal.cloud_id()});
+                newTask->mutable_sensor_labels()->insert({"scope", task.Scope});
                 newTask->set_automatic(task.Query.content().automatic());
                 newTask->set_query_name(task.Query.content().name());
                 *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);

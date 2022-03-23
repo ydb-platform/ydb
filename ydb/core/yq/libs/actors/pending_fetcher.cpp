@@ -328,6 +328,11 @@ private:
             task.automatic() ? (task.query_name() ? task.query_name() : "automatic") : queryId);
 
         auto rootCountersParent = ServiceCounters.RootCounters;
+        std::set<std::pair<TString, TString>> sensorLabels(task.sensor_labels().begin(), task.sensor_labels().end());
+        for (const auto& [label, item]: sensorLabels) {
+            rootCountersParent = rootCountersParent->GetSubgroup(label, item);
+        }
+
         queryCounters.RootCounters = rootCountersParent->GetSubgroup("query_id",
             task.automatic() ? (folderId ? "automatic_" + folderId : "automatic") : queryId);
         queryCounters.Counters = queryCounters.RootCounters;

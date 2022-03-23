@@ -2,6 +2,7 @@
 
 #include <ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/core/yq/libs/config/protos/common.pb.h>
+#include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
@@ -14,6 +15,7 @@ namespace NYq {
 std::unique_ptr<NActors::IActor> NewStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TYqSharedResources::TPtr& yqSharedResources);
 
 } // namespace NYq

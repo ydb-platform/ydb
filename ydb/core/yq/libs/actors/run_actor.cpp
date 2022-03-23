@@ -113,7 +113,7 @@ public:
                 Params.QueryId,
                 Params.Owner,
                 TPrivateClient(
-                    Params.Driver,
+                    Params.YqSharedResources->CoreYdbDriver,
                     NYdb::TCommonClientSettings()
                     .DiscoveryEndpoint(Params.PrivateApiConfig.GetTaskServiceEndpoint())
                     .EnableSsl(Params.PrivateApiConfig.GetSecureTaskService())
@@ -412,7 +412,7 @@ private:
                     ::NYq::MakeReadRuleCreatorActor(
                         SelfId(),
                         Params.QueryId,
-                        Params.Driver,
+                        Params.YqSharedResources->UserSpaceYdbDriver,
                         std::move(TopicsForConsumersCreation),
                         std::move(CredentialsForConsumersCreation)
                     )
@@ -771,7 +771,7 @@ private:
             ::NYq::MakeReadRuleDeleterActor(
                 SelfId(),
                 Params.QueryId,
-                Params.Driver,
+                Params.YqSharedResources->UserSpaceYdbDriver,
                 Params.CreatedTopicConsumers,
                 std::move(credentials)
             )
@@ -832,7 +832,7 @@ private:
             }
             resultId = NActors::TActivationContext::Register(
                     CreateResultWriter(
-                        Params.Driver, ExecuterId, dqGraphParams.GetResultType(), Params.PrivateApiConfig,
+                        Params.YqSharedResources->UserSpaceYdbDriver, ExecuterId, dqGraphParams.GetResultType(), Params.PrivateApiConfig,
                         writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ClientCounters));
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
@@ -1096,7 +1096,7 @@ private:
         }
 
         {
-            dataProvidersInit.push_back(GetYdbDataProviderInitializer(Params.Driver, Params.CredentialsFactory, dbResolver));
+            dataProvidersInit.push_back(GetYdbDataProviderInitializer(Params.YqSharedResources->UserSpaceYdbDriver, Params.CredentialsFactory, dbResolver));
         }
 
         {
@@ -1109,7 +1109,7 @@ private:
 
         {
             NYql::TPqGatewayServices pqServices(
-                Params.Driver,
+                Params.YqSharedResources->UserSpaceYdbDriver,
                 Params.PqCmConnections,
                 Params.CredentialsFactory,
                 std::make_shared<NYql::TPqGatewayConfig>(gatewaysConfig.GetPq()),

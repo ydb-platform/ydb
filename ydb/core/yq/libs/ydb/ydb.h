@@ -4,6 +4,7 @@
 #include <ydb/core/yq/libs/config/protos/storage.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 namespace NYq {
 
@@ -11,15 +12,15 @@ namespace NYq {
 
 struct TYdbConnection : public TThrRefBase {
     NYdb::TDriver Driver;
-    NYdb::NTable::TTableClient Client;
+    NYdb::NTable::TTableClient TableClient;
+    NYdb::NScheme::TSchemeClient SchemeClient;
     const TString DB;
     const TString TablePathPrefix;
 
     TYdbConnection(
-        const NYdb::TDriverConfig& driverConfig,
-        const NConfig::TYdbStorageConfig& config);
-
-    ~TYdbConnection();
+        const NConfig::TYdbStorageConfig& config,
+        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+        const NYdb::TDriver& driver);
 };
 
 using TYdbConnectionPtr = TIntrusivePtr<TYdbConnection>;
@@ -94,9 +95,7 @@ using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory);
-
-TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory);
+TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
 
 NYdb::TStatus MakeErrorStatus(
     NYdb::EStatus code,

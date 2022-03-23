@@ -73,7 +73,7 @@ public:
         , YqSharedResources(yqSharedResources)
         , IcPort(icPort)
         , Client(
-            YqSharedResources->YdbDriver,
+            YqSharedResources->CoreYdbDriver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
                 .EnableSsl(PrivateApiConfig.GetSecureTaskService())

@@ -22,6 +22,9 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TSettings>
+TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory);
+
 TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context) {
     // TODO: use prepared queries
 
@@ -166,29 +169,9 @@ TFuture<TStatus> RegisterGenerationWrapper(
         });
 }
 
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-TYdbConnection::TYdbConnection(const TDriverConfig& driverConfig,
-                               const NConfig::TYdbStorageConfig& config)
-    : Driver(driverConfig)
-    , Client(Driver)
-    , DB(config.GetDatabase())
-    , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
-{
-}
-
-TYdbConnection::~TYdbConnection()
-{
-    Driver.Stop(true);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-
-NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config,
-                                    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
+template <class TSettings>
+TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
+                                                     const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
     TString oauth;
     if (config.GetToken()) {
         oauth = config.GetToken();
@@ -201,9 +184,10 @@ NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config,
     const TString iamEndpoint = config.GetIamEndpoint();
     const TString saKeyFile = config.GetSaKeyFile();
 
-    auto driverConfig = TDriverConfig()
-        .SetEndpoint(config.GetEndpoint())
-        .SetDatabase(config.GetDatabase());
+    TSettings settings;
+    settings
+        .DiscoveryEndpoint(config.GetEndpoint())
+        .Database(config.GetDatabase());
 
     NKikimr::TYdbCredentialsSettings credSettings;
     credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
@@ -211,24 +195,43 @@ NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config,
     credSettings.SaKeyFile = config.GetSaKeyFile();
     credSettings.IamEndpoint = config.GetIamEndpoint();
 
-    driverConfig.SetCredentialsProviderFactory(credProviderFactory(credSettings));
+    settings.CredentialsProviderFactory(credProviderFactory(credSettings));
 
     if (config.GetUseLocalMetadataService()) {
-        driverConfig.UseSecureConnection();
+        settings.EnableSsl(true);
     }
 
     if (config.GetCertificateFile()) {
         auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
-        driverConfig.UseSecureConnection(cert);
+        settings
+            .EnableSsl(true)
+            .CaCert(cert);
     }
 
-    return driverConfig;
+    return settings;
 }
 
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TYdbConnection::TYdbConnection(const NConfig::TYdbStorageConfig& config,
+                               const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+                               const NYdb::TDriver& driver)
+    : Driver(driver)
+    , TableClient(Driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory))
+    , SchemeClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
+    , DB(config.GetDatabase())
+    , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config,
-                                   const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
-    auto driverConfig = GetDriverConfig(config, credProviderFactory);
-    return MakeIntrusive<TYdbConnection>(driverConfig, config);
+                                   const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+                                   const NYdb::TDriver& driver) {
+    return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);
 }
 
 TStatus MakeErrorStatus(
@@ -266,7 +269,7 @@ TFuture<TStatus> CreateTable(
 {
     auto tablePath = JoinPath(ydbConnection->TablePathPrefix, name.c_str());
 
-    return ydbConnection->Client.RetryOperation(
+    return ydbConnection->TableClient.RetryOperation(
         [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
             return session.CreateTable(tablePath, TTableDescription(description));
         });

@@ -62,6 +62,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   libs-audit-mock
   yq-libs-init
   yq-libs-mock
+  yq-libs-shared_resources
   ydb-library-aclib
   library-folder_service-mock
   library-mkql_proto-protos

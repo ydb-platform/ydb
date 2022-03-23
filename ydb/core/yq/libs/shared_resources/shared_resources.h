@@ -16,7 +16,11 @@ struct TYqSharedResources : public IYqSharedResources {
     static TPtr Cast(const IYqSharedResources::TPtr& ptr);
 
     // Resources
-    NYdb::TDriver YdbDriver;
+
+    // Separated YDB drivers for user queries execution and for YQ core usage.
+    // For now they are actually point to the same driver, but it can be changed in the future.
+    NYdb::TDriver CoreYdbDriver;
+    NYdb::TDriver UserSpaceYdbDriver;
     TDbPoolHolder::TPtr DbPoolHolder;
 
 protected:

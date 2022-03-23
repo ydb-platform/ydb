@@ -548,6 +548,7 @@ TFuture<TStatus> UpdateCheckpointWithCheckWrapper(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCheckpointStorage : public ICheckpointStorage {
+    TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
     const NConfig::TYdbStorageConfig Config;
 
@@ -555,7 +556,8 @@ public:
     explicit TCheckpointStorage(
         const NConfig::TYdbStorageConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const IEntityIdGenerator::TPtr& entityIdGenerator);
+        const IEntityIdGenerator::TPtr& entityIdGenerator,
+        const TYqSharedResources::TPtr& yqSharedResources);
 
     ~TCheckpointStorage() = default;
 
@@ -624,8 +626,10 @@ private:
 TCheckpointStorage::TCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const IEntityIdGenerator::TPtr& entityIdGenerator)
-    : YdbConnection(NewYdbConnection(config, credentialsProviderFactory))
+    const IEntityIdGenerator::TPtr& entityIdGenerator,
+    const TYqSharedResources::TPtr& yqSharedResources)
+    : YqSharedResources(yqSharedResources)
+    , YdbConnection(NewYdbConnection(config, credentialsProviderFactory, YqSharedResources->CoreYdbDriver))
     , Config(config)
     , EntityIdGenerator(entityIdGenerator)
 {
@@ -637,8 +641,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
     // TODO: list at first?
     if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
-        auto schemeClient = NScheme::TSchemeClient(YdbConnection->Driver);
-        auto status = schemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
+        auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
             issues = status.GetIssues();
 
@@ -713,7 +716,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)
 {
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator] (TSession session) {
             auto context = MakeIntrusive<TGenerationContext>(
                 session,
@@ -734,7 +737,7 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
 TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoordinators() {
     auto getContext = MakeIntrusive<TGetCoordinatorsContext>();
 
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, getContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -788,7 +791,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 
 TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& checkpointContext) {
     Y_VERIFY(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator);
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -823,7 +826,7 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
     ECheckpointStatus prevStatus)
 {
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, newStatus, prevStatus);
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -849,7 +852,7 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
     const TCheckpointId& checkpointId)
 {
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted);
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -879,7 +882,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
 {
     auto getContext = MakeIntrusive<TGetCheckpointsContext>();
 
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graph, getContext, statuses, limit, loadGraphDescription, settings = DefaultExecDataQuerySettings()] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -906,7 +909,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
 }
 
 TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId] (TSession session) {
             // TODO: use prepared queries
             auto query = Sprintf(R"(
@@ -944,7 +947,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
     const TString& graphId,
     const TCheckpointId& checkpointUpperBound)
 {
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound] (TSession session) {
             // TODO: use prepared queries
             auto query = Sprintf(R"(
@@ -984,7 +987,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
     const TString& graphId,
     const TCheckpointId& checkpointUpperBound)
 {
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound] (TSession session) {
             // TODO: use prepared queries
             using namespace fmt::literals;
@@ -1055,9 +1058,9 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
 
     return StatusToIssues(future);
 }
-TFuture<ICheckpointStorage::TAddToStateSizeResult> NYq::TCheckpointStorage::AddToStateSize(const TString& graphId, const TCheckpointId& checkpointId, ui64 size) {
+TFuture<ICheckpointStorage::TAddToStateSizeResult> TCheckpointStorage::AddToStateSize(const TString& graphId, const TCheckpointId& checkpointId, ui64 size) {
     auto result = MakeIntrusive<TAddToStateSizeContext>();
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, checkpointId, size, result, thisPtr = TIntrusivePtr(this)](TSession session) {
             NYdb::TParamsBuilder paramsBuilder;
             paramsBuilder.AddParam("$graph_id").String(graphId).Build();
@@ -1120,9 +1123,9 @@ TFuture<ICheckpointStorage::TAddToStateSizeResult> NYq::TCheckpointStorage::AddT
         });
 }
 
-TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> NYq::TCheckpointStorage::GetTotalCheckpointsStateSize(const TString& graphId) {
+TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStorage::GetTotalCheckpointsStateSize(const TString& graphId) {
     auto result = MakeIntrusive<TGetTotalCheckpointsStateSizeContext>();
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, thisPtr = TIntrusivePtr(this), result](TSession session) {
           NYdb::TParamsBuilder paramsBuilder;
           paramsBuilder.AddParam("$graph_id").String(graphId).Build();
@@ -1169,7 +1172,7 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> NYq::TCheckpoin
         });
 }
 
-TExecDataQuerySettings NYq::TCheckpointStorage::DefaultExecDataQuerySettings() {
+TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
         .ClientTimeout(TDuration::Seconds(Config.GetClientTimeoutSec()))
@@ -1184,10 +1187,11 @@ TExecDataQuerySettings NYq::TCheckpointStorage::DefaultExecDataQuerySettings() {
 TCheckpointStoragePtr NewYdbCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const IEntityIdGenerator::TPtr& entityIdGenerator)
+    const IEntityIdGenerator::TPtr& entityIdGenerator,
+    const TYqSharedResources::TPtr& yqSharedResources)
 {
     Y_VERIFY(entityIdGenerator);
-    return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator);
+    return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator, yqSharedResources);
 }
 
 } // namespace NYq

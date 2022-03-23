@@ -22,6 +22,7 @@ target_link_libraries(yq-libs-checkpoint_storage PUBLIC
   libs-checkpoint_storage-events
   libs-checkpoint_storage-proto
   yq-libs-checkpointing_common
+  yq-libs-shared_resources
   ydb-library-security
   cpp-client-ydb_scheme
   cpp-client-ydb_table

@@ -5,7 +5,7 @@ namespace NYq {
 using namespace NActors;
 
 TRunActorParams::TRunActorParams(
-    NYdb::TDriver driver,
+    TYqSharedResources::TPtr yqSharedResources,
     NYql::IHTTPGateway::TPtr s3Gateway,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -48,7 +48,7 @@ TRunActorParams::TRunActorParams(
     TInstant createdAt,
     const TString& tenantName
     )
-    : Driver(driver)
+    : YqSharedResources(yqSharedResources)
     , S3Gateway(s3Gateway)
     , FunctionRegistry(functionRegistry)
     , RandomProvider(randomProvider)

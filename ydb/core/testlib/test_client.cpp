@@ -804,7 +804,7 @@ namespace Tests {
 
             const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-            auto yqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
+            YqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
             NYq::Init(
                 protoConfig,
                 Runtime->GetNodeId(nodeIdx),
@@ -812,13 +812,13 @@ namespace Tests {
                 &appData,
                 "TestTenant",
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
-                yqSharedResources,
+                YqSharedResources,
                 NKikimr::NFolderService::CreateMockFolderServiceActor,
                 NYq::CreateMockYqAuditServiceActor,
                 ydbCredFactory,
                 /*IcPort = */0
                 );
-            NYq::InitTest(Runtime.Get(), port, Settings->GrpcPort, yqSharedResources);
+            NYq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
         }
     }
 
@@ -883,6 +883,10 @@ namespace Tests {
 
         if (GRpcServer) {
             GRpcServer->Stop();
+        }
+
+        if (YqSharedResources) {
+            YqSharedResources->Stop();
         }
 
         if (Runtime) {

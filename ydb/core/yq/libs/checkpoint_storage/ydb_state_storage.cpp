@@ -146,13 +146,15 @@ TFuture<TStatus> ProcessState(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStateStorage : public IStateStorage {
+    TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
     const NConfig::TYdbStorageConfig Config;
 
 public:
     explicit TStateStorage(
         const NConfig::TYdbStorageConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const TYqSharedResources::TPtr& yqSharedResources);
     ~TStateStorage() = default;
 
     TFuture<TIssues> Init() override;
@@ -188,8 +190,10 @@ public:
 
 TStateStorage::TStateStorage(
     const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
-    : YdbConnection(NewYdbConnection(config, credentialsProviderFactory))
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TYqSharedResources::TPtr& yqSharedResources)
+    : YqSharedResources(yqSharedResources)
+    , YdbConnection(NewYdbConnection(config, credentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver))
     , Config(config)
 {
 }
@@ -201,8 +205,7 @@ TFuture<TIssues> TStateStorage::Init()
     // TODO: list at first?
     if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
         //LOG_STREAMS_STORAGE_SERVICE_INFO("Creating directory: " << YdbConnection->TablePathPrefix);
-        auto schemeClient = NScheme::TSchemeClient(YdbConnection->Driver);
-        auto status = schemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
+        auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
             issues = status.GetIssues();
 
@@ -250,7 +253,7 @@ TFuture<TIssues> TStateStorage::SaveState(
     const TCheckpointId& checkpointId,
     const NYql::NDqProto::TComputeActorState& state)
 {
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, taskId, graphId, checkpointId, state, thisPtr = TIntrusivePtr(this)] (TSession session) {
             auto context = MakeIntrusive<TContext>(
                 prefix,
@@ -289,7 +292,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
         graphId,
         checkpointId);
 
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [context, thisPtr = TIntrusivePtr(this)] (TSession session) {
             context->Session = session;
             auto future = thisPtr->SelectState(context);
@@ -314,7 +317,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 {
     auto context = MakeIntrusive<TCountStateContext>();
 
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, checkpointId, context, thisPtr = TIntrusivePtr(this)] (TSession session) {
 
             // publish nodes
@@ -379,7 +382,7 @@ TExecDataQuerySettings TStateStorage::DefaultExecDataQuerySettings() {
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, thisPtr = TIntrusivePtr(this)] (TSession session) {
 
             // publish nodes
@@ -419,7 +422,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
     const TString& graphId,
     const TCheckpointId& checkpointUpperBound)
 {
-    auto future = YdbConnection->Client.RetryOperation(
+    auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound, thisPtr = TIntrusivePtr(this)] (TSession session) {
 
             // publish nodes
@@ -556,9 +559,10 @@ TFuture<TStatus> TStateStorage::UpsertState(const TContextPtr& context) {
 
 TStateStoragePtr NewYdbStateStorage(
     const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TYqSharedResources::TPtr& yqSharedResources)
 {
-    return new TStateStorage(config, credentialsProviderFactory);
+    return new TStateStorage(config, credentialsProviderFactory, yqSharedResources);
 }
 
 } // namespace NYq

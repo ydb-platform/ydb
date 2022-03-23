@@ -24,6 +24,7 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/base/grpc_service_factory.h>
+#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -260,6 +261,7 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         std::unique_ptr<NGrpc::TGRpcServer> GRpcServer;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
+        NYq::IYqSharedResources::TPtr YqSharedResources;
     };
 
     class TClient {

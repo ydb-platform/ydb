@@ -160,7 +160,7 @@ public:
         , Guid(CreateGuidAsString())
         , ClientCounters(clientCounters)
         , Client(
-            YqSharedResources->YdbDriver,
+            YqSharedResources->CoreYdbDriver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
                 .EnableSsl(PrivateApiConfig.GetSecureTaskService())
@@ -336,7 +336,7 @@ private:
         const auto createdAt = TInstant::Now();
 
         TRunActorParams params(
-            YqSharedResources->YdbDriver, S3Gateway,
+            YqSharedResources, S3Gateway,
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
             DqCompFactory, PqCmConnections,

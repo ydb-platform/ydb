@@ -99,7 +99,8 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     }
 
     void Stop() override {
-        YdbDriver.Stop(true);
+        CoreYdbDriver.Stop(true);
+        // UserSpaceYdbDriver.Stop(true); // For now it points to the same driver as CoreYdbDriver, so don't call Stop
     }
 
     NYdb::TDriverConfig GetYdbDriverConfig(const NYq::NConfig::TYdbDriverConfig& config) {
@@ -122,7 +123,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         const NYq::NConfig::TDbPoolConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters) {
-        DbPoolHolder = MakeIntrusive<NYq::TDbPoolHolder>(config, YdbDriver, credentialsProviderFactory, counters);
+        DbPoolHolder = MakeIntrusive<NYq::TDbPoolHolder>(config, CoreYdbDriver, credentialsProviderFactory, counters);
     }
 };
 
@@ -136,7 +137,8 @@ TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
 }
 
 TYqSharedResources::TYqSharedResources(NYdb::TDriver driver)
-    : YdbDriver(std::move(driver))
+    : CoreYdbDriver(driver)
+    , UserSpaceYdbDriver(std::move(driver))
 {
 }
 

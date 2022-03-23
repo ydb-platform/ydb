@@ -165,7 +165,7 @@ protected:
     }
 
     void CreateSession() {
-        Connection->Client.GetSession().Subscribe(
+        Connection->TableClient.GetSession().Subscribe(
             [actorId = SelfId(), actorSystem = NActors::TActivationContext::ActorSystem()](const NYdb::NTable::TAsyncCreateSessionResult& result) {
                 actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(result.GetValue()));
             }
@@ -234,7 +234,6 @@ public:
         ui64 cookie)
         : TCreateActorBase(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
         , DirectoryPath(directoryPath)
-        , SchemeClient(Connection->Driver)
     {
     }
 
@@ -245,12 +244,11 @@ private:
 
     NYdb::TAsyncStatus CallYdbSdk() override {
         SCHEMA_LOG_DEBUG("Call create directory \"" << DirectoryPath << "\"");
-        return SchemeClient.MakeDirectory(DirectoryPath);
+        return Connection->SchemeClient.MakeDirectory(DirectoryPath);
     }
 
 private:
     const TString DirectoryPath;
-    NYdb::NScheme::TSchemeClient SchemeClient;
 };
 
 NActors::IActor* MakeCreateTableActor(

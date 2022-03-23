@@ -41,12 +41,14 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
+    TYqSharedResources::TPtr YqSharedResources;
 
 public:
     explicit TStorageProxy(
         const NConfig::TCheckpointCoordinatorConfig& config,
         const NConfig::TCommonConfig& commonConfig,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const TYqSharedResources::TPtr& yqSharedResources);
 
     void Bootstrap();
 
@@ -100,22 +102,24 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
 TStorageProxy::TStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TYqSharedResources::TPtr& yqSharedResources)
     : Config(config)
     , CommonConfig(commonConfig)
     , StorageConfig(Config.GetStorage())
-    , CredentialsProviderFactory(credentialsProviderFactory) {
+    , CredentialsProviderFactory(credentialsProviderFactory)
+    , YqSharedResources(yqSharedResources) {
     FillDefaultParameters(Config, StorageConfig);
 }
 
 void TStorageProxy::Bootstrap() {
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CredentialsProviderFactory, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()));
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CredentialsProviderFactory, CreateEntityIdGenerator(CommonConfig.GetIdsPrefix()), YqSharedResources);
     auto issues = CheckpointStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
     }
 
-    StateStorage = NewYdbStateStorage(StorageConfig, CredentialsProviderFactory);
+    StateStorage = NewYdbStateStorage(StorageConfig, CredentialsProviderFactory, YqSharedResources);
     issues = StateStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
@@ -393,9 +397,10 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
 std::unique_ptr<NActors::IActor> NewStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TYqSharedResources::TPtr& yqSharedResources)
 {
-    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, commonConfig, credentialsProviderFactory));
+    return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, commonConfig, credentialsProviderFactory, yqSharedResources));
 }
 
 } // namespace NYq

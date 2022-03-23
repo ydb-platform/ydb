@@ -3,6 +3,7 @@
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
@@ -19,7 +20,7 @@ namespace NYq {
 
 struct TRunActorParams { // TODO2 : Change name
     TRunActorParams(
-        NYdb::TDriver driver,
+        TYqSharedResources::TPtr yqSharedResources,
         NYql::IHTTPGateway::TPtr s3Gateway,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -66,7 +67,7 @@ struct TRunActorParams { // TODO2 : Change name
     TRunActorParams(const TRunActorParams& params) = default;
     TRunActorParams(TRunActorParams&& params) = default;
 
-    NYdb::TDriver Driver;
+    TYqSharedResources::TPtr YqSharedResources;
     NYql::IHTTPGateway::TPtr S3Gateway;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;

@@ -2400,6 +2400,11 @@ TExprNode::TPtr OptimizeToFlow(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ctx.ChangeChildren(*node, node->Head().ChildrenList());
     }
 
+    if (node->Head().IsCallable("WithContext")) {
+        YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
+        return ctx.ChangeChild(node->Head(), 1, ctx.NewCallable(node->Pos(), "ToFlow", { node->Head().TailPtr() }));
+    }
+
     return node;
 }
 

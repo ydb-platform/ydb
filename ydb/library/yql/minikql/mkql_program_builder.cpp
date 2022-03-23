@@ -5089,6 +5089,11 @@ TRuntimeNode TProgramBuilder::WithContext(const std::string_view& contextType, T
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::PgInternal0(TType* returnType) {
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 bool CanExportType(TType* type, const TTypeEnvironment& env) {
     if (type->GetKind() == TType::EKind::Type) {
         return false; // Type of Type

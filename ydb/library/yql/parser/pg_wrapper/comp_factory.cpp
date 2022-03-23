@@ -199,8 +199,6 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        SET_MEMORY_CONTEXT;
-
         if (TypeId == INT2OID) {
             return ScalarDatumToPod(Int16GetDatum(FromString<i16>(Value)));
         } else if (TypeId == INT4OID) {
@@ -211,11 +209,14 @@ public:
             return ScalarDatumToPod(Float4GetDatum(FromString<float>(Value)));
         } else if (TypeId == FLOAT8OID) {
             return ScalarDatumToPod(Float8GetDatum(FromString<double>(Value)));
-        } else if (TypeId == TEXTOID) {
+        } else if (TypeId == TEXTOID || TypeId == VARCHAROID || TypeId == BYTEAOID) {
+            SET_MEMORY_CONTEXT;
             return PointerDatumToPod(PointerGetDatum(cstring_to_text_with_len(Value.data(), Value.size())));
         } else if (TypeId == BOOLOID) {
             return ScalarDatumToPod(BoolGetDatum(!Value.empty() && Value[0] == 't'));
-        } else if (TypeId == NUMERICOID) {
+        }
+        else if (TypeId == NUMERICOID) {
+            SET_MEMORY_CONTEXT;
             LOCAL_FCINFO(callInfo, 3);
             Zero(*callInfo);
             callInfo->nargs = 3;
@@ -243,7 +244,7 @@ public:
             }
             PG_END_TRY();
         } else {
-            UdfTerminate((TStringBuilder() << "Unsupported pg type:" << NPg::LookupType(TypeId).Name).c_str());
+            UdfTerminate((TStringBuilder() << "Unsupported pg type: " << NPg::LookupType(TypeId).Name).c_str());
         }
     }
 
@@ -253,6 +254,23 @@ private:
 
     const ui32 TypeId;
     const TString Value;
+};
+
+class TPgInternal0 : public TMutableComputationNode<TPgInternal0> {
+    typedef TMutableComputationNode<TPgInternal0> TBaseComputation;
+public:
+    TPgInternal0(TComputationMutables& mutables)
+        : TBaseComputation(mutables)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        return ScalarDatumToPod(PointerGetDatum(nullptr));
+    }
+
+private:
+    void RegisterDependencies() const final {
+    }
 };
 
 class TFunctionCallInfo {
@@ -775,6 +793,10 @@ TComputationNodeFactory GetPgFactory() {
                 ui32 typeId = typeIdData->AsValue().Get<ui32>();
                 auto value = valueData->AsValue().AsStringRef();
                 return new TPgConst(ctx.Mutables, typeId, value);
+            }
+
+            if (name == "PgInternal0") {
+                return new TPgInternal0(ctx.Mutables);
             }
 
             if (name == "PgResolvedCall") {

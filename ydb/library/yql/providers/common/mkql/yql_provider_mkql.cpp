@@ -2242,6 +2242,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.PgConst(type, node.Head().Content());
     });
 
+    AddCallable("PgInternal0", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.PgInternal0(returnType);
+    });
+
     AddCallable({"PgResolvedCall","PgResolvedCallCtx" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto name = node.Head().Content();
         auto id = FromString<ui32>(node.Child(1)->Content());

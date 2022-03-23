@@ -9668,6 +9668,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus PgInternal0Wrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto internalId = NPg::LookupType("internal").TypeId;
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(internalId));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -9909,6 +9920,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         .Atom(0, deserializeFuncDesc.Name)
                         .Atom(1, ToString(aggDesc.DeserializeFuncId))
                         .Arg(2, "state")
+                        .Callable(3, "PgInternal0")
+                        .Seal()
                     .Seal()
                 .Seal()
                 .Build();
@@ -9925,17 +9938,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                             .Callable(0, "Exists")
                                 .Arg(0, "state1")
                             .Seal()
-                            .Callable(1, "If")
-                                .Callable(0, "Exists")
-                                    .Arg(0, "state2")
-                                .Seal()
-                                .Callable(1, "PgResolvedCallCtx")
+                            .Callable(1, "Coalesce")
+                                .Callable(0, "PgResolvedCallCtx")
                                     .Atom(0, combineFuncDesc.Name)
                                     .Atom(1, ToString(aggDesc.CombineFuncId))
                                     .Arg(2, "state1")
                                     .Arg(3, "state2")
                                 .Seal()
-                                .Arg(2, "state1")
+                                .Arg(1, "state1")
                             .Seal()
                             .Arg(2, "state2")
                         .Seal()
@@ -13710,6 +13720,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgType"] = &PgTypeWrapper;
         Functions["PgCast"] = &PgCastWrapper;
         Functions["PgAggregationTraits"] = &PgAggregationTraitsWrapper;
+        Functions["PgInternal0"] = &PgInternal0Wrapper;
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
         Functions["AggrCountUpdate"] = &AggrCountUpdateWrapper;

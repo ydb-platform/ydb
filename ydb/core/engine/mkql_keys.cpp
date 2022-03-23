@@ -261,7 +261,7 @@ TCell MakeCell(NUdf::TDataTypeId typeId, const NUdf::TUnboxedValuePod& value, co
     }
 
     const auto& ref = value.AsStringRef();
-    if (!copy || value.IsString() || TCell::CanInline(ref.Size()))
+    if (!copy && !value.IsEmbedded() || value.IsString() || TCell::CanInline(ref.Size()))
         return TCell(ref.Data(), ref.Size());
 
     const auto& val = env.NewString(ref.Size());

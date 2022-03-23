@@ -36,6 +36,7 @@ struct TSchemeIds {
         ResourceChangeReactionPeriod,
         TabletKickCooldownPeriod,
         ResourceOvercommitment,
+        TabletOwnersSynced,
     };
 };
 

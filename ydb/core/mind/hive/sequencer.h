@@ -121,9 +121,10 @@ class TOwnershipKeeper : public TSequencer {
 public:
     using TOwnerType = TElementType;
 
-    void AddOwnedSequence(TOwnerType owner, TSequence sequence); // all sequence range we owns, free and used, including allocated by the others
+    bool AddOwnedSequence(TOwnerType owner, TSequence sequence); // all sequence range we owns, free and used, including allocated by the others
     TOwnerType GetOwner(TElementType element);
     void Clear();
+    void GetOwnedSequences(TOwnerType owner, std::vector<TSequence>& sequences) const;
 
 protected:
     std::map<TSequence, TOwnerType> OwnedSequences;

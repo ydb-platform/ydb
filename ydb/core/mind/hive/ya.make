@@ -60,6 +60,7 @@ SRCS(
     tx__register_node.cpp
     tx__release_tablets.cpp
     tx__release_tablets_reply.cpp
+    tx__request_tablet_owners.cpp
     tx__request_tablet_seq.cpp
     tx__response_tablet_seq.cpp
     tx__restart_tablet.cpp
@@ -71,6 +72,7 @@ SRCS(
     tx__stop_tablet.cpp
     tx__switch_drain.cpp
     tx__sync_tablets.cpp
+    tx__tablet_owners_reply.cpp
     tx__unlock_tablet.cpp
     tx__update_domain.cpp
     tx__update_tablet_groups.cpp

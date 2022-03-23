@@ -501,3 +501,17 @@ message TNodeStatistics {
     repeated uint64 RestartTimestamp = 1;
     optional uint64 LastAliveTimestamp = 2;
 }
+
+message TEvRequestTabletOwners {
+    optional fixed64 OwnerID = 1;
+}
+
+message TTabletOwnerRecord {
+    optional fixed64 OwnerID = 1;
+    optional uint64 Begin = 2;
+    optional uint64 End = 3;
+}
+
+message TEvTabletOwnersReply {
+    repeated TTabletOwnerRecord TabletOwners = 1;
+}

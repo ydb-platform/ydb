@@ -44,6 +44,7 @@ namespace NKikimr {
             EvConfigureHive,
             EvInitMigration,
             EvQueryMigration,
+            EvRequestTabletOwners,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -73,6 +74,7 @@ namespace NKikimr {
             EvReleaseTabletsReply,
             EvInitMigrationReply,
             EvQueryMigrationReply,
+            EvTabletOwnersReply,
 
             EvEnd
         };
@@ -804,6 +806,9 @@ namespace NKikimr {
                 Record.SetMigrationProgress(progress);
             }
         };
+
+        struct TEvRequestTabletOwners : TEventPB<TEvRequestTabletOwners, NKikimrHive::TEvRequestTabletOwners, EvRequestTabletOwners> {};
+        struct TEvTabletOwnersReply : TEventPB<TEvTabletOwnersReply, NKikimrHive::TEvTabletOwnersReply, EvTabletOwnersReply> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

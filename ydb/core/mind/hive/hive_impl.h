@@ -234,6 +234,8 @@ protected:
     friend class TTxStatus;
     friend class TTxSwitchDrainOn;
     friend class TTxSwitchDrainOff;
+    friend class TTxTabletOwnersReply;
+    friend class TTxRequestTabletOwners;
 
     friend class TDeleteTabletActor;
 
@@ -288,6 +290,8 @@ protected:
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
     ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator);
     ITransaction* CreateSwitchDrainOff(TNodeId nodeId, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
+    ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
+    ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -421,6 +425,10 @@ protected:
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_set<TDataCenterId> RegisteredDataCenterIds;
 
+    // to be removed later
+    bool TabletOwnersSynced = false;
+    // to be removed later
+
     void OnActivateExecutor(const TActorContext& ctx) override;
     void DefaultSignalTabletActive(const TActorContext& ctx) override;
     void OnDetach(const TActorContext&) override;
@@ -500,6 +508,8 @@ protected:
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
     void Handle(NSysView::TEvSysView::TEvGetTabletIdsRequest::TPtr& ev);
     void Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev);
+    void Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev);
+    void Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

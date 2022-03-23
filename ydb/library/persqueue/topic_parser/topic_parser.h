@@ -56,6 +56,8 @@ protected:
         CHECK_SET_VALID(!topicNormalized.StartsWith("/"), "Multiple leading '/' in topic name", return *this);
         CHECK_SET_VALID(!topicNormalized.empty(), "Empty topic name", return *this);
 
+        CHECK_SET_VALID(!topicNormalized.StartsWith("/"), "Multiple leading '/' in topic name", return *this);
+        CHECK_SET_VALID(!topicNormalized.empty(), "Empty topic name", return *this);
         TStringBuf dbNormalized = database;
         dbNormalized.SkipPrefix("/");
         dbNormalized.ChopSuffix("/");

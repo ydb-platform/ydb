@@ -153,9 +153,9 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             KqpSetTxLocksKeys(GetKqpTransaction().GetLocks(), self->SysLocksTable(), EngineBay);
             EngineBay.MarkTxLoaded();
 
-            auto& tasksRunner = GetKqpTasksRunner(); // prepare tasks runner, can throw TMemoryLimitExceededException
+            auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
 
-            auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - TxSize);
+            auto allocGuard = tasksRunner.BindAllocator(100_MB); // set big enough limit, decrease/correct later
 
             auto execCtx = DefaultKqpExecutionContext();
             tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);

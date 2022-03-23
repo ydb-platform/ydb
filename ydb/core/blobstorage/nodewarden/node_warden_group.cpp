@@ -110,7 +110,7 @@ namespace NKikimr::NStorage {
             group.GetGroupRequestPending = false;
         }
 
-        if (group.GroupResolver) {
+        if (group.GroupResolver && !group.GetGroupRequestPending) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
             group.GroupResolver = {};
         }

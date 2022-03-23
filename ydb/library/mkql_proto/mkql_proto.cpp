@@ -1023,9 +1023,32 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
                 case NUdf::TDataType<bool>::Id:
                     dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(value.GetBool()), dataType, env);
                     break;
-                case NUdf::TDataType<ui8>::Id:
-                    dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(ui8(value.GetUint32())), dataType, env);
+                case NUdf::TDataType<i8>::Id: {
+                    auto dataValue = value.GetInt32();
+                    MKQL_ENSURE(dataValue <= Max<i8>() && dataValue >= Min<i8>(),
+                        TStringBuilder() << "Cannot cast value " << dataValue << " to int8");
+                    dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(i8(dataValue)), dataType, env);
                     break;
+                }
+                case NUdf::TDataType<ui8>::Id: {
+                    auto dataValue = value.GetUint32();
+                    MKQL_ENSURE(dataValue <= Max<ui8>(), TStringBuilder() << "Cannot cast value " << dataValue << " to uint8");
+                    dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(ui8(dataValue)), dataType, env);
+                    break;
+                }
+                case NUdf::TDataType<i16>::Id: {
+                    auto dataValue = value.GetInt32();
+                    MKQL_ENSURE(dataValue <= Max<i16>() && dataValue >= Min<i16>(),
+                        TStringBuilder() << "Cannot cast value " << dataValue << " to int16");
+                    dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(i16(dataValue)), dataType, env);
+                    break;
+                }
+                case NUdf::TDataType<ui16>::Id: {
+                    auto dataValue = value.GetUint32();
+                    MKQL_ENSURE(dataValue <= Max<ui16>(), TStringBuilder() << "Cannot cast value " << dataValue << " to uint16");
+                    dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(ui16(dataValue)), dataType, env);
+                    break;
+                }
                 case NUdf::TDataType<i32>::Id:
                     dataNode = TDataLiteral::Create(NUdf::TUnboxedValuePod(value.GetInt32()), dataType, env);
                     break;

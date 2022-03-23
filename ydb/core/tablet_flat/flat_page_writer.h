@@ -537,7 +537,7 @@ namespace NPage {
         const TIntrusiveConstPtr<TPartScheme> Scheme;
 
     private:
-        const TPgSize PageSize = 8 * 1024;
+        const TPgSize PageSize;
         const ui32 PageRows = Max<ui32>();
         const TPgSize SmallEdge;
         const TPgSize LargeEdge;
@@ -632,7 +632,7 @@ namespace NPage {
         const TIntrusiveConstPtr<TPartScheme> Scheme;
 
     private:
-        const TPgSize MinSize = 8 * 1024;
+        const TPgSize MinSize;
         const TGroupId GroupId;
         const TPartScheme::TGroupInfo& GroupInfo;
         TDataPageBuilder DataPageBuilder;

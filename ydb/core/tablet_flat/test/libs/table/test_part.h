@@ -119,7 +119,7 @@ namespace NTest {
             return { Lone(), nullptr, Lone()->Slices };
         }
 
-        TAutoPtr<TWritten> Written;
+        TAutoPtr<TWriteStats> Written;
         TIntrusiveConstPtr<TRowScheme> Scheme;
         TVector<TIntrusiveConstPtr<TPartStore>> Parts;
     };

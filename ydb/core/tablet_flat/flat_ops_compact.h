@@ -128,9 +128,9 @@ namespace NTabletFlatExecutor {
 
             } else if (seq == 1) /* after the end(), stop compaction */ {
                 if (!Finished) {
-                    Stat = Writer->Finish();
+                    WriteStats = Writer->Finish();
                     Results = Bundle->Results();
-                    Y_VERIFY(Stat.Parts == Results.size());
+                    Y_VERIFY(WriteStats.Parts == Results.size());
                     WriteTxStatus();
                     Finished = true;
                 }
@@ -327,11 +327,11 @@ namespace NTabletFlatExecutor {
             prod->TxStatus = std::move(TxStatus);
 
             if (auto logl = Logger->Log(fail ? ELnLev::Error : ELnLev::Info)) {
-                auto raito = Stat.Bytes ? (Stat.Coded + 0.) / Stat.Bytes : 0.;
+                auto raito = WriteStats.Bytes ? (WriteStats.Coded + 0.) / WriteStats.Bytes : 0.;
 
                 logl
                     << NFmt::Do(*this) << " end=" << ui32(abort)
-                    << ", " << Blobs << "blobs " << Stat.Rows << "r"
+                    << ", " << Blobs << "blobs " << WriteStats.Rows << "r"
                     << " (max " << Conf->Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());
 
@@ -362,7 +362,7 @@ namespace NTabletFlatExecutor {
 
             if (fail) {
                 prod->Results.clear(); /* shouldn't sent w/o fixation in bs */
-            } else if (bool(prod->Results) != bool(Stat.Rows > 0)) {
+            } else if (bool(prod->Results) != bool(WriteStats.Rows > 0)) {
                 Y_FAIL("Unexpexced rows production result after compaction");
             } else if ((bool(prod->Results) || bool(prod->TxStatus)) != bool(Blobs > 0)) {
                 Y_FAIL("Unexpexced blobs production result after compaction");
@@ -518,7 +518,7 @@ namespace NTabletFlatExecutor {
         TIntrusiveConstPtr<TScheme> Scheme;
         TAutoPtr<TBundle> Bundle;
         TAutoPtr<TWriter> Writer;
-        NTable::TWritten Stat;
+        NTable::TWriteStats WriteStats;
         TVector<TBundle::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         const NScheme::TTypeRegistry * Registry = nullptr;

@@ -52,12 +52,7 @@ namespace NTable {
         TIntrusiveConstPtr<TSlices> Slices;
     };
 
-    struct TWritten {
-        explicit operator bool() const noexcept
-        {
-            return Rows > 0;
-        }
-
+    struct TWriteStats {
         /*_ Some writer stats collection    */
 
         ui64 Rows   = 0;

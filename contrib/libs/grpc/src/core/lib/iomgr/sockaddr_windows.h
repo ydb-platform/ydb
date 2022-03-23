@@ -25,15 +25,11 @@
 
 #ifdef GRPC_WINSOCK_SOCKET
 
-#define OPTIONAL
-
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
 // must be included after the above
 #include <mswsock.h>
-
-#undef OPTIONAL
 
 typedef struct sockaddr grpc_sockaddr;
 typedef struct sockaddr_in grpc_sockaddr_in;

@@ -22,14 +22,10 @@
 
 #ifdef GRPC_WINSOCK_SOCKET
 
-#define OPTIONAL
-
 #include <winsock2.h>
 
 // must be included after winsock2.h
 #include <mswsock.h>
-
-#undef OPTIONAL
 
 #include "y_absl/strings/str_format.h"
 

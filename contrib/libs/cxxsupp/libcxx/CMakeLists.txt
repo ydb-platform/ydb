@@ -21,6 +21,7 @@ target_include_directories(libs-cxxsupp-libcxx PUBLIC
 )
 target_include_directories(libs-cxxsupp-libcxx PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/include
+  ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxxrt
 )
 target_link_libraries(libs-cxxsupp-libcxx PUBLIC
@@ -58,6 +59,9 @@ target_sources(libs-cxxsupp-libcxx PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/random.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/random_shuffle.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/regex.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/ryu/d2fixed.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/ryu/d2s.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/ryu/f2s.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/shared_mutex.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/stdexcept.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/cxxsupp/libcxx/src/string.cpp

@@ -617,6 +617,49 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
             }
         }
+
+        {
+            ++tabletId;
+            TestConsistentCopyTables(runtime, ++txId, "/", R"(
+                CopyTableDescriptions {
+                  SrcPath: "/MyRoot/TTLEnabledTable4"
+                  DstPath: "/MyRoot/TTLEnabledTable5"
+                }
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            writeRow(tabletId, 1, now, "TTLEnabledTable5", "Uint64");
+            {
+                auto result = readTable(tabletId, "TTLEnabledTable5");
+                NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
+            }
+
+            runtime.AdvanceCurrentTime(TDuration::Hours(1));
+            WaitForCondErase(runtime);
+            {
+                auto result = readTable(tabletId, "TTLEnabledTable5");
+                NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
+            }
+        }
+
+        {
+            ++tabletId;
+            TestCopyTable(runtime, ++txId, "/MyRoot", "TTLEnabledTable6", "/MyRoot/TTLEnabledTable5");
+            env.TestWaitNotification(runtime, txId);
+
+            writeRow(tabletId, 1, now, "TTLEnabledTable6", "Uint64");
+            {
+                auto result = readTable(tabletId, "TTLEnabledTable6");
+                NKqp::CompareYson(R"([[[[[["1"]];[["2"]]];%false]]])", result);
+            }
+
+            runtime.AdvanceCurrentTime(TDuration::Hours(1));
+            WaitForCondErase(runtime);
+            {
+                auto result = readTable(tabletId, "TTLEnabledTable6");
+                NKqp::CompareYson(R"([[[[[["2"]]];%false]]])", result);
+            }
+        }
     }
 
     Y_UNIT_TEST(RacyAlterTableAndConditionalErase) {

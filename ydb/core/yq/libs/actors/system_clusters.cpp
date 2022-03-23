@@ -103,7 +103,7 @@ void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TStrin
         clusterCfg->SetDatabase("/global/b1gvcqr959dbmi1jltep/etn03iai600jur7pipla");
         clusterCfg->SetUseSsl(true);
         clusterCfg->SetServiceAccountId("ajeg8dpl3e4ckjfj1qoq"); // yc-logbroker-reader
-        clusterCfg->SetServiceAccountIdSignature("xxx");
+        clusterCfg->SetServiceAccountIdSignature("kPzxGKY7r4i7FRaqpY64WZP6pfM=");
         clusterCfg->SetClusterType(TPqClusterConfig::CT_PERS_QUEUE);
         clusters.emplace(clusterCfg->GetName(), PqProviderName);
     }

@@ -54,7 +54,10 @@ public:
 
         if (!TrustedZone && !GetCoordinationNodePath().StartsWith(databaseName)) {
             status = StatusIds::BAD_REQUEST;
-            issues.AddIssue("Coordination node path not belong to current database.");
+            issues.AddIssue(TStringBuilder()
+                << "Coordination node path: " << GetCoordinationNodePath()
+                << " does not belong to current database: " << databaseName
+                << ".");
             return false;
         }
         return true;

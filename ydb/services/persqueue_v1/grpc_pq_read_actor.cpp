@@ -781,7 +781,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     }
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token,
-            TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, Request->GetDatabaseName().GetOrElse(TString()))
+            TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, Request->GetDatabaseName().GetOrElse(TString())), TopicsHandler.GetLocalCluster()
     ));
 
 
@@ -1697,7 +1697,7 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
 
         AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
                 ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token,
-                TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, Request->GetDatabaseName().GetOrElse(TString()))
+                TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, Request->GetDatabaseName().GetOrElse(TString())), TopicsHandler.GetLocalCluster()
         ));
     }
 }
@@ -2074,8 +2074,19 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         return;
     }
 
+    auto MaskResult = [](const NKikimrClient::TPersQueuePartitionResponse& resp) {
+            if (resp.HasCmdReadResult()) {
+                auto res = resp;
+                for (auto& rr : *res.MutableCmdReadResult()->MutableResult()) {
+                    rr.SetData(TStringBuilder() << "... " << rr.GetData().size() << " bytes ...");
+                }
+                return res;
+            }
+            return resp;
+        };
+
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " initDone " << InitDone << " event " << result);
+                        << " initDone " << InitDone << " event " << MaskResult(result));
 
 
     if (!InitDone) {
@@ -2606,7 +2617,7 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
         const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
         const TString& session, const NActors::TActorId& metaCache, const NActors::TActorId& newSchemeCache,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token,
-        const NPersQueue::TTopicsToConverter& topics
+        const NPersQueue::TTopicsToConverter& topics, const TString& localCluster
 )
     : ParentId(parentId)
     , Cookie(cookie)
@@ -2617,6 +2628,7 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
     , ClientPath(NPersQueue::ConvertOldConsumerName(ClientId, ctx))
     , Token(token)
     , Counters(counters)
+    , LocalCluster(localCluster)
 {
     for (const auto& t : topics) {
         Topics[t.first].TopicNameConverter = t.second;
@@ -2728,7 +2740,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
     )) {
         return false;
     }
-    if (Token) {
+    if (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         bool found = false;
         for (auto& cons : pqDescr.GetPQTabletConfig().GetReadRules() ) {
             if (cons == ClientId) {
@@ -2738,7 +2750,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
         }
         if (!found) {
             CloseSession(
-                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "'",
+                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster,
                     PersQueue::ErrorCode::BAD_REQUEST, ctx
             );
             return false;
@@ -2863,7 +2875,8 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
             SchemeCache, NewSchemeCache, Counters, token,
-            TopicsHandler.GetReadTopicsList(topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString()))
+            TopicsHandler.GetReadTopicsList(topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString())),
+            TopicsHandler.GetLocalCluster()
     ));
 }
 

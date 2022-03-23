@@ -225,6 +225,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
 
         CmdGetOffset(0, client, 1, tc);
         CmdGetOffset(1, client, 2, tc);
+        CmdGetOffset(0, "user", 0, tc);
 
         {
             THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);

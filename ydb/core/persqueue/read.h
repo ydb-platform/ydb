@@ -275,7 +275,7 @@ namespace NPQ {
                     Y_VERIFY(strKey.size() == TKey::KeySize(), "Unexpected key size: %" PRIu64, strKey.size());
                     TString value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();
-                    TRequestedBlob blob(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value);
+                    TRequestedBlob blob(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value, key);
                     kvReq.Blobs.push_back(blob);
 
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. Passthrough blob. Partition "

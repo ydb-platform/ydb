@@ -1242,7 +1242,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableViewerService) {
-        sil->AddServiceInitializer(new TViewerInitializer(runConfig));
+        sil->AddServiceInitializer(new TViewerInitializer(runConfig, ModuleFactories));
     }
     if (serviceMask.EnableLoadService) {
         sil->AddServiceInitializer(new TLoadInitializer(runConfig));

@@ -24,7 +24,7 @@ bool GetEquiJoinKeyTypes(TExprBase leftInput, const TString& leftColumnName,
     YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct);
     auto structType = itemType->Cast<TStructExprType>();
     auto memberIndex = structType->FindItem(leftColumnName);
-    YQL_ENSURE(memberIndex);
+    YQL_ENSURE(memberIndex, "Column '" << leftColumnName << "' not found in " << *((TTypeAnnotationNode*) structType));
 
     auto leftType = structType->GetItems()[*memberIndex]->GetItemType();
     if (leftType->GetKind() == ETypeAnnotationKind::Optional) {

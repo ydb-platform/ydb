@@ -1083,42 +1083,68 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 #endif
 
-    Y_UNIT_TEST(PrunePartitionsByLiteral) {
-        TKikimrRunner kikimr(AppCfg());
+    Y_UNIT_TEST_TWIN(PrunePartitionsByLiteral, WithPredicatesExtract) {
+        auto cfg = AppCfg();
+        cfg.MutableFeatureFlags()->SetEnablePredicateExtractForScanQueries(WithPredicatesExtract);
+        TKikimrRunner kikimr(cfg);
         NExperimental::TStreamQueryClient db(kikimr.GetDriver());
 
         auto settings = NExperimental::TExecuteStreamQuerySettings()
             .ProfileMode(NExperimental::EStreamQueryProfileMode::Basic);
 
-        auto it = db.ExecuteStreamQuery(R"(
-                SELECT * FROM `/Root/EightShard` WHERE Key = 301;
-            )", settings).GetValueSync();
-
-        UNIT_ASSERT(it.IsSuccess());
-
-        TVector<TString> profiles;
-        CompareYson(R"([[[3];[301u];["Value1"]]])", StreamResultToYson(it, &profiles));
-
-        UNIT_ASSERT_VALUES_EQUAL(1, profiles.size());
-
-//        {
-//            NYql::NDqProto::TDqExecutionStats stats;
-//            google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
-//            UNIT_ASSERT(stats.IsInitialized());
-//
-//            NKqpProto::TKqpExecutionExtraStats extraStats;
-//            UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
-//            UNIT_ASSERT_VALUES_EQUAL(extraStats.GetAffectedShards(), 0);
-//        }
-
+        // simple key
         {
-            NYql::NDqProto::TDqExecutionStats stats;
-            google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
-            UNIT_ASSERT(stats.IsInitialized());
+            auto it = db.ExecuteStreamQuery(Sprintf(R"(
+                PRAGMA Kikimr.OptEnablePredicateExtract = '%s';
+                SELECT * FROM `/Root/EightShard` WHERE Key = 301;
+            )", WithPredicatesExtract ? "true" : "false"), settings).GetValueSync();
 
-            NKqpProto::TKqpExecutionExtraStats extraStats;
-            UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
-            UNIT_ASSERT_VALUES_EQUAL_C(extraStats.GetAffectedShards(), 1, "" << stats.DebugString());
+            UNIT_ASSERT(it.IsSuccess());
+
+            TVector<TString> profiles;
+            CompareYson(R"([[[3];[301u];["Value1"]]])", StreamResultToYson(it, &profiles));
+
+            UNIT_ASSERT_EQUAL(1, profiles.size());
+
+            {
+                NYql::NDqProto::TDqExecutionStats stats;
+                google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
+                UNIT_ASSERT(stats.IsInitialized());
+
+                NKqpProto::TKqpExecutionExtraStats extraStats;
+                UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
+                UNIT_ASSERT_VALUES_EQUAL_C(extraStats.GetAffectedShards(), 1, "" << stats.DebugString());
+            }
+        }
+
+        // complex key
+        {
+            auto params = TParamsBuilder()
+                .AddParam("$ts").Int64(2).Build()
+                .Build();
+
+            auto it = db.ExecuteStreamQuery(Sprintf(R"(
+                PRAGMA Kikimr.OptEnablePredicateExtract = '%s';
+                DECLARE $ts AS Int64;
+                SELECT * FROM `/Root/Logs` WHERE App = "nginx" AND Ts > $ts
+            )", WithPredicatesExtract ? "true" : "false"), params, settings).GetValueSync();
+
+            UNIT_ASSERT(it.IsSuccess());
+
+            TVector<TString> profiles;
+            CompareYson(R"([[["nginx"];["nginx-23"];["GET /cat.jpg HTTP/1.1"];[3]]])", StreamResultToYson(it, &profiles));
+
+            UNIT_ASSERT_EQUAL(1, profiles.size());
+
+            {
+                NYql::NDqProto::TDqExecutionStats stats;
+                google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
+                UNIT_ASSERT(stats.IsInitialized());
+
+                NKqpProto::TKqpExecutionExtraStats extraStats;
+                UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
+                UNIT_ASSERT_VALUES_EQUAL_C(extraStats.GetAffectedShards(), 1, "" << stats.DebugString());
+            }
         }
     }
 

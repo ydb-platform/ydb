@@ -32,7 +32,7 @@ Y_UNIT_TEST(MultiTxStatsFullExp) {
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
-    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangesScan");
+    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
 
@@ -105,14 +105,14 @@ Y_UNIT_TEST(MultiTxStatsFull) {
     );
 
     UNIT_ASSERT(res.QueryStats);
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).name(), "/Root/EightShard");
-    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).table_access(0).partitions_count(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).name(), "/Root/EightShard");
+    UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).table_access(0).partitions_count(), 2);
 
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
-    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangesScan");
+    auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
 

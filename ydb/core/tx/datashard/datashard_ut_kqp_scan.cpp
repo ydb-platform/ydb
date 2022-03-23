@@ -27,6 +27,7 @@ namespace {
     }
 
     void EnableLogging(TTestActorRuntime& runtime) {
+        // runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);

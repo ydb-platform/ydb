@@ -115,7 +115,7 @@ TLoginProvider::TRemoveUserResponse TLoginProvider::RemoveUser(const TRemoveUser
 TLoginProvider::TBasicResponse TLoginProvider::CreateGroup(const TCreateGroupRequest& request) {
     TBasicResponse response;
 
-    if (!CheckAllowedName(request.Group)) {
+    if (request.Options.CheckName && !CheckAllowedName(request.Group)) {
         response.Error = "Name is not allowed";
         return response;
     }

@@ -1173,11 +1173,11 @@ TPath& TPath::Dive(const TString& name) {
         return *this;
     }
 
-    if (Elements.empty() && NameParts.size() < SS->RootPathElemets.size()) {
+    if (Elements.empty() && NameParts.size() < SS->RootPathElements.size()) {
         NameParts.push_back(name);
 
-        if (NameParts.size() == SS->RootPathElemets.size()
-                && NameParts == SS->RootPathElemets)
+        if (NameParts.size() == SS->RootPathElements.size()
+                && NameParts == SS->RootPathElements)
         {
             Elements = {SS->PathsById.at(SS->RootPathId())};
             NameParts = {Elements.front()->Name};
@@ -1246,7 +1246,7 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
 
         TPath headOpPath = Init(txState->TargetPathId, ss);
 
-        auto headPathNameParts = ss->RootPathElemets;
+        auto headPathNameParts = ss->RootPathElements;
         headPathNameParts.insert(headPathNameParts.end(), std::next(headOpPath.NameParts.begin()), headOpPath.NameParts.end());
 
         if (headPathNameParts.size() + 1 == pathParts.size()

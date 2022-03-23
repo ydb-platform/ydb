@@ -7,7 +7,6 @@ TEST_SRCS(
     test_ydb_scripting.py
 )
 
-ENV(YDB_TOKEN="root@builtin")
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TIMEOUT(600)
 SIZE(MEDIUM)

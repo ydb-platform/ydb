@@ -555,7 +555,7 @@ public:
             };
         }
         TProtoToJson::ProtoToJson(json, StorageInfo, JsonSettings);
-        Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 

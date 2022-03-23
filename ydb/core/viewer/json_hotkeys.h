@@ -137,7 +137,7 @@ public:
     }
 
     void ReplyAndPassAway() {
-        TString headers = Viewer->GetHTTPOKJSON();
+        TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult != nullptr) {
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:

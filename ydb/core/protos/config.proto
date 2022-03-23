@@ -217,6 +217,21 @@ message TDomainsConfig {
         repeated string DefaultUserSIDs = 4;
         optional string AllAuthenticatedUsers = 5;
         repeated string ViewerAllowedSIDs = 6;
+
+        message TUser {
+            optional string Name = 1;
+            optional string Password = 2;
+        }
+
+        message TGroup {
+            optional string Name = 1;
+            repeated string Members = 2;
+        }
+
+        repeated TUser DefaultUsers = 15;
+        repeated TGroup DefaultGroups = 16;
+        repeated string DefaultAccess = 17;
+        optional string AllUsersGroup = 18;
     }
 
     repeated TDomain Domain = 1;

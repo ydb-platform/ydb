@@ -563,6 +563,103 @@ namespace NKikimr::NYaml {
         }
     }
 
+    void PrepareSecurityConfig(NJson::TJsonValue& json) {
+        Y_ENSURE(json.Has("domains_config"));
+        Y_ENSURE(json["domains_config"].IsMap());
+
+        NJson::TJsonValue& domainsConfig = json["domains_config"];
+        NJson::TJsonValue& securityConfig = domainsConfig["security_config"];
+        TString defaultUserName;
+
+        if (securityConfig.Has("default_users")) {
+            NJson::TJsonValue& defaultUsers = securityConfig["default_users"];
+            Y_ENSURE(defaultUsers.IsArray());
+            Y_ENSURE(defaultUsers.GetArraySafe().size() > 0);
+            NJson::TJsonValue& defaultUser = defaultUsers.GetArraySafe()[0];
+            Y_ENSURE(defaultUser.IsMap());
+            defaultUserName = defaultUser["password"].GetStringRobust();
+        } else {
+            NJson::TJsonValue& defaultUser = securityConfig["default_users"].AppendValue({});
+            defaultUser["name"] = defaultUserName = "root";
+            defaultUser["password"] = "";
+        }
+
+        if (!securityConfig.Has("default_groups")) {
+            NJson::TJsonValue& defaultGroups = securityConfig["default_groups"];
+
+            {
+                NJson::TJsonValue& defaultGroupAdmins = defaultGroups.AppendValue({});
+                defaultGroupAdmins["name"] = "ADMINS";
+                defaultGroupAdmins["members"].AppendValue(defaultUserName);
+            }
+
+            {
+                NJson::TJsonValue& defaultGroupDatabaseAdmins = defaultGroups.AppendValue({});
+                defaultGroupDatabaseAdmins["name"] = "DATABASE-ADMINS";
+                defaultGroupDatabaseAdmins["members"].AppendValue("ADMINS");
+            }
+
+            {
+                NJson::TJsonValue& defaultGroupAccessAdmins = defaultGroups.AppendValue({});
+                defaultGroupAccessAdmins["name"] = "ACCESS-ADMINS";
+                defaultGroupAccessAdmins["members"].AppendValue("DATABASE-ADMINS");
+            }
+
+            {
+                NJson::TJsonValue& defaultGroupDdlAdmins = defaultGroups.AppendValue({});
+                defaultGroupDdlAdmins["name"] = "DDL-ADMINS";
+                defaultGroupDdlAdmins["members"].AppendValue("DATABASE-ADMINS");
+            }
+
+            {
+                NJson::TJsonValue& defaultGroupDataWriters = defaultGroups.AppendValue({});
+                defaultGroupDataWriters["name"] = "DATA-WRITERS";
+                defaultGroupDataWriters["members"].AppendValue("ADMINS");
+            }
+
+            {
+                NJson::TJsonValue& defaultGroupDataReaders = defaultGroups.AppendValue({});
+                defaultGroupDataReaders["name"] = "DATA-READERS";
+                defaultGroupDataReaders["members"].AppendValue("DATA-WRITERS");
+            }
+
+            {
+                NJson::TJsonValue& defaultGroupMetadataReaders = defaultGroups.AppendValue({});
+                defaultGroupMetadataReaders["name"] = "METADATA-READERS";
+                defaultGroupMetadataReaders["members"].AppendValue("DATA-READERS");
+                defaultGroupMetadataReaders["members"].AppendValue("DDL-ADMINS");
+            }
+
+            {
+                NJson::TJsonValue& defaultGroupUsers = defaultGroups.AppendValue({});
+                defaultGroupUsers["name"] = "USERS";
+                defaultGroupUsers["members"].AppendValue("METADATA-READERS");
+                defaultGroupUsers["members"].AppendValue("DATA-READERS");
+                defaultGroupUsers["members"].AppendValue("DATA-WRITERS");
+                defaultGroupUsers["members"].AppendValue("DDL-ADMINS");
+                defaultGroupUsers["members"].AppendValue("ACCESS-ADMINS");
+                defaultGroupUsers["members"].AppendValue("DATABASE-ADMINS");
+                defaultGroupUsers["members"].AppendValue("ADMINS");
+                defaultGroupUsers["members"].AppendValue(defaultUserName);
+            }
+        }
+
+        if (!securityConfig.Has("all_users_group")) {
+            securityConfig["all_users_group"] = "USERS";
+        }
+
+        if (!securityConfig.Has("default_access")) {
+            NJson::TJsonValue& defaultAccess = securityConfig["default_access"];
+            defaultAccess.AppendValue("+(ConnDB):USERS"); // ConnectDatabase
+            defaultAccess.AppendValue("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes
+            defaultAccess.AppendValue("+(SR):DATA-READERS"); // SelectRow
+            defaultAccess.AppendValue("+(UR|ER):DATA-WRITERS"); // UpdateRow | EraseRow
+            defaultAccess.AppendValue("+(CD|CT|WA|AS|RS):DDL-ADMINS"); // CreateDirectory | CreateTable | WriteAttributes | AlterSchema | RemoveSchema
+            defaultAccess.AppendValue("+(GAR):ACCESS-ADMINS"); // GrantAccessRights
+            defaultAccess.AppendValue("+(CDB|DDB):DATABASE-ADMINS"); // CreateDatabase | DropDatabase
+        }
+    }
+
     void PrepareNameserviceConfig(NJson::TJsonValue& json) {
         if (json.Has("nameservice_config")) {
             Y_ENSURE(json["nameservice_config"].IsMap());
@@ -650,6 +747,7 @@ namespace NKikimr::NYaml {
         PrepareLogConfig(json);
         PrepareSystemTabletsInfo(json);
         PrepareDomainsConfig(json);
+        PrepareSecurityConfig(json);
         PrepareBootstrapConfig(json);
         ClearFields(json);
     }

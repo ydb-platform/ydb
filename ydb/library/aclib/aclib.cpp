@@ -16,7 +16,7 @@ std::pair<ui32, ui32>& operator |=(std::pair<ui32, ui32>& a, const std::pair<ui3
 void TUserToken::SetGroupSIDs(const TVector<TString>& groupSIDs) {
     auto& hashTable = *MutableGroupSIDs();
     auto& hashBuckets = *hashTable.MutableBuckets();
-    int size(groupSIDs.size()); // we targeting for load factor ~1.0
+    int size(groupSIDs.size()); // we are targeting for load factor of ~1.0
     hashBuckets.Reserve(size);
     for (int i = 0; i < size; ++i) {
         hashBuckets.Add();
@@ -138,7 +138,7 @@ TSecurityObject::TSecurityObject(const TSID& owner, bool isContainer)
 
 ui32 TSecurityObject::GetEffectiveAccessRights(const TUserToken& user) const {
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
-        return EAccessRights::GenericFull; // the owner always have access
+        return EAccessRights::GenericFull; // the owner always has access
     ui32 deniedAccessRights = EAccessRights::NoAccess;
     ui32 allowedAccessRights = EAccessRights::NoAccess;
     if (HasACL()) {
@@ -162,7 +162,7 @@ ui32 TSecurityObject::GetEffectiveAccessRights(const TUserToken& user) const {
 
 bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
-        return true; // the owner always have access
+        return true; // the owner always has access
     if (HasACL()) {
         ui32 accessRightsLeft = access;
         for (const NACLibProto::TACE& ace : GetACL().GetACE()) {
@@ -174,10 +174,10 @@ bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
                             return false; // deny entries have precedence over allow entries
                         break;
                     case EAccessType::Allow:
-                        accessRightsLeft &= ~(accessRightsLeft & ace.GetAccessRight()); // some rights allowed
+                        accessRightsLeft &= ~(accessRightsLeft & ace.GetAccessRight()); // some rights are allowed
                         break;
                     }
-                    if (accessRightsLeft == 0) // all rights has been allowed
+                    if (accessRightsLeft == 0) // all rights have been allowed
                         return true;
                 }
             }

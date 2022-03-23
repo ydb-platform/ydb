@@ -207,7 +207,7 @@ private:
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& response = record.GetResponse();
-            out << Viewer->GetHTTPOKJSON();
+            out << Viewer->GetHTTPOKJSON(Event->Get());
             if (!Stats.empty()) {
                 out << "{\"result\":";
             }

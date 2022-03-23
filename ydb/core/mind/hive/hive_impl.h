@@ -174,6 +174,7 @@ protected:
     friend class THiveDrain;
     friend class THiveFill;
     friend class TReassignTabletWaitActor;
+    friend class TMoveTabletWaitActor;
     friend class TStopTabletWaitActor;
     friend class TResumeTabletWaitActor;
     friend class TInitMigrationWaitActor;
@@ -205,6 +206,7 @@ protected:
     friend class TTxMonEvent_Rebalance;
     friend class TTxMonEvent_Storage;
     friend class TTxMonEvent_FindTablet;
+    friend class TTxMonEvent_MoveTablet;
     friend class TTxMonEvent_StopTablet;
     friend class TTxMonEvent_ResumeTablet;
     friend class TTxMonEvent_InitMigration;

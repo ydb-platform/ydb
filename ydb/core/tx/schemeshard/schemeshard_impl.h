@@ -144,7 +144,7 @@ public:
     TParentDomainLink ParentDomainLink;
     TSubDomainsLinks SubDomainsLinks;
 
-    TVector<TString> RootPathElemets;
+    TVector<TString> RootPathElements;
 
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
@@ -1100,6 +1100,8 @@ private:
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
 public:
+    static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
     }

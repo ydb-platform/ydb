@@ -64,7 +64,7 @@ NNodes::TExprBase DqRewriteLengthOfStageOutput(NNodes::TExprBase node, TExprCont
 
 NNodes::TExprBase DqRewriteRightJoinToLeft(const NNodes::TExprBase node, TExprContext& ctx);
 
-NNodes::TExprBase DqPushJoinToStage(const NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+NNodes::TExprBase DqRewriteLeftPureJoin(const NNodes::TExprBase node, TExprContext& ctx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx,
@@ -79,7 +79,7 @@ NNodes::TExprBase DqBuildPureExprStage(NNodes::TExprBase node, TExprContext& ctx
 
 NNodes::TExprBase DqBuildExtendStage(NNodes::TExprBase node, TExprContext& ctx);
 
-NNodes::TExprBase DqBuildPrecomputeStage(NNodes::TExprBase node, TExprContext& ctx);
+NNodes::TExprBase DqBuildPrecompute(NNodes::TExprBase node, TExprContext& ctx);
 
 NYql::NNodes::TExprBase DqBuildHasItems(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     NYql::IOptimizationContext& optCtx);

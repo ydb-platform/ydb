@@ -46,9 +46,9 @@ public:
         AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput));
         AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
-        AddHandler(0, &TDqJoin::Match, HNDL(PushJoinToStage<false>));
+        AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
-        AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecomputeStage));
+        AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecompute));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TKqlInsertRows::Match, HNDL(BuildInsertStages));
@@ -69,7 +69,7 @@ public:
         AddHandler(1, &TCoTake::Match, HNDL(BuildTakeSkipStage<true>));
         AddHandler(1, &TCoSortBase::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoTake::Match, HNDL(BuildTakeStage<true>));
-        AddHandler(1, &TDqJoin::Match, HNDL(PushJoinToStage<true>));
+        AddHandler(1, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(BuildJoin<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
@@ -217,11 +217,10 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> PushJoinToStage(TExprBase node, TExprContext& ctx,
-        IOptimizationContext& optCtx, const TGetParents& getParents)
+    TMaybeNode<TExprBase> RewriteLeftPureJoin(TExprBase node, TExprContext& ctx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushJoinToStage(node, ctx, optCtx, *getParents(), IsGlobal);
-        DumpAppliedRule("PushJoinToStage", node.Ptr(), output.Ptr(), ctx);
+        TExprBase output = DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
+        DumpAppliedRule("RewriteLeftPureJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -234,9 +233,9 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> BuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqBuildPrecomputeStage(node, ctx);
-        DumpAppliedRule("BuildPrecomputeStage", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> BuildPrecompute(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqBuildPrecompute(node, ctx);
+        DumpAppliedRule("BuildPrecompute", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

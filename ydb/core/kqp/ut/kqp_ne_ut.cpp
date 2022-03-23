@@ -1,4 +1,3 @@
-<<<<<<< ydb/core/kqp/ut/kqp_newengine_ut.cpp
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -3048,5 +3047,3 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 }
 
 } // namespace NKikimr::NKqp
-=======
->>>>>>> ydb/core/kqp/ut/kqp_newengine_ut.cpp

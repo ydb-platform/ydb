@@ -977,6 +977,44 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST_NEW_ENGINE(JoinDupColumnRightPure) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTables(session);
+
+        auto params = TParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("Key").Int32(1)
+                            .AddMember("Fk21").Int32(101)
+                        .EndStruct()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("Key").Int32(2)
+                            .AddMember("Fk21").Int32(102)
+                        .EndStruct()
+                .EndList().Build()
+             .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Int32, Fk21: Int32>>;
+
+            SELECT Key, Key1, Key2
+            FROM AS_TABLE($rows) AS t1
+            LEFT JOIN Join1_2 AS t2 ON t1.Key = t2.Key1 AND t1.Fk21 = t2.Key1
+            ORDER BY Key;
+        )"), TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([
+            [1;#;#];
+            [2;#;#]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureInner) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

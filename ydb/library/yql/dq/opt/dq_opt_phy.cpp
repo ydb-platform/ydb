@@ -1427,9 +1427,9 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
 }
 
 /*
- * Precompute input value in a separate stage.
+ * Build physical precompute node.
  */
-TExprBase DqBuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
+TExprBase DqBuildPrecompute(TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TDqPrecompute>()) {
         return node;
     }
@@ -1437,13 +1437,10 @@ TExprBase DqBuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
     auto input = node.Cast<TDqPrecompute>().Input();
 
     TExprNode::TPtr connection;
-    bool value = false;
-
     if (input.Maybe<TDqCnUnionAll>()) {
         connection = input.Ptr();
     } else if (input.Maybe<TDqCnValue>()) {
         connection = input.Ptr();
-        value = true;
     } else if (IsDqPureExpr(input)) {
         if (input.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::List &&
             input.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)
@@ -1472,7 +1469,6 @@ TExprBase DqBuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
                 .Build()
             .Done().Ptr();
 
-        value = true;
     } else {
         return node;
     }
@@ -1481,29 +1477,7 @@ TExprBase DqBuildPrecomputeStage(TExprBase node, TExprContext& ctx) {
         .Connection(connection)
         .Done();
 
-    if (value) {
-        return phyPrecompute;
-    }
-
-    auto precomputeStage = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(phyPrecompute)
-            .Build()
-        .Program()
-            .Args({"zzz"})
-            .Body<TCoIterator>()
-                .List("zzz")
-                .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    return Build<TDqCnUnionAll>(ctx, node.Pos())
-        .Output()
-            .Stage(precomputeStage)
-            .Index().Build("0")
-            .Build()
-        .Done();
+    return phyPrecompute;
 }
 
 TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {

@@ -410,8 +410,8 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
-TExprBase DqPushJoinToStage(const TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowStageMultiUsage)
 {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -419,57 +419,57 @@ TExprBase DqPushJoinToStage(const TExprBase node, TExprContext& ctx, IOptimizati
 
     auto join = node.Cast<TDqJoin>();
 
-    static const std::set<std::string_view> supportedTypes = {"Inner"sv, "Left"sv, "LeftOnly"sv, "LeftSemi"sv};
+    static const std::set<std::string_view> supportedTypes = {"Left"sv, "LeftOnly"sv, "LeftSemi"sv};
     auto joinType = join.JoinType().Value();
     if (!supportedTypes.contains(joinType)) {
         return node;
     }
 
-    TMaybeNode<TDqCnUnionAll> connection;
-    bool pushLeft = false;
-    if (join.LeftInput().Maybe<TDqCnUnionAll>() && IsDqPureExpr(join.RightInput())) {
-        connection = join.LeftInput().Cast<TDqCnUnionAll>();
-        pushLeft = true;
-    }
-    if (join.RightInput().Maybe<TDqCnUnionAll>() && IsDqPureExpr(join.LeftInput())) {
-        connection = join.RightInput().Cast<TDqCnUnionAll>();
-        pushLeft = false;
-    }
-
-    if (!connection) {
+    if (!join.RightInput().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
-    if (!IsSingleConsumerConnection(connection.Cast(), parentsMap, allowStageMultiUsage)) {
+    if (!IsDqPureExpr(join.LeftInput())) {
         return node;
     }
 
-    TCoArgument inputArg{ctx.NewArgument(join.Pos(), "_dq_join_input")};
+    auto rightConnection = join.RightInput().Cast<TDqCnUnionAll>();
 
-    auto makeFlow = [&ctx](const TExprBase& list) {
-        return Build<TCoToFlow>(ctx, list.Pos())
-            .Input(list)
-            .Done();
-    };
+    if (!IsSingleConsumerConnection(rightConnection, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
 
-    auto phyJoin = DqMakePhyMapJoin(
-        join,
-        pushLeft ? TExprBase(inputArg) : makeFlow(join.LeftInput()),
-        pushLeft ? makeFlow(join.RightInput()) : TExprBase(inputArg),
-        ctx);
-
-    auto lambda = Build<TCoLambda>(ctx, join.Pos())
-        .Args({inputArg})
-        .Body(phyJoin)
+    auto leftStage = Build<TDqStage>(ctx, join.Pos())
+        .Inputs()
+            .Build()
+        .Program()
+            .Args({})
+            .Body<TCoToFlow>()
+                .Input(join.LeftInput())
+                .Build()
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
         .Done();
 
-    auto result = DqPushLambdaToStageUnionAll(connection.Cast(), lambda, {}, ctx, optCtx);
-    if (!result) {
-        return node;
-    }
+    auto leftConnection = Build<TDqCnUnionAll>(ctx, join.Pos())
+        .Output()
+            .Stage(leftStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
 
-    YQL_ENSURE(result.Maybe<TDqCnUnionAll>());
-    return result.Cast();
+    // TODO: Right input might be large, there are better possible physical plans.
+    // We only need matching key from the right side. Instead of broadcasting
+    // all right input data to single task, we can do a "partial" right semi join
+    // on in the right stage to extract only necessary rows.
+    return Build<TDqJoin>(ctx, join.Pos())
+        .LeftInput(leftConnection)
+        .LeftLabel(join.LeftLabel())
+        .RightInput(join.RightInput())
+        .RightLabel(join.RightLabel())
+        .JoinType().Build(joinType)
+        .JoinKeys(join.JoinKeys())
+        .Done();
 }
 
 TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx) {

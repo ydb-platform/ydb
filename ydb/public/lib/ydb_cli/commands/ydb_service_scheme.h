@@ -61,7 +61,7 @@ private:
     bool ShowPartitionStats = false;
 };
 
-class TCommandList : public TYdbOperationCommand, public TCommandWithPath {
+class TCommandList : public TYdbOperationCommand, public TCommandWithPath, public TCommandWithFormat {
 public:
     TCommandList();
     virtual void Config(TConfig& config) override;
@@ -69,8 +69,17 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    void PrintResponse(NScheme::TListDirectoryResult& result, const TString& path, NScheme::TSchemeClient& client);
-    void PrintResponseAdvanced(NScheme::TListDirectoryResult& result, TDriver& driver);
+    void PrintResponse(NScheme::TListDirectoryResult& result, const TString& path, TDriver& driver);
+    NJson::TJsonValue CollectJsonResponse(
+            NScheme::TListDirectoryResult &result,
+            const TString &path, NTable::TTableClient& tableClient,
+            NScheme::TSchemeClient& schemeClient,
+            bool advanced);
+
+    void PrintDefaultResponse(NScheme::TListDirectoryResult &result,
+                              const TString &path,
+                              TDriver& driver);
+    void PrintResponseAdvanced(NScheme::TListDirectoryResult& result, const TString& path, TDriver& driver);
     void AddEntriesRecursive(
         const TString& path,
         TVector<NScheme::TSchemeEntry> entries,

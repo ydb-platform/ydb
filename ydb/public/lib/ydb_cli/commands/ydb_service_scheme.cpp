@@ -6,6 +6,10 @@
 #include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <library/cpp/json/json_prettifier.h>
+#include <library/cpp/json/writer/json_value.h>
+#include <library/cpp/json/json_writer.h>
+
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -730,7 +734,7 @@ void TCommandList::Config(TConfig& config) {
         .StoreTrue(&AdvancedMode);
     config.Opts->AddCharOption('R', "List subdirectories recursively")
         .StoreTrue(&Recursive);
-
+    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::JsonUnicode });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
 }
@@ -749,19 +753,130 @@ int TCommandList::Run(TConfig& config) {
     ).GetValueSync();
     ThrowOnError(result);
     if (AdvancedMode) {
-        PrintResponseAdvanced(result, driver);
+        PrintResponseAdvanced(result, Path, driver);
     } else {
-        PrintResponse(result, Path, client);
+        PrintResponse(result, Path, driver);
     }
     Y_UNUSED(Recursive);
     return EXIT_SUCCESS;
 }
 
+namespace {
+    NJson::TJsonMap ConvertEntryToJson(
+            const NScheme::TSchemeEntry& entry,
+            const TString& path) {
+        NJson::TJsonMap res;
+        res["path"] = path;
+        res["type"] = EntryTypeToString(entry.Type);
+        res["owner"] = entry.Owner;
+        return res;
+    }
+
+    NJson::TJsonMap ConvertEntryToJson(
+            const NScheme::TSchemeEntry& entry,
+            const TString& path,
+            const NTable::TTableDescription& tableDescription) {
+        NJson::TJsonMap res = ConvertEntryToJson(entry, path);
+
+        res["path"] = path;
+        res["created"] = CorrectTime(tableDescription.GetCreationTime()).MilliSeconds();
+        res["modified"] = CorrectTime(tableDescription.GetModificationTime()).MilliSeconds();
+        return res;
+    }
+}
+
+NJson::TJsonValue TCommandList::CollectJsonResponse(
+        NScheme::TListDirectoryResult& result,
+        const TString& path,
+        NTable::TTableClient& tableClient,
+        NScheme::TSchemeClient& schemeClient,
+        bool advanced = false
+) {
+    NJson::TJsonValue response = {NJson::EJsonValueType::JSON_ARRAY};
+    TVector<NScheme::TSchemeEntry> children = result.GetChildren();
+    if (children.size() && Recursive) {
+        for (const auto& child : children) {
+            TString childPath = path + '/' + child.Name;
+            if (child.Type == NScheme::ESchemeEntryType::Directory) {
+                NScheme::TListDirectoryResult child_result = schemeClient.ListDirectory(
+                        childPath,
+                        FillSettings(NScheme::TListDirectorySettings())
+                ).GetValueSync();
+                ThrowOnError(child_result);
+
+                NJson::TJsonValue entry;
+                entry = ConvertEntryToJson(child, childPath);
+                response.AppendValue(entry);
+                NJson::TJsonValue children = CollectJsonResponse(
+                        child_result,
+                        childPath,
+                        tableClient,
+                        schemeClient,
+                        advanced);
+                for (const NJson::TJsonValue& childNode : children.GetArray()) {
+                    response.AppendValue(childNode);
+                }
+            } else {
+                NJson::TJsonMap entry;
+                if (advanced) {
+                    NTable::TCreateSessionResult sessionResult = tableClient.GetSession(
+                            NTable::TCreateSessionSettings()
+                    ).GetValueSync();
+                    ThrowOnError(sessionResult);
+
+                    NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(
+                            childPath,
+                            FillSettings(
+                                    NTable::TDescribeTableSettings().WithTableStatistics(true)
+                            )
+                    ).GetValueSync();
+                    ThrowOnError(tableResult);
+                    NTable::TTableDescription tableDescription = tableResult.GetTableDescription();
+                    entry = ConvertEntryToJson(child, childPath, tableDescription);
+                } else {
+                    entry = ConvertEntryToJson(child, childPath);
+                }
+                response.AppendValue(entry);
+            }
+        }
+    } else {
+        response.AppendValue(NJson::TJsonMap{{"path", path + "/" + result.GetEntry().Name}});
+    }
+    return response;
+}
+
 void TCommandList::PrintResponse(
+        NScheme::TListDirectoryResult& result,
+        const TString& path,
+        TDriver& driver
+) {
+    switch (OutputFormat) {
+        case EOutputFormat::JsonUnicode: {
+            NTable::TTableClient tableClient(driver);
+            NScheme::TSchemeClient schemeClient(driver);
+            NJson::TJsonValue response = CollectJsonResponse(result, path, tableClient, schemeClient);
+            NJson::TJsonWriter writer(&Cout, true);
+            writer.Write(response);
+            writer.Flush();
+            Cout << Endl;
+            return;
+        }
+        case EOutputFormat::Default:
+        case EOutputFormat::Pretty:
+            PrintDefaultResponse(result, path, driver);
+            return;
+        default:
+            throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
+    }
+
+}
+
+void TCommandList::PrintDefaultResponse(
     NScheme::TListDirectoryResult& result,
     const TString& path,
-    NScheme::TSchemeClient& client
+    TDriver& driver
 ) {
+    NScheme::TSchemeClient client{driver};
     TVector<NScheme::TSchemeEntry> children = result.GetChildren();
     if (children.size()) {
         if (Recursive) {
@@ -779,7 +894,7 @@ void TCommandList::PrintResponse(
                     ).GetValueSync();
                     ThrowOnError(child_result);
                     Cout << Endl;
-                    PrintResponse(child_result, childPath, client);
+                    PrintDefaultResponse(child_result, childPath, driver);
                 }
             }
         }
@@ -796,27 +911,45 @@ void TCommandList::PrintResponse(
     }
 }
 
-void TCommandList::PrintResponseAdvanced(NScheme::TListDirectoryResult& result, TDriver& driver) {
-    TVector<NScheme::TSchemeEntry> entries = result.GetChildren();
-    bool oneExactEntry = false;
+void TCommandList::PrintResponseAdvanced(
+        NScheme::TListDirectoryResult& result,
+        const TString& path,
+        TDriver& driver
+) {
     NTable::TTableClient tableClient(driver);
     NScheme::TSchemeClient schemeClient(driver);
-    if (!entries.size()) {
-        if (result.GetEntry().Type != NScheme::ESchemeEntryType::Directory) {
-            entries.push_back(result.GetEntry());
-            oneExactEntry = true;
-        } else {
+    switch (OutputFormat) {
+        case EOutputFormat::JsonUnicode: {
+            NJson::TJsonValue response = CollectJsonResponse(result, path, tableClient, schemeClient, true);
+            NJson::TJsonWriter writer(&Cout, true);
+            writer.Write(response);
+            writer.Flush();
+            Cout << Endl;
             return;
         }
+        case EOutputFormat::Default: {
+            TVector<NScheme::TSchemeEntry> entries = result.GetChildren();
+            bool oneExactEntry = false;
+            if (!entries.size()) {
+                if (result.GetEntry().Type != NScheme::ESchemeEntryType::Directory) {
+                    entries.push_back(result.GetEntry());
+                    oneExactEntry = true;
+                } else {
+                    return;
+                }
+            }
+            TPrettyTable table(
+                    { "Type", "Owner", "Size", "Created", "Modified", "Name" },
+                    TPrettyTableConfig().WithoutRowDelimiters()
+            );
+
+            AddEntriesRecursive(TString(), entries, 0, table, oneExactEntry, tableClient, schemeClient);
+
+            Cout << table;
+            return;
+        } default:
+            throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
     }
-    TPrettyTable table(
-        { "Type", "Owner", "Size", "Created", "Modified", "Name" },
-        TPrettyTableConfig().WithoutRowDelimiters()
-    );
-
-    AddEntriesRecursive(TString(), entries, 0, table, oneExactEntry, tableClient, schemeClient);
-
-    Cout << table;
 }
 
 void TCommandList::AddEntriesRecursive(

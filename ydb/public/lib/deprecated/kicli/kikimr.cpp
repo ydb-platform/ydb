@@ -584,8 +584,7 @@ NThreading::TFuture<TResult> TKikimr::RegisterNode(const TString& domainPath, co
     request->Record.SetPort(port);
     request->Record.SetAddress(address);
     request->Record.SetResolveHost(resolveHost);
-    location.Serialize(request->Record.MutableLocation());
-    location.GetLegacyValue().Serialize(request->Record.MutableLocation());
+    location.Serialize(request->Record.MutableLocation(), true);
     request->Record.SetDomainPath(domainPath);
     request->Record.SetFixedNodeId(fixedNodeId);
     if (path) {

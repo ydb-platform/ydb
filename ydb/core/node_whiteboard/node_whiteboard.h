@@ -295,7 +295,7 @@ struct TEvWhiteboard{
         }
 
         TEvSystemStateUpdate(const TNodeLocation& systemLocation) {
-            systemLocation.Serialize(Record.MutableLocation());
+            systemLocation.Serialize(Record.MutableLocation(), false);
             const auto& x = systemLocation.GetLegacyValue();
             auto *pb = Record.MutableSystemLocation();
             pb->SetDataCenter(x.DataCenter);

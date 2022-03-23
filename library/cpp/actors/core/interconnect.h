@@ -72,7 +72,8 @@ namespace NActors {
         TNodeLocation& operator =(const TNodeLocation&) = default;
         TNodeLocation& operator =(TNodeLocation&&) = default;
 
-        void Serialize(NActorsInterconnect::TNodeLocation *pb) const;
+        // compatibleWithOlderVersions should be set to true when this protobuf is possibly going to be delivered to 21-4
+        void Serialize(NActorsInterconnect::TNodeLocation *pb, bool compatibleWithOlderVersions) const;
         TString GetSerializedLocation() const;
 
         TString GetDataCenterId() const { return ToStringUpTo(TKeys::DataCenter); }

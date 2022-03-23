@@ -114,7 +114,7 @@ public:
                 info.SetAddress(node.Address);
                 info.SetResolveHost(node.ResolveHost);
                 info.SetPort(node.Port);
-                node.Location.Serialize(info.MutableLocation());
+                node.Location.Serialize(info.MutableLocation(), true);
             }
         }
 

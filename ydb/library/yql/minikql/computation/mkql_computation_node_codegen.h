@@ -385,6 +385,7 @@ Value* MakeVariant(Value* item, Value* variant, const TCodegenContext& ctx, Basi
 Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block);
 void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& ctx, BasicBlock*& block);
 
+struct TNoCodegen {};
 ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlowNode* node, const TCodegenContext& ctx, BasicBlock*& block);
 
 Function* GenerateCompareFunction(

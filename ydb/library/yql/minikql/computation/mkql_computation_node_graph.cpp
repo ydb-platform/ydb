@@ -689,8 +689,13 @@ public:
                 timerGen.Acquire();
                 for (auto it = nodes.crbegin(); nodes.crend() != it; ++it) {
                     if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(it->Get())) {
-                        codegen->GenerateFunctions(Codegen);
-                        hasCode = true;
+                        try {
+                            codegen->GenerateFunctions(Codegen);
+                            hasCode = true;
+                        } catch (const TNoCodegen&) {
+                            hasCode = false;
+                            break;
+                        }
                     }
                 }
                 timerGen.Release();

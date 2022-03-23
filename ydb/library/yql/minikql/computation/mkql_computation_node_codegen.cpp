@@ -1719,7 +1719,7 @@ void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& c
 ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlowNode* node, const TCodegenContext& ctx, BasicBlock*& block) {
     if (const auto codegen = dynamic_cast<ICodegeneratorInlineWideNode*>(node))
         return codegen->GenGetValues(ctx, block);
-    return {nullptr, {}};
+    throw TNoCodegen();
 }
 
 Value* GenNewArray(const TCodegenContext& ctx, Value* size, Value* items, BasicBlock* block) {

@@ -119,6 +119,43 @@ private:
     const std::string_view ContextType;
 };
 
+class TWithContextWideFlowWrapper : public TStatefulWideFlowComputationNode<TWithContextWideFlowWrapper> {
+    typedef TStatefulWideFlowComputationNode<TWithContextWideFlowWrapper> TBaseComputation;
+public:
+    TWithContextWideFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
+        const std::string_view& contextType)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Any)
+        , Flow(flow)
+        , ContextType(contextType)
+    {}
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        if (stateValue.IsInvalid()) {
+            stateValue = ctx.HolderFactory.Create<TState>(ContextType);
+        }
+
+        TState& state = *static_cast<TState*>(stateValue.AsBoxed().Get());
+        state.Attach();
+        Y_DEFER {
+            state.Detach();
+        };
+
+        auto status = Flow->FetchValues(ctx, output);
+        if (status == EFetchResult::Finish) {
+            state.Cleanup();
+        }
+
+        return status;
+    }
+
+private:
+    void RegisterDependencies() const final {
+        this->FlowDependsOn(Flow);
+    }
+
+    IComputationWideFlowNode* const Flow;
+    const std::string_view ContextType;
+};
 
 }
 
@@ -127,8 +164,12 @@ IComputationNode* WrapWithContext(TCallable& callable, const TComputationNodeFac
     auto contextType = contextTypeData->AsValue().AsStringRef();
     auto arg = LocateNode(ctx.NodeLocator, callable, 1);
     if (callable.GetInput(1).GetStaticType()->IsFlow()) {
-        const auto type = callable.GetType()->GetReturnType();
-        return new TWithContextFlowWrapper(ctx.Mutables, contextType, GetValueRepresentation(type), arg);
+        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(arg)) {
+            return new TWithContextWideFlowWrapper(ctx.Mutables, wide, contextType);
+        } else {
+            const auto type = callable.GetType()->GetReturnType();
+            return new TWithContextFlowWrapper(ctx.Mutables, contextType, GetValueRepresentation(type), arg);
+        }
     } else {
         MKQL_ENSURE(!callable.GetInput(1).GetStaticType()->IsStream(), "Stream is not expected here");
         return new TWithContextWrapper(ctx.Mutables, contextType, arg);

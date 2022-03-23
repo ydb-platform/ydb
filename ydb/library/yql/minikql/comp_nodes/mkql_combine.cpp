@@ -89,7 +89,16 @@ public:
     }
 
     bool IsEmpty() const {
-        return States.empty();
+        if (!States.empty()) {
+            return false;
+        }
+
+        auto& allocState = *TlsAllocState;
+        if (allocState.CurrentContext) {
+            TAllocState::CleanupPAllocList(allocState.CurrentPAllocList);
+        }
+
+        return true;
     }
 
     void PushStat(IStatsRegistry* stats) const {

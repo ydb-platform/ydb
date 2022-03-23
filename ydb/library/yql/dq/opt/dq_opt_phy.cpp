@@ -578,6 +578,21 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
                 .Build()
             .Done();
 
+    if (HasContextFuncs(*lambda.Ptr())) {
+        lambda = Build<TCoLambda>(ctx, combine.Pos())
+            .Args({ TStringBuf("stream") })
+            .Body<TCoWithContext>()
+                .Name()
+                    .Value("Agg")
+                .Build()
+                .Input<TExprApplier>()
+                    .Apply(lambda)
+                    .With(0, TStringBuf("stream"))
+                .Build()
+            .Build()
+            .Done();
+    }
+
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
     if (!result) {
         return node;

@@ -3424,6 +3424,11 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
         }
     }
 
+    if (const auto& input = node->Head(); input.IsCallable("WithContext")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
+        return ctx.ChangeChild(input, 1, ctx.ChangeChild(*node, 0, input.TailPtr()));
+    }
+
     return node;
 }
 

@@ -165,6 +165,7 @@ namespace NKikimr::NStorage {
                     needed.erase(it->second);
                 }
                 if (needed.empty()) {
+                    Y_VERIFY_DEBUG(GetResultingGroupInfo());
                     return false; // information we have is quite conclusive, nothing more to scan
                 }
             }
@@ -183,9 +184,6 @@ namespace NKikimr::NStorage {
             const auto& record = ev->Get()->Record;
             STLOG(PRI_DEBUG, BS_NODE, NW84, "TGroupResolverActor::TEvNodeWardenGroupInfo", (GroupId, GroupId),
                 (NodeId, nodeId), (Msg, ev->Get()->ToString()));
-            if (record.HasGroup()) { // remember group info
-                GroupInfoReceived.emplace(nodeId, record.GetGroup());
-            }
 
             // remove group<->node mapping for selected node and clear started groups vector
             auto& nodeInfo = Ctx.NodeInfo[nodeId];
@@ -198,9 +196,15 @@ namespace NKikimr::NStorage {
             // fill in new started groups vector and create appropriate map
             const auto& startedGroupIds = record.GetStartedGroupIds();
             nodeInfo.StartedGroupIds.insert(nodeInfo.StartedGroupIds.end(), startedGroupIds.begin(), startedGroupIds.end());
+            bool trustworthy = false;
             for (ui32 groupId : nodeInfo.StartedGroupIds) {
                 const bool inserted = Ctx.StartedGroupIdToNodes.emplace(groupId, nodeId).second;
                 Y_VERIFY(inserted);
+                trustworthy |= groupId == GroupId; // the group we are looking for
+            }
+
+            if (trustworthy && record.HasGroup()) { // remember group info
+                GroupInfoReceived.emplace(nodeId, record.GetGroup());
             }
 
             QueriesInFlight.erase(nodeId);
@@ -230,6 +234,19 @@ namespace NKikimr::NStorage {
             for (const auto& [nodeId, group] : GroupInfoReceived) {
                 if (!result || result->GetGroupGeneration() < group.GetGroupGeneration()) {
                     result = &group;
+                }
+            }
+            if (result) {
+                TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(*result, nullptr, nullptr);
+                TBlobStorageGroupInfo::TGroupVDisks received(&info->GetTopology());
+                for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                    const TActorId& actorId = info->GetActorId(i);
+                    if (GroupInfoReceived.count(actorId.NodeId())) {
+                        received |= {&info->GetTopology(), info->GetVDiskId(i)};
+                    }
+                }
+                if (!info->GetQuorumChecker().CheckQuorumForGroup(received)) {
+                    result = nullptr;
                 }
             }
             return result;
@@ -317,8 +334,10 @@ namespace NKikimr::NStorage {
         if (const auto it = Groups.find(r.GetGroupId()); it != Groups.end() && it->second.Group) {
             record.MutableGroup()->CopyFrom(*it->second.Group);
         }
-        for (const auto& [groupId, group] : Groups) {
-            record.AddStartedGroupIds(groupId);
+        for (const auto& [key, value] : LocalVDisks) {
+            if (const auto& r = value.RuntimeData; r && !r->DonorMode) {
+                record.AddStartedGroupIds(r->GroupInfo->GroupID);
+            }
         }
         Send(ev->Sender, res.release(), 0, ev->Cookie);
     }

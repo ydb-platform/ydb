@@ -237,7 +237,7 @@ def initialize_session(rpc_state, response_pb, session_state, session):
     issues._process_response(response_pb.operation)
     message = _apis.ydb_table.CreateSessionResult()
     response_pb.operation.result.Unpack(message)
-    session_state.set_id(message.session_id).attach_endpoint(rpc_state.endpoint)
+    session_state.set_id(message.session_id).attach_endpoint(rpc_state.endpoint_key)
     return session
 
 

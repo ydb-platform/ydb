@@ -18,6 +18,7 @@ from ydb.connection import (
     YDB_DATABASE_HEADER,
     YDB_TRACE_ID_HEADER,
     YDB_REQUEST_TYPE_HEADER,
+    EndpointKey,
 )
 from ydb.driver import DriverConfig
 from ydb.settings import BaseRequestSettings
@@ -71,8 +72,8 @@ class _RpcState(RpcState):
         "_trailing_metadata",
     )
 
-    def __init__(self, stub_instance: Any, rpc_name: str, endpoint: str):
-        super().__init__(stub_instance, rpc_name, endpoint)
+    def __init__(self, stub_instance: Any, rpc_name: str, endpoint: str, endpoint_key):
+        super().__init__(stub_instance, rpc_name, endpoint, endpoint_key)
 
     async def __call__(self, *args, **kwargs):
         resp = self.rpc(*args, **kwargs)
@@ -105,6 +106,8 @@ class Connection:
         "lock",
         "calls",
         "closing",
+        "endpoint_key",
+        "node_id",
     )
 
     def __init__(
@@ -115,6 +118,10 @@ class Connection:
     ):
         global _stubs_list
         self.endpoint = endpoint
+        self.endpoint_key = EndpointKey(
+            self.endpoint, getattr(endpoint_options, "node_id", None)
+        )
+        self.node_id = getattr(endpoint_options, "node_id", None)
         self._channel = channel_factory(
             self.endpoint, driver_config, grpc.aio, endpoint_options=endpoint_options
         )
@@ -141,7 +148,9 @@ class Connection:
         )
         _set_server_timeouts(request, settings, timeout)
         self._prepare_stub_instance(stub)
-        rpc_state = _RpcState(self._stub_instances[stub], rpc_name, self.endpoint)
+        rpc_state = _RpcState(
+            self._stub_instances[stub], rpc_name, self.endpoint, self.endpoint_key
+        )
         logger.debug("%s: creating call state", rpc_state)
 
         if self.closing:

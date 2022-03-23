@@ -30,7 +30,16 @@ class ConnectionsCache(_ConnectionsCache):
         else:
             await asyncio.wait_for(self._event.wait(), timeout=wait_timeout)
 
-        if preferred_endpoint is not None and preferred_endpoint in self.connections:
+        if (
+            preferred_endpoint is not None
+            and preferred_endpoint.node_id in self.connections_by_node_id
+        ):
+            return self.connections_by_node_id[preferred_endpoint.node_id]
+
+        if (
+            preferred_endpoint is not None
+            and preferred_endpoint.endpoint in self.connections
+        ):
             return self.connections[preferred_endpoint]
 
         for conn_lst in self.conn_lst_order:
@@ -52,6 +61,8 @@ class ConnectionsCache(_ConnectionsCache):
 
         if preferred:
             self.preferred[connection.endpoint] = connection
+
+        self.connections_by_node_id[connection.node_id] = connection
         self.connections[connection.endpoint] = connection
 
         self._event.set()
@@ -66,6 +77,7 @@ class ConnectionsCache(_ConnectionsCache):
         self._fast_fail_event.set()
 
     def remove(self, connection):
+        self.connections_by_node_id.pop(connection.node_id, None)
         self.preferred.pop(connection.endpoint, None)
         self.connections.pop(connection.endpoint, None)
         self.outdated.pop(connection.endpoint, None)

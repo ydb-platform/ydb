@@ -19,6 +19,7 @@ class ConnectionsCache(object):
         self.tracer = tracer
         self.lock = threading.RLock()
         self.connections = collections.OrderedDict()
+        self.connections_by_node_id = collections.OrderedDict()
         self.outdated = collections.OrderedDict()
         self.subscriptions = set()
         self.preferred = collections.OrderedDict()
@@ -39,6 +40,8 @@ class ConnectionsCache(object):
         with self.lock:
             if preferred:
                 self.preferred[connection.endpoint] = connection
+
+            self.connections_by_node_id[connection.node_id] = connection
             self.connections[connection.endpoint] = connection
             subscriptions = list(self.subscriptions)
             self.subscriptions.clear()
@@ -128,9 +131,14 @@ class ConnectionsCache(object):
         with self.lock:
             if (
                 preferred_endpoint is not None
-                and preferred_endpoint in self.connections
+                and preferred_endpoint.node_id in self.connections_by_node_id
             ):
-                tracing.trace(self.tracer, {"found_preferred_endpoint": True})
+                return self.connections_by_node_id[preferred_endpoint.node_id]
+
+            if (
+                preferred_endpoint is not None
+                and preferred_endpoint.endpoint in self.connections
+            ):
                 return self.connections[preferred_endpoint]
 
             for conn_lst in self.conn_lst_order:
@@ -146,6 +154,7 @@ class ConnectionsCache(object):
 
     def remove(self, connection):
         with self.lock:
+            self.connections_by_node_id.pop(connection.node_id, None)
             self.preferred.pop(connection.endpoint, None)
             self.connections.pop(connection.endpoint, None)
             self.outdated.pop(connection.endpoint, None)

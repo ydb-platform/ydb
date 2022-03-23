@@ -19,6 +19,7 @@ class EndpointInfo(object):
         "ipv4_addrs",
         "ipv6_addrs",
         "ssl_target_name_override",
+        "node_id",
     )
 
     def __init__(self, endpoint_info):
@@ -30,19 +31,20 @@ class EndpointInfo(object):
         self.ipv4_addrs = tuple(endpoint_info.ip_v4)
         self.ipv6_addrs = tuple(endpoint_info.ip_v6)
         self.ssl_target_name_override = endpoint_info.ssl_target_name_override
+        self.node_id = endpoint_info.node_id
 
     def endpoints_with_options(self):
+        ssl_target_name_override = None
         if self.ssl:
             if self.ssl_target_name_override:
-                endpoint_options = conn_impl.EndpointOptions(
-                    self.ssl_target_name_override
-                )
+                ssl_target_name_override = self.ssl_target_name_override
             elif self.ipv6_addrs or self.ipv4_addrs:
-                endpoint_options = conn_impl.EndpointOptions(self.address)
-            else:
-                endpoint_options = None
-        else:
-            endpoint_options = None
+                ssl_target_name_override = self.address
+
+        endpoint_options = conn_impl.EndpointOptions(
+            ssl_target_name_override=ssl_target_name_override, node_id=self.node_id
+        )
+
         if self.ipv6_addrs or self.ipv4_addrs:
             for ipv6addr in self.ipv6_addrs:
                 yield ("ipv6:[%s]:%s" % (ipv6addr, self.port), endpoint_options)

@@ -163,10 +163,11 @@ def _get_request_timeout(settings):
 
 
 class EndpointOptions(object):
-    __slots__ = ("ssl_target_name_override",)
+    __slots__ = ("ssl_target_name_override", "node_id")
 
-    def __init__(self, ssl_target_name_override=None):
+    def __init__(self, ssl_target_name_override=None, node_id=None):
         self.ssl_target_name_override = ssl_target_name_override
+        self.node_id = node_id
 
 
 def _construct_channel_options(driver_config, endpoint_options=None):
@@ -223,9 +224,10 @@ class _RpcState(object):
         "endpoint",
         "rendezvous",
         "metadata_kv",
+        "endpoint_key",
     )
 
-    def __init__(self, stub_instance, rpc_name, endpoint):
+    def __init__(self, stub_instance, rpc_name, endpoint, endpoint_key):
         """Stores all RPC related data"""
         self.rpc_name = rpc_name
         self.rpc = getattr(stub_instance, rpc_name)
@@ -233,6 +235,7 @@ class _RpcState(object):
         self.endpoint = endpoint
         self.rendezvous = None
         self.metadata_kv = None
+        self.endpoint_key = endpoint_key
 
     def __str__(self):
         return "RpcState(%s, %s, %s)" % (self.rpc_name, self.request_id, self.endpoint)
@@ -318,6 +321,14 @@ def channel_factory(
     )
 
 
+class EndpointKey(object):
+    __slots__ = ("endpoint", "node_id")
+
+    def __init__(self, endpoint, node_id):
+        self.endpoint = endpoint
+        self.node_id = node_id
+
+
 class Connection(object):
     __slots__ = (
         "endpoint",
@@ -330,6 +341,8 @@ class Connection(object):
         "lock",
         "calls",
         "closing",
+        "endpoint_key",
+        "node_id",
     )
 
     def __init__(self, endpoint, driver_config=None, endpoint_options=None):
@@ -341,6 +354,10 @@ class Connection(object):
         """
         global _stubs_list
         self.endpoint = endpoint
+        self.node_id = getattr(endpoint_options, "node_id", None)
+        self.endpoint_key = EndpointKey(
+            endpoint, getattr(endpoint_options, "node_id", None)
+        )
         self._channel = channel_factory(
             self.endpoint, driver_config, endpoint_options=endpoint_options
         )
@@ -368,7 +385,9 @@ class Connection(object):
         )
         _set_server_timeouts(request, settings, timeout)
         self._prepare_stub_instance(stub)
-        rpc_state = _RpcState(self._stub_instances[stub], rpc_name, self.endpoint)
+        rpc_state = _RpcState(
+            self._stub_instances[stub], rpc_name, self.endpoint, self.endpoint_key
+        )
         logger.debug("%s: creating call state", rpc_state)
         with self.lock:
             if self.closing:

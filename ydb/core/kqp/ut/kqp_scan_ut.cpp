@@ -1099,21 +1099,21 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TVector<TString> profiles;
         CompareYson(R"([[[3];[301u];["Value1"]]])", StreamResultToYson(it, &profiles));
 
-        UNIT_ASSERT_EQUAL(2, profiles.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, profiles.size());
+
+//        {
+//            NYql::NDqProto::TDqExecutionStats stats;
+//            google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
+//            UNIT_ASSERT(stats.IsInitialized());
+//
+//            NKqpProto::TKqpExecutionExtraStats extraStats;
+//            UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
+//            UNIT_ASSERT_VALUES_EQUAL(extraStats.GetAffectedShards(), 0);
+//        }
 
         {
             NYql::NDqProto::TDqExecutionStats stats;
             google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
-            UNIT_ASSERT(stats.IsInitialized());
-
-            NKqpProto::TKqpExecutionExtraStats extraStats;
-            UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
-            UNIT_ASSERT_VALUES_EQUAL(extraStats.GetAffectedShards(), 0);
-        }
-
-        {
-            NYql::NDqProto::TDqExecutionStats stats;
-            google::protobuf::TextFormat::ParseFromString(profiles[1], &stats);
             UNIT_ASSERT(stats.IsInitialized());
 
             NKqpProto::TKqpExecutionExtraStats extraStats;

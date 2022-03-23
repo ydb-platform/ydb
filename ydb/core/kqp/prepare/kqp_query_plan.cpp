@@ -1108,6 +1108,11 @@ private:
                     }
                 }
             }
+
+            if (auto literal = key.Maybe<TCoDataCtor>()) {
+                return literal.Cast().Literal().StringValue();
+            }
+
             return TString("n/a");
         };
 

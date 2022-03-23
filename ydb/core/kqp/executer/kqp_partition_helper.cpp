@@ -181,15 +181,24 @@ TVector<TCell> FillKeyValues(const TVector<NUdf::TDataTypeId>& keyColumnTypes, c
         TString paramName;
         TMaybe<ui32> paramIndex;
         switch (tupleValue.GetKindCase()) {
-            case NKqpProto::TKqpPhyValue::kParamValue:
+            case NKqpProto::TKqpPhyValue::kParamValue: {
                 paramName = tupleValue.GetParamValue().GetParamName();
                 break;
-            case NKqpProto::TKqpPhyValue::kParamElementValue:
+            }
+            case NKqpProto::TKqpPhyValue::kParamElementValue: {
                 paramName = tupleValue.GetParamElementValue().GetParamName();
                 paramIndex = tupleValue.GetParamElementValue().GetElementIndex();
                 break;
-            default:
+            }
+            case NKqpProto::TKqpPhyValue::kLiteralValue: {
+                const auto& literal = tupleValue.GetLiteralValue();
+                auto [type, value] = ImportValueFromProto(literal.GetType(), literal.GetValue(), typeEnv, holderFactory);
+                keyValues.emplace_back(NMiniKQL::MakeCell(keyColumnTypes[i], value, typeEnv, /* copy */ true));
+                continue;
+            }
+            default: {
                 YQL_ENSURE(false, "Unexpected type case " << (int) tupleValue.GetKindCase());
+            }
         }
 
         auto param = stageInfo.Meta.Tx.Params.Values.FindPtr(paramName);

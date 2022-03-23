@@ -4709,8 +4709,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
             int readPhase = 0;
             if (UseNewEngine) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
-                readPhase = 2;
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
+                readPhase = 1;
             }
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 1);

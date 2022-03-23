@@ -1441,6 +1441,8 @@ TExprBase DqBuildPrecompute(TExprBase node, TExprContext& ctx) {
         connection = input.Ptr();
     } else if (input.Maybe<TDqCnValue>()) {
         connection = input.Ptr();
+    } else if (input.Maybe<TCoParameter>()) {
+        return input;
     } else if (IsDqPureExpr(input)) {
         if (input.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::List &&
             input.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)

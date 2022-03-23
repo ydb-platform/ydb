@@ -1010,6 +1010,13 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
             component = NLog::InvalidComponent;
         } else {
             component = LogSettings->FindComponent(componentName);
+
+            if (logConfig.GetIgnoreUnknownComponents()
+                    && component == NLog::InvalidComponent)
+            {
+                continue;
+            }
+
             Y_VERIFY(component != NLog::InvalidComponent, "Invalid component name in log configuration file: \"%s\"",
                 componentName.data());
         }

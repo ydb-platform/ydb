@@ -85,6 +85,8 @@ namespace {
             return "dir";
         case  NScheme::ESchemeEntryType::Table:
             return "table";
+        case  NScheme::ESchemeEntryType::ColumnTable:
+            return "column-table";
         case  NScheme::ESchemeEntryType::PqGroup:
             return "pq-group";
         case  NScheme::ESchemeEntryType::SubDomain:
@@ -95,7 +97,9 @@ namespace {
             return "block-store-volume";
         case  NScheme::ESchemeEntryType::CoordinationNode:
             return "coordination-node";
-        default:
+        case  NScheme::ESchemeEntryType::Unknown:
+        case  NScheme::ESchemeEntryType::Sequence:
+        case  NScheme::ESchemeEntryType::Replication:
             return "unknown";
         }
     }

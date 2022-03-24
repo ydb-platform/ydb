@@ -21,6 +21,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::Directory;
     case ::Ydb::Scheme::Entry::TABLE:
         return ESchemeEntryType::Table;
+    case ::Ydb::Scheme::Entry::COLUMN_TABLE:
+        return ESchemeEntryType::ColumnTable;
     case ::Ydb::Scheme::Entry::PERS_QUEUE_GROUP:
         return ESchemeEntryType::PqGroup;
     case ::Ydb::Scheme::Entry::DATABASE:

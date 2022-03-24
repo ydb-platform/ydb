@@ -231,7 +231,6 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr SystemUptimeSeconds;
     };
 
-
     class TRegistryCollector: public TProcStatCollectingActor<TRegistryCollector> {
         using TBase = TProcStatCollectingActor<TRegistryCollector>;
     public:
@@ -290,6 +289,52 @@ namespace {
         NMonitoring::TIntGauge* NumThreads;
         NMonitoring::TIntGauge* SystemUptimeSeconds;
     };
+
+    class TRegistryCollectorShared: public TProcStatCollectingActor<TRegistryCollectorShared> {
+        using TBase = TProcStatCollectingActor<TRegistryCollectorShared>;
+    public:
+        TRegistryCollectorShared(TDuration interval, std::weak_ptr<NMonitoring::TMetricRegistry> registry)
+            : TBase{interval}
+            , Registry(std::move(registry))
+        {
+        }
+
+        void UpdateCounters(const TProcStat& procStat) {
+            std::shared_ptr<NMonitoring::TMetricRegistry> registry = Registry.lock();
+            if (registry) {
+                registry->IntGauge({{"sensor", "process.VmSize"}})->Set(procStat.Vsize);
+                registry->IntGauge({{"sensor", "process.AnonRssSize"}})->Set(procStat.AnonRss);
+                registry->IntGauge({{"sensor", "process.FileRssSize"}})->Set(procStat.FileRss);
+                registry->IntGauge({{"sensor", "process.CGroupMemLimit"}})->Set(procStat.CGroupMemLim);
+                registry->IntGauge({{"sensor", "process.UptimeSeconds"}})->Set(procStat.Uptime.Seconds());
+                registry->IntGauge({{"sensor", "process.NumThreads"}})->Set(procStat.NumThreads);
+                registry->IntGauge({{"sensor", "system.UptimeSeconds"}})->Set(procStat.SystemUptime.Seconds());
+
+                // it is ok here to reset and add metric value, because mutation
+                // is performed in siglethreaded context
+
+                NMonitoring::TRate* userTime = registry->Rate({{"sensor", "process.UserTime"}});
+                NMonitoring::TRate* sysTime = registry->Rate({{"sensor", "process.SystemTime"}});
+                NMonitoring::TRate* minorPageFaults = registry->Rate({{"sensor", "process.MinorPageFaults"}});
+                NMonitoring::TRate* majorPageFaults = registry->Rate({{"sensor", "process.MajorPageFaults"}});
+
+                userTime->Reset();
+                userTime->Add(procStat.Utime);
+
+                sysTime->Reset();
+                sysTime->Add(procStat.Stime);
+
+                minorPageFaults->Reset();
+                minorPageFaults->Add(procStat.MinFlt);
+
+                majorPageFaults->Reset();
+                majorPageFaults->Add(procStat.MajFlt);
+            }
+        }
+
+    private:
+        std::weak_ptr<NMonitoring::TMetricRegistry> Registry;
+    };
 } // namespace
 
     IActor* CreateProcStatCollector(ui32 intervalSec, NMonitoring::TDynamicCounterPtr counters) {
@@ -298,5 +343,9 @@ namespace {
 
     IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry) {
         return new TRegistryCollector(interval, registry);
+    }
+
+    IActor* CreateProcStatCollector(TDuration interval, std::weak_ptr<NMonitoring::TMetricRegistry> registry) {
+        return new TRegistryCollectorShared(interval, std::move(registry));
     }
 }

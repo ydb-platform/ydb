@@ -43,7 +43,13 @@ namespace NMonitoring {
     TMetricRegistry& TMetricRegistry::operator=(TMetricRegistry&& other) = default;
 
     TMetricRegistry* TMetricRegistry::Instance() {
+        //return SharedInstance().get();
         return Singleton<TMetricRegistry>();
+    }
+
+    std::shared_ptr<TMetricRegistry> TMetricRegistry::SharedInstance() {
+        static auto instance(std::make_shared<TMetricRegistry>());
+        return instance;
     }
 
     TGauge* TMetricRegistry::Gauge(TLabels labels) {

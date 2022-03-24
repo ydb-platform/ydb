@@ -334,7 +334,7 @@ private:
 
         if (std::holds_alternative<TMetricsToSend>(variant)) {
             if (Y_UNLIKELY(!HttpProxyId)) {
-                HttpProxyId = Register(NHttp::CreateHttpProxy(*NMonitoring::TMetricRegistry::Instance()));
+                HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
             }
 
             const auto metricsToSend = std::get<TMetricsToSend>(variant);

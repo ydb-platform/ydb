@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierTest) {
     }
 
     Y_UNIT_TEST(TestInitFromRemoteSource) {
-        NMonitoring::TMetricRegistry sensors;
+        auto sensors = std::make_shared<NMonitoring::TMetricRegistry>();
 
         TPortManager pm;
         const ui16 port = pm.GetPort(2134);

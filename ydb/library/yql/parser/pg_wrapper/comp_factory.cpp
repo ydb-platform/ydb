@@ -2,6 +2,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
+#include <ydb/library/yql/minikql/computation/presort_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
@@ -1619,6 +1620,106 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         buf.Skip(stringInfo.cursor);
         return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
     }
+}
+
+void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& output) {
+    switch (type->GetTypeId()) {
+    case BOOLOID: {
+        const auto x = DatumGetBool(ScalarDatumFromPod(value)) != 0;
+        NDetail::EncodeBool<false>(output, x);
+        break;
+    }
+    case INT2OID: {
+        const auto x = DatumGetInt16(ScalarDatumFromPod(value));
+        NDetail::EncodeSigned<i16, false>(output, x);
+        break;
+    }
+    case INT4OID: {
+        const auto x = DatumGetInt32(ScalarDatumFromPod(value));
+        NDetail::EncodeSigned<i32, false>(output, x);
+        break;
+    }
+    case INT8OID: {
+        const auto x = DatumGetInt64(ScalarDatumFromPod(value));
+        NDetail::EncodeSigned<i64, false>(output, x);
+        break;
+    }
+    case FLOAT4OID: {
+        const auto x = DatumGetFloat4(ScalarDatumFromPod(value));
+        NDetail::EncodeFloating<float, false>(output, x);
+        break;
+    }
+    case FLOAT8OID: {
+        const auto x = DatumGetFloat8(ScalarDatumFromPod(value));
+        NDetail::EncodeFloating<double, false>(output, x);
+        break;
+    }
+    case BYTEAOID:
+    case VARCHAROID:
+    case TEXTOID: {
+        SET_MEMORY_CONTEXT;
+        TPAllocScope call;
+        const auto x = (const text*)PointerDatumFromPod(value, true);
+        ui32 len = VARSIZE_ANY_EXHDR(x);
+        TString ret;
+        if (len) {
+            ret = TString::Uninitialized(len);
+            text_to_cstring_buffer(x, ret.begin(), len + 1);
+        }
+
+        NDetail::EncodeString<false>(output, ret);
+        break;
+    }
+    case CSTRINGOID: {
+        SET_MEMORY_CONTEXT;
+        TPAllocScope call;
+        const auto x = (const char*)PointerDatumFromPod(value, false);
+        NDetail::EncodeString<false>(output, x);
+        break;
+    }
+    default:
+        SET_MEMORY_CONTEXT;
+        TPAllocScope call;
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(typeInfo.SendFuncId);
+        fmgr_info(typeInfo.SendFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs == 1);
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { typeInfo.PassByValue ?
+            ScalarDatumFromPod(value) :
+            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
+        auto x = (text*)finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_DEFER {
+            pfree(x);
+        };
+
+        ui32 len = VARSIZE_ANY_EXHDR(x);
+        TString ret;
+        if (len) {
+            ret = TString::Uninitialized(len);
+            text_to_cstring_buffer(x, ret.begin(), len + 1);
+        }
+
+        NDetail::EncodeString<false>(output, ret);
+    }
+}
+
+NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVector<ui8>& buffer) {
+    // presort decoding is used only inside RTMR, don't implement it right now
+    Y_UNUSED(type);
+    Y_UNUSED(input);
+    Y_UNUSED(buffer);
+    throw yexception() << "PG types are not supported";
 }
 
 void* PgInitializeContext(const std::string_view& contextType) {

@@ -1,6 +1,7 @@
 #include <ydb/library/yql/sql/pg_sql.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
+#include <ydb/library/yql/minikql/computation/presort_impl.h>
 #include <ydb/library/yql/core/yql_pg_utils.h>
 
 namespace NSQLTranslationPG {
@@ -85,6 +86,20 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
    Y_UNUSED(type);
    Y_UNUSED(buf);
    throw yexception() << "PG types are not supported";
+}
+
+void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& output) {
+    Y_UNUSED(type);
+    Y_UNUSED(value);
+    Y_UNUSED(output);
+    throw yexception() << "PG types are not supported";
+}
+
+NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVector<ui8>& buffer) {
+    Y_UNUSED(type);
+    Y_UNUSED(input);
+    Y_UNUSED(buffer);
+    throw yexception() << "PG types are not supported";
 }
 
 void* PgInitializeContext(const std::string_view& contextType) {

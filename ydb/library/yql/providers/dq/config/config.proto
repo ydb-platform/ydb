@@ -122,6 +122,9 @@ message TDqConfig {
         optional uint32 HistoryKeepingTime = 2 [default = 60]; // in minutes
         optional uint32 MaxOperations = 3 [default = 1000];
         optional uint32 MaxOperationsPerUser = 4 [default = 100];
+        optional bool LimitTasksPerWindow = 5 [default = false];
+        optional uint32 LimiterNumerator = 6 [default = 1];
+        optional uint32 LimiterDenumerator = 7 [default = 2];
     }
 
     optional TScheduler Scheduler = 10;

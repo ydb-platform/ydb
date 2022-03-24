@@ -18,10 +18,7 @@ inline TActorId MakeViewerID(ui32 node = 0) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-IActor* CreateViewer(
-    const TKikimrRunConfig &kikimrRunConfig,    
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-);
+IActor* CreateViewer(const TKikimrRunConfig &kikimrRunConfig);
 
 class IViewer {
 public:

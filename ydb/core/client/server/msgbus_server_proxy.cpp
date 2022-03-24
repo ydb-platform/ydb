@@ -100,11 +100,8 @@ public:
     }
 };
 
-IActor* CreateMessageBusServerProxy(
-    TMessageBusServer* server,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-) {
-    return new TMessageBusServerProxy(server, pqReadSessionsInfoWorkerFactory);
+IActor* CreateMessageBusServerProxy(TMessageBusServer* server) {
+    return new TMessageBusServerProxy(server);
 }
 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,

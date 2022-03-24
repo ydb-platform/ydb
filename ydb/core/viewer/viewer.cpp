@@ -92,23 +92,6 @@ public:
     }
 };
 
-template <typename ActorRequestType>
-class TPersQueueJsonHandler : public TJsonHandler<ActorRequestType> {
-public:
-    TPersQueueJsonHandler(
-        std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-    )
-        : PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
-    {}
-    
-    IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) override {
-        return new ActorRequestType(viewer, event, PQReadSessionsInfoWorkerFactory);
-    }
-
-private:
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
-};
-
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
         NKikimrViewer::EObjectType::Root,
@@ -146,12 +129,8 @@ public:
         return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
     }
 
-    TViewer(
-        const TKikimrRunConfig &kikimrRunConfig,
-        std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-    )
+    TViewer(const TKikimrRunConfig &kikimrRunConfig)
         : KikimrRunConfig(kikimrRunConfig)
-        , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -212,9 +191,7 @@ public:
             JsonHandlers["/json/config"] = new TJsonHandler<TJsonConfig>;
             JsonHandlers["/json/counters"] = new TJsonHandler<TJsonCounters>;
             JsonHandlers["/json/topicinfo"] = new TJsonHandler<TJsonTopicInfo>;
-            JsonHandlers["/json/pqconsumerinfo"] = new TPersQueueJsonHandler<TJsonPQConsumerInfo>(
-                PQReadSessionsInfoWorkerFactory
-            );
+            JsonHandlers["/json/pqconsumerinfo"] = new TJsonHandler<TJsonPQConsumerInfo>();
             JsonHandlers["/json/tabletcounters"] = new TJsonHandler<TJsonTabletCounters>;
             JsonHandlers["/json/storage"] = new TJsonHandler<TJsonStorage>;
             JsonHandlers["/json/metainfo"] = new TJsonHandler<TJsonMetaInfo>;
@@ -272,7 +249,6 @@ public:
 private:
     THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers;
     const TKikimrRunConfig KikimrRunConfig;
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
     TString AllowOrigin;
@@ -531,11 +507,10 @@ TString IViewer::TContentRequestContext::Dump() const
 ui32 CurrentMonitoringPort = 8765;
 
 IActor* CreateViewer(
-    const TKikimrRunConfig &kikimrRunConfig,
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+    const TKikimrRunConfig &kikimrRunConfig
 ) {
     CurrentMonitoringPort = kikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort();
-    return new TViewer(kikimrRunConfig, pqReadSessionsInfoWorkerFactory);
+    return new TViewer(kikimrRunConfig);
 }
 
 TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request) {

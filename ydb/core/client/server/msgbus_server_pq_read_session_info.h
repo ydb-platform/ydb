@@ -91,7 +91,7 @@ public:
         const TActorId& parentId,
         const THashMap<TString, TActorId>& readSessions,
         std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo
-    ) = 0;
+    ) const = 0;
 };
 
 class TPersQueueGetReadSessionsInfoWorkerFactory : public IPersQueueGetReadSessionsInfoWorkerFactory {
@@ -100,7 +100,7 @@ public:
         const TActorId& parentId,
         const THashMap<TString, TActorId>& readSessions,
         std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo
-    ) override {
+    ) const override {
         return MakeHolder<TPersQueueGetReadSessionsInfoWorker>(parentId, readSessions, nodesInfo);
     }
 };

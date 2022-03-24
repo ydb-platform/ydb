@@ -263,14 +263,12 @@ class IPersQueueGetReadSessionsInfoWorkerFactory;
 IMessageBusServer* CreateMsgBusServer(
     NBus::TBusMessageQueue *queue,
     const NBus::TBusServerSessionConfig &config,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
     ui32 bindPort = TProtocol::DefaultPort
 );
 IMessageBusServer* CreateMsgBusTracingServer(
     NBus::TBusMessageQueue *queue,
     const NBus::TBusServerSessionConfig &config,
     const TString &tracePath,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
     ui32 bindPort = TProtocol::DefaultPort
 );
 

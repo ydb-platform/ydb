@@ -438,12 +438,10 @@ protected:
 TMessageBusServer::TMessageBusServer(
     const NBus::TBusServerSessionConfig &sessionConfig,
     NBus::TBusMessageQueue *busQueue,
-    ui32 bindPort,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+    ui32 bindPort
 )
     : SessionConfig(sessionConfig)
     , BusQueue(busQueue)
-    , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
     , Protocol(bindPort)
 {}
 
@@ -599,7 +597,7 @@ void TMessageBusServer::UnknownMessage(TBusMessageContext &msg) {
 }
 
 IActor* TMessageBusServer::CreateProxy() {
-    return CreateMessageBusServerProxy(this, PQReadSessionsInfoWorkerFactory);
+    return CreateMessageBusServerProxy(this);
 }
 
 IActor* TMessageBusServer::CreateMessageBusTraceService() {
@@ -609,10 +607,9 @@ IActor* TMessageBusServer::CreateMessageBusTraceService() {
 IMessageBusServer* CreateMsgBusServer(
     NBus::TBusMessageQueue *queue,
     const NBus::TBusServerSessionConfig &config,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
     ui32 bindPort
 ) {
-    return new TMessageBusServer(config, queue, bindPort, pqReadSessionsInfoWorkerFactory);
+    return new TMessageBusServer(config, queue, bindPort);
 }
 
 }

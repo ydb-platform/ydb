@@ -81,10 +81,7 @@ protected:
 
     void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig);
 
-    void InitializeMessageBus(
-        const TKikimrRunConfig& runConfig,
-        std::shared_ptr<TModuleFactories> factories = nullptr
-    );
+    void InitializeMessageBus(const TKikimrRunConfig& runConfig);
 
     void InitializeGRpc(const TKikimrRunConfig& runConfig);
 

@@ -219,6 +219,7 @@ namespace Tests {
             Runtime->GetAppData(nodeIdx).StreamingConfig.MergeFrom(Settings->AppConfig.GetGRpcConfig().GetStreamingConfig());
             Runtime->GetAppData(nodeIdx).EnforceUserTokenRequirement = Settings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
             Runtime->GetAppData(nodeIdx).DomainsConfig.MergeFrom(Settings->AppConfig.GetDomainsConfig());
+            Runtime->GetAppData(nodeIdx).PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }
@@ -232,14 +233,12 @@ namespace Tests {
                     Bus.Get(),
                     BusServerSessionConfig,
                     tracePath,
-                    Settings->PersQueueGetReadSessionsInfoWorkerFactory,
                     port
                 ));
             } else {
                 BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
                     Bus.Get(),
                     BusServerSessionConfig,
-                    Settings->PersQueueGetReadSessionsInfoWorkerFactory,
                     port
                 ));
             }

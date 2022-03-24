@@ -19,7 +19,6 @@ class TJsonPQConsumerInfo : public TActorBootstrapped<TJsonPQConsumerInfo> {
     using TBase = TActorBootstrapped<TJsonPQConsumerInfo>;
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
     NKikimrClient::TResponse Result;
     TJsonSettings JsonSettings;
     TString Topic;
@@ -37,12 +36,10 @@ public:
 
     TJsonPQConsumerInfo(
         IViewer* viewer,
-        NMon::TEvHttpInfo::TPtr& ev,
-        std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr
+        NMon::TEvHttpInfo::TPtr& ev
     )
         : Viewer(viewer)
         , Event(ev)
-        , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -71,8 +68,7 @@ public:
             ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(
                 ctx.SelfID,
                 request,
-                NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
-                PQReadSessionsInfoWorkerFactory
+                NMsgBusProxy::CreatePersQueueMetaCacheV2Id()
             ));
             ++Requests;
         }
@@ -83,8 +79,7 @@ public:
             ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(
                 ctx.SelfID,
                 request,
-                NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
-                PQReadSessionsInfoWorkerFactory
+                NMsgBusProxy::CreatePersQueueMetaCacheV2Id()
             ));
             ++Requests;
         }

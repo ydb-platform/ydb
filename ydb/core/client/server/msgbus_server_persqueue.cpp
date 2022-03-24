@@ -1391,7 +1391,6 @@ public:
 template <template <class TImpl, class... TArgs> class TSenderImpl, class... T>
 IActor* CreatePersQueueRequestProcessor(
     const NKikimrClient::TPersQueueRequest& request,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
     T&&... constructorParams
 ) {
     try {
@@ -1415,8 +1414,7 @@ IActor* CreatePersQueueRequestProcessor(
                 return new TSenderImpl<TPersQueueGetPartitionStatusProcessor>(std::forward<T>(constructorParams)...);
             } else if (meta.HasCmdGetReadSessionsInfo()) {
                 return new TSenderImpl<TPersQueueGetReadSessionsInfoProcessor>(
-                    std::forward<T>(constructorParams)...,
-                    pqReadSessionsInfoWorkerFactory
+                    std::forward<T>(constructorParams)...
                 );
             } else {
                 throw std::runtime_error("Not implemented yet");
@@ -1461,13 +1459,11 @@ public:
 
 IActor* CreateMessageBusServerPersQueue(
     TBusMessageContext& msg,
-    const TActorId& schemeCache,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+    const TActorId& schemeCache
 ) {
     const NKikimrClient::TPersQueueRequest& request = static_cast<TBusPersQueue*>(msg.GetMessage())->Record;
     return CreatePersQueueRequestProcessor<TMessageBusServerPersQueue>(
         request,
-        pqReadSessionsInfoWorkerFactory,
         msg,
         schemeCache
     );
@@ -1476,12 +1472,10 @@ IActor* CreateMessageBusServerPersQueue(
 IActor* CreateActorServerPersQueue(
     const TActorId& parentId,
     const NKikimrClient::TPersQueueRequest& request,
-    const TActorId& schemeCache,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+    const TActorId& schemeCache
 ) {
     return CreatePersQueueRequestProcessor<TReplierToParent>(
         request,
-        pqReadSessionsInfoWorkerFactory,
         parentId,
         request,
         schemeCache

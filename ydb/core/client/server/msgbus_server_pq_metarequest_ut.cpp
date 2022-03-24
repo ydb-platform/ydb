@@ -228,8 +228,7 @@ protected:
         Actor = CreateActorServerPersQueue(
             EdgeActorId,
             request,
-            GetMockPQMetaCache().SelfId(),
-            nullptr
+            GetMockPQMetaCache().SelfId()
         );
         TestMainActorId = Runtime->Register(Actor);
         TestActors.insert(TestMainActorId);

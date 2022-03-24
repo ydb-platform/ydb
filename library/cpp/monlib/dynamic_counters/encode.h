@@ -10,6 +10,7 @@ namespace NMonitoring {
     THolder<ICountableConsumer> CreateEncoder(
         IOutputStream* out,
         EFormat format,
+        TStringBuf nameLabel = "sensor",
         TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public
     );
 

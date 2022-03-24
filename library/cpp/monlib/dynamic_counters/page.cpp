@@ -31,6 +31,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
         OutputCallback();
     }
 
+    TString nameLabel("sensor");
     TCountableBase::EVisibility visibility{
         TCountableBase::EVisibility::Public
     };
@@ -45,6 +46,15 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     if (format) {
         parts.pop_back();
     }
+
+    if (!parts.empty() && parts.back().StartsWith(TStringBuf("name_label="))) {
+        TVector<TString> labels;
+        StringSplitter(parts.back()).Split('=').SkipEmpty().Collect(&labels);
+        if (labels.size() == 2U) {
+            nameLabel = labels.back();
+        }
+        parts.pop_back();
+   }
 
     if (!parts.empty() && parts.back() == TStringBuf("private")) {
         visibility = TCountableBase::EVisibility::Private;
@@ -90,7 +100,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
         ythrow yexception() << "unsupported metric encoding format: " << *format;
     }
 
-    auto encoder = CreateEncoder(&out, *format, visibility);
+    auto encoder = CreateEncoder(&out, *format, nameLabel, visibility);
     counters->Accept(TString(), TString(), *encoder);
     out.Flush();
 }

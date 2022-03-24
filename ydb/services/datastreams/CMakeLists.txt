@@ -23,6 +23,7 @@ target_link_libraries(ydb-services-datastreams PUBLIC
   cpp-client-ydb_datastreams
   services-lib-actors
   services-lib-sharding
+  ydb-services-persqueue_v1
   ydb-services-ydb
 )
 target_sources(ydb-services-datastreams PRIVATE

@@ -29,4 +29,7 @@ struct TProcessingResult {
 
 TProcessingResult ProcessMetaCacheTopicResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
 
+Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQueue::ErrorCode::ErrorCode code);
+Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const NPersQueue::NErrorCode::EErrorCode code);
+
 } //namespace NKikimr::NGRpcProxy::V1

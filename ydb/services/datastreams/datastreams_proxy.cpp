@@ -12,6 +12,7 @@
 
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
+#include <ydb/services/persqueue_v1/persqueue_utils.h>
 
 #include <util/folder/path.h>
 
@@ -438,13 +439,13 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-                ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+                ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
             }
         }
 
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
                                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
 
@@ -1141,6 +1142,9 @@ namespace NKikimr::NDataStreams::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
+        void Die(const TActorContext& ctx) override;
 
     private:
         void SendReadRequest(const TActorContext& ctx);
@@ -1153,6 +1157,7 @@ namespace NKikimr::NDataStreams::V1 {
         ui64 TabletId;
         i32 Limit;
         TActorId NewSchemeCache;
+        TActorId PipeClient;
     };
 
     TGetRecordsActor::TGetRecordsActor(TEvDataStreamsGetRecordsRequest* request,
@@ -1195,7 +1200,9 @@ namespace NKikimr::NDataStreams::V1 {
             .BackoffMultiplier = 2,
             .DoFirstRetryInstantly = true
         };
-        auto PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig));
+        PipeClient = ctx.RegisterWithSameMailbox(
+            NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig)
+        );
 
         NKikimrClient::TPersQueueRequest request;
         request.MutablePartitionRequest()->SetTopic(this->GetTopicPath(ctx));
@@ -1218,6 +1225,8 @@ namespace NKikimr::NDataStreams::V1 {
     void TGetRecordsActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         default: TBase::StateWork(ev, ctx);
         }
     }
@@ -1241,7 +1250,6 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
 
-
         if (response.Self->Info.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
             const auto& partitions = response.PQGroupInfo->Description.GetPartitions();
             for (auto& partition : partitions) {
@@ -1259,7 +1267,20 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TGetRecordsActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
-        Y_VERIFY(ev->Get()->Record.HasPartitionResponse());
+        switch (record.GetStatus()) {
+            case NMsgBusProxy::MSTATUS_ERROR:
+                switch (record.GetErrorCode()) {
+                    case NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
+                    case NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
+                        return SendResponse(ctx, {}, 0);
+                    default:
+                        return ReplyWithError(ConvertPersQueueInternalCodeToStatus(record.GetErrorCode()),
+                                              Ydb::PersQueue::ErrorCode::ERROR,
+                                              record.GetErrorReason(), ctx);
+                }
+                break;
+            default: {}
+        }
 
         ui64 millisBehindLatestMs = 0;
         std::vector<Ydb::DataStreams::V1::Record> records;
@@ -1277,10 +1298,24 @@ namespace NKikimr::NDataStreams::V1 {
                 record.set_sequence_number(std::to_string(r.GetOffset()).c_str());
                 records.push_back(record);
             }
-            millisBehindLatestMs = records.size() > 0 ? TInstant::Now().MilliSeconds() - results.rbegin()->GetWriteTimestampMS() : 0;
+            millisBehindLatestMs = records.size() > 0
+                ? TInstant::Now().MilliSeconds() - results.rbegin()->GetWriteTimestampMS()
+                : 0;
         }
 
         SendResponse(ctx, records, millisBehindLatestMs);
+    }
+
+    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
+            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+                           TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
+        }
+    }
+
+    void TGetRecordsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
+        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+                       TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
     }
 
     void TGetRecordsActor::SendResponse(const TActorContext& ctx,
@@ -1305,6 +1340,11 @@ namespace NKikimr::NDataStreams::V1 {
 
         Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
         Die(ctx);
+    }
+
+    void TGetRecordsActor::Die(const TActorContext& ctx) {
+        NTabletPipe::CloseClient(ctx, PipeClient);
+        TBase::Die(ctx);
     }
 
     //-----------------------------------------------------------------------------------------
@@ -1533,13 +1573,13 @@ namespace NKikimr::NDataStreams::V1 {
 
     void TListShardsActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+            ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
                            TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
         }
     }
 
     void TListShardsActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-        ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
+        ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR,
                        TStringBuilder() << "Cannot connect to tablet " << ev->Get()->TabletId, ctx);
     }
 

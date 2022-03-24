@@ -46,8 +46,6 @@ PersQueue::ErrorCode::ErrorCode ConvertOldCode(const NPersQueue::NErrorCode::EEr
 
 void FillIssue(Ydb::Issue::IssueMessage* issue, const PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason);
 
-Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const PersQueue::ErrorCode::ErrorCode code);
-
 const TString& TopicPrefix(const TActorContext& ctx);
 
 static const TDuration CHECK_ACL_DELAY = TDuration::Minutes(5);

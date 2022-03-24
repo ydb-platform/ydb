@@ -6,13 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-find_package(libidn REQUIRED)
+find_package(IDN REQUIRED)
 
 add_library(library-cpp-uri)
 target_link_libraries(library-cpp-uri PUBLIC
   contrib-libs-cxxsupp
   yutil
-  libidn::libidn
+  IDN::IDN
+  $CONAN_OPTS_SEM
   library-cpp-charset
 )
 target_sources(library-cpp-uri PRIVATE

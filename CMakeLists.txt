@@ -131,7 +131,6 @@ conan_cmake_configure(
     bison/3.5.3
     c-ares/1.17.2
     libiconv/1.15
-    libidn/1.36
     openssl/1.1.1l
     ragel/6.10
     yasm/1.3.0
@@ -144,7 +143,6 @@ conan_cmake_configure(
     "res, * -> ./bin/bison/res"
   OPTIONS
     libiconv:shared=True
-    libidn:shared=True
 )
 conan_cmake_autodetect(settings)
 conan_cmake_install(

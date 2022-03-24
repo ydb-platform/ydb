@@ -6,13 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-find_package(libidn REQUIRED)
+find_package(IDN REQUIRED)
 
 add_library(cpp-unicode-punycode)
 target_link_libraries(cpp-unicode-punycode PUBLIC
   contrib-libs-cxxsupp
   yutil
-  libidn::libidn
+  IDN::IDN
+  $CONAN_OPTS_SEM
 )
 target_sources(cpp-unicode-punycode PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/unicode/punycode/punycode.cpp

@@ -324,5 +324,12 @@ const IComputationNode* GetCommonSource(const IComputationNode* first, const ICo
     return common;
 }
 
+void CleanupCurrentContext() {
+    auto& allocState = *TlsAllocState;
+    if (allocState.CurrentContext) {
+        TAllocState::CleanupPAllocList(allocState.CurrentPAllocList);
+    }
+}
+
 }
 }

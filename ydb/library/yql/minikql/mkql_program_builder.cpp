@@ -574,7 +574,7 @@ TRuntimeNode TProgramBuilder::Reduce(TRuntimeNode list, TRuntimeNode state1,
 
 TRuntimeNode TProgramBuilder::Condense(TRuntimeNode flow, TRuntimeNode state,
     const TBinaryLambda& switcher,
-    const TBinaryLambda& handler) {
+    const TBinaryLambda& handler, bool useCtx) {
     const auto flowType = flow.GetStaticType();
 
     if (flowType->IsList()) {
@@ -601,12 +601,17 @@ TRuntimeNode TProgramBuilder::Condense(TRuntimeNode flow, TRuntimeNode state,
     callableBuilder.Add(stateArg);
     callableBuilder.Add(outSwitch);
     callableBuilder.Add(newState);
+    if (useCtx) {
+        MKQL_ENSURE(RuntimeVersion >= 30U, "Too old runtime version");
+        callableBuilder.Add(NewDataLiteral<bool>(useCtx));
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode flow, const TUnaryLambda& init,
     const TBinaryLambda& switcher,
-    const TBinaryLambda& handler) {
+    const TBinaryLambda& handler, bool useCtx) {
     const auto flowType = flow.GetStaticType();
 
     if (flowType->IsList()) {
@@ -635,6 +640,11 @@ TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode flow, const TUnaryLambda& i
     callableBuilder.Add(stateArg);
     callableBuilder.Add(outSwitch);
     callableBuilder.Add(newState);
+    if (useCtx) {
+        MKQL_ENSURE(RuntimeVersion >= 30U, "Too old runtime version");
+        callableBuilder.Add(NewDataLiteral<bool>(useCtx));
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -4409,7 +4419,7 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update) {
+TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& update, bool useCtx) {
     if constexpr (RuntimeVersion < 18U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
@@ -4444,6 +4454,11 @@ TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda
     std::for_each(stateArgs.cbegin(), stateArgs.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     callableBuilder.Add(chop);
     std::for_each(next.cbegin(), next.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
+    if (useCtx) {
+        MKQL_ENSURE(RuntimeVersion >= 30U, "Too old runtime version");
+        callableBuilder.Add(NewDataLiteral<bool>(useCtx));
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

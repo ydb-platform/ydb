@@ -675,7 +675,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         [&](TRuntimeNode::TList items, TRuntimeNode::TList state) {
             items.insert(items.cend(), state.cbegin(), state.cend());
             return MkqlBuildWideLambda(*node.Child(3), ctx, items);
-        });
+        },
+        HasContextFuncs(*node.Child(1)) || HasContextFuncs(*node.Child(3)));
     });
 
     AddCallable("WideCombiner", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1045,7 +1046,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         },
         [&](TRuntimeNode item, TRuntimeNode state) {
             return MkqlBuildLambda(*node.Child(3), ctx, {item, state});
-        });
+        }, HasContextFuncs(*node.Child(3)));
     });
 
     AddCallable("Condense1", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1059,7 +1060,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         },
         [&](TRuntimeNode item, TRuntimeNode state) {
             return MkqlBuildLambda(*node.Child(3), ctx, {item, state});
-        });
+        }, HasContextFuncs(*node.Child(1)) || HasContextFuncs(*node.Child(3)));
     });
 
     AddCallable("Squeeze", [](const TExprNode& node, TMkqlBuildContext& ctx) {

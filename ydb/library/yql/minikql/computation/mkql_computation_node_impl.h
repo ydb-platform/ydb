@@ -1084,6 +1084,7 @@ std::optional<size_t> IsPasstrought(const IComputationNode* root, const TComputa
 TPasstroughtMap MergePasstroughtMaps(const TPasstroughtMap& lhs, const TPasstroughtMap& rhs);
 
 void ApplyChanges(const NUdf::TUnboxedValue& value, NUdf::IApplyContext& applyCtx);
+void CleanupCurrentContext();
 
 }
 }

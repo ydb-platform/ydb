@@ -93,11 +93,7 @@ public:
             return false;
         }
 
-        auto& allocState = *TlsAllocState;
-        if (allocState.CurrentContext) {
-            TAllocState::CleanupPAllocList(allocState.CurrentPAllocList);
-        }
-
+        CleanupCurrentContext();
         return true;
     }
 

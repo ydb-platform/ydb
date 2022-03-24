@@ -9,7 +9,8 @@ namespace NMiniKQL {
 enum class ESqueezeState : ui8 {
     Idle = 0,
     Work,
-    Finished
+    Finished,
+    NeedInit
 };
 
 struct TSqueezeState {

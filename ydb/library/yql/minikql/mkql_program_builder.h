@@ -311,10 +311,10 @@ public:
         const TBinaryLambda& handler3);
     TRuntimeNode Condense(TRuntimeNode stream, TRuntimeNode state,
         const TBinaryLambda& switcher,
-        const TBinaryLambda& handler);
+        const TBinaryLambda& handler, bool useCtx = false);
     TRuntimeNode Condense1(TRuntimeNode stream, const TUnaryLambda& init,
         const TBinaryLambda& switcher,
-        const TBinaryLambda& handler);
+        const TBinaryLambda& handler, bool useCtx = false);
     TRuntimeNode Squeeze(TRuntimeNode stream, TRuntimeNode state,
         const TBinaryLambda& handler,
         const TUnaryLambda& save = {},
@@ -372,7 +372,7 @@ public:
 
     TRuntimeNode WideCombiner(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideLastCombiner(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
-    TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler);
+    TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler, bool useCtx = false);
 
     TRuntimeNode Length(TRuntimeNode listOrDict);
     TRuntimeNode Iterator(TRuntimeNode list, const TArrayRef<const TRuntimeNode>& dependentNodes);

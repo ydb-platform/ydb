@@ -13,9 +13,9 @@ using NYql::EnsureDynamicCast;
 
 namespace {
 
-template <bool Interruptable>
-class TWideCondense1Wrapper : public TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable>> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable>>;
+template <bool Interruptable, bool UseCtx>
+class TWideCondense1Wrapper : public TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable, UseCtx>> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable, UseCtx>>;
 public:
      TWideCondense1Wrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
         TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& initState,
@@ -32,6 +32,10 @@ public:
         if (state.IsFinish()) {
             return EFetchResult::Finish;
         } else if (state.HasValue() && state.Get<bool>()) {
+            if (UseCtx) {
+                CleanupCurrentContext();
+            }
+
             state = NUdf::TUnboxedValuePod(false);
             for (ui32 i = 0U; i < State.size(); ++i)
                 State[i]->SetValue(ctx, InitState[i]->GetValue(ctx));
@@ -269,11 +273,28 @@ IComputationNode* WrapWideCondense1(TCallable& callable, const TComputationNodeF
 
     std::generate_n(std::back_inserter(state), outputWidth, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); } );
 
-    if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        if (isOptional) {
-            return new TWideCondense1Wrapper<true>(ctx.Mutables, wide, std::move(items), std::move(initState), std::move(state), outSwitch, std::move(updateState));
-        } else {
-            return new TWideCondense1Wrapper<false>(ctx.Mutables, wide, std::move(items), std::move(initState), std::move(state), outSwitch, std::move(updateState));
+    index = 2 + inputWidth + 3 * outputWidth;
+    bool useCtx = false;
+    if (index < callable.GetInputsCount()) {
+        useCtx = AS_VALUE(TDataLiteral, callable.GetInput(index))->AsValue().Get<bool>();
+        ++index;
+    }
+
+    if (useCtx) {
+        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
+            if (isOptional) {
+                return new TWideCondense1Wrapper<true, true>(ctx.Mutables, wide, std::move(items), std::move(initState), std::move(state), outSwitch, std::move(updateState));
+            } else {
+                return new TWideCondense1Wrapper<false, true>(ctx.Mutables, wide, std::move(items), std::move(initState), std::move(state), outSwitch, std::move(updateState));
+            }
+        }
+    } else {
+        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
+            if (isOptional) {
+                return new TWideCondense1Wrapper<true, false>(ctx.Mutables, wide, std::move(items), std::move(initState), std::move(state), outSwitch, std::move(updateState));
+            } else {
+                return new TWideCondense1Wrapper<false, false>(ctx.Mutables, wide, std::move(items), std::move(initState), std::move(state), outSwitch, std::move(updateState));
+            }
         }
     }
 

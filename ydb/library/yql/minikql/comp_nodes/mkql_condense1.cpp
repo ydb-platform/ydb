@@ -11,9 +11,9 @@ namespace NMiniKQL {
 
 namespace {
 
-template <bool Interruptable>
-class TCondense1FlowWrapper : public TStatefulFlowCodegeneratorNode<TCondense1FlowWrapper<Interruptable>> {
-    typedef TStatefulFlowCodegeneratorNode<TCondense1FlowWrapper<Interruptable>> TBaseComputation;
+template <bool Interruptable, bool UseCtx>
+class TCondense1FlowWrapper : public TStatefulFlowCodegeneratorNode<TCondense1FlowWrapper<Interruptable, UseCtx>> {
+    typedef TStatefulFlowCodegeneratorNode<TCondense1FlowWrapper<Interruptable, UseCtx>> TBaseComputation;
 public:
      TCondense1FlowWrapper(
         TComputationMutables& mutables,
@@ -31,6 +31,12 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return static_cast<const NUdf::TUnboxedValuePod&>(state);
+        }
+
+        if (UseCtx && state.IsEmbedded()) {
+            CleanupCurrentContext();
+            state = NUdf::TUnboxedValuePod();
+            State->SetValue(ctx, InitState->GetValue(ctx));
         }
 
         while (true) {
@@ -57,7 +63,12 @@ public:
 
                     if (reset.template Get<bool>()) {
                         auto result = State->GetValue(ctx);
-                        State->SetValue(ctx, InitState->GetValue(ctx));
+                        if (UseCtx) {
+                            state = NUdf::TUnboxedValuePod(0);
+                        } else {
+                            State->SetValue(ctx, InitState->GetValue(ctx));
+                        }
+
                         return result.Release();
                     }
                 }
@@ -180,9 +191,9 @@ private:
     IComputationNode* const UpdateState;
 };
 
-template <bool Interruptable>
-class TCondense1Wrapper : public TCustomValueCodegeneratorNode<TCondense1Wrapper<Interruptable>> {
-    typedef TCustomValueCodegeneratorNode<TCondense1Wrapper<Interruptable>> TBaseComputation;
+template <bool Interruptable, bool UseCtx>
+class TCondense1Wrapper : public TCustomValueCodegeneratorNode<TCondense1Wrapper<Interruptable, UseCtx>> {
+    typedef TCustomValueCodegeneratorNode<TCondense1Wrapper<Interruptable, UseCtx>> TBaseComputation;
 public:
     class TValue : public TComputationValue<TValue> {
     public:
@@ -221,6 +232,12 @@ public:
             if (ESqueezeState::Finished == State.Stage)
                 return NUdf::EFetchStatus::Finish;
 
+            if (UseCtx && State.Stage == ESqueezeState::NeedInit) {
+                CleanupCurrentContext();
+                State.Stage = ESqueezeState::Work;
+                State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+            }
+
             for (;;) {
                 const auto status = Stream.Fetch(State.Item->RefValue(Ctx));
                 if (status == NUdf::EFetchStatus::Yield) {
@@ -243,7 +260,12 @@ public:
 
                         if (reset.template Get<bool>()) {
                             result = State.State->GetValue(Ctx);
-                            State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+                            if (UseCtx) {
+                                State.Stage = ESqueezeState::NeedInit;
+                            } else {
+                                State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+                            }
+
                             return NUdf::EFetchStatus::Ok;
                         }
                     }
@@ -472,9 +494,8 @@ private:
 
 }
 
-IComputationNode* WrapCondense1(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 6, "Expected 6 args");
-
+template <bool UseCtx>
+IComputationNode* WrapCondense1Impl(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto initState = LocateNode(ctx.NodeLocator, callable, 2);
     const auto outSwitch = LocateNode(ctx.NodeLocator, callable, 4);
@@ -490,16 +511,30 @@ IComputationNode* WrapCondense1(TCallable& callable, const TComputationNodeFacto
     if (type->IsFlow()) {
         const auto kind = GetValueRepresentation(AS_TYPE(TFlowType, type)->GetItemType());
         if (isOptional) {
-            return new TCondense1FlowWrapper<true>(ctx.Mutables, kind, stream, item, state, outSwitch, initState, updateState);
+            return new TCondense1FlowWrapper<true, UseCtx>(ctx.Mutables, kind, stream, item, state, outSwitch, initState, updateState);
         } else {
-            return new TCondense1FlowWrapper<false>(ctx.Mutables, kind, stream, item, state, outSwitch, initState, updateState);
+            return new TCondense1FlowWrapper<false, UseCtx>(ctx.Mutables, kind, stream, item, state, outSwitch, initState, updateState);
         }
     } else {
         if (isOptional) {
-            return new TCondense1Wrapper<true>(ctx.Mutables, stream, item, state, outSwitch, initState, updateState);
+            return new TCondense1Wrapper<true, UseCtx>(ctx.Mutables, stream, item, state, outSwitch, initState, updateState);
         } else {
-            return new TCondense1Wrapper<false>(ctx.Mutables, stream, item, state, outSwitch, initState, updateState);
+            return new TCondense1Wrapper<false, UseCtx>(ctx.Mutables, stream, item, state, outSwitch, initState, updateState);
         }
+    }
+}
+
+IComputationNode* WrapCondense1(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 6 || callable.GetInputsCount() == 7, "Expected 6 or 7 args");
+    bool useCtx = false;
+    if (callable.GetInputsCount() >= 7) {
+        useCtx = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<bool>();
+    }
+
+    if (useCtx) {
+        return WrapCondense1Impl<true>(callable, ctx);
+    } else {
+        return WrapCondense1Impl<false>(callable, ctx);
     }
 }
 
@@ -526,7 +561,7 @@ IComputationNode* WrapSqueeze1(TCallable& callable, const TComputationNodeFactor
     }
     const auto stateType = hasSaveLoad ? callable.GetInput(6).GetStaticType() : nullptr;
 
-    return new TCondense1Wrapper<false>(ctx.Mutables, stream, item, state, nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
+    return new TCondense1Wrapper<false, false>(ctx.Mutables, stream, item, state, nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
 }
 
 }

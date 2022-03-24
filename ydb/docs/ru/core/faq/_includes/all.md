@@ -12,10 +12,14 @@
 
 {% endif %}
 
+## Ошибки {#errors}
+
+{% include notitle [errors.md](../errors.md) %}
+
 ## YQL {#yql}
 
 {% include notitle [yql.md](../yql.md) %}
 
-## Ошибки {#errors}
+## Serverless {#serverless}
 
-{% include notitle [errors.md](../errors.md) %}
+{% include notitle [serverless.md](../serverless.md) %}

@@ -131,12 +131,6 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             continue;
         }
 
-        if (!item.Event.Relevant()) {
-            ++*QueueItemsPruned;
-            it = EraseItem(Queues.Waiting, it);
-            continue;
-        }
-
         // update item parameters
         item.MsgId = NextMsgId;
         item.SequenceId = CurrentSequenceId;
@@ -187,6 +181,13 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             ++*QueueOverflow;
             break;
         }
+
+        if (!item.Event.Relevant()) {
+            ++*QueueItemsPruned;
+            it = EraseItem(Queues.Waiting, it);
+            continue;
+        }
+
         InFlightCost += item.Cost;
 
         // move item to in-flight queue

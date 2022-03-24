@@ -85,11 +85,6 @@ protected:
     void Handle(TEvKikhouseDiscardSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvLongTxCommitRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvLongTxRollbackRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvLongTxWriteRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvLongTxReadRequest::TPtr& ev, const TActorContext& ctx);
 
     TActorId DiscoveryCacheActorID;
 };

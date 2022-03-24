@@ -1,8 +1,10 @@
-#include "rpc_calls.h"
 #include "rpc_common.h"
 #include "rpc_deferrable.h"
-#include "grpc_request_proxy.h"
+#include "service_longtx.h"
 
+#include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
+
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
@@ -17,6 +19,17 @@
 namespace NKikimr {
 
 namespace {
+
+using TEvLongTxBeginRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::LongTx::BeginTransactionRequest,
+    Ydb::LongTx::BeginTransactionResponse>;
+using TEvLongTxCommitRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::LongTx::CommitTransactionRequest,
+    Ydb::LongTx::CommitTransactionResponse>;
+using TEvLongTxRollbackRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::LongTx::RollbackTransactionRequest,
+    Ydb::LongTx::RollbackTransactionResponse>;
+using TEvLongTxWriteRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::LongTx::WriteRequest,
+    Ydb::LongTx::WriteResponse>;
+using TEvLongTxReadRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::LongTx::ReadRequest,
+    Ydb::LongTx::ReadResponse>;
 
 std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
     TVector<std::pair<TString,  NScheme::TTypeId>> columns;
@@ -93,7 +106,7 @@ THashMap<ui64, TString> SplitData(const TString& data, const NKikimrSchemeOp::TC
 }
 
 namespace NGRpcService {
-
+using namespace NActors;
 using namespace NLongTxService;
 
 class TLongTxBeginRPC : public TActorBootstrapped<TLongTxBeginRPC> {
@@ -104,14 +117,14 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TLongTxBeginRPC(TAutoPtr<TEvLongTxBeginRequest> request)
+    explicit TLongTxBeginRPC(std::unique_ptr<IRequestOpCtx> request)
         : TBase()
-        , Request(request.Release())
+        , Request(std::move(request))
         , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
     {}
 
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest();
+        const auto* req = TEvLongTxBeginRequest::GetProtoRequest(Request);
 
         NKikimrLongTxService::TEvBeginTx::EMode mode = {};
         switch (req->tx_type()) {
@@ -162,7 +175,7 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvLongTxBeginRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     TString DatabaseName;
 };
 
@@ -175,14 +188,14 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TLongTxCommitRPC(TAutoPtr<TEvLongTxCommitRequest> request)
+    explicit TLongTxCommitRPC(std::unique_ptr<IRequestOpCtx> request)
         : TBase()
-        , Request(request.Release())
+        , Request(std::move(request))
     {
     }
 
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest();
+        const auto* req = TEvLongTxCommitRequest::GetProtoRequest(Request);
 
         TString errMsg;
         if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
@@ -215,7 +228,7 @@ private:
         }
 
         Ydb::LongTx::CommitTransactionResult result;
-        const auto* req = Request->GetProtoRequest();
+        const auto* req = TEvLongTxCommitRequest::GetProtoRequest(Request);
         result.set_tx_id(req->tx_id());
         ReplySuccess(result);
     }
@@ -234,7 +247,7 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvLongTxCommitRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     TLongTxId LongTxId;
 };
 
@@ -247,14 +260,14 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TLongTxRollbackRPC(TAutoPtr<TEvLongTxRollbackRequest> request)
+    explicit TLongTxRollbackRPC(std::unique_ptr<IRequestOpCtx> request)
         : TBase()
-        , Request(request.Release())
+        , Request(std::move(request))
     {
     }
 
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest();
+        const auto* req = TEvLongTxRollbackRequest::GetProtoRequest(Request);
 
         TString errMsg;
         if (!LongTxId.ParseString(req->tx_id(), &errMsg)) {
@@ -287,7 +300,7 @@ private:
         }
 
         Ydb::LongTx::RollbackTransactionResult result;
-        const auto* req = Request->GetProtoRequest();
+        const auto* req = TEvLongTxRollbackRequest::GetProtoRequest(Request);
         result.set_tx_id(req->tx_id());
         ReplySuccess(result);
     }
@@ -306,7 +319,7 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvLongTxRollbackRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     TLongTxId LongTxId;
 };
 
@@ -562,13 +575,13 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TLongTxWriteRPC(TAutoPtr<IRequestOpCtx> request)
+    explicit TLongTxWriteRPC(std::unique_ptr<IRequestOpCtx> request)
         : TBase(request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())),
             TEvLongTxWriteRequest::GetProtoRequest(request)->path(),
             request->GetInternalToken(),
             TLongTxId(),
             TEvLongTxWriteRequest::GetProtoRequest(request)->dedup_id())
-        , Request(request.Release())
+        , Request(std::move(request))
         , SchemeCache(MakeSchemeCacheID())
     {
     }
@@ -652,7 +665,7 @@ private:
 
 template<>
 IActor* TEvLongTxWriteRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new TLongTxWriteRPC(msg);
+    return new TLongTxWriteRPC(std::unique_ptr<NKikimr::NGRpcService::IRequestOpCtx>(msg));
 }
 
 // LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)
@@ -739,9 +752,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TLongTxReadRPC(TAutoPtr<TEvLongTxReadRequest> request)
+    explicit TLongTxReadRPC(std::unique_ptr<IRequestOpCtx> request)
         : TBase()
-        , Request(request.Release())
+        , Request(std::move(request))
         , DatabaseName(Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())))
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
@@ -751,7 +764,7 @@ public:
     }
 
     void Bootstrap() {
-        const auto* req = Request->GetProtoRequest();
+        const auto* req = TEvLongTxReadRequest::GetProtoRequest(Request);
 
         if (const TString& internalToken = Request->GetInternalToken()) {
             UserToken.emplace(internalToken);
@@ -929,7 +942,7 @@ private:
     Ydb::LongTx::ReadResult* MakeResult(ui64 outChunk, bool finished) const {
         auto result = TEvLongTxReadRequest::AllocateResult<Ydb::LongTx::ReadResult>(Request);
 
-        const auto* req = Request->GetProtoRequest();
+        const auto* req = TEvLongTxReadRequest::GetProtoRequest(Request);
         result->set_tx_id(req->tx_id());
         result->set_path(req->path());
         result->set_chunk(outChunk);
@@ -957,7 +970,7 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvLongTxReadRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     TString DatabaseName;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
@@ -974,24 +987,24 @@ private:
 
 //
 
-void TGRpcRequestProxy::Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TLongTxBeginRPC(ev->Release().Release()));
+void DoLongTxBeginRPC(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TLongTxBeginRPC(std::move(p)));
 }
 
-void TGRpcRequestProxy::Handle(TEvLongTxCommitRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TLongTxCommitRPC(ev->Release().Release()));
+void DoLongTxCommitRPC(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TLongTxCommitRPC(std::move(p)));
 }
 
-void TGRpcRequestProxy::Handle(TEvLongTxRollbackRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TLongTxRollbackRPC(ev->Release().Release()));
+void DoLongTxRollbackRPC(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TLongTxRollbackRPC(std::move(p)));
 }
 
-void TGRpcRequestProxy::Handle(TEvLongTxWriteRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TLongTxWriteRPC(ev->Release().Release()));
+void DoLongTxWriteRPC(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TLongTxWriteRPC(std::move(p)));
 }
 
-void TGRpcRequestProxy::Handle(TEvLongTxReadRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TLongTxReadRPC(ev->Release().Release()));
+void DoLongTxReadRPC(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TLongTxReadRPC(std::move(p)));
 }
 
 }

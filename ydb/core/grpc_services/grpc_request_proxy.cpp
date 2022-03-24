@@ -602,11 +602,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvKikhouseRefreshSnapshotRequest, PreHandle);
         HFunc(TEvKikhouseDiscardSnapshotRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
-        HFunc(TEvLongTxBeginRequest, PreHandle);
-        HFunc(TEvLongTxCommitRequest, PreHandle);
-        HFunc(TEvLongTxRollbackRequest, PreHandle);
-        HFunc(TEvLongTxWriteRequest, PreHandle);
-        HFunc(TEvLongTxReadRequest, PreHandle);
 
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 

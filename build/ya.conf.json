@@ -30,6 +30,9 @@
         "infractl": {
             "description": "Run InfraCtl CLI"
         },
+        "kubectl": {
+            "description": "Run kubectl CLI"
+        },
         "llvm-profdata": {
             "description": "Run llvm-profdata Clang utility"
         },
@@ -3964,6 +3967,34 @@
                 }
             ]
         },
+        "kubectl": {
+            "tools": {
+                "kubectl": {
+                    "bottle": "kubectl",
+                    "executable": "kubectl"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "vim": {
             "tools": {
                 "vim": {
@@ -7297,6 +7328,19 @@
                 ]
             }
         },
+        "kubectl": {
+            "formula": {
+                "sandbox_id": [
+                    1254092637
+                ],
+                "match": "kubectl"
+            },
+            "executable": {
+                "kubectl": [
+                    "kubectl"
+                ]
+            }
+        },
         "vim": {
             "formula": {
                 "sandbox_id": 82345405,
@@ -7606,7 +7650,7 @@
         },
         "horadric": {
             "formula": {
-                "sandbox_id": 1253017318,
+                "sandbox_id": 1254232350,
                 "match": "horadric"
             },
             "executable": {
@@ -7749,7 +7793,7 @@
         },
         "apphost": {
             "formula": {
-                "sandbox_id": 1253028373,
+                "sandbox_id": 1254237862,
                 "match": "app_host_launcher"
             },
             "executable": {
@@ -8403,7 +8447,7 @@
         },
         "bigb_request": {
             "formula": {
-                "sandbox_id": 1253026022,
+                "sandbox_id": 1254235787,
                 "match": "bb_requester"
             },
             "executable": {
@@ -8414,7 +8458,7 @@
         },
         "bigb_hitlog_analyser": {
             "formula": {
-                "sandbox_id": 1253026674,
+                "sandbox_id": 1254233313,
                 "match": "hitlog_analyser"
             },
             "executable": {
@@ -8436,7 +8480,7 @@
         },
         "bigb_bb_cluster_analyzer": {
             "formula": {
-                "sandbox_id": 1253017462,
+                "sandbox_id": 1254235535,
                 "match": "bb_cluster_analyzer"
             },
             "executable": {
@@ -8458,7 +8502,7 @@
         },
         "bigb_ab": {
             "formula": {
-                "sandbox_id": 1253019924,
+                "sandbox_id": 1254228626,
                 "match": "ab"
             },
             "executable": {
@@ -8482,7 +8526,7 @@
         },
         "caesar_yt_sync": {
             "formula": {
-                "sandbox_id": 1253031548,
+                "sandbox_id": 1254232891,
                 "match": "yt_sync"
             },
             "executable": {
@@ -8493,7 +8537,7 @@
         },
         "caesar_lookup_profile": {
             "formula": {
-                "sandbox_id": 1253020304,
+                "sandbox_id": 1254232893,
                 "match": "lookup_profile"
             },
             "executable": {
@@ -8504,7 +8548,7 @@
         },
         "exp_stats": {
             "formula": {
-                "sandbox_id": 1253018283,
+                "sandbox_id": 1254227881,
                 "match": "exp_stats"
             },
             "executable": {
@@ -8526,7 +8570,7 @@
         },
         "caesar_profile_size_analyzer": {
             "formula": {
-                "sandbox_id": 1253018178,
+                "sandbox_id": 1254229235,
                 "match": "profile_size_analyzer"
             },
             "executable": {

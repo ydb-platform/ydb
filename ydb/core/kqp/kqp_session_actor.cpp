@@ -44,7 +44,14 @@ namespace {
 #define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
+class TBadRequestFail : public yexception {
+public:
+    TKqpRequestInfo RequestInfo;
 
+    TBadRequestFail(TKqpRequestInfo info)
+        : RequestInfo(info)
+    {}
+};
 
 struct TKqpQueryState {
     TActorId Sender;
@@ -671,7 +678,8 @@ public:
     }
 
     NKikimrMiniKQL::TParams* ValidateParameter(const TString& name, const NKikimrMiniKQL::TType& type) {
-        Y_VERIFY(QueryState->QueryCtx, "for testing purpose");
+        YQL_ENSURE(QueryState->QueryCtx);
+        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         auto parameter = QueryState->QueryCtx->Parameters.FindPtr(name);
         if (!parameter) {
             if (type.GetKind() == NKikimrMiniKQL::ETypeKind::Optional) {
@@ -682,12 +690,14 @@ public:
                 return &newParameter;
             }
 
-            YQL_ENSURE(false, "Missing value for parameter: " << name);
+            ythrow TBadRequestFail(requestInfo) << "Missing value for parameter: " << name;
             return nullptr;
         }
 
-        YQL_ENSURE(IsSameType(parameter->GetType(), type), "Parameter " << name
-                << " type mismatch, expected: " << type << ", actual: " << parameter->GetType());
+        if (!IsSameType(parameter->GetType(), type)) {
+            ythrow TBadRequestFail(requestInfo) << "Parameter " << name << " type mismatch, expected: " << type
+                << ", actual: " << parameter->GetType();
+        }
 
         return parameter;
     }
@@ -701,9 +711,14 @@ public:
 
         for (const auto& paramBinding : tx.GetParamBindings()) {
 
-            auto it = paramsMap.Values.emplace(paramBinding.GetName(),
+            try {
+                auto it = paramsMap.Values.emplace(paramBinding.GetName(),
                     *GetParamValue(/*ensure*/ true, *QueryState->QueryCtx, QueryState->TxResults, paramBinding));
-            YQL_ENSURE(it.second);
+                YQL_ENSURE(it.second);
+            } catch (const yexception& ex) {
+                auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
+                ythrow TBadRequestFail(requestInfo) << ex.what();
+            }
         }
 
         return paramsMap;
@@ -785,9 +800,7 @@ public:
 
         while (tx->GetHasEffects()) {
             if (!txCtx.AddDeferredEffect(tx, CreateKqpValueMap(*tx))) {
-                ReplyQueryError(requestInfo, Ydb::StatusIds::BAD_REQUEST,
-                        "Failed to mix queries with old- and new- engines");
-                return;
+                ythrow TBadRequestFail(requestInfo) << "Failed to mix queries with old- and new- engines";
             }
             if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
                 LWTRACK(KqpPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
@@ -1460,6 +1473,8 @@ public:
             default:
                 UnexpectedEvent("ReadyState", ev);
             }
+        } catch (const TBadRequestFail& ex) {
+            ReplyQueryError(ex.RequestInfo, Ydb::StatusIds::BAD_REQUEST, ex.what());
         } catch (const yexception& ex) {
             InternalError(ex.what());
         }
@@ -1477,6 +1492,8 @@ public:
             default:
                 UnexpectedEvent("CompileState", ev);
             }
+        } catch (const TBadRequestFail& ex) {
+            ReplyQueryError(ex.RequestInfo, Ydb::StatusIds::BAD_REQUEST, ex.what());
         } catch (const yexception& ex) {
             InternalError(ex.what());
         }
@@ -1497,6 +1514,8 @@ public:
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
+        } catch (const TBadRequestFail& ex) {
+            ReplyQueryError(ex.RequestInfo, Ydb::StatusIds::BAD_REQUEST, ex.what());
         } catch (const yexception& ex) {
             InternalError(ex.what());
         }

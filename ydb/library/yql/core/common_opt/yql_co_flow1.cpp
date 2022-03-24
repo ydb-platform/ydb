@@ -66,7 +66,6 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
         return ctx.WrapByCallableIf(1U == width && outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && innerMap.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional, "ToList", std::move(flatMap));
     }
 
-
     if (IsJustOrSingleAsList(innerBody.Ref())) {
         auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder");
 
@@ -81,9 +80,10 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
             return {};
         }
 
+        auto clonedInnerLambda = TCoLambda(ctx.DeepCopyLambda(innerMap.Lambda().Ref()));
         auto outerArgValue = innerBody.template Maybe<TCoJust>()
-            ? innerBody.template Cast<TCoJust>().Input()
-            : innerBody.template Cast<TCoAsList>().Arg(0);
+            ? clonedInnerLambda.Body().template Cast<TCoJust>().Input()
+            : clonedInnerLambda.Body().template Cast<TCoAsList>().Arg(0);
 
         YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content();
 
@@ -101,7 +101,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                             .template Input<TExprApplier>()
                                 .Apply(TCoLambda(outerLambda))
                                 .With(0, outerArgValue)
-                                .With(innerMap.Lambda().Args().Arg(0), "item")
+                                .With(clonedInnerLambda.Args().Arg(0), "item")
                                 .template With<TCoDependsOn>(TExprBase(placeHolder))
                                     .Input("item")
                                 .Build()
@@ -121,7 +121,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                             .template Input<TExprApplier>()
                                 .Apply(TCoLambda(outerLambda))
                                 .With(0, outerArgValue)
-                                .With(innerMap.Lambda().Args().Arg(0), "item")
+                                .With(clonedInnerLambda.Args().Arg(0), "item")
                                 .template With<TCoDependsOn>(TExprBase(placeHolder))
                                     .Input("item")
                                 .Build()
@@ -146,7 +146,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                             .template Optional<TExprApplier>()
                                 .Apply(TCoLambda(outerLambda))
                                 .With(0, outerArgValue)
-                                .With(innerMap.Lambda().Args().Arg(0), "item")
+                                .With(clonedInnerLambda.Args().Arg(0), "item")
                                 .template With<TCoDependsOn>(TExprBase(placeHolder))
                                     .Input("item")
                                 .Build()
@@ -164,7 +164,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                 .template Body<TExprApplier>()
                     .Apply(TCoLambda(outerLambda))
                     .With(0, outerArgValue)
-                    .With(innerMap.Lambda().Args().Arg(0), "item")
+                    .With(clonedInnerLambda.Args().Arg(0), "item")
                     .template With<TCoDependsOn>(TExprBase(placeHolder))
                         .Input("item")
                     .Build()

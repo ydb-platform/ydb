@@ -25,6 +25,7 @@ public:
         CleanupChildren();
         UnsubscribeAll();
         NActors::IActor::PassAway();
+        Killed = true;
     }
 
     void CleanupChildren() {
@@ -88,6 +89,9 @@ public:
     void Subscribe(ui32 nodeId) {
         Subscriptions.insert(nodeId);
     }
+
+protected:
+    bool Killed = false;
 
 private:
     THashMap<NActors::TActorId, NActors::IEventBase*> Children;

@@ -131,6 +131,7 @@ private:
     ESyncState SyncState_{E_IDLE};
     ui32 ExpectedEventType_{0};
     THashSet<ui32> CriticalEventTypes_{};
+    bool Killed = false;
 
     void SyncHandler(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
         const ui32 etype = ev->GetTypeRewrite();
@@ -153,7 +154,7 @@ private:
         }
         SyncCallback_ = nullptr;
 
-        while (!DelayedEvents_.empty()) {
+        while (!DelayedEvents_.empty() && !Killed) {
             auto event = std::move(DelayedEvents_.front());
             DelayedEvents_.pop_front();
             InterruptedHandler_ = TBase::CurrentStateFunc();

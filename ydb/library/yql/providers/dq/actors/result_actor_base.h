@@ -21,12 +21,12 @@ namespace NYql::NDqs::NExecutionHelpers {
         using TBase = NYql::TSynchronizableRichActor<TDerived>;
 
         TResultActorBase(
-            const TVector<TString>& columns, 
-            const NActors::TActorId& executerId, 
-            const TString& traceId, 
-            const TDqConfiguration::TPtr& settings, 
-            const TString& resultType, 
-            NActors::TActorId graphExecutionEventsId, 
+            const TVector<TString>& columns,
+            const NActors::TActorId& executerId,
+            const TString& traceId,
+            const TDqConfiguration::TPtr& settings,
+            const TString& resultType,
+            NActors::TActorId graphExecutionEventsId,
             bool discard)
             : TBase(&TDerived::Handler)
             , ExecuterID(executerId)
@@ -39,8 +39,8 @@ namespace NYql::NDqs::NExecutionHelpers {
             , Discard(discard)
             , WriteQueue()
             , SizeLimit(
-                (Settings && Settings->_AllResultsBytesLimit.Get().Defined()) 
-                ? Settings->_AllResultsBytesLimit.Get().GetRef() 
+                (Settings && Settings->_AllResultsBytesLimit.Get().Defined())
+                ? Settings->_AllResultsBytesLimit.Get().GetRef()
                 : 64000000) // GRPC limit
             , RowsLimit(settings ? Settings->_RowsLimitPerWrite.Get() : Nothing())
             , Rows(0)
@@ -240,10 +240,10 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
 
             UnsafeWriteToFullResultTable();
-        } 
+        }
 
         void OnErrorInShutdownState(NYql::NDqs::TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
-            // FullResultWriter will always send TEvGone after this, so these issues will be passed to executor with TEvQueryResponse 
+            // FullResultWriter will always send TEvGone after this, so these issues will be passed to executor with TEvQueryResponse
             TIssues issues;
             IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
             Issues.AddIssues(issues);
@@ -337,7 +337,7 @@ namespace NYql::NDqs::NExecutionHelpers {
 
     private:
         struct TQueueItem {
-            TQueueItem(NDqProto::TData&& data, const TString& messageId) 
+            TQueueItem(NDqProto::TData&& data, const TString& messageId)
                 : WriteRequest()
                 , MessageId(messageId)
                 , SentProcessedEvent(false) {

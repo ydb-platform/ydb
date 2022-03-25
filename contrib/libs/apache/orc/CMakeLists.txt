@@ -61,3 +61,16 @@ target_sources(libs-apache-orc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/OutputStream.cc
   ${CMAKE_BINARY_DIR}/contrib/libs/apache/orc/proto/orc_proto.pb.cc
 )
+target_proto_addincls(libs-apache-orc
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(libs-apache-orc
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

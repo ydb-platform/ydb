@@ -96,6 +96,19 @@ generate_enum_serilization(api-protos
   INCLUDE_HEADERS
   ydb/public/api/protos/draft/datastreams.pb.h
 )
+target_proto_addincls(api-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(api-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 target_proto_plugin(api-protos
   validation
   validation

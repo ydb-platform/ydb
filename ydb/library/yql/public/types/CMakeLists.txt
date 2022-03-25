@@ -19,3 +19,16 @@ target_proto_messages(yql-public-types PRIVATE
 target_sources(yql-public-types PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/public/types/yql_types.pb.cc
 )
+target_proto_addincls(yql-public-types
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(yql-public-types
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

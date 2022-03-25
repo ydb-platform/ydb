@@ -22,3 +22,16 @@ target_sources(core-tablet_flat-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/protos/flat_table_part.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/protos/flat_table_shard.pb.cc
 )
+target_proto_addincls(core-tablet_flat-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(core-tablet_flat-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

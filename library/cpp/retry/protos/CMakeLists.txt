@@ -19,3 +19,16 @@ target_proto_messages(cpp-retry-protos PRIVATE
 target_sources(cpp-retry-protos PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/retry/protos/retry_options.pb.cc
 )
+target_proto_addincls(cpp-retry-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(cpp-retry-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

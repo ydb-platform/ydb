@@ -19,3 +19,16 @@ target_proto_messages(protobuf-util-proto PRIVATE
 target_sources(protobuf-util-proto PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/protobuf/util/proto/merge.pb.cc
 )
+target_proto_addincls(protobuf-util-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(protobuf-util-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

@@ -23,6 +23,19 @@ target_proto_messages(library-mkql_proto-protos PRIVATE
 target_sources(library-mkql_proto-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/mkql_proto/protos/minikql.pb.cc
 )
+target_proto_addincls(library-mkql_proto-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(library-mkql_proto-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 target_proto_plugin(library-mkql_proto-protos
   grpc_cpp
   grpc_cpp

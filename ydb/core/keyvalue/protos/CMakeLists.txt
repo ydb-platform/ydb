@@ -19,3 +19,16 @@ target_proto_messages(core-keyvalue-protos PRIVATE
 target_sources(core-keyvalue-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/keyvalue/protos/events.pb.cc
 )
+target_proto_addincls(core-keyvalue-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(core-keyvalue-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

@@ -22,3 +22,16 @@ target_proto_messages(libs-control_plane_storage-proto PRIVATE
 target_sources(libs-control_plane_storage-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.cc
 )
+target_proto_addincls(libs-control_plane_storage-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(libs-control_plane_storage-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

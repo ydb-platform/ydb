@@ -19,3 +19,16 @@ target_proto_messages(providers-dq-config PRIVATE
 target_sources(providers-dq-config PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/config/config.pb.cc
 )
+target_proto_addincls(providers-dq-config
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(providers-dq-config
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

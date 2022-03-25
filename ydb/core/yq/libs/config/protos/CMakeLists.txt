@@ -58,3 +58,16 @@ target_sources(libs-config-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/token_accessor.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/yq_config.pb.cc
 )
+target_proto_addincls(libs-config-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(libs-config-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

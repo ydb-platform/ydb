@@ -26,3 +26,16 @@ target_sources(yql-dq-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/proto/dq_tasks.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/proto/dq_transport.pb.cc
 )
+target_proto_addincls(yql-dq-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(yql-dq-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

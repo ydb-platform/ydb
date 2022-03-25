@@ -22,3 +22,16 @@ target_sources(providers-common-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/proto/gateways_config.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/proto/udf_resolver.pb.cc
 )
+target_proto_addincls(providers-common-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(providers-common-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

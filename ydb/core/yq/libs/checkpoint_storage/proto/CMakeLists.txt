@@ -20,3 +20,16 @@ target_proto_messages(libs-checkpoint_storage-proto PRIVATE
 target_sources(libs-checkpoint_storage-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/checkpoint_storage/proto/graph_description.pb.cc
 )
+target_proto_addincls(libs-checkpoint_storage-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(libs-checkpoint_storage-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

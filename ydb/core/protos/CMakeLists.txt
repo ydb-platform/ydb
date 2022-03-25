@@ -269,6 +269,19 @@ generate_enum_serilization(ydb-core-protos
   INCLUDE_HEADERS
   ydb/core/protos/blobstorage_pdisk_config.pb.h
 )
+target_proto_addincls(ydb-core-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(ydb-core-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 target_proto_plugin(ydb-core-protos
   grpc_cpp
   grpc_cpp

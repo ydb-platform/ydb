@@ -19,3 +19,16 @@ target_proto_messages(common-metrics-protos PRIVATE
 target_sources(common-metrics-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.cc
 )
+target_proto_addincls(common-metrics-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(common-metrics-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

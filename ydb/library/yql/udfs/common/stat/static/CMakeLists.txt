@@ -28,3 +28,16 @@ target_sources(common-stat-static PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/tdigest.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/stat/static/tdigest.pb.cc
 )
+target_proto_addincls(common-stat-static
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(common-stat-static
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

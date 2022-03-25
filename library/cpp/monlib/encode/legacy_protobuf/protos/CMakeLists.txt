@@ -19,3 +19,16 @@ target_proto_messages(encode-legacy_protobuf-protos PRIVATE
 target_sources(encode-legacy_protobuf-protos PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/monlib/encode/legacy_protobuf/protos/metric_meta.pb.cc
 )
+target_proto_addincls(encode-legacy_protobuf-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(encode-legacy_protobuf-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

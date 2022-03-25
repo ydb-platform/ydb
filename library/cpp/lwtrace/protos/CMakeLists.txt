@@ -19,3 +19,16 @@ target_proto_messages(cpp-lwtrace-protos PRIVATE
 target_sources(cpp-lwtrace-protos PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/lwtrace/protos/lwtrace.pb.cc
 )
+target_proto_addincls(cpp-lwtrace-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(cpp-lwtrace-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

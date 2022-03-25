@@ -49,4 +49,17 @@ target_link_flags(ydb-library-protobuf_printer-ut
   -lrt
   -ldl
 )
+target_proto_addincls(ydb-library-protobuf_printer-ut
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(ydb-library-protobuf_printer-ut
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 vcs_info(ydb-library-protobuf_printer-ut)

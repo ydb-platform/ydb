@@ -21,6 +21,31 @@ target_sources(proto_ast-gen-jsonpath PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.cc
 )
+run_antlr(
+  OUTPUT
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.proto
+  DEPENDS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
+  WORKING_DIRECTORY
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
+  ANTLER_ARGS
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
+  -lib
+  .
+  -fo
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
+  -language
+  protobuf
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NJsonPathGenerated
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
+)
 set(
   ANTLR_PACKAGE_NAME
   NJsonPathGenerated
@@ -36,14 +61,6 @@ set(
 configure_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
-)
-set(
-  ANTLR_PACKAGE_NAME
-  NJsonPathGenerated
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
 )
 run_antlr(
   OUTPUT
@@ -62,4 +79,17 @@ run_antlr(
   .
   -fo
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
+)
+target_proto_addincls(proto_ast-gen-jsonpath
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(proto_ast-gen-jsonpath
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
 )

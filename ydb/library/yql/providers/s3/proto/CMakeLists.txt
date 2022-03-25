@@ -23,3 +23,16 @@ target_sources(providers-s3-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/retry_config.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/source.pb.cc
 )
+target_proto_addincls(providers-s3-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(providers-s3-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

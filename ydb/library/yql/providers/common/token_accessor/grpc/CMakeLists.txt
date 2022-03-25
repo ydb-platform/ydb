@@ -23,6 +23,19 @@ target_proto_messages(common-token_accessor-grpc PRIVATE
 target_sources(common-token_accessor-grpc PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.pb.cc
 )
+target_proto_addincls(common-token_accessor-grpc
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(common-token_accessor-grpc
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 target_proto_plugin(common-token_accessor-grpc
   grpc_cpp
   grpc_cpp

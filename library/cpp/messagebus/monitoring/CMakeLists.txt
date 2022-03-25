@@ -20,3 +20,16 @@ target_proto_messages(cpp-messagebus-monitoring PRIVATE
 target_sources(cpp-messagebus-monitoring PRIVATE
   ${CMAKE_BINARY_DIR}/library/cpp/messagebus/monitoring/mon_proto.pb.cc
 )
+target_proto_addincls(cpp-messagebus-monitoring
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(cpp-messagebus-monitoring
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

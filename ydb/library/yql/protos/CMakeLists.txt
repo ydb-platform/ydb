@@ -23,3 +23,16 @@ target_sources(library-yql-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/protos/yql_mount.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/library/yql/protos/clickhouse.pb.cc
 )
+target_proto_addincls(library-yql-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(library-yql-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

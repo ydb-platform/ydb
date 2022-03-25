@@ -108,3 +108,16 @@ generate_enum_serilization(ydb-core-tablet_flat
   INCLUDE_HEADERS
   ydb/core/tablet_flat/flat_row_eggs.h
 )
+target_proto_addincls(ydb-core-tablet_flat
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(ydb-core-tablet_flat
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

@@ -7,6 +7,18 @@ function(target_proto_plugin Tgt Name PluginTarget)
   )
 endfunction()
 
+function(target_proto_addincls Tgt)
+  set_property(TARGET ${Tgt} APPEND PROPERTY
+    PROTO_ADDINCL ${ARGN}
+  )
+endfunction()
+
+function(target_proto_outs Tgt)
+  set_property(TARGET ${Tgt} APPEND PROPERTY
+    PROTO_OUTS ${ARGN}
+  )
+endfunction()
+
 function(target_proto_messages Tgt Scope)
   get_property(ProtocExtraOutsSuf TARGET ${Tgt} PROPERTY PROTOC_EXTRA_OUTS)
   foreach(proto ${ARGN})
@@ -27,9 +39,8 @@ function(target_proto_messages Tgt Scope)
           ${ProtocExtraOuts}
         COMMAND protoc
           ${COMMON_PROTOC_FLAGS}
-          -I=${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
-          --cpp_out=${CMAKE_BINARY_DIR}
-          --cpp_styleguide_out=${CMAKE_BINARY_DIR}
+          "-I$<JOIN:$<TARGET_GENEX_EVAL:${Tgt},$<TARGET_PROPERTY:${Tgt},PROTO_ADDINCL>>,;-I>"
+          "$<JOIN:$<TARGET_GENEX_EVAL:${Tgt},$<TARGET_PROPERTY:${Tgt},PROTO_OUTS>>,;>"
           --plugin=protoc-gen-cpp_styleguide=${CMAKE_BINARY_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide
           "$<JOIN:$<TARGET_GENEX_EVAL:${Tgt},$<TARGET_PROPERTY:${Tgt},PROTOC_OPTS>>,;>"
           ${protoRel}

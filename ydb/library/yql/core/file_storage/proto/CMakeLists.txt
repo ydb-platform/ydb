@@ -19,3 +19,16 @@ target_proto_messages(core-file_storage-proto PRIVATE
 target_sources(core-file_storage-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/core/file_storage/proto/file_storage.pb.cc
 )
+target_proto_addincls(core-file_storage-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(core-file_storage-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

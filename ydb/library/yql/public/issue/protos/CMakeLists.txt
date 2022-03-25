@@ -21,3 +21,16 @@ target_sources(public-issue-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/public/issue/protos/issue_message.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/library/yql/public/issue/protos/issue_severity.pb.cc
 )
+target_proto_addincls(public-issue-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(public-issue-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

@@ -40,6 +40,19 @@ target_sources(api-grpc-draft PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/yql_db_v1.pb.cc
 )
+target_proto_addincls(api-grpc-draft
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(api-grpc-draft
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 target_proto_plugin(api-grpc-draft
   grpc_cpp
   grpc_cpp

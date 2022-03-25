@@ -21,3 +21,16 @@ target_sources(library-folder_service-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/folder_service/proto/config.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/library/folder_service/proto/folder_service.pb.cc
 )
+target_proto_addincls(library-folder_service-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(library-folder_service-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

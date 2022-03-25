@@ -20,3 +20,16 @@ target_proto_messages(core-viewer-protos PRIVATE
 target_sources(core-viewer-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/viewer/protos/viewer.pb.cc
 )
+target_proto_addincls(core-viewer-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(core-viewer-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

@@ -20,6 +20,19 @@ target_proto_messages(validation-ut-protos PRIVATE
 target_sources(validation-ut-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/public/lib/validation/ut/protos/validation_test.pb.cc
 )
+target_proto_addincls(validation-ut-protos
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(validation-ut-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 target_proto_plugin(validation-ut-protos
   validation
   validation

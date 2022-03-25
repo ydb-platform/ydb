@@ -19,3 +19,16 @@ target_proto_messages(file_storage-http_download-proto PRIVATE
 target_sources(file_storage-http_download-proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/core/file_storage/http_download/proto/http_download.pb.cc
 )
+target_proto_addincls(file_storage-http_download-proto
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(file_storage-http_download-proto
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)

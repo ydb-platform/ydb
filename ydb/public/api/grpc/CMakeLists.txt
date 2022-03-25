@@ -48,6 +48,19 @@ target_sources(api-grpc PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_table_v1.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/yq_v1.pb.cc
 )
+target_proto_addincls(api-grpc
+  ./
+  ${CMAKE_SOURCE_DIR}/
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(api-grpc
+  --cpp_out=${CMAKE_BINARY_DIR}/
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
+)
 target_proto_plugin(api-grpc
   grpc_cpp
   grpc_cpp

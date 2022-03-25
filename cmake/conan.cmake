@@ -33,7 +33,7 @@
 # but it is only necessary on the end-user side. It is not necessary to create conan
 # packages, in fact it shouldn't be use for that. Check the project documentation.
 
-# version: 0.16.1
+# version: 0.17.0
 
 include(CMakeParseArguments)
 
@@ -55,6 +55,8 @@ function(_get_msvc_ide_version result)
         set(${result} 15 PARENT_SCOPE)
     elseif(NOT MSVC_VERSION VERSION_LESS 1920 AND MSVC_VERSION VERSION_LESS 1930)
         set(${result} 16 PARENT_SCOPE)
+    elseif(NOT MSVC_VERSION VERSION_LESS 1930 AND MSVC_VERSION VERSION_LESS 1940)
+        set(${result} 17 PARENT_SCOPE)
     else()
         message(FATAL_ERROR "Conan: Unknown MSVC compiler version [${MSVC_VERSION}]")
     endif()
@@ -124,6 +126,10 @@ macro(_conan_detect_compiler)
 
     if(ARGUMENTS_ARCH)
         set(_CONAN_SETTING_ARCH ${ARGUMENTS_ARCH})
+    endif()
+
+    if(USING_CXX)
+        set(_CONAN_SETTING_COMPILER_CPPSTD ${CMAKE_CXX_STANDARD})
     endif()
 
     if (${CMAKE_${LANGUAGE}_COMPILER_ID} STREQUAL GNU)
@@ -415,7 +421,8 @@ endfunction()
 
 function(_collect_settings result)
     set(ARGUMENTS_PROFILE_AUTO arch build_type compiler compiler.version
-                            compiler.runtime compiler.libcxx compiler.toolset)
+                            compiler.runtime compiler.libcxx compiler.toolset
+                            compiler.cppstd)
     foreach(ARG ${ARGUMENTS_PROFILE_AUTO})
         string(TOUPPER ${ARG} _arg_name)
         string(REPLACE "." "_" _arg_name ${_arg_name})
@@ -427,10 +434,10 @@ function(_collect_settings result)
 endfunction()
 
 function(conan_cmake_autodetect detected_settings)
-    _conan_detect_build_type()
+    _conan_detect_build_type(${ARGV})
     _conan_check_system_name()
     _conan_check_language()
-    _conan_detect_compiler()
+    _conan_detect_compiler(${ARGV})
     _collect_settings(collected_settings)
     set(${detected_settings} ${collected_settings} PARENT_SCOPE)
 endfunction()
@@ -807,7 +814,8 @@ macro(conan_check)
     endif()
               
     if(NOT CONAN_DETECT_QUIET)
-        message(STATUS "Conan: Version found ${CONAN_VERSION_OUTPUT}")
+        string(STRIP "${CONAN_VERSION_OUTPUT}" _CONAN_VERSION_OUTPUT)
+        message(STATUS "Conan: Version found ${_CONAN_VERSION_OUTPUT}")
     endif()
 
     if(DEFINED CONAN_VERSION)
@@ -837,7 +845,7 @@ function(conan_add_remote)
     if(DEFINED CONAN_COMMAND)
         set(CONAN_CMD ${CONAN_COMMAND})
     else()
-        conan_check(REQUIRED)
+        conan_check(REQUIRED DETECT_QUIET)
     endif()
     set(CONAN_VERIFY_SSL_ARG "True")
     if(DEFINED CONAN_VERIFY_SSL)

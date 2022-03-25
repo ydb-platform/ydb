@@ -155,7 +155,9 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            return Record.ShortDebugString();
+            TStringStream ss;
+            ss << ToStringHeader() << " " << Record.ShortDebugString();
+            return ss.Str();
         }
 
         bool IsSerializable() const override {

@@ -130,13 +130,18 @@ message TTaskOutput {
 }
 
 enum ETransformType {
-    TRANSFORM_YANDEX_CLOUD = 0;
+    TRANSFORM_UNSPECIFIED = 0;
+    TRANSFORM_CLOUD_FUNCTION = 1;
 }
 
 message TDqTransform {
     ETransformType Type = 1;
     string FunctionName = 2;
     string ConnectionName = 3;
+
+    // binary YSON(codec ydb/library/yql/providers/common/schema/mkql)
+    string InputType = 4;
+    string OutputType = 5;
 }
 
 message TDqTask {

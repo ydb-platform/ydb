@@ -22,7 +22,7 @@ struct TDqStageSettings {
     bool SinglePartition = false;
 
     bool IsExternalFunction = false;
-    NDqProto::ETransformType TransformType = NDqProto::TRANSFORM_YANDEX_CLOUD;
+    NDqProto::ETransformType TransformType = NDqProto::TRANSFORM_CLOUD_FUNCTION;
     TString TransformName;
     ui32 TransformConcurrency = 0;
 

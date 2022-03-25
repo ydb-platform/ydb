@@ -280,6 +280,7 @@ public:
     ui64 Drop() override { // Drop channel data because channel was finished. Leave checkpoint because checkpoints keep going through channel after finishing channel data transfer.
         ui64 rows = Data.size();
         Data.clear();
+        TDataType().swap(Data);
         return rows;
     }
 
@@ -757,6 +758,8 @@ public:
         DataTail.clear();
         SizeTail.clear();
         MemoryUsed = 0;
+        TDataType().swap(DataHead);
+        TDataType().swap(DataTail);
         // todo: send remove request
         SpilledRows = 0;
         SpilledBlobs.clear();

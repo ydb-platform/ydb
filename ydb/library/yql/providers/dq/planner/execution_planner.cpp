@@ -359,10 +359,6 @@ namespace NYql::NDqs {
                 FillOutputDesc(*taskDesc.AddOutputs(), output);
             }
 
-            auto& transform = *taskDesc.MutableOutputTransform();
-            transform.SetType(task.OutputTransform.Type);
-            transform.SetFunctionName(task.OutputTransform.FunctionName);
-
             auto& program = *taskDesc.MutableProgram();
             program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
             TString programStr;
@@ -479,9 +475,11 @@ namespace NYql::NDqs {
                     task.Inputs[dqSourceInputIndex].SourceSettings = sourceSettings;
                     task.Inputs[dqSourceInputIndex].SourceType = sourceType;
                 }
-                auto& transform = task.OutputTransform;
-                transform.Type = stageSettings.TransformType;
-                transform.FunctionName = stageSettings.TransformName;
+                if (stageSettings.IsExternalFunction) {
+                    auto& transform = task.OutputTransform;
+                    transform.Type = stageSettings.TransformType;
+                    transform.FunctionName = stageSettings.TransformName;
+                }
             }
         }
         return !parts.empty();

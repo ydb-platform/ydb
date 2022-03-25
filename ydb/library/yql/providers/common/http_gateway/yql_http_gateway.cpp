@@ -2,6 +2,7 @@
 
 #include <contrib/libs/curl/include/curl/curl.h>
 #include <util/stream/str.h>
+#include <util/string/builder.h>
 #include <util/generic/size_literals.h>
 
 #include <thread>
@@ -112,12 +113,15 @@ private:
         if (CURLE_OK != result)
             return Fail(TIssue(curl_easy_strerror(result)));
 
+        long httpResponseCode = 0;
+        curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
+
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
             if (1U == Callbacks.size())
-                Callbacks.top()(IHTTPGateway::TContent(std::move(Buffer)));
+                Callbacks.top()(IHTTPGateway::TContent(std::move(Buffer), httpResponseCode));
             else
-                Callbacks.top()(IHTTPGateway::TContent(Buffer));
+                Callbacks.top()(IHTTPGateway::TContent(Buffer, httpResponseCode));
             Callbacks.pop();
         }
     }
@@ -518,21 +522,31 @@ private:
 
 }
 
-IHTTPGateway::TContent::TContent(TString&& data)
+IHTTPGateway::TContent::TContent(TString&& data, long httpResponseCode)
     : TString(std::move(data))
+    , HttpResponseCode(httpResponseCode)
 {
     if (!empty()) {
         THTTPMultiGateway::OutputSize.fetch_add(size());
     }
 }
 
-IHTTPGateway::TContent::TContent(const TString& data)
+IHTTPGateway::TContent::TContent(const TString& data, long httpResponseCode)
     : TString(data)
+    , HttpResponseCode(httpResponseCode)
 {
     if (!empty()) {
         THTTPMultiGateway::OutputSize.fetch_add(size());
     }
 }
+
+IHTTPGateway::TContent::TContent(TString&& data)
+    : TContent(std::move(data), 0)
+{}
+
+IHTTPGateway::TContent::TContent(const TString& data)
+    : TContent(data, 0)
+{}
 
 TString IHTTPGateway::TContent::Extract() {
     if (!empty()) {

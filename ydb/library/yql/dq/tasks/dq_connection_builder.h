@@ -47,9 +47,11 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
 
     for (ui32 i = 0; i < partitionsCount; ++i) {
         auto& task = graph.AddTask(stageInfo);
-        auto& transform = task.OutputTransform;
-        transform.Type = stageSettings.TransformType;
-        transform.FunctionName = stageSettings.TransformName;
+        if (stageSettings.IsExternalFunction) {
+            auto& transform = task.OutputTransform;
+            transform.Type = stageSettings.TransformType;
+            transform.FunctionName = stageSettings.TransformName;
+        }
     }
 }
 

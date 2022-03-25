@@ -1,0 +1,55 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(library-yql-providers-cloud_function-actors-ut)
+target_compile_options(library-yql-providers-cloud_function-actors-ut PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(library-yql-providers-cloud_function-actors-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/actors
+)
+target_link_libraries(library-yql-providers-cloud_function-actors-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  providers-cloud_function-actors
+  cpp-actors-testlib
+  yql-minikql-invoke_builtins
+  udf-service-exception_policy
+  yql-minikql-computation
+  providers-common-http_gateway
+  common-http_gateway-mock
+)
+target_sources(library-yql-providers-cloud_function-actors-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/actors/cloud_function_transform_ut.cpp
+)
+add_test(
+  NAME
+  library-yql-providers-cloud_function-actors-ut
+  COMMAND
+  library-yql-providers-cloud_function-actors-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+target_link_flags(library-yql-providers-cloud_function-actors-ut
+  PUBLIC
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+  -framework
+  CoreFoundation
+)
+vcs_info(library-yql-providers-cloud_function-actors-ut)

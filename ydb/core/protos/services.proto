@@ -267,6 +267,8 @@ enum EServiceKikimr {
 
     YQL_NODES_MANAGER = 715;
 
+    YANDEX_CLOUD_FUNCTION = 716;
+
     // Exports (& imports)
     EXPORT = 800;
     DATASHARD_RESTORE = 801;

@@ -28,6 +28,8 @@ public:
     class TContent : private TString {
     friend class TEasyCurl;
     public:
+        TContent(TString&& data, long httpResponseCode);
+        TContent(const TString& data, long httpResponseCode);
         TContent(TString&& data);
         TContent(const TString& data);
 
@@ -44,6 +46,9 @@ public:
     private:
         TContent(const TContent&) = delete;
         TContent& operator=(const TContent&) = delete;
+
+    public:
+        long HttpResponseCode;
     };
 
     using TResult = std::variant<TContent, TIssues>;

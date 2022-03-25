@@ -65,16 +65,19 @@ struct TEvPqNewMetaCache {
     struct TEvDescribeTopicsRequest : public TEventLocal<TEvDescribeTopicsRequest, EvDescribeTopicsRequest> {
         TString PathPrefix;
         TVector<TString> Topics;
+        bool SyncVersion;
 
         TEvDescribeTopicsRequest() = default;
 
-        explicit TEvDescribeTopicsRequest(const TVector<TString>& topics)
+        explicit TEvDescribeTopicsRequest(const TVector<TString>& topics, bool syncVersion = true)
             : Topics(topics)
+            , SyncVersion(syncVersion)
         {}
 
-        TEvDescribeTopicsRequest(const TVector<TString>& topics, const TString& pathPrefix)
+        TEvDescribeTopicsRequest(const TVector<TString>& topics, const TString& pathPrefix, bool syncVersion = true)
             : PathPrefix(pathPrefix)
             , Topics(topics)
+            , SyncVersion(syncVersion)
         {}
     };
 

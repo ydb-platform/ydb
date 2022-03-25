@@ -18,17 +18,16 @@ using namespace PersQueue::V1;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-IActor* CreatePQWriteService(const TActorId& schemeCache, const TActorId& newSchemeCache,
+IActor* CreatePQWriteService(const TActorId& schemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
-    return new TPQWriteService(schemeCache, newSchemeCache, counters, maxSessions);
+    return new TPQWriteService(schemeCache, counters, maxSessions);
 }
 
 
 
-TPQWriteService::TPQWriteService(const TActorId& schemeCache, const TActorId& newSchemeCache,
+TPQWriteService::TPQWriteService(const TActorId& schemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
     : SchemeCache(schemeCache)
-    , NewSchemeCache(newSchemeCache)
     , Counters(counters)
     , MaxSessions(maxSessions)
     , Enabled(false)
@@ -176,7 +175,6 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
         return;
     }
 
-
     TString localCluster = AvailableLocalCluster(ctx);
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
@@ -198,7 +196,7 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
 
         auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
         TActorId worker = ctx.Register(new TWriteSessionActor(
-                ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
+                ev->Release().Release(), cookie, SchemeCache, Counters,
                 DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
                 *TopicsHandler
         ));

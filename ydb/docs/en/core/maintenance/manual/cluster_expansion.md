@@ -18,7 +18,7 @@
     Node {
         NodeId: 2
         Port: <ic-port>
-        Host: "<new-host>"
+        Host: "<new-host>"|
         InterconnectHost: "<new-host>"
         Location {
             DataCenter: "DC1"
@@ -76,3 +76,4 @@
     ```
     kikimr -s <endpoint> admin bs config invoke --proto-file DefineBox.txt
     ```
+

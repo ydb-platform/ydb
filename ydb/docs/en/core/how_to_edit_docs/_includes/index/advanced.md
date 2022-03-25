@@ -1,3 +1,4 @@
 ## Articles for advanced readers
 
-* [Creating customized documentation](../customize.md)
+- [Creating customized documentation](../customize.md)
+

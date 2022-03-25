@@ -38,13 +38,13 @@ select $_; --- error: Unable to reference anonymous name $_
 export $_; --- An error: Can not export anonymous name $_
 ```
 
-{% if feature_mapreduce %} Moreover, you can't import a named expression with an anonymous alias:
+{% if feature_mapreduce %}Moreover, you can't import a named expression with an anonymous alias:
 
 ```yql
 import utils symbols $sqrt as $_; --- error: Can not import anonymous name $_
 ```
 
-{% endif %} Anonymous argument names are also supported for [lambda functions](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, and in [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
+{% endif %}Anonymous argument names are also supported for [lambda functions](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, and in [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
 
 {% note info %}
 
@@ -52,7 +52,7 @@ If named expression substitution results in completely identical subgraphs in th
 
 {% endnote %}
 
-**Examples:**
+**Examples**
 
 ```yql
 $multiplier = 712;

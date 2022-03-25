@@ -1,23 +1,29 @@
-{% include [intro.md](_includes/backup_and_recovery/01_intro.md) %}
+# Backup and recovery
 
-{% include [prerequisites.md](_includes/backup_and_recovery/02_prerequisites.md) %}
+Backup protects against data loss and lets you restore data from a backup copy in the event of a loss.
 
-{% include [limitations.md](_includes/backup_and_recovery/03_limitations.md) %}
+YDB provides multiple solutions for backup and recovery:
 
-{% include [fs_backup_header.md](_includes/backup_and_recovery/04_fs_backup_1_header.md) %}
+- Backing up data to files and restoring it with a command run by an admin in the YDB CLI
+- Backing up data to S3-compatible storage with a command run by an admin in the YDB CLI
 
-{% include [fs_backup_body.md](_includes/backup_and_recovery/04_fs_backup_2_body.md) %}
+{% include [_includes/backup_and_recovery/options_overlay.md](_includes/backup_and_recovery/options_overlay.md) %}
 
-{% include [fs_restore.md](_includes/backup_and_recovery/05_fs_restore.md) %}
+## YDB CLI {#cli}
 
-{% include [s3_header.md](_includes/backup_and_recovery/06_s3_1_header.md) %}
+### Files {#files}
 
-{% include [s3_prerequisites.md](_includes/backup_and_recovery/06_s3_2_prerequisites.md) %}
+To back up data to a file, run the [`tools dump`](../reference/ydb-cli/export_import/tools_dump.md) command in the YDB CLI as an admin. To learn more about this command, follow the [link](../reference/ydb-cli/export_import/tools_dump.md) in the YDB CLI reference.
 
-{% include [s3_access_keys.md](_includes/backup_and_recovery/06_s3_3_access_keys.md) %}
+To restore data from a file backup created with the `tools dump` command in the YDB CLI, run the [`tools restore`](../reference/ydb-cli/export_import/tools_restore.md) command in the YDB CLI. To learn more about this command, follow the [link](../reference/ydb-cli/export_import/tools_restore.md) in the YDB CLI reference.
 
-{% include [s3_export.md](_includes/backup_and_recovery/06_s3_4_export.md) %}
+### S3-compatible storage {#s3}
 
-{% include [s3_restore.md](_includes/backup_and_recovery/06_s3_5_restore.md) %}
+To back up data to S3-compatible storage (such as [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html)), run the [`export s3`](../reference/ydb-cli/export_import/s3_export.md) command in the YDB CLI as an admin. To learn more about this command, follow the [link](../reference/ydb-cli/export_import/s3_export.md) in the YDB CLI reference.
 
-{% include [s3_forget.md](_includes/backup_and_recovery/06_s3_6_forget.md) %}
+To restore data from a backup created in S3-compatible storage with the`export s3` command in the YDB CLI, run the [`import s3`](../reference/ydb-cli/export_import/s3_import.md) command in the YDB CLI. To learn more about this command, follow the [link](../reference/ydb-cli/export_import/s3_import.md) in the YDB CLI reference.
+
+{% include [_includes/backup_and_recovery/cli_overlay.md](_includes/backup_and_recovery/cli_overlay.md) %}
+
+{% include [_includes/backup_and_recovery/others_overlay.md](_includes/backup_and_recovery/others_overlay.md) %}
+

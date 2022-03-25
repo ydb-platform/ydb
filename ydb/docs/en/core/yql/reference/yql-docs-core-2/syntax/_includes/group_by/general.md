@@ -31,7 +31,7 @@ Aggregate functions ignore `NULL` in their arguments, except for `COUNT`.
 
 YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../../builtins/aggregation.md#aggregateby).
 
-**Examples:**
+**Examples**
 
 ```sql
 SELECT key, COUNT(*) FROM my_table

@@ -41,3 +41,4 @@ $table_paths = (
 
 SELECT COUNT(*) FROM EACH($table_paths);
 ```
+

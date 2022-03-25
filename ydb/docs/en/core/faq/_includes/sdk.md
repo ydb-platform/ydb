@@ -1,6 +1,6 @@
 # SDK
 
-#### What may cause the error "Status: OVERLOADED Error: Pending previous query completion" in the C++ SDK?
+#### Possible causes for "Status: OVERLOADED Error: Pending previous query completion" in the C++ SDK
 
 Q: When running two queries, I try to get a response from the future method of the second one. It returns: `Status: OVERLOADED Why: <main>: Error: Pending previous query completion`.
 
@@ -14,7 +14,7 @@ Make sure not to wrap SDK components in a singleton, since their lifetime should
 
 Using `fork()` in multithreaded applications is an antipattern. Since both the SDK and the gRPC library are multithreaded applications, their stability is not guaranteed.
 
-#### What should I do if I get the error "Active sessions limit exceeded" even though the current number of active sessions is within the limit? {#active-sessions-does-not-exceed-the-limit}
+#### What do I do if I get the "Active sessions limit exceeded" error even though the current number of active sessions is within limits? {#active-sessions-does-not-exceed-the-limit}
 
 The limit applies to the number of active sessions. An active session is a session passed to the client to be used in its code. A session is returned to the pool in a destructor. In this case, the session itself is a replicated object. You may have saved a copy of the session in the code.
 
@@ -24,5 +24,5 @@ Yes, the C++ SDK lets you override the DB parameters and token when creating a c
 
 #### What should I do if a VM has failed and it's impossible to make a query? {#vms-failed-and-you-cant-make-a-request}
 
-To detect the unavailability of a VM, set a client timeout. All queries contain the client timeout parameters. The timeout value should be an order of magnitude greater than the expected query execution time.
+To detect that a VM is unavailable, set a client timeout. All queries contain the client timeout parameters. The timeout value should be an order of magnitude greater than the expected query execution time.
 

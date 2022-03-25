@@ -24,7 +24,7 @@ You can click on any of the methods described below to go to the source code of 
   | Anonymous | [`ydb.AnonymousCredentials()`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/anonymous-credentials) |
   | Access Token | [`ydb.AccessTokenCredentials( token )`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials) |
   | Metadata | [`ydb.iam.MetadataUrlCredentials()`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/metadata-credentials) |
-  | Service Account Key | [`ydb.iam.ServiceAccountCredentials.from_file(`</br>    `key_file, iam_endpoint=None, iam_channel_credentials=None )`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials) |
+  | Service Account Key | [`ydb.iam.ServiceAccountCredentials.from_file(`</br> `key_file, iam_endpoint=None, iam_channel_credentials=None )`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/service-account-credentials) |
   | Determined by environment variables | `ydb.construct_credentials_from_environ()` |
 
 - Go
@@ -69,7 +69,7 @@ The following algorithm that is the same for all SDKs applies:
 4. Otherwise, if the value of the `YDB_ACCESS_TOKEN_CREDENTIALS` environment variable is set, the **Access token** authentication mode is used, where the this variable value is passed.
 5. Otherwise, the **Metadata** authentication mode is used.
 
-If the last step of the algorithm is selecting the **Metadata** mode, you can deploy a working application on VMs and in Yandex Cloud Functions without setting any environment variables.
+If the last step of the algorithm is selecting the **Metadata** mode, you can deploy a working application on VMs and in Cloud Functions in {{ yandex-cloud }} without setting any environment variables.
 
 ## Python SDK specifics
 
@@ -80,8 +80,9 @@ The behavior of the Python SDK differs from the one described above.
 {% endnote %}
 
 1. The algorithm for determining the authentication mode and the necessary parameters from the environment variables in the `construct_credentials_from_environ()` method differs from the one used in other SDKs:
-   * If the value of the `USE_METADATA_CREDENTIALS` environment variable is set to 1, the **Metadata** authentication mode is used.
-   * Otherwise, if the value of the `YDB_TOKEN`  environment variable is set, the **Access Token** authentication mode is used, where this variable value is passed.
-   * Otherwise, if the value of the `SA_KEY_FILE` environment variable is set, the **System Account Key** authentication mode is used and the key is taken from the file whose name is specified in this variable.
-   * Or else, no authentication information is added to requests.
+   - If the value of the `USE_METADATA_CREDENTIALS` environment variable is set to 1, the **Metadata** authentication mode is used.
+   - Otherwise, if the value of the `YDB_TOKEN` environment variable is set, the **Access Token** authentication mode is used, where this variable value is passed.
+   - Otherwise, if the value of the `SA_KEY_FILE` environment variable is set, the **System Account Key** authentication mode is used and the key is taken from the file whose name is specified in this variable.
+   - Or else, no authentication information is added to requests.
 2. If no object responsible for generating tokens is passed when initializing the driver, the [general procedure](#env) for reading environment variable values applies.
+

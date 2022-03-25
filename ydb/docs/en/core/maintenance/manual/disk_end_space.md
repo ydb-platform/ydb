@@ -34,23 +34,23 @@ If the block store volume is running out of space, you can apply defragmentation
 
 1. Check the health of the groups in the cluster. There shouldn't be any problem groups on the same node with the problem block store volume.
 
-2. Log in via SSH to the node hosting this block store volume.
+2. Log in via SSH to the node hosting this block store volume
 
 3. Check if you can [restart the process](node_restarting.md#restart_process).
 
-4. Stop the process.
+4. Stop the process
 
     ```bash
     sudo systemctl stop kikimr
     ```
 
-5. Format the block store volume.
+5. Format the block store volume
 
     ```bash
     sudo kikimr admin blobstorage disk obliterate <path to the store volume part label>
     ```
 
-6. Run the process.
+6. Run the process
 
     ```bash
     sudo systemctl start kikimr
@@ -59,3 +59,4 @@ If the block store volume is running out of space, you can apply defragmentation
 ## Moving individual VDisks from full block store volumes
 
 If defragmentation can't help freeing up space on the block store volume, you can [move](moving_vdisks.md#moving_disk) individual VDisks.
+

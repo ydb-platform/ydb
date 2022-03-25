@@ -14,3 +14,4 @@ SELECT
     WeakField(my_table.other_column, Int64)
 FROM my_table;
 ```
+

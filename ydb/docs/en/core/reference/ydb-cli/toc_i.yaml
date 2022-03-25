@@ -17,6 +17,8 @@ items:
       href: commands/scheme-describe.md
     - name: Directories
       href: commands/dir.md
+    - name: Secondary indexes
+      href: commands/secondary_index.md
     - name: Renaming tables
       href: commands/tools/rename.md
   - name: Operations with data
@@ -27,15 +29,15 @@ items:
       href: commands/explain-plan.md
     - name: Streaming table reads
       href: commands/readtable.md
-    - name: Working with secondary indexes
-      href: commands/index-ops.md
     - name: Scan queries
       href: commands/scan-query.md
+  - name: Importing and exporting data
+    include: { mode: link, path: export_import/toc_p.yaml }
 #  - name: Utilities
 #    items:
     # - name: Copy tables
     #   href: commands/tools/copy.md
-    # - name: Dump
+    # - name: Dump backup
     #   href: commands/tools/dump.md
     # - name: Restore backup
     #   href: commands/tools/restore.md

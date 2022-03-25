@@ -8,7 +8,7 @@ Below are examples of the code for setting the "prefer the nearest data center" 
 
 - Go
 
-
   {% include [go.md](prefer_local/go.md) %}
 
 {% endlist %}
+

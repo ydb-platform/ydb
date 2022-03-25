@@ -4,7 +4,7 @@ Both the [console](../../../interfaces/cli.md) and [web](../../../interfaces/web
 
 The `FileContent` and `FilePath` argument is a string with an alias.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT "Content of "
@@ -21,7 +21,7 @@ The argument is a string with a prefix among aliases.
 
 See also [PRAGMA File](../../../syntax/pragma.md#file) and [PRAGMA Folder](../../../syntax/pragma.md#folder).
 
-**Examples:**
+**Examples**
 
 ```yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
@@ -59,3 +59,4 @@ SELECT ListLength(ParseFile("String", "my_file.txt"));
 SELECT * FROM my_table
 WHERE int_column IN ParseFile("Int64", "my_file.txt"));
 ```
+

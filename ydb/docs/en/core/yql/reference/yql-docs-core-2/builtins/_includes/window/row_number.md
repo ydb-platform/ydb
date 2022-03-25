@@ -2,7 +2,7 @@
 
 Row number within a [partition](../../../syntax/window.md#partition). No arguments.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT
@@ -10,3 +10,4 @@ SELECT
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
+

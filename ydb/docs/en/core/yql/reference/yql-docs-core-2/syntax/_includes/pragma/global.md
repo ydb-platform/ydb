@@ -65,9 +65,9 @@ When set to "auto", it enables a new compute engine. Computing is made, whenever
 | --- | --- |
 | Flag | true |
 
-When you use  `SELECT foo.* FROM ... AS foo`, remove the `foo.` prefix from the names of the result columns.
+When you use `SELECT foo.* FROM ... AS foo`, remove the `foo.` prefix from the names of the result columns.
 
-It can be also used with a [JOIN](../../join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](../../select.md#without) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
+It can be also used with a [JOIN](../../join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](../../select.md#without) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`
 
 ### CoalesceJoinKeysOnQualifiedAll
 
@@ -77,7 +77,7 @@ It can be also used with a [JOIN](../../join.md), but in this case it may fail i
 | --- | --- |
 | Flag | true |
 
-Controls implicit Coalesce for the key `JOIN` columns in the SimpleColumns mode. If the flag is set, the Coalesce is made for key columns if there is at least one expression in the format `foo.*` or `*` in SELECT: for example, `SELECT a.* FROM T1 AS a JOIN T2 AS b USING(key)`. If the flag is not set, then Coalesce for JOIN keys is made only if there is an asterisk '*' after `SELECT`.
+Controls implicit Coalesce for the key `JOIN` columns in the SimpleColumns mode. If the flag is set, the Coalesce is made for key columns if there is at least one expression in the format `foo.*` or `*` in SELECT: for example, `SELECT a.* FROM T1 AS a JOIN T2 AS b USING(key)`. If the flag is not set, then Coalesce for JOIN keys is made only if there is an asterisk '*' after `SELECT`
 
 ### StrictJoinKeyTypes
 
@@ -116,7 +116,7 @@ For more information about the `IN` behavior when operands include `NULL`s, see 
 
 Aligns the RANK/DENSE_RANK behavior with the standard if there are optional types in the window sort keys or in the argument of such window functions. It means that:
 
-* The result type is always Uint64 rather than Uint64?.
+* The result type is always Uint64 rather than Uint64?;
 * NULLs in keys are treated as equal to each other (the current implementation returns NULL).
 You can explicitly select the old behavior by using the `DisableAnsiRankForNullableKeys` pragma. If no pragma is set, then a warning is issued and the old version works.
 
@@ -201,3 +201,4 @@ Increasing the limit on the number of dimensions in [GROUP BY](../../group_by.md
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 
 {% endif %}
+

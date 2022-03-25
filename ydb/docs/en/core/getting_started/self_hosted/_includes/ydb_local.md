@@ -6,9 +6,9 @@ This section describes how to deploy a local {{ ydb-short-name }} cluster using 
 
 As a result of completing the steps below, you'll get a YDB database running on a local VM instance that you can connect to using the following:
 
-* [Endpoint ](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`.
-* [Database location](../../../concepts/connect.md#database): `/Root/test`.
-* [Authentication ](../../../concepts/connect.md#auth-modes): Anonymous (without authentication).
+- [Endpoint](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
+- [Database location](../../../concepts/connect.md#database): `/Root/test`
+- [Authentication](../../../concepts/connect.md#auth-modes): Anonymous (without authentication)
 
 ## Installation {#install}
 
@@ -28,9 +28,9 @@ The local YDB server can be started in disk or in-memory mode:
 
 - Storing data on disk
 
-  * To store data on disk, when running the script for the first time, a 64 GB file named `ydb.data` is created in the working directory. Make sure you have enough free space to create it.
+  - To store data on disk, when running the script for the first time, a 64 GB file named `ydb.data` is created in the working directory. Make sure you have enough free space to create it.
 
-  * Run the following command from the working directory:
+  - Run the following command from the working directory:
 
     ```bash
     ./start.sh disk
@@ -38,9 +38,9 @@ The local YDB server can be started in disk or in-memory mode:
 
 - Storing data in memory
 
-  * Under in-memory data storage, the data is lost when stopping the server.
+  - Under in-memory data storage, the data is lost when stopping the server.
 
-  * Run the following command from the working directory:
+  - Run the following command from the working directory:
 
     ```bash
     ./start.sh ram
@@ -75,3 +75,4 @@ To work with the DB structure and data, you can also use the web interface embed
 ## Additional information {#advanced}
 
 Instructions for administrators on how to deploy clusters from multiple nodes and configure them are given in [Deploy YDB on-premises](../../../deploy/manual/deploy-ydb-on-premises.md) in the "Administration" section.
+

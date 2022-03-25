@@ -19,6 +19,7 @@ Table structure:
 | --- | --- | --- | --- |
 | IntervalEnd | Timestamp | 0 | Closing time of a minute or hour interval |
 | Rank | Uint32 | 1 | Rank of a top query |
+| RequestUnits | Uint64 |  | Number of [RequestUnits](../../../concepts/serverless_and_dedicated.md#serverless-options) used |
 | QueryText | Utf8 |  | Query text |
 | Duration | Interval |  | Total time of query execution |
 | EndTime | Timestamp |  | Query execution end time |
@@ -28,6 +29,7 @@ Table structure:
 | UpdateRows | Uint64 |  | Number of rows updated |
 | UpdateBytes | Uint64 |  | Number of bytes updated |
 | DeleteRows | Uint64 |  | Number of rows deleted |
+| DeleteBytes | Uint64 |  | Number of bytes deleted |
 | Partitions | Uint64 |  | Number of table partitions used during query execution |
 | UserSID | String |  | User security ID |
 | ParametersSize | Uint64 |  | Size of query parameters in bytes |
@@ -50,3 +52,4 @@ Restrictions:
 * Query text limit is 4 KB.
 * Tables with minute intervals contain the history for the last 6 hours.
 * Tables with hourly intervals contain the history for the last 2 weeks.
+

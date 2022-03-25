@@ -11,3 +11,4 @@ SELECT key || "suffix" as key, -CAST(subkey as Int32) as subkey
 FROM my_table
 ASSUME ORDER BY key, subkey DESC;
 ```
+

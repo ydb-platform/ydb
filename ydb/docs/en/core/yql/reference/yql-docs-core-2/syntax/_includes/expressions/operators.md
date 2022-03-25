@@ -6,7 +6,7 @@ The operators `+`, `-`, `*`, `/`, `%` are defined for [primitive data types](../
 
 For the Decimal data type, bankers rounding is used (to the nearest even integer).
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT 2 + 2;
@@ -23,7 +23,7 @@ The operators `=`, `==`, `!=`, `<>`, `>`, `<` are defined for:
 * Primitive data types except Yson and Json.
 * Tuples and structures with the same set of fields. No order is defined for structures, but you can check for (non-)equality. Tuples are compared element-by-element left to right.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT 2 > 1;
@@ -33,7 +33,7 @@ SELECT 2 > 1;
 
 Use the operators `AND`, `OR`, `XOR` for logical operations on Boolean values (`Bool`).
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT 3 > 0 AND false;
@@ -45,10 +45,10 @@ Bitwise operations on numbers:
 
 * `&`, `|`, `^`: AND, OR, and XOR, respectively. Don't confuse bitwise operations with the related keywords. The keywords `AND`, `OR`, and `XOR` are used * for Boolean values only*, but not for numbers.
 * ` ~ `: A negation.
-* `<<`, `>>`: Left or right shifts.
-* `|<<`, `>>|`: Circular left or right shifts.
+* `<`, `>`: Left or right shifts.
+* `|<`, `>|`: Circular left or right shifts.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT
@@ -71,7 +71,7 @@ The operators in the table are listed in descending order of precedence.
 
 | Priority | Operator | Description | Associativity |
 | --- | --- | --- | --- |
-| 1 | <code>a[], a.foo, a()</code> | Accessing a container element, calling a function | Left |
+| 1 | <code>a[], a.foo, a()</code> | Accessing a container item, calling a function | Left |
 | 2 | <code>+a, -a, ~a, NOT a</code> | Unary operators: plus, minus, bitwise and logical negation | Right |
 | 3 | <code>a &#124;&#124; b</code> | [String concatenation](#concatenation) | Left |
 | 4 | <code>a*b, a/b, a%b</code> | Multiplication, division, remainder of division | Left |

@@ -16,7 +16,7 @@ The data is split into sufficiently large blocks, and the whole data blocks are 
 
 {% note info %}
 
-In the `BERNOULLI`  mode, if the `REPEATABLE` keyword is added, the seed is mixed with the chunk ID for each chunk in the table. That's why sampling from different tables with the same content might produce different results.
+In the `BERNOULLI` mode, if the `REPEATABLE` keyword is added, the seed is mixed with the chunk ID for each chunk in the table. That's why sampling from different tables with the same content might produce different results.
 
 {% endnote %}
 
@@ -39,3 +39,4 @@ SELECT *
 FROM my_table
 SAMPLE 1.0 / 3; -- one-third of the table
 ```
+

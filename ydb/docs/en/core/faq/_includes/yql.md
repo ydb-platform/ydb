@@ -4,7 +4,7 @@
 
 #### How do I select table rows by a list of keys? {#explicit-keys}
 
-You can select table rows from the specified list of values of the table's primary key (or key prefix) using the `IN` operator:
+You can select table rows based on a specified list of table primary key (or key prefix) values using the `IN` operator:
 
 ```sql
 DECLARE $keys AS List<UInt64>;
@@ -26,7 +26,7 @@ To select rows effectively, make sure that the value types in the parameters mat
 
 #### Is search by index performed for conditions containing the LIKE operator? {#like-index}
 
-You can only use the `LIKE` operator to search by table index if it sets the row prefix:
+You can only use the `LIKE` operator to search a table index if it specifies a row prefix:
 
 ```sql
 SELECT * FROM string_key_table
@@ -37,25 +37,25 @@ WHERE Key LIKE "some_prefix%";
 
 1000 rows is the response size limit per YQL query. If a response is shortened, it is flagged as `Truncated`. To output more table rows, you can use [paginated output](../../best_practices/paging.md) or the `ReadTable` operation.
 
-#### What should I do if I get the "Datashard: Reply size limit exceeded" error? {#reply-size-exceeded}
+#### What do I do if I get the Datashard: Reply size limit exceeded error in response to a query? {#reply-size-exceeded}
 
-This error means that, when executing the query, an attempt was made to return more than 50 MB of data from one of the involved datashards, which exceeds the allowed limit.
+This error means that, as a query was running, one of the participating data shards attempted to return over 50 MB of data, which exceeds the allowed limit.
 
 Recommendations:
 
 * A general recommendation is to reduce the amount of data processed in a transaction.
-* If a Join operation is running, make sure that its method is [Index Lookup Join](#index-lookup-join).
+* If a query involves a `Join`, it is a good idea to make sure that the method used is [Index lookup Join](#index-lookup-join).
 * If a simple selection is performed, make sure that it is done by keys, or add `LIMIT` in the query.
 
-#### What should I do if I get the "Datashard program size limit exceeded" error? {#program-size-exceeded}
+#### What do I do is I get the "Datashard program size limit exceeded" in response to a query? {#program-size-exceeded}
 
-This error means that the size of the program (including the parameter values) for one of the datashards exceeded the 50 MB limit. In most cases, this indicates an attempt to write more than 50 MB of records to database tables in one transaction. All modifying operations in a transaction such as `UPSERT`, `REPLACE`, `INSERT`, or `UPDATE` count as records.
+This error means that the size of a program (including parameter values) exceeded the 50-MB limit for one of the data shards. In most cases, this indicates an attempt to write over 50 MB of data to database tables in a single transaction. All modifying operations in a transaction such as `UPSERT`, `REPLACE`, `INSERT`, or `UPDATE` count as records.
 
 You need to reduce the total size of records in one transaction. Normally, we don't recommend combining queries that logically don't require transactionality in a single transaction. When adding/updating data in batches, we recommend reducing the size of one batch to values not exceeding a few megabytes.
 
 #### How do I update only those values whose keys are not in the table? {#update-non-existent}
 
-You can use `LEFT JOIN` to mark the keys that are missing from the table and then update their values:
+You can use the `LEFT JOIN` operator to identify the keys a table is missing and update their values:
 
 ```sql
 DECLARE $values AS List<Struct<Key: UInt64, Value: String>>;
@@ -72,18 +72,18 @@ WHERE t.Key IS NULL;
 
 #### Are there any specific features of Join operations? {#join-operations}
 
-Join operations in {{ ydb-short-name }} are performed in one of two ways:
+A `Join` in {{ ydb-short-name }} is performed using one of the two methods below:
 
 * Common Join.
 * Index Lookup Join.
 
 #### Common Join {#common-join}
 
-The contents of both tables (the left and right parts of a Join) are sent to the node executing the query, where the operation is performed on the entire data. This is a universal way to perform a Join operation, which is used when more optimal methods are not applicable. For large tables, this method is either slow or doesn't work in general due to exceeding the data transfer limits.
+The contents of both tables (to the left and to the right of `Join`) are sent to the requesting node which applies the operation to the totality of the data. This is the most generic way of performing a `Join` that is used whenever other optimizations are unavailable. For large tables, this method is either slow or doesn't work in general due to exceeding the data transfer limits.
 
 #### Index Lookup Join {#index-lookup-join}
 
-For rows from the left part of a `Join` operation, a lookup is performed for the corresponding values in the right part. This method is used when the right part is a table and the `Join` operation key is the prefix of its primary key or of the secondary index key. In this method, limited selections are made from the right table instead of full reads. This lets you use it when working with large tables.
+For rows on the left of `Join`, relevant values are looked up to the right. You use this method whenever the right part is a table and the `Join` key is its primary or secondary index key prefix. In this method, limited selections are made from the right table instead of full reads. This lets you use it when working with large tables.
 
 {% note info %}
 

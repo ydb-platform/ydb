@@ -4,3 +4,4 @@ description: "A database (DB) {{ ydb-full-name }}: is an isolated, consistent se
 ---
 
 # Terms and definitions
+ 

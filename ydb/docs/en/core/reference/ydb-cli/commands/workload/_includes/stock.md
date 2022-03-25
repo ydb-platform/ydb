@@ -116,7 +116,7 @@ To run this type of load, execute the command:
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
-* `specific workload options`: [Parameters of a specific type of load](#customer_history_options).
+* `specific workload options`: [Parameters of a specific type of load](#customer_history_options)
 
 ### Parameters for getCustomerHistory {#customer_history_options}
 
@@ -147,7 +147,7 @@ To run this type of load, execute the command:
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
-* `specific workload options`: [Parameters of a specific type of load](#random_customer_history_options).
+* `specific workload options`: [Parameters of a specific type of load](#random_customer_history_options)
 
 ### Parameters for getRandomCustomerHistory {#random_customer_history_options}
 
@@ -180,7 +180,7 @@ To run this type of load, execute the command:
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
-* `specific workload options`: [Parameters of a specific type of load](#insert_random_order_options).
+* `specific workload options`: [Parameters of a specific type of load](#insert_random_order_options)
 
 ### Parameters for insertRandomOrder {#insert_random_order_options}
 
@@ -237,7 +237,7 @@ To run this type of load, execute the command:
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
-* `specific workload options`: [Parameters of a specific type of load](#submit_random_order_options).
+* `specific workload options`: [Parameters of a specific type of load](#submit_random_order_options)
 
 ### Parameters for submitRandomOrder {#submit_random_order_options}
 
@@ -294,13 +294,13 @@ To run this type of load, execute the command:
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
-* `specific workload options`: [Parameters of a specific type of load](#submit_same_order_options).
+* `specific workload options`: [Parameters of a specific type of load](#submit_same_order_options)
 
 ### Parameters for submitSameOrder {#submit_same_order_options}
 
 | Parameter name | Short name | Parameter description |
 | --- | --- | --- |
-| `--products <value>` | `-p <value>`| | Number of products per order. The default value is 100. |
+| `--products <value>` | `-p <value>` | Number of products per order. The default value is 100. |
 
 ## Examples of running the loads
 
@@ -368,3 +368,4 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 * `p99(ms)`: 99th percentile of request latency, in ms.
 * `pMax(ms)`: 100th percentile of request latency, in ms.
 * `Timestamp`: Timestamp of the end of the time window.
+

@@ -91,7 +91,7 @@ ALTER TABLE series_with_families
 	ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd```  for the ```default``` column group in the ```series_with_families``` table:
+Using the ```ALTER FAMILY``` command, you can change the parameters of the column group. The code below changes the storage type to ```hdd``` for the ```default``` column group in the ```series_with_families``` table:
 
 ```sql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";

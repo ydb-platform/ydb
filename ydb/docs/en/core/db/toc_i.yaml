@@ -1,0 +1,9 @@
+items:
+# - name: Cloud Yandex.Cloud
+#   include: { mode: link, path: yandexcloud/toc_i.yaml }
+# - name: Internal cloud Yandex-Team
+#   include: { mode: link, path: yandex-team/toc_i.yaml }
+- name: Backup and recovery
+  href: ../maintenance/backup_and_recovery.md
+- name: Diagnostics
+  include: { mode: link, path: ../troubleshooting/toc_p.yaml }

@@ -47,3 +47,4 @@ In {{ ydb-short-name }}, all columns, including key ones, may contain a NULL val
 ## Row size limit {#limit-string}
 
 To achieve high performance, we don't recommend writing rows larger than 8 MB and key columns larger than 2 KB to the DB.
+

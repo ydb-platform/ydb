@@ -18,7 +18,7 @@ A precompiled version of the [YDB CLI](../../../../reference/ydb-cli/index.md) i
 docker exec <container_id> /ydb -e localhost:2136 -d /local scheme ls
 ```
 
-Where:
+, where
 
 `<container_id>`: The container ID output when you [start](#start) it.
 

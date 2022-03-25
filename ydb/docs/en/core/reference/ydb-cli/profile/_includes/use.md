@@ -35,3 +35,4 @@ In this case, the connection parameters specified in the command line have prior
 If the `--profile` option is not specified in the command line, the {{ ydb-short-name }} CLI will try to take from the currently activated profile all the connection parameters that it couldn't define in other ways (from command-line options or environment variables, as described in [Connecting to and authenticating with a database](../../connect.md)).
 
 Implicit use of the activated profile may cause errors, so we recommend that you read the [Activated profile](../activate.md) article before using this mode.
+

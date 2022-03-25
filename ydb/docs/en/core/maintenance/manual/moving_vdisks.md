@@ -16,11 +16,11 @@ If SelfHeal is disabled or fails to move VDisks, you'll have to run this operati
 
 1. Make sure that the VDisk has actually failed.
 
-    Write down the node's FQDN, ic-port, VDisk path, and pdisk-id.
+    Write down the node's FQDN, ic-port, VDisk path, and pdisk-id
 
-2. Go to any cluster node.
+2. Go to any cluster node
 
-3. Move the VDisk.
+3. Move the VDisk
 
     ```bash
     kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-port>} Path: "<Path to the storage volume part label>" PDiskId: <pdisk-id> Status: BROKEN } }'
@@ -28,14 +28,15 @@ If SelfHeal is disabled or fails to move VDisks, you'll have to run this operati
 
 ## Enable the VDisk back after reassignment {#return_a_device_to_work}
 
-1. In Monitoring, make sure that the PDisk is actually operable.
+1. In Monitoring, make sure that the PDisk is actually operable
 
-    Write down the node's FQDN, ic-port, store path, and pdisk-id.
+    Write down the node's FQDN, ic-port, store path, and pdisk-id
 
-2. Go to any cluster node.
+2. Go to any cluster node
 
-3. Enable the PDisk back.
+3. Enable the PDisk back
 
     ```bash
     kikimr admin bs config invoke --proto 'Command { UpdateDriveStatus { HostKey: { Fqdn: "<host>" IcPort: <ic-port>} Path: "<Path to the storage volume part label>" PDiskId: <pdisk-id> Status: ACTIVE } }'
     ```
+

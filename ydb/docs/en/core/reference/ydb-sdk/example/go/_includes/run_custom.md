@@ -9,12 +9,12 @@ Run the command as follows:
 go run ./basic -ydb="<endpoint>?database=<database>" )
 ```
 
-Where:
+, where
 
-* `<endpoint>` is the [Endpoint](../../../../../concepts/connect.md#endpoint)
-* `<database>` is the [DB location](../../../../../concepts/connect.md#database).
-* `<auth_mode_var`> is the [Environment variable](../../../auth.md#env) that determines the authentication mode.
-* `<auth_mode_value>` is the authentication parameter value for the selected mode.
+- `<endpoint>` is the [Endpoint](../../../../../concepts/connect.md#endpoint)
+- `<database>` is the [DB location](../../../../../concepts/connect.md#database).
+- `<auth_mode_var`> is the [Environment variable](../../../auth.md#env) that determines the authentication mode.
+- `<auth_mode_value>` is the authentication parameter value for the selected mode.
 
 For example:
 
@@ -24,3 +24,4 @@ go run ./basic -ydb="grpcs://ydb.example.com:2135?database=/somepath/somelocatio
 ```
 
 {% include [../../_includes/pars_from_profile_hint.md](../../_includes/pars_from_profile_hint.md) %}
+

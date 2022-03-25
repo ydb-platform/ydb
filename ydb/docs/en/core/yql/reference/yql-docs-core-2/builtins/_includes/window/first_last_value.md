@@ -4,7 +4,7 @@ Access values from the first and last rows of the [window frame](../../../syntax
 
 Optionally, `OVER` can be preceded by the additional modifier `IGNORE NULLS`. It changes the behavior of functions to the first or last __non-empty__ (i.e., non-`NULL`) value among the window frame rows. The antonym of this modifier is `RESPECT NULLS`: it's the default behavior that can be omitted.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT
@@ -19,3 +19,4 @@ SELECT
 FROM my_table
 WINDOW w AS (ORDER BY key);
 ```
+

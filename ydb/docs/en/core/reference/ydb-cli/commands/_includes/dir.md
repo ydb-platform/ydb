@@ -25,17 +25,17 @@ Issues:
 pathId: [OwnerId: <some>, LocalPathId: <some>], path type: EPathTypeDir, path state: EPathStateNoChanges
 ```
 
-The full path syntax starting with a `/` character is also supported. The full path must begin with the [database location](../../../../concepts/connect.md#database)specified in the connection parameters or with which operations are allowed via the established connection to the cluster.
+The full path syntax starting with a `/` character is also supported. The full path must begin with the [database location](../../../../concepts/connect.md#database) specified in the connection parameters or with which operations are allowed via the established connection to the cluster.
 
 Examples:
 
-* Creating a directory at the database root:
+- Creating a directory at the database root
 
   ```bash
   {{ ydb-cli }} --profile db1 scheme mkdir dir1
   ```
 
-* Creating directories at the specified path from the database root:
+- Creating directories at the specified path from the database root
 
   ```bash
   {{ ydb-cli }} --profile db1 scheme mkdir dir1/dir2/dir3

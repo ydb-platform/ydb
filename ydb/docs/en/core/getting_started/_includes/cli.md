@@ -4,8 +4,8 @@
 
 To run commands via the CLI, you will need database connection settings you can retrieve when [creating](../create_db.md) a connection:
 
-* [Endpoint](../../concepts/connect.md#endpoint).
-* [Database name](../../concepts/connect.md#database).
+* [Endpoint](../../concepts/connect.md#endpoint)
+* [Database name](../../concepts/connect.md#database)
 
 You may also need a token or login/password if the database requires [authentication](../auth.md). To execute the below scenario, you need to select an option for saving them in an environment variable.
 
@@ -44,7 +44,7 @@ To test connection, you can use the command for [listing objects](../../referenc
 {{ ydb-cli }} -e <endpoint> -d <database> scheme ls
 ```
 
-If the command is successful, a list of objects in the database is shown in response. If you haven't created anything in the database yet, the output will only contain the `.sys` and `.sys_health` system directories with [diagnostic representations of YDB](../../troubleshooting/system_views.md).
+If the command is successful, a list of objects in the database is shown in response. If you haven't created anything in the database yet, the output will only contain the `.sys` and `.sys_health` system directories with [diagnostic representations of YDB](../../troubleshooting/system_views_db.md).
 
 {% include [cli/ls_examples.md](cli/ls_examples.md) %}
 
@@ -63,7 +63,7 @@ You will be interactively prompted for connection parameters to be linked with t
 Check that the profile is OK with the `scheme ls` command:
 
 ```bash
-{{ ydb-cli }} --profile db1 scheme ls
+{{ ydb-cli }} -p db1 scheme ls
 ```
 
 ## Executing an YQL script {#yql}
@@ -71,7 +71,7 @@ Check that the profile is OK with the `scheme ls` command:
 The {{ ydb-short-name }} CLI `scripting yql` command lets you execute any command (both DDL and DML) in [YQL](../../yql/reference/index.md), an SQL dialect supported by {{ ydb-short-name }}:
 
 ```bash
-{{ ydb-cli }} --profile <profile_name> yql -s <yql_request>
+{{ ydb-cli }} -p <profile_name> yql -s <yql_request>
 ```
 
 For example:
@@ -79,19 +79,19 @@ For example:
 * Creating a table:
 
   ```bash
-  {{ ydb-cli }} --profile db1 yql -s "create table t1( id uint64, primary key(id))"
+  {{ ydb-cli }} -p db1 yql -s "create table t1( id uint64, primary key(id))"
   ```
 
 * Adding a record:
 
   ```bash
-  {{ ydb-cli }} --profile db1 yql -s "insert into t1(id) values (1)"
+  {{ ydb-cli }} -p db1 yql -s "insert into t1(id) values (1)"
   ```
 
 * Data selects:
 
   ```bash
-  {{ ydb-cli }} --profile db1 yql -s "select * from t1"
+  {{ ydb-cli }} -p db1 yql -s "select * from t1"
   ```
 
 If you get the `Profile db1 does not exist` error, that means you neglected to create a profile in the [previous step](#profile).
@@ -105,3 +105,4 @@ The YDB CLI supports individual commands with complete sets of options for any e
 ## Learn more about YDB {#next}
 
 Proceed to the [YQL - Getting started](../yql.md) article to learn more about YDB.
+

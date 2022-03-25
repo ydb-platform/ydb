@@ -8,8 +8,8 @@ Table structure:
 
 | **Field** | **Type** | **Key** | **Value** |
 | --- | --- | --- | --- |
-| OwnerId | Uint64 | 0 | ID of the datashard serving the table |
-| PathId | Uint64 | 1 | Path ID in the datashard |
+| OwnerId | Uint64 | 0 | ID of the SchemeShard serving the table |
+| PathId | Uint64 | 1 | Path ID in the SchemeShard |
 | PartIdx | Uint64 | 2 | Partition sequence number |
 | DataSize | Uint64 |  | Approximate partition size in bytes |
 | RowCount | Uint64 |  | Approximate number of rows |
@@ -26,7 +26,7 @@ Table structure:
 | RowDeletes | Uint64 |  | Number of rows deleted since the start |
 | RangeReads | Uint64 |  | Number of row ranges read since the start |
 | RangeReadRows | Uint64 |  | Number of rows read in the ranges since the start |
-| InFlightTxCount | Uint64 |  | Number of in-flight transactions on the partition |
+| InFlightTxCount | Uint64 |  | Number of in-flight transactions |
 | ImmediateTxCompleted | Uint64 |  | Number of one-shard transactions completed since the start |
 | CoordinatedTxCompleted | Uint64 |  | Number of coordinated transactions completed since the start |
 | TxRejectedByOverload | Uint64 |  | Number of transactions rejected due to overload (since the start) |
@@ -35,3 +35,4 @@ Table structure:
 Restrictions:
 
 * Cumulative fields (RowReads, RowUpdates, and so on) store the accumulated values since the last start of the tablet serving the partition
+

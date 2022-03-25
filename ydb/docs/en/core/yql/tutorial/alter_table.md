@@ -19,3 +19,4 @@ Delete the column you added from the table:
 ```sql
 ALTER TABLE episodes DROP COLUMN viewers;
 ```
+

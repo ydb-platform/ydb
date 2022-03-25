@@ -4,8 +4,8 @@
 
 * ```Url::Normalize(String) -> String?```
 
-Normalizes the URL in a robot-friendly way: converts the hostname into lowercase, strips out certain fragments, etc.
-The normalization result depends only on the URL itself. The normalization **DOES NOT** include operations depending on the external data: transformation based on duplicates, mirrors, etc.
+Normalizes the URL in a robot-friendly way: converts the hostname into lowercase, strips out certain fragments, and so on.
+The normalization result only depends on the URL itself. The normalization **DOES NOT** include operations depending on the external data: transformation based on duplicates, mirrors, etc.
 
 Returned value:
 

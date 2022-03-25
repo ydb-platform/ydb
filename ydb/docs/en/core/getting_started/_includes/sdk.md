@@ -11,3 +11,4 @@ Follow these steps to launch a simple app using {{ ydb-short-name }}:
    * [Go](../../reference/ydb-sdk/example/go/index.md)
 
 For more information about the {{ ydb-short-name }} SDK, see [Working with the {{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md).
+

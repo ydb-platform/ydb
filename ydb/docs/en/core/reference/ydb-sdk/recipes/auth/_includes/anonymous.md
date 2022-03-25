@@ -2,7 +2,7 @@
 
 {% include [work in progress message](../../_includes/addition.md) %}
 
-Below are examples of the code for anonymous authentication in different {{ ydb-short-name }} SDKs.
+Below are examples of the code for anonymous authentication in different {{ ydb-short-name }} SDKs
 
 {% list tabs %}
 
@@ -11,3 +11,4 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
   {% include [go.md](anonymous/go.md) %}
 
 {% endlist %}
+

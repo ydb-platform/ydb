@@ -18,8 +18,8 @@ When adding content, you should first choose where to add it: to the OpenSource 
 
 In the sections where the requirements differ for basic content and customization, there are two corresponding bookmarks:
 
-* **Core**: The core of any documentation, the basic content.
-* **Overlay**: Content that is overlaid on top of the core and adapting it to a custom build.
+- **Core**: The core of any documentation, the basic content.
+- **Overlay**: Content that is overlaid on top of the core and adapting it to a custom build.
 
 All the content of the OpenSource build is part of the core, and zero customization is applied when building it, so when you change it, you'll only need the "Core" bookmark.
 
@@ -31,9 +31,9 @@ The basic structure of the source code directories is based on the subject of th
 
 Each subject directory must contain the "Overview" article with the `index.md` filename. The "Overview" article:
 
-* Describes what the articles in this directory tell about.
-* Optionally, provides a list of links to all or some of the most important articles.
-* Optionally, provides a set of "See also" links to other related articles and sections.
+- Describes what the articles in this directory tell about.
+- Optionally, provides a list of links to all or some of the most important articles.
+- Optionally, provides a set of "See also" links to other related articles and sections.
 
 The presence of the "Overview" article lets you refer to the entire directory rather than a specific article and convert articles into directories without losing the referential integrity.
 
@@ -78,7 +78,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
   `subject1/article1.md`:
 
   ```markdown
-
+  
   {% include [definition.md](_includes/article1/definition.md) %}
 
   {% include [examples.md](_includes/article1/examples.md) %}
@@ -106,43 +106,43 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
   When redefining the content, you can:
 
-  * Add additional content to the beginning or end of an article.
+  - Add additional content to the beginning or end of an article.
 
     `subject1/article1.md`:
 
     ```md
-    
+
     {% include [article1](_includes/article1.md) %}
     
     In addition to the basic authorization methods, our company uses nanotube-based authorization.
     ```
 
-  * Insert additional content between include directives.
+  - Insert additional content between include directives.
 
     `subject1/article1.md`:
 
     ```markdown
-    
+
     {% include [definition.md](_includes/article1/definition.md) %}
-    
+
     In our company, the amount of DB data is limited to 150ZB.
-    
+
     {% include [examples.md](_includes/article1/examples.md) %}
-    
+
     Example 2:
     The quick brown fox jumps over the lazy dog.
     ```
 
-  * Remove some of the content of the original article from the build by removing the corresponding include directive.
+  - Remove some of the content of the original article from the build by removing the corresponding include directive.
 
     `subject1/article1.md`:
 
     ```markdown
-    
+
     {% include [definition.md](_includes/article1/definition.md) %}
-    
+
     In our company, the amount of DB data is limited to 150ZB.
-    
+
     Example:
     The quick brown fox jumps over the lazy dog.
     ```
@@ -155,10 +155,10 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
 ### Specifics of using the include directive {#include-hints}
 
-* The `_includes` contents are not published, so it is useless and forbidden to refer to them, it can only be included in articles by the `{% include ... %}` directive. Unfortunately, when building documentation locally, the contents of _includes remain available and operational, and the error only occurs when deploying the documentation on the farm.
-* Make sure to leave empty lines around the `{% include ... %}` directive, otherwise, it won't be executed during the build.
-* Write a file name in square brackets so that there is something to click on when viewing it in the default viewer on github (which does not understand what include is), and so that one include in it visually differs from the other.
-* After `{%` at the beginning and before `%}`, a space is required at the end, otherwise the include won't be executed during the build.
+- The `_includes` contents are not published, so it is useless and forbidden to refer to them, it can only be included in articles by the `{% include ... %}` directive. Unfortunately, when building documentation locally, the contents of _includes remain available and operational, and the error only occurs when deploying the documentation on the farm.
+- Make sure to leave empty lines around the `{% include ... %}` directive, otherwise, it won't be executed during the build.
+- Write a file name in square brackets so that there is something to click on when viewing it in the default viewer on github (which does not understand what include is), and so that one include in it visually differs from the other.
+- After `{%` at the beginning and before `%}`, a space is required at the end, otherwise the include won't be executed during the build.
 
 ### Other use cases for include {#include-reuse}
 
@@ -291,15 +291,15 @@ The text specified in square brackets is displayed in the browser until the imag
 
 Desirable image formats:
 
-* Charts: [.SVG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Scalable_Vector_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/SVG){% endif %}
-* Screenshots: [.PNG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Portable_Network_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/PNG){% endif %}
+- Charts: [.SVG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Scalable_Vector_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/SVG){% endif %}
+- Screenshots: [.PNG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Portable_Network_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/PNG){% endif %}
 
 Since an image is part of an article, it is impossible to post the image without this article. If there is no text of the article yet, determine the subject directory for its placement and the file name of the future article and only specify a link to the image in the text (keep in mind that the [text of the article is placed in the `_includes` subdirectory](#articles)!), and do not include the article itself in the TOC until it is ready for publication.
 
 When inserting images, you can also specify:
 
-* A hint to be shown when hovering over an image: `![Text](path/file "Hint")`. We don't recommend using it, since lots of modern devices have no mouse pointer.
-* Image size: `![Text](path/file =XSIZExYSIZE)`. We recommend that you use it when specifying the XSIZE for SVG images  so that they are expanded properly by the width of the documentation screen, regardless of the resolution they were saved with: `![Diagram1](../_assets/diagram1.svg =800x)`. If you only specify the X-size in this way, the Y-size is selected automatically with the proportions maintained.
+- A hint to be shown when hovering over an image: `![Text](path/file "Hint")`. We don't recommend using it, since lots of modern devices have no mouse pointer.
+- Image size: `![Text](path/file =XSIZExYSIZE)`. We recommend that you use it when specifying the XSIZE for SVG images so that they are expanded properly by the width of the documentation screen, regardless of the resolution they were saved with: `![Diagram1](../_assets/diagram1.svg =800x)`. If you only specify the X-size in this way, the Y-size is selected automatically with the proportions maintained.
 
 ## Backward compatibility {#compatibility}
 
@@ -321,3 +321,4 @@ If you cannot but move an article, do the following:
    ```
 
 As a result, this article won't be listed anywhere in the TOC, but will be available when following a direct link provided that you keep it somewhere.
+

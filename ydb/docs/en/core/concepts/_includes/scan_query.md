@@ -1,17 +1,17 @@
 # Scan queries in {{ ydb-short-name }}
 
-Scan Queries is a separate data access interface designed primarily for performing analytical ad hoc queries on a DB.
+Scan Queries is a separate data access interface designed primarily for running analytical ad hoc queries against a DB.
 
 This method of executing queries has the following unique features:
 
 * Only *Read-Only* queries.
 * In *SERIALIZABLE_RW* mode, a data snapshot is taken and then used for all subsequent operations. As a result, the impact on OLTP transactions is minimal (only taking a snapshot).
-* The result of the query is a data stream ([grpc stream](https://grpc.io/docs/what-is-grpc/core-concepts/)). This means scan queries have no limit on the number of rows in the result.
+* The output of a query is a data stream ([grpc stream](https://grpc.io/docs/what-is-grpc/core-concepts/)). This means scan queries have no limit on the number of rows in the result.
 * Due to the high overhead, it is only suitable for ad hoc queries.
 
 {% node info %}
 
-From the *Scan Queries* interface, you can query [system tables](../../troubleshooting/system_views.md).
+From the _Scan Queries_ interface, you can query [system tables](../../troubleshooting/system_views_db.md).
 
 {% endnote %}
 
@@ -19,7 +19,7 @@ Scan queries cannot currently be considered an effective solution for running OL
 
 * The query duration is limited to 5 minutes.
 * Many operations (including sorting) are performed entirely in memory, which may lead to resource shortage errors when running complex queries.
-* Only one strategy is currently used for Joins: *MapJoin* (a.k.a. *Broadcast Join*), where the "right" table is converted to a map, so it should be no more than units of gigabytes.
+* A single strategy is currently in use for joins: *MapJoin* (a.k.a. *Broadcast Join*) where the "right" table is converted to a map; and therefore, must be no more than single gigabytes in size.
 * Prepared form isn't supported, so for each call, a query is compiled.
 * There is no optimization for point reads or reading small ranges of data.
 * The SDK doesn't support automatic retry.
@@ -53,3 +53,4 @@ class TTableClient {
 ```
 
 {% endif %}
+

@@ -25,7 +25,7 @@ When performing reads, the blob ID is specified, which can be arbitrary, but pre
 
 Blobs are written in a logical entity called *group*. A special actor called DS proxy is created on every node for each group that is written to. This actor is responsible for performing all operations related to the group. The actor is created automatically through the NodeWarden service that will be described below.
 
-Physically, a group is a set of multiple physical devices (OS block devices) that are located on different nodes so that the failure of one device correlates as little as possible with the failure of another device. These devices are usually located in different racks or different datacenters. On each of these devices, some space is allocated for the group, which is managed by a special service called *VDisk*. Each VDisk runs on top of a block storage device from which it is separated by another service called *PDisk*. Blobs are broken into fragments based on *erasure coding* with these fragments written to VDisks. Before splitting into fragments, optional encryption of the data in the group can be performed.
+Physically, a group is a set of multiple physical devices (OS block devices) that are located on different nodes so that the failure of one device correlates as little as possible with the failure of another device. These devices are usually located in different racks or different datacenters. On each of these devices, some space is allocated for the group, which is managed by a special service called _VDisk_. Each VDisk runs on top of a block storage device from which it is separated by another service called _PDisk_. Blobs are broken into fragments based on _erasure coding_ with these fragments written to VDisks. Before splitting into fragments, optional encryption of the data in the group can be performed.
 
 This scheme is shown in the figure below.
 
@@ -45,29 +45,30 @@ All fail realms have the same number of fail domains, and all fail domains inclu
 
 Each PDisk has an ID that consists of the number of the node that it is running on and the internal number of the PDisk inside this node. This ID is usually written as NodeId:PDiskId. For example, 1:1000. If you know the PDisk ID, you can calculate the service ActorId of this disk and send it a message.
 
-Each VDisk runs on top a specific PDisk and has a *slot ID* comprising three fields (NodeID:PDiskId:VSlotId) as well as the above-mentioned VDisk ID. Strictly speaking, there are different concepts: a slot is a reserved location on a PDISK occupied by a VDisk while a VDisk is an element of a group that occupies a certain slot and performs operations with the slot. Similarly to PDisks, if you know the slot ID, you can calculate the service ActorId of the running VDisk and send it a message. To send messages from the DS proxy to the VDisk, an intermediate actor called *BS_QUEUE* is used.
+Each VDisk runs on top a specific PDisk and has a _slot ID_ comprising three fields (NodeID:PDiskId:VSlotId) as well as the above-mentioned VDisk ID. Strictly speaking, there are different concepts: a slot is a reserved location on a PDISK occupied by a VDisk while a VDisk is an element of a group that occupies a certain slot and performs operations with the slot. Similarly to PDisks, if you know the slot ID, you can calculate the service ActorId of the running VDisk and send it a message. To send messages from the DS proxy to the VDisk, an intermediate actor called _BS_QUEUE_ is used.
 
-The composition of each group is not constant. It may change while the system is running. Hence the concept of a group generation. Each "GroupId:GroupGeneration" pair corresponds to a fixed set of slots (a vector that consists of N slot IDs, where N is equal to group size) that stores the data of an entire group. *Group generation is not to be confused with tablet generation since they are not in any way related*.
+The composition of each group is not constant. It may change while the system is running. Hence the concept of a group generation. Each "GroupId:GroupGeneration" pair corresponds to a fixed set of slots (a vector that consists of N slot IDs, where N is equal to group size) that stores the data of an entire group. _Group generation is not to be confused with tablet generation since they are not in any way related_.
 
 As a rule, groups of two adjacent generations differ by no more than one slot.
 
 ### Subgroups
 
-A special concept of a *subgroup* is introduced for each blob. It is an ordered subset of group disks with a strictly constant number of elements that will store the blob's data and that depends on the encoding type (the number of elements in a group must be the same or greater). For single-datacenter groups with conventional encoding, this subset is selected as the first N elements of a cyclic disk permutation in the group, where the permutation depends on the BlobId hash.
+A special concept of a _subgroup_ is introduced for each blob. It is an ordered subset of group disks with a strictly constant number of elements that will store the blob's data and that depends on the encoding type (the number of elements in a group must be the same or greater). For single-datacenter groups with conventional encoding, this subset is selected as the first N elements of a cyclic disk permutation in the group, where the permutation depends on the BlobId hash.
 
 Each disk in the subgroup corresponds to a disk in the group, but is limited by the allowed number of stored blobs. For example, for block-4-2 encoding with four data parts and two parity parts, the functional purpose of the disks in a subgroup is as follows:
 
 | Number in the subgroup | Possible PartIds |
-| ---------------------- | ---------------- |
-| 0                      | 1                |
-| 1                      | 2                |
-| 2                      | 3                |
-| 3                      | 4                |
-| 4                      | 5                |
-| 5                      | 6                |
-| 6                      | 1,2,3,4,5,6      |
-| 7                      | 1,2,3,4,5,6      |
+| ------------------- | ------------------- |
+| 0 | 1 |
+| 1 | 2 |
+| 2 | 3 |
+| 3 | 4 |
+| 4 | 5 |
+| 5 | 6 |
+| 6 | 1,2,3,4,5,6 |
+| 7 | 1,2,3,4,5,6 |
 
-In this case, PartID=1..4 corresponds to the data parts (which are obtained by splitting the original blob into 4 equal parts), and PartID=5..6 are parity fragments. Disks numbered 6 and 7 in the subgroup are called *handoff disks*. Any part, either one or more, can be written to them. Disks 0..5 can only store the corresponding blob parts.
+In this case, PartID=1..4 corresponds to the data parts (which are obtained by splitting the original blob into 4 equal parts), and PartID=5..6 are parity fragments. Disks numbered 6 and 7 in the subgroup are called _handoff disks_. Any part, either one or more, can be written to them. Disks 0..5 can only store the corresponding blob parts.
 
 In practice, when performing writes, the system tries to write 6 parts to the first 6 disks of the subgroup and, in the vast majority of cases, these attempts are successful. However, if any of the disks is not available, a write operation cannot succeed, which is when handoff disks kick in receiving the parts belonging to the disks that did not respond in time. It may turn out that several fragments of the same blob are sent to the same handoff disk as a result of complicated brakes and races. This is acceptable although it makes no sense in terms of storage: each fragment must have its own unique disk.
+

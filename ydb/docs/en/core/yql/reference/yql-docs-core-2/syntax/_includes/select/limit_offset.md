@@ -2,9 +2,9 @@
 
 `LIMIT` limits the output to the specified number of rows. By default, the output is not restricted.
 
-`OFFSET` specifies the offset from the beginning (in rows). By default, it's zero.
+`OFFSET`: specifies the offset from the beginning (in rows). By default, it's zero.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT key FROM my_table
@@ -20,3 +20,4 @@ LIMIT 7 OFFSET 3;
 SELECT key FROM my_table
 LIMIT 3, 7; -- equivalent to the previous example
 ```
+

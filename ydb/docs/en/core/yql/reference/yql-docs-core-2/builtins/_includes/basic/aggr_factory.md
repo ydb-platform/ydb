@@ -7,7 +7,8 @@ Arguments:
 1. A string in double quotes with the name of an aggregate function, for example ["MIN"](../../aggregation.md#min).
 2. Optional parameters of the aggregate function that are data-independent. For example, the percentile value in [PERCENTILE](../../aggregation.md#percentile).
 
-The resulting factory can be used as the second parameter of the function [AGGREGATE_BY](../../aggregation.md#aggregateby).
+The resulting factory can be used as the second parameter of the function [AGGREGATE_BY](..
+/../aggregation.md#aggregateby).
 If the aggregate function is applied to two columns instead of one, as, for example, [MIN_BY](../../aggregation.md#minby), then in [AGGREGATE_BY](../../aggregation.md#aggregateby), the first argument passes a `Tuple` of two values. See more details in the description of the applicable aggregate function.
 
 **Examples:**
@@ -21,12 +22,12 @@ FROM my_table;
 
 ## AggregateTransform... {#aggregatetransform}
 
-`AggregateTransformInput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of input elements is performed before starting aggregation.
+`AggregateTransformInput()` converts an [aggregation factory](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function, to other factory, in which the specified transformation of input items is performed before starting aggregation.
 
 Arguments:
 
 1. Aggregation factory.
-2. A lambda function with one argument that converts an input element.
+2. A lambda function with one argument that converts an input item.
 
 **Examples:**
 
@@ -57,7 +58,7 @@ select ListAggregate([1,2,3], $g); -- 12
 
 ## AggregateFlatten {#aggregateflatten}
 
-Adapts a factory for [aggregation functions](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function in a way that allows aggregation of list input elements. This operation is similar to [FLATTEN LIST BY](../../../syntax/flatten.md): Each list element is aggregated.
+Adapts a factory for [aggregation functions](../../aggregation.md), for example, obtained using the [AggregationFactory](#aggregationfactory) function in a way that allows aggregation of list input items. This operation is similar to [FLATTEN LIST BY](../../../syntax/flatten.md): Each list item is aggregated.
 
 Arguments:
 

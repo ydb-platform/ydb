@@ -20,7 +20,7 @@ The **Throttling limit** can be enabled or disabled. We recommend that you alway
 
 If the limit is exceeded, a query is not accepted for execution and the `Throughput limit exceeded` error is returned. This error means that you can safely resend your query later. We recommend that you use the statements supplied as part of the {{ ydb-short-name }} SDK when re-sending. The proposed statements implement repetition algorithms that use different repetition strategies depending on error type and code: zero delay, exponentially increasing delay, fast or slow repetition, and others.
 
-The limit is triggered with some delay, so the `Throughput limit exceeded` error is returned for a subsequent query rather than the specific query that resulted in exceeding the limit. Once the limit is triggered, queries won't be accepted for execution for a period approximately equal to the ratio of the queries exceeding the limit to the limit itself. If you use 1000 RUs, for instance, for the execution of a single query while your limit is 100 RUs, new queries won't be accepted for 10 seconds.
+The limit is triggered with some delay, so the `Throughput limit exceeded` error is returned for a subsequent query rather than the specific query that resulted in exceeding the limit. Once the limit is triggered, queries won't be accepted for execution for a period approximately equal to the ratio of the queries exceeding the limit to the limit itself. For example, if you use 1000 RUs for the execution of a single query while your limit is 100 RUs/sec, new queries won't be accepted for 10 seconds.
 
 To reduce the risk of rejection under uneven load, {{ ydb-short-name }} flexibly applies restrictions using a bandwidth reservation mechanism (`burst capacity`). As long as you use fewer RU processing requests than specified in the restriction, the unused bandwidth is reserved. During peak usage, more bandwidth than specified in the restriction may be temporarily available from the accumulated reserve.
 
@@ -39,3 +39,4 @@ The **Maximum amount of data** limit for a serverless database limits the amount
 You can change the **Maximum amount of data** limit interactively at any time, both via the graphical console and the CLI and raise or reduce it without limitations. This allows you to quickly adjust it as needed.
 
 We don't recommend setting the **Maximum amount of data** limit below the current actual amount because in this state, all data modification operations, including DELETE, become unavailable. You will only be able to reduce the amount of data with the DROP TABLE or DROP INDEX commands. If the limit is accidentally set below the actual volume, we recommend returning it to the operating value exceeding the actual volume with some redundancy.
+

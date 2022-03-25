@@ -48,8 +48,8 @@ The highest level of security and performance is provided when using the **Metad
 
 When choosing the authentication mode among those supported by the server and environment, follow the recommendations below:
 
-* **Anonymous** can be used on self-deployed local {{ ydb-short-name }} clusters that are inaccessible over the network.
-* **Access Token** can be used when other modes are not supported server side or for setup/debugging purposes. It does not require that the client access IAM. However, if the IAM system supports an API for token rotation, fixed tokens issued by this IAM usually have a short validity period, which makes it necessary to update them manually in the IAM system on a regular basis.
+* **You would normally use Anonymous** on self-deployed local {{ ydb-short-name }} clusters that are inaccessible over the network.
+* **You would use Access Token** when other modes are not supported server side or for setup/debugging purposes. It does not require that the client access IAM. However, if the IAM system supports an API for token rotation, fixed tokens issued by this IAM usually have a short validity period, which makes it necessary to update them manually in the IAM system on a regular basis.
 * **Refresh Token** can be used when performing one-time manual operations under a personal account, for example, related to DB data maintenance, performing ad-hoc operations in the CLI, or running applications from a workstation. You can manually obtain this token from IAM once to have it last a long time and save it in an environment variable on a personal workstation to use automatically and with no additional authentication parameters on CLI launch.
 * **Service Account Key** is mainly used for applications designed to run in environments where the **Metadata** mode is supported, when testing them outside these environments (for example, on a workstation). It can also be used for applications outside these environments, working as an analog of **Refresh Token** for service accounts. Unlike a personal account, service account access objects and roles can be restricted.
 * **Metadata** is used when deploying applications in clouds. Currently, this mode is supported on virtual machines and in {{ sf-name }} {{ yandex-cloud }}.
@@ -62,7 +62,7 @@ When using modes in which the {{ ydb-short-name }} client accesses the IAM syste
 
 ## Database location {#database}
 
-Database location (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. Has the format [path to the file]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Path_(computing)){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Путь_к_файлу){% endif %} and uses the `/` character as separator. It always starts with a `/`.
+Database location (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. Has the format [path to file]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Path_(computing)){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Путь_к_файлу){% endif %} and uses the `/` character as separator. It always starts with a `/`.
 
 A {{ ydb-short-name }} cluster may have multiple databases deployed, and their location is defined by the cluster configuration. Like the endpoint, `database` for cloud databases is displayed in the management console on the desired database page, and can also be obtained via the CLI of the cloud provider.
 
@@ -103,3 +103,4 @@ The OS that the client runs on already include a set of root certificates from t
 For token rotation, the {{ ydb-short-name }} SDK and CLI use a gRPC request to the {{ yandex-cloud }} IAM API [IamToken - create]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/iam/api-ref/grpc/iam_token_service#Create){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/api-ref/grpc/iam_token_service#Create){% endif %}. In **Refresh Token** mode, the token specified in the OAuth parameter is passed in the `yandex_passport_oauth_token` attribute. In **Service Account Key** mode, a short-lived JWT token is generated from the specified service account attributes and an encryption key and passed in the `jwt` property. The source code for generating the JWT is available as part of the SDK (for example, the `get_jwt()` method in the [Python code](https://github.com/ydb-platform/ydb-python-sdk/blob/main/ydb/iam/auth.py)).
 
 In the {{ ydb-short-name }} SDK and CLI, you can substitute the host used for accessing the API for obtaining tokens. This makes it possible to implement a similar API in corporate contexts.
+

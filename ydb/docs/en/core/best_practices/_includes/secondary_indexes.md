@@ -1,110 +1,66 @@
 # Secondary indexes
 
-This section describes how to use [secondary indexes](../../concepts/secondary_indexes.md) for selecting data.
+[An index](https://en.wikipedia.org/wiki/Database_index) is an auxiliary data structure that lets you find data that meets certain criteria in a database, without having to search every row in a DB table, as well as obtain sorted samples without performing actual sorting that requires processing a complete set of all sorted data.
 
-In general, transactions using a global index are [distributed transactions](../../concepts/transactions.md#distributed-tx). A query can be executed as a single-shard transaction in the following cases:
+Data in YDB tables is always indexed by primary key. This means that fetching any record from a table with the specified values of primary key fields will always take the minimum fixed time, regardless of the total number of records in the table. A primary key index also lets you get any consecutive range of records in ascending or descending order of primary key values. The execution time of this operation will only depend on the number of records received, regardless of the total number of records in the table.
 
-* Point read by primary key.
-* Point read by index column if requested data is a primary key, part of it, or there is a copy of the data in a [covering index](../../concepts/secondary_indexes.md#covering).
-* Point blind write in a table with an [asynchronous index](../../concepts/secondary_indexes.md#async).
+To use similar features for any table fields or combinations thereof, additional indexes called **secondary indexes** can be built based on them.
 
-{% note warning %}
+Transactional systems use indexes to avoid performance degradation and an increase in the query execution cost if the amount of stored data grows.
 
-The size of a response to a client may not exceed 50 MB. The size of data extracted from a single table shard per YQL query may not exceed 5 GB. For large tables and queries, these limits may make it impossible to fully scan all table rows.
+This article describes the basic operations with secondary indexes and provides links to detailed materials for each operation. For information about different types of secondary indexes and their specifics, see the [Secondary indexes](../../concepts/secondary_indexes.md) article in the "Concepts" section.
 
-{% endnote %}
+## Creating secondary indexes {#create}
 
-## Creating a table {#create}
+A secondary index is a data schema object that can be set when creating a table with the [YQL `CREATE TABLE`](../../yql/reference/syntax/create_table.md) statement or added to it later with the [YQL `ALTER TABLE`](../../yql/reference/syntax/alter_table.md) statement.
 
-To create a table named `series`, run the query:
+The [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add) command for creating an index is supported in the YDB CLI.
 
-```sql
-CREATE TABLE series
-(
-    series_id Uint64,
-    title Utf8,
-    series_info Utf8,
-    release_date Uint64,
-    views Uint64,
-    PRIMARY KEY (series_id),
-    INDEX views_index GLOBAL ON (views)
-);
-```
+Since an index contains its own data that is derived from table data, an initial index build operation is performed when creating an index in an existing data table. This may take a long time. This operation is run in the background and is non-blocking for the table. However, you can't use a new index until its build completes.
 
-The `series` table has a key column named `series_id`. An index by primary key is created in {{ ydb-short-name }} automatically. Since the stored data is sorted in order of ascending primary key values, selecting data by this key will be efficient. An example of this selection is a search for all broadcasts of a series by its `series_id` from the `series` table. We also create an index named `views_index` to the `views` column. It will let you efficiently execute queries using it in the predicate.
+Indexes can only be used in the order of their fields. If there are two index fields, `a` and `b`, this index can be effectively used for queries like:
 
-For a more complex select, you can create multiple secondary indexes. For example, to create a table named `series` with two indexes, run the query:
+- `where a = $var1 and b = $var2`
+- `where a = $var1`
+- `where a > $var1`, and other comparison operators
+- `where a = $var1 and b > $var2`, and any other comparison operators, but the first field must be checked for equality
 
-```sql
-CREATE TABLE series
-(
-    series_id Uint64,
-    title Utf8,
-    series_info Utf8,
-    release_date Uint64,
-    views Uint64,
-    PRIMARY KEY (series_id),
-    INDEX views_index GLOBAL ON (views) COVER (release_date),
-    INDEX date_index GLOBAL ON (release_date)
-);
-```
+At the same time, you can't use this index for the following queries:
 
-As a result, two secondary indexes are created: `views_index` to the `views` column and `date_index` to the `release_date` column. In this case, `views_index` contains a copy of the data from the `release_date` column.
+- `where b = $var1`
+- `where a > $var1 and b > $var2`, to be more precise, this entry will be equivalent to `where a > $var1` in terms of using the index
+- `where b > $var1`
 
-{% note info %}
+Considering the above specifics, it's useless to try to index all possible combinations of table columns in advance to speed up the execution of any query. An index is always a trade-off between the speed of searching and writing data and the storage space this data takes. Indexes are created for specific selects and criteria for a search that an application will make in the database.
 
-You can add a secondary index to an existing table without stopping the service. For more information about online index creation, see the [instructions](../../concepts/secondary_indexes.md#index-add).
+## Using secondary indexes when making a Select {#use}
 
-{% endnote %}
-
-## Inserting data {#insert}
-
-Sample YQL queries use [prepared queries](https://en.wikipedia.org/wiki/Prepared_statement). To run them in the YQL editor, define the values of the parameters declared using the `DECLARE` statement.
-
-To add data to the `series` table, run the query:
+To access a table by secondary index, its name must be explicitly specified in the `view` section after the table name as described in the article about the YQL [`SELECT`](../../yql/reference/syntax/select#secondary_index) statement. For example, to make a Select from the `orders` table for the customer with the specified ID (`id_customer`), run a query like this:
 
 ```sql
-DECLARE $seriesId AS Uint64;
-DECLARE $title AS Utf8;
-DECLARE $seriesInfo AS Utf8;
-DECLARE $releaseDate AS Uint32;
-DECLARE $views AS Uint64;
-
-INSERT INTO series (series_id, title, series_info, release_date, views)
-VALUES ($seriesId, $title, $seriesInfo, $releaseDate, $views);
+DECLARE $customer_id AS Uint64;
+SELECT *
+FROM   orders as o view idx_customer
+WHERE  o.id_customer = $customer_id
 ```
 
-## Updating data {#upsert}
+, where`idx_customer` is the name of a secondary index on the `orders` table with the `id_customer` field specified first.
 
-You can save a new number of views for a particular series in the database with the `UPSERT` operation.
+If the `view` section is omitted, a full scan of the `orders` table is performed for making this query.
 
-To update data in the `series` table, run the query:
+In transactional applications, such information requests are executed using paginated output. This helps avoid an increase in costs and execution time if the number of records that meet the filtering criteria grows. The approach to making [queries with pagination](../paging.md) that is described using a primary key as an example is also applicable to columns included in a secondary index.
 
-```sql
-DECLARE $seriesId AS Uint64;
-DECLARE $newViews AS Uint64;
+## Checking the cost of a query {#cost}
 
-UPSERT INTO series (series_id, views)
-VALUES ($seriesId, $newViews);
-```
+Any query in a transactional application should be checked in terms of how many I/O operations it performed in the database and how much CPU it used to run. You should also make sure that these metrics do not grow indefinitely with the growth of the DB size. After making every query, YDB returns statistics that you can use to analyze the necessary parameters.
 
-## Data selection {#select}
-
-Without using secondary indexes, a query to select records that match a certain predicate by number of views won't work effectively since {{ ydb-short-name }} scans all the rows of the `series` table to execute it. The query must explicitly specify which index to use.
-
-To select the `series` table rows that match the predicate by number of views, run the query:
-
-```sql
-SELECT series_id, title, series_info, release_date, views
-FROM series view views_index
-WHERE views >= someValue
-```
+If you use the YDB CLI, select the `--stats` option to enable statistics output after executing the `yql` command. All YDB SDKs also contain structures that provide statistics after making queries. If you run queries in the UI, there is also a tab with statistics next to the results tab.
 
 ## Updating data using a secondary index {#update}
 
-`UPDATE` statements don't let you indicate that a secondary index should be used to search for data, so an attempt to run `UPDATE ... WHERE indexed_field = $value` will result in a full scan of the table. To avoid this, you can first run `SELECT` by index to get the primary key value and then `UPDATE` by the primary key. You can also use `UPDATE ON`.
+YQL statements used for making changes to records ([`UPDATE`](../../yql/reference/syntax/update.md), [`UPSERT`](../../yql/reference/syntax/upsert_into.md), and [`REPLACE`](../../yql/reference/syntax/replace_into.md)) don't let you indicate that a secondary index should be used to search for data, so an attempt to run an `UPDATE ... WHERE indexed_field = $value` will result in a full scan of the table. To avoid this, you can first make a `SELECT` by index to get the primary key value and then an `UPDATE` by primary key. You can also use `UPDATE ON`.
 
-To update data in the `series` table, run the query:
+To update data in `table1`, run the query:
 
 ```sql
 $to_update = (
@@ -123,7 +79,16 @@ To delete all data about series with zero views from the `series` table, run the
 
 ```sql
 DELETE FROM series ON
-SELECT series_id, 
+SELECT series_id,
 FROM series view views_index
-WHERE views == 0;
+WHERE views = 0;
 ```
+
+## Performance of writing data to tables with secondary indexes {#write_performance}
+
+Additional data structures are needed for secondary indexes to work. The support of these structures leads to an increase in the cost of table data update operations.
+
+With synchronous index updates, a transaction is only committed after writing all the necessary data, both in the table and in synchronous indexes. As a result, it takes longer to execute transactions and makes it necessary to use [distributed transactions](../../concepts/transactions#distributed-tx) even if adding and updating records in the only partition.
+
+Asynchronously updated indexes can still use single-shard transactions. However, they only guarantee eventual consistency and still generate load on the database.
+

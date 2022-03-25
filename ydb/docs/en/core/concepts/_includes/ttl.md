@@ -20,7 +20,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 {% note info %}
 
-TTL doesn't guarantee that the item will be deleted exactly at `expiration_time`, it might happen later. If it's important to exclude logically obsolete but not yet physically deleted items from the selection, use request-level filtering.
+TTL doesn't guarantee that the item will be deleted exactly at `expiration_time`, it might happen later. If it's important to exclude logically obsolete but not yet physically deleted items from the selection, use query-level filtering.
 
 {% endnote %}
 
@@ -49,7 +49,7 @@ Data is deleted by the *Background Removal Operation* (*BRO*), consisting of two
   * `Uint32`
   * `Uint64`
   * `DyNumber`
-* The value of the TTL column of the numeric type (`Uint32`, `Uint64`, or `DyNumber`) is interpreted as a value from the [Unix era]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время ){% endif %} set in:
+* The value in the TTL column with a numeric type (`Uint32`, `Uint64`, `DyNumber`) is interpreted as a [Unix-time]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время ){% endif %} value specified in:
   * Seconds
   * Milliseconds
   * Microseconds
@@ -241,3 +241,4 @@ The current TTL settings can be obtained from the table description:
   ```
 
 {% endlist %}
+

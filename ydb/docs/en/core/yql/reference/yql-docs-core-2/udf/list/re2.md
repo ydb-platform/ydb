@@ -90,7 +90,7 @@ Notes on Re2::Options from the official [repository](https://github.com/google/r
 | Literal:Bool? | false | interpret string as literal, not regexp |
 | LogErrors:Bool? | true | log syntax and execution errors to ERROR |
 | LongestMatch:Bool? | false | search for longest match, not first match |
-| MaxMem:Uint64? | - | (see below)  approx. max memory footprint of RE2 |
+| MaxMem:Uint64? | - | (see below) approx. max memory footprint of RE2 |
 | NeverCapture:Bool? | false | parse all parents as non-capturing |
 | NeverNl:Bool? | false | never match \n, even if it is in regexp |
 | PosixSyntax:Bool? | false | restrict regexps to POSIX egrep syntax |

@@ -4,3 +4,4 @@ The Scrub settings let you adjust the interval from the beginning of the previou
 `$ kikimr admin bs config invoke --proto 'Command { UpdateSettings { ScrubPeriodicitySeconds: 86400 MaxScrubbedDisksAtOnce: 1 } }'`
 
 If ScrubPeriodicitySeconds is 0, Scrubbing is disabled.
+

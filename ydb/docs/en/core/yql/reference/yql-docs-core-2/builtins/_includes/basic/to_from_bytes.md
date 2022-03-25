@@ -2,7 +2,7 @@
 
 Conversion of [primitive data types](../../../types/primitive.md) to a string with their binary representation and back. Numbers are represented in the [little endian](https://en.wikipedia.org/wiki/Endianness#Little-endian) format.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT
@@ -12,3 +12,4 @@ SELECT
         Uint64
     ); -- 1234567890ul
 ```
+

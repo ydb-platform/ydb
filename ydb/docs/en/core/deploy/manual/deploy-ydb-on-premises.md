@@ -29,7 +29,7 @@ sudo groupadd ydb
 sudo useradd ydb -g ydb
 ```
 
-To make sure the {{ ydb-short-name }} server has access to block store disks to run, add the user to start the process under to the disk group:
+To make sure the {{ ydb-short-name }} server has access to block store disks to run, add the user to start the process under to the disk group.
 
 ```bash
 sudo usermod -aG disk ydb
@@ -43,11 +43,11 @@ We don't recommend using disks that are used by other processes (including the O
 
 {% endnote %}
 
-1. Create a partition on the selected disk.
+1. Create a partition on the selected disk
 
 {% note alert %}
 
-Be careful! The following step will delete all partitions on the specified disks!
+Be careful! The following step will delete all partitions on the specified disks.
 Make sure that you specified the disks that have no other data!
 
 {% endnote %}
@@ -78,7 +78,7 @@ mkdir /opt/ydb/bin
 mkdir /opt/ydb/cfg
 ```
 
-2. Copy the binary file, libraries, and configuration file to the appropriate directories:
+3. Copy the binary file, libraries, and configuration file to the appropriate directories:
 
 ```bash
 sudo cp -i ydbd-main-linux-amd64/bin/ydbd /opt/ydb/bin/
@@ -87,7 +87,7 @@ sudo cp -i ydbd-main-linux-amd64/lib/libiconv.so /opt/ydb/lib/
 sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
 ```
 
-3. Format the disk with the built-in command:
+3. Format the disk with the built-in command
 
 ```bash
 sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_01 
@@ -105,7 +105,7 @@ Prepare the configuration files:
 
   {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
-  Save the {{ ydb-short-name }} configuration file as `/opt/ydb/cfg/config.yaml`.
+  Save the {{ ydb-short-name }} configuration file as `/opt/ydb/cfg/config.yaml`
 
 - Protected mode
 
@@ -113,21 +113,20 @@ Prepare the configuration files:
 
   {% include [generate-ssl.md](_includes/generate-ssl.md) %}
 
-  Create directories for certificates on each node:
+  Create directories for certificates on each node
 
   ```bash
   mkdir /opt/ydb/certs
   chmod 0750 /opt/ydb/certs
   ```
 
-  Copy the node certificates and keys:
+  Copy the node certificates and keys
 
   ```bash
   sudo -u ydb cp certs/ca.crt certs/node.crt certs/node.key /opt/ydb/certs/
   ```
 
   {% include [prepare-configs.md](_includes/prepare-configs.md) %}
-
   3. In the `interconnect_config` and `grpc_config` sections, specify the path to the certificate, key, and CA certificates:
 
   ```text
@@ -137,7 +136,7 @@ Prepare the configuration files:
         path_to_certificate_file: "/opt/ydb/certs/node.crt"
         path_to_private_key_file: "/opt/ydb/certs/node.key"
         path_to_ca_file: "/opt/ydb/certs/ca.crt"
-
+  
     grpc_config:
         cert: "/opt/ydb/certs/node.crt"
         key: "/opt/ydb/certs/node.key"
@@ -175,7 +174,7 @@ Prepare the configuration files:
   Wants=network-online.target
   StartLimitInterval=10
   StartLimitBurst=15
-
+  
   [Service]
   Restart=always
   RestartSec=1
@@ -191,7 +190,7 @@ Prepare the configuration files:
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=3221225472
-
+  
   [Install]
   WantedBy=multi-user.target
   ```
@@ -232,7 +231,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  /opt/ydbd/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml \
+  /opt/ydbd/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config /opt/ydb/cfg/config.yaml \
   --tenant /Root/testdb --node-broker --node-broker --node-broker
   ```
 
@@ -260,7 +259,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   SyslogFacility=daemon
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  ExecStart=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker --node-broker --node-broker
+  ExecStart=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker --node-broker --node-broker
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720
@@ -279,7 +278,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
 
 ## Test the created database {# try-first-db}
 
-1. Install the YDB CLI as described in [Installing the YDB CLI](../../reference/ydb-cli/install.md).
+1. Install the YDB CLI as described in [Installing the YDB CLI](../../reference/ydb-cli/install.md)
 2. Create a `test_table`:
 
 ```bash
@@ -288,3 +287,4 @@ ydb -e grpc://<node1.domain>:2136 -d /Root/testdb scripting yql \
 ```
 
 Where node.domain is the FQDN of the server running the dynamic nodes that support the `/Root/testdb` database.
+

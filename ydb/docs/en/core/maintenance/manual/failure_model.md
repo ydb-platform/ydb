@@ -16,3 +16,4 @@ If multiple VDisks have failed in the group, SelfHeal stops moving VDisks. If th
 ## The number of failed VDisks has exceeded the failure model {#exceeded_the_failure_model}
 
 The availability and operability of the system might be lost. Make sure to revive at least one VDisk without losing the data stored on it.
+

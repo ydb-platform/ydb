@@ -15,6 +15,7 @@ For a full description of {{ ydb-short-name }} CLI commands, see the following a
 * [Working with directories](../commands/dir.md).
 * [Making a DB query](../commands/query.md).
 * [Streaming table reads](../commands/readtable.md).
-* [Working with secondary indexes](../commands/index-ops.md).
+* [Working with secondary indexes](../commands/secondary_index.md).
 * [Getting a list of DB endpoints](../commands/discovery-list.md).
 * [Load testing](../commands/workload/index.md).
+

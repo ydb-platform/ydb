@@ -4,7 +4,7 @@
 | ------------ | ---------------- | ------------- |
 | List | `List<Type>`,</br>`List<Int32>` | A variable-length sequence consisting of same-type elements. |
 | Dictionary | `Dict<KeyType, ValueType>`,</br>`Dict<String,Int32>` | Set of key-value pairs with a fixed type of keys and values. |
-| Set | `Set<KeyType>`,</br>`Set<String>` | A set of elements with a fixed type is a special case of a dictionary with the `Void` type of values. |
+| Set | `Set<KeyType>`,</br>`Set<String>` | A set of elements with a fixed type is a special case of a dictionary with the `Void` value type. |
 | Tuple | `Tuple<Type1, ..., TypeN>`,</br>`Tuple<Int32,Double>` | Set of unnamed fixed-length elements with types specified for all elements. |
 | Structure | `Struct<Name1:Type1, ..., NameN:TypeN>`,</br> `Struct<Name:String,Age:Int32>` | A set of named fields with specified value types, fixed at query start (must be data-independent). |
 | Stream | `Stream<Type>`,</br> `Stream<Int32>` | Single-pass iterator by same-type values, not serializable |

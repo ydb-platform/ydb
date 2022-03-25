@@ -51,7 +51,7 @@ db, err := ydb.New(
   ydb.WithConnectionString(dsn),
 //  yc.WithInternalCA(), // using Yandex.Cloud certificates
   ydb.WithAccessTokenCredentials(token), // token-based authentication
-//  ydb.WithAnonimousCredentials(token), //  anonymous authentication (for example, in docker ydb)
+//  ydb.WithAnonimousCredentials(token), // anonymous authentication (for example, in docker ydb)
 //  yc.WithMetadataCredentials(token), // authentication from inside a VM in Yandex.Cloud or a function in Yandex Functions
 //  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // authentication in Yandex.Cloud using a service account file
 //  environ.WithEnvironCredentials(ctx), // authentication using environment variables
@@ -264,7 +264,8 @@ if err != nil {
 
 Sample code of a test app that uses archived of versions the Go SDK:
 
-* [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) is available at this [link](../archive/example-go-v1.md),
-* [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) is available at this [link](../archive/example-go-v2.md).
+- [github.com/yandex-cloud/ydb-go-sdk](https://github.com/yandex-cloud/ydb-go-sdk/tree/v1.5.1) is available at this [link](../archive/example-go-v1.md),
+- [github.com/yandex-cloud/ydb-go-sdk/v2](https://github.com/yandex-cloud/ydb-go-sdk/tree/v2.11.2) is available at this [link](../archive/example-go-v2.md).
 
 {% endnote %}
+

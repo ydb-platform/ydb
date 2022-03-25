@@ -1,6 +1,6 @@
 # Yson
 
-[YSON](https://yt.yandex-team.ru/docs/description/common/yson.html) is a JSON-like data format developed at Yandex:
+{% include [_includes/yson/intro_header.md](_includes/yson/intro_header.md) %}
 
 * Similarities with JSON:
     * Does not have a strict scheme.
@@ -18,25 +18,24 @@ Implementation specifics and functionality of the module:
     * `Yson::Parse***`: Getting a resource with a DOM object from serialized data, with all further operations performed on the obtained resource.
     * `Yson::From`: Getting a resource with a DOM object from simple YQL data types or containers (lists or dictionaries).
     * `Yson::ConvertTo***`: Converting a resource to [primitive data types](../../types/primitive.md) or [containers](../../types/containers.md).
-    * `Yson::Lookup***`: Getting a single list element or a dictionary with optional conversion to the relevant data type.
+    * `Yson::Lookup***`: Getting a single list item or a dictionary with optional conversion to the relevant data type.
     * `Yson::YPath***`: Getting one element from the document tree based on the relative path specified, optionally converting it to the relevant data type.
     * `Yson::Serialize***`: Getting a copy of data from the resource and serializing the data in one of the formats.
-* For convenience, when serialized Yson and Json are passed to functions expecting a resource with a DOM object, implicit conversion using `Yson::Parse` or `Yson::ParseJson` is done automatically. In SQL syntax, the dot or square brackets operator automatically adds a `Yson::Lookup` call. To serialize a resource, you still need to call `Yson::ConvertTo***` ([here's the ticket about CAST syntax support](https://st.yandex-team.ru/YQL-2610)) or `Yson::Serialize***`. It means that, for example, to get the "foo" element as a string from the Yson column named mycolumn and serialized as a dictionary, you can write: `SELECT Yson::ConvertToString(mycolumn["foo"]) FROM mytable;` or `SELECT Yson::ConvertToString(mycolumn.foo) FROM mytable;`. In the variant with a dot, special characters can be escaped by [general rules for IDs](../../syntax/expressions.md#escape).
-* Technically, the module is  based on a snapshot of the [YT](https://wiki.yandex-team.ru/yt/) code base in Arcadia.
+* For convenience, when serialized Yson and Json are passed to functions expecting a resource with a DOM object, implicit conversion using `Yson::Parse` or `Yson::ParseJson` is done automatically. In SQL syntax, the dot or square brackets operator automatically adds a `Yson::Lookup` call. To serialize a resource, you still need to call `Yson::ConvertTo***` or `Yson::Serialize***`. It means that, for example, to get the "foo" element as a string from the Yson column named mycolumn and serialized as a dictionary, you can write: `SELECT Yson::ConvertToString(mycolumn["foo"]) FROM mytable;` or `SELECT Yson::ConvertToString(mycolumn.foo) FROM mytable;`. In the variant with a dot, special characters can be escaped by [general rules for IDs](../../syntax/expressions.md#escape).
 
 The module's functions must be considered as "building blocks" from which you can assemble different structures, for example:
 
 * `Yson::Parse*** -> Yson::Serialize***`: Converting from one format to other.
 * `Yson::Parse*** -> Yson::Lookup -> Yson::Serialize***`: Extracting the value of the specified subtree in the source YSON tree.
-* `Yson::Parse*** -> Yson::ConvertToList -> ListMap -> Yson::Lookup***`: Extracting elements by a key from the YSON list.
+* `Yson::Parse*** -> Yson::ConvertToList -> ListMap -> Yson::Lookup***`: Extracting items by a key from the YSON list.
 
-See also examples of combining YSON functions in the [tutorial](https://yql.yandex-team.ru/Tutorial/yt_17_Yson_and_Json).
+{% include [_includes/yson/intro_footer.md](_includes/yson/intro_footer.md) %}
 
 **Examples**
 
 ```yql
 $node = Json(@@
-  {"abc": {"def": 123, "ghi": "привет"}}
+  {"abc": {"def": 123, "ghi": "hello"}}
 @@);
 SELECT Yson::SerializeText($node.abc) AS `yson`;
 -- {"def"=123;"ghi"="\xD0\xBF\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82"}
@@ -79,7 +78,7 @@ The result of all three functions is non-serializable: it can only be passed as 
 
 {% note info %}
 
-The `Yson::ParseJsonDecodeUtf8` expects that characters outside the ASCII range must be additionally escaped. For detailed escaping rules, see the [YT code](https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/core/misc/utf8_decoder.cpp).
+The `Yson::ParseJsonDecodeUtf8` expects that characters outside the ASCII range must be additionally escaped.
 
 {% endnote %}
 
@@ -89,7 +88,13 @@ The `Yson::ParseJsonDecodeUtf8` expects that characters outside the ASCII range 
 Yson::From(T) -> Resource<'Yson2.Node'>
 ```
 
-`Yson::From` is a polymorphic function that converts most primitive data types and containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource, see the [example](https://yql.yandex-team.ru/Operations/X5sdMpdg8tLNyOczX6J8qtBTJv7iItZt01ExReYM0o0=). The source object type must be Yson-compatible. For example, in dictionary keys, you can only use the `String` or `Utf8` data types, but not `String?` or `Utf8?` .
+`Yson::From` is a polymorphic function that converts most primitive data types and containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource. The source object type must be Yson-compatible. For example, in dictionary keys, you can only use the `String` or `Utf8` data types, but not `String?` or `Utf8?` .
+
+**Example**
+
+```sql
+SELECT Yson::Serialize(Yson::From(TableRow())) FROM table1;
+```
 
 ## Yson::WithAttributes
 
@@ -161,13 +166,35 @@ Yson::ConvertToDoubleDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,
 Yson::ConvertToStringDict(Resource<'Yson2.Node'>{Flags:AutoMap}) -> Dict<String,String>
 ```
 
-{% note warning "Attention" %}
+{% note warning %}
 
 These functions do not do implicit type casting by default, that is, the value in the argument must exactly match the function called.
 
 {% endnote %}
 
-`Yson::ConvertTo` is a polymorphic function that converts the data type that is specified in the second argument and supports  containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource, see the [example](https://yql.yandex-team.ru/Operations/X5AsHC--PI3cxBmdA89P5XVtX5m6tn9P2l31MAFsqNo=).
+`Yson::ConvertTo` is a polymorphic function that converts the data type that is specified in the second argument and supports containers (lists, dictionaries, tuples, structures, and so on) into a Yson resource.
+
+**Example**
+
+```sql
+$data = Yson(@@{
+    "name" = "Anya";
+    "age" = 15u;
+    "params" = {
+        "ip" = "95.106.17.32";
+        "last_time_on_site" = 0.5;
+        "region" = 213;
+        "user_agent" = "Mozilla/5.0"
+    }
+}@@);
+SELECT Yson::ConvertTo($data, 
+    Struct<
+        name: String,
+        age: Uint32,
+        params: Dict<String,Yson>
+    >
+);
+```
 
 ## Yson::Contains {#ysoncontains}
 
@@ -206,7 +233,9 @@ Yson::YPathDict(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> Dict<String,Re
 Yson::YPathList(Resource<'Yson2.Node'>{Flags:AutoMap}, String) -> List<Resource<'Yson2.Node'>>?
 ```
 
-Lets you get a part of the resource based on the source resource and the part's path in [YPath](https://yt.yandex-team.ru/docs/description/common/ypath.html) format.
+Lets you get a part of the resource based on the source resource and the part's path in YPath format.
+
+{% include [_includes/yson/ypath_overlay.md](_includes/yson/ypath_overlay.md) %}
 
 ## Yson::Attributes {#ysonattributes}
 
@@ -231,7 +260,7 @@ Yson::SerializeJson(Resource<'Yson2.Node'>{Flags:AutoMap}, [Resource<'Yson2.Opti
 ```
 
 * `SkipMapEntity` serializes `#` values in dictionaries. The value of attributes is not affected by the flag. By default, `false`.
-* `EncodeUtf8` responsible for escaping non-ASCII characters. For detailed escaping rules, see the [YT code](https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/core/misc/utf8_decoder.cpp). By default, `false`.
+* `EncodeUtf8` responsible for escaping non-ASCII characters. By default, `false`.
 
 The `Yson` and `Json` data types returned by serialization functions are special cases of a string that is known to contain data in the given format (Yson/Json).
 

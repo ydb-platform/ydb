@@ -16,9 +16,9 @@ In {{ ydb-short-name }}, you can make YQL queries to a database using:
 
 {% include [yql/ui_prompt.md](yql/ui_prompt.md) %}
 
-* [{{ ydb-short-name }} CLI](#cli).
+* [{{ ydb-short-name }} CLI](#cli)
 
-* [{{ ydb-short-name }} SDK](../sdk.md).
+* [{{ ydb-short-name }} SDK](../sdk.md)
 
 {% include [yql/ui_execute.md](yql/ui_execute.md) %}
 
@@ -27,7 +27,7 @@ In {{ ydb-short-name }}, you can make YQL queries to a database using:
 To execute scripts using the {{ ydb-short-name }} CLI, first do the following:
 
 * [Install the CLI](../cli.md#install).
-* Define and check [DB connection settings](../cli#scheme-ls).
+* Define and check [DB connection settings](../cli#scheme-ls)
 * [Create a `db1` profile](../cli.md#profile) configured to connect to your database.
 
 Save the text of the scripts below to a file. Name it `script.yql` to be able to run the statements given in the examples by simply copying them through the clipboard. Next, run `{{ ydb-cli }} yql` indicating the use of the `db1` profile and reading the script from the `script.yql` file:
@@ -38,7 +38,7 @@ Save the text of the scripts below to a file. Name it `script.yql` to be able to
 
 ## Working with a data schema {#ddl}
 
-### Creating a table {#create-table}
+### Creating tables {#create-table}
 
 A table with the specified columns is created [using the YQL `CREATE TABLE`](../../yql/reference/syntax/create_table.md) statement. Make sure the primary key is defined in the table. Column data types are described in [YQL data types](../../yql/reference/types/index.md).
 
@@ -88,7 +88,7 @@ Check that the tables are actually created in the database.
 
 {% include [yql/ui_scheme_ls.md](yql/ui_scheme_ls.md) %}
 
-To get a list of existing DB tables via the {{ ydb-short-name }} CLI, make sure that the prerequisites under [Executing YQL scripts in the {{ ydb-short-name }} CLI](#cli) below are complete and run [the `scheme ls` statement](../cli.md#ping):
+To get a list of existing DB tables via the {{ ydb-short-name }} CLI, make sure that the prerequisites under [Executing YQL scripts in the {{ ydb-short-name }} CLI](#cli) below are complete and run the [`scheme ls` statement](../cli.md#ping):
 
 ```bash
 {{ ydb-cli }} --profile db1 scheme ls
@@ -213,3 +213,4 @@ You can learn more about YQL use cases by completing tasks from the [YQL tutoria
 ## Learn more about YDB {#next}
 
 Proceed to the [YDB SDK - Getting started](../sdk.md) article to learn more about YDB.
+

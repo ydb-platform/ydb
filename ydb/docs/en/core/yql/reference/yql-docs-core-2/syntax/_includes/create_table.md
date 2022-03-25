@@ -112,7 +112,7 @@ WITH (
 
 Here, key is the name of the parameter and value is its value.
 
-For a list of possible parameter names and their values, see [{{ backend_name }} table description]({{ concept_table }}).
+For a list of possible parameter names and their values, see [table description {{ backend_name }}]({{ concept_table }}).
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 

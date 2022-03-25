@@ -1,6 +1,6 @@
 ## Table {#table}
 
-A table in {{ ydb-short-name }} is a [relational table](https://en.wikipedia.org/wiki/Table_(database)) that contains a set of related data consisting of rows and columns. Each row is a set of cells that are used for storing specific types of values according to the data schema. The data schema defines the names and types of table columns. An example of a data schema is shown below. The `Series` table consists of four columns named `SeriesId`, `ReleaseDate`, `SeriesInfo`, and `Title` and holding data of type `Uint64?` for the first two and `String?` for the others. The `SeriesId` column is declared the primary key.
+A table in {{ ydb-short-name }} is a [relational table](https://en.wikipedia.org/wiki/Table_(database)) containing a set of related data and made up of rows and columns. Each row is a set of cells that are used for storing specific types of values according to the data schema. The data schema defines the names and types of table columns. An example of a data schema is shown below. The `Series` table consists of four columns named `SeriesId`, `ReleaseDate`, `SeriesInfo`, and `Title` and holding data of type `Uint64?` for the first two and `String?` for the others. The `SeriesId` column is declared the primary key.
 
 ![Datamodel_of_a_relational_table](../../_assets/datamodel_rtable.png)
 
@@ -14,7 +14,7 @@ Often, when you design a table schema, you already have a set of fields, which c
 
 A database table can be sharded by primary key value ranges. Each shard of the table is responsible for a specific range of primary keys. Key ranges served by different shards do not overlap. Different table shards can be served by different distributed database servers (including ones in different locations). They can also move independently between servers to enable rebalancing or ensure shard operability if servers or network equipment goes offline.
 
-If there is not a lot of data or load, the table may consist of a single shard. As the amount of data served by the shard or the load on the shard grows, {{ ydb-short-name }} automatically splits the shard into two shards. The data is split by the median value of the primary key if the shard size exceeds the threshold. If partitioning by load is used, the shard first collects a sample of the requested keys (that can be read, written, and deleted) and, based on this sample, selects a key for partitioning to evenly distribute the load across new shards. So in the case of load-based partitioning, the size of new shards may significantly vary.
+If there is not a lot of data or load, the table may consist of a single shard. As the amount of data served by the shard or the load on the shard grows, {{ ydb-short-name }} automatically splits this shard into two shards. The data is split by the median value of the primary key if the shard size exceeds the threshold. If partitioning by load is used, the shard first collects a sample of the requested keys (that can be read, written, and deleted) and, based on this sample, selects a key for partitioning to evenly distribute the load across new shards. So in the case of load-based partitioning, the size of new shards may significantly vary.
 
 The size-based shard split threshold and automatic splitting can be configured (enabled/disabled) individually for each database table.
 
@@ -31,7 +31,7 @@ The following table partitioning parameters are defined in the data schema:
 * Type: `Enum` (`ENABLED`, `DISABLED`).
 * Default value: `ENABLED`.
 
-Automatic partitioning by partition size. If a partition size exceeds the value specified by the [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_partition_size_mb) parameter, it is enqueued for splitting. If the total size of two or more adjacent partitions is less than 50% of the [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_partition_size_mb) value, they are enqueued for merging.
+Automatic partitioning by partition size. If a partition size exceeds the value specified by the [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](#auto_partitioning_partition_size_mb) parameter, it is enqueued for splitting. If the total size of two or more adjacent partitions is less than 50% of the [`AUTO_PARTITIONING_PARTITION_SIZE_MB`](#auto_partitioning_partition_size_mb) value, they are enqueued for merging.
 
 #### AUTO_PARTITIONING_BY_LOAD
 
@@ -40,7 +40,7 @@ Automatic partitioning by partition size. If a partition size exceeds the value 
 
 Automatic partitioning by load. If a shard consumes more than 50% of the CPU for a few dozens of seconds, it is enqueued for splitting. If the total load on two or more adjacent shards uses less than 35% of a single CPU core within an hour, they are enqueued for merging.
 
-Performing split or merge operations uses the CPU and takes time. Therefore, when dealing with a variable load, we recommend both enabling this mode and setting [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](#auto_partitioning_min_partitions_count) to a value other than 1 so that decreased load does not cause the number of partitions to drop below the required value resulting in a need to split them again when load increases.
+Performing split or merge operations uses the CPU and takes time. Therefore, when dealing with a variable load, we recommend both enabling this mode and setting [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) to a value other than 1 so that decreased load does not cause the number of partitions to drop below the required value resulting in a need to split them again when load increases.
 
 When choosing the minimum number of partitions, it makes sense to consider that one table partition can only be hosted on one server and use no more than 1 CPU core for data update operations. Hence, you can set the minimum number of partitions for a table on which a high load is expected to at least the number of nodes (servers) or, preferably, to the number of CPU cores allocated to the database.
 
@@ -49,7 +49,7 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 * Type: `Uint64`.
 * Default value: `2000 MB` ( `2 GB` ).
 
-Partition size threshold in MB. If exceeded, a shard splits. Takes effect when the [AUTO_PARTITIONING_BY_SIZE](#auto_partitioning_by_size) mode is enabled.
+Partition size threshold in MB. If exceeded, a shard splits. Takes effect when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
 
 #### AUTO_PARTITIONING_MIN_PARTITIONS_COUNT
 
@@ -85,14 +85,14 @@ When automatic partitioning is enabled, make sure to set the correct value for [
 
 ### Reading data from replicas {#read_only_replicas}
 
-When making queries in {{ ydb-short-name }}, the actual execution of a query to each shard is performed at a single point serving the distributed transaction protocol. By storing data in shared storage, you can run one or more shard followers without allocating additional space in the storage: the data is already stored in replicated format and you can serve more than one reader (but the writer is still strictly one at every moment).
+When making queries in {{ ydb-short-name }}, the actual execution of a query to each shard is performed at a single point serving the distributed transaction protocol. By storing data in shared storage, you can run one or more shard followers without allocating additional storage space: the data is already stored in replicated format, and you can serve more than one reader (but there is still only one writer at any given moment).
 
 Reading data from followers allows you:
 
-* Serving clients demanding minimal delays otherwise unachievable in a multi-DC cluster. This is achieved by bringing the query execution point closer to the query formulation point, which eliminates the delay associated with inter-DC transfers. As a result, you can both preserve all the storage reliability guarantees of the multi-DC cluster and respond to occasional read queries in milliseconds.
-* Handling read queries from followers without affecting the modifying queries running on the shard. This can be useful both for isolating different scenarios and for increasing the partition bandwidth.
-* Ensuring continued maintenance when moving the partition leader (both in regular cases (balancing) and in an emergency). It lets the processes in the cluster survive without affecting the reading clients.
-* Increasing the general limit of the shard data read performance if many read queries access the same keys.
+* To serve clients demanding minimal delay, which is otherwise unachievable in a multi-DC cluster. This is accomplished by executing queries soon after they are formulated, which eliminates the delay associated with inter-DC transfers. As a result, you can both preserve all the storage reliability guarantees of a multi-DC cluster and respond to occasional read queries in milliseconds.
+* To handle read queries from followers without affecting modifying queries running on a shard. This can be useful both for isolating different scenarios and for increasing the partition bandwidth.
+* To ensuring continued service when moving a partition leader (both in a planned manner for load balancing and in an emergency). It lets the processes in the cluster survive without affecting the reading clients.
+* To increasing the overall shard read performance if many read queries access the same keys.
 
 You can enable running read replicas for each shard of the table in the table data schema. The read replicas (followers) are typically accessed without leaving the data center network, which ensures response delays in milliseconds.
 
@@ -104,7 +104,7 @@ The internal state of each of the followers is restored exactly and fully consis
 
 Besides the data status in storage, followers also receive a stream of updates from the leader. Updates are sent in real time, immediately after the commit to the log. However, they are sent asynchronously, resulting in some delay (usually no more than dozens of milliseconds, but sometimes longer in the event of cluster connectivity issues) in applying updates to followers relative to their commit on the leader. Therefore, reading data from followers is only supported in the [transaction mode](../transactions.md#modes) `StaleReadOnly()`.
 
-If there are multiple followers, their delay from the leader may vary: although each follower of each of the shards retains internal consistency, artifacts may be observed between different shards. Please allow for this in your application code. For that same reason, it's currently impossible to perform cross-shard transactions from followers.
+If there are multiple followers, their delay from the leader may vary: although each follower of each of the shards retains internal consistency, artifacts may be observed from shard to shard. Please provide for this in your application code. For that same reason, it's currently impossible to perform cross-shard transactions from followers.
 
 ### Deleting expired data (TTL) {#ttl}
 

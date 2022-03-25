@@ -9,13 +9,14 @@ As a result of completing the instructions below, you'll get a local YDB databas
 {% list tabs %}
 
 - gRPC
-  * [Endpoint ](../../../../concepts/connect.md#endpoint): `grpc://localhost:2136`.
-  * [Database location](../../../../concepts/connect.md#database): `/local`.
-  * [Authentication ](../../../../concepts/connect.md#auth-modes): Anonymous (without authentication).
+  - [Endpoint](../../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
+  - [Database location](../../../../concepts/connect.md#database): `/local`
+  - [Authentication ](../../../../concepts/connect.md#auth-modes): Anonymous (without authentication)
 
 - gRPCs/TLS
-  * [Endpoint ](../../../../concepts/connect.md#endpoint): `grpcs://localhost:2135`.
-  * [Database location](../../../../concepts/connect.md#database): `/local`.
-  * [Authentication ](../../../../concepts/connect.md#auth-modes): Anonymous (without authentication).
+  - [Endpoint](../../../../concepts/connect.md#endpoint): `grpcs://localhost:2135`
+  - [Database location](../../../../concepts/connect.md#database): `/local`
+  - [Authentication ](../../../../concepts/connect.md#auth-modes): Anonymous (without authentication)
 
 {% endlist %}
+

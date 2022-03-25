@@ -13,3 +13,4 @@ Below are examples of the code for forced setting of the "random choice" balanci
   {% include [go.md](random_choice/go.md) %}
 
 {% endlist %}
+

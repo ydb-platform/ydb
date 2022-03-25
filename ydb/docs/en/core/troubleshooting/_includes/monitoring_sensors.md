@@ -4,7 +4,7 @@
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
-| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. The service data includes the data of the primary and [secondary indexes](../../concepts/secondary_indexes.md). |
+| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. Housekeeping data include the data of the primary and [secondary indexes](../../concepts/secondary_indexes.md). |
 | `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | A limit on the size of user and service data that a database can store in distributed network storage. |
 
 ### API metrics {#api}
@@ -16,9 +16,9 @@
 | `api.grpc.request.inflight_count`<br/>`IGAUGE`, pieces | The number of requests that a database is simultaneously handling in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
 | `api.grpc.request.inflight_bytes`<br/>`IGAUGE`, bytes | The size of requests that a database is simultaneously handling in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
 | `api.grpc.response.bytes`<br/>`RATE`, bytes | The size of responses sent by the database in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
-| `api.grpc.response.count`<br/>`RATE`, pieces | The number of responses sent by the database in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`.<br/>- _status_: The  query execution status. To learn more about statuses, see [Error handling](../../reference/ydb-sdk/error_handling.md). |
+| `api.grpc.response.count`<br/>`RATE`, pieces | The number of responses sent by the database in a certain period of time.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`.<br/>- _status_ is the request execution status. See a more detailed description of statuses under [Error Handling](../../reference/ydb-sdk/error_handling.md). |
 | `api.grpc.response.dropped_count`<br/>`RATE`, pieces | The number of responses dropped at the transport (gRPC) layer due to an error.<br/>Labels:<br/>- _api_service_: The name of the gRPC API service, such as `table`.<br/>- _method_: The name of a gRPC API service method, such as `ExecuteDataQuery`. |
-| `api.grpc.response.issues`<br/>`RATE`, pieces | The number of errors of a certain type, which occurred when executing queries during a certain period of time.<br/>Labels:<br/>- _issue_type_: The type of error, the only value is `optimistic_locks_invalidation`. For more information about locks invalidation, see [Transactions and queries to {{ ydb-short-name }}](../../concepts/transactions.md). |
+| `api.grpc.response.issues`<br/>`RATE`, pieces | The number of errors of a certain type arising in the execution of a request over a certain period of time.<br/>Tags:<br/>- _issue_type_ is the error type wth the only value being `optimistic_locks_invalidation`. For more on lock invalidation, review [Transactions and requests to {{ ydb-short-name }}](../../concepts/transactions.md). |
 
 ### Session metrics {#sessions}
 
@@ -29,12 +29,12 @@
 
 ### Transaction processing metrics {#transactions}
 
-You can analyze a transaction's execution time using a histogram counter. The intervals are set in milliseconds. The chart  shows the number of transactions whose duration falls within a certain time interval.
+You can analyze a transaction's execution time using a histogram counter. The intervals are set in milliseconds. The chart shows the number of transactions whose duration falls within a certain time interval.
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
 | `table.transaction.total_duration_milliseconds`<br/>`HIST_RATE`, pieces | The number of transactions with a certain duration on the server and client. The duration of a transaction is counted from the point of its explicit or implicit start to committing changes or its rollback. Includes the transaction processing time on the server and the time on the client between sending different requests within the same transaction.<br/>Labels:<br/>- _tx_kind_: The transaction type, possible values are `read_only`, `read_write`, `write_only`, and `pure`. |
-| `table.transaction.server_duration_milliseconds`<br/>`HIST_RATE`, pieces | The number of transactions with a certain duration on the server. The duration is the time of executing requests within a transaction on the server. Does not include the waiting time on the client between sending separate requests within a single transaction.<br/>Labels:<br/> -_tx_kind_: The transaction type, possible values  are`read_only`, `read_write`, `write_only`, and `pure`. |
+| `table.transaction.server_duration_milliseconds`<br/>`HIST_RATE`, pieces | The number of transactions with a certain duration on the server. The duration is the time of executing requests within a transaction on the server. Does not include the waiting time on the client between sending separate requests within a single transaction.<br/>Labels:<br/> -_tx_kind_: The transaction type, possible values are`read_only`, `read_write`, `write_only`, and `pure`. |
 | `table.transaction.client_duration_milliseconds`<br/>`HIST_RATE`, pieces | The number of transactions with a certain duration on the client. The duration is the waiting time on the client between sending individual requests within a single transaction. Does not include the time of executing requests on the server.<br/>Labels:<br/>- _tx_kind_: The transaction type, possible values are `read_only`, `read_write`, `write_only`, and `pure`. |
 
 ### Query processing metrics {#queries}
@@ -86,3 +86,4 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `table.query.compilation.cache_evictions`<br/>`RATE`, pieces | The number of queries evicted from the cache of [prepared queries](../oss/public/reference/ydb-sdk/#param-prepared-queries) in a certain period of time. |
 | `table.query.compilation.cache_size_bytes`<br/>`IGAUGE`, bytes | The size of the cache of [prepared queries](../oss/public/reference/ydb-sdk/#param-prepared-queries). |
 | `table.query.compilation.cached_query_count`<br/>`IGAUGE`, pieces | The size of the cache of [prepared queries](../oss/public/reference/ydb-sdk/#param-prepared-queries). |
+

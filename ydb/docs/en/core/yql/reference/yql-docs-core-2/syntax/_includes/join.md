@@ -16,7 +16,7 @@ SELECT ...    FROM table_1
   -- The right-hand selection are entries in table_n
 -- JOIN can include the following steps
 ...
-WHERE  ...
+WHERE ...
 ```
 
 At each JOIN step, rules are used to establish correspondences between rows in the left-hand and right-hand data selections, creating a new selection that includes every combination of rows that meet the JOIN conditions.
@@ -38,7 +38,7 @@ Since columns in YQL are identified by their names, and you can't have two colum
 * `CROSS`: A full cartesian product of two tables without specifying key columns and no explicit `ON/USING`.
 * `EXCLUSION`: Both sides minus the intersection.
 
-![](../_assets/join-YQL-06.png)
+![image](../_assets/join-YQL-06.png)
 
 {% note info %}
 
@@ -79,7 +79,7 @@ LEFT  JOIN c_table AS c ON c.ref = a.key and c.column1 = b.value;
 {% if feature_mapreduce %}
 If the statement filters data in addition to `JOIN`, we recommend that you wrap the criteria that would return `true` for most of the rows in the `LIKELY(...)` function call. If your assumption that positive values prevail for the criteria is correct, such a hint might speed up your query. `LIKELY` can be useful when the predicate calculation is a resource-intensive operation and JOIN significantly reduces the number of rows.
 
-In front of any data source for `JOIN`, you can add the `ANY` keyword to suppress duplicate `JOIN`  keys on the given side. In this case, only one row is left from the set of rows with the same `JOIN` key value (no matter which one, that's why the keyword is called `ANY`).
+In front of any data source for `JOIN`, you can add the `ANY` keyword to suppress duplicate `JOIN` keys on the given side. In this case, only one row is left from the set of rows with the same `JOIN` key value (no matter which one, that's why the keyword is called `ANY`).
 This syntax differs from the one used in [ClickHouse]{% if lang == "en" %}(https://clickhouse.com/docs/en/sql-reference/statements/select/join/){% endif %}{% if lang == "ru" %}(https://clickhouse.tech/docs/ru/sql-reference/statements/select/join/){% endif %}where `ANY` is placed before the `JOIN` type and applies to the right side only.
 
 Request

@@ -69,7 +69,7 @@ Returns a substring starting with ```from``` with the length of ```len``` charac
   The third argument includes the following parameters:
     - DelimeterString:Bool? — treating a delimiter as a string (true, by default) or a set of characters "any of" (false)
     - SkipEmpty:Bool? - whether to skip empty strings in the result, is false by default
-    - Limit:Uint64? - Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last element
+    - Limit:Uint64? - Limits the number of fetched components (unlimited by default); if the limit is exceeded, the raw suffix of the source string is returned in the last item
 
 * ```Unicode::JoinFromList(List<Utf8>{Flags:AutoMap}, Utf8) -> Utf8```
 

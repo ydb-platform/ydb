@@ -38,10 +38,10 @@ Mapping pools to task types is done by setting the pool sequence number in speci
 
 List of fields with their respective tasks:
 
-* **SysExecutor**: System.
-* **UserExecutor**: User.
-* **BatchExecutor**: Batch.
-* **IoExecutor**: IO.
+* **SysExecutor**: System
+* **UserExecutor**: User
+* **BatchExecutor**: Batch
+* **IoExecutor**: IO
 
 Example:
 
@@ -122,7 +122,7 @@ After changing the configuration, restart the node.
 
 ## On dynamic nodes
 
-Dynamic nodes take the configuration from the [CMS](cms.md). To change it, you can use the following command.
+Dynamic nodes take the configuration from the [CMS](cms.md). To change it, you can use the following command:
 
 ```proto
 ConfigureRequest {
@@ -133,7 +133,7 @@ ConfigureRequest {
         Config {
           ActorSystemConfig {
             <actor system config>
-          }  
+          }
         }
         MergeStrategy: 3
       }
@@ -144,3 +144,4 @@ ConfigureRequest {
 ```bash
 kikimr -s <endpoint> admin console execute --domain=<domain> --retry=10 actorsystem.txt
 ```
+

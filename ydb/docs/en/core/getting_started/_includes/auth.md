@@ -7,3 +7,4 @@ Full information about all available authentication methods is given in the [DB 
 ## Learn more about YDB {#next}
 
 Go to [YDB CLI: Getting started](../cli.md) to learn more about YDB.
+

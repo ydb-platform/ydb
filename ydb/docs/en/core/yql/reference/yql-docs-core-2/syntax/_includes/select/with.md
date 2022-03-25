@@ -40,3 +40,4 @@ SELECT key, value FROM my_table WITH COLUMNS Struct<value:Int32?>;
 ```yql
 SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:List<Int32>>;
 ```
+

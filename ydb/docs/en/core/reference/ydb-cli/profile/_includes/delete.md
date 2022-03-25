@@ -35,3 +35,4 @@ echo y | {{ ydb-cli }} config profile delete my_profile
 ```
 
 The efficiency of this method is not guaranteed in any way.
+

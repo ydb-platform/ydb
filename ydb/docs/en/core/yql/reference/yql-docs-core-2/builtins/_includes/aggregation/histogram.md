@@ -70,7 +70,7 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 When you use [aggregation factories](../../basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](#aggregateby) argument.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT
@@ -95,7 +95,7 @@ SELECT
 FROM my_table;
 ```
 
-## LinearHistogram, LogarithmicHistogram and LogHistogram {#linearhistogram}
+## LinearHistogram, LogarithmicHistogram, and LogHistogram {#linearhistogram}
 
 Plotting a histogram based on an explicitly specified fixed bucket scale.
 
@@ -110,7 +110,7 @@ The format of the result is totally similar to [adaptive histograms](#histogram)
 
 If the spread of input values is uncontrollably large, we recommend that you specify the minimum and maximum values to prevent potential failures due to high memory consumption.
 
-**Examples:**
+**Examples**
 
 ```yql
 SELECT

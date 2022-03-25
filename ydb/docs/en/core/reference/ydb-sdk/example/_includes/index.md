@@ -4,13 +4,13 @@ This section describes the code of same-type test apps implemented using {{ ydb-
 
 {% if oss %}
 
-* [C++](../example-cpp.md)
+- [C++](../example-cpp.md)
 {% endif %}
-* [C# (.NET)](../example-dotnet.md)
-* [Go](../go/index.md)
-* [Java](../example-java.md)
-* [Node.js](../example-nodejs.md)
-* [Python](../python/index.md)
+- [C# (.NET)](../example-dotnet.md)
+- [Go](../go/index.md)
+- [Java](../example-java.md)
+- [Node.js](../example-nodejs.md)
+- [Python](../python/index.md)
 
 A test app performs the following steps:
 

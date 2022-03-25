@@ -1,4 +1,4 @@
-  Top 10 queries for the last 6 hours by the total number of rows updated per minute
+Top 10 queries for the last 6 hours by the total number of rows updated per minute
 
   ```sql
   SELECT
@@ -6,7 +6,7 @@
       Count,
       QueryText,
       IntervalEnd
-  FROM `/cluster/path/to/database/.sys/query_metrics_one_minute`
+  FROM `.sys/query_metrics_one_minute`
   ORDER BY SumUpdateRows DESC LIMIT 10
   ```
 
@@ -20,8 +20,9 @@
       SumReadBytes / Count as AvgReadBytes,
       MaxReadBytes,
       QueryText
-  FROM `/cluster/path/to/database/.sys/query_metrics_one_minute`
+  FROM `.sys/query_metrics_one_minute`
   WHERE SumReadBytes > 0
   ORDER BY IntervalEnd DESC, SumReadBytes DESC
   LIMIT 100
   ```
+

@@ -49,9 +49,9 @@ The first step of the interactive scenario is different in the `init` and `profi
 
 Next, you'll be prompted to sequentially perform the following actions with each connection parameter that can be saved in the profile:
 
-* Don't save.
-* Set a new value or Use - Set a new value or Use <value>.
-* Use current value (this option is available when updating an existing profile).
+- Don't save
+- Set a new value or Use <value>
+- Use current value (this option is available when updating an existing profile)
 
 ## Example
 
@@ -108,3 +108,4 @@ Creating a new `mydb1` profile:
     ```text
     Activate profile "mydb1" to use by default? (current active profile is not set) y/n: n
     ```
+

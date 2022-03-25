@@ -3,18 +3,18 @@
 `EVALUATE IF`: Executing an action depending on the condition. It's followed by:
 
 1. Condition.
-1. [DO](#do) with the name and parameters of the action or an anonymous action.
-1. An optional `ELSE` followed by the second `DO` for a situation where the condition is not met.
+2. [DO](#do) with the name and parameters of the action or an anonymous action.
+3. An optional `ELSE` followed by the second `DO` for a situation where the condition is not met.
 
 ## EVALUATE FOR {#evaluate-for}
 
-`EVALUATE FOR`: Executing an action for each element in the list. It's followed by:
+`EVALUATE FOR`: Executing an action for each item in the list. It's followed by:
 
 1. [A named expression](../../expressions.md#named-nodes) applied to each next element in the list.
-1. `IN` keyword.
-1. The above-declared named expression applied to the list the action is executed on.
-1. [DO](#do) with the name and parameters of an action or an anonymous action. In the parameters, you can use both the current element from the first paragraph and any named expressions declared above, including the list itself.
-1. An optional `ELSE` followed by the second `DO` for the situation when the list is empty.
+2. `IN` keyword.
+3. The above-declared named expression applied to the list the action is executed on.
+4. [DO](#do) with the name and parameters of an action or an anonymous action. In the parameters, you can use both the current element from the first paragraph and any named expressions declared above, including the list itself.
+5. An optional `ELSE` followed by the second `DO` for the situation when the list is empty.
 
 **Examples**
 
@@ -73,3 +73,4 @@ ELSE
 Note that `EVALUATE` is run before the operation starts. Please also note that in `EVALUATE` you can't use [anonymous tables](../../select.md#temporary-tables).
 
 {% endnote %}
+

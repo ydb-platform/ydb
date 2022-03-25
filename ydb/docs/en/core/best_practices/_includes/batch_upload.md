@@ -34,3 +34,4 @@ We recommend the following algorithm for efficiently uploading data to {{ ydb-sh
   3. Partition the resulting data set by the number of shards in the table. Each part will contain a set of consecutive rows.
   4. Upload the resulting parts to the table shards concurrently.
   5. Make a ```COMMIT``` after every 100,000 rows or 1 MB of data.
+

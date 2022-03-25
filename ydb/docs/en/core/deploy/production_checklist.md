@@ -12,8 +12,8 @@ When planning a deployment, it's important to choose the right cluster topology 
 
 TBD. mirror-3dc vs block-4-2: Whether we want the following in the doc:
 
-- Much more network traffic.
-- Higher storage overhead.
+- Much more network traffic
+- Higher storage overhead
 
 ## Hardware configuration
 
@@ -23,3 +23,4 @@ For correct operation, we recommend using the x86_64 CPU architecture with suppo
 - ???
 
 ## Software configuration
+

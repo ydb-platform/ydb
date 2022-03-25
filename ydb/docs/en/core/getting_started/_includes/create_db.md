@@ -15,3 +15,4 @@ There are three methods you can use to deploy {{ ydb-short-name }}:
 ## Learn more about YDB {#next}
 
 After creating your database, proceed to the [Authentication - Getting started](../auth.md) article to learn more about YDB.
+

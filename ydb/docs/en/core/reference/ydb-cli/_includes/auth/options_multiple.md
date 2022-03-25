@@ -5,3 +5,4 @@ $ {{ ydb-cli }} --use-metadata-credentials --iam-token-file ~/.ydb/token scheme 
 More than one auth method were provided via options. Choose exactly one of them
 Try "--help" option for more info.
 ```
+

@@ -75,6 +75,10 @@ public:
         return AbiCompatibility_ >= compatibilityVersion;
     }
 
+    IBoxedValue1(const IBoxedValue1&) = delete;
+    IBoxedValue1& operator=(const IBoxedValue1&) = delete;
+    IBoxedValue1() = default;
+
     virtual ~IBoxedValue1() = default;
 
 private:

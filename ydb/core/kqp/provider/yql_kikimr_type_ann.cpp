@@ -488,7 +488,11 @@ private:
 
         for (const auto& item : updateResultType->GetItems()) {
             auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
-            YQL_ENSURE(column);
+            if (!column) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
+                    << "Column '" << column->Name << "' does not exist in table '" << node.Table().Value() << "'."));
+                return TStatus::Error;
+            }
             if (column->NotNull && item->HasOptionalOrNull()) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                     << "Can't set NULL or optional value to not null column: " << column->Name));

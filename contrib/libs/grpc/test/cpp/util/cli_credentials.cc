@@ -18,11 +18,12 @@
 
 #include "test/cpp/util/cli_credentials.h"
 
+#include "y_absl/flags/flag.h"
+
 #include <grpc/slice.h>
 #include <grpc/support/log.h>
 #include <grpcpp/impl/codegen/slice.h>
 
-#include "y_absl/flags/flag.h"
 #include "src/core/lib/iomgr/load_file.h"
 
 Y_ABSL_RETIRED_FLAG(bool, enable_ssl, false,

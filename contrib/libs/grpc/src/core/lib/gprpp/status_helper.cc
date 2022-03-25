@@ -1,0 +1,429 @@
+//
+//
+// Copyright 2021 the gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//
+
+#include <grpc/support/port_platform.h>
+
+#include "src/core/lib/gprpp/status_helper.h"
+
+#include "y_absl/strings/cord.h"
+#include "y_absl/strings/escaping.h"
+#include "y_absl/strings/match.h"
+#include "y_absl/strings/str_format.h"
+#include "y_absl/strings/str_join.h"
+#include "y_absl/time/clock.h"
+#include "google/protobuf/any.upb.h"
+#include "google/rpc/status.upb.h"
+#include "upb/upb.hpp"
+
+#include <grpc/support/log.h>
+
+#include "src/core/lib/gprpp/time_util.h"
+
+#include <util/string/cast.h>
+
+namespace grpc_core {
+
+namespace {
+
+#define TYPE_URL_PREFIX "type.googleapis.com/grpc.status."
+#define TYPE_INT_TAG "int."
+#define TYPE_STR_TAG "str."
+#define TYPE_TIME_TAG "time."
+#define TYPE_CHILDREN_TAG "children"
+#define TYPE_URL(name) (TYPE_URL_PREFIX name)
+const y_absl::string_view kTypeUrlPrefix = TYPE_URL_PREFIX;
+const y_absl::string_view kTypeIntTag = TYPE_INT_TAG;
+const y_absl::string_view kTypeStrTag = TYPE_STR_TAG;
+const y_absl::string_view kTypeTimeTag = TYPE_TIME_TAG;
+const y_absl::string_view kTypeChildrenTag = TYPE_CHILDREN_TAG;
+const y_absl::string_view kChildrenPropertyUrl = TYPE_URL(TYPE_CHILDREN_TAG);
+
+const char* GetStatusIntPropertyUrl(StatusIntProperty key) {
+  switch (key) {
+    case StatusIntProperty::kErrorNo:
+      return TYPE_URL(TYPE_INT_TAG "errno");
+    case StatusIntProperty::kFileLine:
+      return TYPE_URL(TYPE_INT_TAG "file_line");
+    case StatusIntProperty::kStreamId:
+      return TYPE_URL(TYPE_INT_TAG "stream_id");
+    case StatusIntProperty::kRpcStatus:
+      return TYPE_URL(TYPE_INT_TAG "grpc_status");
+    case StatusIntProperty::kOffset:
+      return TYPE_URL(TYPE_INT_TAG "offset");
+    case StatusIntProperty::kIndex:
+      return TYPE_URL(TYPE_INT_TAG "index");
+    case StatusIntProperty::kSize:
+      return TYPE_URL(TYPE_INT_TAG "size");
+    case StatusIntProperty::kHttp2Error:
+      return TYPE_URL(TYPE_INT_TAG "http2_error");
+    case StatusIntProperty::kTsiCode:
+      return TYPE_URL(TYPE_INT_TAG "tsi_code");
+    case StatusIntProperty::kWsaError:
+      return TYPE_URL(TYPE_INT_TAG "wsa_error");
+    case StatusIntProperty::kFd:
+      return TYPE_URL(TYPE_INT_TAG "fd");
+    case StatusIntProperty::kHttpStatus:
+      return TYPE_URL(TYPE_INT_TAG "http_status");
+    case StatusIntProperty::kOccurredDuringWrite:
+      return TYPE_URL(TYPE_INT_TAG "occurred_during_write");
+    case StatusIntProperty::ChannelConnectivityState:
+      return TYPE_URL(TYPE_INT_TAG "channel_connectivity_state");
+    case StatusIntProperty::kLbPolicyDrop:
+      return TYPE_URL(TYPE_INT_TAG "lb_policy_drop");
+  }
+  GPR_UNREACHABLE_CODE(return "unknown");
+}
+
+const char* GetStatusStrPropertyUrl(StatusStrProperty key) {
+  switch (key) {
+    case StatusStrProperty::kDescription:
+      return TYPE_URL(TYPE_STR_TAG "description");
+    case StatusStrProperty::kFile:
+      return TYPE_URL(TYPE_STR_TAG "file");
+    case StatusStrProperty::kOsError:
+      return TYPE_URL(TYPE_STR_TAG "os_error");
+    case StatusStrProperty::kSyscall:
+      return TYPE_URL(TYPE_STR_TAG "syscall");
+    case StatusStrProperty::kTargetAddress:
+      return TYPE_URL(TYPE_STR_TAG "target_address");
+    case StatusStrProperty::kGrpcMessage:
+      return TYPE_URL(TYPE_STR_TAG "grpc_message");
+    case StatusStrProperty::kRawBytes:
+      return TYPE_URL(TYPE_STR_TAG "raw_bytes");
+    case StatusStrProperty::kTsiError:
+      return TYPE_URL(TYPE_STR_TAG "tsi_error");
+    case StatusStrProperty::kFilename:
+      return TYPE_URL(TYPE_STR_TAG "filename");
+    case StatusStrProperty::kKey:
+      return TYPE_URL(TYPE_STR_TAG "key");
+    case StatusStrProperty::kValue:
+      return TYPE_URL(TYPE_STR_TAG "value");
+  }
+  GPR_UNREACHABLE_CODE(return "unknown");
+}
+
+const char* GetStatusTimePropertyUrl(StatusTimeProperty key) {
+  switch (key) {
+    case StatusTimeProperty::kCreated:
+      return TYPE_URL(TYPE_TIME_TAG "created_time");
+  }
+  GPR_UNREACHABLE_CODE(return "unknown");
+}
+
+void EncodeUInt32ToBytes(uint32_t v, char* buf) {
+  buf[0] = v & 0xFF;
+  buf[1] = (v >> 8) & 0xFF;
+  buf[2] = (v >> 16) & 0xFF;
+  buf[3] = (v >> 24) & 0xFF;
+}
+
+uint32_t DecodeUInt32FromBytes(const char* buf) {
+  const unsigned char* ubuf = reinterpret_cast<const unsigned char*>(buf);
+  return ubuf[0] | (uint32_t(ubuf[1]) << 8) | (uint32_t(ubuf[2]) << 16) |
+         (uint32_t(ubuf[3]) << 24);
+}
+
+std::vector<y_absl::Status> ParseChildren(y_absl::Cord children) {
+  std::vector<y_absl::Status> result;
+  upb::Arena arena;
+  // Cord is flattened to iterate the buffer easily at the cost of memory copy.
+  // TODO(veblush): Optimize this once CordReader is introduced.
+  y_absl::string_view buf = children.Flatten();
+  size_t cur = 0;
+  while (buf.size() - cur >= sizeof(uint32_t)) {
+    size_t msg_size = DecodeUInt32FromBytes(buf.data() + cur);
+    cur += sizeof(uint32_t);
+    GPR_ASSERT(buf.size() - cur >= msg_size);
+    google_rpc_Status* msg =
+        google_rpc_Status_parse(buf.data() + cur, msg_size, arena.ptr());
+    cur += msg_size;
+    result.push_back(internal::StatusFromProto(msg));
+  }
+  return result;
+}
+
+}  // namespace
+
+y_absl::Status StatusCreate(y_absl::StatusCode code, y_absl::string_view msg,
+                          const DebugLocation& location,
+                          std::initializer_list<y_absl::Status> children) {
+  y_absl::Status s(code, msg);
+  if (location.file() != nullptr) {
+    StatusSetStr(&s, StatusStrProperty::kFile, location.file());
+  }
+  if (location.line() != -1) {
+    StatusSetInt(&s, StatusIntProperty::kFileLine, location.line());
+  }
+  StatusSetTime(&s, StatusTimeProperty::kCreated, y_absl::Now());
+  for (const y_absl::Status& child : children) {
+    if (!child.ok()) {
+      StatusAddChild(&s, child);
+    }
+  }
+  return s;
+}
+
+void StatusSetInt(y_absl::Status* status, StatusIntProperty key, intptr_t value) {
+  status->SetPayload(GetStatusIntPropertyUrl(key),
+                     y_absl::Cord(ToString(value)));
+}
+
+y_absl::optional<intptr_t> StatusGetInt(const y_absl::Status& status,
+                                      StatusIntProperty key) {
+  y_absl::optional<y_absl::Cord> p =
+      status.GetPayload(GetStatusIntPropertyUrl(key));
+  if (p.has_value()) {
+    y_absl::optional<y_absl::string_view> sv = p->TryFlat();
+    intptr_t value;
+    if (sv.has_value()) {
+      if (y_absl::SimpleAtoi(*sv, &value)) {
+        return value;
+      }
+    } else {
+      if (y_absl::SimpleAtoi(TString(*p), &value)) {
+        return value;
+      }
+    }
+  }
+  return {};
+}
+
+void StatusSetStr(y_absl::Status* status, StatusStrProperty key,
+                  y_absl::string_view value) {
+  status->SetPayload(GetStatusStrPropertyUrl(key), y_absl::Cord(value));
+}
+
+y_absl::optional<TString> StatusGetStr(const y_absl::Status& status,
+                                         StatusStrProperty key) {
+  y_absl::optional<y_absl::Cord> p =
+      status.GetPayload(GetStatusStrPropertyUrl(key));
+  if (p.has_value()) {
+    return TString(*p);
+  }
+  return {};
+}
+
+void StatusSetTime(y_absl::Status* status, StatusTimeProperty key,
+                   y_absl::Time time) {
+  status->SetPayload(GetStatusTimePropertyUrl(key),
+                     y_absl::Cord(y_absl::string_view(
+                         reinterpret_cast<const char*>(&time), sizeof(time))));
+}
+
+y_absl::optional<y_absl::Time> StatusGetTime(const y_absl::Status& status,
+                                         StatusTimeProperty key) {
+  y_absl::optional<y_absl::Cord> p =
+      status.GetPayload(GetStatusTimePropertyUrl(key));
+  if (p.has_value()) {
+    y_absl::optional<y_absl::string_view> sv = p->TryFlat();
+    if (sv.has_value()) {
+      return *reinterpret_cast<const y_absl::Time*>(sv->data());
+    } else {
+      TString s = TString(*p);
+      return *reinterpret_cast<const y_absl::Time*>(s.c_str());
+    }
+  }
+  return {};
+}
+
+void StatusAddChild(y_absl::Status* status, y_absl::Status child) {
+  upb::Arena arena;
+  // Serialize msg to buf
+  google_rpc_Status* msg = internal::StatusToProto(child, arena.ptr());
+  size_t buf_len = 0;
+  char* buf = google_rpc_Status_serialize(msg, arena.ptr(), &buf_len);
+  // Append (msg-length and msg) to children payload
+  y_absl::optional<y_absl::Cord> old_children =
+      status->GetPayload(kChildrenPropertyUrl);
+  y_absl::Cord children;
+  if (old_children.has_value()) {
+    children = *old_children;
+  }
+  char head_buf[sizeof(uint32_t)];
+  EncodeUInt32ToBytes(buf_len, head_buf);
+  children.Append(y_absl::string_view(head_buf, sizeof(uint32_t)));
+  children.Append(y_absl::string_view(buf, buf_len));
+  status->SetPayload(kChildrenPropertyUrl, std::move(children));
+}
+
+std::vector<y_absl::Status> StatusGetChildren(y_absl::Status status) {
+  y_absl::optional<y_absl::Cord> children = status.GetPayload(kChildrenPropertyUrl);
+  return children.has_value() ? ParseChildren(*children)
+                              : std::vector<y_absl::Status>();
+}
+
+TString StatusToString(const y_absl::Status& status) {
+  if (status.ok()) {
+    return "OK";
+  }
+  TString head;
+  y_absl::StrAppend(&head, y_absl::StatusCodeToString(status.code()));
+  if (!status.message().empty()) {
+    y_absl::StrAppend(&head, ":", status.message());
+  }
+  std::vector<TString> kvs;
+  y_absl::optional<y_absl::Cord> children;
+  status.ForEachPayload([&](y_absl::string_view type_url,
+                            const y_absl::Cord& payload) {
+    if (y_absl::StartsWith(type_url, kTypeUrlPrefix)) {
+      type_url.remove_prefix(kTypeUrlPrefix.size());
+      if (type_url == kTypeChildrenTag) {
+        children = payload;
+        return;
+      }
+      y_absl::string_view payload_view;
+      TString payload_storage;
+      if (payload.TryFlat().has_value()) {
+        payload_view = payload.TryFlat().value();
+      } else {
+        payload_storage = TString(payload);
+        payload_view = payload_storage;
+      }
+      if (y_absl::StartsWith(type_url, kTypeIntTag)) {
+        type_url.remove_prefix(kTypeIntTag.size());
+        kvs.push_back(y_absl::StrCat(type_url, ":", payload_view));
+      } else if (y_absl::StartsWith(type_url, kTypeStrTag)) {
+        type_url.remove_prefix(kTypeStrTag.size());
+        kvs.push_back(y_absl::StrCat(type_url, ":\"",
+                                   y_absl::CHexEscape(payload_view), "\""));
+      } else if (y_absl::StartsWith(type_url, kTypeTimeTag)) {
+        type_url.remove_prefix(kTypeTimeTag.size());
+        y_absl::Time t =
+            *reinterpret_cast<const y_absl::Time*>(payload_view.data());
+        kvs.push_back(y_absl::StrCat(type_url, ":\"", y_absl::FormatTime(t), "\""));
+      } else {
+        kvs.push_back(y_absl::StrCat(type_url, ":\"",
+                                   y_absl::CHexEscape(payload_view), "\""));
+      }
+    } else {
+      y_absl::optional<y_absl::string_view> payload_view = payload.TryFlat();
+      TString payload_str = y_absl::CHexEscape(
+          payload_view.has_value() ? *payload_view : TString(payload));
+      kvs.push_back(y_absl::StrCat(type_url, ":\"", payload_str, "\""));
+    }
+  });
+  if (children.has_value()) {
+    std::vector<y_absl::Status> children_status = ParseChildren(*children);
+    std::vector<TString> children_text;
+    children_text.reserve(children_status.size());
+    for (const y_absl::Status& child_status : children_status) {
+      children_text.push_back(StatusToString(child_status));
+    }
+    kvs.push_back(
+        y_absl::StrCat("children:[", y_absl::StrJoin(children_text, ", "), "]"));
+  }
+  return kvs.empty() ? head
+                     : y_absl::StrCat(head, " {", y_absl::StrJoin(kvs, ", "), "}");
+}
+
+namespace internal {
+
+google_rpc_Status* StatusToProto(const y_absl::Status& status, upb_arena* arena) {
+  google_rpc_Status* msg = google_rpc_Status_new(arena);
+  google_rpc_Status_set_code(msg, int32_t(status.code()));
+  google_rpc_Status_set_message(
+      msg, upb_strview_make(status.message().data(), status.message().size()));
+  status.ForEachPayload([&](y_absl::string_view type_url,
+                            const y_absl::Cord& payload) {
+    google_protobuf_Any* any = google_rpc_Status_add_details(msg, arena);
+    char* type_url_buf =
+        reinterpret_cast<char*>(upb_arena_malloc(arena, type_url.size()));
+    memcpy(type_url_buf, type_url.data(), type_url.size());
+    google_protobuf_Any_set_type_url(
+        any, upb_strview_make(type_url_buf, type_url.size()));
+    y_absl::optional<y_absl::string_view> v_view = payload.TryFlat();
+    if (v_view.has_value()) {
+      google_protobuf_Any_set_value(
+          any, upb_strview_make(v_view->data(), v_view->size()));
+    } else {
+      char* buf =
+          reinterpret_cast<char*>(upb_arena_malloc(arena, payload.size()));
+      char* cur = buf;
+      for (y_absl::string_view chunk : payload.Chunks()) {
+        memcpy(cur, chunk.data(), chunk.size());
+        cur += chunk.size();
+      }
+      google_protobuf_Any_set_value(any, upb_strview_make(buf, payload.size()));
+    }
+  });
+  return msg;
+}
+
+y_absl::Status StatusFromProto(google_rpc_Status* msg) {
+  int32_t code = google_rpc_Status_code(msg);
+  upb_strview message = google_rpc_Status_message(msg);
+  y_absl::Status status(static_cast<y_absl::StatusCode>(code),
+                      y_absl::string_view(message.data, message.size));
+  size_t detail_len;
+  const google_protobuf_Any* const* details =
+      google_rpc_Status_details(msg, &detail_len);
+  for (size_t i = 0; i < detail_len; i++) {
+    upb_strview type_url = google_protobuf_Any_type_url(details[i]);
+    upb_strview value = google_protobuf_Any_value(details[i]);
+    status.SetPayload(y_absl::string_view(type_url.data, type_url.size),
+                      y_absl::Cord(y_absl::string_view(value.data, value.size)));
+  }
+  return status;
+}
+
+uintptr_t StatusAllocPtr(y_absl::Status s) {
+  // This relies the fact that y_absl::Status has only one member, StatusRep*
+  // so the sizeof(y_absl::Status) has the same size of intptr_t and StatusRep*
+  // can be stolen using placement allocation.
+  static_assert(sizeof(intptr_t) == sizeof(y_absl::Status),
+                "y_absl::Status should be as big as intptr_t");
+  // This does two things;
+  // 1. Copies StatusRep* of y_absl::Status to ptr
+  // 2. Increases the counter of StatusRep if it's not inlined
+  uintptr_t ptr;
+  new (&ptr) y_absl::Status(s);
+  return ptr;
+}
+
+void StatusFreePtr(uintptr_t ptr) {
+  // Decreases the counter of StatusRep if it's not inlined.
+  reinterpret_cast<y_absl::Status*>(&ptr)->~Status();
+}
+
+y_absl::Status StatusGetFromPtr(uintptr_t ptr) {
+  // Constructs Status from ptr having the address of StatusRep.
+  return *reinterpret_cast<y_absl::Status*>(&ptr);
+}
+
+uintptr_t StatusAllocHeapPtr(y_absl::Status s) {
+  if (s.ok()) return kOkStatusPtr;
+  y_absl::Status* ptr = new y_absl::Status(s);
+  return reinterpret_cast<uintptr_t>(ptr);
+}
+
+void StatusFreeHeapPtr(uintptr_t ptr) {
+  y_absl::Status* s = reinterpret_cast<y_absl::Status*>(ptr);
+  delete s;
+}
+
+y_absl::Status StatusGetFromHeapPtr(uintptr_t ptr) {
+  if (ptr == kOkStatusPtr) {
+    return y_absl::OkStatus();
+  } else {
+    return *reinterpret_cast<y_absl::Status*>(ptr);
+  }
+}
+
+}  // namespace internal
+
+}  // namespace grpc_core

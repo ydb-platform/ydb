@@ -16,7 +16,12 @@
  *
  */
 
+#include "src/cpp/client/create_channel_internal.h"
+
 #include <memory>
+#include <util/generic/string.h>
+#include <utility>
+#include <vector>
 
 #include <grpcpp/channel.h>
 

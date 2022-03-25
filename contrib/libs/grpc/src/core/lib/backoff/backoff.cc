@@ -39,7 +39,7 @@ double generate_uniform_random_number(uint32_t* rng_state) {
 double generate_uniform_random_number_between(uint32_t* rng_state, double a,
                                               double b) {
   if (a == b) return a;
-  if (a > b) GPR_SWAP(double, a, b);  // make sure a < b
+  if (a > b) std::swap(a, b);  // make sure a < b
   const double range = b - a;
   return a + generate_uniform_random_number(rng_state) * range;
 }
@@ -55,7 +55,7 @@ BackOff::BackOff(const Options& options)
 grpc_millis BackOff::NextAttemptTime() {
   if (initial_) {
     initial_ = false;
-    return current_backoff_ + grpc_core::ExecCtx::Get()->Now();
+    return current_backoff_ + ExecCtx::Get()->Now();
   }
   current_backoff_ = static_cast<grpc_millis>(
       std::min(current_backoff_ * options_.multiplier(),
@@ -65,7 +65,7 @@ grpc_millis BackOff::NextAttemptTime() {
       options_.jitter() * current_backoff_);
   const grpc_millis next_timeout =
       static_cast<grpc_millis>(current_backoff_ + jitter);
-  return next_timeout + grpc_core::ExecCtx::Get()->Now();
+  return next_timeout + ExecCtx::Get()->Now();
 }
 
 void BackOff::Reset() {

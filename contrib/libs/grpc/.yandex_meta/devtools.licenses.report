@@ -29,20 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-SKIP     LicenseRef-scancode-generic-cla 084c06118a7b53437fd2eaf3372fb53c
-BELONGS third_party/upb/ya.make
-    # contributors license agreement
-    License text:
-        Please sign the [Google Contributor License Agreement
-        (CLA)](https://cla.developers.google.com/)
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-generic-cla
-        Score           : 22.00
-        Match type      : NOTICE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
-    Files with this license:
-        third_party/upb/CONTRIBUTING.md [3:4]
-
 SKIP     Python-2.0           084da548815188967cad816891b84e50
 BELONGS src/python/grpcio/ya.make
     License text:
@@ -56,36 +42,22 @@ BELONGS src/python/grpcio/ya.make
     Files with this license:
         src/python/grpcio/grpc/__init__.py [13:14]
 
-KEEP     Unlicense            157675c2c94799a0422fc7f5a9c9f9dd
+KEEP     BSD-3-Clause         1074fcc8fed6e87c183fda7df379eff5
 BELONGS third_party/upb/ya.make
-    License text:
-           This is free and unencumbered software released into the public domain. http://unlicense.org/
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: Unlicense
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.64
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        third_party/upb/third_party/wyhash/wyhash.h [2:2]
-
-SKIP     Apache-2.0           16b70eae00287deabdea5ef1821711a0
-BELONGS ya.make
-    License text:
-        licenses(["notice"])  # Apache v2
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        src/core/tsi/test_creds/BUILD [15:15]
+        third_party/upb/upb/msg_internal.h [5:25]
 
 SKIP     Apache-2.0           19395e57ad88c62801cecab69fb3a75b
 BELONGS src/python/grpcio_tests/ya.make
-FILE_INCLUDE LICENSE found in files: src/python/grpcio_tests/setup.py at line 34
-FILE_INCLUDE third_party/address_sorting/LICENSE found in files: src/python/grpcio_tests/setup.py at line 34
-FILE_INCLUDE third_party/upb/LICENSE found in files: src/python/grpcio_tests/setup.py at line 34
-FILE_INCLUDE third_party/upb/third_party/wyhash/LICENSE found in files: src/python/grpcio_tests/setup.py at line 34
+FILE_INCLUDE LICENSE found in files: src/python/grpcio_tests/setup.py at line 33
+FILE_INCLUDE third_party/address_sorting/LICENSE found in files: src/python/grpcio_tests/setup.py at line 33
+FILE_INCLUDE third_party/upb/LICENSE found in files: src/python/grpcio_tests/setup.py at line 33
     License text:
         LICENSE = 'Apache License 2.0'
     Scancode info:
@@ -94,19 +66,7 @@ FILE_INCLUDE third_party/upb/third_party/wyhash/LICENSE found in files: src/pyth
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        src/python/grpcio_tests/setup.py [34:34]
-
-KEEP     Unlicense            1d267ceb3a8d8f75f1be3011ee4cbf53
-BELONGS third_party/upb/ya.make
-FILE_INCLUDE AUTHORS found in files: third_party/upb/third_party/wyhash/LICENSE at line 19
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: Unlicense
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://unlicense.org/, https://spdx.org/licenses/Unlicense, https://unlicense.org/
-    Files with this license:
-        third_party/upb/third_party/wyhash/LICENSE [1:24]
+        src/python/grpcio_tests/setup.py [33:33]
 
 KEEP     BSD-3-Clause         26c9318cf95923719e6a1cbb87990e08
 BELONGS third_party/address_sorting/ya.make
@@ -140,13 +100,15 @@ BELONGS src/python/grpcio_health_checking/ya.make src/python/grpcio_reflection/y
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
+        src/python/grpcio_admin/setup.py [49:49]
+        src/python/grpcio_csds/setup.py [50:50]
         src/python/grpcio_health_checking/setup.py [95:95]
         src/python/grpcio_reflection/setup.py [91:91]
         src/python/grpcio_status/setup.py [93:93]
-        src/python/grpcio_testing/setup.py [71:71]
+        src/python/grpcio_testing/setup.py [72:72]
 
 KEEP     Apache-2.0           3b0ea1fb66390711cb1f160e05b0e2a4
-BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/cpp/end2end/ya.make test/cpp/util/ya.make ya.make
+BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/cpp/end2end/ya.make test/cpp/util/ya.make tools/codegen/core/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -406,6 +368,7 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         include/grpcpp/support/time.h [5:15]
         include/grpcpp/support/validate_service_config.h [5:15]
         include/grpcpp/test/channel_test_peer.h [5:15]
+        include/grpcpp/test/client_context_test_peer.h [5:15]
         include/grpcpp/test/default_reactor_test_peer.h [5:15]
         include/grpcpp/test/mock_stream.h [5:15]
         include/grpcpp/test/server_context_test_spouse.h [5:15]
@@ -443,14 +406,10 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/ext/filters/census/grpc_context.cc [5:15]
         src/core/ext/filters/client_channel/backup_poller.cc [5:15]
         src/core/ext/filters/client_channel/backup_poller.h [5:15]
-        src/core/ext/filters/client_channel/channel_connectivity.cc [5:15]
-        src/core/ext/filters/client_channel/client_channel.h [5:15]
         src/core/ext/filters/client_channel/client_channel_channelz.cc [5:15]
         src/core/ext/filters/client_channel/client_channel_channelz.h [5:15]
         src/core/ext/filters/client_channel/client_channel_factory.cc [5:15]
-        src/core/ext/filters/client_channel/client_channel_factory.h [5:15]
         src/core/ext/filters/client_channel/client_channel_plugin.cc [5:15]
-        src/core/ext/filters/client_channel/connector.h [5:15]
         src/core/ext/filters/client_channel/global_subchannel_pool.h [5:15]
         src/core/ext/filters/client_channel/health/health_check_client.cc [5:15]
         src/core/ext/filters/client_channel/health/health_check_client.h [5:15]
@@ -459,10 +418,8 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/ext/filters/client_channel/http_proxy.cc [5:15]
         src/core/ext/filters/client_channel/http_proxy.h [5:15]
         src/core/ext/filters/client_channel/lb_policy.cc [5:15]
-        src/core/ext/filters/client_channel/lb_policy.h [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/client_load_reporting_filter.cc [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/client_load_reporting_filter.h [5:15]
-        src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.cc [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.h [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_channel.cc [5:15]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_channel.h [5:15]
@@ -485,12 +442,10 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/ext/filters/client_channel/resolver.h [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h [5:15]
-        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_libuv.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_posix.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.h [5:15]
-        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_libuv.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc [5:15]
         src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.h [5:15]
@@ -500,14 +455,10 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/ext/filters/client_channel/resolver_factory.h [5:15]
         src/core/ext/filters/client_channel/resolver_registry.cc [5:15]
         src/core/ext/filters/client_channel/resolver_registry.h [5:15]
-        src/core/ext/filters/client_channel/resolver_result_parsing.cc [5:15]
-        src/core/ext/filters/client_channel/resolver_result_parsing.h [5:15]
         src/core/ext/filters/client_channel/retry_throttle.cc [5:15]
         src/core/ext/filters/client_channel/retry_throttle.h [5:15]
         src/core/ext/filters/client_channel/server_address.cc [5:15]
         src/core/ext/filters/client_channel/server_address.h [5:15]
-        src/core/ext/filters/client_channel/subchannel.cc [5:15]
-        src/core/ext/filters/client_channel/subchannel.h [5:15]
         src/core/ext/filters/client_channel/subchannel_interface.h [5:15]
         src/core/ext/filters/client_channel/subchannel_pool_interface.h [5:15]
         src/core/ext/filters/client_idle/client_idle_filter.cc [5:15]
@@ -523,13 +474,9 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/ext/filters/max_age/max_age_filter.cc [5:15]
         src/core/ext/transport/chttp2/alpn/alpn.cc [5:15]
         src/core/ext/transport/chttp2/alpn/alpn.h [5:15]
-        src/core/ext/transport/chttp2/client/authority.cc [5:15]
-        src/core/ext/transport/chttp2/client/authority.h [5:15]
         src/core/ext/transport/chttp2/client/chttp2_connector.cc [5:15]
         src/core/ext/transport/chttp2/client/chttp2_connector.h [5:15]
-        src/core/ext/transport/chttp2/client/insecure/channel_create.cc [5:15]
         src/core/ext/transport/chttp2/client/insecure/channel_create_posix.cc [5:15]
-        src/core/ext/transport/chttp2/client/secure/secure_channel_create.cc [5:15]
         src/core/ext/transport/chttp2/server/chttp2_server.cc [5:15]
         src/core/ext/transport/chttp2/server/chttp2_server.h [5:15]
         src/core/ext/transport/chttp2/server/insecure/server_chttp2.cc [5:15]
@@ -562,14 +509,12 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/ext/transport/chttp2/transport/hpack_encoder.h [5:15]
         src/core/ext/transport/chttp2/transport/hpack_parser.cc [5:15]
         src/core/ext/transport/chttp2/transport/hpack_parser.h [5:15]
-        src/core/ext/transport/chttp2/transport/hpack_table.cc [5:15]
-        src/core/ext/transport/chttp2/transport/hpack_table.h [5:15]
+        src/core/ext/transport/chttp2/transport/hpack_parser_table.cc [5:15]
+        src/core/ext/transport/chttp2/transport/hpack_parser_table.h [5:15]
         src/core/ext/transport/chttp2/transport/http2_settings.cc [4:14]
         src/core/ext/transport/chttp2/transport/http2_settings.h [4:14]
         src/core/ext/transport/chttp2/transport/huffsyms.cc [5:15]
         src/core/ext/transport/chttp2/transport/huffsyms.h [5:15]
-        src/core/ext/transport/chttp2/transport/incoming_metadata.cc [5:15]
-        src/core/ext/transport/chttp2/transport/incoming_metadata.h [5:15]
         src/core/ext/transport/chttp2/transport/internal.h [5:15]
         src/core/ext/transport/chttp2/transport/parsing.cc [5:15]
         src/core/ext/transport/chttp2/transport/stream_lists.cc [5:15]
@@ -581,13 +526,13 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/ext/transport/inproc/inproc_plugin.cc [5:15]
         src/core/ext/transport/inproc/inproc_transport.cc [5:15]
         src/core/ext/transport/inproc/inproc_transport.h [5:15]
-        src/core/ext/xds/xds_api.cc [5:15]
         src/core/ext/xds/xds_api.h [5:15]
-        src/core/ext/xds/xds_client.cc [5:15]
         src/core/ext/xds/xds_client_stats.cc [5:15]
         src/core/ext/xds/xds_client_stats.h [5:15]
-        src/core/lib/avl/avl.cc [5:15]
-        src/core/lib/avl/avl.h [5:15]
+        src/core/lib/address_utils/parse_address.cc [5:15]
+        src/core/lib/address_utils/parse_address.h [5:15]
+        src/core/lib/address_utils/sockaddr_utils.cc [5:15]
+        src/core/lib/address_utils/sockaddr_utils.h [5:15]
         src/core/lib/backoff/backoff.cc [5:15]
         src/core/lib/backoff/backoff.h [5:15]
         src/core/lib/channel/channel_args.cc [5:15]
@@ -634,7 +579,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/debug/trace.h [5:15]
         src/core/lib/gpr/alloc.cc [5:15]
         src/core/lib/gpr/alloc.h [5:15]
-        src/core/lib/gpr/arena.h [5:15]
         src/core/lib/gpr/atm.cc [5:15]
         src/core/lib/gpr/cpu_iphone.cc [5:15]
         src/core/lib/gpr/cpu_linux.cc [5:15]
@@ -668,11 +612,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/gpr/time_precise.h [5:15]
         src/core/lib/gpr/time_windows.cc [5:15]
         src/core/lib/gpr/tls.h [5:15]
-        src/core/lib/gpr/tls_gcc.h [5:15]
-        src/core/lib/gpr/tls_msvc.h [5:15]
-        src/core/lib/gpr/tls_pthread.cc [5:15]
-        src/core/lib/gpr/tls_pthread.h [5:15]
-        src/core/lib/gpr/tls_stdcpp.h [5:15]
         src/core/lib/gpr/tmpfile.h [5:15]
         src/core/lib/gpr/tmpfile_msys.cc [5:15]
         src/core/lib/gpr/tmpfile_posix.cc [5:15]
@@ -681,7 +620,7 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/gpr/wrap_memcpy.cc [5:15]
         src/core/lib/gprpp/arena.cc [5:15]
         src/core/lib/gprpp/arena.h [5:15]
-        src/core/lib/gprpp/atomic.h [5:15]
+        src/core/lib/gprpp/atomic_utils.h [5:15]
         src/core/lib/gprpp/debug_location.h [5:15]
         src/core/lib/gprpp/examine_stack.cc [5:15]
         src/core/lib/gprpp/examine_stack.h [5:15]
@@ -730,7 +669,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/endpoint_cfstream.h [5:15]
         src/core/lib/iomgr/endpoint_pair.h [5:15]
         src/core/lib/iomgr/endpoint_pair_posix.cc [5:15]
-        src/core/lib/iomgr/endpoint_pair_uv.cc [5:15]
         src/core/lib/iomgr/endpoint_pair_windows.cc [5:15]
         src/core/lib/iomgr/error.cc [5:15]
         src/core/lib/iomgr/error.h [5:15]
@@ -777,7 +715,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/iomgr_internal.h [5:15]
         src/core/lib/iomgr/iomgr_posix.cc [5:15]
         src/core/lib/iomgr/iomgr_posix_cfstream.cc [5:15]
-        src/core/lib/iomgr/iomgr_uv.cc [5:15]
         src/core/lib/iomgr/iomgr_windows.cc [5:15]
         src/core/lib/iomgr/is_epollexclusive_available.cc [5:15]
         src/core/lib/iomgr/is_epollexclusive_available.h [5:15]
@@ -786,11 +723,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/lockfree_event.cc [5:15]
         src/core/lib/iomgr/lockfree_event.h [5:15]
         src/core/lib/iomgr/nameser.h [5:15]
-        src/core/lib/iomgr/parse_address.cc [5:15]
-        src/core/lib/iomgr/parse_address.h [5:15]
-        src/core/lib/iomgr/poller/eventmanager_interface.h [5:15]
-        src/core/lib/iomgr/poller/eventmanager_libuv.cc [5:15]
-        src/core/lib/iomgr/poller/eventmanager_libuv.h [5:15]
         src/core/lib/iomgr/polling_entity.cc [5:15]
         src/core/lib/iomgr/polling_entity.h [5:15]
         src/core/lib/iomgr/pollset.cc [5:15]
@@ -803,8 +735,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/pollset_set_custom.h [5:15]
         src/core/lib/iomgr/pollset_set_windows.cc [5:15]
         src/core/lib/iomgr/pollset_set_windows.h [5:15]
-        src/core/lib/iomgr/pollset_uv.cc [5:15]
-        src/core/lib/iomgr/pollset_uv.h [5:15]
         src/core/lib/iomgr/pollset_windows.cc [5:15]
         src/core/lib/iomgr/pollset_windows.h [5:15]
         src/core/lib/iomgr/port.h [5:15]
@@ -815,13 +745,8 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/resolve_address_custom.h [5:15]
         src/core/lib/iomgr/resolve_address_posix.cc [5:15]
         src/core/lib/iomgr/resolve_address_windows.cc [5:15]
-        src/core/lib/iomgr/resource_quota.cc [5:15]
-        src/core/lib/iomgr/resource_quota.h [5:15]
         src/core/lib/iomgr/sockaddr.h [5:15]
-        src/core/lib/iomgr/sockaddr_custom.h [5:15]
         src/core/lib/iomgr/sockaddr_posix.h [5:15]
-        src/core/lib/iomgr/sockaddr_utils.cc [5:15]
-        src/core/lib/iomgr/sockaddr_utils.h [5:15]
         src/core/lib/iomgr/sockaddr_windows.h [5:15]
         src/core/lib/iomgr/socket_factory_posix.cc [5:15]
         src/core/lib/iomgr/socket_factory_posix.h [5:15]
@@ -832,7 +757,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/socket_utils_linux.cc [5:15]
         src/core/lib/iomgr/socket_utils_posix.cc [5:15]
         src/core/lib/iomgr/socket_utils_posix.h [5:15]
-        src/core/lib/iomgr/socket_utils_uv.cc [5:15]
         src/core/lib/iomgr/socket_utils_windows.cc [5:15]
         src/core/lib/iomgr/socket_windows.cc [5:15]
         src/core/lib/iomgr/socket_windows.h [5:15]
@@ -857,7 +781,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/tcp_server_utils_posix_ifaddrs.cc [5:15]
         src/core/lib/iomgr/tcp_server_utils_posix_noifaddrs.cc [5:15]
         src/core/lib/iomgr/tcp_server_windows.cc [5:15]
-        src/core/lib/iomgr/tcp_uv.cc [5:15]
         src/core/lib/iomgr/tcp_windows.cc [5:15]
         src/core/lib/iomgr/tcp_windows.h [5:15]
         src/core/lib/iomgr/time_averaged_stats.cc [5:15]
@@ -872,9 +795,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/iomgr/timer_heap.h [5:15]
         src/core/lib/iomgr/timer_manager.cc [5:15]
         src/core/lib/iomgr/timer_manager.h [5:15]
-        src/core/lib/iomgr/timer_uv.cc [5:15]
-        src/core/lib/iomgr/udp_server.cc [5:15]
-        src/core/lib/iomgr/udp_server.h [5:15]
         src/core/lib/iomgr/unix_sockets_posix.cc [5:15]
         src/core/lib/iomgr/unix_sockets_posix.h [5:15]
         src/core/lib/iomgr/unix_sockets_posix_noop.cc [5:15]
@@ -892,6 +812,7 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/profiling/basic_timers.cc [5:15]
         src/core/lib/profiling/stap_timers.cc [5:15]
         src/core/lib/profiling/timers.h [5:15]
+        src/core/lib/promise/detail/switch.h [4:14]
         src/core/lib/security/context/security_context.cc [5:15]
         src/core/lib/security/context/security_context.h [5:15]
         src/core/lib/security/credentials/alts/alts_credentials.cc [5:15]
@@ -971,12 +892,16 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/core/lib/slice/percent_encoding.cc [5:15]
         src/core/lib/slice/percent_encoding.h [5:15]
         src/core/lib/slice/slice.cc [5:15]
+        src/core/lib/slice/slice_api.cc [5:15]
         src/core/lib/slice/slice_buffer.cc [5:15]
         src/core/lib/slice/slice_intern.cc [5:15]
         src/core/lib/slice/slice_internal.h [5:15]
+        src/core/lib/slice/slice_split.h [5:15]
         src/core/lib/slice/slice_string_helpers.cc [5:15]
         src/core/lib/slice/slice_string_helpers.h [5:15]
         src/core/lib/slice/slice_utils.h [5:15]
+        src/core/lib/slice/static_slice.cc [4:14]
+        src/core/lib/slice/static_slice.h [4:14]
         src/core/lib/surface/api_trace.cc [5:15]
         src/core/lib/surface/api_trace.h [5:15]
         src/core/lib/surface/byte_buffer.cc [5:15]
@@ -1124,8 +1049,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         src/cpp/common/secure_channel_arguments.cc [5:15]
         src/cpp/common/secure_create_auth_context.cc [5:15]
         src/cpp/common/tls_credentials_options.cc [5:15]
-        src/cpp/common/tls_credentials_options_util.cc [5:15]
-        src/cpp/common/tls_credentials_options_util.h [5:15]
         src/cpp/common/validate_service_config.cc [5:15]
         src/cpp/common/version_cc.cc [5:15]
         src/cpp/ext/proto_server_reflection.cc [5:15]
@@ -1208,14 +1131,10 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         test/core/util/subprocess_windows.cc [5:15]
         test/core/util/test_config.cc [5:15]
         test/core/util/test_config.h [5:15]
-        test/core/util/test_lb_policies.cc [5:15]
-        test/core/util/test_lb_policies.h [5:15]
         test/core/util/test_tcp_server.cc [5:15]
         test/core/util/test_tcp_server.h [5:15]
         test/core/util/tracer_util.cc [5:15]
         test/core/util/tracer_util.h [5:15]
-        test/core/util/trickle_endpoint.cc [5:15]
-        test/core/util/trickle_endpoint.h [5:15]
         test/cpp/end2end/async_end2end_test.cc [5:15]
         test/cpp/end2end/cfstream_test.cc [5:15]
         test/cpp/end2end/channelz_service_test.cc [5:15]
@@ -1231,7 +1150,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         test/cpp/end2end/filter_end2end_test.cc [5:15]
         test/cpp/end2end/flaky_network_test.cc [5:15]
         test/cpp/end2end/generic_end2end_test.cc [5:15]
-        test/cpp/end2end/grpclb_end2end_test.cc [5:15]
         test/cpp/end2end/health_service_end2end_test.cc [5:15]
         test/cpp/end2end/hybrid_end2end_test.cc [5:15]
         test/cpp/end2end/interceptors_util.cc [5:15]
@@ -1257,7 +1175,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         test/cpp/end2end/test_service_impl.h [5:15]
         test/cpp/end2end/thread_stress_test.cc [5:15]
         test/cpp/end2end/time_change_test.cc [5:15]
-        test/cpp/end2end/xds_end2end_test.cc [5:15]
         test/cpp/util/byte_buffer_proto_helper.cc [5:15]
         test/cpp/util/byte_buffer_proto_helper.h [5:15]
         test/cpp/util/byte_buffer_test.cc [5:15]
@@ -1298,11 +1215,9 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/
         test/cpp/util/test_credentials_provider.h [5:15]
         test/cpp/util/time_test.cc [5:15]
         tools/codegen/core/gen_hpack_tables.cc [5:15]
-        tools/codegen/core/gen_legal_metadata_characters.cc [5:15]
-        tools/codegen/core/gen_percent_encoding_tables.cc [5:15]
 
 KEEP     Apache-2.0           4248d6c827c367ff9f1b5e59ca41408e
-BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.make src/proto/grpc/core/ya.make src/proto/grpc/health/v1/ya.make src/proto/grpc/reflection/v1alpha/ya.make src/proto/grpc/status/ya.make src/proto/grpc/testing/duplicate/ya.make src/proto/grpc/testing/xds/ya.make src/proto/grpc/testing/ya.make test/core/util/ya.make test/cpp/end2end/ya.make ya.make
+BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.make src/proto/grpc/core/ya.make src/proto/grpc/health/v1/ya.make src/proto/grpc/reflection/v1alpha/ya.make src/proto/grpc/status/ya.make src/proto/grpc/testing/duplicate/ya.make src/proto/grpc/testing/xds/ya.make src/proto/grpc/testing/ya.make test/core/util/ya.make test/cpp/end2end/ya.make test/cpp/util/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -1310,26 +1225,44 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
+        include/grpc/event_engine/endpoint_config.h [3:13]
+        include/grpc/event_engine/event_engine.h [3:13]
+        include/grpc/event_engine/internal/memory_allocator_impl.h [3:13]
+        include/grpc/event_engine/memory_allocator.h [3:13]
+        include/grpc/event_engine/memory_request.h [3:13]
+        include/grpc/event_engine/port.h [3:13]
+        include/grpcpp/create_channel_binder.h [3:13]
         include/grpcpp/ext/admin_services.h [5:15]
+        include/grpcpp/security/authorization_policy_provider.h [3:13]
+        include/grpcpp/security/binder_credentials.h [3:13]
+        include/grpcpp/security/binder_security_policy.h [3:13]
         include/grpcpp/security/tls_certificate_provider.h [4:14]
+        include/grpcpp/security/tls_certificate_verifier.h [4:14]
         include/grpcpp/xds_server_builder.h [5:15]
         src/core/ext/filters/client_channel/backend_metric.cc [4:14]
         src/core/ext/filters/client_channel/backend_metric.h [4:14]
+        src/core/ext/filters/client_channel/channel_connectivity.cc [4:14]
         src/core/ext/filters/client_channel/client_channel.cc [4:14]
+        src/core/ext/filters/client_channel/client_channel.h [4:14]
+        src/core/ext/filters/client_channel/client_channel_factory.h [4:14]
         src/core/ext/filters/client_channel/config_selector.cc [4:14]
         src/core/ext/filters/client_channel/config_selector.h [4:14]
+        src/core/ext/filters/client_channel/connector.h [4:14]
         src/core/ext/filters/client_channel/dynamic_filters.cc [4:14]
         src/core/ext/filters/client_channel/dynamic_filters.h [4:14]
         src/core/ext/filters/client_channel/global_subchannel_pool.cc [5:15]
+        src/core/ext/filters/client_channel/lb_policy.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/address_filtering.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/address_filtering.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/child_policy_handler.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/child_policy_handler.h [4:14]
+        src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.h [4:14]
         src/core/ext/filters/client_channel/lb_policy/priority/priority.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/ring_hash/ring_hash.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/ring_hash/ring_hash.h [4:14]
+        src/core/ext/filters/client_channel/lb_policy/rls/rls.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/weighted_target/weighted_target.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/xds/cds.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/xds/xds.h [4:14]
@@ -1338,18 +1271,26 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_manager.cc [4:14]
         src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_resolver.cc [4:14]
         src/core/ext/filters/client_channel/local_subchannel_pool.cc [5:15]
+        src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc [3:13]
+        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_event_engine.cc [3:13]
+        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_event_engine.cc [3:13]
         src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.cc [4:14]
         src/core/ext/filters/client_channel/resolver/fake/fake_resolver.cc [4:14]
         src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h [4:14]
         src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc [4:14]
         src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h [4:14]
-        src/core/ext/filters/client_channel/service_config.cc [4:14]
-        src/core/ext/filters/client_channel/service_config.h [4:14]
-        src/core/ext/filters/client_channel/service_config_call_data.h [4:14]
+        src/core/ext/filters/client_channel/resolver_result_parsing.cc [4:14]
+        src/core/ext/filters/client_channel/resolver_result_parsing.h [4:14]
+        src/core/ext/filters/client_channel/retry_filter.cc [4:14]
+        src/core/ext/filters/client_channel/retry_filter.h [4:14]
+        src/core/ext/filters/client_channel/retry_service_config.cc [4:14]
+        src/core/ext/filters/client_channel/retry_service_config.h [4:14]
         src/core/ext/filters/client_channel/service_config_channel_arg_filter.cc [4:14]
-        src/core/ext/filters/client_channel/service_config_parser.cc [4:14]
-        src/core/ext/filters/client_channel/service_config_parser.h [4:14]
+        src/core/ext/filters/client_channel/subchannel.cc [4:14]
+        src/core/ext/filters/client_channel/subchannel.h [4:14]
         src/core/ext/filters/client_channel/subchannel_pool_interface.cc [5:15]
+        src/core/ext/filters/client_idle/idle_filter_state.cc [3:13]
+        src/core/ext/filters/client_idle/idle_filter_state.h [3:13]
         src/core/ext/filters/deadline/deadline_filter.cc [4:14]
         src/core/ext/filters/deadline/deadline_filter.h [4:14]
         src/core/ext/filters/fault_injection/fault_injection_filter.cc [4:14]
@@ -1361,11 +1302,62 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/core/ext/filters/max_age/max_age_filter.h [4:14]
         src/core/ext/filters/message_size/message_size_filter.cc [4:14]
         src/core/ext/filters/message_size/message_size_filter.h [4:14]
-        src/core/ext/filters/workarounds/workaround_cronet_compression_filter.cc [4:14]
-        src/core/ext/filters/workarounds/workaround_cronet_compression_filter.h [4:14]
-        src/core/ext/filters/workarounds/workaround_utils.cc [4:14]
-        src/core/ext/filters/workarounds/workaround_utils.h [4:14]
+        src/core/ext/filters/server_config_selector/server_config_selector.cc [4:14]
+        src/core/ext/filters/server_config_selector/server_config_selector.h [4:14]
+        src/core/ext/filters/server_config_selector/server_config_selector_filter.cc [5:15]
+        src/core/ext/filters/server_config_selector/server_config_selector_filter.h [5:15]
+        src/core/ext/service_config/service_config.cc [4:14]
+        src/core/ext/service_config/service_config.h [4:14]
+        src/core/ext/service_config/service_config_call_data.h [4:14]
+        src/core/ext/service_config/service_config_parser.cc [4:14]
+        src/core/ext/service_config/service_config_parser.h [4:14]
+        src/core/ext/transport/binder/client/binder_connector.cc [3:13]
+        src/core/ext/transport/binder/client/binder_connector.h [3:13]
+        src/core/ext/transport/binder/client/channel_create.cc [3:13]
+        src/core/ext/transport/binder/client/channel_create_impl.cc [3:13]
+        src/core/ext/transport/binder/client/channel_create_impl.h [3:13]
+        src/core/ext/transport/binder/client/connection_id_generator.cc [3:13]
+        src/core/ext/transport/binder/client/connection_id_generator.h [3:13]
+        src/core/ext/transport/binder/client/endpoint_binder_pool.cc [3:13]
+        src/core/ext/transport/binder/client/endpoint_binder_pool.h [3:13]
+        src/core/ext/transport/binder/client/jni_utils.cc [3:13]
+        src/core/ext/transport/binder/client/jni_utils.h [3:13]
+        src/core/ext/transport/binder/client/security_policy_setting.cc [3:13]
+        src/core/ext/transport/binder/client/security_policy_setting.h [3:13]
+        src/core/ext/transport/binder/security_policy/binder_security_policy.cc [3:13]
+        src/core/ext/transport/binder/server/binder_server.cc [3:13]
+        src/core/ext/transport/binder/server/binder_server.h [3:13]
+        src/core/ext/transport/binder/server/binder_server_credentials.cc [3:13]
+        src/core/ext/transport/binder/transport/binder_stream.h [3:13]
+        src/core/ext/transport/binder/transport/binder_transport.cc [3:13]
+        src/core/ext/transport/binder/transport/binder_transport.h [3:13]
+        src/core/ext/transport/binder/utils/ndk_binder.cc [3:13]
+        src/core/ext/transport/binder/utils/ndk_binder.h [3:13]
+        src/core/ext/transport/binder/utils/transport_stream_receiver.h [3:13]
+        src/core/ext/transport/binder/utils/transport_stream_receiver_impl.cc [3:13]
+        src/core/ext/transport/binder/utils/transport_stream_receiver_impl.h [3:13]
+        src/core/ext/transport/binder/wire_format/binder.h [3:13]
+        src/core/ext/transport/binder/wire_format/binder_android.cc [3:13]
+        src/core/ext/transport/binder/wire_format/binder_android.h [3:13]
+        src/core/ext/transport/binder/wire_format/binder_constants.cc [3:13]
+        src/core/ext/transport/binder/wire_format/binder_constants.h [3:13]
+        src/core/ext/transport/binder/wire_format/transaction.cc [3:13]
+        src/core/ext/transport/binder/wire_format/transaction.h [3:13]
+        src/core/ext/transport/binder/wire_format/wire_reader.h [3:13]
+        src/core/ext/transport/binder/wire_format/wire_reader_impl.cc [3:13]
+        src/core/ext/transport/binder/wire_format/wire_reader_impl.h [3:13]
+        src/core/ext/transport/binder/wire_format/wire_writer.cc [3:13]
+        src/core/ext/transport/binder/wire_format/wire_writer.h [3:13]
+        src/core/ext/transport/chttp2/client/insecure/channel_create.cc [4:14]
+        src/core/ext/transport/chttp2/client/secure/secure_channel_create.cc [4:14]
         src/core/ext/transport/chttp2/transport/chttp2_transport.cc [4:14]
+        src/core/ext/transport/chttp2/transport/hpack_constants.h [3:13]
+        src/core/ext/transport/chttp2/transport/hpack_encoder_index.h [3:13]
+        src/core/ext/transport/chttp2/transport/hpack_encoder_table.cc [3:13]
+        src/core/ext/transport/chttp2/transport/hpack_encoder_table.h [3:13]
+        src/core/ext/transport/chttp2/transport/hpack_utils.cc [3:13]
+        src/core/ext/transport/chttp2/transport/hpack_utils.h [3:13]
+        src/core/ext/transport/chttp2/transport/popularity_count.h [3:13]
         src/core/ext/xds/certificate_provider_factory.h [5:15]
         src/core/ext/xds/certificate_provider_registry.cc [5:15]
         src/core/ext/xds/certificate_provider_registry.h [5:15]
@@ -1373,29 +1365,117 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/core/ext/xds/certificate_provider_store.h [5:15]
         src/core/ext/xds/file_watcher_certificate_provider_factory.cc [5:15]
         src/core/ext/xds/file_watcher_certificate_provider_factory.h [5:15]
+        src/core/ext/xds/xds_api.cc [4:14]
         src/core/ext/xds/xds_bootstrap.cc [4:14]
         src/core/ext/xds/xds_bootstrap.h [4:14]
         src/core/ext/xds/xds_certificate_provider.cc [5:15]
         src/core/ext/xds/xds_certificate_provider.h [5:15]
         src/core/ext/xds/xds_channel_args.h [4:14]
+        src/core/ext/xds/xds_channel_stack_modifier.cc [5:15]
+        src/core/ext/xds/xds_channel_stack_modifier.h [5:15]
+        src/core/ext/xds/xds_client.cc [4:14]
         src/core/ext/xds/xds_client.h [4:14]
         src/core/ext/xds/xds_http_fault_filter.cc [4:14]
         src/core/ext/xds/xds_http_fault_filter.h [4:14]
         src/core/ext/xds/xds_http_filters.cc [4:14]
         src/core/ext/xds/xds_http_filters.h [4:14]
+        src/core/ext/xds/xds_routing.cc [5:15]
+        src/core/ext/xds/xds_routing.h [5:15]
         src/core/ext/xds/xds_server_config_fetcher.cc [5:15]
+        src/core/lib/avl/avl.h [3:13]
+        src/core/lib/channel/call_tracer.h [5:15]
+        src/core/lib/channel/channel_args_preconditioning.cc [3:13]
+        src/core/lib/channel/channel_args_preconditioning.h [3:13]
+        src/core/lib/config/core_configuration.cc [3:13]
+        src/core/lib/config/core_configuration.h [3:13]
+        src/core/lib/event_engine/channel_args_endpoint_config.cc [3:13]
+        src/core/lib/event_engine/channel_args_endpoint_config.h [3:13]
+        src/core/lib/event_engine/event_engine.cc [3:13]
+        src/core/lib/event_engine/event_engine_factory.cc [3:13]
+        src/core/lib/event_engine/event_engine_factory.h [3:13]
+        src/core/lib/event_engine/memory_allocator.cc [3:13]
+        src/core/lib/event_engine/sockaddr.cc [3:13]
+        src/core/lib/event_engine/sockaddr.h [3:13]
+        src/core/lib/gprpp/bitset.h [3:13]
+        src/core/lib/gprpp/capture.h [3:13]
+        src/core/lib/gprpp/chunked_vector.h [3:13]
+        src/core/lib/gprpp/construct_destruct.h [3:13]
+        src/core/lib/gprpp/cpp_impl_of.h [3:13]
         src/core/lib/gprpp/dual_ref_counted.h [4:14]
+        src/core/lib/gprpp/match.h [3:13]
+        src/core/lib/gprpp/overload.h [3:13]
         src/core/lib/gprpp/stat.h [4:14]
         src/core/lib/gprpp/stat_posix.cc [4:14]
         src/core/lib/gprpp/stat_windows.cc [4:14]
+        src/core/lib/gprpp/status_helper.cc [5:15]
+        src/core/lib/gprpp/status_helper.h [5:15]
+        src/core/lib/gprpp/table.h [3:13]
         src/core/lib/gprpp/time_util.cc [4:14]
         src/core/lib/gprpp/time_util.h [4:14]
+        src/core/lib/iomgr/endpoint_pair_event_engine.cc [3:13]
+        src/core/lib/iomgr/event_engine/closure.cc [3:13]
+        src/core/lib/iomgr/event_engine/closure.h [3:13]
+        src/core/lib/iomgr/event_engine/endpoint.cc [3:13]
+        src/core/lib/iomgr/event_engine/endpoint.h [3:13]
+        src/core/lib/iomgr/event_engine/iomgr.cc [3:13]
+        src/core/lib/iomgr/event_engine/pollset.cc [3:13]
+        src/core/lib/iomgr/event_engine/pollset.h [3:13]
+        src/core/lib/iomgr/event_engine/promise.h [3:13]
+        src/core/lib/iomgr/event_engine/resolved_address_internal.cc [3:13]
+        src/core/lib/iomgr/event_engine/resolved_address_internal.h [3:13]
+        src/core/lib/iomgr/event_engine/resolver.cc [3:13]
+        src/core/lib/iomgr/event_engine/tcp.cc [3:13]
+        src/core/lib/iomgr/event_engine/timer.cc [3:13]
         src/core/lib/json/json_util.cc [5:15]
         src/core/lib/json/json_util.h [5:15]
         src/core/lib/matchers/matchers.cc [3:13]
         src/core/lib/matchers/matchers.h [3:13]
-        src/core/lib/security/authorization/authorization_engine.h [4:14]
-        src/core/lib/security/authorization/evaluate_args.h [5:15]
+        src/core/lib/promise/activity.cc [3:13]
+        src/core/lib/promise/activity.h [3:13]
+        src/core/lib/promise/arena_promise.h [3:13]
+        src/core/lib/promise/context.h [3:13]
+        src/core/lib/promise/detail/basic_join.h [3:13]
+        src/core/lib/promise/detail/basic_seq.h [3:13]
+        src/core/lib/promise/detail/promise_factory.h [3:13]
+        src/core/lib/promise/detail/promise_like.h [3:13]
+        src/core/lib/promise/detail/status.h [3:13]
+        src/core/lib/promise/exec_ctx_wakeup_scheduler.h [3:13]
+        src/core/lib/promise/for_each.h [3:13]
+        src/core/lib/promise/if.h [3:13]
+        src/core/lib/promise/intra_activity_waiter.h [3:13]
+        src/core/lib/promise/join.h [3:13]
+        src/core/lib/promise/latch.h [3:13]
+        src/core/lib/promise/loop.h [3:13]
+        src/core/lib/promise/map.h [3:13]
+        src/core/lib/promise/observable.h [3:13]
+        src/core/lib/promise/pipe.h [3:13]
+        src/core/lib/promise/poll.h [3:13]
+        src/core/lib/promise/promise.h [3:13]
+        src/core/lib/promise/race.h [3:13]
+        src/core/lib/promise/seq.h [3:13]
+        src/core/lib/promise/try_join.h [3:13]
+        src/core/lib/promise/try_seq.h [3:13]
+        src/core/lib/promise/wait_set.h [3:13]
+        src/core/lib/resource_quota/api.cc [3:13]
+        src/core/lib/resource_quota/api.h [3:13]
+        src/core/lib/resource_quota/memory_quota.cc [3:13]
+        src/core/lib/resource_quota/memory_quota.h [3:13]
+        src/core/lib/resource_quota/resource_quota.cc [3:13]
+        src/core/lib/resource_quota/resource_quota.h [3:13]
+        src/core/lib/resource_quota/thread_quota.cc [3:13]
+        src/core/lib/resource_quota/thread_quota.h [3:13]
+        src/core/lib/resource_quota/trace.cc [3:13]
+        src/core/lib/resource_quota/trace.h [3:13]
+        src/core/lib/security/authorization/authorization_engine.h [3:13]
+        src/core/lib/security/authorization/authorization_policy_provider.h [3:13]
+        src/core/lib/security/authorization/authorization_policy_provider_null_vtable.cc [3:13]
+        src/core/lib/security/authorization/authorization_policy_provider_vtable.cc [3:13]
+        src/core/lib/security/authorization/cel_authorization_engine.h [4:14]
+        src/core/lib/security/authorization/evaluate_args.cc [3:13]
+        src/core/lib/security/authorization/evaluate_args.h [3:13]
+        src/core/lib/security/authorization/grpc_authorization_engine.h [3:13]
+        src/core/lib/security/authorization/grpc_authorization_policy_provider.h [3:13]
+        src/core/lib/security/authorization/matchers.h [3:13]
         src/core/lib/security/authorization/mock_cel/activation.h [3:13]
         src/core/lib/security/authorization/mock_cel/cel_expr_builder_factory.h [3:13]
         src/core/lib/security/authorization/mock_cel/cel_expression.h [3:13]
@@ -1404,6 +1484,8 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/core/lib/security/authorization/mock_cel/flat_expr_builder.h [3:13]
         src/core/lib/security/authorization/rbac_policy.h [3:13]
         src/core/lib/security/authorization/rbac_translator.h [3:13]
+        src/core/lib/security/authorization/sdk_server_authz_filter.cc [3:13]
+        src/core/lib/security/authorization/sdk_server_authz_filter.h [3:13]
         src/core/lib/security/credentials/external/aws_external_account_credentials.cc [4:14]
         src/core/lib/security/credentials/external/aws_external_account_credentials.h [4:14]
         src/core/lib/security/credentials/external/aws_request_signer.cc [4:14]
@@ -1419,33 +1501,43 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/core/lib/security/credentials/tls/grpc_tls_certificate_distributor.h [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_provider.cc [4:14]
         src/core/lib/security/credentials/tls/grpc_tls_certificate_provider.h [4:14]
+        src/core/lib/security/credentials/tls/grpc_tls_certificate_verifier.cc [4:14]
+        src/core/lib/security/credentials/tls/grpc_tls_certificate_verifier.h [4:14]
         src/core/lib/security/credentials/tls/tls_utils.cc [5:15]
         src/core/lib/security/credentials/tls/tls_utils.h [5:15]
         src/core/lib/security/credentials/xds/xds_credentials.cc [5:15]
         src/core/lib/security/credentials/xds/xds_credentials.h [5:15]
         src/core/lib/security/security_connector/insecure/insecure_security_connector.cc [5:15]
         src/core/lib/security/security_connector/insecure/insecure_security_connector.h [5:15]
+        src/core/lib/slice/slice.h [3:13]
+        src/core/lib/slice/slice_refcount.cc [3:13]
+        src/core/lib/slice/slice_refcount.h [3:13]
+        src/core/lib/slice/slice_refcount_base.h [3:13]
+        src/core/lib/slice/slice_split.cc [3:13]
+        src/core/lib/surface/builtins.cc [3:13]
+        src/core/lib/surface/builtins.h [3:13]
         src/core/lib/surface/server.cc [4:14]
         src/core/lib/surface/server.h [4:14]
-        src/core/lib/transport/authority_override.cc [4:14]
-        src/core/lib/transport/authority_override.h [4:14]
+        src/core/lib/transport/parsed_metadata.cc [3:13]
+        src/core/lib/transport/parsed_metadata.h [3:13]
         src/core/tsi/alts/handshaker/proto/altscontext.proto [3:13]
         src/core/tsi/alts/handshaker/proto/handshaker.proto [3:13]
         src/core/tsi/alts/handshaker/proto/transport_security_common.proto [3:13]
         src/cpp/client/xds_credentials.cc [5:15]
         src/cpp/common/tls_certificate_provider.cc [4:14]
+        src/cpp/common/tls_certificate_verifier.cc [4:14]
         src/cpp/server/xds_server_credentials.cc [5:15]
-        src/proto/grpc/auth/v1/authz_policy.proto [3:13]
-        src/proto/grpc/binary_log/v1alpha/log.proto [3:13]
         src/proto/grpc/channelz/channelz.proto [3:13]
         src/proto/grpc/core/stats.proto [3:13]
         src/proto/grpc/gcp/altscontext.proto [3:13]
         src/proto/grpc/gcp/handshaker.proto [3:13]
         src/proto/grpc/gcp/transport_security_common.proto [3:13]
         src/proto/grpc/health/v1/health.proto [3:13]
-        src/proto/grpc/http_over_grpc/http_over_grpc.proto [3:13]
         src/proto/grpc/lb/v1/load_balancer.proto [3:13]
         src/proto/grpc/lb/v1/load_reporter.proto [3:13]
+        src/proto/grpc/lookup/v1/rls.proto [3:13]
+        src/proto/grpc/lookup/v1/rls_config.proto [3:13]
+        src/proto/grpc/reflection/v1/reflection.proto [3:13]
         src/proto/grpc/reflection/v1alpha/reflection.proto [3:13]
         src/proto/grpc/status/status.proto [3:13]
         src/proto/grpc/testing/benchmark_service.proto [3:13]
@@ -1472,7 +1564,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/proto/grpc/testing/xds/eds_for_test.proto [3:13]
         src/proto/grpc/testing/xds/lds_rds_for_test.proto [3:13]
         src/proto/grpc/testing/xds/lrs_for_test.proto [3:13]
-        src/proto/grpc/testing/xds/orca_load_report_for_test.proto [3:13]
         src/proto/grpc/testing/xds/v3/address.proto [3:13]
         src/proto/grpc/testing/xds/v3/ads.proto [3:13]
         src/proto/grpc/testing/xds/v3/aggregate_cluster.proto [3:13]
@@ -1483,6 +1574,7 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/proto/grpc/testing/xds/v3/csds.proto [3:13]
         src/proto/grpc/testing/xds/v3/discovery.proto [3:13]
         src/proto/grpc/testing/xds/v3/endpoint.proto [3:13]
+        src/proto/grpc/testing/xds/v3/extension.proto [3:13]
         src/proto/grpc/testing/xds/v3/fault.proto [3:13]
         src/proto/grpc/testing/xds/v3/fault_common.proto [3:13]
         src/proto/grpc/testing/xds/v3/http_connection_manager.proto [3:13]
@@ -1499,25 +1591,37 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/channelz/ya.m
         src/proto/grpc/testing/xds/v3/string.proto [3:13]
         src/proto/grpc/testing/xds/v3/tls.proto [3:13]
         src/proto/math/math.proto [4:14]
-        test/core/util/eval_args_mock_endpoint.cc [3:13]
-        test/core/util/eval_args_mock_endpoint.h [3:13]
+        test/core/util/build.cc [3:13]
+        test/core/util/build.h [3:13]
+        test/core/util/evaluate_args_test_util.h [3:13]
+        test/core/util/mock_authorization_endpoint.h [3:13]
         test/core/util/resolve_localhost_ip46.cc [5:15]
         test/core/util/resolve_localhost_ip46.h [5:15]
+        test/core/util/test_lb_policies.cc [4:14]
+        test/core/util/test_lb_policies.h [4:14]
         test/core/util/tls_utils.cc [4:14]
         test/core/util/tls_utils.h [4:14]
         test/cpp/end2end/admin_services_end2end_test.cc [5:15]
-        test/cpp/end2end/xds_credentials_end2end_test.cc [5:15]
+        test/cpp/end2end/counted_service.h [4:14]
+        test/cpp/end2end/grpclb_end2end_test.cc [4:14]
+        test/cpp/end2end/rls_end2end_test.cc [4:14]
+        test/cpp/end2end/sdk_authz_end2end_test.cc [3:13]
+        test/cpp/util/tls_test_utils.cc [4:14]
+        test/cpp/util/tls_test_utils.h [4:14]
 
-KEEP     BSD-3-Clause         54930dd58069144c1215a9b35218104a
-BELONGS third_party/upb/ya.make
-    Note: matched license text is too long. Read it in the source files.
+SKIP     LicenseRef-scancode-warranty-disclaimer 44b7fb52fd3cfdfe8a017148dd5f2443
+BELONGS ya.make
+    # not a license
+    License text:
+          // attached to the channel creds, but there should also be a "use at
+          // your own risk" option to get the channel creds without stripping
     Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 97.04
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 100.00
         Match type      : TEXT
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
     Files with this license:
-        third_party/upb/LICENSE [5:26]
+        src/core/ext/filters/client_channel/lb_policy.h [284:285]
 
 SKIP     Python-2.0           5749a3f68d211a0dbd91f414c9769695
 BELONGS src/python/grpcio/ya.make
@@ -1532,17 +1636,17 @@ BELONGS src/python/grpcio/ya.make
     Files with this license:
         src/python/grpcio/grpc/experimental/gevent.py [13:14]
 
-KEEP     Public-Domain        5768fb73f20365b980a417d7c63f5c72
+SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
 BELONGS third_party/upb/ya.make
     License text:
-           This is free and unencumbered software released into the public domain. http://unlicense.org/
+        \## Contributor License Agreement
     Scancode info:
-        Original SPDX id: LicenseRef-scancode-public-domain
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
     Files with this license:
-        third_party/upb/third_party/wyhash/wyhash.h [2:2]
+        third_party/upb/CONTRIBUTING.md [15:15]
 
 SKIP     LicenseRef-scancode-generic-cla 60c79976a6f1daa58457b943cb911512
 BELONGS ya.make
@@ -1556,6 +1660,18 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
     Files with this license:
         CONTRIBUTING.md [16:17]
+
+KEEP     MPL-2.0              6a24ea705a1b0d1e288b7a36cbfec9ea
+BELONGS ya.make
+    License text:
+        Mozilla Public License, v. 2.0
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        LICENSE [238:238]
 
 KEEP     Apache-2.0           86a0725dcd00b87b9929258039db566c
 BELONGS ya.make
@@ -1580,6 +1696,20 @@ BELONGS ya.make
     Files with this license:
         CONTRIBUTING.md [91:91]
 
+KEEP     MPL-2.0              8cf713b6953fdd90a1c0b2dda10bcc6d
+BELONGS ya.make
+    License text:
+        This Source Code Form is subject to the terms of the Mozilla Public License,
+        v. 2.0. If a copy of the MPL was not distributed with this file, You can
+        obtain one at https://mozilla.org/MPL/2.0/.
+    Scancode info:
+        Original SPDX id: MPL-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://mpl.mozilla.org/2012/01/03/announcing-mpl-2-0/, http://www.mozilla.com/MPL/2.0/, https://spdx.org/licenses/MPL-2.0
+    Files with this license:
+        LICENSE [240:242]
+
 KEEP     Apache-2.0           920b2f581700b4aa528093ed0d2f5a5b
 BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/grpcio_health_checking/ya.make src/python/grpcio_reflection/ya.make src/python/grpcio_status/ya.make src/python/grpcio_tests/ya.make test/core/util/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -1589,7 +1719,6 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        BUILD.gn [10:20]
         src/core/tsi/test_creds/BUILD [3:13]
         src/python/grpcio/_parallel_compile_patch.py [3:13]
         src/python/grpcio/_spawn_patch.py [3:13]
@@ -1614,13 +1743,6 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/
         src/python/grpcio/grpc/_cython/_cygrpc/aio/completion_queue.pyx.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/grpc_aio.pxd.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/grpc_aio.pyx.pxi [3:13]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/iomgr.pyx.pxi [3:13]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/resolver.pxd.pxi [3:13]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/resolver.pyx.pxi [3:13]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/socket.pxd.pxi [3:13]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/socket.pyx.pxi [3:13]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/timer.pxd.pxi [3:13]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/timer.pyx.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/rpc_status.pxd.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/rpc_status.pyx.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/server.pxd.pxi [3:13]
@@ -1636,6 +1758,7 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/
         src/python/grpcio/grpc/_cython/_cygrpc/completion_queue.pyx.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/credentials.pxd.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/credentials.pyx.pxi [3:13]
+        src/python/grpcio/grpc/_cython/_cygrpc/csds.pyx.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/event.pxd.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/event.pyx.pxi [3:13]
         src/python/grpcio/grpc/_cython/_cygrpc/fork_posix.pxd.pxi [3:13]
@@ -1718,6 +1841,9 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/
         src/python/grpcio/grpc_core_dependencies.py [3:13]
         src/python/grpcio/grpc_version.py [3:13]
         src/python/grpcio/support.py [3:13]
+        src/python/grpcio_admin/grpc_admin/__init__.py [3:13]
+        src/python/grpcio_admin/grpc_version.py [3:13]
+        src/python/grpcio_admin/setup.py [3:13]
         src/python/grpcio_channelz/channelz_commands.py [3:13]
         src/python/grpcio_channelz/grpc_channelz/__init__.py [3:13]
         src/python/grpcio_channelz/grpc_channelz/v1/__init__.py [3:13]
@@ -1726,6 +1852,9 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/
         src/python/grpcio_channelz/grpc_channelz/v1/channelz.py [3:13]
         src/python/grpcio_channelz/grpc_version.py [3:13]
         src/python/grpcio_channelz/setup.py [3:13]
+        src/python/grpcio_csds/grpc_csds/__init__.py [3:13]
+        src/python/grpcio_csds/grpc_version.py [3:13]
+        src/python/grpcio_csds/setup.py [3:13]
         src/python/grpcio_health_checking/grpc_health/__init__.py [3:13]
         src/python/grpcio_health_checking/grpc_health/v1/__init__.py [3:13]
         src/python/grpcio_health_checking/grpc_health/v1/_async.py [3:13]
@@ -1777,9 +1906,11 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/
         src/python/grpcio_tests/tests/_runner.py [3:13]
         src/python/grpcio_tests/tests/_sanity/__init__.py [3:13]
         src/python/grpcio_tests/tests/_sanity/_sanity_test.py [3:13]
+        src/python/grpcio_tests/tests/admin/test_admin.py [3:13]
         src/python/grpcio_tests/tests/bazel_namespace_package_hack.py [3:13]
         src/python/grpcio_tests/tests/channelz/__init__.py [3:13]
         src/python/grpcio_tests/tests/channelz/_channelz_servicer_test.py [3:13]
+        src/python/grpcio_tests/tests/csds/test_csds.py [3:13]
         src/python/grpcio_tests/tests/fork/__init__.py [3:13]
         src/python/grpcio_tests/tests/fork/_fork_interop_test.py [3:13]
         src/python/grpcio_tests/tests/fork/client.py [3:13]
@@ -1948,14 +2079,32 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/
         src/python/grpcio_tests/tests_aio/unit/timeout_test.py [3:13]
         src/python/grpcio_tests/tests_aio/unit/wait_for_connection_test.py [3:13]
         src/python/grpcio_tests/tests_aio/unit/wait_for_ready_test.py [3:13]
+        src/python/grpcio_tests/tests_gevent/__init__.py [3:13]
+        src/python/grpcio_tests/tests_gevent/unit/__init__.py [3:13]
+        src/python/grpcio_tests/tests_gevent/unit/_test_server.py [3:13]
+        src/python/grpcio_tests/tests_gevent/unit/close_channel_test.py [3:13]
         src/python/grpcio_tests/tests_py3_only/__init__.py [3:13]
         src/python/grpcio_tests/tests_py3_only/interop/xds_interop_client.py [3:13]
+        src/python/grpcio_tests/tests_py3_only/interop/xds_interop_server.py [3:13]
         src/python/grpcio_tests/tests_py3_only/unit/__init__.py [3:13]
         src/python/grpcio_tests/tests_py3_only/unit/_leak_test.py [3:13]
         src/python/grpcio_tests/tests_py3_only/unit/_simple_stubs_test.py [3:13]
         test/core/util/fuzzer_one_entry_runner.sh [7:17]
         test/core/util/grpc_fuzzer.bzl [3:13]
         test/core/util/run_with_poller.sh [4:14]
+
+SKIP     LicenseRef-scancode-generic-cla 979d7de2e3ff119ee2c22c7efbec766d
+BELONGS third_party/upb/ya.make
+    License text:
+        Contributions to this project must be accompanied by a Contributor License
+        Agreement. You (or your employer) retain the copyright to your contribution;
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        third_party/upb/CONTRIBUTING.md [17:18]
 
 KEEP     BSD-3-Clause         9f9f74951499b982d601e33ab0c03bed
 BELONGS third_party/address_sorting/ya.make
@@ -1985,7 +2134,7 @@ BELONGS src/python/grpcio_channelz/ya.make
         src/python/grpcio_channelz/setup.py [92:92]
 
 KEEP     Apache-2.0           ac31f6a0b836e647d840630a3723a387
-BELONGS src/python/grpcio_channelz/ya.make src/python/grpcio_health_checking/ya.make src/python/grpcio_reflection/ya.make src/python/grpcio_status/ya.make
+BELONGS src/python/grpcio_channelz/ya.make src/python/grpcio_health_checking/ya.make src/python/grpcio_reflection/ya.make src/python/grpcio_status/ya.make ya.make
     License text:
             'License :: OSI Approved :: Apache Software License',
     Scancode info:
@@ -1994,7 +2143,108 @@ BELONGS src/python/grpcio_channelz/ya.make src/python/grpcio_health_checking/ya.
         Match type      : TAG
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        src/python/grpcio_channelz/setup.py [59:59]
-        src/python/grpcio_health_checking/setup.py [58:58]
-        src/python/grpcio_reflection/setup.py [59:59]
-        src/python/grpcio_status/setup.py [58:58]
+        src/python/grpcio_admin/setup.py [34:34]
+        src/python/grpcio_channelz/setup.py [58:58]
+        src/python/grpcio_csds/setup.py [34:34]
+        src/python/grpcio_health_checking/setup.py [57:57]
+        src/python/grpcio_reflection/setup.py [58:58]
+        src/python/grpcio_status/setup.py [57:57]
+
+KEEP     BSD-3-Clause         add163b149a20e4f3cd8c4cc3e9d0ccd
+BELONGS third_party/upb/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.64
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/upb/def.hpp [4:24]
+        third_party/upb/upb/upb.hpp [4:24]
+
+KEEP     BSD-3-Clause         bf460a928b270e23d6623d4db9286950
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [210:234]
+
+KEEP     Python-2.0           e9022919a04d4f5ef8123bee0fe8df07
+BELONGS ya.make
+    License text:
+        \# limitations under the License.
+        """gRPC Python's Admin interface."""
+    Scancode info:
+        Original SPDX id: Python-2.0
+        Score           : 66.67
+        Match type      : TAG
+        Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
+    Files with this license:
+        src/python/grpcio_admin/grpc_admin/__init__.py [13:14]
+
+KEEP     BSD-3-Clause         ecc97a1dce30b0ce4682e454b0ca278f
+BELONGS third_party/upb/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 96.55
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/LICENSE [5:26]
+
+KEEP     BSD-3-Clause         efdacd288befe1a76f28537587b3936a
+BELONGS ya.make
+    License text:
+           limitations under the License.
+        -----------------------------------------------------------
+        BSD 3-Clause License
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [202:206]
+
+KEEP     BSD-3-Clause AND BSD-3-Clause fde36bbb770be6f9bbc06c49635a8e3a
+BELONGS third_party/upb/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 97.64
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/upb/decode.c [5:25]
+        third_party/upb/upb/decode.h [5:25]
+        third_party/upb/upb/decode_internal.h [5:25]
+        third_party/upb/upb/def.c [5:25]
+        third_party/upb/upb/def.h [5:25]
+        third_party/upb/upb/encode.c [5:25]
+        third_party/upb/upb/encode.h [5:25]
+        third_party/upb/upb/msg.c [5:25]
+        third_party/upb/upb/msg.h [5:25]
+        third_party/upb/upb/port_def.inc [5:25]
+        third_party/upb/upb/port_undef.inc [5:25]
+        third_party/upb/upb/reflection.c [5:25]
+        third_party/upb/upb/reflection.h [5:25]
+        third_party/upb/upb/table.c [5:25]
+        third_party/upb/upb/table_internal.h [5:25]
+        third_party/upb/upb/text_encode.c [5:25]
+        third_party/upb/upb/text_encode.h [5:25]
+        third_party/upb/upb/upb.c [5:25]
+        third_party/upb/upb/upb.h [5:25]
+        third_party/upb/upb/upb_internal.h [5:25]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 98.09
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        third_party/upb/upb/decode_fast.c [5:25]
+        third_party/upb/upb/decode_fast.h [5:25]

@@ -26,7 +26,7 @@ namespace grpc_core {
 RefCountedPtr<UrlExternalAccountCredentials>
 UrlExternalAccountCredentials::Create(Options options,
                                       std::vector<TString> scopes,
-                                      grpc_error** error) {
+                                      grpc_error_handle* error) {
   auto creds = MakeRefCounted<UrlExternalAccountCredentials>(
       std::move(options), std::move(scopes), error);
   if (*error == GRPC_ERROR_NONE) {
@@ -37,7 +37,7 @@ UrlExternalAccountCredentials::Create(Options options,
 }
 
 UrlExternalAccountCredentials::UrlExternalAccountCredentials(
-    Options options, std::vector<TString> scopes, grpc_error** error)
+    Options options, std::vector<TString> scopes, grpc_error_handle* error)
     : ExternalAccountCredentials(options, std::move(scopes)) {
   auto it = options.credential_source.object_value().find("url");
   if (it == options.credential_source.object_value().end()) {
@@ -51,10 +51,9 @@ UrlExternalAccountCredentials::UrlExternalAccountCredentials(
   }
   y_absl::StatusOr<URI> tmp_url = URI::Parse(it->second.string_value());
   if (!tmp_url.ok()) {
-    *error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+    *error = GRPC_ERROR_CREATE_FROM_CPP_STRING(
         y_absl::StrFormat("Invalid credential source url. Error: %s",
-                        tmp_url.status().ToString())
-            .c_str());
+                        tmp_url.status().ToString()));
     return;
   }
   url_ = *tmp_url;
@@ -113,7 +112,7 @@ UrlExternalAccountCredentials::UrlExternalAccountCredentials(
 
 void UrlExternalAccountCredentials::RetrieveSubjectToken(
     HTTPRequestContext* ctx, const Options& /*options*/,
-    std::function<void(TString, grpc_error*)> cb) {
+    std::function<void(TString, grpc_error_handle)> cb) {
   if (ctx == nullptr) {
     FinishRetrieveSubjectToken(
         "",
@@ -140,26 +139,24 @@ void UrlExternalAccountCredentials::RetrieveSubjectToken(
   request.http.hdrs = headers;
   request.handshaker =
       url_.scheme() == "https" ? &grpc_httpcli_ssl : &grpc_httpcli_plaintext;
-  grpc_resource_quota* resource_quota =
-      grpc_resource_quota_create("external_account_credentials");
   grpc_http_response_destroy(&ctx_->response);
   ctx_->response = {};
   GRPC_CLOSURE_INIT(&ctx_->closure, OnRetrieveSubjectToken, this, nullptr);
-  grpc_httpcli_get(ctx_->httpcli_context, ctx_->pollent, resource_quota,
-                   &request, ctx_->deadline, &ctx_->closure, &ctx_->response);
-  grpc_resource_quota_unref_internal(resource_quota);
+  grpc_httpcli_get(ctx_->httpcli_context, ctx_->pollent,
+                   ResourceQuota::Default(), &request, ctx_->deadline,
+                   &ctx_->closure, &ctx_->response);
   grpc_http_request_destroy(&request.http);
 }
 
-void UrlExternalAccountCredentials::OnRetrieveSubjectToken(void* arg,
-                                                           grpc_error* error) {
+void UrlExternalAccountCredentials::OnRetrieveSubjectToken(
+    void* arg, grpc_error_handle error) {
   UrlExternalAccountCredentials* self =
       static_cast<UrlExternalAccountCredentials*>(arg);
   self->OnRetrieveSubjectTokenInternal(GRPC_ERROR_REF(error));
 }
 
 void UrlExternalAccountCredentials::OnRetrieveSubjectTokenInternal(
-    grpc_error* error) {
+    grpc_error_handle error) {
   if (error != GRPC_ERROR_NONE) {
     FinishRetrieveSubjectToken("", error);
     return;
@@ -167,7 +164,7 @@ void UrlExternalAccountCredentials::OnRetrieveSubjectTokenInternal(
   y_absl::string_view response_body(ctx_->response.body,
                                   ctx_->response.body_length);
   if (format_type_ == "json") {
-    grpc_error* error = GRPC_ERROR_NONE;
+    grpc_error_handle error = GRPC_ERROR_NONE;
     Json response_json = Json::Parse(response_body, &error);
     if (error != GRPC_ERROR_NONE ||
         response_json.type() != Json::Type::OBJECT) {
@@ -196,7 +193,7 @@ void UrlExternalAccountCredentials::OnRetrieveSubjectTokenInternal(
 }
 
 void UrlExternalAccountCredentials::FinishRetrieveSubjectToken(
-    TString subject_token, grpc_error* error) {
+    TString subject_token, grpc_error_handle error) {
   // Reset context
   ctx_ = nullptr;
   // Move object state into local variables.

@@ -23,7 +23,6 @@
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
-
 #include "re2/re2.h"
 
 namespace grpc_core {
@@ -31,14 +30,15 @@ namespace grpc_core {
 class StringMatcher {
  public:
   enum class Type {
-    EXACT,       // value stored in string_matcher_ field
-    PREFIX,      // value stored in string_matcher_ field
-    SUFFIX,      // value stored in string_matcher_ field
-    SAFE_REGEX,  // pattern stored in regex_matcher_ field
-    CONTAINS,    // value stored in string_matcher_ field
+    kExact,      // value stored in string_matcher_ field
+    kPrefix,     // value stored in string_matcher_ field
+    kSuffix,     // value stored in string_matcher_ field
+    kSafeRegex,  // pattern stored in regex_matcher_ field
+    kContains,   // value stored in string_matcher_ field
   };
 
   // Creates StringMatcher instance. Returns error status on failure.
+  // Note: case_sensitive is ignored for type kSafeRegex.
   static y_absl::StatusOr<StringMatcher> Create(Type type,
                                               y_absl::string_view matcher,
                                               bool case_sensitive = true);
@@ -56,19 +56,19 @@ class StringMatcher {
 
   Type type() const { return type_; }
 
-  // Valid for EXACT, PREFIX, SUFFIX and CONTAINS
+  // Valid for kExact, kPrefix, kSuffix and kContains.
   const TString& string_matcher() const { return string_matcher_; }
 
-  // Valid for SAFE_REGEX
+  // Valid for kSafeRegex.
   RE2* regex_matcher() const { return regex_matcher_.get(); }
 
   bool case_sensitive() const { return case_sensitive_; }
 
  private:
   StringMatcher(Type type, y_absl::string_view matcher, bool case_sensitive);
-  StringMatcher(std::unique_ptr<RE2> regex_matcher, bool case_sensitive);
+  explicit StringMatcher(std::unique_ptr<RE2> regex_matcher);
 
-  Type type_ = Type::EXACT;
+  Type type_ = Type::kExact;
   TString string_matcher_;
   std::unique_ptr<RE2> regex_matcher_;
   bool case_sensitive_ = true;
@@ -77,32 +77,32 @@ class StringMatcher {
 class HeaderMatcher {
  public:
   enum class Type {
-    EXACT,       // value stored in StringMatcher field
-    PREFIX,      // value stored in StringMatcher field
-    SUFFIX,      // value stored in StringMatcher field
-    SAFE_REGEX,  // value stored in StringMatcher field
-    CONTAINS,    // value stored in StringMatcher field
-    RANGE,       // uses range_start and range_end fields
-    PRESENT,     // uses present_match field
+    kExact,      // value stored in StringMatcher field
+    kPrefix,     // value stored in StringMatcher field
+    kSuffix,     // value stored in StringMatcher field
+    kSafeRegex,  // value stored in StringMatcher field
+    kContains,   // value stored in StringMatcher field
+    kRange,      // uses range_start and range_end fields
+    kPresent,    // uses present_match field
   };
 
   // Make sure that the first five HeaderMatcher::Type enum values match up to
   // the corresponding StringMatcher::Type enum values, so that it's safe to
   // convert by casting when delegating to StringMatcher.
-  static_assert(static_cast<StringMatcher::Type>(Type::EXACT) ==
-                    StringMatcher::Type::EXACT,
+  static_assert(static_cast<StringMatcher::Type>(Type::kExact) ==
+                    StringMatcher::Type::kExact,
                 "");
-  static_assert(static_cast<StringMatcher::Type>(Type::PREFIX) ==
-                    StringMatcher::Type::PREFIX,
+  static_assert(static_cast<StringMatcher::Type>(Type::kPrefix) ==
+                    StringMatcher::Type::kPrefix,
                 "");
-  static_assert(static_cast<StringMatcher::Type>(Type::SUFFIX) ==
-                    StringMatcher::Type::SUFFIX,
+  static_assert(static_cast<StringMatcher::Type>(Type::kSuffix) ==
+                    StringMatcher::Type::kSuffix,
                 "");
-  static_assert(static_cast<StringMatcher::Type>(Type::SAFE_REGEX) ==
-                    StringMatcher::Type::SAFE_REGEX,
+  static_assert(static_cast<StringMatcher::Type>(Type::kSafeRegex) ==
+                    StringMatcher::Type::kSafeRegex,
                 "");
-  static_assert(static_cast<StringMatcher::Type>(Type::CONTAINS) ==
-                    StringMatcher::Type::CONTAINS,
+  static_assert(static_cast<StringMatcher::Type>(Type::kContains) ==
+                    StringMatcher::Type::kContains,
                 "");
 
   // Creates HeaderMatcher instance. Returns error status on failure.
@@ -124,12 +124,12 @@ class HeaderMatcher {
 
   Type type() const { return type_; }
 
-  // Valid for EXACT, PREFIX, SUFFIX and CONTAINS
+  // Valid for kExact, kPrefix, kSuffix and kContains.
   const TString& string_matcher() const {
     return matcher_.string_matcher();
   }
 
-  // Valid for SAFE_REGEX
+  // Valid for kSafeRegex.
   RE2* regex_matcher() const { return matcher_.regex_matcher(); }
 
   bool Match(const y_absl::optional<y_absl::string_view>& value) const;
@@ -147,7 +147,7 @@ class HeaderMatcher {
   HeaderMatcher(y_absl::string_view name, bool present_match, bool invert_match);
 
   TString name_;
-  Type type_ = Type::EXACT;
+  Type type_ = Type::kExact;
   StringMatcher matcher_;
   int64_t range_start_;
   int64_t range_end_;

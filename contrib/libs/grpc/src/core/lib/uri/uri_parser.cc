@@ -34,11 +34,29 @@
 #include "src/core/lib/gpr/string.h"
 
 namespace grpc_core {
+
 namespace {
+// Checks if this string is made up of pchars, '/', '?', and '%' exclusively.
+// See https://tools.ietf.org/html/rfc3986#section-3.4
+bool IsPCharString(y_absl::string_view str) {
+  return (str.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                "abcdefghijklmnopqrstuvwxyz"
+                                "0123456789"
+                                "?/:@\\-._~!$&'()*+,;=%") ==
+          y_absl::string_view::npos);
+}
+
+y_absl::Status MakeInvalidURIStatus(y_absl::string_view part_name,
+                                  y_absl::string_view uri,
+                                  y_absl::string_view extra) {
+  return y_absl::InvalidArgumentError(y_absl::StrFormat(
+      "Could not parse '%s' from uri '%s'. %s", part_name, uri, extra));
+}
+}  // namespace
 
 // Similar to `grpc_permissive_percent_decode_slice`, this %-decodes all valid
 // triplets, and passes through the rest verbatim.
-TString PercentDecode(y_absl::string_view str) {
+TString URI::PercentDecode(y_absl::string_view str) {
   if (str.empty() || !y_absl::StrContains(str, "%")) {
     return TString(str);
   }
@@ -63,24 +81,6 @@ TString PercentDecode(y_absl::string_view str) {
   }
   return out;
 }
-
-// Checks if this string is made up of pchars, '/', '?', and '%' exclusively.
-// See https://tools.ietf.org/html/rfc3986#section-3.4
-bool IsPCharString(y_absl::string_view str) {
-  return (str.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                "abcdefghijklmnopqrstuvwxyz"
-                                "0123456789"
-                                "?/:@\\-._~!$&'()*+,;=%") ==
-          y_absl::string_view::npos);
-}
-
-y_absl::Status MakeInvalidURIStatus(y_absl::string_view part_name,
-                                  y_absl::string_view uri,
-                                  y_absl::string_view extra) {
-  return y_absl::InvalidArgumentError(y_absl::StrFormat(
-      "Could not parse '%s' from uri '%s'. %s", part_name, uri, extra));
-}
-}  // namespace
 
 y_absl::StatusOr<URI> URI::Parse(y_absl::string_view uri_text) {
   y_absl::StatusOr<TString> decoded;

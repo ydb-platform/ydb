@@ -27,6 +27,10 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stddef.h>
+
+#include <atomic>
+#include <memory>
 #include <new>
 #include <utility>
 
@@ -35,9 +39,6 @@
 
 #include "src/core/lib/gpr/alloc.h"
 #include "src/core/lib/gpr/spinlock.h"
-#include "src/core/lib/gprpp/atomic.h"
-
-#include <stddef.h>
 
 namespace grpc_core {
 
@@ -59,7 +60,7 @@ class Arena {
     static constexpr size_t base_size =
         GPR_ROUND_UP_TO_ALIGNMENT_SIZE(sizeof(Arena));
     size = GPR_ROUND_UP_TO_ALIGNMENT_SIZE(size);
-    size_t begin = total_used_.FetchAdd(size, MemoryOrder::RELAXED);
+    size_t begin = total_used_.fetch_add(size, std::memory_order_relaxed);
     if (begin + size <= initial_zone_size_) {
       return reinterpret_cast<char*>(this) + base_size + begin;
     } else {
@@ -105,7 +106,7 @@ class Arena {
 
   // Keep track of the total used size. We use this in our call sizing
   // hysteresis.
-  Atomic<size_t> total_used_;
+  std::atomic<size_t> total_used_{0};
   const size_t initial_zone_size_;
   gpr_spinlock arena_growth_spinlock_ = GPR_SPINLOCK_STATIC_INITIALIZER;
   // If the initial arena allocation wasn't enough, we allocate additional zones
@@ -115,6 +116,15 @@ class Arena {
   // last zone; the zone list is reverse-walked during arena destruction only.
   Zone* last_zone_ = nullptr;
 };
+
+// Smart pointer for arenas when the final size is not required.
+struct ScopedArenaDeleter {
+  void operator()(Arena* arena) { arena->Destroy(); }
+};
+using ScopedArenaPtr = std::unique_ptr<Arena, ScopedArenaDeleter>;
+inline ScopedArenaPtr MakeScopedArena(size_t initial_size) {
+  return ScopedArenaPtr(Arena::Create(initial_size));
+}
 
 }  // namespace grpc_core
 

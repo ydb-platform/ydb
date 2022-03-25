@@ -17,6 +17,9 @@
 
 #include "src/core/lib/security/credentials/external/aws_request_signer.h"
 
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
+
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/escaping.h"
 #include "y_absl/strings/str_format.h"
@@ -24,9 +27,6 @@
 #include "y_absl/strings/str_split.h"
 #include "y_absl/time/clock.h"
 #include "y_absl/time/time.h"
-
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
 
 namespace grpc_core {
 
@@ -66,7 +66,8 @@ AwsRequestSigner::AwsRequestSigner(
     TString access_key_id, TString secret_access_key, TString token,
     TString method, TString url, TString region,
     TString request_payload,
-    std::map<TString, TString> additional_headers, grpc_error** error)
+    std::map<TString, TString> additional_headers,
+    grpc_error_handle* error)
     : access_key_id_(std::move(access_key_id)),
       secret_access_key_(std::move(secret_access_key)),
       token_(std::move(token)),

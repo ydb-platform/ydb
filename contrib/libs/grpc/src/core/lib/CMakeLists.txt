@@ -18,20 +18,26 @@ target_include_directories(src-core-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
   ${CMAKE_BINARY_DIR}/contrib/libs/grpc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/third_party/upb
 )
 target_link_libraries(src-core-lib PUBLIC
   contrib-libs-cxxsupp
   yutil
+  grpc-third_party-upb
   ybase-internal-spinlock_wait
   abseil-cpp-tstring-y_absl-container
   abseil-cpp-tstring-y_absl-memory
   yabseil-cpp-tstring-y_absl-status
   yabseil-cpp-tstring-y_absl-strings
+  yabsl-strings-cord
   ystrings-internal-str_format
   yabseil-cpp-tstring-y_absl-synchronization
   yabseil-cpp-tstring-y_absl-time
 )
 target_sources(src-core-lib PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/protobuf/any.upb.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/rpc/status.upb.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/alloc.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/atm.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/cpu_iphone.cc
@@ -59,7 +65,6 @@ target_sources(src-core-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/time_posix.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/time_precise.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/time_windows.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/tls_pthread.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/tmpfile_msys.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/tmpfile_posix.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gpr/tmpfile_windows.cc
@@ -72,6 +77,7 @@ target_sources(src-core-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/mpscq.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/stat_posix.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/stat_windows.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/status_helper.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/thd_posix.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/thd_windows.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/lib/gprpp/time_util.cc

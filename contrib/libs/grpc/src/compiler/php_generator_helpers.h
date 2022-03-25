@@ -28,8 +28,10 @@ namespace grpc_php_generator {
 
 inline TString GetPHPServiceClassname(
     const grpc::protobuf::ServiceDescriptor* service,
-    const TString& class_suffix) {
-  return service->name() + (class_suffix == "" ? "Client" : class_suffix);
+    const TString& class_suffix, bool is_server) {
+  return service->name() +
+         (class_suffix == "" ? (is_server ? "" : "Client") : class_suffix) +
+         (is_server ? "Stub" : "");
 }
 
 // ReplaceAll replaces all instances of search with replace in s.
@@ -46,7 +48,7 @@ inline TString ReplaceAll(TString s, const TString& search,
 inline TString GetPHPServiceFilename(
     const grpc::protobuf::FileDescriptor* file,
     const grpc::protobuf::ServiceDescriptor* service,
-    const TString& class_suffix) {
+    const TString& class_suffix, bool is_server) {
   std::ostringstream oss;
   if (file->options().has_php_namespace()) {
     oss << ReplaceAll(file->options().php_namespace(), "\\", "/");
@@ -58,8 +60,8 @@ inline TString GetPHPServiceFilename(
           << grpc_generator::CapitalizeFirstLetter(tokens[i]);
     }
   }
-  return oss.str() + "/" + GetPHPServiceClassname(service, class_suffix) +
-         ".php";
+  return oss.str() + "/" +
+         GetPHPServiceClassname(service, class_suffix, is_server) + ".php";
 }
 
 // Get leading or trailing comments in a string. Comment lines start with "// ".

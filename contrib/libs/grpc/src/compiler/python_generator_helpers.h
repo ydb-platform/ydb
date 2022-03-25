@@ -61,7 +61,7 @@ static TString StripModulePrefixes(
   return raw_module_name;
 }
 
-// TODO(https://github.com/google/protobuf/issues/888):
+// TODO(https://github.com/protocolbuffers/protobuf/issues/888):
 // Export `ModuleName` from protobuf's
 // `src/google/protobuf/compiler/python/python_generator.cc` file.
 TString ModuleName(const TString& filename,
@@ -74,7 +74,7 @@ TString ModuleName(const TString& filename,
                              prefixes_to_filter);
 }
 
-// TODO(https://github.com/google/protobuf/issues/888):
+// TODO(https://github.com/protocolbuffers/protobuf/issues/888):
 // Export `ModuleAlias` from protobuf's
 // `src/google/protobuf/compiler/python/python_generator.cc` file.
 TString ModuleAlias(const TString& filename,

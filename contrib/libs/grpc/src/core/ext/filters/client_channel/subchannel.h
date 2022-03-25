@@ -1,20 +1,18 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
+//
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 
 #ifndef GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
 #define GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
@@ -38,9 +36,6 @@
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/transport/connectivity_state.h"
 #include "src/core/lib/transport/metadata.h"
-
-// Channel arg containing a URI indicating the address to connect to.
-#define GRPC_ARG_SUBCHANNEL_ADDRESS "grpc.subchannel_address"
 
 namespace grpc_core {
 
@@ -87,7 +82,8 @@ class SubchannelCall {
     grpc_call_context_element* context;
     CallCombiner* call_combiner;
   };
-  static RefCountedPtr<SubchannelCall> Create(Args args, grpc_error** error);
+  static RefCountedPtr<SubchannelCall> Create(Args args,
+                                              grpc_error_handle* error);
 
   // Continues processing a transport stream op batch.
   void StartTransportStreamOpBatch(grpc_transport_stream_op_batch* batch);
@@ -113,20 +109,20 @@ class SubchannelCall {
   template <typename T>
   friend class RefCountedPtr;
 
-  SubchannelCall(Args args, grpc_error** error);
+  SubchannelCall(Args args, grpc_error_handle* error);
 
   // If channelz is enabled, intercepts recv_trailing so that we may check the
   // status and associate it to a subchannel.
   void MaybeInterceptRecvTrailingMetadata(
       grpc_transport_stream_op_batch* batch);
 
-  static void RecvTrailingMetadataReady(void* arg, grpc_error* error);
+  static void RecvTrailingMetadataReady(void* arg, grpc_error_handle error);
 
   // Interface of RefCounted<>.
   void IncrementRefCount();
   void IncrementRefCount(const DebugLocation& location, const char* reason);
 
-  static void Destroy(void* arg, grpc_error* error);
+  static void Destroy(void* arg, grpc_error_handle error);
 
   RefCountedPtr<ConnectedSubchannel> connected_subchannel_;
   grpc_closure* after_call_stack_destroy_ = nullptr;
@@ -152,7 +148,6 @@ class Subchannel : public DualRefCounted<Subchannel> {
     struct ConnectivityStateChange {
       grpc_connectivity_state state;
       y_absl::Status status;
-      RefCountedPtr<ConnectedSubchannel> connected_subchannel;
     };
 
     ~ConnectivityStateWatcherInterface() override = default;
@@ -189,10 +184,10 @@ class Subchannel : public DualRefCounted<Subchannel> {
         Y_ABSL_GUARDED_BY(&mu_);
   };
 
-  // Creates a subchannel given \a connector and \a args.
+  // Creates a subchannel.
   static RefCountedPtr<Subchannel> Create(
       OrphanablePtr<SubchannelConnector> connector,
-      const grpc_channel_args* args);
+      const grpc_resolved_address& address, const grpc_channel_args* args);
 
   // The ctor and dtor are not intended to use directly.
   Subchannel(SubchannelKey key, OrphanablePtr<SubchannelConnector> connector,
@@ -204,10 +199,6 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // will have an affect when the subchannel creates a new ConnectedSubchannel.
   void ThrottleKeepaliveTime(int new_keepalive_time) Y_ABSL_LOCKS_EXCLUDED(mu_);
 
-  // Gets the string representing the subchannel address.
-  // Caller doesn't take ownership.
-  const char* GetTargetAddress();
-
   const grpc_channel_args* channel_args() const { return args_; }
 
   channelz::SubchannelNode* channelz_node();
@@ -216,10 +207,8 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // If health_check_service_name is non-null, the returned connectivity
   // state will be based on the state reported by the backend for that
   // service name.
-  // If the return value is GRPC_CHANNEL_READY, also sets *connected_subchannel.
   grpc_connectivity_state CheckConnectivityState(
-      const y_absl::optional<TString>& health_check_service_name,
-      RefCountedPtr<ConnectedSubchannel>* connected_subchannel)
+      const y_absl::optional<TString>& health_check_service_name)
       Y_ABSL_LOCKS_EXCLUDED(mu_);
 
   // Starts watching the subchannel's connectivity state.
@@ -242,30 +231,20 @@ class Subchannel : public DualRefCounted<Subchannel> {
       const y_absl::optional<TString>& health_check_service_name,
       ConnectivityStateWatcherInterface* watcher) Y_ABSL_LOCKS_EXCLUDED(mu_);
 
+  RefCountedPtr<ConnectedSubchannel> connected_subchannel()
+      Y_ABSL_LOCKS_EXCLUDED(mu_) {
+    MutexLock lock(&mu_);
+    return connected_subchannel_;
+  }
+
   // Attempt to connect to the backend.  Has no effect if already connected.
   void AttemptToConnect() Y_ABSL_LOCKS_EXCLUDED(mu_);
 
   // Resets the connection backoff of the subchannel.
-  // TODO(roth): Move connection backoff out of subchannels and up into LB
-  // policy code (probably by adding a SubchannelGroup between
-  // SubchannelList and SubchannelData), at which point this method can
-  // go away.
   void ResetBackoff() Y_ABSL_LOCKS_EXCLUDED(mu_);
 
   // Tears down any existing connection, and arranges for destruction
   void Orphan() override Y_ABSL_LOCKS_EXCLUDED(mu_);
-
-  // Returns a new channel arg encoding the subchannel address as a URI
-  // string. Caller is responsible for freeing the string.
-  static grpc_arg CreateSubchannelAddressArg(const grpc_resolved_address* addr);
-
-  // Returns the URI string from the subchannel address arg in \a args.
-  static const char* GetUriFromSubchannelAddressArg(
-      const grpc_channel_args* args);
-
-  // Sets \a addr from the subchannel address arg in \a args.
-  static void GetAddressFromSubchannelAddressArg(const grpc_channel_args* args,
-                                                 grpc_resolved_address* addr);
 
  private:
   // A linked list of ConnectivityStateWatcherInterfaces that are monitoring
@@ -279,7 +258,7 @@ class Subchannel : public DualRefCounted<Subchannel> {
     void RemoveWatcherLocked(ConnectivityStateWatcherInterface* watcher);
 
     // Notifies all watchers in the list about a change to state.
-    void NotifyLocked(Subchannel* subchannel, grpc_connectivity_state state,
+    void NotifyLocked(grpc_connectivity_state state,
                       const y_absl::Status& status);
 
     void Clear() { watchers_.clear(); }
@@ -340,18 +319,20 @@ class Subchannel : public DualRefCounted<Subchannel> {
 
   // Methods for connection.
   void MaybeStartConnectingLocked() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-  static void OnRetryAlarm(void* arg, grpc_error* error)
+  static void OnRetryAlarm(void* arg, grpc_error_handle error)
       Y_ABSL_LOCKS_EXCLUDED(mu_);
   void ContinueConnectingLocked() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
-  static void OnConnectingFinished(void* arg, grpc_error* error)
+  static void OnConnectingFinished(void* arg, grpc_error_handle error)
       Y_ABSL_LOCKS_EXCLUDED(mu_);
   bool PublishTransportLocked() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // The subchannel pool this subchannel is in.
   RefCountedPtr<SubchannelPoolInterface> subchannel_pool_;
-  // TODO(juanlishen): Consider using args_ as key_ directly.
   // Subchannel key that identifies this subchannel in the subchannel pool.
   const SubchannelKey key_;
+  // Actual address to connect to.  May be different than the address in
+  // key_ if overridden by proxy mapper.
+  grpc_resolved_address address_for_connect_;
   // Channel args.
   grpc_channel_args* args_;
   // pollset_set tracking who's interested in a connection being setup.
@@ -398,4 +379,4 @@ class Subchannel : public DualRefCounted<Subchannel> {
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H */
+#endif  // GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H

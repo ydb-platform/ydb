@@ -41,7 +41,7 @@ BELONGS src/proto/grpc/status/ya.make
         src/proto/grpc/status/status.proto [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 06745079442081a41390888905fc6bdb
-BELONGS src/core/lib/ya.make test/cpp/end2end/ya.make ya.make
+BELONGS src/core/lib/ya.make src/cpp/common/ya.make test/core/util/ya.make test/cpp/end2end/ya.make test/cpp/util/ya.make ya.make
     License text:
         // Copyright 2021 gRPC authors.
     Scancode info:
@@ -49,24 +49,179 @@ BELONGS src/core/lib/ya.make test/cpp/end2end/ya.make ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/grpcpp/create_channel_binder.h [1:1]
         include/grpcpp/ext/admin_services.h [3:3]
+        include/grpcpp/security/authorization_policy_provider.h [1:1]
+        include/grpcpp/security/binder_credentials.h [1:1]
+        include/grpcpp/security/binder_security_policy.h [1:1]
+        include/grpcpp/security/tls_certificate_verifier.h [2:2]
+        include/grpcpp/test/client_context_test_peer.h [3:3]
+        src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc [1:1]
         src/core/ext/filters/client_channel/resolver/google_c2p/google_c2p_resolver.cc [2:2]
+        src/core/ext/filters/client_channel/retry_filter.h [2:2]
+        src/core/ext/filters/client_idle/idle_filter_state.cc [1:1]
+        src/core/ext/filters/client_idle/idle_filter_state.h [1:1]
         src/core/ext/filters/fault_injection/fault_injection_filter.cc [2:2]
         src/core/ext/filters/fault_injection/fault_injection_filter.h [2:2]
         src/core/ext/filters/fault_injection/service_config_parser.cc [2:2]
         src/core/ext/filters/fault_injection/service_config_parser.h [2:2]
+        src/core/ext/filters/server_config_selector/server_config_selector.cc [2:2]
+        src/core/ext/filters/server_config_selector/server_config_selector.h [2:2]
+        src/core/ext/filters/server_config_selector/server_config_selector_filter.cc [3:3]
+        src/core/ext/filters/server_config_selector/server_config_selector_filter.h [3:3]
+        src/core/ext/transport/binder/client/binder_connector.cc [1:1]
+        src/core/ext/transport/binder/client/binder_connector.h [1:1]
+        src/core/ext/transport/binder/client/channel_create.cc [1:1]
+        src/core/ext/transport/binder/client/channel_create_impl.cc [1:1]
+        src/core/ext/transport/binder/client/channel_create_impl.h [1:1]
+        src/core/ext/transport/binder/client/connection_id_generator.cc [1:1]
+        src/core/ext/transport/binder/client/connection_id_generator.h [1:1]
+        src/core/ext/transport/binder/client/endpoint_binder_pool.cc [1:1]
+        src/core/ext/transport/binder/client/endpoint_binder_pool.h [1:1]
+        src/core/ext/transport/binder/client/jni_utils.cc [1:1]
+        src/core/ext/transport/binder/client/jni_utils.h [1:1]
+        src/core/ext/transport/binder/client/security_policy_setting.cc [1:1]
+        src/core/ext/transport/binder/client/security_policy_setting.h [1:1]
+        src/core/ext/transport/binder/security_policy/binder_security_policy.cc [1:1]
+        src/core/ext/transport/binder/server/binder_server.cc [1:1]
+        src/core/ext/transport/binder/server/binder_server.h [1:1]
+        src/core/ext/transport/binder/server/binder_server_credentials.cc [1:1]
+        src/core/ext/transport/binder/transport/binder_stream.h [1:1]
+        src/core/ext/transport/binder/transport/binder_transport.cc [1:1]
+        src/core/ext/transport/binder/transport/binder_transport.h [1:1]
+        src/core/ext/transport/binder/utils/ndk_binder.cc [1:1]
+        src/core/ext/transport/binder/utils/ndk_binder.h [1:1]
+        src/core/ext/transport/binder/utils/transport_stream_receiver.h [1:1]
+        src/core/ext/transport/binder/utils/transport_stream_receiver_impl.cc [1:1]
+        src/core/ext/transport/binder/utils/transport_stream_receiver_impl.h [1:1]
+        src/core/ext/transport/binder/wire_format/binder.h [1:1]
+        src/core/ext/transport/binder/wire_format/binder_android.cc [1:1]
+        src/core/ext/transport/binder/wire_format/binder_android.h [1:1]
+        src/core/ext/transport/binder/wire_format/binder_constants.cc [1:1]
+        src/core/ext/transport/binder/wire_format/binder_constants.h [1:1]
+        src/core/ext/transport/binder/wire_format/transaction.cc [1:1]
+        src/core/ext/transport/binder/wire_format/transaction.h [1:1]
+        src/core/ext/transport/binder/wire_format/wire_reader.h [1:1]
+        src/core/ext/transport/binder/wire_format/wire_reader_impl.cc [1:1]
+        src/core/ext/transport/binder/wire_format/wire_reader_impl.h [1:1]
+        src/core/ext/transport/binder/wire_format/wire_writer.cc [1:1]
+        src/core/ext/transport/binder/wire_format/wire_writer.h [1:1]
+        src/core/ext/transport/chttp2/transport/hpack_constants.h [1:1]
+        src/core/ext/transport/chttp2/transport/hpack_encoder_index.h [1:1]
+        src/core/ext/transport/chttp2/transport/hpack_encoder_table.cc [1:1]
+        src/core/ext/transport/chttp2/transport/hpack_encoder_table.h [1:1]
+        src/core/ext/transport/chttp2/transport/hpack_utils.cc [1:1]
+        src/core/ext/transport/chttp2/transport/hpack_utils.h [1:1]
+        src/core/ext/transport/chttp2/transport/popularity_count.h [1:1]
+        src/core/ext/xds/xds_channel_stack_modifier.cc [3:3]
+        src/core/ext/xds/xds_channel_stack_modifier.h [3:3]
         src/core/ext/xds/xds_http_fault_filter.cc [2:2]
         src/core/ext/xds/xds_http_fault_filter.h [2:2]
         src/core/ext/xds/xds_http_filters.cc [2:2]
         src/core/ext/xds/xds_http_filters.h [2:2]
+        src/core/ext/xds/xds_routing.cc [3:3]
+        src/core/ext/xds/xds_routing.h [3:3]
+        src/core/lib/avl/avl.h [1:1]
+        src/core/lib/channel/call_tracer.h [3:3]
+        src/core/lib/channel/channel_args_preconditioning.cc [1:1]
+        src/core/lib/channel/channel_args_preconditioning.h [1:1]
+        src/core/lib/config/core_configuration.cc [1:1]
+        src/core/lib/config/core_configuration.h [1:1]
+        src/core/lib/event_engine/memory_allocator.cc [1:1]
+        src/core/lib/gprpp/bitset.h [1:1]
+        src/core/lib/gprpp/capture.h [1:1]
+        src/core/lib/gprpp/chunked_vector.h [1:1]
+        src/core/lib/gprpp/construct_destruct.h [1:1]
+        src/core/lib/gprpp/cpp_impl_of.h [1:1]
+        src/core/lib/gprpp/match.h [1:1]
+        src/core/lib/gprpp/overload.h [1:1]
+        src/core/lib/gprpp/table.h [1:1]
         src/core/lib/matchers/matchers.cc [1:1]
         src/core/lib/matchers/matchers.h [1:1]
+        src/core/lib/promise/activity.cc [1:1]
+        src/core/lib/promise/activity.h [1:1]
+        src/core/lib/promise/arena_promise.h [1:1]
+        src/core/lib/promise/context.h [1:1]
+        src/core/lib/promise/detail/basic_join.h [1:1]
+        src/core/lib/promise/detail/basic_seq.h [1:1]
+        src/core/lib/promise/detail/promise_factory.h [1:1]
+        src/core/lib/promise/detail/promise_like.h [1:1]
+        src/core/lib/promise/detail/status.h [1:1]
+        src/core/lib/promise/detail/switch.h [2:2]
+        src/core/lib/promise/exec_ctx_wakeup_scheduler.h [1:1]
+        src/core/lib/promise/for_each.h [1:1]
+        src/core/lib/promise/if.h [1:1]
+        src/core/lib/promise/intra_activity_waiter.h [1:1]
+        src/core/lib/promise/join.h [1:1]
+        src/core/lib/promise/latch.h [1:1]
+        src/core/lib/promise/loop.h [1:1]
+        src/core/lib/promise/map.h [1:1]
+        src/core/lib/promise/observable.h [1:1]
+        src/core/lib/promise/pipe.h [1:1]
+        src/core/lib/promise/poll.h [1:1]
+        src/core/lib/promise/promise.h [1:1]
+        src/core/lib/promise/race.h [1:1]
+        src/core/lib/promise/seq.h [1:1]
+        src/core/lib/promise/try_join.h [1:1]
+        src/core/lib/promise/try_seq.h [1:1]
+        src/core/lib/promise/wait_set.h [1:1]
+        src/core/lib/resource_quota/api.cc [1:1]
+        src/core/lib/resource_quota/api.h [1:1]
+        src/core/lib/resource_quota/memory_quota.cc [1:1]
+        src/core/lib/resource_quota/memory_quota.h [1:1]
+        src/core/lib/resource_quota/resource_quota.cc [1:1]
+        src/core/lib/resource_quota/resource_quota.h [1:1]
+        src/core/lib/resource_quota/thread_quota.cc [1:1]
+        src/core/lib/resource_quota/thread_quota.h [1:1]
+        src/core/lib/resource_quota/trace.cc [1:1]
+        src/core/lib/resource_quota/trace.h [1:1]
+        src/core/lib/security/authorization/authorization_engine.h [1:1]
+        src/core/lib/security/authorization/authorization_policy_provider.h [1:1]
+        src/core/lib/security/authorization/authorization_policy_provider_null_vtable.cc [1:1]
+        src/core/lib/security/authorization/authorization_policy_provider_vtable.cc [1:1]
+        src/core/lib/security/authorization/evaluate_args.cc [1:1]
+        src/core/lib/security/authorization/evaluate_args.h [1:1]
+        src/core/lib/security/authorization/grpc_authorization_engine.h [1:1]
+        src/core/lib/security/authorization/grpc_authorization_policy_provider.h [1:1]
+        src/core/lib/security/authorization/matchers.h [1:1]
         src/core/lib/security/authorization/rbac_policy.h [1:1]
         src/core/lib/security/authorization/rbac_translator.h [1:1]
+        src/core/lib/security/authorization/sdk_server_authz_filter.cc [1:1]
+        src/core/lib/security/authorization/sdk_server_authz_filter.h [1:1]
+        src/core/lib/security/credentials/tls/grpc_tls_certificate_verifier.cc [2:2]
+        src/core/lib/security/credentials/tls/grpc_tls_certificate_verifier.h [2:2]
+        src/core/lib/slice/slice.h [1:1]
+        src/core/lib/slice/slice_refcount.cc [1:1]
+        src/core/lib/slice/slice_refcount.h [1:1]
+        src/core/lib/slice/slice_refcount_base.h [1:1]
+        src/core/lib/slice/slice_split.cc [1:1]
+        src/core/lib/surface/builtins.cc [1:1]
+        src/core/lib/surface/builtins.h [1:1]
+        src/core/lib/transport/parsed_metadata.cc [1:1]
+        src/core/lib/transport/parsed_metadata.h [1:1]
+        src/cpp/common/tls_certificate_verifier.cc [2:2]
+        test/core/util/build.cc [1:1]
+        test/core/util/build.h [1:1]
+        test/core/util/evaluate_args_test_util.h [1:1]
+        test/core/util/mock_authorization_endpoint.h [1:1]
         test/cpp/end2end/admin_services_end2end_test.cc [3:3]
+        test/cpp/end2end/sdk_authz_end2end_test.cc [1:1]
+        test/cpp/util/tls_test_utils.cc [2:2]
+        test/cpp/util/tls_test_utils.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e7dfde444a19e176393b344aaa268da
+BELONGS ya.make
+    License text:
+        // Copyright 2016 The gRPC Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/proto/grpc/reflection/v1/reflection.proto [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0f2ee97b72f8652f2f1b888d86348121
-BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/duplicate/ya.make src/proto/grpc/testing/ya.make src/python/grpcio/ya.make src/python/grpcio_health_checking/ya.make src/python/grpcio_tests/ya.make test/core/util/ya.make test/cpp/end2end/ya.make test/cpp/util/ya.make ya.make
+BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/duplicate/ya.make src/proto/grpc/testing/ya.make src/python/grpcio/ya.make src/python/grpcio_health_checking/ya.make src/python/grpcio_tests/ya.make test/core/util/ya.make test/cpp/end2end/ya.make test/cpp/util/ya.make tools/codegen/core/ya.make ya.make
     License text:
          * Copyright 2015 gRPC authors.
     Scancode info:
@@ -196,15 +351,15 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/compiler/ruby_generator_string-inl.h [3:3]
         src/compiler/schema_interface.h [3:3]
         src/core/ext/filters/census/grpc_context.cc [3:3]
-        src/core/ext/filters/client_channel/channel_connectivity.cc [3:3]
+        src/core/ext/filters/client_channel/channel_connectivity.cc [2:2]
         src/core/ext/filters/client_channel/client_channel.cc [2:2]
-        src/core/ext/filters/client_channel/client_channel.h [3:3]
+        src/core/ext/filters/client_channel/client_channel.h [2:2]
         src/core/ext/filters/client_channel/client_channel_factory.cc [3:3]
-        src/core/ext/filters/client_channel/client_channel_factory.h [3:3]
+        src/core/ext/filters/client_channel/client_channel_factory.h [2:2]
         src/core/ext/filters/client_channel/client_channel_plugin.cc [3:3]
-        src/core/ext/filters/client_channel/connector.h [3:3]
+        src/core/ext/filters/client_channel/connector.h [2:2]
         src/core/ext/filters/client_channel/lb_policy.cc [3:3]
-        src/core/ext/filters/client_channel/lb_policy.h [3:3]
+        src/core/ext/filters/client_channel/lb_policy.h [2:2]
         src/core/ext/filters/client_channel/lb_policy/pick_first/pick_first.cc [3:3]
         src/core/ext/filters/client_channel/lb_policy/round_robin/round_robin.cc [3:3]
         src/core/ext/filters/client_channel/lb_policy/subchannel_list.h [3:3]
@@ -218,22 +373,23 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/ext/filters/client_channel/resolver_factory.h [3:3]
         src/core/ext/filters/client_channel/resolver_registry.cc [3:3]
         src/core/ext/filters/client_channel/resolver_registry.h [3:3]
-        src/core/ext/filters/client_channel/service_config.cc [2:2]
-        src/core/ext/filters/client_channel/service_config_parser.cc [2:2]
-        src/core/ext/filters/client_channel/subchannel.cc [3:3]
-        src/core/ext/filters/client_channel/subchannel.h [3:3]
+        src/core/ext/filters/client_channel/retry_filter.cc [2:2]
+        src/core/ext/filters/client_channel/subchannel.cc [2:2]
+        src/core/ext/filters/client_channel/subchannel.h [2:2]
         src/core/ext/filters/http/client/http_client_filter.cc [2:2]
         src/core/ext/filters/http/client/http_client_filter.h [2:2]
         src/core/ext/filters/http/message_compress/message_compress_filter.cc [3:3]
         src/core/ext/filters/http/message_compress/message_compress_filter.h [3:3]
         src/core/ext/filters/http/server/http_server_filter.cc [3:3]
         src/core/ext/filters/http/server/http_server_filter.h [3:3]
+        src/core/ext/service_config/service_config.cc [2:2]
+        src/core/ext/service_config/service_config_parser.cc [2:2]
         src/core/ext/transport/chttp2/alpn/alpn.cc [3:3]
         src/core/ext/transport/chttp2/alpn/alpn.h [3:3]
         src/core/ext/transport/chttp2/client/chttp2_connector.cc [3:3]
         src/core/ext/transport/chttp2/client/chttp2_connector.h [3:3]
-        src/core/ext/transport/chttp2/client/insecure/channel_create.cc [3:3]
-        src/core/ext/transport/chttp2/client/secure/secure_channel_create.cc [3:3]
+        src/core/ext/transport/chttp2/client/insecure/channel_create.cc [2:2]
+        src/core/ext/transport/chttp2/client/secure/secure_channel_create.cc [2:2]
         src/core/ext/transport/chttp2/server/chttp2_server.cc [3:3]
         src/core/ext/transport/chttp2/server/insecure/server_chttp2.cc [3:3]
         src/core/ext/transport/chttp2/server/secure/server_secure_chttp2.cc [3:3]
@@ -258,12 +414,10 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/ext/transport/chttp2/transport/hpack_encoder.h [3:3]
         src/core/ext/transport/chttp2/transport/hpack_parser.cc [3:3]
         src/core/ext/transport/chttp2/transport/hpack_parser.h [3:3]
-        src/core/ext/transport/chttp2/transport/hpack_table.cc [3:3]
-        src/core/ext/transport/chttp2/transport/hpack_table.h [3:3]
+        src/core/ext/transport/chttp2/transport/hpack_parser_table.cc [3:3]
+        src/core/ext/transport/chttp2/transport/hpack_parser_table.h [3:3]
         src/core/ext/transport/chttp2/transport/huffsyms.cc [3:3]
         src/core/ext/transport/chttp2/transport/huffsyms.h [3:3]
-        src/core/ext/transport/chttp2/transport/incoming_metadata.cc [3:3]
-        src/core/ext/transport/chttp2/transport/incoming_metadata.h [3:3]
         src/core/ext/transport/chttp2/transport/internal.h [3:3]
         src/core/ext/transport/chttp2/transport/parsing.cc [3:3]
         src/core/ext/transport/chttp2/transport/stream_lists.cc [3:3]
@@ -272,8 +426,8 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/ext/transport/chttp2/transport/varint.cc [3:3]
         src/core/ext/transport/chttp2/transport/varint.h [3:3]
         src/core/ext/transport/chttp2/transport/writing.cc [3:3]
-        src/core/lib/avl/avl.cc [3:3]
-        src/core/lib/avl/avl.h [3:3]
+        src/core/lib/address_utils/parse_address.h [3:3]
+        src/core/lib/address_utils/sockaddr_utils.h [3:3]
         src/core/lib/channel/channel_args.cc [3:3]
         src/core/lib/channel/channel_args.h [3:3]
         src/core/lib/channel/channel_stack.cc [3:3]
@@ -321,10 +475,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/lib/gpr/time_precise.h [3:3]
         src/core/lib/gpr/time_windows.cc [3:3]
         src/core/lib/gpr/tls.h [3:3]
-        src/core/lib/gpr/tls_gcc.h [3:3]
-        src/core/lib/gpr/tls_msvc.h [3:3]
-        src/core/lib/gpr/tls_pthread.cc [3:3]
-        src/core/lib/gpr/tls_pthread.h [3:3]
         src/core/lib/gpr/tmpfile.h [3:3]
         src/core/lib/gpr/tmpfile_msys.cc [3:3]
         src/core/lib/gpr/tmpfile_posix.cc [3:3]
@@ -368,7 +518,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/lib/iomgr/is_epollexclusive_available.h [3:3]
         src/core/lib/iomgr/load_file.cc [3:3]
         src/core/lib/iomgr/load_file.h [3:3]
-        src/core/lib/iomgr/parse_address.h [3:3]
         src/core/lib/iomgr/polling_entity.h [3:3]
         src/core/lib/iomgr/pollset.h [3:3]
         src/core/lib/iomgr/pollset_set.h [3:3]
@@ -381,7 +530,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/lib/iomgr/resolve_address_windows.cc [3:3]
         src/core/lib/iomgr/sockaddr.h [3:3]
         src/core/lib/iomgr/sockaddr_posix.h [3:3]
-        src/core/lib/iomgr/sockaddr_utils.h [3:3]
         src/core/lib/iomgr/sockaddr_windows.h [3:3]
         src/core/lib/iomgr/socket_mutator.cc [3:3]
         src/core/lib/iomgr/socket_mutator.h [3:3]
@@ -409,8 +557,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/lib/iomgr/timer_generic.cc [3:3]
         src/core/lib/iomgr/timer_heap.cc [3:3]
         src/core/lib/iomgr/timer_heap.h [3:3]
-        src/core/lib/iomgr/udp_server.cc [3:3]
-        src/core/lib/iomgr/udp_server.h [3:3]
         src/core/lib/iomgr/wakeup_fd_eventfd.cc [3:3]
         src/core/lib/iomgr/wakeup_fd_nospecial.cc [3:3]
         src/core/lib/iomgr/wakeup_fd_pipe.cc [3:3]
@@ -452,9 +598,13 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         src/core/lib/slice/b64.cc [3:3]
         src/core/lib/slice/b64.h [3:3]
         src/core/lib/slice/slice.cc [3:3]
+        src/core/lib/slice/slice_api.cc [3:3]
         src/core/lib/slice/slice_buffer.cc [3:3]
+        src/core/lib/slice/slice_split.h [3:3]
         src/core/lib/slice/slice_string_helpers.cc [3:3]
         src/core/lib/slice/slice_string_helpers.h [3:3]
+        src/core/lib/slice/static_slice.cc [2:2]
+        src/core/lib/slice/static_slice.h [2:2]
         src/core/lib/surface/api_trace.cc [3:3]
         src/core/lib/surface/api_trace.h [3:3]
         src/core/lib/surface/byte_buffer.cc [3:3]
@@ -691,8 +841,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/dupli
         test/cpp/util/test_config_cc.cc [3:3]
         test/cpp/util/time_test.cc [3:3]
         tools/codegen/core/gen_hpack_tables.cc [3:3]
-        tools/codegen/core/gen_legal_metadata_characters.cc [3:3]
-        tools/codegen/core/gen_percent_encoding_tables.cc [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1393ed0d9a5e8e3a97f2447521ecb0a6
 BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/ya.make src/python/grpcio/ya.make src/python/grpcio_tests/ya.make test/core/util/ya.make test/cpp/end2end/ya.make test/cpp/util/ya.make ya.make
@@ -822,22 +970,22 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/ya.ma
         src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_resolver.cc [2:2]
         src/core/ext/filters/client_channel/local_subchannel_pool.cc [3:3]
         src/core/ext/filters/client_channel/local_subchannel_pool.h [3:3]
-        src/core/ext/filters/client_channel/resolver_result_parsing.cc [3:3]
-        src/core/ext/filters/client_channel/resolver_result_parsing.h [3:3]
+        src/core/ext/filters/client_channel/resolver_result_parsing.cc [2:2]
+        src/core/ext/filters/client_channel/resolver_result_parsing.h [2:2]
+        src/core/ext/filters/client_channel/retry_service_config.cc [2:2]
+        src/core/ext/filters/client_channel/retry_service_config.h [2:2]
         src/core/ext/filters/client_channel/server_address.cc [3:3]
         src/core/ext/filters/client_channel/server_address.h [3:3]
         src/core/ext/filters/client_channel/subchannel_pool_interface.cc [3:3]
         src/core/ext/filters/client_channel/subchannel_pool_interface.h [3:3]
         src/core/ext/filters/http/client_authority_filter.cc [3:3]
         src/core/ext/filters/http/client_authority_filter.h [3:3]
-        src/core/ext/transport/chttp2/client/authority.cc [3:3]
-        src/core/ext/transport/chttp2/client/authority.h [3:3]
         src/core/ext/transport/chttp2/transport/chttp2_transport.cc [2:2]
         src/core/ext/transport/chttp2/transport/context_list.cc [3:3]
         src/core/ext/transport/chttp2/transport/context_list.h [3:3]
-        src/core/ext/xds/xds_api.cc [3:3]
+        src/core/ext/xds/xds_api.cc [2:2]
         src/core/ext/xds/xds_api.h [3:3]
-        src/core/ext/xds/xds_client.cc [3:3]
+        src/core/ext/xds/xds_client.cc [2:2]
         src/core/ext/xds/xds_client_stats.cc [3:3]
         src/core/ext/xds/xds_client_stats.h [3:3]
         src/core/lib/channel/channelz.h [3:3]
@@ -855,7 +1003,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/ya.ma
         src/core/lib/iomgr/internal_errqueue.h [3:3]
         src/core/lib/iomgr/iomgr_custom.cc [3:3]
         src/core/lib/iomgr/iomgr_internal.cc [3:3]
-        src/core/lib/iomgr/iomgr_uv.cc [3:3]
         src/core/lib/iomgr/pollset.cc [3:3]
         src/core/lib/iomgr/pollset_custom.cc [3:3]
         src/core/lib/iomgr/pollset_custom.h [3:3]
@@ -865,7 +1012,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/ya.ma
         src/core/lib/iomgr/resolve_address.cc [3:3]
         src/core/lib/iomgr/resolve_address_custom.cc [3:3]
         src/core/lib/iomgr/resolve_address_custom.h [3:3]
-        src/core/lib/iomgr/sockaddr_custom.h [3:3]
         src/core/lib/iomgr/tcp_client.cc [3:3]
         src/core/lib/iomgr/tcp_client_cfstream.cc [4:4]
         src/core/lib/iomgr/tcp_client_custom.cc [3:3]
@@ -996,8 +1142,8 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/ya.ma
         src/python/grpcio_tests/tests/unit/_version_test.py [1:1]
         test/core/util/fuzzer_util.cc [3:3]
         test/core/util/fuzzer_util.h [3:3]
-        test/core/util/test_lb_policies.cc [3:3]
-        test/core/util/test_lb_policies.h [3:3]
+        test/core/util/test_lb_policies.cc [2:2]
+        test/core/util/test_lb_policies.h [2:2]
         test/cpp/end2end/channelz_service_test.cc [3:3]
         test/cpp/end2end/client_callback_end2end_test.cc [3:3]
         test/cpp/end2end/client_interceptors_end2end_test.cc [3:3]
@@ -1012,6 +1158,43 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/testing/ya.ma
         test/cpp/end2end/test_health_check_service_impl.h [3:3]
         test/cpp/util/channel_trace_proto_helper.cc [3:3]
         test/cpp/util/channel_trace_proto_helper.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 14562f2a7eb107a8f822700bf0293d8d
+BELONGS third_party/upb/ya.make
+    License text:
+        Copyright (c) 2009-2021, Google LLC
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        third_party/upb/LICENSE [2:3]
+        third_party/upb/upb/decode.c [2:3]
+        third_party/upb/upb/decode.h [2:3]
+        third_party/upb/upb/decode_fast.c [2:3]
+        third_party/upb/upb/decode_fast.h [2:3]
+        third_party/upb/upb/decode_internal.h [2:3]
+        third_party/upb/upb/def.c [2:3]
+        third_party/upb/upb/def.h [2:3]
+        third_party/upb/upb/def.hpp [1:2]
+        third_party/upb/upb/encode.c [2:3]
+        third_party/upb/upb/encode.h [2:3]
+        third_party/upb/upb/msg.c [2:3]
+        third_party/upb/upb/msg.h [2:3]
+        third_party/upb/upb/msg_internal.h [2:3]
+        third_party/upb/upb/port_def.inc [2:3]
+        third_party/upb/upb/port_undef.inc [2:3]
+        third_party/upb/upb/reflection.c [2:3]
+        third_party/upb/upb/reflection.h [2:3]
+        third_party/upb/upb/table.c [2:3]
+        third_party/upb/upb/table_internal.h [2:3]
+        third_party/upb/upb/text_encode.c [2:3]
+        third_party/upb/upb/text_encode.h [2:3]
+        third_party/upb/upb/upb.c [2:3]
+        third_party/upb/upb/upb.h [2:3]
+        third_party/upb/upb/upb.hpp [1:2]
+        third_party/upb/upb/upb_internal.h [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1ad5a8379223f39b4124906a5bd2437d
 BELONGS src/python/grpcio/ya.make src/python/grpcio_tests/ya.make
@@ -1030,13 +1213,12 @@ BELONGS src/python/grpcio/ya.make src/python/grpcio_tests/ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 1c0b49517f30a005a1f30fc39200d3ee
 BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make src/python/grpcio_tests/ya.make test/cpp/end2end/ya.make ya.make
     License text:
-        \# Copyright 2019 gRPC authors.
+         * Copyright 2019 gRPC authors.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        BUILD.gn [8:8]
         include/grpcpp/impl/codegen/async_stream.h [3:3]
         include/grpcpp/impl/codegen/client_callback.h [3:3]
         include/grpcpp/impl/codegen/delegating_channel.h [3:3]
@@ -1061,7 +1243,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.h [2:2]
         src/core/ext/filters/client_channel/lb_policy/xds/cds.cc [2:2]
-        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_libuv.cc [3:3]
         src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.cc [2:2]
         src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.h [3:3]
         src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc [3:3]
@@ -1082,9 +1263,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/core/lib/iomgr/executor/mpmcqueue.h [3:3]
         src/core/lib/iomgr/executor/threadpool.cc [3:3]
         src/core/lib/iomgr/executor/threadpool.h [3:3]
-        src/core/lib/iomgr/poller/eventmanager_interface.h [3:3]
-        src/core/lib/iomgr/poller/eventmanager_libuv.cc [3:3]
-        src/core/lib/iomgr/poller/eventmanager_libuv.h [3:3]
         src/core/lib/iomgr/work_serializer.cc [3:3]
         src/core/lib/iomgr/work_serializer.h [3:3]
         src/core/lib/security/security_connector/ssl_utils_config.cc [3:3]
@@ -1094,8 +1272,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/cpp/common/alts_context.cc [3:3]
         src/cpp/common/alts_util.cc [3:3]
         src/cpp/common/tls_credentials_options.cc [3:3]
-        src/cpp/common/tls_credentials_options_util.cc [3:3]
-        src/cpp/common/tls_credentials_options_util.h [3:3]
         src/cpp/common/validate_service_config.cc [3:3]
         src/cpp/server/external_connection_acceptor_impl.cc [3:3]
         src/cpp/server/external_connection_acceptor_impl.h [3:3]
@@ -1108,13 +1284,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/python/grpcio/grpc/_cython/_cygrpc/aio/channel.pyx.pxi [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/grpc_aio.pxd.pxi [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/grpc_aio.pyx.pxi [1:1]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/iomgr.pyx.pxi [1:1]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/resolver.pxd.pxi [1:1]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/resolver.pyx.pxi [1:1]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/socket.pxd.pxi [1:1]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/socket.pyx.pxi [1:1]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/timer.pxd.pxi [1:1]
-        src/python/grpcio/grpc/_cython/_cygrpc/aio/iomgr/timer.pyx.pxi [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/rpc_status.pxd.pxi [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/rpc_status.pyx.pxi [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/iomgr.pxd.pxi [1:1]
@@ -1154,6 +1323,7 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/core/ext/filters/client_channel/dynamic_filters.h [2:2]
         src/core/ext/filters/client_channel/lb_policy/address_filtering.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/address_filtering.h [2:2]
+        src/core/ext/filters/client_channel/lb_policy/rls/rls.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/xds/xds_channel_args.h [2:2]
         src/core/ext/filters/client_channel/service_config_channel_arg_filter.cc [2:2]
         src/core/ext/filters/http/message_compress/message_decompress_filter.cc [3:3]
@@ -1169,7 +1339,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/core/ext/xds/xds_certificate_provider.h [3:3]
         src/core/ext/xds/xds_server_config_fetcher.cc [3:3]
         src/core/lib/gpr/sync_abseil.cc [3:3]
-        src/core/lib/gpr/tls_stdcpp.h [3:3]
         src/core/lib/gprpp/dual_ref_counted.h [2:2]
         src/core/lib/gprpp/examine_stack.cc [3:3]
         src/core/lib/gprpp/examine_stack.h [3:3]
@@ -1181,8 +1350,7 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/core/lib/iomgr/ev_apple.h [3:3]
         src/core/lib/json/json_util.cc [3:3]
         src/core/lib/json/json_util.h [3:3]
-        src/core/lib/security/authorization/authorization_engine.h [2:2]
-        src/core/lib/security/authorization/evaluate_args.h [3:3]
+        src/core/lib/security/authorization/cel_authorization_engine.h [2:2]
         src/core/lib/security/authorization/mock_cel/activation.h [1:1]
         src/core/lib/security/authorization/mock_cel/cel_expr_builder_factory.h [1:1]
         src/core/lib/security/authorization/mock_cel/cel_expression.h [1:1]
@@ -1210,8 +1378,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/core/lib/security/credentials/xds/xds_credentials.h [3:3]
         src/core/lib/security/security_connector/insecure/insecure_security_connector.cc [3:3]
         src/core/lib/security/security_connector/insecure/insecure_security_connector.h [3:3]
-        src/core/lib/transport/authority_override.cc [2:2]
-        src/core/lib/transport/authority_override.h [2:2]
         src/cpp/client/xds_credentials.cc [3:3]
         src/cpp/common/tls_certificate_provider.cc [2:2]
         src/cpp/server/xds_server_credentials.cc [3:3]
@@ -1219,14 +1385,23 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/python/grpcio/ya.make sr
         src/python/grpcio_reflection/grpc_reflection/v1alpha/_async.py [1:1]
         src/python/grpcio_reflection/grpc_reflection/v1alpha/_base.py [1:1]
         src/python/grpcio_tests/tests_aio/unit/_metadata_test.py [1:1]
-        test/core/util/eval_args_mock_endpoint.cc [1:1]
-        test/core/util/eval_args_mock_endpoint.h [1:1]
         test/core/util/resolve_localhost_ip46.cc [3:3]
         test/core/util/resolve_localhost_ip46.h [3:3]
         test/core/util/tls_utils.cc [2:2]
         test/core/util/tls_utils.h [2:2]
         test/cpp/end2end/context_allocator_end2end_test.cc [3:3]
-        test/cpp/end2end/xds_credentials_end2end_test.cc [3:3]
+        test/cpp/end2end/rls_end2end_test.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 24f793f95f5c432d60ec3ef10b0e1a07
+BELONGS ya.make
+    License text:
+        Copyright 2016, Google Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [208:208]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2738b84693d58ad3ff70e7cfefe0c3de
 BELONGS src/python/grpcio_tests/ya.make
@@ -1257,11 +1432,13 @@ BELONGS src/core/lib/ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        src/core/lib/gprpp/status_helper.cc [3:3]
+        src/core/lib/gprpp/status_helper.h [3:3]
         src/core/lib/gprpp/time_util.cc [2:2]
         src/core/lib/gprpp/time_util.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3f8e6ecc96f8543539ce4b548cdc9afb
-BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio_tests/ya.make ya.make
+BELONGS src/core/lib/ya.make src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/grpcio_tests/ya.make ya.make
     License text:
         // Copyright 2021 The gRPC Authors
     Scancode info:
@@ -1269,11 +1446,53 @@ BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio_tests/ya.make ya.ma
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/proto/grpc/auth/v1/authz_policy.proto [1:1]
+        include/grpc/event_engine/endpoint_config.h [1:1]
+        include/grpc/event_engine/event_engine.h [1:1]
+        include/grpc/event_engine/internal/memory_allocator_impl.h [1:1]
+        include/grpc/event_engine/memory_allocator.h [1:1]
+        include/grpc/event_engine/memory_request.h [1:1]
+        include/grpc/event_engine/port.h [1:1]
+        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_event_engine.cc [1:1]
+        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_event_engine.cc [1:1]
+        src/core/lib/event_engine/channel_args_endpoint_config.cc [1:1]
+        src/core/lib/event_engine/channel_args_endpoint_config.h [1:1]
+        src/core/lib/event_engine/event_engine.cc [1:1]
+        src/core/lib/event_engine/event_engine_factory.cc [1:1]
+        src/core/lib/event_engine/event_engine_factory.h [1:1]
+        src/core/lib/event_engine/sockaddr.cc [1:1]
+        src/core/lib/event_engine/sockaddr.h [1:1]
+        src/core/lib/iomgr/endpoint_pair_event_engine.cc [1:1]
+        src/core/lib/iomgr/event_engine/closure.cc [1:1]
+        src/core/lib/iomgr/event_engine/closure.h [1:1]
+        src/core/lib/iomgr/event_engine/endpoint.cc [1:1]
+        src/core/lib/iomgr/event_engine/endpoint.h [1:1]
+        src/core/lib/iomgr/event_engine/iomgr.cc [1:1]
+        src/core/lib/iomgr/event_engine/pollset.cc [1:1]
+        src/core/lib/iomgr/event_engine/pollset.h [1:1]
+        src/core/lib/iomgr/event_engine/promise.h [1:1]
+        src/core/lib/iomgr/event_engine/resolved_address_internal.cc [1:1]
+        src/core/lib/iomgr/event_engine/resolved_address_internal.h [1:1]
+        src/core/lib/iomgr/event_engine/resolver.cc [1:1]
+        src/core/lib/iomgr/event_engine/tcp.cc [1:1]
+        src/core/lib/iomgr/event_engine/timer.cc [1:1]
         src/proto/grpc/testing/xds/v3/config_dump.proto [1:1]
         src/proto/grpc/testing/xds/v3/csds.proto [1:1]
+        src/proto/grpc/testing/xds/v3/extension.proto [1:1]
         src/proto/grpc/testing/xds/v3/router.proto [1:1]
+        src/python/grpcio/grpc/_cython/_cygrpc/csds.pyx.pxi [1:1]
+        src/python/grpcio_admin/grpc_admin/__init__.py [1:1]
+        src/python/grpcio_admin/grpc_version.py [1:1]
+        src/python/grpcio_admin/setup.py [1:1]
+        src/python/grpcio_csds/grpc_csds/__init__.py [1:1]
+        src/python/grpcio_csds/grpc_version.py [1:1]
+        src/python/grpcio_csds/setup.py [1:1]
+        src/python/grpcio_tests/tests/admin/test_admin.py [1:1]
+        src/python/grpcio_tests/tests/csds/test_csds.py [1:1]
         src/python/grpcio_tests/tests_aio/unit/server_time_remaining_test.py [1:1]
+        src/python/grpcio_tests/tests_gevent/__init__.py [1:1]
+        src/python/grpcio_tests/tests_gevent/unit/__init__.py [1:1]
+        src/python/grpcio_tests/tests_gevent/unit/_test_server.py [1:1]
+        src/python/grpcio_tests/tests_gevent/unit/close_channel_test.py [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 47856a1da8680a4ba503954f87b9eb2c
 BELONGS test/core/util/ya.make
@@ -1383,7 +1602,7 @@ BELONGS src/proto/grpc/channelz/ya.make src/python/grpcio/ya.make src/python/grp
         src/python/grpcio_tests/tests/status/_grpc_status_test.py [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8183794cfdcd444d086a2c63a36d9beb
-BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/grpcio_health_checking/ya.make src/python/grpcio_status/ya.make src/python/grpcio_tests/ya.make
+BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/grpcio_channelz/ya.make src/python/grpcio_health_checking/ya.make src/python/grpcio_status/ya.make src/python/grpcio_tests/ya.make ya.make
     License text:
         // Copyright 2020 The gRPC Authors
     Scancode info:
@@ -1391,6 +1610,8 @@ BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        src/proto/grpc/lookup/v1/rls.proto [1:1]
+        src/proto/grpc/lookup/v1/rls_config.proto [1:1]
         src/proto/grpc/testing/xds/v3/address.proto [1:1]
         src/proto/grpc/testing/xds/v3/ads.proto [1:1]
         src/proto/grpc/testing/xds/v3/aggregate_cluster.proto [1:1]
@@ -1452,7 +1673,7 @@ BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/
         src/python/grpcio_tests/tests_py3_only/unit/_leak_test.py [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 90fc8bbf7a57ec743af147a4496a5eb2
-BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/grpcio_tests/ya.make test/cpp/end2end/ya.make ya.make
+BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/grpcio_tests/ya.make test/cpp/end2end/ya.make
     License text:
         // Copyright 2019 The gRPC Authors
     Scancode info:
@@ -1460,13 +1681,11 @@ BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/proto/grpc/http_over_grpc/http_over_grpc.proto [1:1]
         src/proto/grpc/testing/xds/ads_for_test.proto [1:1]
         src/proto/grpc/testing/xds/cds_for_test.proto [1:1]
         src/proto/grpc/testing/xds/eds_for_test.proto [1:1]
         src/proto/grpc/testing/xds/lds_rds_for_test.proto [1:1]
         src/proto/grpc/testing/xds/lrs_for_test.proto [1:1]
-        src/proto/grpc/testing/xds/orca_load_report_for_test.proto [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/common.pyx.pxi [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/server.pxd.pxi [1:1]
         src/python/grpcio/grpc/_cython/_cygrpc/aio/server.pyx.pxi [1:1]
@@ -1489,35 +1708,6 @@ BELONGS src/proto/grpc/testing/xds/ya.make src/python/grpcio/ya.make src/python/
         src/python/grpcio_tests/tests_aio/unit/aio_rpc_error_test.py [1:1]
         src/python/grpcio_tests/tests_aio/unit/channel_argument_test.py [1:1]
         test/cpp/end2end/cfstream_test.cc [3:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 915a58fad04e1b9efec32a9b5cde7ce6
-BELONGS third_party/upb/ya.make
-FILE_INCLUDE LICENSE found in files: third_party/upb/third_party/wyhash/wyhash.h at line 3
-FILE_INCLUDE third_party/address_sorting/LICENSE found in files: third_party/upb/third_party/wyhash/wyhash.h at line 3
-FILE_INCLUDE third_party/upb/LICENSE found in files: third_party/upb/third_party/wyhash/wyhash.h at line 3
-FILE_INCLUDE third_party/upb/third_party/wyhash/LICENSE found in files: third_party/upb/third_party/wyhash/wyhash.h at line 3
-    License text:
-        /* Copyright 2020 王一 Wang Yi <godspeed_china@yeah.net>
-           This is free and unencumbered software released into the public domain. http://unlicense.org/
-           See github.com/wangyi-fudan/wyhash/ LICENSE
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        third_party/upb/third_party/wyhash/wyhash.h [1:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b2cd4508342480479b8c05479802ed26
-BELONGS third_party/upb/ya.make
-    License text:
-        Copyright (c) 2009-2011, Google Inc.
-        All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        third_party/upb/LICENSE [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c822b8e4a7bf3b1525b6d5673145a917
 BELONGS src/python/grpcio_tests/ya.make
@@ -1599,10 +1789,6 @@ BELONGS src/core/lib/ya.make src/proto/grpc/core/ya.make src/proto/grpc/testing/
         src/core/ext/filters/http/http_filters_plugin.cc [3:3]
         src/core/ext/filters/max_age/max_age_filter.cc [3:3]
         src/core/ext/filters/max_age/max_age_filter.h [2:2]
-        src/core/ext/filters/workarounds/workaround_cronet_compression_filter.cc [2:2]
-        src/core/ext/filters/workarounds/workaround_cronet_compression_filter.h [2:2]
-        src/core/ext/filters/workarounds/workaround_utils.cc [2:2]
-        src/core/ext/filters/workarounds/workaround_utils.h [2:2]
         src/core/ext/transport/chttp2/transport/flow_control.cc [3:3]
         src/core/ext/transport/chttp2/transport/flow_control.h [3:3]
         src/core/ext/transport/chttp2/transport/http2_settings.cc [2:2]
@@ -1628,11 +1814,10 @@ BELONGS src/core/lib/ya.make src/proto/grpc/core/ya.make src/proto/grpc/testing/
         src/core/lib/debug/stats.h [3:3]
         src/core/lib/debug/stats_data.cc [2:2]
         src/core/lib/debug/stats_data.h [2:2]
-        src/core/lib/gpr/arena.h [3:3]
         src/core/lib/gpr/atm.cc [3:3]
         src/core/lib/gprpp/arena.cc [3:3]
         src/core/lib/gprpp/arena.h [3:3]
-        src/core/lib/gprpp/atomic.h [3:3]
+        src/core/lib/gprpp/atomic_utils.h [3:3]
         src/core/lib/gprpp/debug_location.h [3:3]
         src/core/lib/gprpp/fork.cc [3:3]
         src/core/lib/gprpp/fork.h [3:3]
@@ -1730,9 +1915,9 @@ BELONGS src/core/lib/ya.make src/proto/grpc/core/ya.make src/proto/grpc/testing/
         test/core/util/fuzzer_one_entry_runner.sh [5:5]
         test/core/util/port_isolated_runtime_environment.cc [3:3]
         test/core/util/run_with_poller.sh [2:2]
+        test/cpp/end2end/counted_service.h [2:2]
         test/cpp/end2end/exception_test.cc [3:3]
-        test/cpp/end2end/grpclb_end2end_test.cc [3:3]
-        test/cpp/end2end/xds_end2end_test.cc [3:3]
+        test/cpp/end2end/grpclb_end2end_test.cc [2:2]
         test/cpp/util/error_details_test.cc [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d1f37f63030e0e8933bd29b33aedaaa6
@@ -1756,6 +1941,7 @@ BELONGS src/python/grpcio_tests/ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/python/grpcio_tests/tests/unit/_xds_credentials_test.py [1:1]
+        src/python/grpcio_tests/tests_py3_only/interop/xds_interop_server.py [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f053023fe408f1896a456d1d28958df9
 BELONGS src/proto/grpc/health/v1/ya.make ya.make
@@ -1812,7 +1998,7 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/reflection/v1
         src/core/ext/filters/client_channel/http_connect_handshaker.h [3:3]
         src/core/ext/filters/client_channel/http_proxy.cc [3:3]
         src/core/ext/filters/client_channel/http_proxy.h [3:3]
-        src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.cc [3:3]
+        src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.cc [3:3]
         src/core/ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.h [3:3]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h [3:3]
@@ -1820,23 +2006,24 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/reflection/v1
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc [3:3]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.cc [3:3]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.h [3:3]
-        src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_libuv.cc [3:3]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc [3:3]
         src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc [3:3]
         src/core/ext/filters/client_channel/resolver/fake/fake_resolver.cc [2:2]
         src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h [2:2]
-        src/core/ext/filters/client_channel/service_config.h [2:2]
-        src/core/ext/filters/client_channel/service_config_call_data.h [2:2]
-        src/core/ext/filters/client_channel/service_config_parser.h [2:2]
         src/core/ext/filters/deadline/deadline_filter.cc [2:2]
         src/core/ext/filters/deadline/deadline_filter.h [2:2]
         src/core/ext/filters/message_size/message_size_filter.cc [2:2]
         src/core/ext/filters/message_size/message_size_filter.h [2:2]
+        src/core/ext/service_config/service_config.h [2:2]
+        src/core/ext/service_config/service_config_call_data.h [2:2]
+        src/core/ext/service_config/service_config_parser.h [2:2]
         src/core/ext/transport/chttp2/client/insecure/channel_create_posix.cc [3:3]
         src/core/ext/transport/chttp2/server/chttp2_server.h [3:3]
         src/core/ext/transport/chttp2/server/insecure/server_chttp2_posix.cc [3:3]
         src/core/ext/transport/chttp2/transport/bin_decoder.cc [3:3]
         src/core/ext/transport/chttp2/transport/bin_decoder.h [3:3]
+        src/core/lib/address_utils/parse_address.cc [3:3]
+        src/core/lib/address_utils/sockaddr_utils.cc [3:3]
         src/core/lib/backoff/backoff.cc [3:3]
         src/core/lib/backoff/backoff.h [3:3]
         src/core/lib/channel/channel_stack_builder.cc [3:3]
@@ -1854,27 +2041,17 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/reflection/v1
         src/core/lib/iomgr/combiner.cc [3:3]
         src/core/lib/iomgr/combiner.h [3:3]
         src/core/lib/iomgr/endpoint_pair_posix.cc [3:3]
-        src/core/lib/iomgr/endpoint_pair_uv.cc [3:3]
         src/core/lib/iomgr/error.cc [3:3]
         src/core/lib/iomgr/error.h [3:3]
         src/core/lib/iomgr/error_internal.h [3:3]
         src/core/lib/iomgr/ev_poll_posix.cc [3:3]
         src/core/lib/iomgr/grpc_if_nametoindex_posix.cc [3:3]
         src/core/lib/iomgr/grpc_if_nametoindex_unsupported.cc [3:3]
-        src/core/lib/iomgr/parse_address.cc [3:3]
         src/core/lib/iomgr/polling_entity.cc [3:3]
         src/core/lib/iomgr/pollset_set_custom.cc [3:3]
-        src/core/lib/iomgr/pollset_uv.cc [3:3]
-        src/core/lib/iomgr/pollset_uv.h [3:3]
         src/core/lib/iomgr/port.h [3:3]
-        src/core/lib/iomgr/resource_quota.cc [3:3]
-        src/core/lib/iomgr/resource_quota.h [3:3]
-        src/core/lib/iomgr/sockaddr_utils.cc [3:3]
-        src/core/lib/iomgr/socket_utils_uv.cc [3:3]
         src/core/lib/iomgr/socket_utils_windows.cc [3:3]
-        src/core/lib/iomgr/tcp_uv.cc [3:3]
         src/core/lib/iomgr/timer_generic.h [3:3]
-        src/core/lib/iomgr/timer_uv.cc [3:3]
         src/core/lib/iomgr/unix_sockets_posix.cc [3:3]
         src/core/lib/iomgr/unix_sockets_posix.h [3:3]
         src/core/lib/iomgr/unix_sockets_posix_noop.cc [3:3]
@@ -1923,7 +2100,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/reflection/v1
         src/cpp/server/server_posix.cc [3:3]
         src/cpp/thread_manager/thread_manager.cc [3:3]
         src/cpp/thread_manager/thread_manager.h [3:3]
-        src/proto/grpc/binary_log/v1alpha/log.proto [1:1]
         src/proto/grpc/reflection/v1alpha/reflection.proto [1:1]
         src/proto/grpc/testing/compiler_test.proto [1:1]
         src/proto/grpc/testing/proto2/empty2.proto [2:2]
@@ -1997,8 +2173,6 @@ BELONGS src/core/lib/ya.make src/cpp/common/ya.make src/proto/grpc/reflection/v1
         test/core/util/passthru_endpoint.cc [3:3]
         test/core/util/passthru_endpoint.h [3:3]
         test/core/util/subprocess_windows.cc [3:3]
-        test/core/util/trickle_endpoint.cc [3:3]
-        test/core/util/trickle_endpoint.h [3:3]
         test/cpp/end2end/client_lb_end2end_test.cc [3:3]
         test/cpp/end2end/filter_end2end_test.cc [3:3]
         test/cpp/end2end/health_service_end2end_test.cc [3:3]

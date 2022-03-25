@@ -24,8 +24,13 @@
 #include <util/generic/string.h>
 #include <thread>
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include "y_absl/memory/memory.h"
 #include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_format.h"
+#include "y_absl/strings/str_join.h"
 
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
@@ -44,28 +49,24 @@
 #include "src/core/ext/filters/client_channel/global_subchannel_pool.h"
 #include "src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h"
 #include "src/core/ext/filters/client_channel/server_address.h"
-#include "src/core/ext/filters/client_channel/service_config.h"
+#include "src/core/ext/service_config/service_config.h"
+#include "src/core/lib/address_utils/parse_address.h"
 #include "src/core/lib/backoff/backoff.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/env.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/iomgr/parse_address.h"
 #include "src/core/lib/iomgr/tcp_client.h"
 #include "src/core/lib/security/credentials/fake/fake_credentials.h"
 #include "src/cpp/client/secure_credentials.h"
 #include "src/cpp/server/secure_server_credentials.h"
-
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
-#include "src/proto/grpc/testing/xds/orca_load_report_for_test.pb.h"
+#include "src/proto/grpc/testing/xds/v3/orca_load_report.pb.h"
 #include "test/core/util/port.h"
 #include "test/core/util/resolve_localhost_ip46.h"
 #include "test/core/util/test_config.h"
 #include "test/core/util/test_lb_policies.h"
 #include "test/cpp/end2end/test_service_impl.h"
-
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 using grpc::testing::EchoRequest;
 using grpc::testing::EchoResponse;
@@ -102,7 +103,7 @@ class MyTestServiceImpl : public TestServiceImpl {
  public:
   Status Echo(ServerContext* context, const EchoRequest* request,
               EchoResponse* response) override {
-    const udpa::data::orca::v1::OrcaLoadReport* load_report = nullptr;
+    const xds::data::orca::v3::OrcaLoadReport* load_report = nullptr;
     {
       grpc::internal::MutexLock lock(&mu_);
       ++request_count_;
@@ -133,7 +134,7 @@ class MyTestServiceImpl : public TestServiceImpl {
     return clients_;
   }
 
-  void set_load_report(udpa::data::orca::v1::OrcaLoadReport* load_report) {
+  void set_load_report(xds::data::orca::v3::OrcaLoadReport* load_report) {
     grpc::internal::MutexLock lock(&mu_);
     load_report_ = load_report;
   }
@@ -146,7 +147,7 @@ class MyTestServiceImpl : public TestServiceImpl {
 
   grpc::internal::Mutex mu_;
   int request_count_ = 0;
-  const udpa::data::orca::v1::OrcaLoadReport* load_report_ = nullptr;
+  const xds::data::orca::v3::OrcaLoadReport* load_report_ = nullptr;
   grpc::internal::Mutex clients_mu_;
   std::set<TString> clients_;
 };
@@ -355,32 +356,33 @@ class ClientLbEnd2endTest : public ::testing::Test {
   }
 
   struct ServerData {
-    int port_;
+    const int port_;
     std::unique_ptr<Server> server_;
     MyTestServiceImpl service_;
     std::unique_ptr<std::thread> thread_;
-    bool server_ready_ = false;
-    bool started_ = false;
 
-    explicit ServerData(int port = 0) {
-      port_ = port > 0 ? port : 5100; // grpc_pick_unused_port_or_die();
-    }
+    grpc::internal::Mutex mu_;
+    grpc::internal::CondVar cond_;
+    bool server_ready_ Y_ABSL_GUARDED_BY(mu_) = false;
+    bool started_ Y_ABSL_GUARDED_BY(mu_) = false;
+
+    explicit ServerData(int port = 0)
+        : port_(port > 0 ? port : 5100) {}
 
     void Start(const TString& server_host) {
       gpr_log(GPR_INFO, "starting server on port %d", port_);
+      grpc::internal::MutexLock lock(&mu_);
       started_ = true;
-      grpc::internal::Mutex mu;
-      grpc::internal::MutexLock lock(&mu);
-      grpc::internal::CondVar cond;
       thread_ = y_absl::make_unique<std::thread>(
-          std::bind(&ServerData::Serve, this, server_host, &mu, &cond));
-      grpc::internal::WaitUntil(&cond, &mu, [this] { return server_ready_; });
+          std::bind(&ServerData::Serve, this, server_host));
+      while (!server_ready_) {
+        cond_.Wait(&mu_);
+      }
       server_ready_ = false;
       gpr_log(GPR_INFO, "server startup complete");
     }
 
-    void Serve(const TString& server_host, grpc::internal::Mutex* mu,
-               grpc::internal::CondVar* cond) {
+    void Serve(const TString& server_host) {
       std::ostringstream server_address;
       server_address << server_host << ":" << port_;
       ServerBuilder builder;
@@ -389,12 +391,13 @@ class ClientLbEnd2endTest : public ::testing::Test {
       builder.AddListeningPort(server_address.str(), std::move(creds));
       builder.RegisterService(&service_);
       server_ = builder.BuildAndStart();
-      grpc::internal::MutexLock lock(mu);
+      grpc::internal::MutexLock lock(&mu_);
       server_ready_ = true;
-      cond->Signal();
+      cond_.Signal();
     }
 
     void Shutdown() {
+      grpc::internal::MutexLock lock(&mu_);
       if (!started_) return;
       server_->Shutdown(grpc_timeout_milliseconds_to_deadline(0));
       thread_->join();
@@ -1682,9 +1685,24 @@ class ClientLbPickArgsTest : public ClientLbEnd2endTest {
 
   static void TearDownTestCase() { grpc_shutdown(); }
 
-  const std::vector<grpc_core::PickArgsSeen>& args_seen_list() {
+  std::vector<grpc_core::PickArgsSeen> args_seen_list() {
     grpc::internal::MutexLock lock(&mu_);
     return args_seen_list_;
+  }
+
+  static TString ArgsSeenListString(
+      const std::vector<grpc_core::PickArgsSeen>& args_seen_list) {
+    std::vector<TString> entries;
+    for (const auto& args_seen : args_seen_list) {
+      std::vector<TString> metadata;
+      for (const auto& p : args_seen.metadata) {
+        metadata.push_back(y_absl::StrCat(p.first, "=", p.second));
+      }
+      entries.push_back(y_absl::StrFormat("{path=\"%s\", metadata=[%s]}",
+                                        args_seen.path,
+                                        y_absl::StrJoin(metadata, ", ")));
+    }
+    return y_absl::StrCat("[", y_absl::StrJoin(entries, ", "), "]");
   }
 
  private:
@@ -1708,29 +1726,26 @@ TEST_F(ClientLbPickArgsTest, Basic) {
   auto channel = BuildChannel("test_pick_args_lb", response_generator);
   auto stub = BuildStub(channel);
   response_generator.SetNextResolution(GetServersPorts());
-  CheckRpcSendOk(stub, DEBUG_LOCATION, /*wait_for_ready=*/true);
+  // Proactively connect the channel, so that the LB policy will always
+  // be connected before it sees the pick.  Otherwise, the test would be
+  // flaky because sometimes the pick would be seen twice (once in
+  // CONNECTING and again in READY) and other times only once (in READY).
+  ASSERT_TRUE(channel->WaitForConnected(gpr_inf_future(GPR_CLOCK_MONOTONIC)));
   // Check LB policy name for the channel.
   EXPECT_EQ("test_pick_args_lb", channel->GetLoadBalancingPolicyName());
-  // There will be two entries, one for the pick tried in state
-  // CONNECTING and another for the pick tried in state READY.
-  EXPECT_THAT(args_seen_list(),
-              ::testing::ElementsAre(
-                  ::testing::AllOf(
-                      ::testing::Field(&grpc_core::PickArgsSeen::path,
-                                       "/grpc.testing.EchoTestService/Echo"),
-                      ::testing::Field(&grpc_core::PickArgsSeen::metadata,
-                                       ::testing::UnorderedElementsAre(
-                                           ::testing::Pair("foo", "1"),
-                                           ::testing::Pair("bar", "2"),
-                                           ::testing::Pair("baz", "3")))),
-                  ::testing::AllOf(
-                      ::testing::Field(&grpc_core::PickArgsSeen::path,
-                                       "/grpc.testing.EchoTestService/Echo"),
-                      ::testing::Field(&grpc_core::PickArgsSeen::metadata,
-                                       ::testing::UnorderedElementsAre(
-                                           ::testing::Pair("foo", "1"),
-                                           ::testing::Pair("bar", "2"),
-                                           ::testing::Pair("baz", "3"))))));
+  // Now send an RPC and check that the picker sees the expected data.
+  CheckRpcSendOk(stub, DEBUG_LOCATION, /*wait_for_ready=*/true);
+  auto pick_args_seen_list = args_seen_list();
+  EXPECT_THAT(pick_args_seen_list,
+              ::testing::ElementsAre(::testing::AllOf(
+                  ::testing::Field(&grpc_core::PickArgsSeen::path,
+                                   "/grpc.testing.EchoTestService/Echo"),
+                  ::testing::Field(&grpc_core::PickArgsSeen::metadata,
+                                   ::testing::UnorderedElementsAre(
+                                       ::testing::Pair("foo", "1"),
+                                       ::testing::Pair("bar", "2"),
+                                       ::testing::Pair("baz", "3"))))))
+      << ArgsSeenListString(pick_args_seen_list);
 }
 
 class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
@@ -1758,7 +1773,7 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
     return trailing_metadata_;
   }
 
-  const udpa::data::orca::v1::OrcaLoadReport* backend_load_report() {
+  const xds::data::orca::v3::OrcaLoadReport* backend_load_report() {
     grpc::internal::MutexLock lock(&mu_);
     return load_report_.get();
   }
@@ -1773,7 +1788,7 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
     self->trailing_metadata_ = args_seen.metadata;
     if (backend_metric_data != nullptr) {
       self->load_report_ =
-          y_absl::make_unique<udpa::data::orca::v1::OrcaLoadReport>();
+          y_absl::make_unique<xds::data::orca::v3::OrcaLoadReport>();
       self->load_report_->set_cpu_utilization(
           backend_metric_data->cpu_utilization);
       self->load_report_->set_mem_utilization(
@@ -1794,7 +1809,7 @@ class ClientLbInterceptTrailingMetadataTest : public ClientLbEnd2endTest {
   grpc::internal::Mutex mu_;
   int trailers_intercepted_ = 0;
   grpc_core::MetadataVector trailing_metadata_;
-  std::unique_ptr<udpa::data::orca::v1::OrcaLoadReport> load_report_;
+  std::unique_ptr<xds::data::orca::v3::OrcaLoadReport> load_report_;
 };
 
 ClientLbInterceptTrailingMetadataTest*
@@ -1872,7 +1887,7 @@ TEST_F(ClientLbInterceptTrailingMetadataTest, BackendMetricData) {
   const int kNumServers = 1;
   const int kNumRpcs = 10;
   StartServers(kNumServers);
-  udpa::data::orca::v1::OrcaLoadReport load_report;
+  xds::data::orca::v3::OrcaLoadReport load_report;
   load_report.set_cpu_utilization(0.5);
   load_report.set_mem_utilization(0.75);
   load_report.set_rps(25);

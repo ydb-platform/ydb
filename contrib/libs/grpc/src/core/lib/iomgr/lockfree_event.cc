@@ -77,7 +77,11 @@ void LockfreeEvent::DestroyEvent() {
   do {
     curr = gpr_atm_no_barrier_load(&state_);
     if (curr & kShutdownBit) {
-      GRPC_ERROR_UNREF((grpc_error*)(curr & ~kShutdownBit));
+#ifdef GRPC_ERROR_IS_ABSEIL_STATUS
+      internal::StatusFreeHeapPtr(curr & ~kShutdownBit);
+#else
+      GRPC_ERROR_UNREF((grpc_error_handle)(curr & ~kShutdownBit));
+#endif
     } else {
       GPR_ASSERT(curr == kClosureNotReady || curr == kClosureReady);
     }
@@ -139,8 +143,13 @@ void LockfreeEvent::NotifyOn(grpc_closure* closure) {
            contains a pointer to the shutdown-error). If the fd is shutdown,
            schedule the closure with the shutdown error */
         if ((curr & kShutdownBit) > 0) {
-          grpc_error* shutdown_err =
-              reinterpret_cast<grpc_error*>(curr & ~kShutdownBit);
+#ifdef GRPC_ERROR_IS_ABSEIL_STATUS
+          grpc_error_handle shutdown_err =
+              internal::StatusGetFromHeapPtr(curr & ~kShutdownBit);
+#else
+          grpc_error_handle shutdown_err =
+              reinterpret_cast<grpc_error_handle>(curr & ~kShutdownBit);
+#endif
           ExecCtx::Run(DEBUG_LOCATION, closure,
                        GRPC_ERROR_CREATE_REFERENCING_FROM_STATIC_STRING(
                            "FD Shutdown", &shutdown_err, 1));
@@ -159,15 +168,20 @@ void LockfreeEvent::NotifyOn(grpc_closure* closure) {
   GPR_UNREACHABLE_CODE(return );
 }
 
-bool LockfreeEvent::SetShutdown(grpc_error* shutdown_error) {
+bool LockfreeEvent::SetShutdown(grpc_error_handle shutdown_error) {
+#ifdef GRPC_ERROR_IS_ABSEIL_STATUS
+  intptr_t status_ptr = internal::StatusAllocHeapPtr(shutdown_error);
+  gpr_atm new_state = status_ptr | kShutdownBit;
+#else
   gpr_atm new_state = reinterpret_cast<gpr_atm>(shutdown_error) | kShutdownBit;
+#endif
 
   while (true) {
     gpr_atm curr = gpr_atm_no_barrier_load(&state_);
     if (GRPC_TRACE_FLAG_ENABLED(grpc_polling_trace)) {
       gpr_log(GPR_DEBUG,
               "LockfreeEvent::SetShutdown: %p curr=%" PRIxPTR " err=%s",
-              &state_, curr, grpc_error_string(shutdown_error));
+              &state_, curr, grpc_error_std_string(shutdown_error).c_str());
     }
     switch (curr) {
       case kClosureReady:
@@ -184,7 +198,11 @@ bool LockfreeEvent::SetShutdown(grpc_error* shutdown_error) {
 
         /* If fd is already shutdown, we are done */
         if ((curr & kShutdownBit) > 0) {
+#ifdef GRPC_ERROR_IS_ABSEIL_STATUS
+          internal::StatusFreeHeapPtr(status_ptr);
+#else
           GRPC_ERROR_UNREF(shutdown_error);
+#endif
           return false;
         }
 

@@ -18,10 +18,12 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <atomic>
 #include <functional>
 
+#include "y_absl/synchronization/mutex.h"
+
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/gprpp/atomic.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/mpscq.h"
 #include "src/core/lib/gprpp/orphanable.h"
@@ -43,16 +45,42 @@ namespace grpc_core {
 // other callbacks from other threads might also be executed before Run()
 // returns. Since an arbitrary set of callbacks might be executed when Run() is
 // called, generally no locks should be held while calling Run().
-class WorkSerializer {
+// If a thread wants to preclude the possibility of the callback being invoked
+// inline in Run() (for example, if a mutex lock is held and executing callbacks
+// inline would cause a deadlock), it should use Schedule() instead and then
+// invoke DrainQueue() when it is safe to invoke the callback.
+class Y_ABSL_LOCKABLE WorkSerializer {
  public:
   WorkSerializer();
 
   ~WorkSerializer();
 
-  // TODO(yashkt): Replace grpc_core::DebugLocation with y_absl::SourceLocation
+  // Runs a given callback on the work serializer. If there is no other thread
+  // currently executing the WorkSerializer, the callback is run immediately. In
+  // this case, the current thread is also borrowed for draining the queue for
+  // any callbacks that get added in the meantime.
+  //
+  // If you want to use clang thread annotation to make sure that callback is
+  // called by WorkSerializer only, you need to add the annotation to both the
+  // lambda function given to Run and the actual callback function like;
+  //
+  //   void run_callback() {
+  //     work_serializer.Run(
+  //         []() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(work_serializer) {
+  //            callback();
+  //         }, DEBUG_LOCATION);
+  //   }
+  //   void callback() Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(work_serializer) { ... }
+  //
+  // TODO(yashkt): Replace DebugLocation with y_absl::SourceLocation
   // once we can start using it directly.
-  void Run(std::function<void()> callback,
-           const grpc_core::DebugLocation& location);
+  void Run(std::function<void()> callback, const DebugLocation& location);
+
+  // Schedule \a callback to be run later when the queue of callbacks is
+  // drained.
+  void Schedule(std::function<void()> callback, const DebugLocation& location);
+  // Drains the queue of callbacks.
+  void DrainQueue();
 
  private:
   class WorkSerializerImpl;

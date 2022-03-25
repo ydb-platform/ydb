@@ -18,8 +18,9 @@
 
 #include "test/core/util/stack_tracer.h"
 
-#include <gtest/gtest.h>
 #include <util/generic/string.h>
+
+#include <gtest/gtest.h>
 
 #include "y_absl/debugging/symbolize.h"
 #include "y_absl/strings/match.h"

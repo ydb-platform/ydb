@@ -32,6 +32,7 @@
 #include <grpc/support/sync.h>
 #include <grpc/support/thd_id.h>
 
+#include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/thd.h"
 #include "src/core/lib/iomgr/closure.h"
@@ -151,6 +152,13 @@ static tsi_result handshaker_result_extract_peer(
   return ok;
 }
 
+static tsi_result handshaker_result_get_frame_protector_type(
+    const tsi_handshaker_result* /*self*/,
+    tsi_frame_protector_type* frame_protector_type) {
+  *frame_protector_type = TSI_FRAME_PROTECTOR_NORMAL_OR_ZERO_COPY;
+  return TSI_OK;
+}
+
 static tsi_result handshaker_result_create_zero_copy_grpc_protector(
     const tsi_handshaker_result* self, size_t* max_output_protected_frame_size,
     tsi_zero_copy_grpc_protector** protector) {
@@ -247,9 +255,11 @@ static void handshaker_result_destroy(tsi_handshaker_result* self) {
 
 static const tsi_handshaker_result_vtable result_vtable = {
     handshaker_result_extract_peer,
+    handshaker_result_get_frame_protector_type,
     handshaker_result_create_zero_copy_grpc_protector,
     handshaker_result_create_frame_protector,
-    handshaker_result_get_unused_bytes, handshaker_result_destroy};
+    handshaker_result_get_unused_bytes,
+    handshaker_result_destroy};
 
 tsi_result alts_tsi_handshaker_result_create(grpc_gcp_HandshakerResp* resp,
                                              bool is_client,
@@ -306,7 +316,7 @@ tsi_result alts_tsi_handshaker_result_create(grpc_gcp_HandshakerResp* resp,
   // We don't check if local service account is empty here
   // because local identity could be empty in certain situations.
   alts_tsi_handshaker_result* sresult =
-      static_cast<alts_tsi_handshaker_result*>(gpr_zalloc(sizeof(*sresult)));
+      grpc_core::Zalloc<alts_tsi_handshaker_result>();
   sresult->key_data =
       static_cast<char*>(gpr_zalloc(kAltsAes128GcmRekeyKeyLength));
   memcpy(sresult->key_data, key_data.data, kAltsAes128GcmRekeyKeyLength);
@@ -372,7 +382,8 @@ tsi_result alts_tsi_handshaker_result_create(grpc_gcp_HandshakerResp* resp,
 }
 
 /* gRPC provided callback used when gRPC thread model is applied. */
-static void on_handshaker_service_resp_recv(void* arg, grpc_error* error) {
+static void on_handshaker_service_resp_recv(void* arg,
+                                            grpc_error_handle error) {
   alts_handshaker_client* client = static_cast<alts_handshaker_client*>(arg);
   if (client == nullptr) {
     gpr_log(GPR_ERROR, "ALTS handshaker client is nullptr");
@@ -382,7 +393,7 @@ static void on_handshaker_service_resp_recv(void* arg, grpc_error* error) {
   if (error != GRPC_ERROR_NONE) {
     gpr_log(GPR_ERROR,
             "ALTS handshaker on_handshaker_service_resp_recv error: %s",
-            grpc_error_string(error));
+            grpc_error_std_string(error).c_str());
     success = false;
   }
   alts_handshaker_client_handle_response(client, success);
@@ -390,8 +401,8 @@ static void on_handshaker_service_resp_recv(void* arg, grpc_error* error) {
 
 /* gRPC provided callback used when dedicatd CQ and thread are used.
  * It serves to safely bring the control back to application. */
-static void on_handshaker_service_resp_recv_dedicated(void* arg,
-                                                      grpc_error* /*error*/) {
+static void on_handshaker_service_resp_recv_dedicated(
+    void* arg, grpc_error_handle /*error*/) {
   alts_shared_resource_dedicated* resource =
       grpc_alts_get_shared_resource_dedicated();
   grpc_cq_end_op(
@@ -480,8 +491,8 @@ struct alts_tsi_handshaker_continue_handshaker_next_args {
   grpc_closure closure;
 };
 
-static void alts_tsi_handshaker_create_channel(void* arg,
-                                               grpc_error* /* unused_error */) {
+static void alts_tsi_handshaker_create_channel(
+    void* arg, grpc_error_handle /* unused_error */) {
   alts_tsi_handshaker_continue_handshaker_next_args* next_args =
       static_cast<alts_tsi_handshaker_continue_handshaker_next_args*>(arg);
   alts_tsi_handshaker* handshaker = next_args->handshaker;

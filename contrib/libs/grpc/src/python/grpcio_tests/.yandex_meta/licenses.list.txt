@@ -29,6 +29,10 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright 2019 gRPC authors.
+
+
+====================COPYRIGHT====================
  * Copyright 2020 gRPC authors.
 
 
@@ -42,10 +46,6 @@
 
 ====================COPYRIGHT====================
 # Copyright 2019 The gRPC authors.
-
-
-====================COPYRIGHT====================
-# Copyright 2019 gRPC authors.
 
 
 ====================COPYRIGHT====================

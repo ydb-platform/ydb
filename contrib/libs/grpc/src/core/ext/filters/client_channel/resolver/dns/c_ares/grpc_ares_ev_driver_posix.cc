@@ -20,23 +20,24 @@
 #include "src/core/lib/iomgr/port.h"
 #if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
 
-#include <ares.h>
 #include <string.h>
 #include <sys/ioctl.h>
 
-#include "y_absl/strings/str_cat.h"
+#include <ares.h>
 
-#include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h"
+#include "y_absl/strings/str_cat.h"
 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 #include <grpc/support/time.h>
+
+#include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.h"
 #include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.h"
+#include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/iomgr/ev_posix.h"
 #include "src/core/lib/iomgr/iomgr_internal.h"
-#include "src/core/lib/iomgr/sockaddr_utils.h"
 
 namespace grpc_core {
 
@@ -72,7 +73,7 @@ class GrpcPolledFdPosix : public GrpcPolledFd {
            bytes_available > 0;
   }
 
-  void ShutdownLocked(grpc_error* error) override {
+  void ShutdownLocked(grpc_error_handle error) override {
     grpc_fd_shutdown(fd_, error);
   }
 

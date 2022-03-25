@@ -23,10 +23,11 @@
 
 #include <util/generic/string.h>
 
-#include <grpc/support/time.h>
-
 #include "y_absl/strings/str_format.h"
 #include "y_absl/time/time.h"
+
+#include <grpc/support/time.h>
+
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/credentials/jwt/json_token.h"
 
@@ -41,10 +42,10 @@ class grpc_service_account_jwt_access_credentials
                             grpc_auth_metadata_context context,
                             grpc_credentials_mdelem_array* md_array,
                             grpc_closure* on_request_metadata,
-                            grpc_error** error) override;
+                            grpc_error_handle* error) override;
 
   void cancel_get_request_metadata(grpc_credentials_mdelem_array* md_array,
-                                   grpc_error* error) override;
+                                   grpc_error_handle error) override;
 
   const gpr_timespec& jwt_lifetime() const { return jwt_lifetime_; }
   const grpc_auth_json_key& key() const { return key_; }
@@ -64,7 +65,7 @@ class grpc_service_account_jwt_access_credentials
   gpr_mu cache_mu_;
   struct {
     grpc_mdelem jwt_md = GRPC_MDNULL;
-    char* service_url = nullptr;
+    TString service_url;
     gpr_timespec jwt_expiration;
   } cached_;
 
@@ -77,5 +78,12 @@ class grpc_service_account_jwt_access_credentials
 grpc_core::RefCountedPtr<grpc_call_credentials>
 grpc_service_account_jwt_access_credentials_create_from_auth_json_key(
     grpc_auth_json_key key, gpr_timespec token_lifetime);
+
+namespace grpc_core {
+
+// Exposed for testing purposes only.
+y_absl::StatusOr<TString> RemoveServiceNameFromJwtUri(y_absl::string_view uri);
+
+}  // namespace grpc_core
 
 #endif /* GRPC_CORE_LIB_SECURITY_CREDENTIALS_JWT_JWT_CREDENTIALS_H */

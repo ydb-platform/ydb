@@ -52,13 +52,13 @@ RefCountedPtr<grpc_auth_context> TestOnlyMakeInsecureAuthContext() {
 // provide an insecure channel.
 bool InsecureChannelSecurityConnector::check_call_host(
     y_absl::string_view /*host*/, grpc_auth_context* /*auth_context*/,
-    grpc_closure* /*on_call_host_checked*/, grpc_error** error) {
+    grpc_closure* /*on_call_host_checked*/, grpc_error_handle* error) {
   *error = GRPC_ERROR_NONE;
   return true;
 }
 
 void InsecureChannelSecurityConnector::cancel_check_call_host(
-    grpc_closure* /*on_call_host_checked*/, grpc_error* error) {
+    grpc_closure* /*on_call_host_checked*/, grpc_error_handle error) {
   GRPC_ERROR_UNREF(error);
 }
 
@@ -95,7 +95,7 @@ int InsecureChannelSecurityConnector::cmp(
 // created with the security level of TSI_SECURITY_NONE.
 void InsecureServerSecurityConnector::add_handshakers(
     const grpc_channel_args* args, grpc_pollset_set* /* interested_parties */,
-    grpc_core::HandshakeManager* handshake_manager) {
+    HandshakeManager* handshake_manager) {
   tsi_handshaker* handshaker = nullptr;
   // Re-use local_tsi_handshaker_create as a minimalist handshaker.
   GPR_ASSERT(tsi_local_handshaker_create(false /* is_client */, &handshaker) ==
@@ -105,7 +105,7 @@ void InsecureServerSecurityConnector::add_handshakers(
 
 void InsecureServerSecurityConnector::check_peer(
     tsi_peer peer, grpc_endpoint* /*ep*/,
-    grpc_core::RefCountedPtr<grpc_auth_context>* auth_context,
+    RefCountedPtr<grpc_auth_context>* auth_context,
     grpc_closure* on_peer_checked) {
   *auth_context = MakeAuthContext();
   tsi_peer_destruct(&peer);

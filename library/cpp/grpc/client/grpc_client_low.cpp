@@ -84,6 +84,10 @@ private:
     static void Destroy(grpc_socket_mutator* mutator) {
         delete Cast(mutator);
     }
+    static bool Mutate2(const grpc_mutate_socket_info* info, grpc_socket_mutator* mutator) {
+        auto self = Cast(mutator);
+        return self->SetOption(info->fd);
+    }
 
     static grpc_socket_mutator_vtable VTable;
     const int Idle_;
@@ -95,7 +99,8 @@ grpc_socket_mutator_vtable TGRpcKeepAliveSocketMutator::VTable =
     {
         &TGRpcKeepAliveSocketMutator::Mutate,
         &TGRpcKeepAliveSocketMutator::Compare,
-        &TGRpcKeepAliveSocketMutator::Destroy
+        &TGRpcKeepAliveSocketMutator::Destroy,
+        &TGRpcKeepAliveSocketMutator::Mutate2
     };
 
 TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime)

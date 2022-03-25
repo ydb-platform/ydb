@@ -33,15 +33,15 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright 2019 gRPC authors.
+
+
+====================COPYRIGHT====================
  * Copyright 2020 gRPC authors.
 
 
 ====================COPYRIGHT====================
 # Copyright 2019 The gRPC authors.
-
-
-====================COPYRIGHT====================
-# Copyright 2019 gRPC authors.
 
 
 ====================COPYRIGHT====================
@@ -58,3 +58,7 @@
 
 ====================COPYRIGHT====================
 // Copyright 2020 The gRPC Authors
+
+
+====================COPYRIGHT====================
+// Copyright 2021 The gRPC Authors

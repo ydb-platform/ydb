@@ -18,6 +18,8 @@
 
 #include "src/core/lib/security/credentials/tls/grpc_tls_certificate_provider.h"
 
+#include <openssl/ssl.h>
+
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
@@ -29,17 +31,16 @@
 namespace grpc_core {
 
 StaticDataCertificateProvider::StaticDataCertificateProvider(
-    TString root_certificate,
-    grpc_core::PemKeyCertPairList pem_key_cert_pairs)
+    TString root_certificate, PemKeyCertPairList pem_key_cert_pairs)
     : distributor_(MakeRefCounted<grpc_tls_certificate_distributor>()),
       root_certificate_(std::move(root_certificate)),
       pem_key_cert_pairs_(std::move(pem_key_cert_pairs)) {
   distributor_->SetWatchStatusCallback([this](TString cert_name,
                                               bool root_being_watched,
                                               bool identity_being_watched) {
-    grpc_core::MutexLock lock(&mu_);
+    MutexLock lock(&mu_);
     y_absl::optional<TString> root_certificate;
-    y_absl::optional<grpc_core::PemKeyCertPairList> pem_key_cert_pairs;
+    y_absl::optional<PemKeyCertPairList> pem_key_cert_pairs;
     StaticDataCertificateProvider::WatcherInfo& info = watcher_info_[cert_name];
     if (!info.root_being_watched && root_being_watched &&
         !root_certificate_.empty()) {
@@ -60,8 +61,8 @@ StaticDataCertificateProvider::StaticDataCertificateProvider(
       distributor_->SetKeyMaterials(cert_name, std::move(root_certificate),
                                     std::move(pem_key_cert_pairs));
     }
-    grpc_error* root_cert_error = GRPC_ERROR_NONE;
-    grpc_error* identity_cert_error = GRPC_ERROR_NONE;
+    grpc_error_handle root_cert_error = GRPC_ERROR_NONE;
+    grpc_error_handle identity_cert_error = GRPC_ERROR_NONE;
     if (root_being_watched && !root_has_update) {
       root_cert_error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           "Unable to get latest root certificates.");
@@ -121,15 +122,15 @@ FileWatcherCertificateProvider::FileWatcherCertificateProvider(
       provider->ForceUpdate();
     }
   };
-  refresh_thread_ = grpc_core::Thread(
-      "FileWatcherCertificateProvider_refreshing_thread", thread_lambda, this);
+  refresh_thread_ = Thread("FileWatcherCertificateProvider_refreshing_thread",
+                           thread_lambda, this);
   refresh_thread_.Start();
   distributor_->SetWatchStatusCallback([this](TString cert_name,
                                               bool root_being_watched,
                                               bool identity_being_watched) {
-    grpc_core::MutexLock lock(&mu_);
+    MutexLock lock(&mu_);
     y_absl::optional<TString> root_certificate;
-    y_absl::optional<grpc_core::PemKeyCertPairList> pem_key_cert_pairs;
+    y_absl::optional<PemKeyCertPairList> pem_key_cert_pairs;
     FileWatcherCertificateProvider::WatcherInfo& info =
         watcher_info_[cert_name];
     if (!info.root_being_watched && root_being_watched &&
@@ -150,8 +151,8 @@ FileWatcherCertificateProvider::FileWatcherCertificateProvider(
       distributor_->SetKeyMaterials(cert_name, root_certificate,
                                     pem_key_cert_pairs);
     }
-    grpc_error* root_cert_error = GRPC_ERROR_NONE;
-    grpc_error* identity_cert_error = GRPC_ERROR_NONE;
+    grpc_error_handle root_cert_error = GRPC_ERROR_NONE;
+    grpc_error_handle identity_cert_error = GRPC_ERROR_NONE;
     if (root_being_watched && !root_certificate.has_value()) {
       root_cert_error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
           "Unable to get latest root certificates.");
@@ -178,7 +179,7 @@ FileWatcherCertificateProvider::~FileWatcherCertificateProvider() {
 
 void FileWatcherCertificateProvider::ForceUpdate() {
   y_absl::optional<TString> root_certificate;
-  y_absl::optional<grpc_core::PemKeyCertPairList> pem_key_cert_pairs;
+  y_absl::optional<PemKeyCertPairList> pem_key_cert_pairs;
   if (!root_cert_path_.empty()) {
     root_certificate = ReadRootCertificatesFromFile(root_cert_path_);
   }
@@ -186,7 +187,7 @@ void FileWatcherCertificateProvider::ForceUpdate() {
     pem_key_cert_pairs = ReadIdentityKeyCertPairFromFiles(
         private_key_path_, identity_certificate_path_);
   }
-  grpc_core::MutexLock lock(&mu_);
+  MutexLock lock(&mu_);
   const bool root_cert_changed =
       (!root_certificate.has_value() && !root_certificate_.empty()) ||
       (root_certificate.has_value() && root_certificate_ != *root_certificate);
@@ -210,15 +211,16 @@ void FileWatcherCertificateProvider::ForceUpdate() {
   }
   if (root_cert_changed || identity_cert_changed) {
     ExecCtx exec_ctx;
-    grpc_error* root_cert_error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+    grpc_error_handle root_cert_error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
         "Unable to get latest root certificates.");
-    grpc_error* identity_cert_error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "Unable to get latest identity certificates.");
+    grpc_error_handle identity_cert_error =
+        GRPC_ERROR_CREATE_FROM_STATIC_STRING(
+            "Unable to get latest identity certificates.");
     for (const auto& p : watcher_info_) {
       const TString& cert_name = p.first;
       const WatcherInfo& info = p.second;
       y_absl::optional<TString> root_to_report;
-      y_absl::optional<grpc_core::PemKeyCertPairList> identity_to_report;
+      y_absl::optional<PemKeyCertPairList> identity_to_report;
       // Set key materials to the distributor if their contents changed.
       if (info.root_being_watched && !root_certificate_.empty() &&
           root_cert_changed) {
@@ -256,11 +258,12 @@ FileWatcherCertificateProvider::ReadRootCertificatesFromFile(
     const TString& root_cert_full_path) {
   // Read the root file.
   grpc_slice root_slice = grpc_empty_slice();
-  grpc_error* root_error =
+  grpc_error_handle root_error =
       grpc_load_file(root_cert_full_path.c_str(), 0, &root_slice);
   if (root_error != GRPC_ERROR_NONE) {
     gpr_log(GPR_ERROR, "Reading file %s failed: %s",
-            root_cert_full_path.c_str(), grpc_error_string(root_error));
+            root_cert_full_path.c_str(),
+            grpc_error_std_string(root_error).c_str());
     GRPC_ERROR_UNREF(root_error);
     return y_absl::nullopt;
   }
@@ -275,7 +278,7 @@ namespace {
 // it logs the error and returns 0.
 time_t GetModificationTime(const char* filename) {
   time_t ts = 0;
-  y_absl::Status status = grpc_core::GetFileModificationTime(filename, &ts);
+  y_absl::Status status = GetFileModificationTime(filename, &ts);
   return ts;
 }
 
@@ -314,19 +317,21 @@ FileWatcherCertificateProvider::ReadIdentityKeyCertPairFromFiles(
     }
     // Read the identity files.
     SliceWrapper key_slice, cert_slice;
-    grpc_error* key_error =
+    grpc_error_handle key_error =
         grpc_load_file(private_key_path.c_str(), 0, &key_slice.slice);
     if (key_error != GRPC_ERROR_NONE) {
       gpr_log(GPR_ERROR, "Reading file %s failed: %s. Start retrying...",
-              private_key_path.c_str(), grpc_error_string(key_error));
+              private_key_path.c_str(),
+              grpc_error_std_string(key_error).c_str());
       GRPC_ERROR_UNREF(key_error);
       continue;
     }
-    grpc_error* cert_error =
+    grpc_error_handle cert_error =
         grpc_load_file(identity_certificate_path.c_str(), 0, &cert_slice.slice);
     if (cert_error != GRPC_ERROR_NONE) {
       gpr_log(GPR_ERROR, "Reading file %s failed: %s. Start retrying...",
-              identity_certificate_path.c_str(), grpc_error_string(cert_error));
+              identity_certificate_path.c_str(),
+              grpc_error_std_string(cert_error).c_str());
       GRPC_ERROR_UNREF(cert_error);
       continue;
     }
@@ -360,6 +365,54 @@ FileWatcherCertificateProvider::ReadIdentityKeyCertPairFromFiles(
   return y_absl::nullopt;
 }
 
+y_absl::StatusOr<bool> PrivateKeyAndCertificateMatch(
+    y_absl::string_view private_key, y_absl::string_view cert_chain) {
+  if (private_key.empty()) {
+    return y_absl::InvalidArgumentError("Private key string is empty.");
+  }
+  if (cert_chain.empty()) {
+    return y_absl::InvalidArgumentError("Certificate string is empty.");
+  }
+  BIO* cert_bio = BIO_new_mem_buf(cert_chain.data(), cert_chain.size());
+  if (cert_bio == nullptr) {
+    return y_absl::InvalidArgumentError(
+        "Conversion from certificate string to BIO failed.");
+  }
+  // Reads the first cert from the cert_chain which is expected to be the leaf
+  // cert
+  X509* x509 = PEM_read_bio_X509(cert_bio, nullptr, nullptr, nullptr);
+  BIO_free(cert_bio);
+  if (x509 == nullptr) {
+    return y_absl::InvalidArgumentError(
+        "Conversion from PEM string to X509 failed.");
+  }
+  EVP_PKEY* public_evp_pkey = X509_get_pubkey(x509);
+  X509_free(x509);
+  if (public_evp_pkey == nullptr) {
+    return y_absl::InvalidArgumentError(
+        "Extraction of public key from x.509 certificate failed.");
+  }
+  BIO* private_key_bio =
+      BIO_new_mem_buf(private_key.data(), private_key.size());
+  if (private_key_bio == nullptr) {
+    EVP_PKEY_free(public_evp_pkey);
+    return y_absl::InvalidArgumentError(
+        "Conversion from private key string to BIO failed.");
+  }
+  EVP_PKEY* private_evp_pkey =
+      PEM_read_bio_PrivateKey(private_key_bio, nullptr, nullptr, nullptr);
+  BIO_free(private_key_bio);
+  if (private_evp_pkey == nullptr) {
+    EVP_PKEY_free(public_evp_pkey);
+    return y_absl::InvalidArgumentError(
+        "Conversion from PEM string to EVP_PKEY failed.");
+  }
+  bool result = EVP_PKEY_cmp(private_evp_pkey, public_evp_pkey) == 1;
+  EVP_PKEY_free(private_evp_pkey);
+  EVP_PKEY_free(public_evp_pkey);
+  return result;
+}
+
 }  // namespace grpc_core
 
 /** -- Wrapper APIs declared in grpc_security.h -- **/
@@ -367,6 +420,7 @@ FileWatcherCertificateProvider::ReadIdentityKeyCertPairFromFiles(
 grpc_tls_certificate_provider* grpc_tls_certificate_provider_static_data_create(
     const char* root_certificate, grpc_tls_identity_pairs* pem_key_cert_pairs) {
   GPR_ASSERT(root_certificate != nullptr || pem_key_cert_pairs != nullptr);
+  grpc_core::ExecCtx exec_ctx;
   grpc_core::PemKeyCertPairList identity_pairs_core;
   if (pem_key_cert_pairs != nullptr) {
     identity_pairs_core = std::move(pem_key_cert_pairs->pem_key_cert_pairs);
@@ -384,6 +438,7 @@ grpc_tls_certificate_provider*
 grpc_tls_certificate_provider_file_watcher_create(
     const char* private_key_path, const char* identity_certificate_path,
     const char* root_cert_path, unsigned int refresh_interval_sec) {
+  grpc_core::ExecCtx exec_ctx;
   return new grpc_core::FileWatcherCertificateProvider(
       private_key_path == nullptr ? "" : private_key_path,
       identity_certificate_path == nullptr ? "" : identity_certificate_path,

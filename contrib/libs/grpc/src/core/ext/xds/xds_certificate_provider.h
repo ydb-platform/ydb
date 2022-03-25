@@ -34,8 +34,7 @@ class XdsCertificateProvider : public grpc_tls_certificate_provider {
   XdsCertificateProvider();
   ~XdsCertificateProvider() override;
 
-  grpc_core::RefCountedPtr<grpc_tls_certificate_distributor> distributor()
-      const override {
+  RefCountedPtr<grpc_tls_certificate_distributor> distributor() const override {
     return distributor_;
   }
 
@@ -127,9 +126,11 @@ class XdsCertificateProvider : public grpc_tls_certificate_provider {
   void WatchStatusCallback(TString cert_name, bool root_being_watched,
                            bool identity_being_watched);
 
+  RefCountedPtr<grpc_tls_certificate_distributor> distributor_;
+
   Mutex mu_;
   std::map<TString /*cert_name*/, std::unique_ptr<ClusterCertificateState>>
-      certificate_state_map_;
+      certificate_state_map_ Y_ABSL_GUARDED_BY(mu_);
 
   // Use a separate mutex for san_matchers_ to avoid deadlocks since
   // san_matchers_ needs to be accessed when a handshake is being done and we
@@ -141,9 +142,7 @@ class XdsCertificateProvider : public grpc_tls_certificate_provider {
   // subject_alternative_names_matchers()
   Mutex san_matchers_mu_;
   std::map<TString /*cluster_name*/, std::vector<StringMatcher>>
-      san_matcher_map_;
-
-  RefCountedPtr<grpc_tls_certificate_distributor> distributor_;
+      san_matcher_map_ Y_ABSL_GUARDED_BY(san_matchers_mu_);
 };
 
 }  // namespace grpc_core

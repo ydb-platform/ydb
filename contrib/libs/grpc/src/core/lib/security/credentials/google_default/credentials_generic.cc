@@ -18,8 +18,6 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/security/credentials/google_default/google_default_credentials.h"
-
 #include <util/generic/string.h>
 
 #include "y_absl/strings/str_cat.h"
@@ -28,6 +26,7 @@
 #include <grpc/support/log.h>
 
 #include "src/core/lib/gpr/env.h"
+#include "src/core/lib/security/credentials/google_default/google_default_credentials.h"
 
 TString grpc_get_well_known_google_credentials_file_path_impl(void) {
   char* base = gpr_getenv(GRPC_GOOGLE_CREDENTIALS_PATH_ENV_VAR);

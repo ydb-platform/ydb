@@ -1,6 +1,4 @@
-//
-//
-// Copyright 2020 gRPC authors.
+// Copyright 2021 gRPC authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
-//
 
 #ifndef GRPC_CORE_LIB_SECURITY_AUTHORIZATION_EVALUATE_ARGS_H
 #define GRPC_CORE_LIB_SECURITY_AUTHORIZATION_EVALUATE_ARGS_H
@@ -26,6 +22,7 @@
 #include "y_absl/types/optional.h"
 
 #include "src/core/lib/iomgr/endpoint.h"
+#include "src/core/lib/iomgr/resolve_address.h"
 #include "src/core/lib/security/context/security_context.h"
 #include "src/core/lib/transport/metadata_batch.h"
 
@@ -33,14 +30,35 @@ namespace grpc_core {
 
 class EvaluateArgs {
  public:
-  EvaluateArgs(grpc_metadata_batch* metadata, grpc_auth_context* auth_context,
-               grpc_endpoint* endpoint)
-      : metadata_(metadata), auth_context_(auth_context), endpoint_(endpoint) {}
+  // Caller is responsible for ensuring auth_context outlives PerChannelArgs
+  // struct.
+  struct PerChannelArgs {
+    struct Address {
+      // The address in sockaddr form.
+      grpc_resolved_address address;
+      // The same address with only the host part.
+      TString address_str;
+      int port = 0;
+    };
+
+    PerChannelArgs(grpc_auth_context* auth_context, grpc_endpoint* endpoint);
+
+    y_absl::string_view transport_security_type;
+    y_absl::string_view spiffe_id;
+    std::vector<y_absl::string_view> uri_sans;
+    std::vector<y_absl::string_view> dns_sans;
+    y_absl::string_view common_name;
+    y_absl::string_view subject;
+    Address local_address;
+    Address peer_address;
+  };
+
+  EvaluateArgs(grpc_metadata_batch* metadata, PerChannelArgs* channel_args)
+      : metadata_(metadata), channel_args_(channel_args) {}
 
   y_absl::string_view GetPath() const;
   y_absl::string_view GetHost() const;
   y_absl::string_view GetMethod() const;
-  std::multimap<y_absl::string_view, y_absl::string_view> GetHeaders() const;
   // Returns metadata value(s) for the specified key.
   // If the key is not present in the batch, returns y_absl::nullopt.
   // If the key is present exactly once in the batch, returns a string_view of
@@ -50,19 +68,23 @@ class EvaluateArgs {
   // string_view of that string.
   y_absl::optional<y_absl::string_view> GetHeaderValue(
       y_absl::string_view key, TString* concatenated_value) const;
-  y_absl::string_view GetLocalAddress() const;
-  int GetLocalPort() const;
-  y_absl::string_view GetPeerAddress() const;
-  int GetPeerPort() const;
-  y_absl::string_view GetSpiffeId() const;
-  y_absl::string_view GetCertServerName() const;
 
-  // TODO(unknown): Add a getter function for source.principal
+  grpc_resolved_address GetLocalAddress() const;
+  y_absl::string_view GetLocalAddressString() const;
+  int GetLocalPort() const;
+  grpc_resolved_address GetPeerAddress() const;
+  y_absl::string_view GetPeerAddressString() const;
+  int GetPeerPort() const;
+  y_absl::string_view GetTransportSecurityType() const;
+  y_absl::string_view GetSpiffeId() const;
+  std::vector<y_absl::string_view> GetUriSans() const;
+  std::vector<y_absl::string_view> GetDnsSans() const;
+  y_absl::string_view GetCommonName() const;
+  y_absl::string_view GetSubject() const;
 
  private:
   grpc_metadata_batch* metadata_;
-  grpc_auth_context* auth_context_;
-  grpc_endpoint* endpoint_;
+  PerChannelArgs* channel_args_;
 };
 
 }  // namespace grpc_core

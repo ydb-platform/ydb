@@ -25,15 +25,18 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <grpc/event_engine/port.h>
 #include <grpc/grpc.h>
 
-#if !defined(_STRUCT_IOVEC) && !defined(__DEFINED_struct_iovec)
+#ifndef _STRUCT_IOVEC && !defined(__DEFINED_struct_iovec)
+#if !defined(GRPC_EVENT_ENGINE_POSIX)
 #define _STRUCT_IOVEC
 #define __DEFINED_struct_iovec
 struct iovec {
   void* iov_base;
   size_t iov_len;
 };
+#endif  // GRPC_EVENT_ENGINE_POSIX
 #endif  // _STRUCT_IOVEC
 
 /**

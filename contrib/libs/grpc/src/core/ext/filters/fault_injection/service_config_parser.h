@@ -21,7 +21,7 @@
 
 #include <vector>
 
-#include "src/core/ext/filters/client_channel/service_config.h"
+#include "src/core/ext/service_config/service_config_parser.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 
 namespace grpc_core {
@@ -73,7 +73,7 @@ class FaultInjectionServiceConfigParser : public ServiceConfigParser::Parser {
   // Parses the per-method service config for fault injection filter.
   std::unique_ptr<ServiceConfigParser::ParsedConfig> ParsePerMethodParams(
       const grpc_channel_args* args, const Json& json,
-      grpc_error** error) override;
+      grpc_error_handle* error) override;
   // Returns the parser index for FaultInjectionServiceConfigParser.
   static size_t ParserIndex();
   // Registers FaultInjectionServiceConfigParser to ServiceConfigParser.

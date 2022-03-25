@@ -18,16 +18,17 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/ext/filters/client_channel/client_channel.h"
 #include "src/core/ext/filters/client_channel/client_channel_channelz.h"
-#include "src/core/lib/channel/channelz_registry.h"
-#include "src/core/lib/gpr/useful.h"
-#include "src/core/lib/surface/channel.h"
-#include "src/core/lib/transport/connectivity_state.h"
 
 #include <grpc/support/string_util.h>
 
 #include <util/string/cast.h>
+
+#include "src/core/ext/filters/client_channel/client_channel.h"
+#include "src/core/lib/channel/channelz_registry.h"
+#include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/surface/channel.h"
+#include "src/core/lib/transport/connectivity_state.h"
 
 namespace grpc_core {
 namespace channelz {
@@ -41,7 +42,7 @@ SubchannelNode::SubchannelNode(TString target_address,
 SubchannelNode::~SubchannelNode() {}
 
 void SubchannelNode::UpdateConnectivityState(grpc_connectivity_state state) {
-  connectivity_state_.Store(state, MemoryOrder::RELAXED);
+  connectivity_state_.store(state, std::memory_order_relaxed);
 }
 
 void SubchannelNode::SetChildSocket(RefCountedPtr<SocketNode> socket) {
@@ -52,7 +53,7 @@ void SubchannelNode::SetChildSocket(RefCountedPtr<SocketNode> socket) {
 Json SubchannelNode::RenderJson() {
   // Create and fill the data child.
   grpc_connectivity_state state =
-      connectivity_state_.Load(MemoryOrder::RELAXED);
+      connectivity_state_.load(std::memory_order_relaxed);
   Json::Object data = {
       {"state",
        Json::Object{

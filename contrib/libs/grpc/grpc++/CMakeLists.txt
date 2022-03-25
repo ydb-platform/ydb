@@ -30,10 +30,33 @@ target_link_libraries(libs-grpc-grpc++ PUBLIC
   grpc-third_party-address_sorting
   grpc-third_party-upb
   OpenSSL::OpenSSL
+  ycontainer-internal-raw_hash_set
+  yabseil-cpp-tstring-y_absl-hash
+  yabseil-cpp-tstring-y_absl-status
+  yabsl-status-statusor
   yabseil-cpp-tstring-y_absl-strings
   yabseil-cpp-tstring-y_absl-synchronization
+  yabseil-cpp-tstring-y_absl-time
 )
 target_sources(libs-grpc-grpc++ PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/binder_connector.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/channel_create.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/channel_create_impl.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/connection_id_generator.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/endpoint_binder_pool.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/jni_utils.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/security_policy_setting.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/security_policy/binder_security_policy.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/server/binder_server.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/server/binder_server_credentials.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/transport/binder_transport.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/utils/ndk_binder.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/utils/transport_stream_receiver_impl.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/wire_format/binder_android.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/wire_format/binder_constants.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/wire_format/transaction.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/wire_format/wire_reader_impl.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/wire_format/wire_writer.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/channel_cc.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/client_callback.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/client/client_context.cc
@@ -58,8 +81,8 @@ target_sources(libs-grpc-grpc++ PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/secure_channel_arguments.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/secure_create_auth_context.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/tls_certificate_provider.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/tls_certificate_verifier.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/tls_credentials_options.cc
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/tls_credentials_options_util.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/validate_service_config.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/common/version_cc.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/cpp/server/async_generic_service.cc

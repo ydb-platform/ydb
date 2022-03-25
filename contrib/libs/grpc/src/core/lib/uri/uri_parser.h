@@ -56,6 +56,8 @@ class URI {
   URI(URI&&) = default;
   URI& operator=(URI&&) = default;
 
+  static TString PercentDecode(y_absl::string_view str);
+
   const TString& scheme() const { return scheme_; }
   const TString& authority() const { return authority_; }
   const TString& path() const { return path_; }

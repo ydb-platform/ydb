@@ -44,48 +44,59 @@ extern TraceFlag grpc_xds_client_refcount_trace;
 class XdsClient : public DualRefCounted<XdsClient> {
  public:
   // Listener data watcher interface.  Implemented by callers.
-  class ListenerWatcherInterface {
+  class ListenerWatcherInterface : public RefCounted<ListenerWatcherInterface> {
    public:
-    virtual ~ListenerWatcherInterface() = default;
-    virtual void OnListenerChanged(XdsApi::LdsUpdate listener) = 0;
-    virtual void OnError(grpc_error* error) = 0;
-    virtual void OnResourceDoesNotExist() = 0;
+    virtual void OnListenerChanged(XdsApi::LdsUpdate listener)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnError(grpc_error_handle error)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnResourceDoesNotExist()
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
   };
 
   // RouteConfiguration data watcher interface.  Implemented by callers.
-  class RouteConfigWatcherInterface {
+  class RouteConfigWatcherInterface
+      : public RefCounted<RouteConfigWatcherInterface> {
    public:
-    virtual ~RouteConfigWatcherInterface() = default;
-    virtual void OnRouteConfigChanged(XdsApi::RdsUpdate route_config) = 0;
-    virtual void OnError(grpc_error* error) = 0;
-    virtual void OnResourceDoesNotExist() = 0;
+    virtual void OnRouteConfigChanged(XdsApi::RdsUpdate route_config)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnError(grpc_error_handle error)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnResourceDoesNotExist()
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
   };
 
   // Cluster data watcher interface.  Implemented by callers.
-  class ClusterWatcherInterface {
+  class ClusterWatcherInterface : public RefCounted<ClusterWatcherInterface> {
    public:
-    virtual ~ClusterWatcherInterface() = default;
-    virtual void OnClusterChanged(XdsApi::CdsUpdate cluster_data) = 0;
-    virtual void OnError(grpc_error* error) = 0;
-    virtual void OnResourceDoesNotExist() = 0;
+    virtual void OnClusterChanged(XdsApi::CdsUpdate cluster_data)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnError(grpc_error_handle error)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnResourceDoesNotExist()
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
   };
 
   // Endpoint data watcher interface.  Implemented by callers.
-  class EndpointWatcherInterface {
+  class EndpointWatcherInterface : public RefCounted<EndpointWatcherInterface> {
    public:
-    virtual ~EndpointWatcherInterface() = default;
-    virtual void OnEndpointChanged(XdsApi::EdsUpdate update) = 0;
-    virtual void OnError(grpc_error* error) = 0;
-    virtual void OnResourceDoesNotExist() = 0;
+    virtual void OnEndpointChanged(XdsApi::EdsUpdate update)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnError(grpc_error_handle error)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
+    virtual void OnResourceDoesNotExist()
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&work_serializer_) = 0;
   };
 
   // Factory function to get or create the global XdsClient instance.
   // If *error is not GRPC_ERROR_NONE upon return, then there was
   // an error initializing the client.
-  static RefCountedPtr<XdsClient> GetOrCreate(grpc_error** error);
+  static RefCountedPtr<XdsClient> GetOrCreate(const grpc_channel_args* args,
+                                              grpc_error_handle* error);
 
-  // Callers should not instantiate directly.  Use GetOrCreate() instead.
-  explicit XdsClient(grpc_error** error);
+  // Most callers should not instantiate directly.  Use GetOrCreate() instead.
+  XdsClient(std::unique_ptr<XdsBootstrap> bootstrap,
+            const grpc_channel_args* args);
   ~XdsClient() override;
 
   const XdsBootstrap& bootstrap() const {
@@ -100,18 +111,6 @@ class XdsClient : public DualRefCounted<XdsClient> {
 
   grpc_pollset_set* interested_parties() const { return interested_parties_; }
 
-  // TODO(roth): When we add federation, there will be multiple channels
-  // inside the XdsClient, and the set of channels may change over time,
-  // but not every channel may use every one of the child channels, so
-  // this API will need to change.  At minumum, we will need to hold a
-  // ref to the parent channelz node so that we can update its list of
-  // children as the set of xDS channels changes.  However, we may also
-  // want to make this a bit more selective such that only those
-  // channels on which a given parent channel is actually requesting
-  // resources will actually be marked as its children.
-  void AddChannelzLinkage(channelz::ChannelNode* parent_channelz_node);
-  void RemoveChannelzLinkage(channelz::ChannelNode* parent_channelz_node);
-
   void Orphan() override;
 
   // Start and cancel listener data watch for a listener.
@@ -122,7 +121,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // If the caller is going to start a new watch after cancelling the
   // old one, it should set delay_unsubscription to true.
   void WatchListenerData(y_absl::string_view listener_name,
-                         std::unique_ptr<ListenerWatcherInterface> watcher);
+                         RefCountedPtr<ListenerWatcherInterface> watcher);
   void CancelListenerDataWatch(y_absl::string_view listener_name,
                                ListenerWatcherInterface* watcher,
                                bool delay_unsubscription = false);
@@ -134,9 +133,8 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // pointer must not be used for any other purpose.)
   // If the caller is going to start a new watch after cancelling the
   // old one, it should set delay_unsubscription to true.
-  void WatchRouteConfigData(
-      y_absl::string_view route_config_name,
-      std::unique_ptr<RouteConfigWatcherInterface> watcher);
+  void WatchRouteConfigData(y_absl::string_view route_config_name,
+                            RefCountedPtr<RouteConfigWatcherInterface> watcher);
   void CancelRouteConfigDataWatch(y_absl::string_view route_config_name,
                                   RouteConfigWatcherInterface* watcher,
                                   bool delay_unsubscription = false);
@@ -149,7 +147,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // If the caller is going to start a new watch after cancelling the
   // old one, it should set delay_unsubscription to true.
   void WatchClusterData(y_absl::string_view cluster_name,
-                        std::unique_ptr<ClusterWatcherInterface> watcher);
+                        RefCountedPtr<ClusterWatcherInterface> watcher);
   void CancelClusterDataWatch(y_absl::string_view cluster_name,
                               ClusterWatcherInterface* watcher,
                               bool delay_unsubscription = false);
@@ -162,7 +160,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // If the caller is going to start a new watch after cancelling the
   // old one, it should set delay_unsubscription to true.
   void WatchEndpointData(y_absl::string_view eds_service_name,
-                         std::unique_ptr<EndpointWatcherInterface> watcher);
+                         RefCountedPtr<EndpointWatcherInterface> watcher);
   void CancelEndpointDataWatch(y_absl::string_view eds_service_name,
                                EndpointWatcherInterface* watcher,
                                bool delay_unsubscription = false);
@@ -200,15 +198,15 @@ class XdsClient : public DualRefCounted<XdsClient> {
   // implementation.
   TString DumpClientConfigBinary();
 
+  // Helpers for encoding the XdsClient object in channel args.
+  grpc_arg MakeChannelArg() const;
+  static RefCountedPtr<XdsClient> GetFromChannelArgs(
+      const grpc_channel_args& args);
+
  private:
   // Contains a channel to the xds server and all the data related to the
   // channel.  Holds a ref to the xds client object.
-  //
-  // Currently, there is only one ChannelState object per XdsClient
-  // object, and it has essentially the same lifetime.  But in the
-  // future, when we add federation support, a single XdsClient may have
-  // multiple underlying channels to talk to different xDS servers.
-  class ChannelState : public InternallyRefCounted<ChannelState> {
+  class ChannelState : public DualRefCounted<ChannelState> {
    public:
     template <typename T>
     class RetryableCall;
@@ -236,9 +234,13 @@ class XdsClient : public DualRefCounted<XdsClient> {
     void StartConnectivityWatchLocked();
     void CancelConnectivityWatchLocked();
 
-    void Subscribe(const TString& type_url, const TString& name);
-    void Unsubscribe(const TString& type_url, const TString& name,
-                     bool delay_unsubscription);
+    void SubscribeLocked(const TString& type_url,
+                         const XdsApi::ResourceName& name)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
+    void UnsubscribeLocked(const TString& type_url,
+                           const XdsApi::ResourceName& name,
+                           bool delay_unsubscription)
+        Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(&XdsClient::mu_);
 
    private:
     class StateWatcher;
@@ -251,16 +253,19 @@ class XdsClient : public DualRefCounted<XdsClient> {
     // The channel and its status.
     grpc_channel* channel_;
     bool shutting_down_ = false;
-    StateWatcher* watcher_ = nullptr;
+    StateWatcher* watcher_;
 
     // The retryable XDS calls.
     OrphanablePtr<RetryableCall<AdsCallState>> ads_calld_;
     OrphanablePtr<RetryableCall<LrsCallState>> lrs_calld_;
+
+    // Stores the most recent accepted resource version for each resource type.
+    std::map<TString /*type*/, TString /*version*/>
+        resource_type_version_map_;
   };
 
   struct ListenerState {
-    std::map<ListenerWatcherInterface*,
-             std::unique_ptr<ListenerWatcherInterface>>
+    std::map<ListenerWatcherInterface*, RefCountedPtr<ListenerWatcherInterface>>
         watchers;
     // The latest data seen from LDS.
     y_absl::optional<XdsApi::LdsUpdate> update;
@@ -269,7 +274,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
 
   struct RouteConfigState {
     std::map<RouteConfigWatcherInterface*,
-             std::unique_ptr<RouteConfigWatcherInterface>>
+             RefCountedPtr<RouteConfigWatcherInterface>>
         watchers;
     // The latest data seen from RDS.
     y_absl::optional<XdsApi::RdsUpdate> update;
@@ -277,7 +282,7 @@ class XdsClient : public DualRefCounted<XdsClient> {
   };
 
   struct ClusterState {
-    std::map<ClusterWatcherInterface*, std::unique_ptr<ClusterWatcherInterface>>
+    std::map<ClusterWatcherInterface*, RefCountedPtr<ClusterWatcherInterface>>
         watchers;
     // The latest data seen from CDS.
     y_absl::optional<XdsApi::CdsUpdate> update;
@@ -285,12 +290,25 @@ class XdsClient : public DualRefCounted<XdsClient> {
   };
 
   struct EndpointState {
-    std::map<EndpointWatcherInterface*,
-             std::unique_ptr<EndpointWatcherInterface>>
+    std::map<EndpointWatcherInterface*, RefCountedPtr<EndpointWatcherInterface>>
         watchers;
     // The latest data seen from EDS.
     y_absl::optional<XdsApi::EdsUpdate> update;
     XdsApi::ResourceMetadata meta;
+  };
+
+  struct AuthorityState {
+    RefCountedPtr<ChannelState> channel_state;
+    std::map<TString /*listener_name*/, ListenerState> listener_map;
+    std::map<TString /*route_config_name*/, RouteConfigState>
+        route_config_map;
+    std::map<TString /*cluster_name*/, ClusterState> cluster_map;
+    std::map<TString /*eds_service_name*/, EndpointState> endpoint_map;
+
+    bool HasSubscribedResources() {
+      return !listener_map.empty() || !route_config_map.empty() ||
+             !cluster_map.empty() || !endpoint_map.empty();
+    }
   };
 
   struct LoadReportState {
@@ -307,49 +325,55 @@ class XdsClient : public DualRefCounted<XdsClient> {
     grpc_millis last_report_time = ExecCtx::Get()->Now();
   };
 
+  class Notifier;
+
   // Sends an error notification to all watchers.
-  void NotifyOnErrorLocked(grpc_error* error);
+  void NotifyOnErrorLocked(grpc_error_handle error)
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   XdsApi::ClusterLoadReportMap BuildLoadReportSnapshotLocked(
-      bool send_all_clusters, const std::set<TString>& clusters);
+      bool send_all_clusters, const std::set<TString>& clusters)
+      Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
-  void UpdateResourceMetadataWithFailedParseResult(
-      grpc_millis update_time, const XdsApi::AdsParseResult& result);
-  void UpdatePendingResources(
-      const TString& type_url,
-      XdsApi::ResourceMetadataMap* resource_metadata_map);
+  RefCountedPtr<ChannelState> GetOrCreateChannelStateLocked(
+      const XdsBootstrap::XdsServer& server) Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
+  std::unique_ptr<XdsBootstrap> bootstrap_;
+  grpc_channel_args* args_;
   const grpc_millis request_timeout_;
   grpc_pollset_set* interested_parties_;
-  std::unique_ptr<XdsBootstrap> bootstrap_;
   OrphanablePtr<CertificateProviderStore> certificate_provider_store_;
   XdsApi api_;
+  WorkSerializer work_serializer_;
 
   Mutex mu_;
 
-  // The channel for communicating with the xds server.
-  OrphanablePtr<ChannelState> chand_;
+  //  Map of existing xDS server channels.
+  std::map<XdsBootstrap::XdsServer, ChannelState*> xds_server_channel_map_
+      Y_ABSL_GUARDED_BY(mu_);
 
-  // One entry for each watched LDS resource.
-  std::map<TString /*listener_name*/, ListenerState> listener_map_;
-  // One entry for each watched RDS resource.
-  std::map<TString /*route_config_name*/, RouteConfigState>
-      route_config_map_;
-  // One entry for each watched CDS resource.
-  std::map<TString /*cluster_name*/, ClusterState> cluster_map_;
-  // One entry for each watched EDS resource.
-  std::map<TString /*eds_service_name*/, EndpointState> endpoint_map_;
+  std::map<TString /*authority*/, AuthorityState> authority_state_map_
+      Y_ABSL_GUARDED_BY(mu_);
 
   // Load report data.
   std::map<
       std::pair<TString /*cluster_name*/, TString /*eds_service_name*/>,
       LoadReportState>
-      load_report_map_;
+      load_report_map_ Y_ABSL_GUARDED_BY(mu_);
 
-  // Stores the most recent accepted resource version for each resource type.
-  std::map<TString /*type*/, TString /*version*/> resource_version_map_;
+  // Stores started watchers whose resource name was not parsed successfully,
+  // waiting to be cancelled or reset in Orphan().
+  std::map<ListenerWatcherInterface*, RefCountedPtr<ListenerWatcherInterface>>
+      invalid_listener_watchers_ Y_ABSL_GUARDED_BY(mu_);
+  std::map<RouteConfigWatcherInterface*,
+           RefCountedPtr<RouteConfigWatcherInterface>>
+      invalid_route_config_watchers_ Y_ABSL_GUARDED_BY(mu_);
+  std::map<ClusterWatcherInterface*, RefCountedPtr<ClusterWatcherInterface>>
+      invalid_cluster_watchers_ Y_ABSL_GUARDED_BY(mu_);
+  std::map<EndpointWatcherInterface*, RefCountedPtr<EndpointWatcherInterface>>
+      invalid_endpoint_watchers_ Y_ABSL_GUARDED_BY(mu_);
 
-  bool shutting_down_ = false;
+  bool shutting_down_ Y_ABSL_GUARDED_BY(mu_) = false;
 };
 
 namespace internal {
@@ -362,4 +386,4 @@ void SetXdsFallbackBootstrapConfig(const char* config);
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_EXT_XDS_XDS_CLIENT_H */
+#endif  // GRPC_CORE_EXT_XDS_XDS_CLIENT_H

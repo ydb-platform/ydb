@@ -27,25 +27,23 @@
 
 #include "y_absl/container/inlined_vector.h"
 #include "y_absl/types/optional.h"
+#include "y_absl/types/variant.h"
+#include "envoy/admin/v3/config_dump.upb.h"
 #include "re2/re2.h"
-
 #include "upb/def.hpp"
 
 #include <grpc/slice_buffer.h>
 
-#include "envoy/admin/v3/config_dump.upb.h"
 #include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/ext/xds/xds_client_stats.h"
 #include "src/core/ext/xds/xds_http_filters.h"
+#include "src/core/lib/channel/status_util.h"
 #include "src/core/lib/matchers/matchers.h"
 
 namespace grpc_core {
 
-// TODO(yashykt): Check to see if xDS security is enabled. This will be
-// removed once this feature is fully integration-tested and enabled by
-// default.
-bool XdsSecurityEnabled();
+bool XdsRbacEnabled();
 
 class XdsClient;
 
@@ -57,6 +55,7 @@ class XdsApi {
   static const char* kEdsTypeUrl;
 
   struct Duration {
+    Duration() {}
     int64_t seconds = 0;
     int32_t nanos = 0;
     bool operator==(const Duration& other) const {
@@ -69,6 +68,29 @@ class XdsApi {
 
   using TypedPerFilterConfig =
       std::map<TString, XdsHttpFilterImpl::FilterConfig>;
+
+  struct RetryPolicy {
+    internal::StatusCodeSet retry_on;
+    uint32_t num_retries;
+
+    struct RetryBackOff {
+      Duration base_interval;
+      Duration max_interval;
+
+      bool operator==(const RetryBackOff& other) const {
+        return base_interval == other.base_interval &&
+               max_interval == other.max_interval;
+      }
+      TString ToString() const;
+    };
+    RetryBackOff retry_back_off;
+
+    bool operator==(const RetryPolicy& other) const {
+      return (retry_on == other.retry_on && num_retries == other.num_retries &&
+              retry_back_off == other.retry_back_off);
+    }
+    TString ToString() const;
+  };
 
   // TODO(donnadionne): When we can use y_absl::variant<>, consider using that
   // for: PathMatcher, HeaderMatcher, cluster_name and weighted_clusters
@@ -87,60 +109,83 @@ class XdsApi {
       TString ToString() const;
     };
 
-    struct HashPolicy {
-      enum Type { HEADER, CHANNEL_ID };
-      Type type;
-      bool terminal = false;
-      // Fields used for type HEADER.
-      TString header_name;
-      std::unique_ptr<RE2> regex = nullptr;
-      TString regex_substitution;
+    Matchers matchers;
 
-      HashPolicy() {}
-
-      // Copyable.
-      HashPolicy(const HashPolicy& other);
-      HashPolicy& operator=(const HashPolicy& other);
-
-      // Moveable.
-      HashPolicy(HashPolicy&& other) noexcept;
-      HashPolicy& operator=(HashPolicy&& other) noexcept;
-
-      bool operator==(const HashPolicy& other) const;
-      TString ToString() const;
+    struct UnknownAction {
+      bool operator==(const UnknownAction& /* other */) const { return true; }
     };
 
-    Matchers matchers;
-    std::vector<HashPolicy> hash_policies;
+    struct RouteAction {
+      struct HashPolicy {
+        enum Type { HEADER, CHANNEL_ID };
+        Type type;
+        bool terminal = false;
+        // Fields used for type HEADER.
+        TString header_name;
+        std::unique_ptr<RE2> regex = nullptr;
+        TString regex_substitution;
 
-    // Action for this route.
-    // TODO(roth): When we can use y_absl::variant<>, consider using that
-    // here, to enforce the fact that only one of the two fields can be set.
-    TString cluster_name;
-    struct ClusterWeight {
-      TString name;
-      uint32_t weight;
-      TypedPerFilterConfig typed_per_filter_config;
+        HashPolicy() {}
 
-      bool operator==(const ClusterWeight& other) const {
-        return name == other.name && weight == other.weight &&
-               typed_per_filter_config == other.typed_per_filter_config;
+        // Copyable.
+        HashPolicy(const HashPolicy& other);
+        HashPolicy& operator=(const HashPolicy& other);
+
+        // Moveable.
+        HashPolicy(HashPolicy&& other) noexcept;
+        HashPolicy& operator=(HashPolicy&& other) noexcept;
+
+        bool operator==(const HashPolicy& other) const;
+        TString ToString() const;
+      };
+
+      struct ClusterWeight {
+        TString name;
+        uint32_t weight;
+        TypedPerFilterConfig typed_per_filter_config;
+
+        bool operator==(const ClusterWeight& other) const {
+          return name == other.name && weight == other.weight &&
+                 typed_per_filter_config == other.typed_per_filter_config;
+        }
+        TString ToString() const;
+      };
+
+      std::vector<HashPolicy> hash_policies;
+      y_absl::optional<RetryPolicy> retry_policy;
+
+      // Action for this route.
+      // TODO(roth): When we can use y_absl::variant<>, consider using that
+      // here, to enforce the fact that only one of the two fields can be set.
+      TString cluster_name;
+      std::vector<ClusterWeight> weighted_clusters;
+      // Storing the timeout duration from route action:
+      // RouteAction.max_stream_duration.grpc_timeout_header_max or
+      // RouteAction.max_stream_duration.max_stream_duration if the former is
+      // not set.
+      y_absl::optional<Duration> max_stream_duration;
+
+      bool operator==(const RouteAction& other) const {
+        return hash_policies == other.hash_policies &&
+               retry_policy == other.retry_policy &&
+               cluster_name == other.cluster_name &&
+               weighted_clusters == other.weighted_clusters &&
+               max_stream_duration == other.max_stream_duration;
       }
       TString ToString() const;
     };
-    std::vector<ClusterWeight> weighted_clusters;
-    // Storing the timeout duration from route action:
-    // RouteAction.max_stream_duration.grpc_timeout_header_max or
-    // RouteAction.max_stream_duration.max_stream_duration if the former is
-    // not set.
-    y_absl::optional<Duration> max_stream_duration;
 
+    struct NonForwardingAction {
+      bool operator==(const NonForwardingAction& /* other */) const {
+        return true;
+      }
+    };
+
+    y_absl::variant<UnknownAction, RouteAction, NonForwardingAction> action;
     TypedPerFilterConfig typed_per_filter_config;
 
     bool operator==(const Route& other) const {
-      return matchers == other.matchers && cluster_name == other.cluster_name &&
-             weighted_clusters == other.weighted_clusters &&
-             max_stream_duration == other.max_stream_duration &&
+      return matchers == other.matchers && action == other.action &&
              typed_per_filter_config == other.typed_per_filter_config;
     }
     TString ToString() const;
@@ -164,26 +209,14 @@ class XdsApi {
       return virtual_hosts == other.virtual_hosts;
     }
     TString ToString() const;
-    VirtualHost* FindVirtualHostForDomain(const TString& domain);
   };
 
   struct CommonTlsContext {
-    struct CertificateValidationContext {
-      std::vector<StringMatcher> match_subject_alt_names;
-
-      bool operator==(const CertificateValidationContext& other) const {
-        return match_subject_alt_names == other.match_subject_alt_names;
-      }
-
-      TString ToString() const;
-      bool Empty() const;
-    };
-
-    struct CertificateProviderInstance {
+    struct CertificateProviderPluginInstance {
       TString instance_name;
       TString certificate_name;
 
-      bool operator==(const CertificateProviderInstance& other) const {
+      bool operator==(const CertificateProviderPluginInstance& other) const {
         return instance_name == other.instance_name &&
                certificate_name == other.certificate_name;
       }
@@ -192,28 +225,28 @@ class XdsApi {
       bool Empty() const;
     };
 
-    struct CombinedCertificateValidationContext {
-      CertificateValidationContext default_validation_context;
-      CertificateProviderInstance
-          validation_context_certificate_provider_instance;
+    struct CertificateValidationContext {
+      CertificateProviderPluginInstance ca_certificate_provider_instance;
+      std::vector<StringMatcher> match_subject_alt_names;
 
-      bool operator==(const CombinedCertificateValidationContext& other) const {
-        return default_validation_context == other.default_validation_context &&
-               validation_context_certificate_provider_instance ==
-                   other.validation_context_certificate_provider_instance;
+      bool operator==(const CertificateValidationContext& other) const {
+        return ca_certificate_provider_instance ==
+                   other.ca_certificate_provider_instance &&
+               match_subject_alt_names == other.match_subject_alt_names;
       }
 
       TString ToString() const;
       bool Empty() const;
     };
 
-    CertificateProviderInstance tls_certificate_certificate_provider_instance;
-    CombinedCertificateValidationContext combined_validation_context;
+    CertificateValidationContext certificate_validation_context;
+    CertificateProviderPluginInstance tls_certificate_provider_instance;
 
     bool operator==(const CommonTlsContext& other) const {
-      return tls_certificate_certificate_provider_instance ==
-                 other.tls_certificate_certificate_provider_instance &&
-             combined_validation_context == other.combined_validation_context;
+      return certificate_validation_context ==
+                 other.certificate_validation_context &&
+             tls_certificate_provider_instance ==
+                 other.tls_certificate_provider_instance;
     }
 
     TString ToString() const;
@@ -292,7 +325,7 @@ class XdsApi {
       }
 
       TString ToString() const;
-    } filter_chain_data;
+    };
 
     // A multi-level map used to determine which filter chain to use for a given
     // incoming connection. Determining the right filter chain for a given
@@ -377,20 +410,30 @@ class XdsApi {
     TString ToString() const;
   };
 
+  struct ResourceName {
+    TString authority;
+    TString id;
+
+    bool operator<(const ResourceName& other) const {
+      if (authority < other.authority) return true;
+      if (id < other.id) return true;
+      return false;
+    }
+  };
+
   struct LdsResourceData {
     LdsUpdate resource;
     TString serialized_proto;
   };
 
-  using LdsUpdateMap = std::map<TString /*server_name*/, LdsResourceData>;
+  using LdsUpdateMap = std::map<ResourceName, LdsResourceData>;
 
   struct RdsResourceData {
     RdsUpdate resource;
     TString serialized_proto;
   };
 
-  using RdsUpdateMap =
-      std::map<TString /*route_config_name*/, RdsResourceData>;
+  using RdsUpdateMap = std::map<ResourceName, RdsResourceData>;
 
   struct CdsUpdate {
     enum ClusterType { EDS, LOGICAL_DNS, AGGREGATE };
@@ -399,34 +442,42 @@ class XdsApi {
     // The name to use in the EDS request.
     // If empty, the cluster name will be used.
     TString eds_service_name;
+    // For cluster type LOGICAL_DNS.
+    // The hostname to lookup in DNS.
+    TString dns_hostname;
+    // For cluster type AGGREGATE.
+    // The prioritized list of cluster names.
+    std::vector<TString> prioritized_cluster_names;
+
     // Tls Context used by clients
     CommonTlsContext common_tls_context;
+
     // The LRS server to use for load reporting.
     // If not set, load reporting will be disabled.
     // If set to the empty string, will use the same server we obtained the CDS
     // data from.
     y_absl::optional<TString> lrs_load_reporting_server_name;
+
     // The LB policy to use (e.g., "ROUND_ROBIN" or "RING_HASH").
     TString lb_policy;
     // Used for RING_HASH LB policy only.
     uint64_t min_ring_size = 1024;
     uint64_t max_ring_size = 8388608;
-    enum HashFunction { XX_HASH, MURMUR_HASH_2 };
-    HashFunction hash_function;
     // Maximum number of outstanding requests can be made to the upstream
     // cluster.
     uint32_t max_concurrent_requests = 1024;
-    // For cluster type AGGREGATE.
-    // The prioritized list of cluster names.
-    std::vector<TString> prioritized_cluster_names;
 
     bool operator==(const CdsUpdate& other) const {
       return cluster_type == other.cluster_type &&
              eds_service_name == other.eds_service_name &&
+             dns_hostname == other.dns_hostname &&
+             prioritized_cluster_names == other.prioritized_cluster_names &&
              common_tls_context == other.common_tls_context &&
              lrs_load_reporting_server_name ==
                  other.lrs_load_reporting_server_name &&
-             prioritized_cluster_names == other.prioritized_cluster_names &&
+             lb_policy == other.lb_policy &&
+             min_ring_size == other.min_ring_size &&
+             max_ring_size == other.max_ring_size &&
              max_concurrent_requests == other.max_concurrent_requests;
     }
 
@@ -438,7 +489,7 @@ class XdsApi {
     TString serialized_proto;
   };
 
-  using CdsUpdateMap = std::map<TString /*cluster_name*/, CdsResourceData>;
+  using CdsUpdateMap = std::map<ResourceName, CdsResourceData>;
 
   struct EdsUpdate {
     struct Priority {
@@ -527,8 +578,7 @@ class XdsApi {
     TString serialized_proto;
   };
 
-  using EdsUpdateMap =
-      std::map<TString /*eds_service_name*/, EdsResourceData>;
+  using EdsUpdateMap = std::map<ResourceName, EdsResourceData>;
 
   struct ClusterLoadReport {
     XdsClusterDropStats::Snapshot dropped_requests;
@@ -577,13 +627,9 @@ class XdsApi {
     grpc_millis failed_update_time = 0;
   };
   using ResourceMetadataMap =
-      std::map<y_absl::string_view /*resource_name*/, const ResourceMetadata*>;
-  struct ResourceTypeMetadata {
-    y_absl::string_view version;
-    ResourceMetadataMap resource_metadata_map;
-  };
+      std::map<TString /*resource_name*/, const ResourceMetadata*>;
   using ResourceTypeMetadataMap =
-      std::map<y_absl::string_view /*type_url*/, ResourceTypeMetadata>;
+      std::map<y_absl::string_view /*type_url*/, ResourceMetadataMap>;
   static_assert(static_cast<ResourceMetadata::ClientResourceStatus>(
                     envoy_admin_v3_REQUESTED) ==
                     ResourceMetadata::ClientResourceStatus::REQUESTED,
@@ -609,7 +655,7 @@ class XdsApi {
   // Otherwise, one of the *_update_map fields will be populated, based
   // on the type_url field.
   struct AdsParseResult {
-    grpc_error* parse_error = GRPC_ERROR_NONE;
+    grpc_error_handle parse_error = GRPC_ERROR_NONE;
     TString version;
     TString nonce;
     TString type_url;
@@ -617,27 +663,53 @@ class XdsApi {
     RdsUpdateMap rds_update_map;
     CdsUpdateMap cds_update_map;
     EdsUpdateMap eds_update_map;
-    std::set<TString> resource_names_failed;
+    std::set<ResourceName> resource_names_failed;
   };
 
-  XdsApi(XdsClient* client, TraceFlag* tracer, const XdsBootstrap::Node* node);
+  XdsApi(XdsClient* client, TraceFlag* tracer, const XdsBootstrap::Node* node,
+         const CertificateProviderStore::PluginDefinitionMap* map);
+
+  static bool IsLds(y_absl::string_view type_url);
+  static bool IsRds(y_absl::string_view type_url);
+  static bool IsCds(y_absl::string_view type_url);
+  static bool IsEds(y_absl::string_view type_url);
+
+  // A helper method to parse the resource name and return back a ResourceName
+  // struct.  Optionally the parser can check the resource type portion of the
+  // resource name.
+  static y_absl::StatusOr<ResourceName> ParseResourceName(
+      y_absl::string_view name,
+      bool (*is_expected_type)(y_absl::string_view) = nullptr);
+
+  // A helper method to construct the resource name from parts.
+  static TString ConstructFullResourceName(y_absl::string_view authority,
+                                               y_absl::string_view resource_type,
+                                               y_absl::string_view name);
 
   // Creates an ADS request.
   // Takes ownership of \a error.
-  grpc_slice CreateAdsRequest(const XdsBootstrap::XdsServer& server,
-                              const TString& type_url,
-                              const std::set<y_absl::string_view>& resource_names,
-                              const TString& version,
-                              const TString& nonce, grpc_error* error,
-                              bool populate_node);
+  grpc_slice CreateAdsRequest(
+      const XdsBootstrap::XdsServer& server, const TString& type_url,
+      const std::map<y_absl::string_view /*authority*/,
+                     std::set<y_absl::string_view /*name*/>>& resource_names,
+      const TString& version, const TString& nonce,
+      grpc_error_handle error, bool populate_node);
 
   // Parses an ADS response.
   AdsParseResult ParseAdsResponse(
       const XdsBootstrap::XdsServer& server, const grpc_slice& encoded_response,
-      const std::set<y_absl::string_view>& expected_listener_names,
-      const std::set<y_absl::string_view>& expected_route_configuration_names,
-      const std::set<y_absl::string_view>& expected_cluster_names,
-      const std::set<y_absl::string_view>& expected_eds_service_names);
+      const std::map<y_absl::string_view /*authority*/,
+                     std::set<y_absl::string_view /*name*/>>&
+          subscribed_listener_names,
+      const std::map<y_absl::string_view /*authority*/,
+                     std::set<y_absl::string_view /*name*/>>&
+          subscribed_route_config_names,
+      const std::map<y_absl::string_view /*authority*/,
+                     std::set<y_absl::string_view /*name*/>>&
+          subscribed_cluster_names,
+      const std::map<y_absl::string_view /*authority*/,
+                     std::set<y_absl::string_view /*name*/>>&
+          subscribed_eds_service_names);
 
   // Creates an initial LRS request.
   grpc_slice CreateLrsInitialRequest(const XdsBootstrap::XdsServer& server);
@@ -648,10 +720,10 @@ class XdsApi {
   // Parses the LRS response and returns \a
   // load_reporting_interval for client-side load reporting. If there is any
   // error, the output config is invalid.
-  grpc_error* ParseLrsResponse(const grpc_slice& encoded_response,
-                               bool* send_all_clusters,
-                               std::set<TString>* cluster_names,
-                               grpc_millis* load_reporting_interval);
+  grpc_error_handle ParseLrsResponse(const grpc_slice& encoded_response,
+                                     bool* send_all_clusters,
+                                     std::set<TString>* cluster_names,
+                                     grpc_millis* load_reporting_interval);
 
   // Assemble the client config proto message and return the serialized result.
   TString AssembleClientConfig(
@@ -661,9 +733,12 @@ class XdsApi {
   XdsClient* client_;
   TraceFlag* tracer_;
   const XdsBootstrap::Node* node_;  // Do not own.
+  const CertificateProviderStore::PluginDefinitionMap*
+      certificate_provider_definition_map_;  // Do not own.
   upb::SymbolTable symtab_;
   const TString build_version_;
   const TString user_agent_name_;
+  const TString user_agent_version_;
 };
 
 }  // namespace grpc_core

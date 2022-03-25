@@ -22,7 +22,7 @@
 
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
-#include "src/core/ext/filters/client_channel/service_config.h"
+
 #include "src/core/ext/filters/fault_injection/fault_injection_filter.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/status_util.h"
@@ -37,17 +37,15 @@ size_t g_fault_injection_parser_index;
 
 std::vector<FaultInjectionMethodParsedConfig::FaultInjectionPolicy>
 ParseFaultInjectionPolicy(const Json::Array& policies_json_array,
-                          std::vector<grpc_error*>* error_list) {
+                          std::vector<grpc_error_handle>* error_list) {
   std::vector<FaultInjectionMethodParsedConfig::FaultInjectionPolicy> policies;
   for (size_t i = 0; i < policies_json_array.size(); i++) {
     FaultInjectionMethodParsedConfig::FaultInjectionPolicy
         fault_injection_policy;
-    std::vector<grpc_error*> sub_error_list;
+    std::vector<grpc_error_handle> sub_error_list;
     if (policies_json_array[i].type() != Json::Type::OBJECT) {
-      error_list->push_back(GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-          y_absl::StrCat("faultInjectionPolicy index ", i,
-                       " is not a JSON object")
-              .c_str()));
+      error_list->push_back(GRPC_ERROR_CREATE_FROM_CPP_STRING(y_absl::StrCat(
+          "faultInjectionPolicy index ", i, " is not a JSON object")));
       continue;
     }
     const Json::Object& json_object = policies_json_array[i].object_value();
@@ -133,15 +131,9 @@ ParseFaultInjectionPolicy(const Json::Array& policies_json_array,
       }
     }
     if (!sub_error_list.empty()) {
-      // Can't use GRPC_ERROR_CREATE_FROM_VECTOR() here, because the error
-      // string is not static in this case.
-      grpc_error* error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
-          y_absl::StrCat("failed to parse faultInjectionPolicy index ", i)
-              .c_str());
-      for (size_t i = 0; i < sub_error_list.size(); ++i) {
-        error = grpc_error_add_child(error, sub_error_list[i]);
-      }
-      error_list->push_back(error);
+      error_list->push_back(GRPC_ERROR_CREATE_FROM_VECTOR_AND_CPP_STRING(
+          y_absl::StrCat("failed to parse faultInjectionPolicy index ", i),
+          &sub_error_list));
     }
     policies.push_back(std::move(fault_injection_policy));
   }
@@ -152,7 +144,7 @@ ParseFaultInjectionPolicy(const Json::Array& policies_json_array,
 
 std::unique_ptr<ServiceConfigParser::ParsedConfig>
 FaultInjectionServiceConfigParser::ParsePerMethodParams(
-    const grpc_channel_args* args, const Json& json, grpc_error** error) {
+    const grpc_channel_args* args, const Json& json, grpc_error_handle* error) {
   GPR_DEBUG_ASSERT(error != nullptr && *error == GRPC_ERROR_NONE);
   // Only parse fault injection policy if the following channel arg is present.
   if (!grpc_channel_args_find_bool(
@@ -162,7 +154,7 @@ FaultInjectionServiceConfigParser::ParsePerMethodParams(
   // Parse fault injection policy from given Json
   std::vector<FaultInjectionMethodParsedConfig::FaultInjectionPolicy>
       fault_injection_policies;
-  std::vector<grpc_error*> error_list;
+  std::vector<grpc_error_handle> error_list;
   const Json::Array* policies_json_array;
   if (ParseJsonObjectField(json.object_value(), "faultInjectionPolicy",
                            &policies_json_array, &error_list)) {

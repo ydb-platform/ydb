@@ -74,7 +74,7 @@ class CertificateProviderStore
       store_->ReleaseCertificateProvider(key_, this);
     }
 
-    grpc_core::RefCountedPtr<grpc_tls_certificate_distributor> distributor()
+    RefCountedPtr<grpc_tls_certificate_distributor> distributor()
         const override {
       return certificate_provider_->distributor();
     }
@@ -92,7 +92,7 @@ class CertificateProviderStore
   };
 
   RefCountedPtr<CertificateProviderWrapper> CreateCertificateProviderLocked(
-      y_absl::string_view key);
+      y_absl::string_view key) Y_ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Releases a previously created certificate provider from the certificate
   // provider map if the value matches \a wrapper.
@@ -101,10 +101,10 @@ class CertificateProviderStore
 
   Mutex mu_;
   // Map of plugin configurations
-  PluginDefinitionMap plugin_config_map_;
+  const PluginDefinitionMap plugin_config_map_;
   // Underlying map for the providers.
   std::map<y_absl::string_view, CertificateProviderWrapper*>
-      certificate_providers_map_;
+      certificate_providers_map_ Y_ABSL_GUARDED_BY(mu_);
 };
 
 }  // namespace grpc_core

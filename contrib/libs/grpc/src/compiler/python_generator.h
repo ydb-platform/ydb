@@ -34,7 +34,7 @@ struct GeneratorConfiguration {
   TString grpc_package_root;
   // TODO(https://github.com/grpc/grpc/issues/8622): Drop this.
   TString beta_package_root;
-  // TODO(https://github.com/google/protobuf/issues/888): Drop this.
+  // TODO(https://github.com/protocolbuffers/protobuf/issues/888): Drop this.
   TString import_prefix;
   std::vector<TString> prefixes_to_filter;
 };

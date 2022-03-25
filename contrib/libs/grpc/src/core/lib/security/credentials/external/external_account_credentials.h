@@ -46,10 +46,12 @@ class ExternalAccountCredentials
     TString quota_project_id;
     TString client_id;
     TString client_secret;
+    TString workforce_pool_user_project;
   };
 
   static RefCountedPtr<ExternalAccountCredentials> Create(
-      const Json& json, std::vector<TString> scopes, grpc_error** error);
+      const Json& json, std::vector<TString> scopes,
+      grpc_error_handle* error);
 
   ExternalAccountCredentials(Options options, std::vector<TString> scopes);
   ~ExternalAccountCredentials() override;
@@ -84,7 +86,7 @@ class ExternalAccountCredentials
   // back.
   virtual void RetrieveSubjectToken(
       HTTPRequestContext* ctx, const Options& options,
-      std::function<void(TString, grpc_error*)> cb) = 0;
+      std::function<void(TString, grpc_error_handle)> cb) = 0;
 
  private:
   // This method implements the common token fetch logic and it will be called
@@ -95,17 +97,17 @@ class ExternalAccountCredentials
                     grpc_millis deadline) override;
 
   void OnRetrieveSubjectTokenInternal(y_absl::string_view subject_token,
-                                      grpc_error* error);
+                                      grpc_error_handle error);
 
   void ExchangeToken(y_absl::string_view subject_token);
-  static void OnExchangeToken(void* arg, grpc_error* error);
-  void OnExchangeTokenInternal(grpc_error* error);
+  static void OnExchangeToken(void* arg, grpc_error_handle error);
+  void OnExchangeTokenInternal(grpc_error_handle error);
 
   void ImpersenateServiceAccount();
-  static void OnImpersenateServiceAccount(void* arg, grpc_error* error);
-  void OnImpersenateServiceAccountInternal(grpc_error* error);
+  static void OnImpersenateServiceAccount(void* arg, grpc_error_handle error);
+  void OnImpersenateServiceAccountInternal(grpc_error_handle error);
 
-  void FinishTokenFetch(grpc_error* error);
+  void FinishTokenFetch(grpc_error_handle error);
 
   Options options_;
   std::vector<TString> scopes_;

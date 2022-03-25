@@ -19,9 +19,10 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/iomgr/buffer_list.h"
-#include "src/core/lib/iomgr/port.h"
 
 #include <grpc/support/log.h>
+
+#include "src/core/lib/iomgr/port.h"
 
 #ifdef GRPC_LINUX_ERRQUEUE
 #include <netinet/in.h>
@@ -39,15 +40,15 @@ void fill_gpr_from_timestamp(gpr_timespec* gts, const struct timespec* ts) {
   gts->clock_type = GPR_CLOCK_REALTIME;
 }
 
-void default_timestamps_callback(void* /*arg*/, grpc_core::Timestamps* /*ts*/,
-                                 grpc_error* /*shudown_err*/) {
+void default_timestamps_callback(void* /*arg*/, Timestamps* /*ts*/,
+                                 grpc_error_handle /*shudown_err*/) {
   gpr_log(GPR_DEBUG, "Timestamps callback has not been registered");
 }
 
 /** The saved callback function that will be invoked when we get all the
  * timestamps that we are going to get for a TracedBuffer. */
-void (*timestamps_callback)(void*, grpc_core::Timestamps*,
-                            grpc_error* shutdown_err) =
+void (*timestamps_callback)(void*, Timestamps*,
+                            grpc_error_handle shutdown_err) =
     default_timestamps_callback;
 
 /* Used to extract individual opt stats from cmsg, so as to avoid troubles with
@@ -61,11 +62,11 @@ T read_unaligned(const void* ptr) {
 
 /* Extracts opt stats from the tcp_info struct \a info to \a metrics */
 void extract_opt_stats_from_tcp_info(ConnectionMetrics* metrics,
-                                     const grpc_core::tcp_info* info) {
+                                     const tcp_info* info) {
   if (info == nullptr) {
     return;
   }
-  if (info->length > offsetof(grpc_core::tcp_info, tcpi_sndbuf_limited)) {
+  if (info->length > offsetof(tcp_info, tcpi_sndbuf_limited)) {
     metrics->recurring_retrans.emplace(info->tcpi_retransmits);
     metrics->is_delivery_rate_app_limited.emplace(
         info->tcpi_delivery_rate_app_limited);
@@ -83,7 +84,7 @@ void extract_opt_stats_from_tcp_info(ConnectionMetrics* metrics,
     metrics->rwnd_limited_usec.emplace(info->tcpi_rwnd_limited);
     metrics->sndbuf_limited_usec.emplace(info->tcpi_sndbuf_limited);
   }
-  if (info->length > offsetof(grpc_core::tcp_info, tcpi_dsack_dups)) {
+  if (info->length > offsetof(tcp_info, tcpi_dsack_dups)) {
     metrics->data_sent.emplace(info->tcpi_bytes_sent);
     metrics->data_retx.emplace(info->tcpi_bytes_retrans);
     metrics->packet_spurious_retx.emplace(info->tcpi_dsack_dups);
@@ -188,9 +189,9 @@ void extract_opt_stats_from_cmsg(ConnectionMetrics* metrics,
   }
 }
 
-static int get_socket_tcp_info(grpc_core::tcp_info* info, int fd) {
+int get_socket_tcp_info(tcp_info* info, int fd) {
   memset(info, 0, sizeof(*info));
-  info->length = sizeof(*info) - sizeof(socklen_t);
+  info->length = offsetof(tcp_info, length);
   return getsockopt(fd, IPPROTO_TCP, TCP_INFO, info, &(info->length));
 }
 } /* namespace */
@@ -268,7 +269,7 @@ void TracedBuffer::ProcessTimestamp(TracedBuffer** head,
 }
 
 void TracedBuffer::Shutdown(TracedBuffer** head, void* remaining,
-                            grpc_error* shutdown_err) {
+                            grpc_error_handle shutdown_err) {
   GPR_DEBUG_ASSERT(head != nullptr);
   TracedBuffer* elem = *head;
   while (elem != nullptr) {
@@ -284,9 +285,8 @@ void TracedBuffer::Shutdown(TracedBuffer** head, void* remaining,
   GRPC_ERROR_UNREF(shutdown_err);
 }
 
-void grpc_tcp_set_write_timestamps_callback(void (*fn)(void*,
-                                                       grpc_core::Timestamps*,
-                                                       grpc_error* error)) {
+void grpc_tcp_set_write_timestamps_callback(
+    void (*fn)(void*, Timestamps*, grpc_error_handle error)) {
   timestamps_callback = fn;
 }
 } /* namespace grpc_core */
@@ -294,9 +294,8 @@ void grpc_tcp_set_write_timestamps_callback(void (*fn)(void*,
 #else /* GRPC_LINUX_ERRQUEUE */
 
 namespace grpc_core {
-void grpc_tcp_set_write_timestamps_callback(void (*fn)(void*,
-                                                       grpc_core::Timestamps*,
-                                                       grpc_error* error)) {
+void grpc_tcp_set_write_timestamps_callback(
+    void (*fn)(void*, Timestamps*, grpc_error_handle error)) {
   // Cast value of fn to void to avoid unused parameter warning.
   // Can't comment out the name because some compilers and formatters don't
   // like the sequence */* , which would arise from */*fn*/.

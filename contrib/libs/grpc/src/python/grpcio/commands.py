@@ -13,27 +13,21 @@
 # limitations under the License.
 """Provides distutils command classes for the GRPC Python setup process."""
 
-from __future__ import print_function
+# NOTE(https://github.com/grpc/grpc/issues/24028): allow setuptools to monkey
+# patch distutils
+import setuptools  # isort:skip
 
-import distutils
 import glob
 import os
 import os.path
-import platform
-import re
 import shutil
 import subprocess
 import sys
 import sysconfig
 import traceback
 
-import setuptools
 from setuptools.command import build_ext
 from setuptools.command import build_py
-from setuptools.command import easy_install
-from setuptools.command import install
-from setuptools.command import test
-
 import support
 
 PYTHON_STEM = os.path.dirname(os.path.abspath(__file__))
@@ -258,9 +252,13 @@ class BuildExt(build_ext.build_ext):
             old_compile = self.compiler._compile
 
             def new_compile(obj, src, ext, cc_args, extra_postargs, pp_opts):
-                if src[-2:] == '.c':
+                if src.endswith('.c'):
                     extra_postargs = [
                         arg for arg in extra_postargs if not '-std=c++' in arg
+                    ]
+                elif src.endswith('.cc') or src.endswith('.cpp'):
+                    extra_postargs = [
+                        arg for arg in extra_postargs if not '-std=gnu99' in arg
                     ]
                 return old_compile(obj, src, ext, cc_args, extra_postargs,
                                    pp_opts)

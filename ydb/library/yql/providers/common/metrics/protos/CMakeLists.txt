@@ -16,3 +16,6 @@ target_link_libraries(common-metrics-protos PUBLIC
 target_proto_messages(common-metrics-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/metrics/protos/metrics_registry.proto
 )
+target_sources(common-metrics-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.cc
+)

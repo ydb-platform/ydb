@@ -17,3 +17,7 @@ target_proto_messages(public-issue-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/protos/issue_message.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/issue/protos/issue_severity.proto
 )
+target_sources(public-issue-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/public/issue/protos/issue_message.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/public/issue/protos/issue_severity.pb.cc
+)

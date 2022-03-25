@@ -16,22 +16,8 @@ target_link_libraries(proto_ast-gen-v1_proto PUBLIC
 target_proto_messages(proto_ast-gen-v1_proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.proto
 )
-run_antlr(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.proto
-  DEPENDS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1.g
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/org/antlr/codegen/templates/protobuf/protobuf.stg
-  WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto
-  ANTLER_ARGS
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1.g
-  -lib
-  .
-  -fo
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto
-  -language
-  protobuf
+target_sources(proto_ast-gen-v1_proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.cc
 )
 set(
   ANTLR_PACKAGE_NAME

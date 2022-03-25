@@ -16,3 +16,6 @@ target_link_libraries(library-login-protos PUBLIC
 target_proto_messages(library-login-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/login/protos/login.proto
 )
+target_sources(library-login-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/login/protos/login.pb.cc
+)

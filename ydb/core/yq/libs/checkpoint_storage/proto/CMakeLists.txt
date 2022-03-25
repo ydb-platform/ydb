@@ -17,3 +17,6 @@ target_link_libraries(libs-checkpoint_storage-proto PUBLIC
 target_proto_messages(libs-checkpoint_storage-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/checkpoint_storage/proto/graph_description.proto
 )
+target_sources(libs-checkpoint_storage-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/checkpoint_storage/proto/graph_description.pb.cc
+)

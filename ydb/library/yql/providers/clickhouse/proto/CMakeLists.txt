@@ -17,3 +17,7 @@ target_proto_messages(providers-clickhouse-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/proto/source.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/proto/range.proto
 )
+target_sources(providers-clickhouse-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/clickhouse/proto/source.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/clickhouse/proto/range.pb.cc
+)

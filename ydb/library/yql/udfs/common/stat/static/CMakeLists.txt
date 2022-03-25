@@ -26,4 +26,5 @@ target_proto_messages(common-stat-static PRIVATE
 target_sources(common-stat-static PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/static_udf.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/static/tdigest.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/udfs/common/stat/static/tdigest.pb.cc
 )

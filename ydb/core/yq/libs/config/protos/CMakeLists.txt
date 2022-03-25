@@ -37,3 +37,24 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/token_accessor.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/yq_config.proto
 )
+target_sources(libs-config-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/audit.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/common.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/control_plane_proxy.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/control_plane_storage.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/db_pool.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/gateways.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/issue_id.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/nodes_manager.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/pending_fetcher.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/pinger.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/private_api.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/private_proxy.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/read_actors_factory.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/resource_manager.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/storage.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/test_connection.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/token_accessor.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/config/protos/yq_config.pb.cc
+)

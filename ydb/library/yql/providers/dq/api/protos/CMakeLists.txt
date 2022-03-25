@@ -23,3 +23,8 @@ target_proto_messages(dq-api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/protos/dqs.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/protos/task_command_executor.proto
 )
+target_sources(dq-api-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/api/protos/service.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/api/protos/dqs.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.cc
+)

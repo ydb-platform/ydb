@@ -17,3 +17,7 @@ target_proto_messages(api-protos-annotations PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/sensitive.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/annotations/validation.proto
 )
+target_sources(api-protos-annotations PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/annotations/sensitive.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/annotations/validation.pb.cc
+)

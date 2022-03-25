@@ -20,6 +20,9 @@ target_link_libraries(common-token_accessor-grpc PUBLIC
 target_proto_messages(common-token_accessor-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.proto
 )
+target_sources(common-token_accessor-grpc PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/token_accessor/grpc/token_accessor_pb.pb.cc
+)
 target_proto_plugin(common-token_accessor-grpc
   grpc_cpp
   grpc_cpp

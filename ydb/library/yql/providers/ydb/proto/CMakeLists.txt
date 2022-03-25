@@ -17,3 +17,7 @@ target_proto_messages(providers-ydb-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/proto/range.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/ydb/proto/source.proto
 )
+target_sources(providers-ydb-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/ydb/proto/range.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/ydb/proto/source.pb.cc
+)

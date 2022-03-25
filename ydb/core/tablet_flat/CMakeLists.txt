@@ -81,6 +81,7 @@ target_sources(ydb-core-tablet_flat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/shared_sausagecache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/tablet_flat_executed.cpp
+  ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/flat_executor.pb.cc
 )
 generate_enum_serilization(ydb-core-tablet_flat
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_gen.h

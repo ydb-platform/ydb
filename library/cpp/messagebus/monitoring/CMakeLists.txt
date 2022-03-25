@@ -17,3 +17,6 @@ target_link_libraries(cpp-messagebus-monitoring PUBLIC
 target_proto_messages(cpp-messagebus-monitoring PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/monitoring/mon_proto.proto
 )
+target_sources(cpp-messagebus-monitoring PRIVATE
+  ${CMAKE_BINARY_DIR}/library/cpp/messagebus/monitoring/mon_proto.pb.cc
+)

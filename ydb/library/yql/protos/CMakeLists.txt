@@ -18,3 +18,8 @@ target_proto_messages(library-yql-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/protos/yql_mount.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/protos/clickhouse.proto
 )
+target_sources(library-yql-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/protos/common.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/protos/yql_mount.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/protos/clickhouse.pb.cc
+)

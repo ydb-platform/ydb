@@ -18,3 +18,8 @@ target_proto_messages(providers-s3-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/retry_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/proto/source.proto
 )
+target_sources(providers-s3-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/range.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/retry_config.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/s3/proto/source.pb.cc
+)

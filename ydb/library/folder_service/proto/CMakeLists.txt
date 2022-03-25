@@ -17,3 +17,7 @@ target_proto_messages(library-folder_service-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/folder_service/proto/config.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/folder_service/proto/folder_service.proto
 )
+target_sources(library-folder_service-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/folder_service/proto/config.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/folder_service/proto/folder_service.pb.cc
+)

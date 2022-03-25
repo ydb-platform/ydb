@@ -16,3 +16,6 @@ target_link_libraries(yql-public-types PUBLIC
 target_proto_messages(yql-public-types PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/types/yql_types.proto
 )
+target_sources(yql-public-types PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/public/types/yql_types.pb.cc
+)

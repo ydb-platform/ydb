@@ -18,3 +18,6 @@ target_link_libraries(libs-graph_params-proto PUBLIC
 target_proto_messages(libs-graph_params-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/graph_params/proto/graph_params.proto
 )
+target_sources(libs-graph_params-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/graph_params/proto/graph_params.pb.cc
+)

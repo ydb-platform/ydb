@@ -20,6 +20,9 @@ target_link_libraries(grpc_streaming-ut-grpc PUBLIC
 target_proto_messages(grpc_streaming-ut-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_streaming/ut/grpc/streaming_service.proto
 )
+target_sources(grpc_streaming-ut-grpc PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/grpc_streaming/ut/grpc/streaming_service.pb.cc
+)
 target_proto_plugin(grpc_streaming-ut-grpc
   grpc_cpp
   grpc_cpp

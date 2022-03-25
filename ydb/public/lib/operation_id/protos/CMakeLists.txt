@@ -16,3 +16,6 @@ target_link_libraries(lib-operation_id-protos PUBLIC
 target_proto_messages(lib-operation_id-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/operation_id/protos/operation_id.proto
 )
+target_sources(lib-operation_id-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/public/lib/operation_id/protos/operation_id.pb.cc
+)

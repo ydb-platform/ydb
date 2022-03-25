@@ -20,6 +20,9 @@ target_link_libraries(library-mkql_proto-protos PUBLIC
 target_proto_messages(library-mkql_proto-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/protos/minikql.proto
 )
+target_sources(library-mkql_proto-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/mkql_proto/protos/minikql.pb.cc
+)
 target_proto_plugin(library-mkql_proto-protos
   grpc_cpp
   grpc_cpp

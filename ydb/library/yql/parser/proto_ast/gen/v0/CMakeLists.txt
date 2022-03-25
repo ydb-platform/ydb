@@ -19,31 +19,7 @@ target_proto_messages(proto_ast-gen-v0 PRIVATE
 target_sources(proto_ast-gen-v0 PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.cpp
-)
-run_antlr(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.proto
-  DEPENDS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v0/SQL.g
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/protobuf/protobuf.stg
-  WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0
-  ANTLER_ARGS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v0/SQL.g
-  -lib
-  .
-  -fo
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0
-  -language
-  protobuf
-)
-set(
-  ANTLR_PACKAGE_NAME
-  NSQLGenerated
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/protobuf/protobuf.stg
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.pb.cc
 )
 set(
   ANTLR_PACKAGE_NAME
@@ -60,6 +36,14 @@ set(
 configure_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/Cpp/Cpp.stg
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NSQLGenerated
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/protobuf/protobuf.stg
 )
 run_antlr(
   OUTPUT

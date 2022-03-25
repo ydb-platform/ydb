@@ -19,31 +19,7 @@ target_proto_messages(proto_ast-gen-jsonpath PRIVATE
 target_sources(proto_ast-gen-jsonpath PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
-)
-run_antlr(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.proto
-  DEPENDS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
-  WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
-  ANTLER_ARGS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
-  -lib
-  .
-  -fo
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
-  -language
-  protobuf
-)
-set(
-  ANTLR_PACKAGE_NAME
-  NJsonPathGenerated
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.cc
 )
 set(
   ANTLR_PACKAGE_NAME
@@ -60,6 +36,14 @@ set(
 configure_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NJsonPathGenerated
+)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
 )
 run_antlr(
   OUTPUT

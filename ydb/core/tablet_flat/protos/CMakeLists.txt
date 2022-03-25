@@ -18,3 +18,7 @@ target_proto_messages(core-tablet_flat-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/protos/flat_table_part.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/protos/flat_table_shard.proto
 )
+target_sources(core-tablet_flat-protos PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/protos/flat_table_part.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/core/tablet_flat/protos/flat_table_shard.pb.cc
+)

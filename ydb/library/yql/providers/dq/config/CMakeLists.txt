@@ -16,3 +16,6 @@ target_link_libraries(providers-dq-config PUBLIC
 target_proto_messages(providers-dq-config PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/config/config.proto
 )
+target_sources(providers-dq-config PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/config/config.pb.cc
+)

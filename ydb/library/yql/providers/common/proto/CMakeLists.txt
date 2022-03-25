@@ -18,3 +18,7 @@ target_proto_messages(providers-common-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/proto/gateways_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/proto/udf_resolver.proto
 )
+target_sources(providers-common-proto PRIVATE
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/proto/gateways_config.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/common/proto/udf_resolver.pb.cc
+)

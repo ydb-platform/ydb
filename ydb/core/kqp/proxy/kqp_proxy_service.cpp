@@ -51,8 +51,6 @@ TString MakeKqpProxyBoardPath(const TString& database) {
 
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(10);
-static constexpr TDuration DEFAULT_PUBLISH_BATCHING_INTERVAL = TDuration::MilliSeconds(1000);
-static constexpr TDuration DEFAUL_BOARD_LOOKUP_INTERVAL = TDuration::MilliSeconds(5000);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
 
@@ -424,10 +422,12 @@ public:
             return;
         }
 
+        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
         auto now = TAppData::TimeProvider->Now();
-        if (LastPublishResourcesAt && now - *LastPublishResourcesAt < DEFAULT_PUBLISH_BATCHING_INTERVAL) {
+        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
+        if (LastPublishResourcesAt && now - *LastPublishResourcesAt < batchingInterval) {
             ResourcesPublishScheduled = true;
-            Schedule(DEFAULT_PUBLISH_BATCHING_INTERVAL, new TEvPrivate::TEvReadyToPublishResources());
+            Schedule(batchingInterval, new TEvPrivate::TEvReadyToPublishResources());
             return;
         }
 
@@ -777,7 +777,10 @@ public:
         Y_UNUSED(ev);
         LookupPeerProxyData();
         if (!ShutdownRequested) {
-            Schedule(DEFAUL_BOARD_LOOKUP_INTERVAL, new TEvPrivate::TEvCollectPeerProxyData());
+            const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+            ui64 millis = sbs.GetBoardLookupIntervalMs();
+            TDuration d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            Schedule(d, new TEvPrivate::TEvCollectPeerProxyData());
         }
     }
 

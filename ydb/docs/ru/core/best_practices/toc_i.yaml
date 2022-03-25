@@ -1,10 +1,14 @@
 items:
 - name: Обзор
   href: index.md
+- name: Выбор первичного ключа для максимальной производительности
+  href: pk_scalability.md
 - name: Проектирование схемы
   href: schema_design.md
+  hidden: true
 - name: Партиционирование таблиц
   href: table_sharding.md
+  hidden: true
 - name: Вторичные индексы
   href: secondary_indexes.md
 - name: Постраничный вывод

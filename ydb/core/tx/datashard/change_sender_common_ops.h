@@ -75,7 +75,7 @@ public:
     virtual void Resolve() = 0;
     virtual bool IsResolving() const = 0;
     virtual bool IsResolved() const = 0;
-    virtual ui64 GetPartitionId(TConstArrayRef<TCell> key) const = 0;
+    virtual ui64 GetPartitionId(const TChangeRecord& record) const = 0;
 };
 
 class TBaseChangeSender: public IChangeSender {

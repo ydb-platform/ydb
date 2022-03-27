@@ -285,11 +285,10 @@ namespace NKikimr::NDataStreams::V1 {
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)) {
+        if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error)) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
         }
 
@@ -326,11 +325,10 @@ namespace NKikimr::NDataStreams::V1 {
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)
+        if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error)
             || !ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)
             || !ValidateRetentionPeriod(*GetProtoRequest(), groupConfig, Nothing(), error))
         {
@@ -868,8 +866,8 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest> {
-        using TBase = TUpdateSchemeActor<TRegisterStreamConsumerActor, TEvDataStreamsRegisterStreamConsumerRequest>;
+    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest, true> {
+        using TBase = TUpdateSchemeActor<TRegisterStreamConsumerActor, TEvDataStreamsRegisterStreamConsumerRequest, true>;
 
     public:
         TRegisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest* request);
@@ -943,8 +941,8 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest> {
-        using TBase = TUpdateSchemeActor<TDeregisterStreamConsumerActor, TEvDataStreamsDeregisterStreamConsumerRequest>;
+    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest, true> {
+        using TBase = TUpdateSchemeActor<TDeregisterStreamConsumerActor, TEvDataStreamsDeregisterStreamConsumerRequest, true>;
 
     public:
         TDeregisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest* request);
@@ -1101,8 +1099,11 @@ namespace NKikimr::NDataStreams::V1 {
             auto partitionId = partition.GetPartitionId();
             TString shardName = GetShardName(partitionId);
             if (shardName == ShardId) {
-                TShardIterator it(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber);
-                SendResponse(ctx, it);
+                if (topicInfo->ShowPrivatePath) {
+                    SendResponse(ctx, TShardIterator::Cdc(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
+                } else {
+                    SendResponse(ctx, TShardIterator::Common(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
+                }
                 return;
             }
         }
@@ -1187,7 +1188,7 @@ namespace NKikimr::NDataStreams::V1 {
                                   TStringBuilder() << "Limit '" << Limit << "' is out of bounds [1; " << MAX_LIMIT << "]", ctx);
         }
 
-        SendDescribeProposeRequest(ctx);
+        SendDescribeProposeRequest(ctx, ShardIterator.IsCdcTopic());
         Become(&TGetRecordsActor::StateWork);
     }
 
@@ -1334,7 +1335,7 @@ namespace NKikimr::NDataStreams::V1 {
         TShardIterator shardIterator(ShardIterator.GetStreamName(),
                                      ShardIterator.GetStreamArn(),
                                      ShardIterator.GetShardId(),
-                                     timestamp, seqNo);
+                                     timestamp, seqNo, ShardIterator.GetKind());
         result.set_next_shard_iterator(shardIterator.Serialize());
         result.set_millis_behind_latest(millisBehindLatestMs);
 

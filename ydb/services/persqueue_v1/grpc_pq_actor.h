@@ -708,7 +708,7 @@ private:
 
     void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code, const TActorContext& ctx);
 
-
+    void DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate = false);
     bool ProcessTopicSchemeCacheResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
                                          THashMap<TString, TTopicHolder>::iterator topicsIter, const TActorContext& ctx);
     void HandleClientSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
@@ -1163,8 +1163,8 @@ public:
 };
 
 
-class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest> {
-    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
+class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest, true> {
+    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest, true>;
 
 public:
     TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
@@ -1176,8 +1176,8 @@ public:
                                const NKikimrSchemeOp::TDirEntry& selfInfo);
 };
 
-class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest> {
-    using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>;
+class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest, true> {
+    using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest, true>;
 
 public:
     TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request);

@@ -421,8 +421,11 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsPQGroup()
-                .NotUnderOperation()
-                .IsCommonSensePath();
+                .NotUnderOperation();
+
+            if (!Transaction.GetAllowAccessToPrivatePaths()) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 TString explain = TStringBuilder() << "path fail checks"
@@ -451,7 +454,6 @@ public:
             Y_VERIFY(parseOk, "Previously serialized pq tablet config cannot be parsed");
         }
         newTabletConfig = tabletConfig;
-
 
         TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
         if (!alterData) {

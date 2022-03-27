@@ -825,8 +825,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             case NKikimrSchemeOp::EPathTypeTableIndex:
                 return true;
-            case NKikimrSchemeOp::EPathTypeCdcStream:
-                return true;
             default:
                 return false;
             }

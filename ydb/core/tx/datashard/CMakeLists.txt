@@ -18,6 +18,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   library-cpp-resource
   cpp-actors-core
   cpp-containers-flat_hash
+  cpp-digest-md5
   cpp-html-pcdata
   library-cpp-json
   cpp-json-yson
@@ -44,6 +45,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   api-protos
   lib-deprecated-kicli
   dq-actors-compute
+  services-lib-sharding
 )
 target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
@@ -251,6 +253,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   library-cpp-resource
   cpp-actors-core
   cpp-containers-flat_hash
+  cpp-digest-md5
   cpp-html-pcdata
   library-cpp-json
   cpp-json-yson
@@ -277,6 +280,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   api-protos
   lib-deprecated-kicli
   dq-actors-compute
+  services-lib-sharding
 )
 target_sources(core-tx-datashard.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp

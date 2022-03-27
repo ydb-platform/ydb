@@ -21,14 +21,27 @@ namespace NKikimr::NDataStreams::V1 {
       }
 
       TShardIterator(const TString& streamName, const TString& streamArn,
-                     ui32 shardId, ui64 readTimestamp, ui32 sequenceNumber) {
+                     ui32 shardId, ui64 readTimestamp, ui32 sequenceNumber,
+                     NKikimrPQ::TYdsShardIterator::ETopicKind kind = NKikimrPQ::TYdsShardIterator::KIND_COMMON) {
           Proto.SetStreamName(streamName);
           Proto.SetStreamArn(streamArn);
           Proto.SetShardId(shardId);
           Proto.SetReadTimestampMs(readTimestamp);
           Proto.SetSequenceNumber(sequenceNumber);
           Proto.SetCreationTimestampMs(TInstant::Now().MilliSeconds());
+          Proto.SetKind(kind);
           Valid = true;
+      }
+
+      static TShardIterator Common(const TString& streamName, const TString& streamArn,
+                     ui32 shardId, ui64 readTimestamp, ui32 sequenceNumber) {
+          return TShardIterator(streamName, streamArn, shardId, readTimestamp, sequenceNumber);
+      }
+
+      static TShardIterator Cdc(const TString& streamName, const TString& streamArn,
+                     ui32 shardId, ui64 readTimestamp, ui32 sequenceNumber) {
+          return TShardIterator(streamName, streamArn, shardId, readTimestamp, sequenceNumber,
+                NKikimrPQ::TYdsShardIterator::KIND_CDC);
       }
 
       TString Serialize() const {
@@ -63,6 +76,14 @@ namespace NKikimr::NDataStreams::V1 {
       bool IsAlive(ui64 now) const {
           return now >= Proto.GetCreationTimestampMs() && now -
               Proto.GetCreationTimestampMs() < LIFETIME_MS;
+      }
+
+      NKikimrPQ::TYdsShardIterator::ETopicKind GetKind() const {
+          return Proto.GetKind();
+      }
+
+      bool IsCdcTopic() const {
+          return Proto.GetKind() == NKikimrPQ::TYdsShardIterator::KIND_CDC;
       }
 
       bool IsValid() const {

@@ -17,6 +17,7 @@
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
+#include <util/string/join.h>
 #include <util/string/strip.h>
 #include <util/charset/utf8.h>
 
@@ -2630,8 +2631,8 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
     , Counters(counters)
     , LocalCluster(localCluster)
 {
-    for (const auto& t : topics) {
-        Topics[t.first].TopicNameConverter = t.second;
+    for (const auto& [path, converter] : topics) {
+        Topics[path].TopicNameConverter = converter;
     }
 }
 
@@ -2642,18 +2643,24 @@ TReadInitAndAuthActor::~TReadInitAndAuthActor() = default;
 void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth for : " << ClientId);
     Become(&TThis::StateFunc);
-    TVector<TString> topicNames;
-    for (const auto& topic : Topics) {
-        topicNames.emplace_back(topic.second.TopicNameConverter->GetPrimaryPath());
-    }
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
-    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topicNames, true));
+    DescribeTopics(ctx);
+}
+
+void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate) {
+    TVector<TString> topicNames;
+    for (const auto& [_, holder] : Topics) {
+        topicNames.emplace_back(holder.TopicNameConverter->GetPrimaryPath());
+    }
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
+    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topicNames, true, showPrivate));
 }
 
 void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
-    for (auto& t : Topics) {
-        if (t.second.PipeClient)
-            NTabletPipe::CloseClient(ctx, t.second.PipeClient);
+    for (auto& [_, holder] : Topics) {
+        if (holder.PipeClient)
+            NTabletPipe::CloseClient(ctx, holder.PipeClient);
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth is DEAD");
@@ -2695,12 +2702,26 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Handle describe topics response");
+
+    bool reDescribe = false;
     for (const auto& entry : ev->Get()->Result->ResultSet) {
-        auto processResult = ProcessMetaCacheTopicResponse(entry);
         auto path = JoinPath(entry.Path);
         auto it = Topics.find(path);
         Y_VERIFY(it != Topics.end());
 
+        if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+            Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
+            const auto& topic = entry.ListNodeEntry->Children.at(0);
+
+            it->second.TopicNameConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
+            Topics[it->second.TopicNameConverter->GetPrimaryPath()] = it->second;
+            Topics.erase(it);
+
+            reDescribe = true;
+            continue;
+        }
+
+        auto processResult = ProcessMetaCacheTopicResponse(entry);
         if (processResult.IsFatal) {
             Topics.erase(it);
             if (Topics.empty()) {
@@ -2711,14 +2732,21 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
                 continue;
             }
         }
-        if (!ProcessTopicSchemeCacheResponse(entry, it, ctx))
-            return;
 
+        if (!ProcessTopicSchemeCacheResponse(entry, it, ctx)) {
+            return;
+        }
     }
+
     if (Topics.empty()) {
         CloseSession("no topics found", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
+
+    if (reDescribe) {
+        return DescribeTopics(ctx, true);
+    }
+
     // ToDo[migration] - separate option - ?
     bool doCheckClientAcl = DoCheckACL && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen();
     if (doCheckClientAcl) {
@@ -2812,9 +2840,9 @@ bool TReadInitAndAuthActor::CheckACLPermissionsForNavigate(
 
 void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicTabletsPairs res;
-    for (auto& t : Topics) {
+    for (auto& [_, holder] : Topics) {
         res.emplace_back(decltype(res)::value_type({
-            t.second.TopicNameConverter, t.second.TabletID, t.second.CloudId, t.second.DbId, t.second.FolderId
+            holder.TopicNameConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.FolderId
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

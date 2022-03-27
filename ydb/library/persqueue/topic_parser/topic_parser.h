@@ -120,6 +120,10 @@ public:
         CHECK_VALID_AND_RETURN(PrimaryFullPath);
     }
 
+    void SetPrimaryPath(const TString& path) {
+        PrimaryFullPath = path;
+    }
+
     TString GetSecondaryPath() {
         Y_FAIL("UNIMPLEMENTED");
         CHECK_VALID_AND_RETURN(SecondaryFullPath);

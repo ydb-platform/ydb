@@ -1,5 +1,9 @@
 #include "datashard_ut_common.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+
 #include <util/string/strip.h>
 
 namespace NKikimr {
@@ -567,6 +571,314 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
             opts.SetChangesQueueBytesLimit(1);
         });
     }
-}
+
+} // AsyncIndexChangeExchange
+
+Y_UNIT_TEST_SUITE(Cdc) {
+    using namespace NYdb::NPersQueue;
+    using namespace NYdb::NDataStreams::V1;
+
+    using TCdcStream = TShardedTableOptions::TCdcStream;
+
+    template <typename TDerived, typename TClient>
+    class TTestEnv {
+    public:
+        explicit TTestEnv(
+            const TShardedTableOptions& tableDesc,
+            const TCdcStream& streamDesc,
+            const TString& root = "Root",
+            const TString& tableName = "Table")
+        {
+            auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
+                .SetDomainName(root)
+                .SetGrpcPort(PortManager.GetPort(2135));
+
+            Server = new TServer(settings);
+            Server->EnableGRpc(settings.GrpcPort);
+
+            const auto database = JoinPath({root});
+            auto& runtime = *Server->GetRuntime();
+            EdgeActor = runtime.AllocateEdgeActor();
+
+            SetupLogging(runtime);
+            InitRoot(Server, EdgeActor);
+
+            CreateShardedTable(Server, EdgeActor, database, tableName, tableDesc);
+            WaitTxNotification(Server, EdgeActor, AsyncAlterAddStream(Server, database, tableName, streamDesc));
+
+            Client = TDerived::MakeClient(Server->GetDriver(), database);
+        }
+
+        TServer::TPtr GetServer() {
+            UNIT_ASSERT(Server);
+            return Server;
+        }
+
+        TClient& GetClient() {
+            UNIT_ASSERT(Client);
+            return *Client;
+        }
+
+        const TActorId& GetEdgeActor() const {
+            return EdgeActor;
+        }
+
+    private:
+        static NKikimrPQ::TPQConfig DefaultPQConfig() {
+            NKikimrPQ::TPQConfig pqConfig;
+            pqConfig.SetEnabled(true);
+            pqConfig.SetEnableProtoSourceIdInfo(true);
+            pqConfig.SetRoundRobinPartitionMapping(true);
+            pqConfig.SetTopicsAreFirstClassCitizen(true);
+            pqConfig.SetMaxReadCookies(10);
+            pqConfig.AddClientServiceType()->SetName("data-streams");
+            return pqConfig;
+        }
+
+        static void SetupLogging(TTestActorRuntime& runtime) {
+            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
+        }
+
+    private:
+        TPortManager PortManager;
+        TServer::TPtr Server;
+        TActorId EdgeActor;
+        THolder<TClient> Client;
+
+    }; // TTestEnv
+
+    class TTestPqEnv: public TTestEnv<TTestPqEnv, TPersQueueClient> {
+    public:
+        using TTestEnv<TTestPqEnv, TPersQueueClient>::TTestEnv;
+
+        static THolder<TPersQueueClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
+            return MakeHolder<TPersQueueClient>(driver, TPersQueueClientSettings().Database(database));
+        }
+    };
+
+    class TTestYdsEnv: public TTestEnv<TTestYdsEnv, TDataStreamsClient> {
+    public:
+        using TTestEnv<TTestYdsEnv, TDataStreamsClient>::TTestEnv;
+
+        static THolder<TDataStreamsClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
+            return MakeHolder<TDataStreamsClient>(driver, NYdb::TCommonClientSettings().Database(database));
+        }
+    }; 
+
+    TShardedTableOptions SimpleTable() {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+            });
+    }
+
+    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format) {
+        return TCdcStream{
+            .Name = "Stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
+            .Format = format,
+        };
+    }
+
+    TCdcStream Updates(NKikimrSchemeOp::ECdcStreamFormat format) {
+        return TCdcStream{
+            .Name = "Stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = format,
+        };
+    }
+
+    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format) {
+        return TCdcStream{
+            .Name = "Stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            .Format = format,
+        };
+    }
+
+    struct PqRunner {
+        static void Run(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
+                const TVector<TString>& queries, const TVector<std::pair<TString, TString>>& records)
+        {
+            TTestPqEnv env(tableDesc, streamDesc);
+
+            for (const auto& query : queries) {
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query);
+            }
+
+            auto& client = env.GetClient();
+
+            // add consumer
+            {
+                auto res = client.AddReadRule("/Root/Table/Stream",
+                    TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user"))).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+
+            // get records
+            auto reader = client.CreateReadSession(TReadSessionSettings()
+                .AppendTopics(TString("/Root/Table/Stream"))
+                .ConsumerName("user")
+                .DisableClusterDiscovery(true)
+            );
+
+            ui32 reads = 0;
+            while (reads < records.size()) {
+                auto ev = reader->GetEvent(true);
+                UNIT_ASSERT(ev);
+
+                if (auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                    for (const auto& item : data->GetMessages()) {
+                        const auto& record = records.at(reads++);
+                        UNIT_ASSERT_VALUES_EQUAL(record.first, item.GetPartitionKey());
+                        UNIT_ASSERT_VALUES_EQUAL(record.second, item.GetData());
+                    }
+                } else if (auto* create = std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
+                    create->Confirm();
+                } else if (auto* destroy = std::get_if<TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
+                    destroy->Confirm();
+                } else if (std::get_if<TSessionClosedEvent>(&*ev)) {
+                    break;
+                }
+            }
+
+            // remove consumer
+            {
+                auto res = client.RemoveReadRule("/Root/Table/Stream",
+                    TRemoveReadRuleSettings().ConsumerName("user")).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        }
+    };
+
+    struct YdsRunner {
+        static void Run(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
+                const TVector<TString>& queries, const TVector<std::pair<TString, TString>>& records)
+        {
+            TTestYdsEnv env(tableDesc, streamDesc);
+
+            for (const auto& query : queries) {
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query);
+            }
+
+            auto& client = env.GetClient();
+
+            // add consumer
+            {
+                auto res = client.RegisterStreamConsumer("/Root/Table/Stream", "user").ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+
+            // get shards
+            TString shardId;
+            {
+                auto res = client.ListShards("/Root/Table/Stream", {}).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(res.GetResult().shards().size(), 1);
+                shardId = res.GetResult().shards().begin()->shard_id();
+            }
+
+            // get iterator
+            TString shardIt;
+            {
+                auto res = client.GetShardIterator("/Root/Table/Stream", shardId, Ydb::DataStreams::V1::ShardIteratorType::TRIM_HORIZON).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+                shardIt = res.GetResult().shard_iterator();
+            }
+
+            // get records
+            {
+                auto res = client.GetRecords(shardIt).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(res.GetResult().records().size(), records.size());
+
+                for (ui32 i = 0; i < records.size(); ++i) {
+                    const auto& actual = res.GetResult().records().at(i);
+                    const auto& expected = records.at(i);
+                    UNIT_ASSERT_VALUES_EQUAL(actual.partition_key(), expected.first);
+                    UNIT_ASSERT_VALUES_EQUAL(actual.data(), expected.second);
+                }
+            }
+
+            // remove consumer
+            {
+                auto res = client.DeregisterStreamConsumer("/Root/Table/Stream", "user").ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        }
+    };
+
+    #define Y_UNIT_TEST_TWIN(N, VAR1, VAR2)                                                                            \
+        template<typename TRunner> void N(NUnitTest::TTestContext&);                                                   \
+        struct TTestRegistration##N {                                                                                  \
+            TTestRegistration##N() {                                                                                   \
+                TCurrentTest::AddTest(#N "[" #VAR1 "]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<VAR1>), false); \
+                TCurrentTest::AddTest(#N "[" #VAR2 "]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<VAR2>), false); \
+            }                                                                                                          \
+        };                                                                                                             \
+        static TTestRegistration##N testRegistration##N;                                                               \
+        template<typename TRunner>                                                                                     \
+        void N(NUnitTest::TTestContext&)
+
+    Y_UNIT_TEST_TWIN(KeysOnlyLog, PqRunner, YdsRunner) {
+        TRunner::Run(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            {"[1]", R"({"update":{}})"},
+            {"[2]", R"({"update":{}})"},
+            {"[3]", R"({"update":{}})"},
+            {"[1]", R"({"erase":{}})"},
+        });
+    }
+
+    Y_UNIT_TEST_TWIN(UpdatesLog, PqRunner, YdsRunner) {
+        TRunner::Run(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            {"[1]", R"({"update":{"value":10}})"},
+            {"[2]", R"({"update":{"value":20}})"},
+            {"[3]", R"({"update":{"value":30}})"},
+            {"[1]", R"({"erase":{}})"},
+        });
+    }
+
+    Y_UNIT_TEST_TWIN(NewAndOldImagesLog, PqRunner, YdsRunner) {
+        TRunner::Run(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            {"[1]", R"({"update":{},"newImage":{"value":10}})"},
+            {"[2]", R"({"update":{},"newImage":{"value":20}})"},
+            {"[3]", R"({"update":{},"newImage":{"value":30}})"},
+            {"[1]", R"({"update":{},"newImage":{"value":100},"oldImage":{"value":10}})"},
+            {"[2]", R"({"update":{},"newImage":{"value":200},"oldImage":{"value":20}})"},
+            {"[3]", R"({"update":{},"newImage":{"value":300},"oldImage":{"value":30}})"},
+            {"[1]", R"({"erase":{},"oldImage":{"value":100}})"},
+        });
+    }
+
+} // Cdc
 
 } // NKikimr

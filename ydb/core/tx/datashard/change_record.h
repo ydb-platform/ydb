@@ -36,14 +36,16 @@ public:
     const TPathId& GetPathId() const { return PathId; }
     EKind GetKind() const { return Kind; }
     const TString& GetBody() const { return Body; }
-    i64 GetSeqNo() const;
-    TConstArrayRef<TCell> GetKey() const;
 
     const TPathId& GetTableId() const { return TableId; }
     ui64 GetSchemaVersion() const { return SchemaVersion; }
 
     void SerializeTo(NKikimrChangeExchange::TChangeRecord& record) const;
     void SerializeTo(NJson::TJsonValue& key, NJson::TJsonValue& value) const;
+
+    TConstArrayRef<TCell> GetKey() const;
+    i64 GetSeqNo() const;
+    TString GetPartitionKey() const;
 
     TString ToString() const;
     void Out(IOutputStream& out) const;
@@ -62,6 +64,7 @@ private:
     TUserTable::TCPtr Schema;
 
     mutable TMaybe<TOwnedCellVec> Key;
+    mutable TMaybe<TString> PartitionKey;
 
 }; // TChangeRecord
 

@@ -29,6 +29,8 @@ target_link_libraries(ydb-core-tx-datashard-ut_change_exchange PUBLIC
   ydb-core-tx
   udf-service-exception_policy
   public-lib-yson_value
+  cpp-client-ydb_datastreams
+  cpp-client-ydb_persqueue_public
   cpp-client-ydb_result
 )
 target_sources(ydb-core-tx-datashard-ut_change_exchange PRIVATE

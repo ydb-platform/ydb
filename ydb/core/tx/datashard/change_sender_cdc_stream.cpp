@@ -5,12 +5,14 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_writer.h>
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -18,7 +20,7 @@ namespace NDataShard {
 using namespace NPQ;
 
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
-    static constexpr auto CodecRaw = 1;
+    static constexpr auto CodecRaw = 0;
 
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
@@ -616,28 +618,43 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
         return KeyDesc && KeyDesc->Partitions;
     }
 
-    ui64 GetPartitionId(TConstArrayRef<TCell> key) const override {
+    ui64 GetPartitionId(const TChangeRecord& record) const override {
         Y_VERIFY(KeyDesc);
         Y_VERIFY(KeyDesc->Partitions);
 
-        const auto range = TTableRange(key);
-        Y_VERIFY(range.Point);
+        switch (Format) {
+            case NKikimrSchemeOp::ECdcStreamFormatProto: {
+                const auto range = TTableRange(record.GetKey());
+                Y_VERIFY(range.Point);
 
-        TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            KeyDesc->Partitions.begin(), KeyDesc->Partitions.end(), true,
-            [&](const TKeyDesc::TPartitionInfo& partition, bool) {
-                const int compares = CompareBorders<true, false>(
-                    partition.EndKeyPrefix.GetCells(), range.From,
-                    partition.IsInclusive || partition.IsPoint,
-                    range.InclusiveFrom || range.Point, KeyDesc->Schema
+                TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
+                    KeyDesc->Partitions.begin(), KeyDesc->Partitions.end(), true,
+                    [&](const TKeyDesc::TPartitionInfo& partition, bool) {
+                        const int compares = CompareBorders<true, false>(
+                            partition.EndKeyPrefix.GetCells(), range.From,
+                            partition.IsInclusive || partition.IsPoint,
+                            range.InclusiveFrom || range.Point, KeyDesc->Schema
+                        );
+
+                        return (compares < 0);
+                    }
                 );
 
-                return (compares < 0);
+                Y_VERIFY(it != KeyDesc->Partitions.end());
+                return it->PartitionId;
             }
-        );
 
-        Y_VERIFY(it != KeyDesc->Partitions.end());
-        return it->PartitionId;
+            case NKikimrSchemeOp::ECdcStreamFormatJson: {
+                using namespace NKikimr::NDataStreams::V1;
+                const auto hashKey = HexBytesToDecimal(MD5::Calc(record.GetPartitionKey()));
+                return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());
+            }
+
+            default: {
+                Y_FAIL_S("Unknown format"
+                    << ": format# " << static_cast<int>(Format));
+            }
+        }
     }
 
     IActor* CreateSender(ui64 partitionId) override {

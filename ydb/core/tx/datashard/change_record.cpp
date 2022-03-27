@@ -2,6 +2,7 @@
 #include "export_common.h"
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -13,34 +14,6 @@
 
 namespace NKikimr {
 namespace NDataShard {
-
-i64 TChangeRecord::GetSeqNo() const {
-    Y_VERIFY(Order <= Max<i64>());
-    return static_cast<i64>(Order);
-}
-
-TConstArrayRef<TCell> TChangeRecord::GetKey() const {
-    if (Key) {
-        return *Key;
-    }
-
-    switch (Kind) {
-        case EKind::AsyncIndex:
-        case EKind::CdcDataChange: {
-            NKikimrChangeExchange::TChangeRecord::TDataChange parsed;
-            Y_VERIFY(parsed.ParseFromArray(Body.data(), Body.size()));
-
-            TSerializedCellVec key;
-            Y_VERIFY(TSerializedCellVec::TryParse(parsed.GetKey().GetData(), key));
-
-            Key.ConstructInPlace(key.GetCells());
-            break;
-        }
-    }
-
-    Y_VERIFY(Key);
-    return *Key;
-}
 
 void TChangeRecord::SerializeTo(NKikimrChangeExchange::TChangeRecord& record) const {
     record.SetOrder(Order);
@@ -134,7 +107,7 @@ static NJson::TJsonValue ToJson(const TCell& cell, NScheme::TTypeId type) {
 static void SerializeJsonKey(TUserTable::TCPtr schema, NJson::TJsonValue& key,
     const NKikimrChangeExchange::TChangeRecord::TDataChange::TSerializedCells& in)
 {
-    Y_VERIFY(in.TagsSize() != schema->KeyColumnIds.size());
+    Y_VERIFY(in.TagsSize() == schema->KeyColumnIds.size());
     for (size_t i = 0; i < schema->KeyColumnIds.size(); ++i) {
         Y_VERIFY(in.GetTags(i) == schema->KeyColumnIds.at(i));
     }
@@ -187,20 +160,25 @@ void TChangeRecord::SerializeTo(NJson::TJsonValue& key, NJson::TJsonValue& value
                 SerializeJsonValue(Schema, value["newImage"], body.GetNewImage());
             }
 
-            if (!body.HasOldImage() && !body.HasNewImage()) {
-                switch (body.GetRowOperationCase()) {
-                    case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
+            const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
+            switch (body.GetRowOperationCase()) {
+                case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
+                    value["update"].SetType(NJson::EJsonValueType::JSON_MAP);
+                    if (!hasAnyImage) {
                         SerializeJsonValue(Schema, value["update"], body.GetUpsert());
-                        break;
-                    case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
+                    }
+                    break;
+                case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
+                    value["reset"].SetType(NJson::EJsonValueType::JSON_MAP);
+                    if (!hasAnyImage) {
                         SerializeJsonValue(Schema, value["reset"], body.GetReset());
-                        break;
-                    case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
-                        value["erase"].SetType(NJson::EJsonValueType::JSON_MAP);
-                        break;
-                    default:
-                        Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
-                }
+                    }
+                    break;
+                case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
+                    value["erase"].SetType(NJson::EJsonValueType::JSON_MAP);
+                    break;
+                default:
+                    Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
             }
 
             break;
@@ -210,6 +188,62 @@ void TChangeRecord::SerializeTo(NJson::TJsonValue& key, NJson::TJsonValue& value
             Y_FAIL("Not supported");
         }
     }
+}
+
+TConstArrayRef<TCell> TChangeRecord::GetKey() const {
+    if (Key) {
+        return *Key;
+    }
+
+    switch (Kind) {
+        case EKind::AsyncIndex:
+        case EKind::CdcDataChange: {
+            NKikimrChangeExchange::TChangeRecord::TDataChange parsed;
+            Y_VERIFY(parsed.ParseFromArray(Body.data(), Body.size()));
+
+            TSerializedCellVec key;
+            Y_VERIFY(TSerializedCellVec::TryParse(parsed.GetKey().GetData(), key));
+
+            Key.ConstructInPlace(key.GetCells());
+            break;
+        }
+    }
+
+    Y_VERIFY(Key);
+    return *Key;
+}
+
+i64 TChangeRecord::GetSeqNo() const {
+    Y_VERIFY(Order <= Max<i64>());
+    return static_cast<i64>(Order);
+}
+
+TString TChangeRecord::GetPartitionKey() const {
+    if (PartitionKey) {
+        return *PartitionKey;
+    }
+
+    switch (Kind) {
+        case EKind::CdcDataChange: {
+            Y_VERIFY(Schema);
+
+            NKikimrChangeExchange::TChangeRecord::TDataChange body;
+            Y_VERIFY(body.ParseFromArray(Body.data(), Body.size()));
+
+            NJson::TJsonValue key;
+            SerializeJsonKey(Schema, key, body.GetKey());
+
+            PartitionKey.ConstructInPlace(WriteJson(key, false));
+            break;
+        }
+
+        case EKind::AsyncIndex: {
+            Y_FAIL("Not supported");
+        }
+    }
+
+    Y_VERIFY(PartitionKey);
+    return *PartitionKey;
 }
 
 TString TChangeRecord::ToString() const {

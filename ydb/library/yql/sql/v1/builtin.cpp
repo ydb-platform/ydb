@@ -3210,14 +3210,18 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         return new TScriptUdf(pos, TString(scriptName), name, args);
     } else if (ns.empty()) {
-        if (auto simpleType = LookupSimpleTypeBySqlAlias(normalizedName, ctx.FlexibleTypes)) {
-            const auto type = ToString(*simpleType);
+        if (auto simpleType = LookupSimpleType(normalizedName, ctx.FlexibleTypes, /* isPgType = */ false)) {
+            const auto type = *simpleType;
             if (NUdf::FindDataSlot(type)) {
                 YQL_ENSURE(type != "Decimal");
                 return new TYqlData(pos, type, args);
             }
 
-            if (type == "Void" || type == "EmptyList" || type == "EmptyDict") {
+            if (type.StartsWith("pg")) {
+                TVector<TNodePtr> pgConstArgs = args;
+                pgConstArgs.push_back(new TCallNodeImpl(pos, "PgType", { BuildQuotedAtom(pos, type.substr(2)) }));
+                return new TYqlPgConst(pos, pgConstArgs);
+            } else if (type == "Void" || type == "EmptyList" || type == "EmptyDict") {
                 return new TCallNodeImpl(pos, type, 0, 0, args);
             } else {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "Can not create objects of type " << type);

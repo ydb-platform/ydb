@@ -45,6 +45,7 @@ struct TTypeDesc {
     // from opclass
     ui32 LessProcId = 0;
     ui32 EqualProcId = 0;
+    ui32 HashProcId = 0;
 };
 
 enum class ECastMethod {
@@ -92,7 +93,6 @@ struct TOpClassDesc {
 };
 
 struct TAmOpDesc {
-    EOpClassMethod Method = EOpClassMethod::Btree;
     TString Family;
     ui32 Strategy = 0;
     ui32 LeftType = 0;
@@ -106,6 +106,22 @@ enum class EBtreeAmStrategy {
     Equal = 3,
     GreaterOrEqual = 4,
     Greater = 5
+};
+
+struct TAmProcDesc {
+    TString Family;
+    ui32 ProcNum = 0;
+    ui32 LeftType = 0;
+    ui32 RightType = 0;
+    ui32 ProcId = 0;
+};
+
+enum class EBtreeAmProcNum {
+    Compare = 1
+};
+
+enum class EHashAmProcNum {
+    Hash = 1
 };
 
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
@@ -129,7 +145,8 @@ const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui
 bool HasOpClass(EOpClassMethod method, ui32 typeId);
 const TOpClassDesc& LookupOpClass(EOpClassMethod method, ui32 typeId);
 
-const TAmOpDesc& LookupAmOp(EOpClassMethod method, const TString& family, ui32 strategy, ui32 leftType, ui32 rightType);
+const TAmOpDesc& LookupAmOp(const TString& family, ui32 strategy, ui32 leftType, ui32 rightType);
+const TAmProcDesc& LookupAmProc(const TString& family, ui32 num, ui32 leftType, ui32 rightType);
 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType);
 

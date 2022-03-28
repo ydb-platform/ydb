@@ -34,7 +34,9 @@ using TAggregations = THashMap<ui32, TAggregateDesc>;
 
 using TOpClasses = THashMap<std::pair<EOpClassMethod, ui32>, TOpClassDesc>;
 
-using TAmOps = THashMap<std::tuple<EOpClassMethod, TString, ui32, ui32, ui32>, TAmOpDesc>;
+using TAmOps = THashMap<std::tuple<TString, ui32, ui32, ui32>, TAmOpDesc>;
+
+using TAmProcs = THashMap<std::tuple<TString, ui32, ui32, ui32>, TAmProcDesc>;
 
 class TParser {
 public:
@@ -124,13 +126,37 @@ public:
     virtual void OnKey(const TString& key, const TString& value) = 0;
 };
 
+bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds) {
+    ui32 size = d.Kind == EOperKind::Binary ? 2 : 1;
+    if (argTypeIds.size() != size) {
+        return false;
+    }
+
+    for (size_t i = 0; i < argTypeIds.size(); ++i) {
+        ui32 expectedArgType;
+        if (d.Kind == EOperKind::RightUnary || (d.Kind == EOperKind::Binary && i == 0)) {
+            expectedArgType = d.LeftType;
+        }
+        else {
+            expectedArgType = d.RightType;
+        }
+
+        if (!IsCompatibleTo(argTypeIds[i], expectedArgType)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 class TOperatorsParser : public TParser {
 public:
     TOperatorsParser(TOperators& operators, const THashMap<TString, ui32>& typeByName,
-        const THashMap<TString, TVector<ui32>>& procByName)
+        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
         : Operators(operators)
         , TypeByName(typeByName)
         , ProcByName(procByName)
+        , Procs(procs)
     {}
 
     void OnKey(const TString& key, const TString& value) override {
@@ -161,25 +187,38 @@ public:
             Y_ENSURE(typeIdPtr);
             LastOperator.ResultType = *typeIdPtr;
         } else if (key == "oprcode") {
-            auto procIdPtr = ProcByName.FindPtr(value);
-            // skip operator if proc isn't buildin, e.g. path_contain_pt
-            if (!procIdPtr) {
-                IsSupported = false;
-                return;
-            }
-
-            Y_ENSURE(procIdPtr->size() == 1);
-            LastOperator.ProcId = procIdPtr->at(0);
+            LastCode = value;
         }
     }
 
     void OnFinish() override {
         if (IsSupported) {
-            Y_ENSURE(!LastOperator.Name.empty());
-            Operators[LastOperator.OperId] = LastOperator;
+            auto pos = LastCode.find('(');
+            auto code = LastCode.substr(0, pos);
+            auto procIdPtr = ProcByName.FindPtr(code);
+            // skip operator if proc isn't builtin, e.g. path_contain_pt
+            if (!procIdPtr) {
+                IsSupported = false;
+            } else {
+                for (auto procId : *procIdPtr) {
+                    auto procPtr = Procs.FindPtr(procId);
+                    Y_ENSURE(procPtr);
+                    if (ValidateOperArgs(LastOperator, procPtr->ArgTypes)) {
+                        Y_ENSURE(!LastOperator.ProcId);
+                        LastOperator.ProcId = procId;
+                    }
+                }
+
+                // can be missing for example jsonb - _text
+                if (LastOperator.ProcId) {
+                    Y_ENSURE(!LastOperator.Name.empty());
+                    Operators[LastOperator.OperId] = LastOperator;
+                }
+            }
         }
 
         LastOperator = TOperDesc();
+        LastCode = "";
         IsSupported = true;
     }
 
@@ -187,8 +226,10 @@ private:
     TOperators& Operators;
     const THashMap<TString, ui32>& TypeByName;
     const THashMap<TString, TVector<ui32>>& ProcByName;
+    const TProcs& Procs;
     TOperDesc LastOperator;
     bool IsSupported = true;
+    TString LastCode;
 };
 
 class TProcsParser : public TParser {
@@ -663,13 +704,7 @@ public:
     {}
 
     void OnKey(const TString& key, const TString& value) override {
-        if (key == "amopmethod") {
-            if (value == "btree") {
-                LastAmOp.Method = EOpClassMethod::Btree;
-            } else {
-                IsSupported = false;
-            }
-        } else if (key == "amopfamily") {
+        if (key == "amopfamily") {
             LastAmOp.Family = value;
         } else if (key == "amoplefttype") {
             auto leftTypePtr = TypeByName.FindPtr(value);
@@ -689,23 +724,20 @@ public:
     }
 
     void OnFinish() override {
-        if (IsSupported) {
-            auto operIdPtr = OperatorsByName.FindPtr(LastOp);
-            Y_ENSURE(operIdPtr);
-            for (const auto& id : *operIdPtr) {
-                const auto& d = Operators.FindPtr(id);
-                Y_ENSURE(d);
-                if (d->Kind == EOperKind::Binary && IsCompatibleTo(LastAmOp.LeftType, d->LeftType) && IsCompatibleTo(LastAmOp.RightType, d->RightType)) {
-                    Y_ENSURE(!LastAmOp.OperId);
-                    LastAmOp.OperId = d->OperId;
-                }
+        auto operIdPtr = OperatorsByName.FindPtr(LastOp);
+        Y_ENSURE(operIdPtr);
+        for (const auto& id : *operIdPtr) {
+            const auto& d = Operators.FindPtr(id);
+            Y_ENSURE(d);
+            if (d->Kind == EOperKind::Binary && IsCompatibleTo(LastAmOp.LeftType, d->LeftType) && IsCompatibleTo(LastAmOp.RightType, d->RightType)) {
+                Y_ENSURE(!LastAmOp.OperId);
+                LastAmOp.OperId = d->OperId;
             }
-
-            Y_ENSURE(LastAmOp.OperId);
-            AmOps[std::make_tuple(LastAmOp.Method, LastAmOp.Family, LastAmOp.Strategy, LastAmOp.LeftType, LastAmOp.RightType)] = LastAmOp;
         }
 
-        IsSupported = true;
+        Y_ENSURE(LastAmOp.OperId);
+        AmOps[std::make_tuple(LastAmOp.Family, LastAmOp.Strategy, LastAmOp.LeftType, LastAmOp.RightType)] = LastAmOp;
+
         LastAmOp = TAmOpDesc();
         LastOp = "";
     }
@@ -716,14 +748,69 @@ private:
     const THashMap<TString, TVector<ui32>>& OperatorsByName;
     const TOperators& Operators;
     TAmOpDesc LastAmOp;
-    bool IsSupported = true;
     TString LastOp;
 };
 
+class TAmProcsParser : public TParser {
+public:
+    TAmProcsParser(TAmProcs& amProcs, const THashMap<TString, ui32>& typeByName,
+        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
+        : AmProcs(amProcs)
+        , TypeByName(typeByName)
+        , ProcByName(procByName)
+        , Procs(procs)
+    {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "amprocfamily") {
+            LastAmProc.Family = value;
+        } else if (key == "amproclefttype") {
+            auto leftTypePtr = TypeByName.FindPtr(value);
+            Y_ENSURE(leftTypePtr);
+            LastAmProc.LeftType = *leftTypePtr;
+        } else if (key == "amprocrighttype") {
+            auto rightTypePtr = TypeByName.FindPtr(value);
+            Y_ENSURE(rightTypePtr);
+            LastAmProc.RightType = *rightTypePtr;
+        } else if (key == "amprocnum") {
+            LastAmProc.ProcNum = FromString<ui32>(value);
+        } else if (key == "amproc") {
+            LastName = value;
+        }
+    }
+
+    void OnFinish() override {
+        if (LastName.find('(') == TString::npos) {
+            auto procIdPtr = ProcByName.FindPtr(LastName);
+            Y_ENSURE(procIdPtr);
+            for (const auto& id : *procIdPtr) {
+                const auto& d = Procs.FindPtr(id);
+                Y_ENSURE(d);
+                Y_ENSURE(!LastAmProc.ProcId);
+                LastAmProc.ProcId = d->ProcId;
+            }
+
+            Y_ENSURE(LastAmProc.ProcId);
+            AmProcs[std::make_tuple(LastAmProc.Family, LastAmProc.ProcNum, LastAmProc.LeftType, LastAmProc.RightType)] = LastAmProc;
+        }
+
+        LastAmProc = TAmProcDesc();
+        LastName = "";
+    }
+
+private:
+    TAmProcs& AmProcs;
+    const THashMap<TString, ui32>& TypeByName;
+    const THashMap<TString, TVector<ui32>>& ProcByName;
+    const TProcs& Procs;
+    TAmProcDesc LastAmProc;
+    TString LastName;
+};
+
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
-    const THashMap<TString, TVector<ui32>>& procByName) {
+    const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
     TOperators ret;
-    TOperatorsParser parser(ret, typeByName, procByName);
+    TOperatorsParser parser(ret, typeByName, procByName, procs);
     parser.Do(dat);
     return ret;
 }
@@ -769,6 +856,14 @@ TAmOps ParseAmOps(const TString& dat, const THashMap<TString, ui32>& typeByName,
     const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators) {
     TAmOps ret;
     TAmOpsParser parser(ret, typeByName, operatorsByName, operators);
+    parser.Do(dat);
+    return ret;
+}
+
+TAmProcs ParseAmProcs(const TString& dat, const THashMap<TString, ui32>& typeByName,
+    const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
+    TAmProcs ret;
+    TAmProcsParser parser(ret, typeByName, procByName, procs);
     parser.Do(dat);
     return ret;
 }
@@ -874,7 +969,7 @@ struct TCatalog {
             Y_ENSURE(CastsByDir.insert(std::make_pair(std::make_pair(v.SourceId, v.TargetId), k)).second);
         }
 
-        Operators = ParseOperators(opData, TypeByName, ProcByName);
+        Operators = ParseOperators(opData, TypeByName, ProcByName, Procs);
         for (const auto&[k, v] : Operators) {
             OperatorsByName[v.Name].push_back(k);
         }
@@ -886,13 +981,14 @@ struct TCatalog {
 
         OpClasses = ParseOpClasses(opClassData, TypeByName);
         AmOps = ParseAmOps(amOpData, TypeByName, OperatorsByName, Operators);
+        AmProcs = ParseAmProcs(amProcData, TypeByName, ProcByName, Procs);
         for (auto&[k, v] : Types) {
             if (v.TypeId != v.ArrayTypeId) {
-                auto opClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, v.TypeId));
-                if (opClassPtr) {
-                    auto lessAmOpPtr = AmOps.FindPtr(std::make_tuple(EOpClassMethod::Btree, opClassPtr->Family, ui32(EBtreeAmStrategy::Less), v.TypeId, v.TypeId));
+                auto btreeOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, v.TypeId));
+                if (btreeOpClassPtr) {
+                    auto lessAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->Family, ui32(EBtreeAmStrategy::Less), v.TypeId, v.TypeId));
                     Y_ENSURE(lessAmOpPtr);
-                    auto equalAmOpPtr = AmOps.FindPtr(std::make_tuple(EOpClassMethod::Btree, opClassPtr->Family, ui32(EBtreeAmStrategy::Equal), v.TypeId, v.TypeId));
+                    auto equalAmOpPtr = AmOps.FindPtr(std::make_tuple(btreeOpClassPtr->Family, ui32(EBtreeAmStrategy::Equal), v.TypeId, v.TypeId));
                     Y_ENSURE(equalAmOpPtr);
                     auto lessOperPtr = Operators.FindPtr(lessAmOpPtr->OperId);
                     Y_ENSURE(lessOperPtr);
@@ -900,6 +996,13 @@ struct TCatalog {
                     Y_ENSURE(equalOperPtr);
                     v.LessProcId = lessOperPtr->ProcId;
                     v.EqualProcId = equalOperPtr->ProcId;
+                }
+
+                auto hashOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Hash, v.TypeId));
+                if (hashOpClassPtr) {
+                    auto hashAmProcPtr = AmProcs.FindPtr(std::make_tuple(hashOpClassPtr->Family, ui32(EHashAmProcNum::Hash), v.TypeId, v.TypeId));
+                    Y_ENSURE(hashAmProcPtr);
+                    v.HashProcId = hashAmProcPtr->ProcId;
                 }
             }
         }
@@ -916,6 +1019,7 @@ struct TCatalog {
     TAggregations Aggregations;
     TOpClasses OpClasses;
     TAmOps AmOps;
+    TAmProcs AmProcs;
     THashMap<TString, TVector<ui32>> ProcByName;
     THashMap<TString, ui32> TypeByName;
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
@@ -1029,28 +1133,6 @@ const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId) {
     return *castPtr;
 }
 
-bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds) {
-    ui32 size = d.Kind == EOperKind::Binary ? 2 : 1;
-    if (argTypeIds.size() != size) {
-        return false;
-    }
-
-    for (size_t i = 0; i < argTypeIds.size(); ++i) {
-        ui32 expectedArgType;
-        if (d.Kind == EOperKind::RightUnary || (d.Kind == EOperKind::Binary && i == 0)) {
-            expectedArgType = d.LeftType;
-        } else {
-            expectedArgType = d.RightType;
-        }
-
-        if (!IsCompatibleTo(argTypeIds[i], expectedArgType)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
     auto operIdPtr = catalog.OperatorsByName.FindPtr(name);
@@ -1139,16 +1221,24 @@ const TOpClassDesc& LookupOpClass(EOpClassMethod method, ui32 typeId) {
     return *opClassPtr;
 }
 
-/*
-const TAmOpDesc& LookupAmOp(EOpClassMethod method, const TString& family, ui32 strategy, ui32 leftType, ui32 rightType) {
+const TAmOpDesc& LookupAmOp(const TString& family, ui32 strategy, ui32 leftType, ui32 rightType) {
     const auto& catalog = TCatalog::Instance();
-    auto amOpPtr = catalog.AmOps.FindPtr(std::make_tuple(method, family, strategy, leftType, rightType));
+    auto amOpPtr = catalog.AmOps.FindPtr(std::make_tuple(family, strategy, leftType, rightType));
     if (!amOpPtr) {
         throw yexception() << "No such amop";
     }
 
     return *amOpPtr;
 }
-*/
+
+const TAmProcDesc& LookupAmProc(const TString& family, ui32 num, ui32 leftType, ui32 rightType) {
+    const auto& catalog = TCatalog::Instance();
+    auto amProcPtr = catalog.AmProcs.FindPtr(std::make_tuple(family, num, leftType, rightType));
+    if (!amProcPtr) {
+        throw yexception() << "No such amproc";
+    }
+
+    return *amProcPtr;
+}
 
 }

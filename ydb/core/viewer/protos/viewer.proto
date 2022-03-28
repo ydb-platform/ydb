@@ -386,6 +386,8 @@ message TStoragePoolInfo {
 message TStorageInfo {
     EFlag Overall = 1;
     repeated TStoragePoolInfo StoragePools = 2;
+    uint64 TotalGroups = 3;
+    uint64 FoundGroups = 4;
 }
 
 message TNodeInfo {

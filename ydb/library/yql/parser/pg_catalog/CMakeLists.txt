@@ -31,6 +31,7 @@ target_sources(yql-parser-pg_catalog.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/15e039bc35a86f84476091e328dd74ea.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/ca7bb755fe32f897eb03cf6004d1ad2a.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f2374a475345069a2bfd38b387dfa11a.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/462597d51509ecdc14b417ce082dc53b.cpp
 )
 resources(yql-parser-pg_catalog.global
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/99bdd9e510834dd355c2457fcccc53d5.cpp
@@ -80,4 +81,11 @@ resources(yql-parser-pg_catalog.global
   ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_amproc.dat
   KEYS
   pg_amproc.dat
+)
+resources(yql-parser-pg_catalog.global
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/462597d51509ecdc14b417ce082dc53b.cpp
+  INPUTS
+  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_amop.dat
+  KEYS
+  pg_amop.dat
 )

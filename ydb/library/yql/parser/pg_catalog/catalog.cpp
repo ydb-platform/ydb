@@ -34,8 +34,11 @@ using TAggregations = THashMap<ui32, TAggregateDesc>;
 
 using TOpClasses = THashMap<std::pair<EOpClassMethod, ui32>, TOpClassDesc>;
 
+using TAmOps = THashMap<std::tuple<EOpClassMethod, TString, ui32, ui32, ui32>, TAmOpDesc>;
+
 class TParser {
 public:
+    virtual ~TParser() = default;
     void Do(const TString& dat) {
         enum class EState {
             WaitBracket,
@@ -635,7 +638,7 @@ public:
     void OnFinish() override {
         if (IsSupported) {
             Y_ENSURE(!LastOpClass.Name.empty());
-            OpClasses[std::pair(LastOpClass.Method, LastOpClass.TypeId)] = LastOpClass;
+            OpClasses[std::make_pair(LastOpClass.Method, LastOpClass.TypeId)] = LastOpClass;
         }
 
         IsSupported = true;
@@ -647,6 +650,74 @@ private:
     const THashMap<TString, ui32>& TypeByName;
     TOpClassDesc LastOpClass;
     bool IsSupported = true;
+};
+
+class TAmOpsParser : public TParser {
+public:
+    TAmOpsParser(TAmOps& amOps, const THashMap<TString, ui32>& typeByName,
+        const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators)
+        : AmOps(amOps)
+        , TypeByName(typeByName)
+        , OperatorsByName(operatorsByName)
+        , Operators(operators)
+    {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "amopmethod") {
+            if (value == "btree") {
+                LastAmOp.Method = EOpClassMethod::Btree;
+            } else {
+                IsSupported = false;
+            }
+        } else if (key == "amopfamily") {
+            LastAmOp.Family = value;
+        } else if (key == "amoplefttype") {
+            auto leftTypePtr = TypeByName.FindPtr(value);
+            Y_ENSURE(leftTypePtr);
+            LastAmOp.LeftType = *leftTypePtr;
+        } else if (key == "amoprighttype") {
+            auto rightTypePtr = TypeByName.FindPtr(value);
+            Y_ENSURE(rightTypePtr);
+            LastAmOp.RightType = *rightTypePtr;
+        } else if (key == "amopstrategy") {
+            LastAmOp.Strategy = FromString<ui32>(value);
+        } else if (key == "amopopr") {
+            auto pos = value.find('(');
+            Y_ENSURE(pos != TString::npos);
+            LastOp = value.substr(0, pos);
+        }
+    }
+
+    void OnFinish() override {
+        if (IsSupported) {
+            auto operIdPtr = OperatorsByName.FindPtr(LastOp);
+            Y_ENSURE(operIdPtr);
+            for (const auto& id : *operIdPtr) {
+                const auto& d = Operators.FindPtr(id);
+                Y_ENSURE(d);
+                if (d->Kind == EOperKind::Binary && IsCompatibleTo(LastAmOp.LeftType, d->LeftType) && IsCompatibleTo(LastAmOp.RightType, d->RightType)) {
+                    Y_ENSURE(!LastAmOp.OperId);
+                    LastAmOp.OperId = d->OperId;
+                }
+            }
+
+            Y_ENSURE(LastAmOp.OperId);
+            AmOps[std::make_tuple(LastAmOp.Method, LastAmOp.Family, LastAmOp.Strategy, LastAmOp.LeftType, LastAmOp.RightType)] = LastAmOp;
+        }
+
+        IsSupported = true;
+        LastAmOp = TAmOpDesc();
+        LastOp = "";
+    }
+
+private:
+    TAmOps& AmOps;
+    const THashMap<TString, ui32>& TypeByName;
+    const THashMap<TString, TVector<ui32>>& OperatorsByName;
+    const TOperators& Operators;
+    TAmOpDesc LastAmOp;
+    bool IsSupported = true;
+    TString LastOp;
 };
 
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
@@ -694,6 +765,14 @@ TOpClasses ParseOpClasses(const TString& dat, const THashMap<TString, ui32>& typ
     return ret;
 }
 
+TAmOps ParseAmOps(const TString& dat, const THashMap<TString, ui32>& typeByName,
+    const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators) {
+    TAmOps ret;
+    TAmOpsParser parser(ret, typeByName, operatorsByName, operators);
+    parser.Do(dat);
+    return ret;
+}
+
 struct TCatalog {
     TCatalog() {
         TString typeData;
@@ -710,6 +789,8 @@ struct TCatalog {
         Y_ENSURE(NResource::FindExact("pg_opclass.dat", &opClassData));
         TString amProcData;
         Y_ENSURE(NResource::FindExact("pg_amproc.dat", &amProcData));
+        TString amOpData;
+        Y_ENSURE(NResource::FindExact("pg_amop.dat", &amOpData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
         Types = ParseTypes(typeData, lazyTypeInfos);
         for (const auto& [k, v] : Types) {
@@ -804,6 +885,24 @@ struct TCatalog {
         }
 
         OpClasses = ParseOpClasses(opClassData, TypeByName);
+        AmOps = ParseAmOps(amOpData, TypeByName, OperatorsByName, Operators);
+        for (auto&[k, v] : Types) {
+            if (v.TypeId != v.ArrayTypeId) {
+                auto opClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Btree, v.TypeId));
+                if (opClassPtr) {
+                    auto lessAmOpPtr = AmOps.FindPtr(std::make_tuple(EOpClassMethod::Btree, opClassPtr->Family, ui32(EBtreeAmStrategy::Less), v.TypeId, v.TypeId));
+                    Y_ENSURE(lessAmOpPtr);
+                    auto equalAmOpPtr = AmOps.FindPtr(std::make_tuple(EOpClassMethod::Btree, opClassPtr->Family, ui32(EBtreeAmStrategy::Equal), v.TypeId, v.TypeId));
+                    Y_ENSURE(equalAmOpPtr);
+                    auto lessOperPtr = Operators.FindPtr(lessAmOpPtr->OperId);
+                    Y_ENSURE(lessOperPtr);
+                    auto equalOperPtr = Operators.FindPtr(equalAmOpPtr->OperId);
+                    Y_ENSURE(equalOperPtr);
+                    v.LessProcId = lessOperPtr->ProcId;
+                    v.EqualProcId = equalOperPtr->ProcId;
+                }
+            }
+        }
     }
 
     static const TCatalog& Instance() {
@@ -816,6 +915,7 @@ struct TCatalog {
     TCasts Casts;
     TAggregations Aggregations;
     TOpClasses OpClasses;
+    TAmOps AmOps;
     THashMap<TString, TVector<ui32>> ProcByName;
     THashMap<TString, ui32> TypeByName;
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
@@ -1026,17 +1126,29 @@ const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId) {
     const auto& catalog = TCatalog::Instance();
-    return catalog.OpClasses.contains(std::pair(method, typeId));
+    return catalog.OpClasses.contains(std::make_pair(method, typeId));
 }
 
 const TOpClassDesc& LookupOpClass(EOpClassMethod method, ui32 typeId) {
     const auto& catalog = TCatalog::Instance();
-    auto opClassPtr = catalog.OpClasses.FindPtr(std::pair(method, typeId));
+    auto opClassPtr = catalog.OpClasses.FindPtr(std::make_pair(method, typeId));
     if (!opClassPtr) {
         throw yexception() << "No such opclass";
     }
 
     return *opClassPtr;
 }
+
+/*
+const TAmOpDesc& LookupAmOp(EOpClassMethod method, const TString& family, ui32 strategy, ui32 leftType, ui32 rightType) {
+    const auto& catalog = TCatalog::Instance();
+    auto amOpPtr = catalog.AmOps.FindPtr(std::make_tuple(method, family, strategy, leftType, rightType));
+    if (!amOpPtr) {
+        throw yexception() << "No such amop";
+    }
+
+    return *amOpPtr;
+}
+*/
 
 }

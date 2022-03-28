@@ -42,6 +42,9 @@ struct TTypeDesc {
     ui32 SendFuncId = 0;
     ui32 ReceiveFuncId = 0;
     i32 TypeLen = 0;
+    // from opclass
+    ui32 LessProcId = 0;
+    ui32 EqualProcId = 0;
 };
 
 enum class ECastMethod {
@@ -88,6 +91,23 @@ struct TOpClassDesc {
     TString Family;
 };
 
+struct TAmOpDesc {
+    EOpClassMethod Method = EOpClassMethod::Btree;
+    TString Family;
+    ui32 Strategy = 0;
+    ui32 LeftType = 0;
+    ui32 RightType = 0;
+    ui32 OperId = 0;
+};
+
+enum class EBtreeAmStrategy {
+    Less = 1,
+    LessOrEqual = 2,
+    Equal = 3,
+    GreaterOrEqual = 4,
+    Greater = 5
+};
+
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
@@ -108,6 +128,8 @@ const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId);
 const TOpClassDesc& LookupOpClass(EOpClassMethod method, ui32 typeId);
+
+const TAmOpDesc& LookupAmOp(EOpClassMethod method, const TString& family, ui32 strategy, ui32 leftType, ui32 rightType);
 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType);
 

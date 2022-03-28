@@ -15,115 +15,158 @@ using namespace NYql::NCommon;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
 
-TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoExtractMembers>()) {
+TMaybeNode<TCoAtomList> GetUsedColumns(TExprBase read, TCoAtomList columns, const TParentsMap& parentsMap,
+    bool allowMultiUsage, TExprContext& ctx)
+{
+    TSet<TString> usedColumnsSet;
+
+    auto consumers = GetConsumers(read, parentsMap);
+    if (!allowMultiUsage && consumers.size() > 1) {
+        return {};
+    }
+
+    for (const auto& consumer : consumers) {
+        auto maybeExtractMembers = TMaybeNode<TCoExtractMembers>(consumer);
+        if (!maybeExtractMembers) {
+            return {};
+        }
+
+        auto columns = maybeExtractMembers.Cast().Members();
+        for (const auto& column : columns) {
+            usedColumnsSet.emplace(column);
+        }
+    }
+
+    YQL_ENSURE(usedColumnsSet.size() <= columns.Size());
+
+    if (usedColumnsSet.size() == columns.Size()) {
+        return {};
+    }
+
+    TVector<TExprNode::TPtr> usedColumns;
+    usedColumns.reserve(usedColumnsSet.size());
+    for (const auto& column : usedColumnsSet) {
+        usedColumns.emplace_back(ctx.NewAtom(columns.Pos(), column));
+    }
+
+    return Build<TCoAtomList>(ctx, columns.Pos())
+        .Add(usedColumns)
+        .Done();
+}
+
+} // namespace
+
+TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowMultiUsage)
+{
+    if (!node.Maybe<TKqlReadTableBase>()) {
         return node;
     }
 
-    auto extract = node.Cast<TCoExtractMembers>();
-    auto input = extract.Input();
+    auto read = node.Cast<TKqlReadTableBase>();
 
-    if (!input.Maybe<TKqlReadTableBase>()) {
+    auto usedColumns = GetUsedColumns(read, read.Columns(), parentsMap, allowMultiUsage, ctx);
+    if (!usedColumns) {
         return node;
     }
-
-    auto read = extract.Input().Cast<TKqlReadTableBase>();
 
     if (auto maybeIndexRead = read.Maybe<TKqlReadTableIndex>()) {
         auto indexRead = maybeIndexRead.Cast();
 
-        return Build<TKqlReadTableIndex>(ctx, extract.Pos())
+        return Build<TKqlReadTableIndex>(ctx, read.Pos())
             .Table(indexRead.Table())
             .Range(indexRead.Range())
-            .Columns(extract.Members())
+            .Columns(usedColumns.Cast())
             .Index(indexRead.Index())
             .Settings(indexRead.Settings())
             .Done();
     }
 
-    return Build<TKqlReadTableBase>(ctx, extract.Pos())
+    return Build<TKqlReadTableBase>(ctx, read.Pos())
         .CallableName(read.CallableName())
         .Table(read.Table())
         .Range(read.Range())
-        .Columns(extract.Members())
+        .Columns(usedColumns.Cast())
         .Settings(read.Settings())
         .Done();
 }
 
-TExprBase KqpApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoExtractMembers>()) {
-        return node;
-    }
-
-    auto extract = node.Cast<TCoExtractMembers>();
-    auto input = extract.Input();
-
-    if (!input.Maybe<TKqlReadTableRangesBase>()) {
+TExprBase KqpApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowMultiUsage)
+{
+    if (!node.Maybe<TKqlReadTableRangesBase>()) {
         return node;
     }
 
     // TKqpReadOlapTableRangesBase is derived from TKqlReadTableRangesBase, but should be handled separately
-    if (input.Maybe<TKqpReadOlapTableRangesBase>()) {
+    if (node.Maybe<TKqpReadOlapTableRangesBase>()) {
         return node;
     }
 
-    auto read = extract.Input().Cast<TKqlReadTableRangesBase>();
+    auto read = node.Cast<TKqlReadTableRangesBase>();
 
-    return Build<TKqlReadTableRangesBase>(ctx, extract.Pos())
+    auto usedColumns = GetUsedColumns(read, read.Columns(), parentsMap, allowMultiUsage, ctx);
+    if (!usedColumns) {
+        return node;
+    }
+
+    return Build<TKqlReadTableRangesBase>(ctx, read.Pos())
         .CallableName(read.CallableName())
         .Table(read.Table())
         .Ranges(read.Ranges())
-        .Columns(extract.Members())
+        .Columns(usedColumns.Cast())
         .Settings(read.Settings())
         .ExplainPrompt(read.ExplainPrompt())
         .Done();
 }
 
-TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoExtractMembers>()) {
+TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowMultiUsage)
+{
+    if (!node.Maybe<TKqpReadOlapTableRangesBase>()) {
         return node;
     }
 
-    auto extract = node.Cast<TCoExtractMembers>();
-    auto input = extract.Input();
-
-    if (!input.Maybe<TKqlReadTableRangesBase>()) {
-        return node;
-    }
-
-    auto read = extract.Input().Cast<TKqpReadOlapTableRangesBase>();
+    auto read = node.Cast<TKqpReadOlapTableRangesBase>();
 
     // When process is set it may use columns in read.Columns() but those columns may not be present
     // in the results. Thus do not apply extract members if process is not empty lambda
+    // TODO: Support process lambda in this rule.
     if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
         return node;
     }
 
-    return Build<TKqpReadOlapTableRangesBase>(ctx, extract.Pos())
+    auto usedColumns = GetUsedColumns(read, read.Columns(), parentsMap, allowMultiUsage, ctx);
+    if (!usedColumns) {
+        return node;
+    }
+
+    return Build<TKqpReadOlapTableRangesBase>(ctx, read.Pos())
         .CallableName(read.CallableName())
         .Table(read.Table())
         .Ranges(read.Ranges())
-        .Columns(extract.Members())
+        .Columns(usedColumns.Cast())
         .Settings(read.Settings())
         .ExplainPrompt(read.ExplainPrompt())
         .Process(read.Process())
         .Done();
 }
 
-TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoExtractMembers>()) {
+TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx, const TParentsMap& parentsMap,
+    bool allowMultiUsage)
+{
+    if (!node.Maybe<TKqlLookupTableBase>()) {
         return node;
     }
 
-    auto extract = node.Cast<TCoExtractMembers>();
-    auto input = extract.Input();
+    auto lookup = node.Cast<TKqlLookupTableBase>();
 
-    if (!input.Maybe<TKqlLookupTableBase>()) {
+    auto usedColumns = GetUsedColumns(lookup, lookup.Columns(), parentsMap, allowMultiUsage, ctx);
+    if (!usedColumns) {
         return node;
     }
-
-    auto lookup = extract.Input().Cast<TKqlLookupTableBase>();
 
     if (auto maybeIndexLookup = lookup.Maybe<TKqlLookupIndex>()) {
         auto indexLookup = maybeIndexLookup.Cast();
@@ -131,7 +174,7 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx)
         return Build<TKqlLookupIndex>(ctx, lookup.Pos())
             .Table(indexLookup.Table())
             .LookupKeys(indexLookup.LookupKeys())
-            .Columns(extract.Members())
+            .Columns(usedColumns.Cast())
             .Index(indexLookup.Index())
             .Done();
     }
@@ -140,7 +183,7 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx)
         .CallableName(lookup.CallableName())
         .Table(lookup.Table())
         .LookupKeys(lookup.LookupKeys())
-        .Columns(extract.Members())
+        .Columns(usedColumns.Cast())
         .Done();
 }
 

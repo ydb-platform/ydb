@@ -1,3 +1,4 @@
+#include "kqp_opt_log_impl.h"
 #include "kqp_opt_log_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -19,8 +20,8 @@ using namespace NYql::NNodes;
 namespace {
 
 TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTableRanges readTable,
-    TMaybeNode<TCoFilterNullMembers>& filterNull, TMaybeNode<TCoSkipNullMembers>& skipNull,
-    const TKikimrTableDescription& tableDesc, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+    const TKqpMatchReadResult& readMatch, const TKikimrTableDescription& tableDesc, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
 {
     switch (tableDesc.Metadata->Kind) {
         case EKikimrTableKind::Datashard:
@@ -108,19 +109,7 @@ TMaybeNode<TExprBase> TryBuildTrivialReadTable(TCoFlatMap& flatmap, TKqlReadTabl
             .Settings(settings.BuildNode(ctx, readTable.Pos()))
             .Done();
 
-        if (filterNull) {
-            input = Build<TCoFilterNullMembers>(ctx, readTable.Pos())
-                .Input(input)
-                .Members(filterNull.Cast().Members())
-                .Done();
-        }
-
-        if (skipNull) {
-            input = Build<TCoSkipNullMembers>(ctx, readTable.Pos())
-                .Input(input)
-                .Members(skipNull.Cast().Members())
-                .Done();
-        }
+        input = readMatch.BuildProcessNodes(input, ctx);
 
         input = Build<TCoFlatMap>(ctx, readTable.Pos())
             .Input(input)
@@ -160,27 +149,16 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         return node;
     }
 
-    TMaybeNode<TKqlReadTableRanges> readTable;
-    TMaybeNode<TCoFilterNullMembers> filterNull;
-    TMaybeNode<TCoSkipNullMembers> skipNull;
-
-    if (auto maybeRead = flatmap.Input().Maybe<TKqlReadTableRanges>()) {
-        readTable = maybeRead.Cast();
-    }
-
-    if (auto maybeRead = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTableRanges>()) {
-        readTable = maybeRead.Cast();
-        filterNull = flatmap.Input().Cast<TCoFilterNullMembers>();
-    }
-
-    if (auto maybeRead = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTableRanges>()) {
-        readTable = maybeRead.Cast();
-        skipNull = flatmap.Input().Cast<TCoSkipNullMembers>();
-    }
-
-    if (!readTable) {
+    auto readMatch = MatchRead<TKqlReadTableRanges>(flatmap.Input());
+    if (!readMatch) {
         return node;
     }
+
+    if (readMatch->FlatMap) {
+        return node;
+    }
+
+    auto read = readMatch->Read.Cast<TKqlReadTableRanges>();
 
     /*
      * ReadTableRanges supported predicate extraction, but it may be disabled via flag. For example to force
@@ -192,8 +170,6 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         return node;
     }
 
-    auto read = readTable.Cast();
-
     if (!read.Ranges().Maybe<TCoVoid>()) {
         return node;
     }
@@ -201,7 +177,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
 
     // test for trivial cases (explicit literals or parameters)
-    if (auto expr = TryBuildTrivialReadTable(flatmap, read, filterNull, skipNull, tableDesc, ctx, kqpCtx)) {
+    if (auto expr = TryBuildTrivialReadTable(flatmap, read, *readMatch, tableDesc, ctx, kqpCtx)) {
         return expr.Cast();
     }
 
@@ -247,19 +223,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
         .Done();
 
-    if (filterNull) {
-        input = Build<TCoFilterNullMembers>(ctx, node.Pos())
-            .Input(input)
-            .Members(filterNull.Cast().Members())
-            .Done();
-    }
-
-    if (skipNull) {
-        input = Build<TCoSkipNullMembers>(ctx, node.Pos())
-            .Input(input)
-            .Members(skipNull.Cast().Members())
-            .Done();
-    }
+    input = readMatch->BuildProcessNodes(input, ctx);
 
     return Build<TCoFlatMap>(ctx, node.Pos())
         .Input(input)

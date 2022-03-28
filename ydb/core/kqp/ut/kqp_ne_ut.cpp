@@ -2995,6 +2995,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
+        //Cerr << result.GetPlan() << Endl;
+
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(result.GetPlan(), &plan, true);
         auto reads = plan["tables"][0]["reads"].GetArraySafe();
@@ -3062,6 +3064,52 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].table_access().size());
         UNIT_ASSERT_VALUES_EQUAL(1, stats.query_phases()[0].affected_shards());
         UNIT_ASSERT_VALUES_EQUAL("/Root/Logs", stats.query_phases()[0].table_access()[0].name());
+    }
+
+    Y_UNIT_TEST(ReadDifferentColumns) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            SELECT Fk21 FROM Join1 WHERE Value = "Value1";
+            SELECT Fk22 FROM Join1 WHERE Value = "Value2";
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        auto reads = plan["tables"][0]["reads"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
+    }
+
+    Y_UNIT_TEST(ReadDifferentColumnsPk) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            SELECT Fk21 FROM Join1 WHERE Key = 1;
+            SELECT Fk22 FROM Join1 WHERE Value = "Value2";
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        auto reads = plan["tables"][0]["reads"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(reads.size(), 2);
+
+        TSet<TString> readTypes;
+        readTypes.insert(reads[0]["type"].GetString());
+        readTypes.insert(reads[1]["type"].GetString());
+        UNIT_ASSERT(readTypes.contains("Lookup"));
     }
 }
 

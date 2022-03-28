@@ -22,6 +22,7 @@ target_link_libraries(kqp-opt-logical PUBLIC
 target_sources(kqp-opt-logical PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_effects.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_extract.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_indexes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_ranges.cpp

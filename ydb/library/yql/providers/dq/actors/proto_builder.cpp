@@ -59,7 +59,7 @@ NDqProto::EDataTransportVersion GetTransportVersion(const NYql::NDqProto::TData&
 TProtoBuilder::TProtoBuilder(const TString& type, const TVector<TString>& columns)
     : Alloc()
     , TypeEnv(Alloc)
-    , ResultType(reinterpret_cast<TType*>(DeserializeNode(type, TypeEnv)))
+    , ResultType(static_cast<TType*>(DeserializeNode(type, TypeEnv)))
     , ColumnOrder(BuildColumnOrder(columns, ResultType))
 {
     Alloc.Release();

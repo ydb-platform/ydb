@@ -348,6 +348,10 @@ void TTypeType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TTypeType::CalculatePresortSupport() {
+    return false;
+}
+
 TDataType::TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env)
     : TType(EKind::Data, env.GetTypeOfType())
     , SchemeType(schemeType)
@@ -385,6 +389,10 @@ TNode* TDataType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TDataType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+bool TDataType::CalculatePresortSupport() {
+    return true;
 }
 
 TDataDecimalType::TDataDecimalType(ui8 precision, ui8 scale, const TTypeEnvironment& env)
@@ -494,6 +502,23 @@ TNode* TPgType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TPgType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+static THashSet<TStringBuf> PG_SUPPORTED_PRESORT = {
+    "bool",
+    "int2",
+    "int4",
+    "int8",
+    "float4",
+    "float8",
+    "bytea",
+    "varchar",
+    "text",
+    "cstring"
+};
+
+bool TPgType::CalculatePresortSupport() {
+    return PG_SUPPORTED_PRESORT.contains(GetName());
 }
 
 const TString& TPgType::GetName() const {
@@ -622,6 +647,16 @@ TNode* TStructType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TStructType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+bool TStructType::CalculatePresortSupport() {
+    for (ui32 i = 0; i < MembersCount; ++i) {
+        if (!Members[i].second->IsPresortSupported()) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 ui32 TStructType::GetMemberIndex(const TStringBuf& name) const {
@@ -798,6 +833,10 @@ void TListType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TListType::CalculatePresortSupport() {
+    return GetItemType()->IsPresortSupported();
+}
+
 TListLiteral::TListLiteral(TRuntimeNode* items, ui32 count, TListType* type, const TTypeEnvironment& env, bool validate)
     : TNode(type)
     , Items(items)
@@ -969,6 +1008,10 @@ void TStreamType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TStreamType::CalculatePresortSupport() {
+    return false;
+}
+
 TFlowType::TFlowType(TType* itemType, const TTypeEnvironment& env, bool validate)
     : TType(EKind::Flow, env.GetTypeOfType())
     , Data(itemType)
@@ -1007,6 +1050,10 @@ TNode* TFlowType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TFlowType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+bool TFlowType::CalculatePresortSupport() {
+    return false;
 }
 
 TOptionalType::TOptionalType(TType* itemType, const TTypeEnvironment& env, bool validate)
@@ -1050,6 +1097,10 @@ void TOptionalType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TOptionalType::CalculatePresortSupport() {
+    return GetItemType()->IsPresortSupported();
+}
+
 TTaggedType::TTaggedType(TType* baseType, TInternName tag, const TTypeEnvironment& env)
     : TType(EKind::Tagged, env.GetTypeOfType())
     , BaseType(baseType)
@@ -1088,6 +1139,10 @@ TNode* TTaggedType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TTaggedType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+bool TTaggedType::CalculatePresortSupport() {
+    return GetBaseType()->IsPresortSupported();
 }
 
 TOptionalLiteral::TOptionalLiteral(TOptionalType* type, bool validate)
@@ -1213,6 +1268,10 @@ TNode* TDictType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TDictType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+bool TDictType::CalculatePresortSupport() {
+    return KeyType->IsPresortSupported() && PayloadType->IsPresortSupported();
 }
 
 TDictType::TDictType(TType* keyType, TType* payloadType, const TTypeEnvironment& env, bool validate)
@@ -1536,6 +1595,10 @@ void TCallableType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TCallableType::CalculatePresortSupport() {
+    return false;
+}
+
 TCallable::TCallable(ui32 inputsCount, TRuntimeNode* inputs, TCallableType* type, bool validate)
     : TNode(type)
     , InputsCount(inputsCount)
@@ -1776,6 +1839,10 @@ void TAnyType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TAnyType::CalculatePresortSupport() {
+    return false;
+}
+
 TAnyType* TAnyType::Create(TTypeType* type, const TTypeEnvironment& env) {
     return ::new(env.Allocate<TAnyType>()) TAnyType(type);
 }
@@ -1927,6 +1994,16 @@ void TTupleType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TTupleType::CalculatePresortSupport() {
+    for (ui32 i = 0; i < ElementsCount; ++i) {
+        if (!Elements[i]->IsPresortSupported()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 TTupleLiteral::TTupleLiteral(TRuntimeNode* values, TTupleType* type, bool validate)
     : TNode(type)
     , Values(values)
@@ -2057,6 +2134,10 @@ void TResourceType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
+bool TResourceType::CalculatePresortSupport() {
+    return false;
+}
+
 TResourceType* TResourceType::Create(const TStringBuf& tag, const TTypeEnvironment& env) {
     return ::new(env.Allocate<TResourceType>()) TResourceType(env.GetTypeOfType(), env.InternName(tag));
 }
@@ -2109,6 +2190,10 @@ TNode* TVariantType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TVariantType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+bool TVariantType::CalculatePresortSupport() {
+    return GetUnderlyingType()->IsPresortSupported();
 }
 
 TVariantLiteral* TVariantLiteral::Create(TRuntimeNode item, ui32 index, TVariantType* type, const TTypeEnvironment& env) {
@@ -2217,6 +2302,10 @@ TNode* TBlockType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
 void TBlockType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
+}
+
+bool TBlockType::CalculatePresortSupport() {
+    return false;
 }
 
 bool IsNumericType(NUdf::TDataTypeId typeId) {

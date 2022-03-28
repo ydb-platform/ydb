@@ -76,6 +76,18 @@ struct TAggregateDesc {
     TString InitValue;
 };
 
+enum class EOpClassMethod {
+    Btree,
+    Hash
+};
+
+struct TOpClassDesc {
+    EOpClassMethod Method = EOpClassMethod::Btree;
+    ui32 TypeId = 0;
+    TString Name;
+    TString Family;
+};
+
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
@@ -93,6 +105,9 @@ const TOperDesc& LookupOper(ui32 operId);
 
 bool HasAggregation(const TStringBuf& name);
 const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui32>& argTypeIds);
+
+bool HasOpClass(EOpClassMethod method, ui32 typeId);
+const TOpClassDesc& LookupOpClass(EOpClassMethod method, ui32 typeId);
 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType);
 

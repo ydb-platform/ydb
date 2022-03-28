@@ -32,6 +32,8 @@ using TCasts = THashMap<ui32, TCastDesc>;
 
 using TAggregations = THashMap<ui32, TAggregateDesc>;
 
+using TOpClasses = THashMap<std::pair<EOpClassMethod, ui32>, TOpClassDesc>;
+
 class TParser {
 public:
     void Do(const TString& dat) {
@@ -603,6 +605,50 @@ private:
     TString LastDeserializeFunc;
 };
 
+class TOpClassesParser : public TParser {
+public:
+    TOpClassesParser(TOpClasses& opClasses, const THashMap<TString, ui32>& typeByName)
+        : OpClasses(opClasses)
+        , TypeByName(typeByName)
+    {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "opcmethod") {
+            if (value == "btree") {
+                LastOpClass.Method = EOpClassMethod::Btree;
+            } else if (value == "hash") {
+                LastOpClass.Method = EOpClassMethod::Hash;
+            } else {
+                IsSupported = false;
+            }
+        } else if (key == "opcintype") {
+            auto idPtr = TypeByName.FindPtr(value);
+            Y_ENSURE(idPtr);
+            LastOpClass.TypeId = *idPtr;
+        } else if (key == "opcname") {
+            LastOpClass.Name = value;
+        } else if (key == "opcfamily") {
+            LastOpClass.Family = value;
+        }
+    }
+
+    void OnFinish() override {
+        if (IsSupported) {
+            Y_ENSURE(!LastOpClass.Name.empty());
+            OpClasses[std::pair(LastOpClass.Method, LastOpClass.TypeId)] = LastOpClass;
+        }
+
+        IsSupported = true;
+        LastOpClass = TOpClassDesc();
+    }
+
+private:
+    TOpClasses& OpClasses;
+    const THashMap<TString, ui32>& TypeByName;
+    TOpClassDesc LastOpClass;
+    bool IsSupported = true;
+};
+
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
     const THashMap<TString, TVector<ui32>>& procByName) {
     TOperators ret;
@@ -641,6 +687,13 @@ TCasts ParseCasts(const TString& dat, const THashMap<TString, ui32>& typeByName,
     return ret;
 }
 
+TOpClasses ParseOpClasses(const TString& dat, const THashMap<TString, ui32>& typeByName) {
+    TOpClasses ret;
+    TOpClassesParser parser(ret, typeByName);
+    parser.Do(dat);
+    return ret;
+}
+
 struct TCatalog {
     TCatalog() {
         TString typeData;
@@ -653,6 +706,10 @@ struct TCatalog {
         Y_ENSURE(NResource::FindExact("pg_cast.dat", &castData));
         TString aggData;
         Y_ENSURE(NResource::FindExact("pg_aggregate.dat", &aggData));
+        TString opClassData;
+        Y_ENSURE(NResource::FindExact("pg_opclass.dat", &opClassData));
+        TString amProcData;
+        Y_ENSURE(NResource::FindExact("pg_amproc.dat", &amProcData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
         Types = ParseTypes(typeData, lazyTypeInfos);
         for (const auto& [k, v] : Types) {
@@ -745,6 +802,8 @@ struct TCatalog {
         for (const auto&[k, v] : Aggregations) {
             AggregationsByName[v.Name].push_back(k);
         }
+
+        OpClasses = ParseOpClasses(opClassData, TypeByName);
     }
 
     static const TCatalog& Instance() {
@@ -756,6 +815,7 @@ struct TCatalog {
     TTypes Types;
     TCasts Casts;
     TAggregations Aggregations;
+    TOpClasses OpClasses;
     THashMap<TString, TVector<ui32>> ProcByName;
     THashMap<TString, ui32> TypeByName;
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
@@ -962,6 +1022,21 @@ const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui
     }
 
     throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types";
+}
+
+bool HasOpClass(EOpClassMethod method, ui32 typeId) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.OpClasses.contains(std::pair(method, typeId));
+}
+
+const TOpClassDesc& LookupOpClass(EOpClassMethod method, ui32 typeId) {
+    const auto& catalog = TCatalog::Instance();
+    auto opClassPtr = catalog.OpClasses.FindPtr(std::pair(method, typeId));
+    if (!opClassPtr) {
+        throw yexception() << "No such opclass";
+    }
+
+    return *opClassPtr;
 }
 
 }

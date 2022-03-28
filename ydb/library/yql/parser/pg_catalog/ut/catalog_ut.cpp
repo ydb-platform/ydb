@@ -153,3 +153,23 @@ Y_UNIT_TEST_SUITE(TAggregationsTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.DeserializeFuncId, 0);
     }
 }
+
+Y_UNIT_TEST_SUITE(TOpClassesTests) {
+    Y_UNIT_TEST(TestMissing) {
+        UNIT_ASSERT_EXCEPTION(LookupOpClass(EOpClassMethod::Btree, LookupType("json").TypeId), yexception);
+    }
+
+   Y_UNIT_TEST(TestOk) {
+        auto ret = LookupOpClass(EOpClassMethod::Btree, LookupType("int4").TypeId);
+        UNIT_ASSERT(ret.Method == EOpClassMethod::Btree);
+        UNIT_ASSERT_VALUES_EQUAL(ret.TypeId, LookupType("int4").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "int4_ops");
+        UNIT_ASSERT_VALUES_EQUAL(ret.Family, "btree/integer_ops");
+
+        ret = LookupOpClass(EOpClassMethod::Hash, LookupType("int4").TypeId);
+        UNIT_ASSERT(ret.Method == EOpClassMethod::Hash);
+        UNIT_ASSERT_VALUES_EQUAL(ret.TypeId, LookupType("int4").TypeId);
+        UNIT_ASSERT_VALUES_EQUAL(ret.Name, "int4_ops");
+        UNIT_ASSERT_VALUES_EQUAL(ret.Family, "hash/integer_ops");
+   }
+}

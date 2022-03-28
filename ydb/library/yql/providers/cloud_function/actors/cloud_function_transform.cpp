@@ -55,6 +55,7 @@ const auto RETRY_POLICY = IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryB
 
 TCloudFunctionTransformActor::TCloudFunctionTransformActor(TActorId owner,
                                                            NDqProto::TDqTransform transform, IHTTPGateway::TPtr gateway,
+                                                           NYdb::TCredentialsProviderPtr credentialsProvider,
                                                            IDqOutputChannel::TPtr transformInput,
                                                            IDqOutputConsumer::TPtr taskOutput,
                                                            const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -64,6 +65,7 @@ TCloudFunctionTransformActor::TCloudFunctionTransformActor(TActorId owner,
 , Owner(owner)
 , Transform(transform)
 , Gateway(std::move(gateway))
+, CredentialsProvider(std::move(credentialsProvider))
 , TransformInput(std::move(transformInput))
 , TaskOutput(std::move(taskOutput))
 , TransformName(UrlEscapeRet(transform.GetFunctionName(), true))
@@ -147,7 +149,10 @@ void TCloudFunctionTransformActor::Handle(TCFTransformEvent::TEvExecuteTransform
         TransformInProgress = true;
 
         auto* actorSystem = TActivationContext::ActorSystem();
-        auto headers = IHTTPGateway::THeaders();
+        const auto iamToken = CredentialsProvider->GetAuthInfo();
+        auto headers = iamToken.empty()
+                ? IHTTPGateway::THeaders()
+                : IHTTPGateway::THeaders{TString("Authorization: ") + iamToken};
         Gateway->Download(CLOUD_FUNCTION_BASE_URL + TransformName, headers, 10,
                           std::bind(&TCloudFunctionTransformActor::OnInvokeFinished, actorSystem, SelfId(),
                                     context,
@@ -305,9 +310,22 @@ TGuard<NKikimr::NMiniKQL::TScopedAlloc> TCloudFunctionTransformActor::BindAlloca
     return TypeEnv.BindAllocator();
 }
 
-std::pair<IDqTransformActor*, NActors::IActor*> CreateCloudFunctionTransformActor(const NDqProto::TDqTransform& transform, IHTTPGateway::TPtr gateway, TDqTransformActorFactory::TArguments&& args) {
+std::pair<IDqTransformActor*, NActors::IActor*> CreateCloudFunctionTransformActor(
+        const NDqProto::TDqTransform& transform, IHTTPGateway::TPtr gateway,
+        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        TDqTransformActorFactory::TArguments&& args) {
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credProviderFactory;
+    if (transform.HasConnectionName()) {
+        const auto token = args.SecureParams.Value(transform.GetConnectionName(), TString{});
+        credProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, true);
+    } else {
+        credProviderFactory = NYdb::CreateInsecureCredentialsProviderFactory();
+    }
+
     const auto actor = new TCloudFunctionTransformActor(
-            args.ComputeActorId, transform, gateway,
+            args.ComputeActorId, transform,
+            gateway, credProviderFactory->CreateProvider(),
             args.TransformInput, args.TransformOutput,
             args.HolderFactory, args.TypeEnv,
             args.ProgramBuilder);

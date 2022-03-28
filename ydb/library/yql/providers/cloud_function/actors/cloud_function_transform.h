@@ -9,8 +9,10 @@
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -54,7 +56,9 @@ public:
     static constexpr char ActorName[] = "YQL_DQ_CLOUD_FUNC_TRANSFORM";
 
     TCloudFunctionTransformActor(TActorId owner,
-                                 NDqProto::TDqTransform transform, IHTTPGateway::TPtr gateway,
+                                 NDqProto::TDqTransform transform,
+                                 IHTTPGateway::TPtr gateway,
+                                 NYdb::TCredentialsProviderPtr credentialsProvider,
                                  IDqOutputChannel::TPtr transformInput,
                                  IDqOutputConsumer::TPtr taskOutput,
                                  const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -102,6 +106,8 @@ private:
     NDqProto::TDqTransform Transform;
     IHTTPGateway::TPtr Gateway;
 
+    NYdb::TCredentialsProviderPtr CredentialsProvider;
+
     IDqOutputChannel::TPtr TransformInput;
     IDqOutputConsumer::TPtr TaskOutput;
 
@@ -117,6 +123,9 @@ private:
     NMiniKQL::TType* OutputRowsType = nullptr;
 };
 
-std::pair<IDqTransformActor*, NActors::IActor*> CreateCloudFunctionTransformActor(const NDqProto::TDqTransform& transform, IHTTPGateway::TPtr gateway, TDqTransformActorFactory::TArguments&& args);
+std::pair<IDqTransformActor*, NActors::IActor*> CreateCloudFunctionTransformActor(
+        const NDqProto::TDqTransform& transform, IHTTPGateway::TPtr gateway,
+        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        TDqTransformActorFactory::TArguments&& args);
 
 }

@@ -10,6 +10,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/providers/common/http_gateway/mock/yql_http_mock_gateway.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 #include <thread>
 #include <chrono>
@@ -27,9 +28,9 @@ using namespace std::chrono_literals;
 struct TTransformSystem {
     IDqOutputChannel::TPtr InputChannel;
     IDqOutputChannel::TPtr OutputChannel;
-    TCloudFunctionTransformActor* TransformActor;
     NActors::TActorId TransformActorId;
     NActors::TActorId ComputeActorId;
+    IHTTPMockGateway::TPtr Gateway;
 };
 
 class TCloudFunctionTransformTest: public TTestBase {
@@ -38,6 +39,7 @@ public:
     UNIT_TEST(TestEmptyChannel)
     UNIT_TEST(TestMultiplicationTransform)
     UNIT_TEST(TestSeveralIterations)
+    UNIT_TEST(TestPrivateFunction)
     UNIT_TEST_SUITE_END();
 
     TCloudFunctionTransformTest()
@@ -46,19 +48,24 @@ public:
     , FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
     , ProgramBuilder(*TypeEnv, *FunctionRegistry)
     , MemInfo("Mem")
-    , Gateway(IHTTPMockGateway::Make())
     {
         HolderFactory = std::make_unique<NMiniKQL::THolderFactory>(Alloc->Ref(), MemInfo);
         ValueBuilder = std::make_unique<TDefaultValueBuilder>(*HolderFactory);
     }
 
-    TTransformSystem StartUpTransformSystem(ui32 nodeId, TString transformName) {
+    TTransformSystem StartUpTransformSystem(ui32 nodeId, TString transformName,
+                                            TString connectionName = {}, THashMap<TString, TString> secureParams = {}) {
         auto system = TTransformSystem();
+
+        system.Gateway = IHTTPMockGateway::Make();
 
         NDqProto::TDqTransform taskTransform;
 
         taskTransform.SetType(NDqProto::ETransformType::TRANSFORM_CLOUD_FUNCTION);
         taskTransform.SetFunctionName(transformName);
+        if (!connectionName.empty()) {
+            taskTransform.SetConnectionName(connectionName);
+        }
 
         TStructMember inMembers[] = {
             {"A", TDataType::Create(NUdf::TDataType<bool>::Id, *TypeEnv)},
@@ -89,12 +96,22 @@ public:
         system.OutputChannel = CreateDqOutputChannel(nodeId + 400, outputType, *TypeEnv, *HolderFactory, settings, logger);
         auto outputConsumer = CreateOutputMapConsumer(system.OutputChannel);
 
+        auto credentialsFactory = CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory("", true, "");
         system.ComputeActorId = ActorRuntime_->AllocateEdgeActor();
-        system.TransformActor = new TCloudFunctionTransformActor(system.ComputeActorId,
-                                                                     taskTransform, Gateway,
-                                                                     system.InputChannel, outputConsumer,
-                                                                     *HolderFactory, *TypeEnv, ProgramBuilder);
-        system.TransformActorId = ActorRuntime_->Register(system.TransformActor, nodeId);
+        auto args = TDqTransformActorFactory::TArguments{
+            .ComputeActorId = system.ComputeActorId,
+            .TransformInput = system.InputChannel,
+            .TransformOutput = outputConsumer,
+            .HolderFactory = *HolderFactory,
+            .TypeEnv = *TypeEnv,
+            .ProgramBuilder = ProgramBuilder,
+            .SecureParams = secureParams
+        };
+
+        NActors::IActor* transformActor;
+        std::tie(std::ignore, transformActor) = CreateCloudFunctionTransformActor(taskTransform, system.Gateway,
+                                                                                         credentialsFactory, std::move(args));
+        system.TransformActorId = ActorRuntime_->Register(transformActor, nodeId);
 
         return system;
     }
@@ -133,7 +150,7 @@ public:
         auto url = "https://functions.yandexcloud.net/multiplyC";
         auto headers = IHTTPGateway::THeaders();
         auto postBody = "[{\"A\":\"true\",\"C\":\"555\"}]";
-        Gateway->AddDownloadResponse(url, headers, postBody, multiplyCResponse);
+        context.Gateway->AddDownloadResponse(url, headers, postBody, multiplyCResponse);
 
         NUdf::TUnboxedValue* items;
         auto value = ValueBuilder->NewArray(2, items);
@@ -169,9 +186,9 @@ public:
         auto url = "https://functions.yandexcloud.net/multiplyCBatch";
         auto headers = IHTTPGateway::THeaders();
         auto postBody1 = "[{\"A\":\"true\",\"C\":\"430\"}]";
-        Gateway->AddDownloadResponse(url, headers, postBody1, multiplyCResponse1);
+        context.Gateway->AddDownloadResponse(url, headers, postBody1, multiplyCResponse1);
         auto postBody2 = "[{\"A\":\"false\",\"C\":\"800\"}]";
-        Gateway->AddDownloadResponse(url, headers, postBody2, multiplyCResponse2);
+        context.Gateway->AddDownloadResponse(url, headers, postBody2, multiplyCResponse2);
 
         NUdf::TUnboxedValue* items1;
         auto value1 = ValueBuilder->NewArray(2, items1);
@@ -203,6 +220,38 @@ public:
         transformedRows.clear();
     }
 
+    void TestPrivateFunction() {
+        const auto token = "{\"token\":\"yVVeGG6W0ccToZw\"}";
+        const THashMap<TString, TString> secureParams = {{"private_cf_connection", token}};
+        auto context = StartUpTransformSystem(0, "multiplyPrivate", "private_cf_connection", secureParams);
+
+        IHTTPMockGateway::TDataResponse multiplyPrivateResponse = []() {
+            return IHTTPGateway::TContent("[{\"A\":true,\"C\":360}]", 200);
+        };
+
+        auto url = "https://functions.yandexcloud.net/multiplyPrivate";
+        auto headers = IHTTPGateway::THeaders{"Authorization: Bearer yVVeGG6W0ccToZw"};
+        auto postBody = "[{\"A\":\"true\",\"C\":\"180\"}]";
+        context.Gateway->AddDownloadResponse(url, headers, postBody, multiplyPrivateResponse);
+
+        NUdf::TUnboxedValue* items;
+        auto value = ValueBuilder->NewArray(2, items);
+        items[0] = NUdf::TUnboxedValuePod(true);
+        items[1] = NUdf::TUnboxedValuePod(ui32(180));
+
+        context.InputChannel->Push(std::move(value));
+        context.InputChannel->Finish();
+
+        auto executeEv = new TCloudFunctionTransformActor::TCFTransformEvent::TEvExecuteTransform();
+        ActorRuntime_->Send(new IEventHandle(context.TransformActorId, context.ComputeActorId, executeEv));
+        auto event = ActorRuntime_->GrabEdgeEvent<NTransformActor::TEvTransformCompleted>(context.ComputeActorId, TDuration::Seconds(1));
+
+        UNIT_ASSERT(event);
+        NKikimr::NMiniKQL::TUnboxedValueVector transformedRows;
+        context.OutputChannel->PopAll(transformedRows);
+        transformedRows.clear();
+    }
+
 private:
     THolder<NActors::TTestActorRuntimeBase> ActorRuntime_;
 
@@ -215,7 +264,6 @@ private:
     std::unique_ptr<NMiniKQL::THolderFactory> HolderFactory;
 
     std::unique_ptr<TDefaultValueBuilder> ValueBuilder;
-    IHTTPMockGateway::TPtr Gateway;
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TCloudFunctionTransformTest)

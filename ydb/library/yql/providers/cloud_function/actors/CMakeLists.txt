@@ -26,6 +26,8 @@ target_link_libraries(providers-cloud_function-actors PUBLIC
   yql-minikql-computation
   yql-public-issue
   yql-sql-pg_dummy
+  common-token_accessor-client
+  client-ydb_types-credentials
 )
 target_sources(providers-cloud_function-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/actors/cloud_function_transform.cpp

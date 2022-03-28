@@ -23,6 +23,8 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
+
+        const THashMap<TString, TString>& SecureParams;
     };
 
     TDqTransformActorFactory();

@@ -36,8 +36,10 @@ public:
         if (state.IsInvalid()) {
             state = NUdf::TUnboxedValuePod();
             State->SetValue(ctx, InitState->GetValue(ctx));
-        } else if (UseCtx && state.IsEmbedded()) {
-            CleanupCurrentContext();
+        } else if (state.HasValue()) {
+            if constexpr (UseCtx) {
+                CleanupCurrentContext();
+            }
             state = NUdf::TUnboxedValuePod();
             State->SetValue(ctx, InitState->GetValue(ctx));
             State->SetValue(ctx, UpdateState->GetValue(ctx));
@@ -62,14 +64,8 @@ public:
                 }
 
                 if (reset.template Get<bool>()) {
-                    auto result = State->GetValue(ctx);
-                    if (UseCtx) {
-                        state = NUdf::TUnboxedValuePod(0);
-                    } else {
-                        State->SetValue(ctx, InitState->GetValue(ctx));
-                        State->SetValue(ctx, UpdateState->GetValue(ctx));
-                    }
-                    return result.Release();
+                    state = NUdf::TUnboxedValuePod::Zero();
+                    return State->GetValue(ctx).Release();
                 }
             }
 
@@ -90,6 +86,7 @@ public:
         MKQL_ENSURE(codegenState, "State must be codegenerator node.");
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
+        const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
@@ -99,13 +96,28 @@ public:
         const auto result = PHINode::Create(state->getType(), Switch ? 4U : 3U, "result", exit);
         result->addIncoming(state, block);
 
-        const auto select = SwitchInst::Create(state, work, 2U, block);
+        const auto select = SwitchInst::Create(state, work, 3U, block);
         select->addCase(GetFinish(context), exit);
         select->addCase(GetInvalid(context), init);
+        select->addCase(GetFalse(context), next);
 
         block = init;
         new StoreInst(GetEmpty(context), statePtr, block);
         codegenState->CreateSetValue(ctx, block, GetNodeValue(InitState, ctx, block));
+        BranchInst::Create(work, block);
+
+        block = next;
+
+        if constexpr (UseCtx) {
+            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
+            const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
+            const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
+            CallInst::Create(cleanupPtr, {}, "", block);
+        }
+
+        new StoreInst(GetEmpty(context), statePtr, block);
+        codegenState->CreateSetValue(ctx, block, GetNodeValue(InitState, ctx, block));
+        codegenState->CreateSetValue(ctx, block, GetNodeValue(UpdateState, ctx, block));
         BranchInst::Create(work, block);
 
         block = work;
@@ -136,9 +148,8 @@ public:
 
             block = swap;
 
-            const auto output = codegenState->CreateSwapValue(ctx, block, GetNodeValue(InitState, ctx, block));
-            codegenState->CreateSetValue(ctx, block, GetNodeValue(UpdateState, ctx, block));
-            result->addIncoming(output, block);
+            new StoreInst(GetFalse(context), statePtr, block);
+            result->addIncoming(GetNodeValue(State, ctx, block), block);
             BranchInst::Create(exit, block);
 
             block = skip;
@@ -214,20 +225,27 @@ public:
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (ESqueezeState::Finished == State.Stage)
-                return NUdf::EFetchStatus::Finish;
 
-            if (ESqueezeState::Idle == State.Stage) {
-                State.Stage = ESqueezeState::Work;
-                State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
-            } else if (UseCtx && ESqueezeState::NeedInit == State.Stage) {
-                CleanupCurrentContext();
-                State.Stage = ESqueezeState::Work;
-                State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
-                State.State->SetValue(Ctx, State.UpdateState->GetValue(Ctx));
+            switch (State.Stage) {
+                case ESqueezeState::Finished:
+                    return NUdf::EFetchStatus::Finish;
+                case ESqueezeState::Idle:
+                    State.Stage = ESqueezeState::Work;
+                    State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+                    break;
+                case ESqueezeState::NeedInit:
+                    if constexpr (UseCtx) {
+                        CleanupCurrentContext();
+                    }
+                    State.Stage = ESqueezeState::Work;
+                    State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+                    State.State->SetValue(Ctx, State.UpdateState->GetValue(Ctx));
+                    break;
+                default:
+                    break;
             }
 
-            for (;;) {
+            while (true) {
                 const auto status = Stream.Fetch(State.Item->RefValue(Ctx));
                 if (status == NUdf::EFetchStatus::Yield) {
                     return status;
@@ -244,14 +262,8 @@ public:
                     }
 
                     if (reset.template Get<bool>()) {
+                        State.Stage = ESqueezeState::NeedInit;
                         result = State.State->GetValue(Ctx);
-                        if (UseCtx) {
-                            State.Stage = ESqueezeState::NeedInit;
-                        } else {
-                            State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
-                            State.State->SetValue(Ctx, State.UpdateState->GetValue(Ctx));
-                        }
-
                         return NUdf::EFetchStatus::Ok;
                     }
                 }
@@ -363,18 +375,40 @@ private:
 
         const auto state = new LoadInst(statePtr, "state", block);
 
-        const auto one = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, state, ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Idle)), "one", block);
-
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
+        const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto none = BasicBlock::Create(context, "none", ctx.Func);
 
-        BranchInst::Create(init, work, one, block);
+        const auto select = SwitchInst::Create(state, work, 3U, block);
+        select->addCase(ConstantInt::get(stateType, static_cast<ui8>(ESqueezeState::Finished)), none);
+        select->addCase(ConstantInt::get(stateType, static_cast<ui8>(ESqueezeState::Idle)), init);
+        select->addCase(ConstantInt::get(stateType, static_cast<ui8>(ESqueezeState::NeedInit)), next);
+
+        block = none;
+        ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), block);
+
         block = init;
 
         new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Work)), statePtr, block);
-
         codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.InitState, ctx, block));
         BranchInst::Create(work, block);
+
+        block = next;
+
+        if constexpr (UseCtx) {
+            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
+            const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
+            const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
+            CallInst::Create(cleanupPtr, {}, "", block);
+        }
+
+        new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::Work)), statePtr, block);
+        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.InitState, ctx, block));
+        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.UpdateState, ctx, block));
+
+        BranchInst::Create(work, block);
+
         block = work;
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -409,10 +443,10 @@ private:
 
             const auto reset = GetNodeValue(State.Switch, ctx, block);
             if constexpr (Interruptable) {
-                const auto next = BasicBlock::Create(context, "next", ctx.Func);
+                const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
                 const auto done = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, reset, ConstantInt::get(reset->getType(), 0), "done", block);
-                BranchInst::Create(stop, next, done, block);
-                block = next;
+                BranchInst::Create(stop, pass, done, block);
+                block = pass;
             }
 
             const auto cast = CastInst::Create(Instruction::Trunc, reset, Type::getInt1Ty(context), "bool", block);
@@ -420,14 +454,12 @@ private:
             BranchInst::Create(swap, skip, cast, block);
 
             block = swap;
+
+            new StoreInst(ConstantInt::get(state->getType(), static_cast<ui8>(ESqueezeState::NeedInit)), statePtr, block);
             SafeUnRefUnboxed(valuePtr, ctx, block);
             const auto state = codegenStateArg->CreateGetValue(ctx, block);
             new StoreInst(state, valuePtr, block);
             ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);
-
-            codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.InitState, ctx, block));
-            codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.UpdateState, ctx, block));
-
             ReturnInst::Create(context, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), block);
 
             block = skip;
@@ -453,7 +485,6 @@ private:
 
     TFetchPtr Fetch = nullptr;
 #endif
-
     IComputationNode* const Stream;
     TSqueezeState State;
 };

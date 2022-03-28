@@ -32,7 +32,7 @@ public:
         if (state.IsFinish()) {
             return EFetchResult::Finish;
         } else if (state.HasValue() && state.Get<bool>()) {
-            if (UseCtx) {
+            if constexpr (UseCtx) {
                 CleanupCurrentContext();
             }
 
@@ -121,6 +121,13 @@ public:
         choise->addCase(GetTrue(context), init);
 
         block = init;
+
+        if constexpr (UseCtx) {
+            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
+            const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
+            const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
+            CallInst::Create(cleanupPtr, {}, "", block);
+        }
 
         new StoreInst(GetFalse(context), statePtr, block);
 

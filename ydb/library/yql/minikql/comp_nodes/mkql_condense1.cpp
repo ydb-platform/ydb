@@ -31,10 +31,10 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return static_cast<const NUdf::TUnboxedValuePod&>(state);
-        }
-
-        if (UseCtx && state.IsEmbedded()) {
-            CleanupCurrentContext();
+        } else if (state.HasValue()) {
+            if constexpr (UseCtx) {
+                CleanupCurrentContext();
+            }
             state = NUdf::TUnboxedValuePod();
             State->SetValue(ctx, InitState->GetValue(ctx));
         }
@@ -62,14 +62,8 @@ public:
                     }
 
                     if (reset.template Get<bool>()) {
-                        auto result = State->GetValue(ctx);
-                        if (UseCtx) {
-                            state = NUdf::TUnboxedValuePod(0);
-                        } else {
-                            State->SetValue(ctx, InitState->GetValue(ctx));
-                        }
-
-                        return result.Release();
+                        state = NUdf::TUnboxedValuePod::Zero();
+                        return State->GetValue(ctx).Release();
                     }
                 }
 
@@ -81,7 +75,6 @@ public:
         state = NUdf::TUnboxedValuePod::MakeFinish();
         return empty ? NUdf::TUnboxedValuePod::MakeFinish() : State->GetValue(ctx).Release();
     }
-
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -91,6 +84,7 @@ public:
         const auto codegenState = dynamic_cast<ICodegeneratorExternalNode*>(State);
         MKQL_ENSURE(codegenState, "State must be codegenerator node.");
 
+        const auto step = BasicBlock::Create(context, "step", ctx.Func);
         const auto frst = BasicBlock::Create(context, "frst", ctx.Func);
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -103,7 +97,22 @@ public:
         const auto result = PHINode::Create(state->getType(), Switch ? 4U : 3U, "result", exit);
         result->addIncoming(state, block);
 
-        BranchInst::Create(exit, frst, IsFinish(state, block), block);
+        const auto way = SwitchInst::Create(state, frst, 2U, block);
+        way->addCase(GetFalse(context), step);
+        way->addCase(GetFinish(context), exit);
+
+        block = step;
+
+        if constexpr (UseCtx) {
+            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
+            const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
+            const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
+            CallInst::Create(cleanupPtr, {}, "", block);
+        }
+
+        new StoreInst(GetEmpty(context), statePtr, block);
+        codegenState->CreateSetValue(ctx, block, GetNodeValue(InitState, ctx, block));
+        BranchInst::Create(frst, block);
 
         block = frst;
 
@@ -140,9 +149,9 @@ public:
 
             const auto reset = GetNodeValue(Switch, ctx, block);
             if constexpr (Interruptable) {
-                const auto next = BasicBlock::Create(context, "next", ctx.Func);
-                BranchInst::Create(stop, next, IsEmpty(reset, block), block);
-                block = next;
+                const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
+                BranchInst::Create(stop, pass, IsEmpty(reset, block), block);
+                block = pass;
             }
 
             const auto cast = CastInst::Create(Instruction::Trunc, reset, Type::getInt1Ty(context), "bool", block);
@@ -150,7 +159,8 @@ public:
 
             block = swap;
 
-            const auto output = codegenState->CreateSwapValue(ctx, block, GetNodeValue(InitState, ctx, block));
+            new StoreInst(GetFalse(context), statePtr, block);
+            const auto output = codegenState->CreateGetValue(ctx, block);
             result->addIncoming(output, block);
             BranchInst::Create(exit, block);
 
@@ -229,16 +239,21 @@ public:
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
-            if (ESqueezeState::Finished == State.Stage)
-                return NUdf::EFetchStatus::Finish;
-
-            if (UseCtx && State.Stage == ESqueezeState::NeedInit) {
-                CleanupCurrentContext();
-                State.Stage = ESqueezeState::Work;
-                State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+            switch (State.Stage) {
+                case ESqueezeState::Finished:
+                    return NUdf::EFetchStatus::Finish;
+                case ESqueezeState::NeedInit:
+                    if constexpr (UseCtx) {
+                        CleanupCurrentContext();
+                    }
+                    State.Stage = ESqueezeState::Work;
+                    State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
+                    break;
+                default:
+                    break;
             }
 
-            for (;;) {
+            while (true) {
                 const auto status = Stream.Fetch(State.Item->RefValue(Ctx));
                 if (status == NUdf::EFetchStatus::Yield) {
                     return status;
@@ -259,13 +274,8 @@ public:
                         }
 
                         if (reset.template Get<bool>()) {
+                            State.Stage = ESqueezeState::NeedInit;
                             result = State.State->GetValue(Ctx);
-                            if (UseCtx) {
-                                State.Stage = ESqueezeState::NeedInit;
-                            } else {
-                                State.State->SetValue(Ctx, State.InitState->GetValue(Ctx));
-                            }
-
                             return NUdf::EFetchStatus::Ok;
                         }
                     }
@@ -381,9 +391,32 @@ private:
         const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
             new LoadInst(containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
+        const auto step = BasicBlock::Create(context, "step", ctx.Func);
+        const auto none = BasicBlock::Create(context, "none", ctx.Func);
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
 
+        const auto state0 = new LoadInst(statePtr, "state0", block);
+
+        const auto select = SwitchInst::Create(state0, loop, 2U, block);
+        select->addCase(ConstantInt::get(stateType, static_cast<ui8>(ESqueezeState::Finished)), none);
+        select->addCase(ConstantInt::get(stateType, static_cast<ui8>(ESqueezeState::NeedInit)), step);
+
+        block = none;
+        ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), block);
+
+        block = step;
+
+        if constexpr (UseCtx) {
+            const auto cleanup = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&CleanupCurrentContext));
+            const auto cleanupType = FunctionType::get(Type::getVoidTy(context), {}, false);
+            const auto cleanupPtr = CastInst::Create(Instruction::IntToPtr, cleanup, PointerType::getUnqual(cleanupType), "cleanup_ctx", block);
+            CallInst::Create(cleanupPtr, {}, "", block);
+        }
+
+        new StoreInst(ConstantInt::get(state0->getType(), static_cast<ui8>(ESqueezeState::Work)), statePtr, block);
+        codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.InitState, ctx, block));
         BranchInst::Create(loop, block);
+
         block = loop;
 
         const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
@@ -442,11 +475,11 @@ private:
             BranchInst::Create(swap, skip, cast, block);
 
             block = swap;
+            new StoreInst(ConstantInt::get(state1->getType(), static_cast<ui8>(ESqueezeState::NeedInit)), statePtr, block);
             SafeUnRefUnboxed(valuePtr, ctx, block);
             const auto state = codegenStateArg->CreateGetValue(ctx, block);
             new StoreInst(state, valuePtr, block);
             ValueAddRef(State.State->GetRepresentation(), valuePtr, ctx, block);
-            codegenStateArg->CreateSetValue(ctx, block, GetNodeValue(State.InitState, ctx, block));
             ReturnInst::Create(context, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), block);
 
             block = skip;
@@ -487,7 +520,6 @@ private:
 
     TFetchPtr Fetch = nullptr;
 #endif
-
     IComputationNode* const Stream;
     TSqueezeState State;
 };

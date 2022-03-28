@@ -629,7 +629,8 @@ struct Schema {
         static bool Precharge(
             TToughDb&, ui32,
             NTable::TRawVals, NTable::TRawVals,
-            NTable::TTagsRef, NTable::EDirection);
+            NTable::TTagsRef, NTable::EDirection,
+            ui64 = Max<ui64>(), ui64 = Max<ui64>());
     };
 
     struct NoAutoPrecharge {};
@@ -1047,8 +1048,21 @@ struct Schema {
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, NTable::TKeyRange{ }, columns).Release());
                 }
 
-                static bool Precharge(TToughDb& database, NTable::TTagsRef columns) {
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, {}, {}, columns, IteratorType::Direction);
+                static bool Precharge(
+                    TToughDb& database,
+                    NTable::TTagsRef columns,
+                    ui64 maxRowCount,
+                    ui64 maxBytes)
+                {
+                    return Precharger<AutoPrecharge>::Precharge(
+                        database,
+                        TableId,
+                        {},
+                        {},
+                        columns,
+                        IteratorType::Direction,
+                        maxRowCount,
+                        maxBytes);
                 }
             };
 
@@ -1094,10 +1108,24 @@ struct Schema {
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
-                static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
+                static bool Precharge(
+                    TToughDb& database,
+                    const KeyValuesType& keyValues,
+                    NTable::TTagsRef columns,
+                    ui64 maxRowCount,
+                    ui64 maxBytes)
+                {
                     TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues);
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction);
+                    return Precharger<AutoPrecharge>::Precharge(
+                        database,
+                        TableId,
+                        minKey,
+                        maxKey,
+                        columns,
+                        IteratorType::Direction,
+                        maxRowCount,
+                        maxBytes);
                 }
             };
 
@@ -1141,9 +1169,23 @@ struct Schema {
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
-                static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
+                static bool Precharge(
+                    TToughDb& database,
+                    const KeyValuesType& keyValues,
+                    NTable::TTagsRef columns,
+                    ui64 maxRowCount,
+                    ui64 maxBytes)
+                {
                     TTupleToRawTypeValueFixedSize<KeyValuesType, KeyColumnsType, FullKeySize> minKey(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, {}, columns, IteratorType::Direction);
+                    return Precharger<AutoPrecharge>::Precharge(
+                        database,
+                        TableId,
+                        minKey,
+                        {},
+                        columns,
+                        IteratorType::Direction,
+                        maxRowCount,
+                        maxBytes);
                 }
             };
 
@@ -1187,9 +1229,23 @@ struct Schema {
                     return THolder<IteratorType>(database.IterateRangeGeneric<IteratorType>(TableId, range, columns).Release());
                 }
 
-                static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
+                static bool Precharge(
+                    TToughDb& database,
+                    const KeyValuesType& keyValues,
+                    NTable::TTagsRef columns,
+                    ui64 maxRowCount,
+                    ui64 maxBytes)
+                {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> maxKey(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, {}, maxKey, columns, IteratorType::Direction);
+                    return Precharger<AutoPrecharge>::Precharge(
+                        database,
+                        TableId,
+                        {},
+                        maxKey,
+                        columns,
+                        IteratorType::Direction,
+                        maxRowCount,
+                        maxBytes);
                 }
             };
 
@@ -1245,11 +1301,21 @@ struct Schema {
                 static bool Precharge(TToughDb& database,
                                       const MinKeyValuesType& minKeyValues,
                                       const MaxKeyValuesType& maxKeyValues,
-                                      NTable::TTagsRef columns)
+                                      NTable::TTagsRef columns,
+                                      ui64 maxRowCount,
+                                      ui64 maxBytes)
                 {
                     TTupleToRawTypeValueFixedSize<MinKeyValuesType, MinKeyColumnsType, FullKeySize> minKey(minKeyValues);
                     TTupleToRawTypeValue<MaxKeyValuesType, MaxKeyColumnsType> maxKey(maxKeyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, minKey, maxKey, columns, IteratorType::Direction);
+                    return Precharger<AutoPrecharge>::Precharge(
+                        database,
+                        TableId,
+                        minKey,
+                        maxKey,
+                        columns,
+                        IteratorType::Direction,
+                        maxRowCount,
+                        maxBytes);
                 }
             };
 
@@ -1277,9 +1343,23 @@ struct Schema {
                     return THolder<NTable::TTableIt>(database.IterateExact(TableId, key, columns).Release());
                 }
 
-                static bool Precharge(TToughDb& database, const KeyValuesType& keyValues, NTable::TTagsRef columns) {
+                static bool Precharge(
+                    TToughDb& database,
+                    const KeyValuesType& keyValues,
+                    NTable::TTagsRef columns,
+                    ui64 maxRowCount,
+                    ui64 maxBytes)
+                {
                     TTupleToRawTypeValue<KeyValuesType, KeyColumnsType> key(keyValues);
-                    return Precharger<AutoPrecharge>::Precharge(database, TableId, key, key, columns, NTable::TTableIt::Direction);
+                    return Precharger<AutoPrecharge>::Precharge(
+                        database,
+                        TableId,
+                        key,
+                        key,
+                        columns,
+                        NTable::TTableIt::Direction,
+                        maxRowCount,
+                        maxBytes);
                 }
             };
 
@@ -1438,12 +1518,26 @@ struct Schema {
             }
 
             template <typename... ColumnTypes>
-            bool Precharge() {
-                return Iterator::Precharge(*Database, Columns<ColumnTypes...>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    Columns<ColumnTypes...>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
-            bool Precharge() {
-                return Iterator::Precharge(*Database, Columns<typename TableType::TColumns>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    Columns<typename TableType::TColumns>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
             auto Reverse() const {
@@ -1496,12 +1590,28 @@ struct Schema {
             }
 
             template <typename... ColumnTypes>
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<ColumnTypes...>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<ColumnTypes...>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<typename TableType::TColumns>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
             auto Reverse() const & {
@@ -1565,12 +1675,28 @@ struct Schema {
             }
 
             template <typename... ColumnTypes>
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<ColumnTypes...>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<ColumnTypes...>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<typename TableType::TColumns>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
             auto Reverse() const & {
@@ -1597,7 +1723,6 @@ struct Schema {
         protected:
             TToughDb* Database;
             KeyValuesType KeyValues;
-
         public:
             LessOrEqualKeyOperations(TToughDb& database, KeyValuesTypes... keyValues)
                 : Database(&database)
@@ -1634,12 +1759,28 @@ struct Schema {
             }
 
             template <typename... ColumnTypes>
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<ColumnTypes...>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<ColumnTypes...>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<typename TableType::TColumns>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
             auto Reverse() const & {
@@ -1707,12 +1848,30 @@ struct Schema {
             }
 
             template <typename... ColumnTypes>
-            bool Precharge() {
-                return Iterator::Precharge(*Database, MinKeyValues, MaxKeyValues, Columns<ColumnTypes...>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    MinKeyValues,
+                    MaxKeyValues,
+                    Columns<ColumnTypes...>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
-            bool Precharge() {
-                return Iterator::Precharge(*Database, MinKeyValues, MaxKeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    MinKeyValues,
+                    MaxKeyValues,
+                    Columns<typename TableType::TColumns>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
             auto Reverse() const & {
@@ -1764,12 +1923,28 @@ struct Schema {
             }
 
             template <typename... ColumnTypes>
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<ColumnTypes...>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<ColumnTypes...>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
-            bool Precharge() {
-                return Iterator::Precharge(*Database, KeyValues, Columns<typename TableType::TColumns>::GetColumnIds());
+            bool Precharge(
+                ui64 maxRowCount = Max<ui64>(),
+                ui64 maxBytes = Max<ui64>())
+            {
+                return Iterator::Precharge(
+                    *Database,
+                    KeyValues,
+                    Columns<typename TableType::TColumns>::GetColumnIds(),
+                    maxRowCount,
+                    maxBytes);
             }
 
             template <typename... ColumnTypes>
@@ -1920,16 +2095,16 @@ template <>
 inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge(
         TToughDb& database, ui32 table,
         NTable::TRawVals minKey, NTable::TRawVals maxKey,
-        NTable::TTagsRef columns, NTable::EDirection direction)
+        NTable::TTagsRef columns, NTable::EDirection direction, ui64 maxRowCount, ui64 maxBytes)
 {
-    return database.Precharge(table, minKey, maxKey, columns, 0, -1, -1, direction);
+    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction);
 }
 
 template <>
 inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge(
         TToughDb&, ui32,
         NTable::TRawVals, NTable::TRawVals,
-        NTable::TTagsRef, NTable::EDirection)
+        NTable::TTagsRef, NTable::EDirection, ui64, ui64)
 {
     return true;
 }

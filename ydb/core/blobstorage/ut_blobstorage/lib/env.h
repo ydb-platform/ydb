@@ -29,6 +29,7 @@ struct TEnvironmentSetup {
         const std::function<void(TTestActorSystem&)> PrepareRuntime;
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
+        const ui32 NumDataCenters = 0;
     };
 
     const TSettings Settings;
@@ -93,6 +94,11 @@ struct TEnvironmentSetup {
         Cerr << "RandomSeed# " << seed << Endl;
     }
 
+    ui32 GetNumDataCenters() const {
+        return Settings.NumDataCenters ? Settings.NumDataCenters :
+            Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : 1;
+    }
+
     void Initialize() {
         Runtime = std::make_unique<TTestActorSystem>(Settings.NodeCount);
         if (Settings.PrepareRuntime) {
@@ -102,8 +108,7 @@ struct TEnvironmentSetup {
         Runtime->Start();
         auto *appData = Runtime->GetAppData();
         appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", DomainId).Release());
-        Runtime->SetupTabletRuntime(Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc,
-            Settings.ControllerNodeId);
+        Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId);
         SetupStaticStorage();
         SetupTablet();
         SetupStorage();
@@ -115,8 +120,7 @@ struct TEnvironmentSetup {
 
     void StartNode(ui32 nodeId) {
         Runtime->StartNode(nodeId);
-        Runtime->SetupTabletRuntime(Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc,
-            Settings.ControllerNodeId, nodeId);
+        Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId, nodeId);
         if (nodeId == Settings.ControllerNodeId) {
             SetupStaticStorage();
             SetupTablet();

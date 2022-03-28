@@ -132,12 +132,12 @@ TActorId TTestActorSystem::CreateTestBootstrapper(TTabletStorageInfo *info, std:
     return Register(CreateBootstrapper(info, bi.Get()), nodeId);
 }
 
-void TTestActorSystem::SetupTabletRuntime(bool isMirror3dc, ui32 stateStorageNodeId, ui32 targetNodeId) {
+void TTestActorSystem::SetupTabletRuntime(ui32 numDataCenters, ui32 stateStorageNodeId, ui32 targetNodeId) {
     auto setup = MakeIntrusive<TTableNameserverSetup>();
-    ui32 nodeCountInDC = (MaxNodeId + 2) / 3;
+    ui32 nodeCountInDC = (MaxNodeId + numDataCenters - 1) / numDataCenters;
     for (ui32 nodeId : GetNodes()) {
         const TString name = Sprintf("127.0.0.%u", nodeId);
-        ui32 dcNum = isMirror3dc ? ((nodeId + nodeCountInDC - 1) / nodeCountInDC) : 1;
+        const ui32 dcNum = (nodeId + nodeCountInDC - 1) / nodeCountInDC;
         NActorsInterconnect::TNodeLocation location;
         location.SetDataCenter(ToString(dcNum));
         location.SetRack(ToString(nodeId));

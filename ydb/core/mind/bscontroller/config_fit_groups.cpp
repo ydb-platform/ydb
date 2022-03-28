@@ -197,11 +197,10 @@ namespace NKikimr {
                                 replace = true;
                                 break;
 
-                            case NKikimrBlobStorage::EDriveStatus::SPARE:
-                                break;
-
                             case NKikimrBlobStorage::EDriveStatus::FAULTY:
                             case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                            case NKikimrBlobStorage::EDriveStatus::DECOMMIT_PENDING:
+                            case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
                                 // groups are moved out asynchronously
                                 break;
 
@@ -460,8 +459,17 @@ namespace NKikimr {
                 }
 
                 // register PDisk in the mapper
-                return Mapper->RegisterPDisk(id, State.HostRecords->GetLocation(id.NodeId), usable, numSlots,
-                    info.ExpectedSlotCount, groups.data(), groups.size(), availableSpace, info.Operational);
+                return Mapper->RegisterPDisk({
+                    .PDiskId = id,
+                    .Location = State.HostRecords->GetLocation(id.NodeId),
+                    .Usable = usable,
+                    .NumSlots = numSlots,
+                    .MaxSlots = info.ExpectedSlotCount,
+                    .Groups = std::move(groups),
+                    .SpaceAvailable = availableSpace,
+                    .Operational = info.Operational,
+                    .Decommitted = info.Decommitted(),
+                });
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,

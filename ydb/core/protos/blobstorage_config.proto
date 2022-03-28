@@ -186,9 +186,11 @@ enum EDriveStatus {
     ACTIVE = 1; // working as expected
     INACTIVE = 2; // new groups are not created over this drive, but existing ones continue to work as expected
     BROKEN = 3; // drive is not working, groups are automatically moved out of this drive upon reception of this status
-    SPARE = 4; // spare drive -- groups are created only when being moved from BROKEN drives
+    reserved 4;
     FAULTY = 5; // drive is expected to become BROKEN soon, new groups are not created, old groups are asynchronously moved out from this drive
     TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working
+    DECOMMIT_PENDING = 7; // drive is going to be removed soon, but SelfHeal logic do not remove it automatically
+    DECOMMIT_IMMINENT = 8; // drive is going to be removed automatically
 }
 
 message TGroupStatus {
@@ -226,6 +228,7 @@ message TUpdateDriveStatus {
     uint32 PDiskId = 4; // may be set instead of path to identify PDisk
     string Serial = 5; // may be set instead of path and PDiskId to identify PDisk
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
+    bool ProhibitDecommittedStatusChange = 7; // used by CMS to prevent changing status from DECOMMIT_*
 }
 
 message TReadDriveStatus {
@@ -613,6 +616,7 @@ message TConfigResponse {
             kDiskIsNotDonor = 8;
             kAlready = 9;
             kMayGetDegraded = 10;
+            kPDiskStatusRace = 11;
         }
 
         message TFailParam {
@@ -630,6 +634,7 @@ message TConfigResponse {
                 uint32 GroupId = 11;
                 NKikimrBlobStorage.TVDiskID VDiskId = 12;
                 NKikimrBlobStorage.TVSlotId VSlotId = 13;
+                EDriveStatus Status = 14;
             }
         }
 

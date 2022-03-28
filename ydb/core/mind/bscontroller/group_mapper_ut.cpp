@@ -306,8 +306,17 @@ public:
         }
         for (const auto& pair : PDisks) {
             auto& g = groupDisks[pair.first];
-            mapper.RegisterPDisk(pair.first, pair.second.GetLocation(), !unusableDisks.count(pair.first),
-                pair.second.NumSlots, maxSlots, g.data(), g.size(), 0, nonoperationalDisks.count(pair.first));
+            mapper.RegisterPDisk({
+                .PDiskId = pair.first,
+                .Location = pair.second.GetLocation(),
+                .Usable = !unusableDisks.count(pair.first),
+                .NumSlots = pair.second.NumSlots,
+                .MaxSlots = maxSlots,
+                .Groups{g.begin(), g.end()},
+                .SpaceAvailable = 0,
+                .Operational = static_cast<bool>(nonoperationalDisks.count(pair.first)),
+                .Decommitted = false,
+            });
         }
     }
 };

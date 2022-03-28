@@ -25,6 +25,11 @@ namespace NKikimr::NBsController {
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
         if (cmd.GetStatus() != pdisk->Status) {
+            using E = NKikimrBlobStorage::EDriveStatus;
+            if (cmd.GetProhibitDecommittedStatusChange() && (pdisk->Status == E::DECOMMIT_PENDING || pdisk->Status == E::DECOMMIT_IMMINENT)) {
+                throw TExPDiskStatusRace(pdiskId.NodeId, pdiskId.PDiskId, pdisk->Status);
+            }
+
             const bool wasGoodExpectedStatus = pdisk->HasGoodExpectedStatus();
             pdisk->Status = cmd.GetStatus();
             pdisk->StatusTimestamp = Timestamp;

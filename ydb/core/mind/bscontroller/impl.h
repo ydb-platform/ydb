@@ -403,6 +403,7 @@ public:
             switch (Status) {
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
                 case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
                     return true;
                 default:
                     return false;
@@ -410,7 +411,24 @@ public:
         }
 
         bool BadInTermsOfSelfHeal() const {
-            return ShouldBeSettledBySelfHeal() || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
+            switch (Status) {
+                case NKikimrBlobStorage::EDriveStatus::FAULTY:
+                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                case NKikimrBlobStorage::EDriveStatus::INACTIVE:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        bool Decommitted() const {
+            switch (Status) {
+                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_PENDING:
+                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         std::tuple<bool, bool> GetSelfHealStatusTuple() const {
@@ -425,9 +443,10 @@ public:
 
                 case NKikimrBlobStorage::EDriveStatus::ACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::INACTIVE:
-                case NKikimrBlobStorage::EDriveStatus::SPARE:
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
                 case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_PENDING:
+                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
                     return true;
 
                 case NKikimrBlobStorage::EDriveStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -487,7 +506,7 @@ public:
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
             NKikimrBlobStorage::TGroupStatus::E OperatingStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
-            // status derived by adding underlying PDisk status (FAULTY&BROKEN are assumed to be not working ones)
+            // status derived by adding underlying PDisk status (some of them are assumed to be not working ones)
             NKikimrBlobStorage::TGroupStatus::E ExpectedStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
         } Status;
 

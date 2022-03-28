@@ -18,13 +18,24 @@ namespace NKikimr {
             using TGroupDefinition = TVector<TVector<TVector<TPDiskId>>>; // Realm/Domain/Disk
             using TForbiddenPDisks = std::unordered_set<TPDiskId, THash<TPDiskId>>;
 
+            struct TPDiskRecord {
+                const TPDiskId PDiskId;
+                const TNodeLocation Location;
+                const bool Usable;
+                ui32 NumSlots;
+                const ui32 MaxSlots;
+                TStackVec<ui32, 16> Groups;
+                i64 SpaceAvailable;
+                const bool Operational;
+                const bool Decommitted;
+            };
+
         public:
             TGroupMapper(TGroupGeometryInfo geom, bool randomize = false);
             ~TGroupMapper();
 
             // Register PDisk inside mapper to use it in subsequent map operations
-            bool RegisterPDisk(TPDiskId pdiskId, TNodeLocation location, bool usable, ui32 numSlots, ui32 maxSlots,
-                const ui32 groupIds[], size_t numGroups, i64 spaceAvailable, bool operational);
+            bool RegisterPDisk(const TPDiskRecord& pdisk);
 
             // Remove PDisk from the table.
             void UnregisterPDisk(TPDiskId pdiskId);

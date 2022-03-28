@@ -289,8 +289,17 @@ public:
                         const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
                         if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
                             const TNodeLocation& location = HostRecords->GetLocation(pdiskId.NodeId);
-                            const bool ok = mapper.RegisterPDisk(pdiskId, location, true, pdisk.GetNumActiveSlots(),
-                                pdisk.GetExpectedSlotCount(), nullptr, 0, 0, true);
+                            const bool ok = mapper.RegisterPDisk({
+                                .PDiskId = pdiskId,
+                                .Location = location,
+                                .Usable = true,
+                                .NumSlots = pdisk.GetNumActiveSlots(),
+                                .MaxSlots = pdisk.GetExpectedSlotCount(),
+                                .Groups = {},
+                                .SpaceAvailable = 0,
+                                .Operational = true,
+                                .Decommitted = false,
+                            });
                             Y_VERIFY(ok);
                             break;
                         }

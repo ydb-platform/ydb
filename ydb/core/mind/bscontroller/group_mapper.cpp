@@ -64,31 +64,14 @@ namespace NKikimr::NBsController {
 
         struct TFailDomainInfo;
 
-        struct TPDiskInfo {
-            const TNodeLocation Location;
-            i64 SpaceAvailable;
-            bool Usable;
-            ui32 NumSlots;
-            const ui32 MaxSlots;
+        struct TPDiskInfo : TPDiskRecord {
             TPDiskLayoutPosition Position;
-            const TPDiskId PDiskId;
-            TStackVec<ui32, 32> Groups;
-            const bool Operational;
             TFailDomainInfo *FailDomain;
             bool Matching = false;
 
-            TPDiskInfo(TNodeLocation location, bool usable, ui32 numSlots, ui32 maxSlots, TPDiskLayoutPosition position,
-                    const TPDiskId& pdiskId, const ui32 groupIds[], size_t numGroups, i64 spaceAvailable,
-                    bool operational, TFailDomainInfo *failDomain)
-                : Location(std::move(location))
-                , SpaceAvailable(spaceAvailable)
-                , Usable(usable)
-                , NumSlots(numSlots)
-                , MaxSlots(maxSlots)
+            TPDiskInfo(const TPDiskRecord& pdisk, TPDiskLayoutPosition position, TFailDomainInfo *failDomain)
+                : TPDiskRecord(pdisk)
                 , Position(std::move(position))
-                , PDiskId(pdiskId)
-                , Groups(groupIds, groupIds + numGroups)
-                , Operational(operational)
                 , FailDomain(failDomain)
             {
                 std::sort(Groups.begin(), Groups.end());
@@ -99,7 +82,7 @@ namespace NKikimr::NBsController {
             }
 
             bool IsUsable() const {
-                return Usable && NumSlots < MaxSlots;
+                return Usable && !Decommitted && NumSlots < MaxSlots;
             }
 
             void InsertGroup(ui32 groupId) {
@@ -192,7 +175,7 @@ namespace NKikimr::NBsController {
                                 const TPDiskInfo& pdisk = it->second;
 
                                 // register the disk in context
-                                if (!AddDisk(pdisk, failRealmIdx, domainThroughIdx, error)) {
+                                if (!pdisk.Decommitted && !AddDisk(pdisk, failRealmIdx, domainThroughIdx, error)) {
                                     return false;
                                 }
                             }
@@ -396,16 +379,14 @@ namespace NKikimr::NBsController {
             , Randomize(randomize)
         {}
 
-        bool RegisterPDisk(TPDiskId pdiskId, TNodeLocation location, bool usable, ui32 numSlots, ui32 maxSlots,
-                const ui32 groupIds[], size_t numGroups, i64 spaceAvailable, bool operational) {
+        bool RegisterPDisk(const TPDiskRecord& pdisk) {
             // calculate disk position
-            const TPDiskLayoutPosition p(DomainMapper, location, pdiskId, Geom);
+            const TPDiskLayoutPosition p(DomainMapper, pdisk.Location, pdisk.PDiskId, Geom);
 
             // insert PDisk into specific map
             TPDisks::iterator it;
             bool inserted;
-            std::tie(it, inserted) = PDisks.try_emplace(pdiskId, std::move(location), usable, numSlots, maxSlots,
-                p, pdiskId, groupIds, numGroups, spaceAvailable, operational, &Box(p));
+            std::tie(it, inserted) = PDisks.try_emplace(pdisk.PDiskId, pdisk, p, &Box(p));
             if (inserted) {
                 it->second.FailDomain->push_back(&*it);
             }
@@ -468,6 +449,9 @@ namespace NKikimr::NBsController {
                                     }
                                     if (!it->second.Usable) {
                                         s << std::exchange(minus, "") << "u";
+                                    }
+                                    if (it->second.Decommitted) {
+                                        s << std::exchange(minus, "") << "d";
                                     }
                                     if (it->second.NumSlots >= it->second.MaxSlots) {
                                         s << std::exchange(minus, "") << "m";
@@ -770,10 +754,8 @@ namespace NKikimr::NBsController {
 
     TGroupMapper::~TGroupMapper() = default;
 
-    bool TGroupMapper::RegisterPDisk(TPDiskId pdiskId, TNodeLocation location, bool usable, ui32 numSlots, ui32 maxSlots,
-            const ui32 groupIds[], size_t numGroups, i64 spaceAvailable, bool operational) {
-        return Impl->RegisterPDisk(pdiskId, std::move(location), usable, numSlots, maxSlots, groupIds, numGroups,
-            spaceAvailable, operational);
+    bool TGroupMapper::RegisterPDisk(const TPDiskRecord& pdisk) {
+        return Impl->RegisterPDisk(pdisk);
     }
 
     void TGroupMapper::UnregisterPDisk(TPDiskId pdiskId) {

@@ -35,6 +35,7 @@ namespace NKikimr::NBsController {
         P(ItemConfigGenerationProvided, ui64)
         P(ItemConfigGenerationExpected, ui64)
         P(GroupId, ui32)
+        P(Status, NKikimrBlobStorage::EDriveStatus)
 
         struct TVDiskIdTraits {
             using Type = TVDiskID;
@@ -202,6 +203,17 @@ namespace NKikimr::NBsController {
     struct TExAlready : TExError {
         NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
             return NKikimrBlobStorage::TConfigResponse::TStatus::kAlready;
+        }
+    };
+
+    struct TExPDiskStatusRace : TExError {
+        TExPDiskStatusRace(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status) {
+            *this << "PDisk status race" << TErrorParams::NodeId(nodeId) << TErrorParams::PDiskId(pdiskId)
+                << TErrorParams::Status(status);
+        }
+
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kPDiskStatusRace;
         }
     };
 

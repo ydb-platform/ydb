@@ -86,9 +86,10 @@ namespace NMonitoring {
         class TDecoderUnistat {
         private:
         public:
-            explicit TDecoderUnistat(IMetricConsumer* consumer, IInputStream* is, TInstant ts)
-                : Consumer_{consumer}
-                , Timestamp_{ts} {
+            explicit TDecoderUnistat(IMetricConsumer* consumer, IInputStream* is, TStringBuf metricNameLabel, TInstant ts)
+                : Consumer_{consumer},
+                MetricNameLabel(metricNameLabel),
+                Timestamp_{ts} {
                 ReadJsonTree(is, &Json_, /* throw */ true);
             }
 
@@ -193,7 +194,7 @@ namespace NMonitoring {
                 Consumer_->OnMetricBegin(MetricContext_.Type);
 
                 Consumer_->OnLabelsBegin();
-                Consumer_->OnLabel("sensor", TString{MetricContext_.Name});
+                Consumer_->OnLabel(MetricNameLabel, TString{MetricContext_.Name});
                 for (auto&& l : MetricContext_.Labels) {
                     Consumer_->OnLabel(l.Name(), l.Value());
                 }
@@ -225,6 +226,7 @@ namespace NMonitoring {
         private:
             IMetricConsumer* Consumer_;
             NJson::TJsonValue Json_;
+            TStringBuf MetricNameLabel;
             TInstant Timestamp_;
 
             struct {
@@ -239,15 +241,15 @@ namespace NMonitoring {
 
     }
 
-    void DecodeUnistat(TStringBuf data, IMetricConsumer* c, TInstant ts) {
+    void DecodeUnistat(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel, TInstant ts) {
         c->OnStreamBegin();
-        DecodeUnistatToStream(data, c, ts);
+        DecodeUnistatToStream(data, c, metricNameLabel, ts);
         c->OnStreamEnd();
     }
 
-    void DecodeUnistatToStream(TStringBuf data, IMetricConsumer* c, TInstant ts) {
+    void DecodeUnistatToStream(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel, TInstant ts) {
         TMemoryInput in{data.data(), data.size()};
-        TDecoderUnistat decoder(c, &in, ts);
+        TDecoderUnistat decoder(c, &in, metricNameLabel, ts);
         decoder.Decode();
     }
 }

@@ -9,6 +9,7 @@ namespace NMonitoring {
         constexpr TStringBuf PROTOBUF = "application/x-solomon-pb";
         constexpr TStringBuf SPACK = "application/x-solomon-spack";
         constexpr TStringBuf PROMETHEUS = "text/plain";
+        constexpr TStringBuf UNISTAT = "text/json";
     }
 
     namespace NFormatContentEncoding {

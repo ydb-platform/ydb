@@ -31,11 +31,11 @@ class TS3MockTest: public NUnitTest::TTestBase, private NWrappers::TS3User {
 
 public:
     void SetUp() override {
-        UNIT_ASSERT(!Port.Defined());
+        Y_VERIFY(!Port.Defined());
         Port = PortManager.GetPort();
 
         S3Mock = MakeHolder<TS3Mock>(TS3Mock::TSettings(*Port));
-        UNIT_ASSERT(S3Mock->Start());
+        Y_VERIFY(S3Mock->Start());
 
         Runtime = MakeHolder<TTestBasicRuntime>();
         Runtime->Initialize(TAppPrepare().Unwrap());

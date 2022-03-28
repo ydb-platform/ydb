@@ -21,7 +21,6 @@ extern "C" {
 #include "postgres.h"
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
-#include "utils/fmgrprotos.h"
 #include "utils/builtins.h"
 #include "utils/datum.h"
 #include "utils/memutils.h"
@@ -189,6 +188,10 @@ struct TMkqlPgAdapter {
 #define SET_MEMORY_CONTEXT \
     CurrentMemoryContext = ErrorContext = TMkqlPgAdapter::Instance();
 
+inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
+    return desc.ElementTypeId ? desc.ElementTypeId : desc.TypeId;
+}
+
 class TPgConst : public TMutableComputationNode<TPgConst> {
     typedef TMutableComputationNode<TPgConst> TBaseComputation;
 public:
@@ -196,57 +199,47 @@ public:
         : TBaseComputation(mutables)
         , TypeId(typeId)
         , Value(value)
+        , TypeDesc(NPg::LookupType(TypeId))
     {
+        Zero(FInfo);
+        Y_ENSURE(TypeDesc.InFuncId);
+        fmgr_info(TypeDesc.InFuncId, &FInfo);
+        Y_ENSURE(!FInfo.fn_retset);
+        Y_ENSURE(FInfo.fn_addr);
+        Y_ENSURE(FInfo.fn_nargs >=1 && FInfo.fn_nargs <= 3);
+        TypeIOParam = MakeTypeIOParam(TypeDesc);
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        if (TypeId == INT2OID) {
-            return ScalarDatumToPod(Int16GetDatum(FromString<i16>(Value)));
-        } else if (TypeId == INT4OID) {
-            return ScalarDatumToPod(Int32GetDatum(FromString<i32>(Value)));
-        } else if (TypeId == INT8OID) {
-            return ScalarDatumToPod(Int64GetDatum(FromString<i64>(Value)));
-        } else if (TypeId == FLOAT4OID) {
-            return ScalarDatumToPod(Float4GetDatum(FromString<float>(Value)));
-        } else if (TypeId == FLOAT8OID) {
-            return ScalarDatumToPod(Float8GetDatum(FromString<double>(Value)));
-        } else if (TypeId == TEXTOID || TypeId == VARCHAROID || TypeId == BYTEAOID) {
-            SET_MEMORY_CONTEXT;
-            return PointerDatumToPod(PointerGetDatum(cstring_to_text_with_len(Value.data(), Value.size())));
-        } else if (TypeId == BOOLOID) {
-            return ScalarDatumToPod(BoolGetDatum(!Value.empty() && Value[0] == 't'));
-        }
-        else if (TypeId == NUMERICOID) {
-            SET_MEMORY_CONTEXT;
-            LOCAL_FCINFO(callInfo, 3);
-            Zero(*callInfo);
-            callInfo->nargs = 3;
-            callInfo->fncollation = DEFAULT_COLLATION_OID;
-            callInfo->isnull = false;
-            callInfo->args[0] = { (Datum)Value.c_str(), false };
-            callInfo->args[1] = { ObjectIdGetDatum(NUMERICOID), false };
-            callInfo->args[2] = { Int32GetDatum(-1), false };
+        SET_MEMORY_CONTEXT;
 
-            TPAllocScope call;
-            PG_TRY();
-            {
-                auto x = numeric_in(callInfo);
-                Y_ENSURE(!callInfo->isnull);
-                return PointerDatumToPod(x);
-            }
-            PG_CATCH();
-            {
-                auto error_data = CopyErrorData();
-                TStringBuilder errMsg;
-                errMsg << "Error in function: numeric_in, reason: " << error_data->message;
-                FreeErrorData(error_data);
-                FlushErrorState();
-                UdfTerminate(errMsg.c_str());
-            }
-            PG_END_TRY();
-        } else {
-            UdfTerminate((TStringBuilder() << "Unsupported pg type: " << NPg::LookupType(TypeId).Name).c_str());
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfo);
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)Value.c_str(), false };
+        callInfo->args[1] = { ObjectIdGetDatum(TypeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
+
+        TPAllocScope call;
+        PG_TRY();
+        {
+            auto ret = FInfo.fn_addr(callInfo);
+            Y_ENSURE(!callInfo->isnull);
+            return TypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);
         }
+        PG_CATCH();
+        {
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error in function: " << NPg::LookupProc(TypeDesc.InFuncId).Name << ", reason: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            UdfTerminate(errMsg.c_str());
+        }
+        PG_END_TRY();
     }
 
 private:
@@ -255,6 +248,9 @@ private:
 
     const ui32 TypeId;
     const TString Value;
+    const NPg::TTypeDesc TypeDesc;
+    FmgrInfo FInfo;
+    ui32 TypeIOParam;
 };
 
 class TPgInternal0 : public TMutableComputationNode<TPgInternal0> {
@@ -459,10 +455,6 @@ private:
     const TVector<TType*> ArgTypes;
     TVector<NPg::TTypeDesc> ArgDesc;
 };
-
-inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
-    return desc.ElementTypeId ? desc.ElementTypeId : desc.TypeId;
-}
 
 class TPgCast : public TMutableComputationNode<TPgCast> {
     typedef TMutableComputationNode<TPgCast> TBaseComputation;

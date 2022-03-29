@@ -13,7 +13,7 @@
  - ninja 1.10+
 
 ##### How to build:
- Currently x86_64 linux is supported. Building was tested on Ubuntu 20.04
+ Currently x86_64 linux is supported. Building was tested on Ubuntu 18.04 and Ubuntu 20.04
  Note when multithreading build is on operation each instance of clang can use up to 1 GB of RAM. Linkage of binary file can use up to 16Gb ram. Please make sure system has enough memory.
 
 1. Add repositories to install dependencies

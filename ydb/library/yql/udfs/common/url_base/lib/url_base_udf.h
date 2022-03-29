@@ -95,33 +95,21 @@ namespace {
 
     SIMPLE_UDF(TGetTail, TOptional<char*>(TOptional<char*>)) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
-        const std::string_view url(args[0].AsStringRef());
-        std::string_view cut(CutSchemePrefix(url));
-        const auto s = cut.find('/');
-        if (s == std::string_view::npos) {
-            return valueBuilder->NewString("/");
-        }
-
-        cut.remove_prefix(s);
-        return valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
+        const TStringBuf url(args[0].AsStringRef());
+        TStringBuf host, tail;
+        SplitUrlToHostAndPath(url, host, tail);
+        return tail.StartsWith('/')
+                ? valueBuilder->NewString(tail)
+                : valueBuilder->NewString(TString('/').append(tail));
     }
 
     SIMPLE_UDF(TGetPath, TOptional<char*>(TOptional<char*>)) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
-        const std::string_view url(args[0].AsStringRef());
-        std::string_view cut(CutSchemePrefix(url));
-        const auto s = cut.find('/');
-        if (s == std::string_view::npos) {
-            return valueBuilder->NewString("/");
-        }
-
-        cut.remove_prefix(s);
-        const auto end = cut.find_first_of("?#");
-        if (std::string_view::npos != end) {
-            cut.remove_suffix(cut.size() - end);
-        }
-
-        return valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
+        const TStringBuf url(args[0].AsStringRef());
+        TStringBuf path = GetPathAndQuery(url, true).Before('?');
+        return path.StartsWith('/')
+                ? valueBuilder->NewString(path)
+                : valueBuilder->NewString(TString('/').append(path));
     }
 
     SIMPLE_UDF(TGetFragment, TOptional<char*>(TOptional<char*>)) {

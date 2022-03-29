@@ -52,7 +52,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-TComputationNodeFactory GetTestFactory();
+TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory = {});
 
 template<typename T>
 NUdf::TUnboxedValuePod ToValue(T value) {
@@ -61,7 +61,8 @@ NUdf::TUnboxedValuePod ToValue(T value) {
 
 template<bool UseLLVM>
 struct TSetup {
-    TSetup() {
+    TSetup(TComputationNodeFactory nodeFactory = {}) {
+        NodeFactory = nodeFactory;
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         RandomProvider = CreateDeterministicRandomProvider(1);
         TimeProvider = CreateDeterministicTimeProvider(10000000);
@@ -73,7 +74,7 @@ struct TSetup {
     THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
         Reset();
         Explorer.Walk(pgm.GetNode(), *Env);
-        TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(),
+        TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(NodeFactory),
             FunctionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, UseLLVM ? "" : "OFF", EGraphPerProcess::Multi);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
@@ -86,6 +87,7 @@ struct TSetup {
         Pattern.Reset();
     }
 
+    TComputationNodeFactory NodeFactory;
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TIntrusivePtr<ITimeProvider> TimeProvider;

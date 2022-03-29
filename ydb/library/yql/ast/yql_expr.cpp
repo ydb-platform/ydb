@@ -2882,6 +2882,28 @@ const TString& TPgExprType::GetName() const {
     return NPg::LookupType(TypeId).Name;
 }
 
+ui32 TPgExprType::GetFlags(ui32 typeId) {
+    const auto& desc = NPg::LookupType(typeId);
+    ui32 ret = TypeHasManyValues;
+    if (!desc.SendFuncId || !desc.ReceiveFuncId) {
+        ret |= TypeNonPersistable;
+    }
+
+    if (!desc.LessProcId || !desc.CompareProcId) {
+        ret |= TypeNonComparable;
+    }
+
+    if (!desc.EqualProcId || !desc.CompareProcId) {
+        ret |= TypeNonEquatable;
+    }
+
+    if (!desc.HashProcId) {
+        ret |= TypeNonHashable;
+    }
+
+    return ret;
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)

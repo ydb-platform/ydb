@@ -22,6 +22,21 @@ bool IsCompatibleTo(ui32 actualType, ui32 expectedType) {
     return actualType == expectedType;
 }
 
+TString ArgTypesList(const TVector<ui32>& ids) {
+    TStringBuilder str;
+    str << '(';
+    for (ui32 i = 0; i < ids.size(); ++i) {
+        if (i > 0) {
+            str << ',';
+        }
+
+        str << LookupType(ids[i]).Name;
+    }
+
+    str << ')';
+    return str;
+}
+
 using TOperators = THashMap<ui32, TOperDesc>;
 
 using TProcs = THashMap<ui32, TProcDesc>;
@@ -996,6 +1011,10 @@ struct TCatalog {
                     Y_ENSURE(equalOperPtr);
                     v.LessProcId = lessOperPtr->ProcId;
                     v.EqualProcId = equalOperPtr->ProcId;
+
+                    auto compareAmProcPtr = AmProcs.FindPtr(std::make_tuple(btreeOpClassPtr->Family, ui32(EBtreeAmProcNum::Compare), v.TypeId, v.TypeId));
+                    Y_ENSURE(compareAmProcPtr);
+                    v.CompareProcId = compareAmProcPtr->ProcId;
                 }
 
                 auto hashOpClassPtr = OpClasses.FindPtr(std::make_pair(EOpClassMethod::Hash, v.TypeId));
@@ -1053,7 +1072,8 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
     }
 
     if (!ValidateProcArgs(*procPtr, argTypeIds)) {
-        throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types";
+        throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types:" <<
+            ArgTypesList(argTypeIds);
     }
 
     return *procPtr;
@@ -1076,7 +1096,8 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
         return *d;
     }
 
-    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types";
+    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types:"
+        << ArgTypesList(argTypeIds);
 }
 
 const TProcDesc& LookupProc(ui32 procId) {
@@ -1150,7 +1171,8 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
         return *d;
     }
 
-    throw yexception() << "Unable to find an overload for operator " << name << " with given argument types";
+    throw yexception() << "Unable to find an overload for operator " << name << " with given argument types: "
+        << ArgTypesList(argTypeIds);
 }
 
 const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds) {
@@ -1161,7 +1183,8 @@ const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds) {
     }
 
     if (!ValidateOperArgs(*operPtr, argTypeIds)) {
-        throw yexception() << "Unable to find an overload for operator with oid " << operId << " with given argument types";
+        throw yexception() << "Unable to find an overload for operator with oid " << operId << " with given argument types: "
+            << ArgTypesList(argTypeIds);
     }
 
     return *operPtr;
@@ -1203,7 +1226,8 @@ const TAggregateDesc& LookupAggregation(const TStringBuf& name, const TVector<ui
         return *d;
     }
 
-    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types";
+    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
+        << ArgTypesList(argTypeIds);
 }
 
 bool HasOpClass(EOpClassMethod method, ui32 typeId) {

@@ -7,6 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/core/yql_pg_utils.h>
@@ -1743,6 +1744,115 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
     } else {
         Y_FAIL("Unsupported context type");
     }
+}
+
+NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
+    Y_UNUSED(type);
+    throw yexception() << "PG types are not supported";
+}
+
+class TPgCompare : public NUdf::ICompare {
+public:
+    TPgCompare(const NMiniKQL::TPgType* type)
+        : Type(type)
+        , TypeDesc(NPg::LookupType(type->GetTypeId()))
+    {
+        Y_ENSURE(TypeDesc.LessProcId);
+        Y_ENSURE(TypeDesc.CompareProcId);
+
+        Zero(FInfoLess);
+        fmgr_info(TypeDesc.LessProcId, &FInfoLess);
+        Y_ENSURE(!FInfoLess.fn_retset);
+        Y_ENSURE(FInfoLess.fn_addr);
+        Y_ENSURE(FInfoLess.fn_nargs == 2);
+
+        Zero(FInfoCompare);
+        fmgr_info(TypeDesc.CompareProcId, &FInfoCompare);
+        Y_ENSURE(!FInfoCompare.fn_retset);
+        Y_ENSURE(FInfoCompare.fn_addr);
+        Y_ENSURE(FInfoCompare.fn_nargs == 2);
+    }
+
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        SET_MEMORY_CONTEXT;
+        TPAllocScope call;
+        LOCAL_FCINFO(callInfo, 2);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess);
+        callInfo->nargs = 2;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        if (!lhs) {
+            if (!rhs) {
+                return false;
+            }
+
+            return true;
+        }
+
+        if (!rhs) {
+            return false;
+        }
+
+        callInfo->args[0] = { TypeDesc.PassByValue ?
+            ScalarDatumFromPod(lhs) :
+            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+        callInfo->args[1] = { TypeDesc.PassByValue ?
+            ScalarDatumFromPod(rhs) :
+            PointerDatumFromPod(rhs, TypeDesc.TypeLen == -1), false };
+
+        auto x = FInfoLess.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetBool(x);
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        SET_MEMORY_CONTEXT;
+        TPAllocScope call;
+        LOCAL_FCINFO(callInfo, 2);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare);
+        callInfo->nargs = 2;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        if (!lhs) {
+            if (!rhs) {
+                return 0;
+            }
+
+            return -1;
+        }
+
+        if (!rhs) {
+            return 1;
+        }
+
+        callInfo->args[0] = { TypeDesc.PassByValue ?
+            ScalarDatumFromPod(lhs) :
+            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+        callInfo->args[1] = { TypeDesc.PassByValue ?
+            ScalarDatumFromPod(rhs) :
+            PointerDatumFromPod(rhs, TypeDesc.TypeLen == -1), false };
+
+        auto x = FInfoCompare.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetInt32(x);
+    }
+
+private:
+    const NMiniKQL::TPgType* Type;
+    const NPg::TTypeDesc TypeDesc;
+
+    FmgrInfo FInfoLess, FInfoCompare;
+};
+
+NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
+    return new TPgCompare(type);
+}
+
+NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type) {
+    Y_UNUSED(type);
+    throw yexception() << "PG types are not supported";
 }
 
 } // namespace NMiniKQL

@@ -4225,6 +4225,9 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
+        auto& lambdaMerge = input->ChildRef(5);
+        const bool noSaveLoad = lambdaMerge->Tail().IsCallable("Void");
+
         auto& lambdaSave = input->ChildRef(3);
         if (!UpdateLambdaAllArgumentsTypes(lambdaSave, { combineStateType }, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -4235,7 +4238,7 @@ namespace {
         }
 
         auto savedType = lambdaSave->GetTypeAnn();
-        if (!EnsurePersistableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
+        if (!noSaveLoad && !EnsurePersistableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4255,7 +4258,6 @@ namespace {
         }
 
         auto reduceStateType = lambdaLoad->GetTypeAnn();
-        auto& lambdaMerge = input->ChildRef(5);
         if (!UpdateLambdaAllArgumentsTypes(lambdaMerge, { reduceStateType, reduceStateType }, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4264,7 +4266,7 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!lambdaMerge->Tail().IsCallable("Void") && !IsSameAnnotation(*lambdaMerge->GetTypeAnn(), *reduceStateType)) {
+        if (!noSaveLoad && !IsSameAnnotation(*lambdaMerge->GetTypeAnn(), *reduceStateType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaUpdate->Pos()), TStringBuilder() << "Mismatch merge lambda result type, expected: "
                 << *reduceStateType << ", but got: " << *lambdaMerge->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;

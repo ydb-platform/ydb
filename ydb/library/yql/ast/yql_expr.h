@@ -702,7 +702,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Pg;
 
     TPgExprType(ui64 hash, ui32 typeId)
-        : TTypeAnnotationNode(KindValue, TypeHasManyValues, hash)
+        : TTypeAnnotationNode(KindValue, GetFlags(typeId), hash)
         , TypeId(typeId)
     {
     }
@@ -721,6 +721,9 @@ public:
     bool operator==(const TPgExprType& other) const {
         return TypeId == other.TypeId;
     }
+
+private:
+    ui32 GetFlags(ui32 typeId);
 
 private:
     ui32 TypeId;

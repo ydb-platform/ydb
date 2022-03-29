@@ -24,6 +24,7 @@ target_link_libraries(ydb-library-yql-minikql-ut PUBLIC
   yql-minikql-computation
   yql-minikql-invoke_builtins
   udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_sources(ydb-library-yql-minikql-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/compact_hash_ut.cpp

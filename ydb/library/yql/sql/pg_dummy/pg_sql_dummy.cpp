@@ -3,6 +3,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <ydb/library/yql/minikql/computation/presort_impl.h>
 #include <ydb/library/yql/core/yql_pg_utils.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 
 namespace NSQLTranslationPG {
 
@@ -110,6 +111,21 @@ void* PgInitializeContext(const std::string_view& contextType) {
 void PgDestroyContext(const std::string_view& contextType, void* ctx) {
    Y_UNUSED(contextType);
    Y_UNUSED(ctx);
+}
+
+NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
+    Y_UNUSED(type);
+    throw yexception() << "PG types are not supported";
+}
+
+NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
+    Y_UNUSED(type);
+    throw yexception() << "PG types are not supported";
+}
+
+NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type) {
+    Y_UNUSED(type);
+    throw yexception() << "PG types are not supported";
 }
 
 } // namespace NMiniKQL

@@ -45,6 +45,7 @@ struct TTypeDesc {
     // from opclass
     ui32 LessProcId = 0;
     ui32 EqualProcId = 0;
+    ui32 CompareProcId = 0;
     ui32 HashProcId = 0;
 };
 

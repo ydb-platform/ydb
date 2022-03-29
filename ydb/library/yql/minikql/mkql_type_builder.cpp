@@ -1751,8 +1751,10 @@ NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::EmptyList:
         case NMiniKQL::TType::EKind::EmptyDict:
             return new TEmptyHash();
+        case NMiniKQL::TType::EKind::Pg:
+            return MakePgHash((const TPgType*)type);
         default:
-            throw TTypeNotSupported() << "Data, Optional, Tuple, Struct, List, Variant or Dict is expected for hashing";
+            throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for hashing";
     }
 }
 
@@ -1791,8 +1793,10 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
         }
         case NMiniKQL::TType::EKind::List:
             return new TCompare<NMiniKQL::TType::EKind::List>(type);
+        case NMiniKQL::TType::EKind::Pg:
+            return MakePgCompare((const TPgType*)type);
         default:
-            throw TTypeNotSupported() << "Data, Optional, Variant over Tuple, Tuple or List is expected for comparing";
+            throw TTypeNotSupported() << "Data, Pg, Optional, Variant over Tuple, Tuple or List is expected for comparing";
     }
 }
 
@@ -1834,8 +1838,10 @@ NUdf::IEquate::TPtr MakeEquateImpl(const NMiniKQL::TType* type) {
             return new TEquate<NMiniKQL::TType::EKind::Variant>(type);
         case NMiniKQL::TType::EKind::Dict:
             return new TEquate<NMiniKQL::TType::EKind::Dict>(type);
+        case NMiniKQL::TType::EKind::Pg:
+            return MakePgEquate((const TPgType*)type);
         default:
-            throw TTypeNotSupported() << "Data, Optional, Tuple, Struct, List, Variant or Dict is expected for equating";
+            throw TTypeNotSupported() << "Data, Pg, Optional, Tuple, Struct, List, Variant or Dict is expected for equating";
     }
 }
 

@@ -28,6 +28,7 @@ Y_UNIT_TEST_SUITE(TTypesTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, 0);
         UNIT_ASSERT(ret.LessProcId);
         UNIT_ASSERT(ret.EqualProcId);
+        UNIT_ASSERT(ret.CompareProcId);
         UNIT_ASSERT(ret.HashProcId);
 
         ret = LookupType("point");
@@ -37,6 +38,7 @@ Y_UNIT_TEST_SUITE(TTypesTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.ElementTypeId, LookupType("float8").TypeId);
         UNIT_ASSERT(!ret.LessProcId);
         UNIT_ASSERT(!ret.EqualProcId);
+        UNIT_ASSERT(!ret.CompareProcId);
         UNIT_ASSERT(!ret.HashProcId);
 
         ret = LookupType(1009);

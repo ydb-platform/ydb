@@ -44,8 +44,8 @@ void TDefaultValueBuilder::Terminate(const char* message) const {
         ythrow yexception() << fullMessage;
     }
 
-    Cerr << fullMessage;
-    abort();
+    Cerr << fullMessage << Flush;
+    _exit(1);
 }
 
 NUdf::TUnboxedValue TDefaultValueBuilder::NewStringNotFilled(ui32 size) const

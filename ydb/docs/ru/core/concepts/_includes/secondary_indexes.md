@@ -46,15 +46,15 @@
 
 Создание индекса — асинхронная операция. Если после запуска операции произойдет разрыв клиент-серверной связности, то построение индекса будет продолжено. Управлять асинхронной операцией можно через {{ ydb-short-name }} CLI.
 
-## Создаени и удаление вторичных индексов {#ddl}
+## Создание и удаление вторичных индексов {#ddl}
 
 Вторичный индекс может быть:
 
-- Создан ири создании таблицы командой YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table.md).
+- Создан при создании таблицы командой YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table.md).
 - Добавлен к существующей таблице командой YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) или командой YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add)
 - Удален у существующей таблицы командой YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) или командой YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop).
 - Удален вместе с таблицей командой YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table.md) или командой YDB CLI `table drop`.
 
 ## Назначение и применение вторичных индексов {#best_practices}
 
-О нзначении и применении вторичных индексов при разработке приложений смотрите в [рекомендациях](../../best_practices/secondary_indexes.md).
+О назначении и применении вторичных индексов при разработке приложений смотрите в [рекомендациях](../../best_practices/secondary_indexes.md).

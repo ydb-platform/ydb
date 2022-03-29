@@ -2,7 +2,7 @@
 
 {% include [work in progress message](../../_includes/addition.md) %}
 
-Ниже приведены примеры кода анонимной аутентификации в разных {{ ydb-short-name }} SDK
+Ниже приведены примеры кода анонимной аутентификации в разных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
 

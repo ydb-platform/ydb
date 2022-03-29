@@ -285,8 +285,8 @@ public:
                     disks.GetValue<T::Guid>(), getOpt(T::SharedWithOs()), getOpt(T::ReadCentric()),
                     disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
-                    disks.GetValue<T::ExpectedSerial>(), disks.GetValue<T::LastSeenSerial>(),
-                    disks.GetValue<T::LastSeenPath>(), staticSlotUsage);
+                    disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::ExpectedSerial>(),
+                    disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage);
 
                 if (!disks.Next())
                     return false;

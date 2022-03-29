@@ -794,6 +794,7 @@ namespace NKikimr::NBsController {
             pb->SetDriveStatus(pdisk.Status);
             pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
             pb->SetDriveStatusChangeTimestamp(pdisk.StatusTimestamp.GetValue());
+            pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);
             pb->MutablePDiskMetrics()->ClearPDiskId();
         }

@@ -39,6 +39,7 @@ public:
             {T::StatusChangeTimestamp::ColumnId, {E::kInfoFieldNumber, V::kStatusChangeTimestampFieldNumber}},
             {T::ExpectedSlotCount::ColumnId, {E::kInfoFieldNumber, V::kExpectedSlotCountFieldNumber}},
             {T::NumActiveSlots::ColumnId, {E::kInfoFieldNumber, V::kNumActiveSlotsFieldNumber}},
+            {T::DecommitStatus::ColumnId, {E::kInfoFieldNumber, V::kDecommitStatusFieldNumber}},
         };
         return fieldMap;
     }

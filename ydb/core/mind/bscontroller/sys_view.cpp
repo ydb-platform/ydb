@@ -434,6 +434,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     }
     info->SetExpectedSlotCount(pDiskInfo->ExpectedSlotCount);
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
+    info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
@@ -567,6 +568,7 @@ void TBlobStorageController::UpdateSystemViews() {
                     }
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
+                pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
                 pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount ? pdisk.ExpectedSlotCount : pdisk.StaticSlotUsage);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
             }

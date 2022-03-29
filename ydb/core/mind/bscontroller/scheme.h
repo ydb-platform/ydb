@@ -38,10 +38,11 @@ struct Schema : NIceDb::Schema {
         struct ExpectedSerial : Column<14, NScheme::NTypeIds::String> {};
         struct LastSeenSerial : Column<15, NScheme::NTypeIds::String> {};
         struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {};
+        struct DecommitStatus : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EDecommitStatus; static constexpr Type Default = Type::DECOMMIT_NONE; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
-              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath>;
+              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus>;
     };
 
     struct Group : Table<4> {

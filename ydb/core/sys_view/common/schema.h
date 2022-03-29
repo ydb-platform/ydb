@@ -191,6 +191,7 @@ struct Schema : NIceDb::Schema {
         struct StatusChangeTimestamp : Column<14, NScheme::NTypeIds::Timestamp> {};
         struct ExpectedSlotCount : Column<15, NScheme::NTypeIds::Uint32> {};
         struct NumActiveSlots : Column<16, NScheme::NTypeIds::Uint32> {};
+        struct DecommitStatus : Column<17, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -208,7 +209,8 @@ struct Schema : NIceDb::Schema {
             Status,
             StatusChangeTimestamp,
             ExpectedSlotCount,
-            NumActiveSlots>;
+            NumActiveSlots,
+            DecommitStatus>;
     };
 
     struct VSlots : Table<5> {

@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(Decommit3dc) {
                 auto *ds = cmd->MutableUpdateDriveStatus();
                 ds->MutableHostKey()->SetNodeId(pdisk.GetNodeId());
                 ds->SetPDiskId(pdisk.GetPDiskId());
-                ds->SetStatus(NKikimrBlobStorage::EDriveStatus::DECOMMIT_PENDING);
+                ds->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING);
             }
         }
 
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(Decommit3dc) {
             auto *ds = cmd->MutableUpdateDriveStatus();
             ds->MutableHostKey()->SetNodeId(nodeId);
             ds->SetPDiskId(pdiskId);
-            ds->SetStatus(NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT);
+            ds->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT);
             movedOutPDisks.emplace(nodeId, pdiskId);
             auto response = env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());

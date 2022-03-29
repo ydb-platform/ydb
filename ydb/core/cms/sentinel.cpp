@@ -151,8 +151,6 @@ bool TPDiskStatus::IsNewStatusGood() const {
         case EPDiskStatus::FAULTY:
         case EPDiskStatus::BROKEN:
         case EPDiskStatus::TO_BE_REMOVED:
-        case EPDiskStatus::DECOMMIT_PENDING:
-        case EPDiskStatus::DECOMMIT_IMMINENT:
         case EPDiskStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
         case EPDiskStatus::EDriveStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
             return false;
@@ -650,7 +648,6 @@ class TStatusChanger: public TSentinelChildBase<TStatusChanger> {
         command.MutableHostKey()->SetNodeId(Id.NodeId);
         command.SetPDiskId(Id.DiskId);
         command.SetStatus(Status);
-        command.SetProhibitDecommittedStatusChange(true);
         NTabletPipe::SendData(SelfId(), CmsState->BSControllerPipe, request.Release());
     }
 

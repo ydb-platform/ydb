@@ -189,8 +189,13 @@ enum EDriveStatus {
     reserved 4;
     FAULTY = 5; // drive is expected to become BROKEN soon, new groups are not created, old groups are asynchronously moved out from this drive
     TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working
-    DECOMMIT_PENDING = 7; // drive is going to be removed soon, but SelfHeal logic do not remove it automatically
-    DECOMMIT_IMMINENT = 8; // drive is going to be removed automatically
+}
+
+enum EDecommitStatus {
+    DECOMMIT_UNSET = 0; // unset status -- missing optional field
+    DECOMMIT_NONE = 1; // no decomission
+    DECOMMIT_PENDING = 2; // drive is going to be removed soon, but SelfHeal logic would not remove it automatically
+    DECOMMIT_IMMINENT = 3; // drive is going to be settled automatically
 }
 
 message TGroupStatus {
@@ -228,7 +233,7 @@ message TUpdateDriveStatus {
     uint32 PDiskId = 4; // may be set instead of path to identify PDisk
     string Serial = 5; // may be set instead of path and PDiskId to identify PDisk
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
-    bool ProhibitDecommittedStatusChange = 7; // used by CMS to prevent changing status from DECOMMIT_*
+    EDecommitStatus DecommitStatus = 7;
 }
 
 message TReadDriveStatus {
@@ -529,6 +534,7 @@ message TBaseConfig {
         uint32 ExpectedSlotCount = 13;
         NKikimrBlobStorage.TPDiskMetrics PDiskMetrics = 14;
         uint64 DriveStatusChangeTimestamp = 15; // TInstant::GetValue()
+        EDecommitStatus DecommitStatus = 16;
     }
     message TVSlot {
         message TDonorDisk {
@@ -616,7 +622,6 @@ message TConfigResponse {
             kDiskIsNotDonor = 8;
             kAlready = 9;
             kMayGetDegraded = 10;
-            kPDiskStatusRace = 11;
         }
 
         message TFailParam {
@@ -634,7 +639,6 @@ message TConfigResponse {
                 uint32 GroupId = 11;
                 NKikimrBlobStorage.TVDiskID VDiskId = 12;
                 NKikimrBlobStorage.TVSlotId VSlotId = 13;
-                EDriveStatus Status = 14;
             }
         }
 

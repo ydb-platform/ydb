@@ -69,6 +69,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDriveStatus, stream, value) {
     stream << NKikimrBlobStorage::EDriveStatus_Name(value);
 }
 
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDecommitStatus, stream, value) {
+    stream << NKikimrBlobStorage::EDecommitStatus_Name(value);
+}
+
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TGroupStatus::E, stream, value) {
     stream << NKikimrBlobStorage::TGroupStatus::E_Name(value);
 }

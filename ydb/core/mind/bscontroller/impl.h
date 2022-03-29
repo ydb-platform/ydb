@@ -293,6 +293,7 @@ public:
 
         NKikimrBlobStorage::EDriveStatus Status;
         TInstant StatusTimestamp;
+        NKikimrBlobStorage::EDecommitStatus DecommitStatus;
         TString ExpectedSerial;
         TString LastSeenSerial;
         TString LastSeenPath;
@@ -312,7 +313,8 @@ public:
                     Table::Timestamp,
                     Table::ExpectedSerial,
                     Table::LastSeenSerial,
-                    Table::LastSeenPath
+                    Table::LastSeenPath,
+                    Table::DecommitStatus
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -325,7 +327,8 @@ public:
                     &TPDiskInfo::StatusTimestamp,
                     &TPDiskInfo::ExpectedSerial,
                     &TPDiskInfo::LastSeenSerial,
-                    &TPDiskInfo::LastSeenPath
+                    &TPDiskInfo::LastSeenPath,
+                    &TPDiskInfo::DecommitStatus
                 );
             callback(&adapter);
         }
@@ -342,6 +345,7 @@ public:
                    ui32 defaultMaxSlots,
                    NKikimrBlobStorage::EDriveStatus status,
                    TInstant statusTimestamp,
+                   NKikimrBlobStorage::EDecommitStatus decommitStatus,
                    const TString& expectedSerial,
                    const TString& lastSeenSerial,
                    const TString& lastSeenPath,
@@ -357,6 +361,7 @@ public:
             , BoxId(boxId)
             , Status(status)
             , StatusTimestamp(statusTimestamp)
+            , DecommitStatus(decommitStatus)
             , ExpectedSerial(expectedSerial)
             , LastSeenSerial(lastSeenSerial)
             , LastSeenPath(lastSeenPath)
@@ -400,39 +405,39 @@ public:
         }
 
         bool ShouldBeSettledBySelfHeal() const {
-            switch (Status) {
-                case NKikimrBlobStorage::EDriveStatus::FAULTY:
-                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
-                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
-                    return true;
-                default:
-                    return false;
-            }
+            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
+                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
+                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT;
         }
 
         bool BadInTermsOfSelfHeal() const {
-            switch (Status) {
-                case NKikimrBlobStorage::EDriveStatus::FAULTY:
-                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
-                case NKikimrBlobStorage::EDriveStatus::INACTIVE:
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        bool Decommitted() const {
-            switch (Status) {
-                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_PENDING:
-                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
-                    return true;
-                default:
-                    return false;
-            }
+            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
+                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
+                || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
         std::tuple<bool, bool> GetSelfHealStatusTuple() const {
             return {ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal()};
+        }
+
+        bool AcceptsNewSlots() const {
+            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
+                && DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE;
+        }
+
+        bool Decommitted() const {
+            switch (DecommitStatus) {
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE:
+                    return false;
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING:
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT:
+                    return true;
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET:
+                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    break;
+            }
+            Y_FAIL("unexpected EDecommitStatus");
         }
 
         bool HasGoodExpectedStatus() const {
@@ -445,8 +450,6 @@ public:
                 case NKikimrBlobStorage::EDriveStatus::INACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
                 case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
-                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_PENDING:
-                case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
                     return true;
 
                 case NKikimrBlobStorage::EDriveStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:

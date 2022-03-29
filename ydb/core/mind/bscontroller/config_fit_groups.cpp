@@ -199,8 +199,6 @@ namespace NKikimr {
 
                             case NKikimrBlobStorage::EDriveStatus::FAULTY:
                             case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
-                            case NKikimrBlobStorage::EDriveStatus::DECOMMIT_PENDING:
-                            case NKikimrBlobStorage::EDriveStatus::DECOMMIT_IMMINENT:
                                 // groups are moved out asynchronously
                                 break;
 
@@ -450,7 +448,7 @@ namespace NKikimr {
                     }
                 }
 
-                if (info.Status != NKikimrBlobStorage::EDriveStatus::ACTIVE) {
+                if (!info.AcceptsNewSlots()) {
                     usable = false;
                 }
 

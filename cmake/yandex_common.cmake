@@ -1,6 +1,7 @@
 # Set of common macros
 
 find_package(Python2 REQUIRED)
+find_package(Python3 REQUIRED)
 
 function(target_ragel_lexers TgtName Key Src)
   SET(RAGEL_BIN ${CMAKE_BINARY_DIR}/bin/ragel)
@@ -120,5 +121,45 @@ function(resources Tgt Output)
     OUTPUT ${Output}
     COMMAND rescompiler ${Output} ${ResourcesList}
     DEPENDS ${RESOURCE_ARGS_INPUTS}
+  )
+endfunction()
+
+function(use_export_script Target ExportFile)
+  get_filename_component(OutName ${ExportFile} NAME)
+  set(OutPath ${CMAKE_CURRENT_BINARY_DIR}/gen_${OutName})
+
+  if (MSVC)
+    target_link_flags(${Target} PRIVATE /DEF:${OutPath})
+    set(EXPORT_SCRIPT_FLAVOR msvc)
+  elseif(APPLE)
+    execute_process(
+      COMMAND Python3_EXECUTABLE ${CMAKE_SOURCE_DIR}/build/scripts/export_script_gen.py ${ExportFile} --format darwin
+      RESULT_VARIABLE _SCRIPT_RES
+      OUTPUT_VARIABLE _SCRIPT_FLAGS
+      ERROR_VARIABLE _SCRIPT_STDERR
+    )
+    if (NOT ${_SCRIPT_RES} EQUAL 0)
+      message(FATAL_ERROR "Failed to parse export symbols from ${ExportFile}:\n${_SCRIPT_STDERR}")
+      return()
+    endif()
+    target_link_flags(${Target} PRIVATE ${_SCRIPT_FLAGS})
+    return()
+  else()
+    set(EXPORT_SCRIPT_FLAVOR gnu)
+    target_link_flags(${Target} PRIVATE -Wl,--gc-sections -rdynamic -Wl,--version-script=${OutPath})
+  endif()
+
+  add_custom_command(
+    OUTPUT ${OutPath}
+    COMMAND
+      Python3::Interpreter ${CMAKE_SOURCE_DIR}/build/scripts/export_script_gen.py ${ExportFile} ${OutPath} --format ${EXPORT_SCRIPT_FLAVOR}
+    DEPENDS ${ExportFile} ${CMAKE_SOURCE_DIR}/build/scripts/export_script_gen.py
+  )
+  target_sources(${Target} PRIVATE ${OutPath})
+  set_property(SOURCE ${OutPath} PROPERTY
+    HEADER_FILE_ONLY On
+  )
+  set_property(TARGET ${Target} APPEND PROPERTY
+    LINK_DEPENDS ${OutPath}
   )
 endfunction()

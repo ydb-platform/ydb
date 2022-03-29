@@ -14,9 +14,9 @@ using namespace NKikimr;
 
 void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, NGRpcService::ICheckerIface* checker) {
     static const std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
-    //full list of permissions for compatility. remove old permissions later.
+    //full list of permissions for compatibility. remove old permissions later.
     static const TVector<TString> permissions = {
-        "yds.streams.write",
+        "ydb.streams.write",
         "ydb.databases.list",
         "ydb.databases.create",
         "ydb.databases.connect"

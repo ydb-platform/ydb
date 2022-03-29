@@ -44,6 +44,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         bool IsSnapshot;
         bool IsTotalSnapshot;
         TString EmbeddedLogBody;
+        TVector<TEvTablet::TCommitMetadata> EmbeddedMetadata;
 
         TVector<TLogoBlobID> GcDiscovered;
         TVector<TLogoBlobID> GcLeft;
@@ -123,6 +124,14 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 GcLeft.resize(gcLeftSize);
                 for (ui32 i= 0; i != gcLeftSize; ++i)
                     GcLeft[i] = LogoBlobIDFromLogoBlobID(x.GetGcLeft(i));
+            }
+
+            if (const size_t metaSize = x.EmbeddedMetadataSize()) {
+                EmbeddedMetadata.reserve(metaSize);
+                for (size_t i = 0; i < metaSize; ++i) {
+                    const auto& meta = x.GetEmbeddedMetadata(i);
+                    EmbeddedMetadata.emplace_back(meta.GetKey(), meta.GetData());
+                }
             }
 
             switch (Status) {
@@ -679,9 +688,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                                 }());
 
                                 if (entry.EmbeddedLogBody)
-                                    graph->AddEntry(id, entry.EmbeddedLogBody, entry.GcDiscovered, entry.GcLeft);
+                                    graph->AddEntry(id, std::move(entry.EmbeddedLogBody), std::move(entry.GcDiscovered), std::move(entry.GcLeft), std::move(entry.EmbeddedMetadata));
                                 else
-                                    graph->AddEntry(id, entry.References, entry.IsSnapshot, entry.GcDiscovered, entry.GcLeft);
+                                    graph->AddEntry(id, std::move(entry.References), entry.IsSnapshot, std::move(entry.GcDiscovered), std::move(entry.GcLeft), std::move(entry.EmbeddedMetadata));
 
                                 if (lastUnbrokenTailEntry + 1 == id.second)
                                     lastUnbrokenTailEntry = id.second;
@@ -717,9 +726,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                             }());
 
                             if (entry.EmbeddedLogBody)
-                                graph->AddEntry(id, entry.EmbeddedLogBody, entry.GcDiscovered, entry.GcLeft);
+                                graph->AddEntry(id, std::move(entry.EmbeddedLogBody), std::move(entry.GcDiscovered), std::move(entry.GcLeft), std::move(entry.EmbeddedMetadata));
                             else
-                                graph->AddEntry(id, entry.References, entry.IsSnapshot, entry.GcDiscovered, entry.GcLeft);
+                                graph->AddEntry(id, std::move(entry.References), entry.IsSnapshot, std::move(entry.GcDiscovered), std::move(entry.GcLeft), std::move(entry.EmbeddedMetadata));
 
                             hasSnapshotInGeneration |= entry.IsSnapshot;
                             break;

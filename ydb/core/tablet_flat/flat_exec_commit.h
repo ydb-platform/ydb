@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/base/tablet.h>
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 
@@ -53,6 +54,7 @@ namespace NTabletFlatExecutor {
         TString FollowerAux;
         TVector<TLogoBlob> Refs;
         TGCBlobDelta GcDelta;
+        TVector<TEvTablet::TCommitMetadata> Metadata;
         TSeat *FirstTx = nullptr;
         TSeat *LastTx = nullptr;
     };

@@ -1164,6 +1164,16 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
            entry->FollowerUpdate->Body = msg->EmbeddedLogBody;
     }
 
+    if (!msg->EmbeddedMetadata.empty()) {
+        auto *m = x->MutableEmbeddedMetadata();
+        m->Reserve(msg->EmbeddedMetadata.size());
+        for (const auto &meta : msg->EmbeddedMetadata) {
+            auto *p = m->Add();
+            p->SetKey(meta.Key);
+            p->SetData(meta.Data);
+        }
+    }
+
     if (saveFollowerUpdate && msg->FollowerAux)
         entry->FollowerUpdate->AuxPayload = msg->FollowerAux;
 

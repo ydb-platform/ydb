@@ -1,6 +1,7 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "library/cpp/actors/protos/actors.proto";
 
 package NKikimrExecutorFlat;
 option java_package = "ru.yandex.kikimr.proto";
@@ -246,4 +247,14 @@ message TDatabaseBorrowPart {
 
     repeated TPartInfo Parts = 3;
     repeated TTxStatus TxStatusParts = 4;
+}
+
+message TLeaseInfoMetadata {
+    // Actor id of the lease holder, which is an executor actor
+    optional NActorsProto.TActorId LeaseHolder = 1;
+
+    // Lease duration in microseconds. Lease holder may perform leader-only
+    // tasks up to this duration since the last channel 0 block confirmation,
+    // and expects future generations will not interfere.
+    optional uint32 LeaseDurationUs = 2;
 }

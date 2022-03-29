@@ -103,9 +103,14 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
         TEvTablet::TEvBoot::TPtr &ev,
         TExecutorCaches &&caches)
 {
-    PrepareEnv(false, ev->Get()->Generation, std::move(caches));
+    TEvTablet::TEvBoot *msg = ev->Get();
+    PrepareEnv(false, msg->Generation, std::move(caches));
 
-    Steps->Spawn<NBoot::TStages>(std::move(ev->Get()->DependencyGraph), nullptr);
+    if (msg->DependencyGraph) {
+        StartLeaseWaiter(BootTimestamp, *msg->DependencyGraph);
+    }
+
+    Steps->Spawn<NBoot::TStages>(std::move(msg->DependencyGraph), nullptr);
     Steps->Execute();
 
     return CheckCompletion();
@@ -113,7 +118,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
 
 void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches caches) noexcept
 {
-    BootStartTime = TAppData::TimeProvider->Now();
+    BootTimestamp = AppData()->MonotonicTimeProvider->Now();
 
     auto *sys = TlsActivationContext->ExecutorThread.ActorSystem;
     auto *logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_FLATBOOT);
@@ -212,9 +217,12 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::CheckCompletion()
     if (Loads)
         return OpResultContinue;
 
+    if (LeaseWaiter)
+        return OpResultContinue;
+
     if (State().Follower || Restored) {
         if (auto logl = Steps->Logger()->Log(ELnLev::Info)) {
-            auto spent = TAppData::TimeProvider->Now() - BootStartTime;
+            auto spent = AppData()->MonotonicTimeProvider->Now() - BootTimestamp;
 
             logl
                 << NFmt::Do(State()) << " booting completed"
@@ -278,6 +286,12 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
         step.Drop();
         Steps->Execute();
+    } else if (auto *msg = ev.CastAsLocal<TEvTablet::TEvLeaseDropped>()) {
+        if (LeaseWaiter != ev.Sender) {
+            return OpResultUnhandled;
+        }
+
+        LeaseWaiter = { };
     } else {
         return OpResultUnhandled;
     }
@@ -291,6 +305,9 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept {
 }
 
 void TExecutorBootLogic::Cancel() {
+    if (LeaseWaiter) {
+        Ops->Send(LeaseWaiter, new TEvents::TEvPoison);
+    }
 }
 
 void TExecutorBootLogic::FollowersSyncComplete() {

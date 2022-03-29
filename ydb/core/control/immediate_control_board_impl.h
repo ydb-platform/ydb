@@ -14,7 +14,7 @@ private:
 public:
     bool RegisterLocalControl(TControlWrapper control, TString name);
 
-    void RegisterSharedControl(TControlWrapper& control, TString name);
+    bool RegisterSharedControl(TControlWrapper& control, TString name);
 
     void RestoreDefaults();
 

@@ -334,6 +334,7 @@ class TExecutor
             EvActivateCompactionRead,
             EvActivateCompactionChanges,
             EvBrokenTransaction,
+            EvLeaseExtend,
 
             EvEnd
         };
@@ -347,6 +348,7 @@ class TExecutor
         struct TEvActivateCompactionRead : public TEventLocal<TEvActivateCompactionRead, EvActivateCompactionRead> {};
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
+        struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
     };
 
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
@@ -355,6 +357,37 @@ class TExecutor
     TAutoPtr<NUtil::ILogger> Logger;
 
     ui32 FollowerId = 0;
+
+    // This becomes true when executor enables the use of leases, e.g. starts persisting them
+    // This may become false again when leases are not actively used for some time
+    bool LeaseEnabled = false;
+    // As soon as lease is persisted we may theoretically use read-only checks for lease prolongation
+    bool LeasePersisted = false;
+    // When lease is dropped we must stop accepting new lease-dependent requests
+    bool LeaseDropped = false;
+    // When lease is used in any given cycle this becomes true
+    bool LeaseUsed = false;
+    // This flag marks when TEvLeaseExtend message is already pending
+    bool LeaseExtendPending = false;
+    TDuration LeaseDuration;
+    TMonotonic LeaseEnd;
+    // Counts the number of times an unused lease has been extended
+    size_t UnusedLeaseExtensions = 0;
+
+    struct TLeaseCommit {
+        const ui32 Step;
+        const TMonotonic Start;
+        TMonotonic LeaseEnd;
+        TVector<std::function<void()>> Callbacks;
+
+        TLeaseCommit(ui32 step, TMonotonic start, TMonotonic leaseEnd)
+            : Step(step)
+            , Start(start)
+            , LeaseEnd(leaseEnd)
+        { }
+    };
+
+    TList<TLeaseCommit> LeaseCommits;
 
     using TActivationQueue = TOneOneQueueInplace<TSeat *, 64>;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
@@ -502,6 +535,8 @@ class TExecutor
     void ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch);
 
     void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTablet::TEvDropLease::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);
@@ -574,6 +609,11 @@ public:
     void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) override;
     void DetachTablet(const TActorContext &ctx) override;
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
+
+    TLeaseCommit* EnsureReadOnlyLease(TMonotonic at);
+    void ConfirmReadOnlyLease(TMonotonic at) override;
+    void ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) override;
+    void ConfirmReadOnlyLease(std::function<void()> callback) override;
 
     TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext& snap, TRawVals from, TRawVals to, ui64 loaner) const override;
 

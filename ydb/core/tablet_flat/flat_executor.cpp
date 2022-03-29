@@ -408,6 +408,15 @@ void TExecutor::Active(const TActorContext &ctx) {
         CompactionLogic->UpdateInMemStatsStep(it.first, 0, Database->GetTableMemSize(it.first));
 
     UpdateCompactions();
+
+    LeaseEnabled = Owner->ReadOnlyLeaseEnabled();
+    if (LeaseEnabled) {
+        LeaseDuration = Owner->ReadOnlyLeaseDuration();
+        if (!LeaseDuration) {
+            LeaseEnabled = false;
+        }
+    }
+
     MakeLogSnapshot();
 
     if (auto error = CheckBorrowConsistency()) {
@@ -432,8 +441,6 @@ void TExecutor::TranscriptBootOpResult(ui32 res, const TActorContext &ctx) {
     case TExecutorBootLogic::OpResultComplete:
         return Active(ctx);
     case TExecutorBootLogic::OpResultBroken:
-        BootLogic.Destroy();
-
         if (auto logl = Logger->Log(ELnLev::Error)) {
             logl << NFmt::Do(*this) << " Broken while booting";
         }
@@ -453,10 +460,10 @@ void TExecutor::TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ct
     case TExecutorBootLogic::OpResultComplete:
         return ActivateFollower(ctx);
     case TExecutorBootLogic::OpResultBroken:
-        BootLogic.Destroy();
         if (auto logl = Logger->Log(ELnLev::Error)) {
             logl << NFmt::Do(*this) << " Broken while follower booting";
         }
+
         return Broken();
     default:
         Y_FAIL("unknown boot result");
@@ -588,6 +595,7 @@ TExecutorCaches TExecutor::CleanupState() {
     TExecutorCaches caches;
 
     if (BootLogic) {
+        BootLogic->Cancel();
         caches = BootLogic->DetachCaches();
     } else {
         if (PrivatePageCache) {
@@ -1393,6 +1401,85 @@ void TExecutor::ApplyExternalPartSwitch(TPendingPartSwitch &partSwitch) {
             }
         }
     }
+}
+
+TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
+    Y_VERIFY(Stats->IsActive && !Stats->IsFollower);
+    Y_VERIFY(at >= LeaseEnd);
+
+    if (!LeaseEnabled) {
+        // Automatically enable leases
+        LeaseEnabled = true;
+        LeaseDuration = Owner->ReadOnlyLeaseDuration();
+        Y_VERIFY(LeaseDuration);
+    }
+
+    // Try to find a suitable commit that is already in flight
+    TLeaseCommit* lease = nullptr;
+    for (auto it = LeaseCommits.rbegin(); it != LeaseCommits.rend(); ++it) {
+        if (at < it->LeaseEnd) {
+            lease = &*it;
+        } else {
+            break;
+        }
+    }
+
+    if (!lease) {
+        if (LeaseDropped) {
+            // We cannot start new lease confirmations
+            return nullptr;
+        }
+
+        LogicRedo->FlushBatchedLog();
+
+        auto commit = CommitManager->Begin(true, ECommit::Misc);
+
+        NKikimrExecutorFlat::TLeaseInfoMetadata proto;
+        ActorIdToProto(SelfId(), proto.MutableLeaseHolder());
+        proto.SetLeaseDurationUs(LeaseDuration.MicroSeconds());
+
+        TString data;
+        bool ok = proto.SerializeToString(&data);
+        Y_VERIFY(ok);
+
+        commit->Metadata.emplace_back(ui32(NBoot::ELogCommitMeta::LeaseInfo), std::move(data));
+
+        TMonotonic ts = AppData()->MonotonicTimeProvider->Now();
+        lease = &LeaseCommits.emplace_back(commit->Step, ts, ts + LeaseDuration);
+
+        CommitManager->Commit(commit);
+    }
+
+    return lease;
+}
+
+void TExecutor::ConfirmReadOnlyLease(TMonotonic at) {
+    Y_VERIFY(Stats->IsActive && !Stats->IsFollower);
+    LeaseUsed = true;
+
+    if (LeaseEnabled && at < LeaseEnd) {
+        return;
+    }
+
+    EnsureReadOnlyLease(at);
+}
+
+void TExecutor::ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) {
+    Y_VERIFY(Stats->IsActive && !Stats->IsFollower);
+    LeaseUsed = true;
+
+    if (LeaseEnabled && at < LeaseEnd) {
+        callback();
+        return;
+    }
+
+    if (auto* lease = EnsureReadOnlyLease(at)) {
+        lease->Callbacks.push_back(std::move(callback));
+    }
+}
+
+void TExecutor::ConfirmReadOnlyLease(std::function<void()> callback) {
+    ConfirmReadOnlyLease(AppData()->MonotonicTimeProvider->Now(), std::move(callback));
 }
 
 bool TExecutor::CanExecuteTransaction() const {
@@ -2389,6 +2476,21 @@ void TExecutor::MakeLogSnapshot() {
     GcLogic->SnapToLog(snap, commit->Step);
     LogicSnap->MakeSnap(snap, *commit, Logger.Get());
 
+    if (LeaseEnabled) {
+        NKikimrExecutorFlat::TLeaseInfoMetadata proto;
+        ActorIdToProto(SelfId(), proto.MutableLeaseHolder());
+        proto.SetLeaseDurationUs(LeaseDuration.MicroSeconds());
+
+        TString data;
+        bool ok = proto.SerializeToString(&data);
+        Y_VERIFY(ok);
+
+        commit->Metadata.emplace_back(ui32(NBoot::ELogCommitMeta::LeaseInfo), std::move(data));
+
+        TMonotonic ts = AppData()->MonotonicTimeProvider->Now();
+        LeaseCommits.emplace_back(commit->Step, ts, ts + LeaseDuration);
+    }
+
     CommitManager->Commit(commit);
 
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
@@ -2605,6 +2707,41 @@ void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
     }
 }
 
+void TExecutor::Handle(TEvTablet::TEvDropLease::TPtr &ev, const TActorContext &ctx) {
+    TMonotonic ts = AppData(ctx)->MonotonicTimeProvider->Now();
+
+    LeaseDropped = true;
+    LeaseEnd = Min(LeaseEnd, ts);
+
+    for (auto& l : LeaseCommits) {
+        l.LeaseEnd = Min(l.LeaseEnd, ts);
+    }
+
+    ctx.Send(ev->Sender, new TEvTablet::TEvLeaseDropped);
+    Owner->ReadOnlyLeaseDropped();
+}
+
+void TExecutor::Handle(TEvPrivate::TEvLeaseExtend::TPtr &, const TActorContext &) {
+    Y_VERIFY(LeaseExtendPending);
+    LeaseExtendPending = false;
+
+    if (!LeaseCommits.empty() || !LeaseEnabled || LeaseDropped) {
+        return;
+    }
+
+    if (LeaseUsed) {
+        LeaseUsed = false;
+        UnusedLeaseExtensions = 0;
+    } else if (UnusedLeaseExtensions >= 5) {
+        return;
+    } else {
+        ++UnusedLeaseExtensions;
+    }
+
+    // Start a new lease extension commit
+    EnsureReadOnlyLease(LeaseEnd);
+}
+
 void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx) {
     TEvTablet::TEvCommitResult *msg = ev->Get();
 
@@ -2629,6 +2766,41 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         logl
             << NFmt::Do(*this) << " commited cookie " << int(cookie)
             << " for step " << step;
+    }
+
+    if (!LeaseCommits.empty()) {
+        auto& l = LeaseCommits.front();
+        Y_VERIFY(step <= l.Step);
+        if (step == l.Step) {
+            LeasePersisted = true;
+            LeaseEnd = Max(LeaseEnd, l.LeaseEnd);
+
+            while (!l.Callbacks.empty()) {
+                // Note: callback may (though unlikely) recursively add more callbacks
+                TVector<std::function<void()>> callbacks;
+                callbacks.swap(l.Callbacks);
+                for (auto& callback : callbacks) {
+                    callback();
+                }
+            }
+
+            LeaseCommits.pop_front();
+
+            // Calculate a full round-trip latency for leases
+            // When this latency is larger than third of lease duration we want
+            // to increase lease duration so we would have enough time for
+            // processing read-only requests without additional commits
+            TMonotonic ts = AppData()->MonotonicTimeProvider->Now();
+            if ((LeaseEnd - ts) < LeaseDuration / 3) {
+                LeaseDuration *= 2;
+            }
+
+            // We want to schedule a new commit before the lease expires
+            if (LeaseCommits.empty() && !LeaseExtendPending) {
+                Schedule(LeaseEnd - LeaseDuration / 3, new TEvPrivate::TEvLeaseExtend);
+                LeaseExtendPending = true;
+            }
+        }
     }
 
     switch (cookie) {
@@ -3562,11 +3734,13 @@ STFUNC(TExecutor::StateWork) {
         CFunc(TEvPrivate::EvUpdateCounters, UpdateCounters);
         cFunc(TEvPrivate::EvCheckYellow, UpdateYellow);
         cFunc(TEvPrivate::EvUpdateCompactions, UpdateCompactions);
+        HFunc(TEvPrivate::TEvLeaseExtend, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvents::TEvFlushLog, Handle);
         hFunc(NSharedCache::TEvRequest, Handle);
         hFunc(NSharedCache::TEvResult, Handle);
         hFunc(NSharedCache::TEvUpdated, Handle);
+        HFunc(TEvTablet::TEvDropLease, Handle);
         HFunc(TEvTablet::TEvCommitResult, Handle);
         hFunc(TEvTablet::TEvCheckBlobstorageStatusResult, Handle);
         hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);

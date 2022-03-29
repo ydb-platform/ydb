@@ -18,7 +18,8 @@ public:
     }
 
     TImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
-                                   const NKikimrConfig::TImmediateControlsConfig &cfg);
+                                   const NKikimrConfig::TImmediateControlsConfig &cfg,
+                                   bool allowExistingControls);
 
     void Bootstrap(const TActorContext &ctx);
 
@@ -38,13 +39,15 @@ public:
     }
 
 private:
-    void CreateControls(TIntrusivePtr<TControlBoard> board);
+    void CreateControls(TIntrusivePtr<TControlBoard> board, bool allowExisting);
     void CreateControls(TIntrusivePtr<TControlBoard> board,
                         const google::protobuf::Descriptor *desc,
-                        const TString &prefix);
+                        const TString &prefix,
+                        bool allowExisting);
     void AddControl(TIntrusivePtr<TControlBoard> board,
                     const google::protobuf::FieldDescriptor *desc,
-                    const TString &prefix);
+                    const TString &prefix,
+                    bool allowExisting);
     void ApplyConfig(const NKikimrConfig::TImmediateControlsConfig &cfg,
                      TIntrusivePtr<TControlBoard> board);
     void ApplyConfig(const ::google::protobuf::Message &cfg,
@@ -57,9 +60,10 @@ private:
 };
 
 TImmediateControlsConfigurator::TImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
-                                                               const NKikimrConfig::TImmediateControlsConfig &cfg)
+                                                               const NKikimrConfig::TImmediateControlsConfig &cfg,
+                                                               bool allowExistingControls)
 {
-    CreateControls(board);
+    CreateControls(board, allowExistingControls);
     ApplyConfig(cfg, board);
 }
 
@@ -98,15 +102,16 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
-void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard> board)
+void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard> board, bool allowExisting)
 {
     auto *desc = NKikimrConfig::TImmediateControlsConfig::descriptor();
-    CreateControls(board, desc, "");
+    CreateControls(board, desc, "", allowExisting);
 }
 
 void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard> board,
                                                     const google::protobuf::Descriptor *desc,
-                                                    const TString &prefix)
+                                                    const TString &prefix,
+                                                    bool allowExisting)
 {
     for (int i = 0; i < desc->field_count(); ++i) {
         auto *fieldDesc = desc->field(i);
@@ -117,20 +122,22 @@ void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard>
         auto fieldType = fieldDesc->type();
         if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64
             || fieldType == google::protobuf::FieldDescriptor::TYPE_INT64)
-            AddControl(board, fieldDesc, prefix);
+            AddControl(board, fieldDesc, prefix, allowExisting);
         else {
             Y_VERIFY(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,
                      "Only [u]int64 and message fields are allowed in Immediate Controls Config");
 
             CreateControls(board, fieldDesc->message_type(),
-                           MakePrefix(prefix, fieldDesc->name()));
+                           MakePrefix(prefix, fieldDesc->name()),
+                           allowExisting);
         }
     }
 }
 
 void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> board,
                                                 const google::protobuf::FieldDescriptor *desc,
-                                                const TString &prefix)
+                                                const TString &prefix,
+                                                bool allowExisting)
 {
     auto &opts = desc->options().GetExtension(NKikimrConfig::ControlOptions);
     auto name = MakePrefix(prefix, desc->name());
@@ -139,11 +146,22 @@ void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> boa
     ui64 maxValue = opts.GetMaxValue();
 
     Controls[name] = TControlWrapper(defaultValue, minValue, maxValue);
-    // All controls are actually shared but use RegisterLocalControl to
-    // make sure it is not registered by someone else with other options.
-    auto res = board->RegisterLocalControl(Controls[name], name);
-    Y_VERIFY_S(res, "Immediate Control " << name << " was registered before "
-               << "TImmediateControlsConfigurator creation");
+
+    // When we register control it is possible that is has already been
+    // registered by some other code, in which case it may be used before it
+    // is properly configured. It can currently only happen in configurator
+    // tests, where it is created very late after some tablets have already
+    // started.
+    auto res = board->RegisterSharedControl(Controls[name], name);
+    Y_VERIFY_S(res || allowExisting,
+            "Immediate Control " << name << " was registered before "
+            << "TImmediateControlsConfigurator creation");
+    if (Y_UNLIKELY(!res)) {
+        Cerr << "WARNING: immediate control " << name << " was registered before "
+            << "TImmediateControlsConfigurator creation. "
+            << "A default value may have been used before it was configured." << Endl;
+        Controls[name].Reset(defaultValue, minValue, maxValue);
+    }
 }
 
 void TImmediateControlsConfigurator::ApplyConfig(const NKikimrConfig::TImmediateControlsConfig &cfg,
@@ -192,9 +210,10 @@ TString TImmediateControlsConfigurator::MakePrefix(const TString &prefix,
 }
 
 IActor *CreateImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
-                                            const NKikimrConfig::TImmediateControlsConfig &cfg)
+                                            const NKikimrConfig::TImmediateControlsConfig &cfg,
+                                            bool allowExistingControls)
 {
-    return new TImmediateControlsConfigurator(board, cfg);
+    return new TImmediateControlsConfigurator(board, cfg, allowExistingControls);
 }
 
 } // namespace NConsole

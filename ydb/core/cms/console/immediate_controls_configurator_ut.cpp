@@ -57,7 +57,8 @@ NKikimrConsole::TConfigItem ITEM_CONTROLS_EXCEED_MAX;
 void InitImmediateControlsConfigurator(TTenantTestRuntime &runtime)
 {
     runtime.Register(CreateImmediateControlsConfigurator(runtime.GetAppData().Icb,
-                                                         NKikimrConfig::TImmediateControlsConfig()));
+                                                         NKikimrConfig::TImmediateControlsConfig(),
+                                                         /* allowExistingControls */ true));
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
     runtime.DispatchEvents(options);

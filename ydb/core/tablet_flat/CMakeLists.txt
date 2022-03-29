@@ -35,6 +35,7 @@ target_proto_messages(ydb-core-tablet_flat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor.proto
 )
 target_sources(ydb-core-tablet_flat PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_lease.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_boot_misc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_comp_create.cpp

@@ -13,7 +13,8 @@ namespace NConsole {
  * immediate control board via CMS.
  */
 IActor *CreateImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
-                                            const NKikimrConfig::TImmediateControlsConfig &cfg);
+                                            const NKikimrConfig::TImmediateControlsConfig &cfg,
+                                            bool allowExistingControls = false);
 
 } // namespace NConsole
 } // namespace NKikimr

@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-tablet_flat-ut PUBLIC
   ydb-core-scheme
   test-libs-exec
   test-libs-table
+  ydb-core-testlib
   udf-service-exception_policy
 )
 target_sources(ydb-core-tablet_flat-ut PRIVATE
@@ -33,6 +34,7 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_database_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_gclogic_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_executor_leases_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_range_cache_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_row_versions_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/flat_sausagecache_ut.cpp

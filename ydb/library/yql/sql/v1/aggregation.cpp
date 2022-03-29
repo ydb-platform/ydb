@@ -111,7 +111,11 @@ protected:
         }
         if (AggMode == EAggregateMode::Distinct) {
             const auto column = Expr->GetColumnName();
-            YQL_ENSURE(column);
+            if (!column) {
+                // TODO: improve TBasicAggrFunc::CollectPreaggregateExprs()
+                ctx.Error(Pos) << "Aggregation of aggregated values is forbidden for no window functions";
+                return false;
+            }
             DistinctKey = *column;
             YQL_ENSURE(src);
             if (!IsGeneratedKeyColumn && src->GetJoin()) {

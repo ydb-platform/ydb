@@ -3263,6 +3263,10 @@ select FormatType($f());
     Y_UNIT_TEST(DisableClassicDivisionWithError) {
         ExpectFailWithError("pragma ClassicDivision = 'false'; select $foo / 30;", "<main>:1:42: Error: Unknown name: $foo\n");
     }
+
+    Y_UNIT_TEST(AggregationOfAgrregatedDistinctExpr) {
+        ExpectFailWithError("select sum(sum(distinct x + 1)) from plato.Input", "<main>:1:12: Error: Aggregation of aggregated values is forbidden for no window functions\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

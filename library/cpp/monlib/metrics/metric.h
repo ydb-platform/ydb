@@ -9,7 +9,7 @@ namespace NMonitoring {
     ///////////////////////////////////////////////////////////////////////////////
     // IMetric
     ///////////////////////////////////////////////////////////////////////////////
-    class IMetric {
+    class IMetric : public TThrRefBase {
     public:
         virtual ~IMetric() = default;
 
@@ -17,7 +17,7 @@ namespace NMonitoring {
         virtual void Accept(TInstant time, IMetricConsumer* consumer) const = 0;
     };
 
-    using IMetricPtr = THolder<IMetric>;
+    using IMetricPtr = TIntrusivePtr<IMetric>;
 
     class IGauge: public IMetric {
     public:

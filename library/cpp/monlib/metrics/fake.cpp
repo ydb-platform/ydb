@@ -89,7 +89,7 @@ namespace NMonitoring {
         {
             TWriteGuard g{Lock_};
 
-            IMetricPtr metric = MakeHolder<TMetric>(std::forward<Args>(args)...);
+            IMetricPtr metric = MakeIntrusive<TMetric>(std::forward<Args>(args)...);
 
             // decltype(Metrics_)::iterator breaks build on windows
             THashMap<ILabelsPtr, IMetricPtr>::iterator it;

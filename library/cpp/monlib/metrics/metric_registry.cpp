@@ -180,7 +180,7 @@ namespace NMonitoring {
         }
 
         {
-            IMetricPtr metric = MakeHolder<TMetric>(std::forward<Args>(args)...);
+            IMetricPtr metric = MakeIntrusive<TMetric>(std::forward<Args>(args)...);
 
             TWriteGuard g{*Lock_};
             // decltype(Metrics_)::iterator breaks build on windows
@@ -215,15 +215,22 @@ namespace NMonitoring {
             consumer->OnLabelsEnd();
         }
 
+        TVector<std::pair<ILabelsPtr, IMetricPtr>> tmpMetrics;
+
         {
             TReadGuard g{*Lock_};
+            tmpMetrics.reserve(Metrics_.size());
             for (const auto& it: Metrics_) {
-                ILabels* labels = it.first.Get();
-                IMetric* metric = it.second.Get();
-                ConsumeMetric(time, consumer, metric, [&]() {
-                    ConsumeLabels(consumer, *labels);
-                });
+                tmpMetrics.push_back(it);
             }
+        }
+
+        for (const auto& it: tmpMetrics) {
+            ILabels* labels = it.first.Get();
+            IMetric* metric = it.second.Get();
+            ConsumeMetric(time, consumer, metric, [&]() {
+                ConsumeLabels(consumer, *labels);
+            });
         }
 
         consumer->OnStreamEnd();

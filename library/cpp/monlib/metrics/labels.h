@@ -114,7 +114,7 @@ namespace NMonitoring {
 
     using TLabel = TLabelImpl<TString>;
 
-    struct ILabels {
+    struct ILabels : public TThrRefBase {
         struct TIterator {
             TIterator() = default;
             TIterator(const ILabels* labels, size_t idx = 0)
@@ -394,20 +394,20 @@ namespace NMonitoring {
     };
 
     using TLabels = TLabelsImpl<TString>;
-    using ILabelsPtr = THolder<ILabels>;
+    using ILabelsPtr = TIntrusivePtr<ILabels>;
 
     template <typename T>
     ILabelsPtr MakeLabels() {
-        return MakeHolder<TLabelsImpl<T>>();
+        return MakeIntrusive<TLabelsImpl<T>>();
     }
 
     template <typename T>
     ILabelsPtr MakeLabels(std::initializer_list<TLabelImpl<T>> labels) {
-        return MakeHolder<TLabelsImpl<T>>(labels);
+        return MakeIntrusive<TLabelsImpl<T>>(labels);
     }
 
     inline ILabelsPtr MakeLabels(TLabels&& labels) {
-        return MakeHolder<TLabels>(std::move(labels));
+        return MakeIntrusive<TLabels>(std::move(labels));
     }
 }
 

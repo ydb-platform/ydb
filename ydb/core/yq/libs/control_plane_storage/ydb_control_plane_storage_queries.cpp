@@ -231,7 +231,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
                         continue;
                     }
 
-                    Cerr << "PAM: " << binding.content().connection_id() << Endl;
                     *queryInternal.add_binding() = binding;
                 }
             }

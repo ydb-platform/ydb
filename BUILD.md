@@ -1,6 +1,8 @@
 ## Build YDB from source
 
-##### Requirements:
+##### Build requirements:
+ The following packets is required to build ydbd.
+
  - cmake 3.22+
  - clang-12
  - lld-12
@@ -9,8 +11,15 @@
  - python3.8
  - pip3
  - antlr3
- - libaio
+ - libaio-dev
+ - libidn11-dev
  - ninja 1.10+
+
+##### Runtime requirements:
+ The following packets is required to run ydbd.
+
+ - libidn11
+ - libaio
 
 ##### How to build:
  Currently x86_64 linux is supported. Building was tested on Ubuntu 18.04 and Ubuntu 20.04

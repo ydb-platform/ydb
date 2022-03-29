@@ -50,7 +50,7 @@ class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl
             DbDriverState_,
             TRpcRequestSettings(),
             OPERATION_CLIENT_TIMEOUT,
-            TString());
+            TEndpointKey());
 
         return promise.GetFuture();
     }
@@ -112,7 +112,7 @@ public:
             DbDriverState_,
             TRpcRequestSettings(),
             OPERATION_CLIENT_TIMEOUT,
-            TString());
+            TEndpointKey());
 
         return promise.GetFuture();
     }

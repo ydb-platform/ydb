@@ -33,8 +33,6 @@ namespace NTable {
 class IMigratorClient {
 public:
     virtual ~IMigratorClient() = default;
-    virtual TAsyncPrepareQueryResult PrepareDataQuery(const TSession& session, const TString& query,
-        const TPrepareDataQuerySettings& settings) = 0;
     virtual void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout) = 0;
 };
 
@@ -46,34 +44,24 @@ public:
     // IMPORTANT: SetHost methods are not reentrant. Moreover new call of this methods allowed only if
     // future returned from previous call was set.
     // The value of future means number of requests migrated
-    NThreading::TFuture<ui64> SetHost(const TString& host, TSession targetSession);
-    NThreading::TFuture<ui64> SetHost(const TString& host);
+    void SetHost(ui64 nodeId);
 
     // Checks and perform migration if the session suitable to be removed from host.
     // Prepared requests will be migrated if target session was set along with host.
     // Returns false if session is not suitable or unable to get lock to start migration
     // Returns true if session is suitable in this case Unlink methos on the session is called
     // This methos is thread safe.
-    bool DoCheckAndMigrate(TSession::TImpl* session, std::shared_ptr<IMigratorClient> client);
-
-    // Wait current migration to be finished (if has one)
-    void Wait() const;
+    bool DoCheckAndMigrate(TSession::TImpl* session);
 
     // Reset migrator to initiall state if migration was not started and returns true
     // Returns false if migration was started
     bool Reset();
 private:
-    std::function<void()> CreateMigrationTask();
     bool IsOurSession(TSession::TImpl* session) const;
-    NThreading::TFuture<ui64> PrepareQuery(size_t id);
 
-    TString CurHost_;
-    std::vector<TString> Queries_;
-    std::unique_ptr<TSession> TargetSession_;
+    ui64 CurHost_ = 0;
 
     mutable std::mutex Lock_;
-    NThreading::TPromise<ui64> Promise_;
-    NThreading::TFuture<void> Finished_;
 };
 
 } // namespace NTable

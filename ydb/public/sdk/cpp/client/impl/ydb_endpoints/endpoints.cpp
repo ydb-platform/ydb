@@ -12,8 +12,8 @@ namespace NYdb {
 
 class TEndpointElectorSafe::TObjRegistry : public IObjRegistryHandle {
 public:
-    TObjRegistry(const TStringType& endpoint)
-        : Endpoint_(endpoint)
+    TObjRegistry(const ui64& nodeId)
+        : NodeId_(nodeId)
     {}
 
     bool Add(TEndpointObj* obj) {
@@ -39,13 +39,13 @@ public:
         return Objs_.size();
     }
 
-    const TStringType& GetEndpointName() const {
-        return Endpoint_;
+    ui64 GetNodeId() const {
+        return NodeId_;
     }
 
 private:
     std::set<TEndpointObj*> Objs_;
-    const TStringType Endpoint_;
+    ui64 NodeId_;
 
     mutable std::shared_mutex Mutex_;
 };
@@ -96,16 +96,22 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
 
                 auto it = KnownEndpoints_.find(record.Endpoint);
                 Y_VERIFY(it != KnownEndpoints_.end());
-                for (const auto& registry : it->second.TaggedObjs) {
-                    notifyRemoved.emplace_back(registry.second);
-                }
                 KnownEndpoints_.erase(it);
+
+                auto nodeIdIt = KnownEndpointsByNodeId_.find(record.NodeId);
+                if (nodeIdIt != KnownEndpointsByNodeId_.end()) {
+                    for (const auto& registry : nodeIdIt->second.TaggedObjs) {
+                        notifyRemoved.emplace_back(registry.second);
+                    }
+                    KnownEndpointsByNodeId_.erase(nodeIdIt);
+                }
             }
         }
         // Find endpoints which were added
         Records_ = std::move(uniqRec);
         for (const auto& record : Records_) {
-            KnownEndpoints_[record.Endpoint].Record = record;
+            KnownEndpoints_[record.Endpoint] = record;
+            KnownEndpointsByNodeId_[record.NodeId].Record = record;
         }
         Y_VERIFY(Records_.size() == KnownEndpoints_.size());
         EndpointCountGauge_.SetValue(Records_.size());
@@ -122,12 +128,20 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
     return removed;
 }
 
-TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TStringType& preferredEndpoint) const {
+TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TEndpointKey& preferredEndpoint) const {
     std::shared_lock guard(Mutex_);
-    if (!preferredEndpoint.empty()) {
-        auto it = KnownEndpoints_.find(preferredEndpoint);
-        if (it != KnownEndpoints_.end()) {
+
+    if (preferredEndpoint.GetNodeId()) {
+        auto it = KnownEndpointsByNodeId_.find(preferredEndpoint.GetNodeId());
+        if (it != KnownEndpointsByNodeId_.end()) {
             return it->second.Record;
+        }
+    }
+
+    if (!preferredEndpoint.GetEndpoint().empty()) {
+        auto it = KnownEndpoints_.find(preferredEndpoint.GetEndpoint());
+        if (it != KnownEndpoints_.end()) {
+            return it->second;
         }
     }
     if (BestK_ == -1) {
@@ -154,7 +168,7 @@ void TEndpointElectorSafe::PessimizeEndpoint(const TStringType& endpoint) {
 
             auto it = KnownEndpoints_.find(endpoint);
             if (it != KnownEndpoints_.end()) {
-                it->second.Record.Priority = Max<i32>();
+                it->second.Priority = Max<i32>();
             }
         }
     }
@@ -173,13 +187,13 @@ void TEndpointElectorSafe::SetStatCollector(const NSdkStats::TStatCollector::TEn
     EndpointActiveGauge_.Set(endpointStatCollector.EndpointActive);
 }
 
-bool TEndpointElectorSafe::LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag) {
+bool TEndpointElectorSafe::LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag) {
     {
         std::unique_lock guard(Mutex_);
         // Find obj registry for given endpoint
         // No endpoint - no registry, return false
-        auto objIt = KnownEndpoints_.find(endpoint);
-        if (objIt == KnownEndpoints_.end()) {
+        auto objIt = KnownEndpointsByNodeId_.find(endpoint.GetNodeId());
+        if (objIt == KnownEndpointsByNodeId_.end()) {
             return false;
         }
 
@@ -187,7 +201,7 @@ bool TEndpointElectorSafe::LinkObjToEndpoint(const TStringType& endpoint, TEndpo
         TTaggedObjRegistry::iterator registryIt = taggedObjs.find(tag);
 
         if (registryIt == taggedObjs.end()) {
-            registryIt = taggedObjs.emplace(tag, new TObjRegistry(endpoint)).first;
+            registryIt = taggedObjs.emplace(tag, new TObjRegistry(endpoint.GetNodeId())).first;
         }
 
         // Call Link under endpoint elector mutex.
@@ -211,13 +225,13 @@ void TEndpointElectorSafe::ForEachEndpoint(const THandleCb& cb, i32 minPriority,
         if (it->Priority > maxPriority)
             break;
 
-        const TTaggedObjRegistry& taggedObjs = KnownEndpoints_.at(it->Endpoint).TaggedObjs;
+        const TTaggedObjRegistry& taggedObjs = KnownEndpointsByNodeId_.at(it->NodeId).TaggedObjs;
 
         auto registry = taggedObjs.find(tag);
         if (registry != taggedObjs.end()) {
-            cb(it->Endpoint, *registry->second);
+            cb(it->NodeId, *registry->second);
         } else {
-            cb(it->Endpoint, TObjRegistry(it->Endpoint));
+            cb(it->NodeId, TObjRegistry(it->NodeId));
         }
 
         it++;

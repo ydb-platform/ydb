@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
     Y_UNIT_TEST(Empty) {
         TEndpointElectorSafe elector;
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("").Endpoint, "");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey()).Endpoint, "");
     }
 
     Y_UNIT_TEST(DiffOnRemove) {
@@ -140,8 +140,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         // Just to make sure no possible to get more than expected
         size_t extra_attempts = 1000;
         while (endpoints.size() != 2 || --extra_attempts) {
-            endpoints.insert(elector.GetEndpoint("").Endpoint);
-            UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("Three").Endpoint, "Three");
+            endpoints.insert(elector.GetEndpoint(TEndpointKey()).Endpoint);
+            UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("Three", 0)).Endpoint, "Three");
         }
         UNIT_ASSERT_VALUES_EQUAL(endpoints.size(), 2);
         UNIT_ASSERT(endpoints.find("One_A") != endpoints.end());
@@ -149,8 +149,8 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
         elector.SetNewState(TVector<TEndpointRecord>{{"One", 1}});
         // no prefered endpoint, expect avaliable
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("Three").Endpoint, "One");
-        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint("").Endpoint, "One");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey("Three", 0)).Endpoint, "One");
+        UNIT_ASSERT_VALUES_EQUAL(elector.GetEndpoint(TEndpointKey()).Endpoint, "One");
     }
 
     Y_UNIT_TEST(EndpointAssociationTwoThreadsNoRace) {
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         TVector<std::unique_ptr<TTestObj>> storage;
         while (!emulator.Finished()) {
             auto obj = std::make_unique<TTestObj>(counter2);
-            if (elector.LinkObjToEndpoint("Two", obj.get(), nullptr)) {
+            if (elector.LinkObjToEndpoint(TEndpointKey("Two", 2), obj.get(), nullptr)) {
                 counter1++;
             }
             storage.emplace_back(std::move(obj));
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
     Y_UNIT_TEST(EndpointAssiciationSingleThread) {
         TEndpointElectorSafe elector;
-        elector.SetNewState(TVector<TEndpointRecord>{{"Two", 2}, {"One_A", 1}, {"Three", 3}, {"One_B", 1}});
+        elector.SetNewState(TVector<TEndpointRecord>{{"Two", 2, "", 2}, {"One_A", 10, "", 10}, {"Three", 3, "", 3}, {"One_B", 4, "", 4}});
 
         auto obj1 = std::make_unique<TTestObj>();
         auto obj2 = std::make_unique<TTestObj>();
@@ -193,14 +193,14 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
 
         UNIT_ASSERT_VALUES_EQUAL(obj1->ObjectRegistred(), false);
 
-        UNIT_ASSERT(elector.LinkObjToEndpoint("Two", obj1.get(), nullptr));
+        UNIT_ASSERT(elector.LinkObjToEndpoint(TEndpointKey("Two", 2), obj1.get(), nullptr));
         // Registred of same object twice is not allowed
-        UNIT_ASSERT_VALUES_EQUAL(elector.LinkObjToEndpoint("Two", obj1.get(), nullptr), false);
+        UNIT_ASSERT_VALUES_EQUAL(elector.LinkObjToEndpoint(TEndpointKey("Two", 2), obj1.get(), nullptr), false);
 
-        UNIT_ASSERT(elector.LinkObjToEndpoint("Three", obj2.get(), nullptr));
-        UNIT_ASSERT(elector.LinkObjToEndpoint("Three", obj3.get(), nullptr));
-        UNIT_ASSERT(elector.LinkObjToEndpoint("One_B", obj4.get(), nullptr));
-        UNIT_ASSERT(elector.LinkObjToEndpoint("One_B", obj5.get(), (void*)1));
+        UNIT_ASSERT(elector.LinkObjToEndpoint(TEndpointKey("Three", 3), obj2.get(), nullptr));
+        UNIT_ASSERT(elector.LinkObjToEndpoint(TEndpointKey("Three", 3), obj3.get(), nullptr));
+        UNIT_ASSERT(elector.LinkObjToEndpoint(TEndpointKey("One_B", 4), obj4.get(), nullptr));
+        UNIT_ASSERT(elector.LinkObjToEndpoint(TEndpointKey("One_B", 4), obj5.get(), (void*)1));
 
         UNIT_ASSERT_VALUES_EQUAL(obj1->ObjectRegistred(), true);
 
@@ -210,33 +210,33 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(obj4->ObjectCount(), 1);
 
         {
-            TMap<TString, size_t> sizes;
+            TMap<ui64, size_t> sizes;
             size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](const TString& endpoint, const NYdb::IObjRegistryHandle& handle) {
-                sizes[endpoint] = handle.Size();
+            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
+                sizes[nodeId] = handle.Size();
                 i++;
             }, 0, Max<i32>(), nullptr);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(i, 4);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("Two"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_A"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_B"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("Three"), 2);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(4), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(3), 2);
         }
 
         {
-            TMap<TString, size_t> sizes;
+            TMap<ui64, size_t> sizes;
             size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](const TString& endpoint, const NYdb::IObjRegistryHandle& handle) {
-                sizes[endpoint] = handle.Size();
+            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
+                sizes[nodeId] = handle.Size();
                 i++;
             }, 0, Max<i32>(), (void*)1);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(i, 4);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("Two"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_A"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_B"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("Three"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(4), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(3), 0);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(obj1->HostRemoved(), false);
@@ -252,24 +252,24 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(obj4->HostRemoved(), false);
 
         {
-            TMap<TString, size_t> sizes;
+            TMap<ui64, size_t> sizes;
             size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](const TString& endpoint, const NYdb::IObjRegistryHandle& handle) {
-                sizes[endpoint] = handle.Size();
+            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
+                sizes[nodeId] = handle.Size();
                 i++;
             }, 0, Max<i32>(), nullptr);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(i, 4);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("Two"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_A"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_B"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("Three"), 2);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(4), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(3), 2);
         }
 
         obj1.reset(new TTestObj());
-        elector.LinkObjToEndpoint("Two", obj1.get(), nullptr);
+        elector.LinkObjToEndpoint(TEndpointKey("Two", 2), obj1.get(), nullptr);
 
-        elector.SetNewState(TVector<TEndpointRecord>{{"Two", 2}, {"One_A", 1}, {"One_C", 1}});
+        elector.SetNewState(TVector<TEndpointRecord>{{"Two", 2, "", 2}, {"One_A", 10, "", 10}, {"One_C", 1, "", 1}});
 
         UNIT_ASSERT_VALUES_EQUAL(obj1->HostRemoved(), false);
         UNIT_ASSERT_VALUES_EQUAL(obj2->HostRemoved(), true);
@@ -278,17 +278,17 @@ Y_UNIT_TEST_SUITE(EndpointElector) {
         UNIT_ASSERT_VALUES_EQUAL(obj5->HostRemoved(), true);
 
         {
-            TMap<TString, size_t> sizes;
+            TMap<ui64, size_t> sizes;
             size_t i = 0;
-            elector.ForEachEndpoint([&sizes, &i](const TString& endpoint, const NYdb::IObjRegistryHandle& handle) {
-                sizes[endpoint] = handle.Size();
+            elector.ForEachEndpoint([&sizes, &i](ui64 nodeId, const NYdb::IObjRegistryHandle& handle) {
+                sizes[nodeId] = handle.Size();
                 i++;
             }, 0, Max<i32>(), nullptr);
             UNIT_ASSERT_VALUES_EQUAL(sizes.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(i, 3);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("Two"), 1);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_C"), 0);
-            UNIT_ASSERT_VALUES_EQUAL(sizes.at("One_A"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(2), 1);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(1), 0);
+            UNIT_ASSERT_VALUES_EQUAL(sizes.at(10), 0);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(obj1->ObjectCount(), 1);

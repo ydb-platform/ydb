@@ -34,7 +34,6 @@ constexpr TDuration PERIODIC_ACTION_INTERVAL = TDuration::Seconds(5);
 constexpr TDuration SETTLER_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(1);
 //How ofter run host scan to perform session balancing
 constexpr TDuration HOSTSCAN_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(2);
-constexpr TDuration MIGRATION_GET_SESSION_CLIENT_TIMEOUT = TDuration::Seconds(2);
 constexpr ui64 KEEP_ALIVE_RANDOM_FRACTION = 4;
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
 constexpr ui64 PERIODIC_ACTION_BATCH_SIZE = 10; //Max number of tasks to perform during one interval
@@ -1331,7 +1330,7 @@ public:
     // Returns true if session was extracted from session pool and dropped via smart deleter
     // Returns false if session for given endpoint was not found
     // NOTE: O(n) under session pool lock, should not be used often
-    bool DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl> client, const TString& endpoint);
+    bool DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl> client, ui64 nodeId);
     // Returns true if session returned to pool successfully
     bool ReturnSession(TSession::TImpl* impl, bool active);
     TPeriodicCb CreatePeriodicTask(std::weak_ptr<TTableClient::TImpl> weakClient, TKeepAliveCmd&& cmd, TDeletePredicate&& predicate);
@@ -1486,14 +1485,12 @@ public:
     }
 
     ~TImpl() {
-        RequestMigrator_.Wait();
-
         if (Connections_->GetDrainOnDtors()) {
             Drain().Wait();
         }
     }
 
-    bool LinkObjToEndpoint(const TString& endpoint, TEndpointObj* obj, const void* tag) {
+    bool LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag) {
         return DbDriverState_->EndpointPool.LinkObjToEndpoint(endpoint, obj, tag);
     }
 
@@ -1704,14 +1701,14 @@ public:
             ), SETTLER_PERIODIC_ACTION_INTERVAL);
     }
 
-    static TString ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client) {
+    static ui64 ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client) {
         size_t max = 0;
-        TString result;
+        ui64 result = 0;
 
-        auto cb = [&result, &max](const TString& host, const IObjRegistryHandle& handle) {
+        auto cb = [&result, &max](ui64 nodeId, const IObjRegistryHandle& handle) {
             const auto sz = handle.Size();
             if (sz > max) {
-                result = host;
+                result = nodeId;
                 max = sz;
             }
         };
@@ -1721,16 +1718,16 @@ public:
         return result;
     }
 
-    static std::pair<TString, size_t> ScanLocation(std::shared_ptr<TTableClient::TImpl> client,
-        std::unordered_map<TString, size_t>& sessions, bool allNodes)
+    static std::pair<ui64, size_t> ScanLocation(std::shared_ptr<TTableClient::TImpl> client,
+        std::unordered_map<ui64, size_t>& sessions, bool allNodes)
     {
-        std::pair<TString, size_t> result = {TString(), 0};
+        std::pair<ui64, size_t> result = {0, 0};
 
-        auto cb = [&result, &sessions](const TString& host, const IObjRegistryHandle& handle) {
+        auto cb = [&result, &sessions](ui64 nodeId, const IObjRegistryHandle& handle) {
             const auto sz = handle.Size();
-            sessions.insert({host, sz});
+            sessions.insert({nodeId, sz});
             if (sz > result.second) {
-                result.first = host;
+                result.first = nodeId;
                 result.second = sz;
             }
         };
@@ -1744,62 +1741,10 @@ public:
         return result;
     }
 
-    static NThreading::TFuture<ui64> StartRequestMigration(std::shared_ptr<TTableClient::TImpl> client,
-        const TString& oldEndpoint, const size_t maxSessions, const std::unordered_map<TString, size_t>& hostMap)
-    {
-        const auto settings = TCreateSessionSettings()
-            .ClientTimeout(MIGRATION_GET_SESSION_CLIENT_TIMEOUT);
-
-        auto newEndpoint = client->DbDriverState_->GetEndpoint();
-
-        // New host is same
-        if (newEndpoint == oldEndpoint)
-            return NThreading::MakeFuture<ui64>(0);
-
-        // New host unknown
-        auto it = hostMap.find(newEndpoint);
-        if (it == hostMap.end())
-            return NThreading::MakeFuture<ui64>(0);
-
-        // Number of sessions on proposed host will bw grater after creation new session
-        // skip such host
-        if (it->second >= maxSessions)
-            return NThreading::MakeFuture<ui64>(0);
-
-        return client->CreateSession(settings, false, newEndpoint)
-            .Apply([oldEndpoint, client, maxSessions](TAsyncCreateSessionResult future) {
-                auto sessionResult = future.ExtractValue();
-
-                if (!sessionResult.IsSuccess())
-                    return NThreading::MakeFuture<ui64>(0);
-
-                auto session = sessionResult.GetSession();
-
-                // Mark idle to prevent ActiveSessionCounter change
-                session.SessionImpl_->MarkIdle();
-
-                // Got session, but the host just has been removed, we can`t trust this session
-                // TODO: probably change CreateSession to return error in this case
-                if (!session.SessionImpl_->ObjectRegistred()) {
-                    session.SessionImpl_->MarkBroken();
-                    return NThreading::MakeFuture<ui64>(0);
-                }
-
-                auto sessionsOnProposedHost = session.SessionImpl_->ObjectCount();
-
-                if (sessionResult.GetEndpoint() != oldEndpoint && sessionsOnProposedHost <= maxSessions) {
-                    return client->RequestMigrator_.SetHost(oldEndpoint, session);
-                } else {
-                    session.SessionImpl_->MarkBroken();
-                    return NThreading::MakeFuture<ui64>(0);
-                }
-            });
-    }
-
-    static NMath::TStats CalcCV(const std::unordered_map<TString, size_t>& in) {
+    static NMath::TStats CalcCV(const std::unordered_map<ui64, size_t>& in) {
         TVector<size_t> t;
         t.reserve(in.size());
-        std::transform(in.begin(), in.end(), std::back_inserter(t), [](const std::pair<TString, size_t>& pair) {
+        std::transform(in.begin(), in.end(), std::back_inserter(t), [](const std::pair<ui64, size_t>& pair) {
             return pair.second;
         });
         return NMath::CalcCV(t);
@@ -1810,10 +1755,9 @@ public:
 
         // The future in completed when we have finished current migrate task
         // and ready to accept new one
-        TFuture<ui64> readyToMigrate;
-        std::pair<TString, size_t> winner = {TString(), 0};
+        std::pair<ui64, size_t> winner = {0, 0};
 
-        auto periodicCb = [weak, readyToMigrate, winner](NYql::TIssues&&, EStatus status) mutable -> bool {
+        auto periodicCb = [weak, winner](NYql::TIssues&&, EStatus status) mutable -> bool {
 
             if (status != EStatus::SUCCESS) {
                 return false;
@@ -1824,26 +1768,14 @@ public:
                 return false;
             } else {
                 TRequestMigrator& migrator = strongClient->RequestMigrator_;
-                // Another migration has started but not finished yet
-                if (readyToMigrate.Initialized() && !readyToMigrate.HasValue()) {
-                    // There is a host we want to find session on but session was not returned from client
-                    if (winner.first) {
-                        // Try to find sutiable session in session pool
-                        if (!strongClient->SessionPool_.DropSessionOnEndpoint(strongClient, winner.first)) {
-                            // No session in session pool, reset migrator and start from scratch
-                            migrator.Reset();
-                        }
-                    }
-                    return true;
-                }
 
                 const auto balancingPolicy = strongClient->DbDriverState_->GetBalancingPolicy();
 
                 // Try to find any host at foreign locations if prefer local dc
-                const TString foreignHost = (balancingPolicy == EBalancingPolicy::UsePreferableLocation) ?
-                    ScanForeignLocations(strongClient) : TString();
+                const ui64 foreignHost = (balancingPolicy == EBalancingPolicy::UsePreferableLocation) ?
+                    ScanForeignLocations(strongClient) : 0;
 
-                std::unordered_map<TString, size_t> hostMap;
+                std::unordered_map<ui64, size_t> hostMap;
 
                 winner = ScanLocation(strongClient, hostMap,
                    balancingPolicy == EBalancingPolicy::UseAllNodes);
@@ -1880,38 +1812,14 @@ public:
                 if (hostMap.size() < 2)
                     return true;
 
-
                 // Migrate last session only if move from foreign to local
                 if (!forceMigrate && winner.second < 2)
                     return true;
 
-                // Add counter to update monitoring
-                if (readyToMigrate.Initialized()) {
-                    strongClient->RequestMigrated.Add(readyToMigrate.GetValue());
-                }
-
                 if (stats.Cv > minCv || forceMigrate) {
-                    if (!strongClient->Settings_.AllowRequestMigration_) {
-                        readyToMigrate = migrator.SetHost(winner.first);
-                    } else {
-                        // Max number of session on target host to allow migrate requests to.
-                        // We should not try to migrate if number of sessions on target host equal
-                        // or less than number of session on source host by one.
-                        // And apply some heuristic: do not try to migrate on host where number of sessions
-                        // grater than mean.
-                        //
-                        // If force migration flag is set we should increase the limit
-                        // to allow migration if no sessions on local cluster
-                        size_t maxSessions = 0;
-                        if (forceMigrate) {
-                            maxSessions = (size_t)ceil(stats.Mean) + 1;
-                        } else {
-                            maxSessions = std::min((size_t)ceil(stats.Mean), winner.second - 1);
-                        }
-                        readyToMigrate = StartRequestMigration(strongClient, winner.first, maxSessions, hostMap);
-                    }
+                    migrator.SetHost(winner.first);
                 } else {
-                    readyToMigrate = migrator.SetHost(TString());
+                    migrator.SetHost(0);
                 }
                 return true;
             }
@@ -1974,7 +1882,7 @@ public:
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            preferedLocation);
+            TEndpointKey(preferedLocation, 0));
 
         std::weak_ptr<TDbDriverState> state = DbDriverState_;
 
@@ -2018,7 +1926,7 @@ public:
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            session->GetEndpoint());
+            session->GetEndpointKey());
 
         return keepAliveResultPromise.GetFuture();
     }
@@ -2217,7 +2125,7 @@ public:
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            session.SessionImpl_->Endpoint_);
+            session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
     }
@@ -2267,7 +2175,7 @@ public:
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            session.SessionImpl_->GetEndpoint());
+            session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
     }
@@ -2306,7 +2214,7 @@ public:
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            session.SessionImpl_->GetEndpoint());
+            session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
     }
@@ -2323,7 +2231,7 @@ public:
             &Ydb::Table::V1::TableService::Stub::AsyncRollbackTransaction,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            session.SessionImpl_->GetEndpoint());
+            session.SessionImpl_->GetEndpointKey());
     }
 
     TAsyncExplainDataQueryResult ExplainDataQuery(const TSession& session, const TString& query,
@@ -2358,7 +2266,7 @@ public:
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            session.SessionImpl_->GetEndpoint());
+            session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
     }
@@ -2431,7 +2339,7 @@ public:
             &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            sessionImpl->GetEndpoint());
+            sessionImpl->GetEndpointKey());
     }
 
     TAsyncStatus CloseInternal(const TSession::TImpl* sessionImpl) {
@@ -2452,7 +2360,7 @@ public:
                  sessionImpl->GetState() == TSession::TImpl::S_DISCONNECTED ||
                  sessionImpl->GetState() == TSession::TImpl::S_IDLE);
 
-        if (RequestMigrator_.DoCheckAndMigrate(sessionImpl, shared_from_this())) {
+        if (RequestMigrator_.DoCheckAndMigrate(sessionImpl)) {
             SessionRemovedDueBalancing.Inc();
             return false;
         }
@@ -2503,7 +2411,7 @@ public:
 
         if (sessionImpl->GetId()) {
             CloseInternal(sessionImpl);
-            DbDriverState_->StatCollector.DecSessionsOnHost(sessionImpl->Endpoint_);
+            DbDriverState_->StatCollector.DecSessionsOnHost(sessionImpl->GetEndpoint());
         }
 
         delete sessionImpl;
@@ -2801,7 +2709,7 @@ private:
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
-            session.SessionImpl_->Endpoint_);
+            session.SessionImpl_->GetEndpointKey());
 
         return promise.GetFuture();
     }
@@ -2996,12 +2904,12 @@ TAsyncCreateSessionResult TSessionPoolImpl::GetSession(
     }
 }
 
-bool TSessionPoolImpl::DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl> client, const TString& endpoint) {
+bool TSessionPoolImpl::DropSessionOnEndpoint(std::shared_ptr<TTableClient::TImpl> client, ui64 nodeId) {
     std::unique_ptr<TSession::TImpl> sessionImpl;
     {
         std::lock_guard guard(Mtx_);
         for (auto it = Sessions_.begin(); it != Sessions_.end(); it++) {
-            if (it->second->GetEndpoint() == endpoint) {
+            if (it->second->GetEndpointKey().GetNodeId() == nodeId) {
                 sessionImpl = std::move(it->second);
                 Sessions_.erase(it);
                 break;
@@ -3669,7 +3577,7 @@ TSession::TSession(std::shared_ptr<TTableClient::TImpl> client, const TString& s
         TSession::TImpl::GetSmartDeleter(client))
 {
     if (endpointId) {
-        Client_->LinkObjToEndpoint(endpointId, SessionImpl_.get(), Client_.get());
+        Client_->LinkObjToEndpoint(SessionImpl_->GetEndpointKey(), SessionImpl_.get(), Client_.get());
     }
 }
 

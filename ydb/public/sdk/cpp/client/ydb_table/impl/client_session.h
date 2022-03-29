@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -17,6 +18,7 @@ namespace NTable {
 ////////////////////////////////////////////////////////////////////////////////
 
 using TSessionInspectorFn = std::function<void(TAsyncCreateSessionResult future)>;
+
 
 class TSession::TImpl : public TEndpointObj {
     friend class TTableClient;
@@ -52,6 +54,7 @@ public:
 
     const TString& GetId() const;
     const TString& GetEndpoint() const;
+    const TEndpointKey& GetEndpointKey() const;
     void MarkBroken();
     void MarkAsClosing();
     void MarkStandalone();
@@ -86,7 +89,7 @@ public:
 
 private:
     const TString SessionId_;
-    const TString Endpoint_;
+    const TEndpointKey EndpointKey_;
     EState State_;
     bool UseQueryCache_;
     TLRUCache<TString, TDataQueryInfo> QueryCache_;

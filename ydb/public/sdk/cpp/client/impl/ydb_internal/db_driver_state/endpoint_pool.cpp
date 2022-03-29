@@ -47,6 +47,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             const auto& preferedLocation = GetPreferedLocation(result.Result.self_location());
             for (const auto& endpoint : result.Result.endpoints()) {
                 i32 loadFactor = (i32)(multiplicator * Min(LoadMax, Max(LoadMin, endpoint.load_factor())));
+                ui64 nodeId = endpoint.node_id();
                 if (BalancingSettings_.Policy != EBalancingPolicy::UseAllNodes) {
                     if (endpoint.location() != preferedLocation) {
                         // Location missmatch, shift this endpoint
@@ -81,7 +82,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                     }
                     endpointBuilder << ":" << endpoint.port();
                     TStringType endpointString = std::move(endpointBuilder);
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride());
+                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId);
                     addDefault = false;
                 }
                 for (const auto& addr : endpoint.ip_v4()) {
@@ -94,7 +95,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                             << addr
                             << ":"
                             << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride());
+                    records.emplace_back(std::move(endpointString), loadFactor, getIpSslTargetNameOverride(), nodeId);
                     addDefault = false;
                 }
                 if (addDefault) {
@@ -103,7 +104,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                             << endpoint.address()
                             << ":"
                             << endpoint.port();
-                    records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride));
+                    records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride), nodeId);
                 }
             }
             LastUpdateTime_ = TInstant::Now().MicroSeconds();
@@ -121,7 +122,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
     return {future, true};
 }
 
-TEndpointRecord TEndpointPool::GetEndpoint(const TStringType& preferredEndpoint) const {
+TEndpointRecord TEndpointPool::GetEndpoint(const TEndpointKey& preferredEndpoint) const {
     return Elector_.GetEndpoint(preferredEndpoint);
 }
 
@@ -138,7 +139,7 @@ int TEndpointPool::GetPessimizationRatio() {
     return Elector_.GetPessimizationRatio();
 }
 
-bool TEndpointPool::LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag) {
+bool TEndpointPool::LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag) {
     return Elector_.LinkObjToEndpoint(endpoint, obj, tag);
 }
 

@@ -75,8 +75,8 @@ public:
     static void SetGrpcKeepAlive(NGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls);
 
     template<typename TService>
-    std::pair<std::unique_ptr<TServiceConnection<TService>>, TStringType> GetServiceConnection(
-        TDbDriverStatePtr dbState, const TStringType& preferredEndpoint,
+    std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
+        TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
         auto clientConfig = NGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
@@ -92,7 +92,7 @@ public:
         } else {
             auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint);
             if (!endpoint) {
-                return {nullptr, ""};
+                return {nullptr, TEndpointKey()};
             }
             clientConfig.Locator = endpoint.Endpoint;
             clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
@@ -110,7 +110,7 @@ public:
 #else
         conn = std::move(GRpcClientLow_.CreateGRpcServiceConnection<TService>(clientConfig));
 #endif
-        return {std::move(conn), clientConfig.Locator};
+        return {std::move(conn), TEndpointKey(clientConfig.Locator, 0)};
     }
 
     template<class TService, class TRequest, class TResponse>
@@ -128,7 +128,7 @@ public:
         TDbDriverStatePtr dbState,
         const TRpcRequestSettings& requestSettings,
         TDuration clientTimeout,
-        const TStringType& preferredEndpoint,
+        const TEndpointKey& preferredEndpoint,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         using NGrpc::TGrpcStatus;
@@ -159,7 +159,7 @@ public:
 
         WithServiceConnection<TService>(
             [this, request = std::move(request), userResponseCb = std::move(userResponseCb), rpc, requestSettings, context = std::move(context), clientTimeout, dbState]
-            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable -> void {
+            (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
                 if (!status.Ok()) {
                     userResponseCb(
                         nullptr,
@@ -206,13 +206,13 @@ public:
                 meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 
                 dbState->StatCollector.IncGRpcInFlight();
-                dbState->StatCollector.IncGRpcInFlightByHost(endpoint);
+                dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
                 NGrpc::TAdvancedResponseCallback<TResponse> responseCbLow =
                     [this, context, userResponseCb = std::move(userResponseCb), endpoint, dbState]
                     (const grpc::ClientContext& ctx, TGrpcStatus&& grpcStatus, TResponse&& response) mutable -> void {
                         dbState->StatCollector.DecGRpcInFlight();
-                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint);
+                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                         if (NGrpc::IsGRpcStatusGood(grpcStatus)) {
                             std::multimap<TStringType, TStringType> metadata;
@@ -234,22 +234,22 @@ public:
                                 std::move(userResponseCb),
                                 this,
                                 std::move(context),
-                                endpoint,
+                                endpoint.GetEndpoint(),
                                 std::move(metadata));
 
                             EnqueueResponse(resp);
                         } else {
                             dbState->StatCollector.IncReqFailDueTransportError();
-                            dbState->StatCollector.IncTransportErrorsByHost(endpoint);
+                            dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
 
                             auto resp = new TGRpcErrorResponse<TResponse>(
                                 std::move(grpcStatus),
                                 std::move(userResponseCb),
                                 this,
                                 std::move(context),
-                                endpoint);
+                                endpoint.GetEndpoint());
 
-                            dbState->EndpointPool.BanEndpoint(endpoint);
+                            dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
 
                             EnqueueResponse(resp);
                         }
@@ -270,7 +270,7 @@ public:
         const TRpcRequestSettings& requestSettings,
         TDuration clientTimeout,
         bool poll = false,
-        const TStringType& preferredEndpoint = TStringType(),
+        const TEndpointKey& preferredEndpoint = TEndpointKey(),
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         if (!TryCreateContext(context)) {
@@ -342,7 +342,7 @@ public:
             dbState,
             requestSettings,
             clientTimeout,
-            TString(),
+            TEndpointKey(),
             nullptr);
     }
 
@@ -355,7 +355,7 @@ public:
         TDuration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
         TDuration clientTimeout,
-        const TStringType& preferredEndpoint = TStringType(),
+        const TEndpointKey& preferredEndpoint = TEndpointKey(),
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         auto operationCb = [userResponseCb = std::move(userResponseCb)](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
@@ -409,7 +409,7 @@ public:
 
         WithServiceConnection<TService>(
             [request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState]
-            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable {
+            (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
                     responseCb(std::move(status), nullptr);
                     return;
@@ -447,32 +447,32 @@ public:
                 }
 
                 dbState->StatCollector.IncGRpcInFlight();
-                dbState->StatCollector.IncGRpcInFlightByHost(endpoint);
+                dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
                 auto lowCallback = [responseCb = std::move(responseCb), dbState, endpoint]
                     (TGrpcStatus grpcStatus, TProcessor processor) mutable {
                         dbState->StatCollector.DecGRpcInFlight();
-                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint);
+                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                         if (grpcStatus.Ok()) {
                             Y_VERIFY(processor);
                             auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
                                 if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
-                                    dbState->EndpointPool.BanEndpoint(endpoint);
+                                    dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                                 }
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
                             // TODO: Add headers for streaming calls.
-                            TPlainStatus status(std::move(grpcStatus), endpoint, {});
+                            TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             responseCb(std::move(status), std::move(processor));
                         } else {
                             dbState->StatCollector.IncReqFailDueTransportError();
-                            dbState->StatCollector.IncTransportErrorsByHost(endpoint);
+                            dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
                             if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
-                                dbState->EndpointPool.BanEndpoint(endpoint);
+                                dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
                             // TODO: Add headers for streaming calls.
-                            TPlainStatus status(std::move(grpcStatus), endpoint, {});
+                            TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             responseCb(std::move(status), nullptr);
                         }
                     };
@@ -483,7 +483,7 @@ public:
                     std::move(rpc),
                     std::move(meta),
                     context.get());
-            }, dbState, TStringType(), endpointPolicy);
+            }, dbState, TEndpointKey(), endpointPolicy);
     }
 
     template<class TService, class TRequest, class TResponse, class TCallback>
@@ -507,7 +507,7 @@ public:
 
         WithServiceConnection<TService>(
             [connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
-            (TPlainStatus status, TConnection serviceConnection, TStringType endpoint) mutable {
+            (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
                     connectedCallback(std::move(status), nullptr);
                     return;
@@ -545,32 +545,32 @@ public:
                 }
 
                 dbState->StatCollector.IncGRpcInFlight();
-                dbState->StatCollector.IncGRpcInFlightByHost(endpoint);
+                dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
                 auto lowCallback = [connectedCallback = std::move(connectedCallback), dbState, endpoint]
                     (TGrpcStatus grpcStatus, TProcessor processor) {
                         dbState->StatCollector.DecGRpcInFlight();
-                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint);
+                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                         if (grpcStatus.Ok()) {
                             Y_VERIFY(processor);
                             auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
                                 if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
-                                    dbState->EndpointPool.BanEndpoint(endpoint);
+                                    dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                                 }
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
                             // TODO: Add headers for streaming calls.
-                            TPlainStatus status(std::move(grpcStatus), endpoint, {});
+                            TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             connectedCallback(std::move(status), std::move(processor));
                         } else {
                             dbState->StatCollector.IncReqFailDueTransportError();
-                            dbState->StatCollector.IncTransportErrorsByHost(endpoint);
+                            dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
                             if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
-                                dbState->EndpointPool.BanEndpoint(endpoint);
+                                dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
                             // TODO: Add headers for streaming calls.
-                            TPlainStatus status(std::move(grpcStatus), endpoint, {});
+                            TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             connectedCallback(std::move(status), nullptr);
                         }
                     };
@@ -580,7 +580,7 @@ public:
                     std::move(rpc),
                     std::move(meta),
                     context.get());
-            }, dbState, TStringType(), endpointPolicy);
+            }, dbState, TEndpointKey(), endpointPolicy);
     }
 
     TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;
@@ -606,11 +606,11 @@ public:
 private:
     template <typename TService, typename TCallback>
     void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
-        const TStringType& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)
+        const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         TConnection serviceConnection;
-        TStringType endpoint;
+        TEndpointKey endpoint;
         std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy);
         if (!serviceConnection) {
             if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
@@ -635,7 +635,7 @@ private:
                 callback(
                     discoveryStatus,
                     TConnection{nullptr},
-                    TStringType{ });
+                    TEndpointKey{ });
             } else {
                 int64_t newVal;
                 int64_t val;
@@ -646,7 +646,7 @@ private:
                         callback(
                             TPlainStatus(EStatus::CLIENT_LIMITS_REACHED, "Requests queue limit reached"),
                             TConnection{nullptr},
-                            TStringType{ });
+                            TEndpointKey{ });
                         return;
                     }
                     newVal = val + 1;
@@ -671,7 +671,7 @@ private:
                         callback(
                             TPlainStatus(discoveryStatus.Status, std::move(discoveryStatus.Issues)),
                             TConnection{nullptr},
-                            TStringType{ });
+                            TEndpointKey{ });
                     }
                 });
             }

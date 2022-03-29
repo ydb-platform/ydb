@@ -1,12 +1,34 @@
 #include "client_session.h"
 #include "data_query.h"
 
+#include <util/string/cast.h>
+
 namespace NYdb {
 namespace NTable {
 
+ui64 GetNodeIdFromSession(const TString& sessionId) {
+    if (sessionId.empty()) {
+        return 0;
+    }
+
+    try {
+        NKikimr::NOperationId::TOperationId opId(sessionId);
+        const auto& nodeIds = opId.GetValue("node_id");
+        if (nodeIds.size() != 1) {
+            return 0;
+        }
+
+        return FromStringWithDefault<ui64>(*nodeIds[0], 0);
+
+    } catch (...) {
+        return 0;
+    }
+    return 0;
+}
+
 TSession::TImpl::TImpl(const TString& sessionId, const TString& endpoint, bool useQueryCache, ui32 queryCacheSize)
     : SessionId_(sessionId)
-    , Endpoint_(endpoint)
+    , EndpointKey_(endpoint, GetNodeIdFromSession(sessionId))
     , State_(S_STANDALONE)
     , UseQueryCache_(useQueryCache)
     , QueryCache_(queryCacheSize)
@@ -25,7 +47,11 @@ const TString& TSession::TImpl::GetId() const {
 }
 
 const TString& TSession::TImpl::GetEndpoint() const {
-    return Endpoint_;
+    return EndpointKey_.GetEndpoint();
+}
+
+const TEndpointKey& TSession::TImpl::GetEndpointKey() const {
+    return EndpointKey_;
 }
 
 // Can be called from interceptor, need lock

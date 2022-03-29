@@ -110,7 +110,7 @@ public:
                     INITIAL_DEFERRED_CALL_DELAY,
                     TRpcRequestSettings::Make(settings),
                     settings.ClientTimeout_,
-                    settings.Endpoint_);
+                    TEndpointKey(settings.Endpoint_, 0));
 
         return promise.GetFuture();
     }

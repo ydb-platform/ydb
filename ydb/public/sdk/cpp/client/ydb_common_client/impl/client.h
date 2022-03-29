@@ -58,7 +58,7 @@ protected:
         TAsyncRequest<TService, TRequest, TResponse> rpc,
         const TRpcRequestSettings& requestSettings = {},
         TDuration timeout = TDuration::Zero(),
-        const TString& preferredEndpoint = TString())
+        const TEndpointKey& preferredEndpoint = TEndpointKey())
     {
         auto promise = NThreading::NewPromise<TStatus>();
 

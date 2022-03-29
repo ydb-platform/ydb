@@ -53,7 +53,7 @@ void TDeferredAction::OnAlarm() {
         {},
         TDuration::Zero(),
         true,
-        Endpoint_,
+        TEndpointKey(Endpoint_, 0),
         std::move(Context_));
 }
 

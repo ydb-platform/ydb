@@ -31,11 +31,11 @@ public:
     TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
     ~TEndpointPool();
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
-    TEndpointRecord GetEndpoint(const TStringType& preferredEndpoint) const;
+    TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint) const;
     TDuration TimeSinceLastUpdate() const;
     void BanEndpoint(const TStringType& endpoint);
     int GetPessimizationRatio();
-    bool LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag);
+    bool LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;

@@ -144,12 +144,16 @@ public:
 
 public:
     STATEFN(WaitResolveState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
-            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-            hFunc(TEvents::TEvWakeup, HandleTimeout);
-            default:
-                UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvents::TEvWakeup, HandleTimeout);
+                default:
+                    UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
         }
         ReportEventElapsedTime();
     }

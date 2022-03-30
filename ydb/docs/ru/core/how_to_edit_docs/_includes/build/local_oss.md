@@ -7,7 +7,7 @@
 Для сборки OpenSource документации {{ ydb-short-name }} нужно выполнить команду:
 
 ``` bash
-$ yfm -i <source_dir> -o <output_dir> --allowHTML
+yfm -i <source_dir> -o <output_dir> --allowHTML
 ```
 
 Где: 
@@ -19,7 +19,7 @@ $ yfm -i <source_dir> -o <output_dir> --allowHTML
 В качестве `source_dir` можно задавать `.` (точку), если команда yfm вызывается непосредственно из каталога `source_dir`, например:
 
 ``` bash
-docs $ yfm -i . -o ~/docs/ydboss --allowHTML
+yfm -i . -o ~/docs/ydboss --allowHTML
 ```
 
 Для просмотра собранной локально документации можно открыть каталог из браузера, или воспользоваться простым web-сервером, встроенным в Python:

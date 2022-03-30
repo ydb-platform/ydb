@@ -1,3 +1,4 @@
+#include "kqp_opt_log_impl.h"
 #include "kqp_opt_log_rules.h"
 
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
@@ -40,19 +41,32 @@ TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, co
         return node;
     }
 
-    if (!flatMap.Input().Maybe<TKqlReadTable>() && !flatMap.Input().Maybe<TKqlReadTableIndex>()) {
+    auto readMatch = MatchRead<TKqlReadTableBase>(flatMap.Input());
+    if (!readMatch) {
         return node;
     }
 
-    const auto readTable = flatMap.Input().Cast<TKqlReadTableBase>();
+    if (readMatch->FlatMap) {
+        return node;
+    }
+
+    auto readTable = readMatch->Read.Cast<TKqlReadTableBase>();
+
+    static const std::set<TStringBuf> supportedReads {
+        TKqlReadTable::CallableName(),
+        TKqlReadTableIndex::CallableName(),
+    };
+
+    if (!supportedReads.contains(readTable.CallableName())) {
+        return node;
+    }
 
     if (!readTable.Table().SysView().Value().empty()) {
         return node;
     }
 
     TString lookupTable;
-
-    if (auto indexRead = flatMap.Input().Maybe<TKqlReadTableIndex>()) {
+    if (auto indexRead = readTable.Maybe<TKqlReadTableIndex>()) {
         lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name;
     } else {
         lookupTable = readTable.Table().Path().StringValue();

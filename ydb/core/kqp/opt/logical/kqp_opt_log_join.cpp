@@ -350,6 +350,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Build()
         .Done();
 
+    rightReadMatch->ExtractMembers = {}; // We already fetching only required columns
     lookup = rightReadMatch->BuildProcessNodes(lookup, ctx);
 
     if (join.JoinType().Value() == "RightSemi") {

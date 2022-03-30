@@ -3265,7 +3265,7 @@ select FormatType($f());
     }
 
     Y_UNIT_TEST(AggregationOfAgrregatedDistinctExpr) {
-        ExpectFailWithError("select sum(sum(distinct x + 1)) from plato.Input", "<main>:1:12: Error: Aggregation of aggregated values is forbidden for non window functions\n");
+        ExpectFailWithError("select sum(sum(distinct x + 1)) from plato.Input", "<main>:1:12: Error: Aggregation of aggregated values is forbidden\n");
     }
 }
 

@@ -106,14 +106,14 @@ protected:
             return false;
         }
         if (Expr->IsAggregated() && !Expr->IsAggregationKey() && !IsOverWindow()) {
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden for non window functions";
+            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
             return false;
         }
         if (AggMode == EAggregateMode::Distinct) {
             const auto column = Expr->GetColumnName();
             if (!column) {
                 // TODO: improve TBasicAggrFunc::CollectPreaggregateExprs()
-                ctx.Error(Pos) << "Aggregation of aggregated values is forbidden for non window functions";
+                ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
                 return false;
             }
             DistinctKey = *column;

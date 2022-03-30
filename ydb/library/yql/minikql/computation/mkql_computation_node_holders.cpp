@@ -825,12 +825,16 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
+            NUdf::ICompare::TPtr compare,
+            NUdf::IEquate::TPtr equate,
             const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
         , IsTuple(isTuple)
         , Mode(mode)
+        , Compare(compare)
+        , Equate(equate)
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -855,7 +859,7 @@ private:
         }
 
         return BinarySearch(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key),
-            TValueLess(Types, IsTuple));
+            TValueLess(Types, IsTuple, Compare));
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -865,8 +869,8 @@ private:
             encodedKey = MakeString(Packer->Encode(key, false));
         }
 
-        const auto it = LowerBound(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key), TValueLess(Types, IsTuple));
-        if (it == Items.end() || !TValueEqual(Types, IsTuple)(*it, NUdf::TUnboxedValuePod(Packer ? encodedKey : key)))
+        const auto it = LowerBound(Items.begin(), Items.end(), NUdf::TUnboxedValuePod(Packer ? encodedKey : key), TValueLess(Types, IsTuple, Compare));
+        if (it == Items.end() || !TValueEqual(Types, IsTuple, Equate)(*it, NUdf::TUnboxedValuePod(Packer ? encodedKey : key)))
             return NUdf::TUnboxedValuePod();
 
         return it->MakeOptional();
@@ -906,8 +910,8 @@ private:
 
         switch (Mode) {
         case EDictSortMode::RequiresSorting:
-            StableSort(Items.begin(), Items.end(), TValueLess(Types, IsTuple));
-            Items.erase(Unique(Items.begin(), Items.end(), TValueEqual(Types, IsTuple)), Items.end());
+            StableSort(Items.begin(), Items.end(), TValueLess(Types, IsTuple, Compare));
+            Items.erase(Unique(Items.begin(), Items.end(), TValueEqual(Types, IsTuple, Equate)), Items.end());
             break;
         case EDictSortMode::SortedUniqueAscending:
             break;
@@ -927,7 +931,7 @@ private:
     }
 
     bool IsSortedUnique() const {
-        TValueLess less(Types, IsTuple);
+        TValueLess less(Types, IsTuple, Compare);
         for (size_t i = 1, e = Items.size(); i < e; ++i) {
             if (!less(Items[i - 1], Items[i]))
                 return false;
@@ -945,6 +949,8 @@ private:
     const TKeyTypes Types;
     const bool IsTuple;
     const EDictSortMode Mode;
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
     mutable bool IsBuilt;
     const THolderFactory& HolderFactory;
     mutable TItems Items;
@@ -1021,12 +1027,16 @@ public:
             EDictSortMode mode,
             bool eagerFill,
             TType* encodedType,
+            NUdf::ICompare::TPtr compare,
+            NUdf::IEquate::TPtr equate,
             const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
         , IsTuple(isTuple)
         , Mode(mode)
+        , Compare(compare)
+        , Equate(equate)
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -1051,7 +1061,7 @@ private:
         }
 
         return BinarySearch(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValuePod()),
-            TKeyPayloadPairLess(Types, IsTuple));
+            TKeyPayloadPairLess(Types, IsTuple, Compare));
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
@@ -1061,8 +1071,8 @@ private:
             encodedKey = MakeString(Packer->Encode(key, false));
         }
 
-        const auto it = LowerBound(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValue()), TKeyPayloadPairLess(Types, IsTuple));
-        if (it == Items.end() || !TKeyPayloadPairEqual(Types, IsTuple)({it->first, it->second}, TKeyPayloadPair(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), {})))
+        const auto it = LowerBound(Items.begin(), Items.end(), TItems::value_type(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), NUdf::TUnboxedValue()), TKeyPayloadPairLess(Types, IsTuple, Compare));
+        if (it == Items.end() || !TKeyPayloadPairEqual(Types, IsTuple, Equate)({it->first, it->second}, TKeyPayloadPair(NUdf::TUnboxedValuePod(Packer ? encodedKey : key), {})))
             return NUdf::TUnboxedValuePod();
 
         return it->second.MakeOptional();
@@ -1102,8 +1112,8 @@ private:
 
         switch (Mode) {
         case EDictSortMode::RequiresSorting:
-            StableSort(Items.begin(), Items.end(), TKeyPayloadPairLess(Types, IsTuple));
-            Items.erase(Unique(Items.begin(), Items.end(), TKeyPayloadPairEqual(Types, IsTuple)), Items.end());
+            StableSort(Items.begin(), Items.end(), TKeyPayloadPairLess(Types, IsTuple, Compare));
+            Items.erase(Unique(Items.begin(), Items.end(), TKeyPayloadPairEqual(Types, IsTuple, Equate)), Items.end());
             break;
         case EDictSortMode::SortedUniqueAscending:
             break;
@@ -1123,7 +1133,7 @@ private:
     }
 
     bool IsSortedUnique() const {
-        TKeyPayloadPairLess less(Types, IsTuple);
+        TKeyPayloadPairLess less(Types, IsTuple, Compare);
         for (size_t i = 1, e = Items.size(); i < e; ++i) {
             if (!less(Items[i - 1], Items[i]))
                 return false;
@@ -1141,6 +1151,8 @@ private:
     const TKeyTypes Types;
     const bool IsTuple;
     const EDictSortMode Mode;
+    NUdf::ICompare::TPtr Compare;
+    NUdf::IEquate::TPtr Equate;
     mutable bool IsBuilt;
     const THolderFactory& HolderFactory;
     mutable TItems Items;
@@ -1202,11 +1214,12 @@ public:
     };
 
     THashedSetHolder(TMemoryUsageInfo* memInfo, THashedSetFiller filler,
-        const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType, const THolderFactory& holderFactory)
+        const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
-        , Set(0, TValueHasher(Types, isTuple), TValueEqual(Types, isTuple))
+        , Set(0, TValueHasher(Types, isTuple, hash), TValueEqual(Types, isTuple, equate))
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -1955,11 +1968,12 @@ public:
     };
 
     THashedDictHolder(TMemoryUsageInfo* memInfo, THashedDictFiller filler,
-        const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType, const THolderFactory& holderFactory)
+        const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
         , Filler(filler)
         , Types(types)
-        , Map(0, TValueHasher(Types, isTuple), TValueEqual(Types, isTuple))
+        , Map(0, TValueHasher(Types, isTuple, hash), TValueEqual(Types, isTuple, equate))
         , IsBuilt(false)
         , HolderFactory(holderFactory)
     {
@@ -2427,12 +2441,15 @@ class TDictNode: public TMutableComputationNode<TDictNode> {
 public:
     TDictNode(TComputationMutables& mutables,
             std::vector<std::pair<IComputationNode*, IComputationNode*>>&& itemNodes,
-            const TKeyTypes& types, bool isTuple, TType* encodedType)
+            const TKeyTypes& types, bool isTuple, TType* encodedType,
+            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate)
         : TBaseComputation(mutables)
         , ItemNodes(std::move(itemNodes))
         , Types(types)
         , IsTuple(isTuple)
         , EncodedType(encodedType)
+        , Hash(hash)
+        , Equate(equate)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -2460,7 +2477,7 @@ public:
                 };
 
         return ctx.HolderFactory.CreateDirectHashedDictHolder(
-                filler, Types, IsTuple, true, EncodedType);
+                filler, Types, IsTuple, true, EncodedType, Hash, Equate);
     }
 
 private:
@@ -2475,6 +2492,8 @@ private:
     const TKeyTypes Types;
     const bool IsTuple;
     TType* EncodedType;
+    NUdf::IHash::TPtr Hash;
+    NUdf::IEquate::TPtr Equate;
 };
 
 class TVariantNode : public TMutableCodegeneratorNode<TVariantNode> {
@@ -2838,12 +2857,18 @@ public:
             const TKeyTypes& types,
             bool isTuple,
             ui32 dictFlags,
-            TType* encodeType)
+            TType* encodeType,
+            NUdf::IHash::TPtr hash,
+            NUdf::IEquate::TPtr equate,
+            NUdf::ICompare::TPtr compare)
         : HolderFactory_(holderFactory)
         , Types_(types)
         , IsTuple_(isTuple)
         , DictFlags_(dictFlags)
         , EncodeType_(encodeType)
+        , Hash_(hash)
+        , Equate_(equate)
+        , Compare_(compare)
     {
         Items_.reserve(10);
     }
@@ -2865,7 +2890,7 @@ public:
             THashedDictFiller filler(std::bind(prepareFn, this, std::placeholders::_1));
 
             return HolderFactory_.CreateDirectHashedDictHolder(
-                        filler, Types_, IsTuple_, true, EncodeType_);
+                        filler, Types_, IsTuple_, true, EncodeType_, Hash_, Equate_);
         }
         else {
             auto prepareFn = (DictFlags_ & NUdf::TDictFlags::Multi)
@@ -2878,7 +2903,7 @@ public:
                     : EDictSortMode::RequiresSorting;
 
             return HolderFactory_.CreateDirectSortedDictHolder(filler, Types_, IsTuple_, mode, true,
-                EncodeType_);
+                EncodeType_, Compare_, Equate_);
         }
     }
 
@@ -2943,14 +2968,14 @@ private:
             }
         }
 
-        StableSort(localValues.begin(), localValues.end(), TKeyPayloadPairLess(Types_, IsTuple_));
+        StableSort(localValues.begin(), localValues.end(), TKeyPayloadPairLess(Types_, IsTuple_, Compare_));
 
         TKeyPayloadPairVector groups;
         groups.reserve(localValues.size());
         if (!localValues.empty()) {
             TDefaultListRepresentation currentList(std::move(localValues.begin()->second));
             auto lastKey = std::move(localValues.begin()->first);
-            TValueEqual eqPredicate(Types_, IsTuple_);
+            TValueEqual eqPredicate(Types_, IsTuple_, Equate_);
             for (auto it = localValues.begin() + 1; it != localValues.end(); ++it) {
                 if (eqPredicate(lastKey, it->first)) {
                     currentList = currentList.Append(std::move(it->second));
@@ -2986,6 +3011,9 @@ private:
     const bool IsTuple_;
     const ui32 DictFlags_;
     TType* const EncodeType_;
+    NUdf::IHash::TPtr Hash_;
+    NUdf::IEquate::TPtr Equate_;
+    NUdf::ICompare::TPtr Compare_;
     TKeyPayloadPairVector Items_;
 };
 
@@ -3363,10 +3391,12 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedSetHolder(
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
-        TType* encodedType) const
+        TType* encodedType,
+        NUdf::ICompare::TPtr compare,
+        NUdf::IEquate::TPtr equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<TSortedSetHolder>(CurrentAllocState, &MemInfo,
-        filler, types, isTuple, mode, eagerFill, encodedType, *this));
+        filler, types, isTuple, mode, eagerFill, encodedType, compare, equate, *this));
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedDictHolder(
@@ -3375,10 +3405,12 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectSortedDictHolder(
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
-        TType* encodedType) const
+        TType* encodedType,
+        NUdf::ICompare::TPtr compare,
+        NUdf::IEquate::TPtr equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<TSortedDictHolder>(CurrentAllocState, &MemInfo,
-        filler, types, isTuple, mode, eagerFill, encodedType, *this));
+        filler, types, isTuple, mode, eagerFill, encodedType, compare, equate, *this));
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedDictHolder(
@@ -3386,10 +3418,12 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedDictHolder(
         const TKeyTypes& types,
         bool isTuple,
         bool eagerFill,
-        TType* encodedType) const
+        TType* encodedType,
+        NUdf::IHash::TPtr hash,
+        NUdf::IEquate::TPtr equate) const
 {
     return NUdf::TUnboxedValuePod(AllocateOn<THashedDictHolder>(CurrentAllocState, &MemInfo,
-        filler, types, isTuple, eagerFill, encodedType, *this));
+        filler, types, isTuple, eagerFill, encodedType, hash, equate, *this));
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSetHolder(
@@ -3397,9 +3431,11 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSetHolder(
     const TKeyTypes& types,
     bool isTuple,
     bool eagerFill,
-    TType* encodedType) const {
+    TType* encodedType,
+    NUdf::IHash::TPtr hash,
+    NUdf::IEquate::TPtr equate) const {
     return NUdf::TUnboxedValuePod(AllocateOn<THashedSetHolder>(CurrentAllocState, &MemInfo,
-        filler, types, isTuple, eagerFill, encodedType, *this));
+        filler, types, isTuple, eagerFill, encodedType, hash, equate, *this));
 }
 
 template <typename T>
@@ -3474,8 +3510,11 @@ NUdf::IDictValueBuilder::TPtr THolderFactory::NewDict(
     TKeyTypes types;
     bool encoded;
     bool isTuple;
-    GetDictionaryKeyTypes(keyType, types, isTuple, encoded);
-    return new TDictValueBuilder(*this, types, isTuple, flags, encoded ? keyType : nullptr);
+    bool useIHash;
+    GetDictionaryKeyTypes(keyType, types, isTuple, encoded, useIHash);
+    return new TDictValueBuilder(*this, types, isTuple, flags, encoded ? keyType : nullptr,
+        useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr,
+        useIHash ? MakeCompareImpl(keyType) : nullptr);
 }
 
 #define DEFINE_HASHED_SINGLE_FIXED_MAP(xType) \
@@ -3531,13 +3570,14 @@ IComputationNode* TNodeFactory::CreateArrayNode(TComputationNodePtrVector&& valu
 
 IComputationNode* TNodeFactory::CreateDictNode(
         std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
-        const TKeyTypes& types, bool isTuple, TType* encodedType) const
+        const TKeyTypes& types, bool isTuple, TType* encodedType,
+        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate) const
 {
     if (items.empty()) {
         return new TEmptyNode(Mutables);
     }
 
-    return new TDictNode(Mutables, std::move(items), types, isTuple, encodedType);
+    return new TDictNode(Mutables, std::move(items), types, isTuple, encodedType, hash, equate);
 }
 
 IComputationNode* TNodeFactory::CreateVariantNode(IComputationNode* item, ui32 index) const {
@@ -3552,10 +3592,16 @@ IComputationNode* TNodeFactory::CreateImmutableNode(NUdf::TUnboxedValue&& value)
     return new TUnboxedImmutableCodegeneratorNode(&MemInfo, std::move(value));
 }
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded) {
+void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash) {
     isTuple = false;
     encoded = false;
+    useIHash = false;
     types.clear();
+    if (!keyType->IsPresortSupported()) {
+        useIHash = true;
+        return;
+    }
+
     const bool isOptional = keyType->IsOptional();
     if (isOptional) {
         keyType = AS_TYPE(TOptionalType, keyType)->GetItemType();

@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/pack_num.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <library/cpp/resource/resource.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 
@@ -755,7 +756,8 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
             TKeyTypes types;
             bool isTuple;
             bool encoded;
-            GetDictionaryKeyTypes(keyType, types, isTuple, encoded);
+            bool useIHash;
+            GetDictionaryKeyTypes(keyType, types, isTuple, encoded, useIHash);
             if (encoded) {
                 TGenericPresortEncoder packer(keyType);
                 decltype(EncodedDictBuffers)::value_type dictBuffer;
@@ -792,7 +794,7 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
                     dictBuffer.emplace_back(std::move(key), std::move(payload));
                 }
 
-                Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple));
+                Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple, useIHash ? MakeCompareImpl(keyType) : nullptr));
                 for (const auto& p: dictBuffer) {
                     PackImpl(keyType, p.first);
                     PackImpl(payloadType, p.second);

@@ -9,6 +9,7 @@
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
@@ -1104,7 +1105,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         TKeyTypes types;
         bool isTuple;
         bool encoded;
-        GetDictionaryKeyTypes(keyType, types, isTuple, encoded);
+        bool useIHash;
+        GetDictionaryKeyTypes(keyType, types, isTuple, encoded, useIHash);
 
         TMaybe<TValuePacker> packer;
         if (encoded) {
@@ -1141,7 +1143,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 }
             };
 
-            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, nullptr);
+            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, nullptr,
+                useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr);
         }
         else {
             auto filler = [&](TValuesDictHashMap& map) {
@@ -1177,7 +1180,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
                 }
             };
 
-            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, encoded ? keyType : nullptr);
+            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, encoded ? keyType : nullptr,
+                useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr);
         }
     }
 

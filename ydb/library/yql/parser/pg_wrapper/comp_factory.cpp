@@ -1708,11 +1708,83 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
 }
 
 NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVector<ui8>& buffer) {
-    // presort decoding is used only inside RTMR, don't implement it right now
-    Y_UNUSED(type);
-    Y_UNUSED(input);
-    Y_UNUSED(buffer);
-    throw yexception() << "PG types are not supported";
+    switch (type->GetTypeId()) {
+    case BOOLOID: {
+        const auto x = NDetail::DecodeBool<false>(input);
+        return ScalarDatumToPod(BoolGetDatum(x));
+    }
+    case INT2OID: {
+        const auto x = NDetail::DecodeSigned<i16, false>(input);
+        return ScalarDatumToPod(Int16GetDatum(x));
+    }
+    case INT4OID: {
+        const auto x = NDetail::DecodeSigned<i32, false>(input);
+        return ScalarDatumToPod(Int32GetDatum(x));
+    }
+    case INT8OID: {
+        const auto x = NDetail::DecodeSigned<i64, false>(input);
+        return ScalarDatumToPod(Int64GetDatum(x));
+    }
+    case FLOAT4OID: {
+        const auto x = NDetail::DecodeFloating<float, false>(input);
+        return ScalarDatumToPod(Float4GetDatum(x));
+    }
+    case FLOAT8OID: {
+        const auto x = NDetail::DecodeFloating<double, false>(input);
+        return ScalarDatumToPod(Float8GetDatum(x));
+    }
+    case BYTEAOID:
+    case VARCHAROID:
+    case TEXTOID: {
+        buffer.clear();
+        const auto s = NDetail::DecodeString<false>(input, buffer);
+        SET_MEMORY_CONTEXT;
+        auto ret = cstring_to_text_with_len(s.Data(), s.Size());
+        return PointerDatumToPod((Datum)ret);
+    }
+    case CSTRINGOID: {
+        buffer.clear();
+        const auto s = NDetail::DecodeString<false>(input, buffer);
+        SET_MEMORY_CONTEXT;
+        auto ret = (char*)palloc(s.Size() + 1);
+        memcpy(ret, s.Data(), s.Size());
+        ret[s.Size()] = '\0';
+        return PointerDatumToPod((Datum)ret);
+    }
+    default:
+        buffer.clear();
+        const auto s = NDetail::DecodeString<false>(input, buffer);
+
+        StringInfoData stringInfo;
+        stringInfo.data = (char*)s.Data();
+        stringInfo.len = s.Size();
+        stringInfo.maxlen = s.Size();
+        stringInfo.cursor = 0;
+
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        auto typeIOParam = MakeTypeIOParam(typeInfo);
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(typeInfo.ReceiveFuncId);
+        fmgr_info(typeInfo.ReceiveFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)&stringInfo, false };
+        callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
+
+        auto x = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_ENSURE(stringInfo.cursor == stringInfo.len);
+        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+    }
 }
 
 void* PgInitializeContext(const std::string_view& contextType) {
@@ -1746,9 +1818,52 @@ void PgDestroyContext(const std::string_view& contextType, void* ctx) {
     }
 }
 
+class TPgHash : public NUdf::IHash {
+public:
+    TPgHash(const NMiniKQL::TPgType* type)
+        : Type(type)
+        , TypeDesc(NPg::LookupType(type->GetTypeId()))
+    {
+        Y_ENSURE(TypeDesc.HashProcId);
+
+        Zero(FInfoHash);
+        fmgr_info(TypeDesc.HashProcId, &FInfoHash);
+        Y_ENSURE(!FInfoHash.fn_retset);
+        Y_ENSURE(FInfoHash.fn_addr);
+        Y_ENSURE(FInfoHash.fn_nargs == 1);
+    }
+
+    ui64 Hash(NUdf::TUnboxedValuePod lhs) const override {
+        SET_MEMORY_CONTEXT;
+        TPAllocScope call;
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash);
+        callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        if (!lhs) {
+            return 0;
+        }
+
+        callInfo->args[0] = { TypeDesc.PassByValue ?
+            ScalarDatumFromPod(lhs) :
+            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+
+        auto x = FInfoHash.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetUInt32(x);
+    }
+
+private:
+    const NMiniKQL::TPgType* Type;
+    const NPg::TTypeDesc TypeDesc;
+
+    FmgrInfo FInfoHash;
+};
+
 NUdf::IHash::TPtr MakePgHash(const NMiniKQL::TPgType* type) {
-    Y_UNUSED(type);
-    throw yexception() << "PG types are not supported";
+    return new TPgHash(type);
 }
 
 class TPgCompare : public NUdf::ICompare {
@@ -1850,9 +1965,63 @@ NUdf::ICompare::TPtr MakePgCompare(const NMiniKQL::TPgType* type) {
     return new TPgCompare(type);
 }
 
+class TPgEquate: public NUdf::IEquate {
+public:
+    TPgEquate(const NMiniKQL::TPgType* type)
+        : Type(type)
+        , TypeDesc(NPg::LookupType(type->GetTypeId()))
+    {
+        Y_ENSURE(TypeDesc.EqualProcId);
+
+        Zero(FInfoEquate);
+        fmgr_info(TypeDesc.EqualProcId, &FInfoEquate);
+        Y_ENSURE(!FInfoEquate.fn_retset);
+        Y_ENSURE(FInfoEquate.fn_addr);
+        Y_ENSURE(FInfoEquate.fn_nargs == 2);
+    }
+
+    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        SET_MEMORY_CONTEXT;
+        TPAllocScope call;
+        LOCAL_FCINFO(callInfo, 2);
+        Zero(*callInfo);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquate);
+        callInfo->nargs = 2;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        if (!lhs) {
+            if (!rhs) {
+                return true;
+            }
+
+            return false;
+        }
+
+        if (!rhs) {
+            return false;
+        }
+
+        callInfo->args[0] = { TypeDesc.PassByValue ?
+            ScalarDatumFromPod(lhs) :
+            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+        callInfo->args[1] = { TypeDesc.PassByValue ?
+            ScalarDatumFromPod(rhs) :
+            PointerDatumFromPod(rhs, TypeDesc.TypeLen == -1), false };
+
+        auto x = FInfoEquate.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return DatumGetBool(x);
+    }
+
+private:
+    const NMiniKQL::TPgType* Type;
+    const NPg::TTypeDesc TypeDesc;
+
+    FmgrInfo FInfoEquate;
+};
+
 NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type) {
-    Y_UNUSED(type);
-    throw yexception() << "PG types are not supported";
+    return new TPgEquate(type);
 }
 
 } // namespace NMiniKQL

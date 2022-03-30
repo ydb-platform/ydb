@@ -618,9 +618,11 @@ Y_UNIT_TEST(GenericDict) {
     TKeyTypes keyTypes;
     bool isTuple;
     bool encoded;
-    GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded);
+    bool useIHash;
+    GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded, useIHash);
     UNIT_ASSERT(!isTuple);
     UNIT_ASSERT(!encoded);
+    UNIT_ASSERT(!useIHash);
     TMemoryUsageInfo memInfo("test");
     THolderFactory holderFactory(alloc.Ref(), memInfo);
     auto value = holderFactory.GetEmptyContainer();
@@ -629,13 +631,13 @@ Y_UNIT_TEST(GenericDict) {
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
     value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) {
         map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true));
-    }, keyTypes, false, true, nullptr);
+    }, keyTypes, false, true, nullptr, nullptr, nullptr);
     buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x00"sv));
     value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) {
         map.emplace(NUdf::TUnboxedValuePod(ui32(5678)), NUdf::TUnboxedValuePod(false));
         map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true));
-    }, keyTypes, false, true, nullptr);
+    }, keyTypes, false, true, nullptr, nullptr, nullptr);
     buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x01\x00\x00\x16\x2E\x00\x00"sv));
 }

@@ -394,7 +394,8 @@ private:
         TKeyTypes types;
         bool isTuple;
         bool encoded;
-        GetDictionaryKeyTypes(keyType, types, isTuple, encoded);
+        bool useIHash;
+        GetDictionaryKeyTypes(keyType, types, isTuple, encoded, useIHash);
 
         std::vector<std::pair<IComputationNode*, IComputationNode*>> items;
         items.reserve(node.GetItemsCount());
@@ -403,7 +404,8 @@ private:
             items.push_back(std::make_pair(GetComputationNode(item.first.GetNode()), GetComputationNode(item.second.GetNode())));
         }
 
-        AddNode(node, NodeFactory->CreateDictNode(std::move(items), types, isTuple, encoded ? keyType : nullptr));
+        AddNode(node, NodeFactory->CreateDictNode(std::move(items), types, isTuple, encoded ? keyType : nullptr,
+            useIHash ? MakeHashImpl(keyType) : nullptr, useIHash ? MakeEquateImpl(keyType) : nullptr));
     }
 
     void Visit(TCallable& node) override {

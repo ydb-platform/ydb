@@ -491,11 +491,11 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(TValueHasher(KeyTypes, IsTuple), TValueEqual(KeyTypes, IsTuple));
+        state = ctx.HolderFactory.Create<TState>(TValueHasher(KeyTypes, IsTuple, nullptr), TValueEqual(KeyTypes, IsTuple, nullptr));
 #else
         state = ctx.HolderFactory.Create<TState>(
-            ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TValueHasher(KeyTypes, IsTuple)),
-            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TValueEqual(KeyTypes, IsTuple))
+            ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TValueHasher(KeyTypes, IsTuple, nullptr)),
+            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TValueEqual(KeyTypes, IsTuple, nullptr))
         );
 #endif
     }
@@ -637,11 +637,12 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Combine)
             return ctx.HolderFactory.Create<TCodegenValue>(Combine, &ctx, Stream->GetValue(ctx),
-                ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TValueHasher(KeyTypes, IsTuple)),
-                ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TValueEqual(KeyTypes, IsTuple))
+                ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TValueHasher(KeyTypes, IsTuple, nullptr)),
+                ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TValueEqual(KeyTypes, IsTuple, nullptr))
             );
 #endif
-        return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), Nodes, MemLimit, ctx, TValueHasher(KeyTypes, IsTuple), TValueEqual(KeyTypes, IsTuple));
+        return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), Nodes, MemLimit, ctx,
+            TValueHasher(KeyTypes, IsTuple, nullptr), TValueEqual(KeyTypes, IsTuple, nullptr));
     }
 
 private:
@@ -952,7 +953,8 @@ IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFac
     TKeyTypes keyTypes;
     bool isTuple;
     bool encoded;
-    GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded);
+    bool useIHash;
+    GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded, useIHash);
     Y_VERIFY(!encoded, "TODO");
     const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui64>();
     const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;

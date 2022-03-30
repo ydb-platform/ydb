@@ -8,6 +8,7 @@
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/compact_hash.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 
@@ -91,70 +92,99 @@ inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedV
 }
 
 struct TKeyPayloadPairLess {
-    TKeyPayloadPairLess(const TKeyTypes& types, bool isTuple)
+    TKeyPayloadPairLess(const TKeyTypes& types, bool isTuple, NUdf::ICompare::TPtr compare)
         : Types(&types)
         , IsTuple(isTuple)
+        , Compare(compare)
     {}
 
     bool operator()(const TKeyPayloadPair& left, const TKeyPayloadPair& right) const {
+        if (Compare) {
+            return Compare->Less(left.first, right.first);
+        }
+
         return CompareKeys(left.first, right.first, *Types, IsTuple) < 0;
     }
 
     const TKeyTypes* Types;
     bool IsTuple;
+    NUdf::ICompare::TPtr Compare;
 };
 
 struct TKeyPayloadPairEqual {
-    TKeyPayloadPairEqual(const TKeyTypes& types, bool isTuple)
+    TKeyPayloadPairEqual(const TKeyTypes& types, bool isTuple, NUdf::IEquate::TPtr equate)
         : Types(&types)
         , IsTuple(isTuple)
+        , Equate(equate)
     {}
 
     bool operator()(const TKeyPayloadPair& left, const TKeyPayloadPair& right) const {
+        if (Equate) {
+            return Equate->Equals(left.first, right.first);
+        }
+
         return CompareKeys(left.first, right.first, *Types, IsTuple) == 0;
     }
 
     const TKeyTypes* Types;
     bool IsTuple;
+    NUdf::IEquate::TPtr Equate;
 };
 
 struct TValueEqual {
-    TValueEqual(const TKeyTypes& types, bool isTuple)
+    TValueEqual(const TKeyTypes& types, bool isTuple, NUdf::IEquate::TPtr equate)
         : Types(&types)
         , IsTuple(isTuple)
+        , Equate(equate)
     {}
 
     bool operator()(const NUdf::TUnboxedValue& left, const NUdf::TUnboxedValue& right) const {
+        if (Equate) {
+            return Equate->Equals(left, right);
+        }
+
         return CompareKeys(left, right, *Types, IsTuple) == 0;
     }
 
     const TKeyTypes* Types;
     bool IsTuple;
+    NUdf::IEquate::TPtr Equate;
 };
 
 struct TValueLess {
-    TValueLess(const TKeyTypes& types, bool isTuple)
+    TValueLess(const TKeyTypes& types, bool isTuple, NUdf::ICompare::TPtr compare)
         : Types(&types)
         , IsTuple(isTuple)
+        , Compare(compare)
     {}
 
     bool operator()(const NUdf::TUnboxedValue& left, const NUdf::TUnboxedValue& right) const {
+        if (Compare) {
+            return Compare->Less(left, right);
+        }
+
         return CompareKeys(left, right, *Types, IsTuple) < 0;
     }
 
     const TKeyTypes* Types;
     bool IsTuple;
+    NUdf::ICompare::TPtr Compare;
 };
 
 constexpr NUdf::THashType HashOfNull = ~0ULL;
 
 struct TValueHasher {
-    TValueHasher(const TKeyTypes& types, bool isTuple)
+    TValueHasher(const TKeyTypes& types, bool isTuple, NUdf::IHash::TPtr hash)
         : Types(&types)
         , IsTuple(isTuple)
+        , Hash(hash)
     {}
 
     NUdf::THashType operator()(const NUdf::TUnboxedValuePod& value) const {
+        if (Hash) {
+            return Hash->Hash(value);
+        }
+
         if (!value)
             return HashOfNull;
 
@@ -181,6 +211,7 @@ struct TValueHasher {
 
     const TKeyTypes* Types;
     bool IsTuple;
+    NUdf::IHash::TPtr Hash;
 };
 
 template<typename T>
@@ -401,7 +432,9 @@ public:
             bool isTuple,
             EDictSortMode mode,
             bool eagerFill,
-            TType* encodedType) const;
+            TType* encodedType,
+            NUdf::ICompare::TPtr compare,
+            NUdf::IEquate::TPtr equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectSortedDictHolder(
             TSortedDictFiller filler,
@@ -409,21 +442,27 @@ public:
             bool isTuple,
             EDictSortMode mode,
             bool eagerFill,
-            TType* encodedType) const;
+            TType* encodedType,
+            NUdf::ICompare::TPtr compare,
+            NUdf::IEquate::TPtr equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedDictHolder(
             THashedDictFiller filler,
             const TKeyTypes& types,
             bool isTuple,
             bool eagerFill,
-            TType* encodedType) const;
+            TType* encodedType,
+            NUdf::IHash::TPtr hash,
+            NUdf::IEquate::TPtr equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedSetHolder(
         THashedSetFiller filler,
         const TKeyTypes& types,
         bool isTuple,
         bool eagerFill,
-        TType* encodedType) const;
+        TType* encodedType,
+        NUdf::IHash::TPtr hash,
+        NUdf::IEquate::TPtr equate) const;
 
     template <typename T>
     NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedSetHolder(TValuesDictHashSingleFixedSet<T>&& set) const;
@@ -562,7 +601,8 @@ public:
 
     IComputationNode* CreateDictNode(
             std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
-            const TKeyTypes& types, bool isTuple, TType* encodedType) const;
+            const TKeyTypes& types, bool isTuple, TType* encodedType,
+            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate) const;
 
     IComputationNode* CreateVariantNode(IComputationNode* item, ui32 index) const;
 
@@ -571,7 +611,7 @@ private:
     TComputationMutables& Mutables;
 };
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded);
+void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash);
 
 struct TContainerCacheOnContext : private TNonCopyable {
     TContainerCacheOnContext(TComputationMutables& mutables);

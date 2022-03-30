@@ -5,6 +5,7 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/watermark_tracker.h>
 
 #include <util/generic/scope.h>
@@ -414,12 +415,13 @@ public:
         , KeyPacker(mutables)
         , StatePacker(mutables)
         , KeyTypes()
-        , IsTuple()
+        , IsTuple(false)
+        , UseIHash(false)
     {
         Stateless = false;
 
         bool encoded;
-        GetDictionaryKeyTypes(keyType, KeyTypes, IsTuple, encoded);
+        GetDictionaryKeyTypes(keyType, KeyTypes, IsTuple, encoded, UseIHash);
         Y_VERIFY(!encoded, "TODO");
     }
 
@@ -443,8 +445,8 @@ public:
         return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), this, (ui64)hopTime,
                                                       (ui64)intervalHopCount, (ui64)delayHopCount,
                                                       dataWatermarks, ctx,
-                                                      TValueHasher(KeyTypes, IsTuple),
-                                                      TValueEqual(KeyTypes, IsTuple));
+                                                      TValueHasher(KeyTypes, IsTuple, UseIHash ? MakeHashImpl(KeyType) : nullptr),
+                                                      TValueEqual(KeyTypes, IsTuple, UseIHash ? MakeEquateImpl(KeyType) : nullptr));
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
@@ -517,6 +519,7 @@ private:
 
     TKeyTypes KeyTypes;
     bool IsTuple;
+    bool UseIHash;
 };
 
 }

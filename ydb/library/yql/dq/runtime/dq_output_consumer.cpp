@@ -89,9 +89,10 @@ public:
             }
             bool isTuple;
             bool encoded;
-            GetDictionaryKeyTypes(type, KeyTypes, isTuple, encoded);
+            bool useIHash;
+            GetDictionaryKeyTypes(type, KeyTypes, isTuple, encoded, useIHash);
 
-            ValueHashers.emplace_back(KeyTypes, isTuple);
+            ValueHashers.emplace_back(KeyTypes, isTuple, useIHash ? MakeHashImpl(type) : nullptr);
         }
     }
 

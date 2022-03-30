@@ -7,11 +7,11 @@
 
 
 
-add_library(providers-cloud_function-gateway)
-target_compile_options(providers-cloud_function-gateway PRIVATE
+add_library(external_function-cloud_function-gateway)
+target_compile_options(external_function-cloud_function-gateway PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(providers-cloud_function-gateway PUBLIC
+target_link_libraries(external_function-cloud_function-gateway PUBLIC
   contrib-libs-cxxsupp
   yutil
   common-token_accessor-client
@@ -22,6 +22,6 @@ target_link_libraries(providers-cloud_function-gateway PUBLIC
   contrib-libs-fmt
   serverless-functions-v1
 )
-target_sources(providers-cloud_function-gateway PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/gateway/cloud_function_gateway.cpp
+target_sources(external_function-cloud_function-gateway PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/external_function/cloud_function/gateway/cloud_function_gateway.cpp
 )

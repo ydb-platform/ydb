@@ -7,11 +7,11 @@
 
 
 
-add_library(providers-cloud_function-actors)
-target_compile_options(providers-cloud_function-actors PRIVATE
+add_library(external_function-cloud_function-actors)
+target_compile_options(external_function-cloud_function-actors PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_link_libraries(providers-cloud_function-actors PUBLIC
+target_link_libraries(external_function-cloud_function-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
@@ -29,7 +29,7 @@ target_link_libraries(providers-cloud_function-actors PUBLIC
   common-token_accessor-client
   client-ydb_types-credentials
 )
-target_sources(providers-cloud_function-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/actors/cloud_function_transform.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/actors/cloud_function_transform_factory.cpp
+target_sources(external_function-cloud_function-actors PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/external_function/cloud_function/actors/cloud_function_transform.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/external_function/cloud_function/actors/cloud_function_transform_factory.cpp
 )

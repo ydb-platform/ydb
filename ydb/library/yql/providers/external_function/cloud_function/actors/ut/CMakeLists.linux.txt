@@ -7,20 +7,20 @@
 
 
 
-add_executable(library-yql-providers-cloud_function-actors-ut)
-target_compile_options(library-yql-providers-cloud_function-actors-ut PRIVATE
+add_executable(cloud_function-actors-ut)
+target_compile_options(cloud_function-actors-ut PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(library-yql-providers-cloud_function-actors-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/actors
+target_include_directories(cloud_function-actors-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/external_function/cloud_function/actors
 )
-target_link_libraries(library-yql-providers-cloud_function-actors-ut PUBLIC
+target_link_libraries(cloud_function-actors-ut PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-lfalloc
   library-cpp-cpuid_check
   cpp-testing-unittest_main
-  providers-cloud_function-actors
+  external_function-cloud_function-actors
   cpp-actors-testlib
   yql-minikql-invoke_builtins
   udf-service-exception_policy
@@ -28,21 +28,21 @@ target_link_libraries(library-yql-providers-cloud_function-actors-ut PUBLIC
   providers-common-http_gateway
   common-http_gateway-mock
 )
-target_sources(library-yql-providers-cloud_function-actors-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/cloud_function/actors/cloud_function_transform_ut.cpp
+target_sources(cloud_function-actors-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/external_function/cloud_function/actors/cloud_function_transform_ut.cpp
 )
 add_test(
   NAME
-  library-yql-providers-cloud_function-actors-ut
+  cloud_function-actors-ut
   COMMAND
-  library-yql-providers-cloud_function-actors-ut
+  cloud_function-actors-ut
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
 )
-target_link_flags(library-yql-providers-cloud_function-actors-ut
+target_link_flags(cloud_function-actors-ut
   PUBLIC
   -ldl
   -lrt
@@ -53,4 +53,4 @@ target_link_flags(library-yql-providers-cloud_function-actors-ut
   -lrt
   -ldl
 )
-vcs_info(library-yql-providers-cloud_function-actors-ut)
+vcs_info(cloud_function-actors-ut)

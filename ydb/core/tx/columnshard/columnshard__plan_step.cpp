@@ -8,6 +8,24 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
+class TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+public:
+    TTxPlanStep(TColumnShard* self, TEvTxProcessing::TEvPlanStep::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_PLANSTEP; }
+
+private:
+    TEvTxProcessing::TEvPlanStep::TPtr Ev;
+    THashMap<TActorId, TVector<ui64>> TxAcks;
+    std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> Result;
+};
+
+
 bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(Ev);
     LOG_S_DEBUG("TTxPlanStep.Execute at tablet " << Self->TabletID());
@@ -91,6 +109,15 @@ void TTxPlanStep::Complete(const TActorContext& ctx) {
     }
 
     ctx.Send(Ev->Sender, Result.release());
+}
+
+
+void TColumnShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx) {
+    ui64 step = ev->Get()->Record.GetStep();
+    ui64 mediatorId = ev->Get()->Record.GetMediatorID();
+    LOG_S_DEBUG("PlanStep " << step << " at tablet " << TabletID() << ", mediator " << mediatorId);
+
+    Execute(new TTxPlanStep(this, ev), ctx);
 }
 
 }

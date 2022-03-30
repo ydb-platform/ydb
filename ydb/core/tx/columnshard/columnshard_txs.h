@@ -10,10 +10,6 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/tx_processing.h>
 
-namespace arrow {
-    class Schema;
-}
-
 namespace NKikimr::NColumnShard {
 
 struct TEvPrivate {
@@ -24,6 +20,9 @@ struct TEvPrivate {
         EvReadFinished,
         EvPeriodicWakeup,
         EvEviction,
+        EvS3Settings,
+        EvExport,
+        EvForget,
         EvEnd
     };
 
@@ -83,6 +82,47 @@ struct TEvPrivate {
         bool NeedWrites() const {
             return (TxEvent->PutStatus != NKikimrProto::OK);
         }
+    };
+
+    struct TEvS3Settings : public TEventLocal<TEvS3Settings, EvS3Settings> {
+        NKikimrSchemeOp::TS3Settings Settings;
+
+        explicit TEvS3Settings(const NKikimrSchemeOp::TS3Settings& settings)
+            : Settings(settings)
+        {}
+    };
+
+    struct TEvExport : public TEventLocal<TEvExport, EvExport> {
+        using TBlobDataMap = THashMap<TUnifiedBlobId, TString>;
+
+        NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
+        ui64 ExportNo{};
+        TActorId DstActor;
+        THashMap<TString, TBlobDataMap> TierBlobs;
+        TBlobDataMap Blobs;
+        THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
+        TString ErrorStr;
+
+        explicit TEvExport(ui64 exportNo, THashMap<TString, TBlobDataMap>&& tierBlobs)
+            : ExportNo(exportNo)
+            , TierBlobs(std::move(tierBlobs))
+        {
+            Y_VERIFY(ExportNo);
+        }
+
+        TEvExport(ui64 exportNo, TActorId dstActor, TBlobDataMap&& blobs)
+            : ExportNo(exportNo)
+            , DstActor(dstActor)
+            , Blobs(std::move(blobs))
+        {
+            Y_VERIFY(ExportNo);
+        }
+    };
+
+    struct TEvForget : public TEventLocal<TEvForget, EvForget> {
+        NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
+        std::vector<NOlap::TEvictedBlob> Evicted;
+        TString ErrorStr;
     };
 
     struct TEvScanStats : public TEventLocal<TEvScanStats, EvScanStats> {
@@ -155,58 +195,6 @@ public:
     TTxType GetTxType() const override { return TXTYPE_UPDATE_SCHEMA; }
 };
 
-/// Propose deterministic tx
-class TTxProposeTransaction : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
-public:
-    TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
-
-private:
-    TEvColumnShard::TEvProposeTransaction::TPtr Ev;
-    std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> Result;
-};
-
-/// Plan deterministic txs
-class TTxPlanStep : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
-public:
-    TTxPlanStep(TColumnShard* self, TEvTxProcessing::TEvPlanStep::TPtr& ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PLANSTEP; }
-
-private:
-    TEvTxProcessing::TEvPlanStep::TPtr Ev;
-    THashMap<TActorId, TVector<ui64>> TxAcks;
-    std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> Result;
-};
-
-/// Write portion of data in OLAP transaction
-class TTxWrite : public TTransactionBase<TColumnShard> {
-public:
-    TTxWrite(TColumnShard* self, TEvColumnShard::TEvWrite::TPtr& ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_WRITE; }
-
-private:
-    TEvColumnShard::TEvWrite::TPtr Ev;
-    std::unique_ptr<TEvColumnShard::TEvWriteResult> Result;
-};
-
 /// Read portion of data in OLAP transaction
 class TTxReadBase : public TTransactionBase<TColumnShard> {
 protected:
@@ -232,81 +220,6 @@ protected:
 
 protected:
     TString ErrorDescription;
-};
-
-class TTxRead : public TTxReadBase {
-public:
-    TTxRead(TColumnShard* self, TEvColumnShard::TEvRead::TPtr& ev)
-        : TTxReadBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_READ; }
-
-private:
-    TEvColumnShard::TEvRead::TPtr Ev;
-    std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
-    NOlap::TReadMetadata::TConstPtr ReadMetadata;
-};
-
-class TTxScan : public TTxReadBase {
-public:
-    using TReadMetadataPtr = NOlap::TReadMetadataBase::TConstPtr;
-
-    TTxScan(TColumnShard* self, TEvColumnShard::TEvScan::TPtr& ev)
-        : TTxReadBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_START_SCAN; }
-
-private:
-    NOlap::TReadMetadataBase::TConstPtr CreateReadMetadata(const TActorContext& ctx, TReadDescription& read,
-        bool isIndexStats, bool isReverse, ui64 limit);
-
-private:
-    TEvColumnShard::TEvScan::TPtr Ev;
-    TVector<TReadMetadataPtr> ReadMetadataRanges;
-};
-
-
-class TTxReadBlobRanges : public TTransactionBase<TColumnShard> {
-public:
-    TTxReadBlobRanges(TColumnShard* self, TEvColumnShard::TEvReadBlobRanges::TPtr& ev)
-        : TTransactionBase<TColumnShard>(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_READ_BLOB_RANGES; }
-
-private:
-    TEvColumnShard::TEvReadBlobRanges::TPtr Ev;
-    std::unique_ptr<TEvColumnShard::TEvReadBlobRangesResult> Result;
-};
-
-
-/// Common transaction for WriteIndex and GranuleCompaction.
-/// For WriteIndex it writes new portion from InsertTable into index.
-/// For GranuleCompaction it writes new portion of indexed data and mark old data with "switching" snapshot.
-class TTxWriteIndex : public TTransactionBase<TColumnShard> {
-public:
-    TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr& ev)
-        : TBase(self)
-        , Ev(ev)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_WRITE_INDEX; }
-
-private:
-    TEvPrivate::TEvWriteIndex::TPtr Ev;
 };
 
 }

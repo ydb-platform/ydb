@@ -6,6 +6,7 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/GetObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/PutObjectRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Client.h>
 
@@ -25,6 +26,10 @@ void Out(IOutputStream& out, const Aws::S3::Model::HeadObjectOutcome& outcome);
 void Out(IOutputStream& out, const Aws::S3::Model::PutObjectRequest& request);
 void Out(IOutputStream& out, const Aws::S3::Model::PutObjectResult& result);
 void Out(IOutputStream& out, const Aws::S3::Model::PutObjectOutcome& outcome);
+
+void Out(IOutputStream& out, const Aws::S3::Model::DeleteObjectRequest& request);
+void Out(IOutputStream& out, const Aws::S3::Model::DeleteObjectResult& result);
+void Out(IOutputStream& out, const Aws::S3::Model::DeleteObjectOutcome& outcome);
 
 void Out(IOutputStream& out, const Aws::S3::Model::CreateMultipartUploadRequest& request);
 void Out(IOutputStream& out, const Aws::S3::Model::CreateMultipartUploadResult& result);
@@ -84,6 +89,18 @@ Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::PutObjectResult, out, value) {
 }
 
 Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::PutObjectOutcome, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::DeleteObjectRequest, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::DeleteObjectResult, out, value) {
+    NKikimr::NWrappers::Out(out, value);
+}
+
+Y_DECLARE_OUT_SPEC(inline, Aws::S3::Model::DeleteObjectOutcome, out, value) {
     NKikimr::NWrappers::Out(out, value);
 }
 

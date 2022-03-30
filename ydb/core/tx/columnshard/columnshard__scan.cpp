@@ -17,6 +17,29 @@ namespace NKikimr::NColumnShard {
 using namespace NKqp;
 using NBlobCache::TBlobRange;
 
+class TTxScan : public TTxReadBase {
+public:
+    using TReadMetadataPtr = NOlap::TReadMetadataBase::TConstPtr;
+
+    TTxScan(TColumnShard* self, TEvColumnShard::TEvScan::TPtr& ev)
+        : TTxReadBase(self)
+        , Ev(ev)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_START_SCAN; }
+
+private:
+    NOlap::TReadMetadataBase::TConstPtr CreateReadMetadata(const TActorContext& ctx, TReadDescription& read,
+        bool isIndexStats, bool isReverse, ui64 limit);
+
+private:
+    TEvColumnShard::TEvScan::TPtr Ev;
+    TVector<TReadMetadataPtr> ReadMetadataRanges;
+};
+
+
 constexpr ui64 INIT_BATCH_ROWS = 1000;
 constexpr i64 DEFAULT_READ_AHEAD_BYTES = 1*1024*1024;
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
@@ -719,6 +742,26 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor,
         scanId, txId, scanGen, requestCookie, table, timeout, std::move(ReadMetadataRanges), dataFormat));
+}
+
+
+void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+    ui64 txId = msg->Record.GetTxId();
+    const auto& snapshot = msg->Record.GetSnapshot();
+    TRowVersion readVersion(snapshot.GetStep(), snapshot.GetTxId());
+    TRowVersion maxReadVersion = GetMaxReadVersion();
+    LOG_S_DEBUG("Scan at tablet " << TabletID() << " version=" << readVersion << " readable=" << maxReadVersion);
+
+    if (maxReadVersion < readVersion) {
+        WaitingScans.emplace(readVersion, std::move(ev));
+        WaitPlanStep(readVersion.Step);
+        return;
+    }
+
+    ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
+    SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
+    Execute(new TTxScan(this, ev), ctx);
 }
 
 }

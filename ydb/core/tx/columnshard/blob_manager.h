@@ -12,6 +12,9 @@ namespace NKikimr::NColumnShard {
 
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
+using NOlap::TEvictedBlob;
+using NOlap::EEvictState;
+using NKikimrTxColumnShard::TEvictMetadata;
 
 
 // A batch of blobs that are written by a single task.
@@ -79,6 +82,23 @@ public:
     virtual void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
 };
 
+// An interface for exporting and caching exported blobs out of ColumnShard index to external storages like S3.
+// Just do not mix it with IBlobManager that use out storage model.
+class IBlobExporter {
+protected:
+    ~IBlobExporter() = default;
+
+public:
+    // Lazily export blob to external object store. Keep it available via blobId.
+    virtual bool ExportOneToOne(const TUnifiedBlobId& blobId, const TEvictMetadata& meta, IBlobManagerDb& db) = 0;
+    virtual bool DropOneToOne(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
+    virtual bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) = 0;
+    virtual bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) = 0;
+    virtual bool LoadOneToOneExport(IBlobManagerDb& db) = 0;
+    //virtual TEvictedBlob GetEvicted(const TUnifiedBlobId& blob, TEvictMetadata& meta) = 0;
+    virtual TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) = 0;
+};
+
 // Garbage Collection generation and step
 using TGenStep = std::tuple<ui32, ui32>;
 
@@ -115,7 +135,7 @@ struct TBlobManagerCounters {
 };
 
 // The implementation of BlobManager that hides all GC-related details
-class TBlobManager : public IBlobManager, public IBlobInUseTracker {
+class TBlobManager : public IBlobManager, public IBlobExporter, public IBlobInUseTracker {
 private:
     static constexpr size_t BLOB_COUNT_TO_TRIGGER_GC_DEFAULT = 1000;
     static constexpr ui64 GC_INTERVAL_SECONDS_DEFAULT = 60;
@@ -178,6 +198,10 @@ private:
 
     TInstant PreviousGCTime; // Used for delaying next GC if there are too few blobs to collect
 
+    //
+    std::unordered_map<TEvictedBlob, TEvictMetadata, THash<NKikimr::NOlap::TEvictedBlob>> EvictedBlobs;
+    std::unordered_map<TEvictedBlob, TEvictMetadata, THash<NKikimr::NOlap::TEvictedBlob>> DroppedEvictedBlobs;
+
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen);
 
@@ -206,6 +230,14 @@ public:
     void SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) override;
     void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
 
+    // Implementation of IBlobExporter
+    bool ExportOneToOne(const TUnifiedBlobId& blobId, const TEvictMetadata& meta, IBlobManagerDb& db) override;
+    bool DropOneToOne(const TUnifiedBlobId& blob, IBlobManagerDb& db) override;
+    bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) override;
+    bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) override;
+    bool LoadOneToOneExport(IBlobManagerDb& db) override;
+    TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) override;
+
     // Implementation of IBlobInUseTracker
     void SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) override;
 
@@ -214,6 +246,29 @@ private:
 
     // Delete small blobs that were previously in use and could not be deleted
     void PerformDelayedDeletes(IBlobManagerDb& db);
+
+    bool ExtractEvicted(TEvictedBlob& evict, TEvictMetadata& meta, bool fromDropped = false) {
+        if (fromDropped) {
+            if (DroppedEvictedBlobs.count(evict)) {
+                auto node = DroppedEvictedBlobs.extract(evict);
+                if (!node.empty()) {
+                    evict = node.key();
+                    meta = node.mapped();
+                    return true;
+                }
+            }
+        } else {
+            if (EvictedBlobs.count(evict)) {
+                auto node = EvictedBlobs.extract(evict);
+                if (!node.empty()) {
+                    evict = node.key();
+                    meta = node.mapped();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 };
 
 }

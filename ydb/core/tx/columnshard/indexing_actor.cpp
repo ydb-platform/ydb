@@ -17,7 +17,6 @@ public:
     {}
 
     void Handle(TEvPrivate::TEvIndexing::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
         LOG_S_DEBUG("TEvIndexing at tablet " << TabletId << " (index)");
 
         auto& event = *ev->Get();
@@ -31,7 +30,7 @@ public:
             auto& blobId = blobsToIndex[i].BlobId;
             auto res = BlobsToRead.emplace(blobId, i);
             Y_VERIFY(res.second, "Duplicate blob in DataToIndex: %s", blobId.ToStringNew().c_str());
-            SendReadRequest(ctx, blobId);
+            SendReadRequest(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
         }
 
         if (BlobsToRead.empty()) {
@@ -99,10 +98,9 @@ private:
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
     THashMap<TUnifiedBlobId, ui32> BlobsToRead;
 
-    void SendReadRequest(const TActorContext&, const TUnifiedBlobId& blobId) {
-        Y_VERIFY(blobId.BlobSize());
-        Send(BlobCacheActorId,
-             new NBlobCache::TEvBlobCache::TEvReadBlobRange(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()), false));
+    void SendReadRequest(const NBlobCache::TBlobRange& blobRange) {
+        Y_VERIFY(blobRange.Size);
+        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, false));
     }
 
     void Index(const TActorContext& ctx) {

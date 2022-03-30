@@ -63,6 +63,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastWriteId, Self->LastWriteId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastPlannedStep, Self->LastPlannedStep);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
+    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
 
     if (!ready)
         return false;
@@ -317,6 +318,9 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     {
         TBlobManagerDb blobManagerDb(txc.DB);
         if (!Self->BlobManager->LoadState(blobManagerDb)) {
+            return false;
+        }
+        if (!Self->BlobManager->LoadOneToOneExport(blobManagerDb)) {
             return false;
         }
     }

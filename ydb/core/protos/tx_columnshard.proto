@@ -53,6 +53,11 @@ message TMetadata {
     optional bytes LogicalMeta = 4; // TLogicalMetadata
 }
 
+message TEvictMetadata {
+    optional string TierName = 1;
+    optional uint32 TierVersion = 2;
+}
+
 message TEvWrite {
     optional NActorsProto.TActorId Source = 1;
     optional uint64 TxInitiator = 2;

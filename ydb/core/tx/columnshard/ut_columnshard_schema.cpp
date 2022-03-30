@@ -1,8 +1,10 @@
 #include "columnshard_ut_common.h"
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 namespace NKikimr {
 
 using namespace NTxUT;
+using NWrappers::NTestHelpers::TS3Mock;
 
 namespace {
 
@@ -317,7 +319,11 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
         }
 
         TriggerTTL(runtime, sender, {++planStep, ++txId}, {});
-
+#if 0
+        if (i) {
+            sleep(1); // TODO: wait export
+        }
+#endif
         // Read
 
         --planStep;
@@ -354,14 +360,9 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     return resColumns;
 }
 
-void TestTiersT1(bool reboots) {
+void TestTwoTiers(const TTestSchema::TTableSpecials& spec, bool compressed, bool reboots) {
     std::vector<ui64> ts = {1600000000, 1620000000};
     ui64 nowSec = TInstant::Now().Seconds();
-
-    TTestSchema::TTableSpecials spec;
-    spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0"));
-    spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1"));
-    spec.Tiers.back().SetCodec("zstd");
 
     std::vector<TTestSchema::TTableSpecials> alters(4, spec);
 
@@ -402,7 +403,56 @@ void TestTiersT1(bool reboots) {
     UNIT_ASSERT_EQUAL(columns[2].first->length(), portionSize);
 
     Cerr << "read bytes: " << columns[0].second << ", " << columns[1].second << ", " << columns[2].second << "\n";
-    UNIT_ASSERT_GT(columns[0].second, columns[1].second);
+    if (compressed) {
+        UNIT_ASSERT_GT(columns[0].second, columns[1].second);
+    } else {
+        UNIT_ASSERT_EQUAL(columns[0].second, columns[1].second);
+    }
+}
+
+void TestTwoHotTiers(bool reboot) {
+    TTestSchema::TTableSpecials spec;
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0"));
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1"));
+    spec.Tiers.back().SetCodec("zstd");
+
+    TestTwoTiers(spec, true, reboot);
+}
+
+void TestHotAndColdTiers(bool reboot) {
+#if 1
+    TString bucket = "ydb";
+    TPortManager portManager;
+    ui16 port = portManager.GetPort();
+    TString connString = Sprintf("localhost:%hu", port);
+    Cerr << "S3 at " << connString << "\n";
+
+    TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+    UNIT_ASSERT(s3Mock.Start());
+#endif
+
+    TTestSchema::TTableSpecials spec;
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0"));
+    spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1"));
+    spec.Tiers.back().S3 = NKikimrSchemeOp::TS3Settings();
+    auto& s3 = *spec.Tiers.back().S3;
+
+    s3.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+    s3.SetVerifySSL(false);
+#if 0
+    s3.SetEndpoint("storage.cloud-preprod.yandex.net");
+    s3.SetBucket("ch-s3");
+    s3.SetAccessKey(); <--
+    s3.SetSecretKey(); <--
+    s3.SetProxyHost("localhost");
+    s3.SetProxyPort(8080);
+    s3.SetProxyScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+#else
+    s3.SetEndpoint(connString);
+    s3.SetBucket(bucket);
+#endif
+
+    TestTwoTiers(spec, false, reboot);
 }
 
 void TestDrop(bool reboots) {
@@ -536,15 +586,24 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestTtl(true, false, specs);
     }
 
-    Y_UNIT_TEST(Tiers) {
-        TestTiersT1(false);
+    Y_UNIT_TEST(HotTiers) {
+        TestTwoHotTiers(false);
     }
 
-    Y_UNIT_TEST(RebootTiers) {
+    Y_UNIT_TEST(RebootHotTiers) {
         NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTiersT1(true);
+        TestTwoHotTiers(true);
     }
 
+    Y_UNIT_TEST(ColdTiers) {
+        TestHotAndColdTiers(false);
+    }
+#if 0
+    Y_UNIT_TEST(RebootColdTiers) {
+        NColumnShard::gAllowLogBatchingDefaultValue = false;
+        TestHotAndColdTiers(true);
+    }
+#endif
     Y_UNIT_TEST(Drop) {
         TestDrop(false);
     }

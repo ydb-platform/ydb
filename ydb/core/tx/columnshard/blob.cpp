@@ -7,6 +7,50 @@
 
 namespace NKikimr::NOlap {
 
+TString DsToS3Key(const TString& s) {
+    Y_VERIFY(s.size() > 2);
+    TString res = s;
+    res[0] = 'S';
+    res[1] = '3';
+    for (size_t i = 2; i < res.size(); ++i) {
+        switch (res[i]) {
+            case '[':
+                res[i] = 'a';
+                break;
+            case ']':
+                res[i] = 'b';
+                break;
+            case ':':
+                res[i] = '_';
+                break;
+        }
+    }
+    return res;
+}
+
+TString S3ToDsKey(const TString& s) {
+    Y_VERIFY(s.size() > 2);
+    TString res = s;
+    res[0] = 'D';
+    res[1] = 'S';
+    for (size_t i = 2; i < res.size(); ++i) {
+        switch (res[i]) {
+            case 'a':
+                res[i] = '[';
+                break;
+            case 'b':
+                res[i] = ']';
+                break;
+            case '_':
+                res[i] = ':';
+                break;
+        }
+    }
+    return res;
+}
+
+namespace {
+
 #define PARSE_INT_COMPONENT(fieldType, fieldName, endChar) \
     if (pos >= endPos) { \
         error = "Failed to parse " #fieldName " component"; \
@@ -29,7 +73,7 @@ namespace NKikimr::NOlap {
 
 // Format: "DS:group:logoBlobId"
 // Example: "DS:2181038103:[72075186224038245:51:31595:2:0:11952:0]"
-TUnifiedBlobId DoParseExtendedDsBlobId(const TString& s, TString& error) {
+TUnifiedBlobId ParseExtendedDsBlobId(const TString& s, TString& error) {
     Y_VERIFY(s.size() > 2);
     const char* str = s.c_str();
     Y_VERIFY(str[0] == 'D' && str[1] == 'S');
@@ -52,7 +96,7 @@ TUnifiedBlobId DoParseExtendedDsBlobId(const TString& s, TString& error) {
 
 // Format: "SM[tabletId:generation:step:cookie:size]"
 // Example: "SM[72075186224038245:51:31184:0:2528]"
-TUnifiedBlobId DoParseSmallBlobId(const TString& s, TString& error) {
+TUnifiedBlobId ParseSmallBlobId(const TString& s, TString& error) {
     Y_VERIFY(s.size() > 2);
     const char* str = s.c_str();
     Y_VERIFY(str[0] == 'S' && str[1] == 'M');
@@ -77,11 +121,32 @@ TUnifiedBlobId DoParseSmallBlobId(const TString& s, TString& error) {
     return TUnifiedBlobId(tabletId, gen, step, cookie, size);
 }
 
+// Format: "S3_key|bucket"
+TUnifiedBlobId ParseS3BlobId(const TString& s, TString& error) {
+    TVector<TString> keyBucket;
+    Split(s, "|", keyBucket);
+
+    if (s.size() < 2 || s[0] != 'S' || s[1] != '3' ||
+        keyBucket.size() != 2) {
+        error = TStringBuilder() << "Wrong S3 id '" << s << "'";
+        return TUnifiedBlobId();
+    }
+
+    TUnifiedBlobId dsBlobId = ParseExtendedDsBlobId(S3ToDsKey(keyBucket[0]), error);
+    if (!dsBlobId.IsValid()) {
+        return TUnifiedBlobId();
+    }
+
+    return TUnifiedBlobId(dsBlobId, TUnifiedBlobId::S3_BLOB, keyBucket[1]);
+}
+
+}
+
 TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str,
      const IBlobGroupSelector* dsGroupSelector, TString& error)
 {
     if (str.size() <= 2) {
-        error = "String size is too small";
+        error = TStringBuilder() << "Wrong blob id: '" << str << "'";
         return TUnifiedBlobId();
     }
 
@@ -107,15 +172,14 @@ TUnifiedBlobId TUnifiedBlobId::ParseFromString(const TString& str,
             return TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
         }
     } else if (str[0] == 'D' && str[1] == 'S') {
-        return DoParseExtendedDsBlobId(str, error);
+        return ParseExtendedDsBlobId(str, error);
     } else if (str[0] == 'S' && str[1] == 'M') {
-        return DoParseSmallBlobId(str, error);
+        return ParseSmallBlobId(str, error);
     } else if (str[0] == 'S' && str[1] == '3') {
-        error = "S3 blob id parsing is not yet implemented";
-        return TUnifiedBlobId();
+        return ParseS3BlobId(str, error);
     }
 
-    error = Sprintf("Unknown blob id format: %c%c", str[0], str[1]);
+    error = TStringBuilder() << "Wrong blob id: '" << str << "'";
     return TUnifiedBlobId();
 }
 

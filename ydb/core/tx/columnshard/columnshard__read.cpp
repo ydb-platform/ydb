@@ -16,15 +16,25 @@ TVector<T> ProtoToVector(const U& cont) {
 
 }
 
-IActor* CreateReadActor(ui64 tabletId,
-                        const TActorId& dstActor,
-                        std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
-                        NOlap::TReadMetadata::TConstPtr readMetadata,
-                        const TInstant& deadline,
-                        const TActorId& columnShardActorId,
-                        ui64 requestCookie);
-
 using namespace NTabletFlatExecutor;
+
+class TTxRead : public TTxReadBase {
+public:
+    TTxRead(TColumnShard* self, TEvColumnShard::TEvRead::TPtr& ev)
+        : TTxReadBase(self)
+        , Ev(ev)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_READ; }
+
+private:
+    TEvColumnShard::TEvRead::TPtr Ev;
+    std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
+    NOlap::TReadMetadata::TConstPtr ReadMetadata;
+};
+
 
 NOlap::TReadMetadata::TPtr
 TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescription& read,
@@ -291,6 +301,22 @@ void TTxRead::Complete(const TActorContext& ctx) {
         ctx.Register(CreateReadActor(Self->TabletID(), Ev->Get()->GetSource(),
             std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie));
     }
+}
+
+
+void TColumnShard::Handle(TEvColumnShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+    TRowVersion readVersion(msg->Record.GetPlanStep(), msg->Record.GetTxId());
+    TRowVersion maxReadVersion = GetMaxReadVersion();
+    LOG_S_DEBUG("Read at tablet " << TabletID() << " version=" << readVersion << " readable=" << maxReadVersion);
+
+    if (maxReadVersion < readVersion) {
+        WaitingReads.emplace(readVersion, std::move(ev));
+        WaitPlanStep(readVersion.Step);
+        return;
+    }
+
+    Execute(new TTxRead(this, ev), ctx);
 }
 
 }

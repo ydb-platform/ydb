@@ -60,7 +60,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_hive.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_kesus.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_keyvalue.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_olapshard.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_pq.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_replication.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/counters_schemeshard.proto
@@ -178,7 +177,6 @@ target_sources(ydb-core-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_hive.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_kesus.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_keyvalue.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_olapshard.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_pq.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_replication.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/core/protos/counters_schemeshard.pb.cc

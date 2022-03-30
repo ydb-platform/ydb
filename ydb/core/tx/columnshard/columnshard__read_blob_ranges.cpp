@@ -7,6 +7,23 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
+class TTxReadBlobRanges : public TTransactionBase<TColumnShard> {
+public:
+    TTxReadBlobRanges(TColumnShard* self, TEvColumnShard::TEvReadBlobRanges::TPtr& ev)
+        : TTransactionBase<TColumnShard>(self)
+        , Ev(ev)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_READ_BLOB_RANGES; }
+
+private:
+    TEvColumnShard::TEvReadBlobRanges::TPtr Ev;
+    std::unique_ptr<TEvColumnShard::TEvReadBlobRangesResult> Result;
+};
+
+
 // Returns false in case of page fault
 bool TryReadValue(NIceDb::TNiceDb& db, const TString& key, TString& value, ui32& readStatus) {
     auto rowset = db.Table<Schema::SmallBlobs>().Key(key).Select<Schema::SmallBlobs::Data>();
@@ -99,6 +116,11 @@ bool TTxReadBlobRanges::Execute(TTransactionContext& txc, const TActorContext& c
 void TTxReadBlobRanges::Complete(const TActorContext& ctx) {
     Y_UNUSED(ctx);
     LOG_S_DEBUG("TTxReadBlobRanges.Complete at tablet " << Self->TabletID());
+}
+
+void TColumnShard::Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TActorContext& ctx) {
+    LOG_S_DEBUG("Read blob ranges at tablet " << TabletID() << ev->Get()->Record);
+    Execute(new TTxReadBlobRanges(this, ev), ctx);
 }
 
 }

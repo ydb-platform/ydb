@@ -44,9 +44,9 @@ struct Schema : NIceDb::Schema {
         LastPlannedTxId = 5,
         LastSchemaSeqNoGeneration = 6,
         LastSchemaSeqNoRound = 7,
-
         LastGcBarrierGen = 8,
         LastGcBarrierStep = 9,
+        LastExportNumber = 10,
     };
 
     enum class EInsertTableIds : ui8 {
@@ -168,6 +168,20 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<BlobId, Data>;
     };
 
+    struct OneToOneEvictedBlobs : Table<13> {
+        struct BlobId : Column<1, NScheme::NTypeIds::String> {};
+        struct Size : Column<2, NScheme::NTypeIds::Uint32> {}; // extracted from BlobId for better introspection
+        struct State : Column<3, NScheme::NTypeIds::Byte> {}; // evicting -> (self) cached <-> exported
+        struct Dropped : Column<4, NScheme::NTypeIds::Bool> {};
+        struct Metadata : Column<5, NScheme::NTypeIds::String> {}; // NKikimrTxColumnShard.TEvictMetadata
+        struct ExternBlobId : Column<6, NScheme::NTypeIds::String> {};
+        //struct Format : Column<7, NScheme::NTypeIds::Byte> {};
+        //struct CachedBlobId : Column<8, NScheme::NTypeIds::String> {}; // TODO
+
+        using TKey = TableKey<BlobId>;
+        using TColumns = TableColumns<BlobId, Size, State, Dropped, Metadata, ExternBlobId>;
+    };
+
     // Index tables
 
     // InsertTable - common for all indices
@@ -241,7 +255,8 @@ struct Schema : NIceDb::Schema {
         IndexGranules,
         IndexColumns,
         IndexCounters,
-        SmallBlobs
+        SmallBlobs,
+        OneToOneEvictedBlobs
         >;
 
     //

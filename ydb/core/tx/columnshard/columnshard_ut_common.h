@@ -30,8 +30,8 @@ struct TTestSchema {
         TString Codec;
         std::optional<int> CompressionLevel;
         std::optional<ui32> EvictAfterSeconds;
-        //ui64 EvictAfterBytes; // TODO
         TString TtlColumn;
+        std::optional<NKikimrSchemeOp::TS3Settings> S3;
 
         TStorageTier(const TString& name = {})
             : Name(name)
@@ -179,6 +179,9 @@ struct TTestSchema {
                 }
                 if (tier.CompressionLevel) {
                     t->MutableCompression()->SetCompressionLevel(*tier.CompressionLevel);
+                }
+                if (tier.S3) {
+                    t->MutableObjectStorage()->CopyFrom(*tier.S3);
                 }
             }
         }

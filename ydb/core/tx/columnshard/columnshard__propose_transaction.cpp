@@ -6,6 +6,23 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
+class TTxProposeTransaction : public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+public:
+    TTxProposeTransaction(TColumnShard* self, TEvColumnShard::TEvProposeTransaction::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
+
+private:
+    TEvColumnShard::TEvProposeTransaction::TPtr Ev;
+    std::unique_ptr<TEvColumnShard::TEvProposeTransactionResult> Result;
+};
+
+
 bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
     LOG_S_DEBUG("TTxProposeTransaction.Execute at tablet " << Self->TabletID());
@@ -240,6 +257,16 @@ void TTxProposeTransaction::Complete(const TActorContext& ctx) {
     ctx.Send(Ev->Get()->GetSource(), Result.release());
 
     Self->TryRegisterMediatorTimeCast();
+}
+
+
+void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
+    auto& record = Proto(ev->Get());
+    ui32 txKind = record.GetTxKind();
+    ui64 txId = record.GetTxId();
+    LOG_S_DEBUG("ProposeTransaction kind " << txKind << " txId " << txId << " at tablet " << TabletID());
+
+    Execute(new TTxProposeTransaction(this, ev), ctx);
 }
 
 }

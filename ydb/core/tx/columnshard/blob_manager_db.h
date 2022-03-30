@@ -24,6 +24,13 @@ public:
     virtual void EraseBlobToDelete(const TUnifiedBlobId& blobId) = 0;
     virtual void WriteSmallBlob(const TUnifiedBlobId& blobId, const TString& data) = 0;
     virtual void EraseSmallBlob(const TUnifiedBlobId& blobId) = 0;
+
+    virtual bool LoadEvicted(THashMap<TEvictedBlob, TString>& evicted,
+                             THashMap<TEvictedBlob, TString>& dropped,
+                             const NOlap::IBlobGroupSelector& dsGroupSelector) = 0;
+    virtual void UpdateEvictBlob(const TEvictedBlob& evict, const TString& meta) = 0;
+    virtual void DropEvictBlob(const TEvictedBlob& evict) = 0;
+    virtual void EraseEvictBlob(const TEvictedBlob& evict) = 0;
 };
 
 
@@ -44,6 +51,13 @@ public:
     void EraseBlobToDelete(const TUnifiedBlobId& blobId) override;
     void WriteSmallBlob(const TUnifiedBlobId& blobId, const TString& data) override;
     void EraseSmallBlob(const TUnifiedBlobId& blobId) override;
+
+    virtual bool LoadEvicted(THashMap<TEvictedBlob, TString>& evicted,
+                             THashMap<TEvictedBlob, TString>& dropped,
+                             const NOlap::IBlobGroupSelector& dsGroupSelector) override;
+    void UpdateEvictBlob(const TEvictedBlob& evict, const TString& meta) override;
+    void DropEvictBlob(const TEvictedBlob& evict) override;
+    void EraseEvictBlob(const TEvictedBlob& evict) override;
 
 private:
     NTable::TDatabase& Database;

@@ -843,15 +843,57 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     }
 
     for (auto& tierConfig : schema.GetStorageTiers()) {
-        NOlap::TStorageTier tier;
-        tier.Name = tierConfig.GetName();
+        auto& tierName = tierConfig.GetName();
+        TierConfigs[tierName] = TTierConfig{tierConfig};
+
+        NOlap::TStorageTier tier{ .Name = tierName };
         if (tierConfig.HasCompression()) {
             tier.Compression = ConvertCompression(tierConfig.GetCompression());
+        }
+        if (TierConfigs[tierName].NeedExport()) {
+            S3Actors[tierName] = {}; // delayed actor creation
         }
         indexInfo.AddStorageTier(std::move(tier));
     }
 
     return indexInfo;
+}
+
+ui32 TColumnShard::InitS3Actors(const TActorContext& ctx, bool init) {
+    ui32 count = 0;
+#ifndef KIKIMR_DISABLE_S3_OPS
+    for (auto& [tierName, actor] : S3Actors) {
+        if (!init && actor) {
+            continue;
+        }
+
+        Y_VERIFY(!actor);
+        Y_VERIFY(TierConfigs.count(tierName));
+        auto& tierConfig = TierConfigs[tierName];
+        Y_VERIFY(tierConfig.NeedExport());
+
+        actor = ctx.Register(CreateS3Actor(TabletID(), ctx.SelfID, tierName));
+        ctx.Send(actor, new TEvPrivate::TEvS3Settings(tierConfig.S3Settings()));
+        ++count;
+    }
+#else
+    Y_UNUSED(ctx);
+    Y_UNUSED(init);
+#endif
+    return count;
+}
+
+void TColumnShard::StopS3Actors(const TActorContext& ctx) {
+#ifndef KIKIMR_DISABLE_S3_OPS
+    for (auto& [_, actor] : S3Actors) {
+        if (actor) {
+            ctx.Send(actor, new TEvents::TEvPoisonPill);
+            actor = {};
+        }
+    }
+#else
+    Y_UNUSED(ctx);
+#endif
 }
 
 }

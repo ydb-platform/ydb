@@ -102,6 +102,19 @@ void Out(IOutputStream& out, const PutObjectOutcome& outcome) {
     OutOutcome(out, outcome);
 }
 
+void Out(IOutputStream& out, const DeleteObjectRequest& request) {
+    using T = DeleteObjectRequest;
+    OutRequest(out, request, {&Bucket<T>, &Key<T>});
+}
+
+void Out(IOutputStream& out, const DeleteObjectResult& result) {
+    OutResult(out, result, "DeleteObjectResult", {});
+}
+
+void Out(IOutputStream& out, const DeleteObjectOutcome& outcome) {
+    OutOutcome(out, outcome);
+}
+
 void Out(IOutputStream& out, const CreateMultipartUploadRequest& request) {
     using T = CreateMultipartUploadRequest;
     OutRequest(out, request, {&Bucket<T>, &Key<T>});

@@ -112,9 +112,17 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
             return ev->Get()->Request;
         }
 
-        void Reply(const typename TEvResponse::TOutcome& outcome) const {
+        void Reply(const typename TEvRequest::TRequest& request,
+                   const typename TEvResponse::TOutcome& outcome) const
+        {
             Y_VERIFY(!std::exchange(Replied, true), "Double-reply");
-            Send(MakeResponse(outcome).Release());
+
+            std::optional<TString> key;
+            if (request.KeyHasBeenSet()) {
+                key = request.GetKey();
+            }
+
+            Send(MakeResponse(key, outcome).Release());
         }
 
     protected:
@@ -126,8 +134,10 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
             Send(Sender, ev);
         }
 
-        virtual THolder<IEventBase> MakeResponse(const typename TEvResponse::TOutcome& outcome) const {
-            return MakeHolder<TEvResponse>(outcome);
+        virtual THolder<IEventBase> MakeResponse(const std::optional<TString>& key,
+                                                 const typename TEvResponse::TOutcome& outcome) const
+        {
+            return MakeHolder<TEvResponse>(key, outcome);
         }
 
     private:
@@ -192,11 +202,13 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
         }
 
     protected:
-        THolder<IEventBase> MakeResponse(const typename TEvResponse::TOutcome& outcome) const override {
+        THolder<IEventBase> MakeResponse(const std::optional<TString>& key,
+                                         const typename TEvResponse::TOutcome& outcome) const override
+        {
             if (outcome.IsSuccess()) {
-                return MakeHolder<TEvResponse>(outcome, std::move(Buffer));
+                return MakeHolder<TEvResponse>(key, outcome, std::move(Buffer));
             } else {
-                return MakeHolder<TEvResponse>(outcome);
+                return MakeHolder<TEvResponse>(key, outcome);
             }
         }
 
@@ -256,7 +268,7 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
         auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender);
         auto callback = [](
                 const S3Client*,
-                const typename TEvRequest::TRequest&,
+                const typename TEvRequest::TRequest& request,
                 const typename TEvResponse::TOutcome& outcome,
                 const std::shared_ptr<const AsyncCallerContext>& context) {
             const auto* ctx = static_cast<const TCtx*>(context.get());
@@ -264,7 +276,7 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
             LOG_NOTICE_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
                 << ": uuid# " << ctx->GetUUID()
                 << ", response# " << outcome);
-            ctx->Reply(outcome);
+            ctx->Reply(request, outcome);
         };
 
         LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
@@ -286,6 +298,11 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
     void Handle(TEvS3Wrapper::TEvPutObjectRequest::TPtr& ev) {
         Call<TEvS3Wrapper::TEvPutObjectRequest, TEvS3Wrapper::TEvPutObjectResponse, TInputStreamContext>(
             ev, &S3Client::PutObjectAsync);
+    }
+
+    void Handle(TEvS3Wrapper::TEvDeleteObjectRequest::TPtr& ev) {
+        Call<TEvS3Wrapper::TEvDeleteObjectRequest, TEvS3Wrapper::TEvDeleteObjectResponse>(
+            ev, &S3Client::DeleteObjectAsync);
     }
 
     void Handle(TEvS3Wrapper::TEvCreateMultipartUploadRequest::TPtr& ev) {
@@ -330,6 +347,7 @@ public:
             hFunc(TEvS3Wrapper::TEvGetObjectRequest, Handle);
             hFunc(TEvS3Wrapper::TEvHeadObjectRequest, Handle);
             hFunc(TEvS3Wrapper::TEvPutObjectRequest, Handle);
+            hFunc(TEvS3Wrapper::TEvDeleteObjectRequest, Handle);
             hFunc(TEvS3Wrapper::TEvCreateMultipartUploadRequest, Handle);
             hFunc(TEvS3Wrapper::TEvUploadPartRequest, Handle);
             hFunc(TEvS3Wrapper::TEvCompleteMultipartUploadRequest, Handle);

@@ -10,6 +10,7 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/GetObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/HeadObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/PutObjectRequest.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Client.h>
 
@@ -57,10 +58,12 @@ struct TEvS3Wrapper {
         using TOutcome = Aws::Utils::Outcome<T, Aws::S3::S3Error>;
         using TResult = Aws::Utils::Outcome<U, Aws::S3::S3Error>;
 
+        std::optional<TString> Key;
         TResult Result;
 
-        explicit TGenericResponse(const TOutcome& outcome)
-            : Result(TDerived::ResultFromOutcome(outcome))
+        explicit TGenericResponse(const std::optional<TString>& key, const TOutcome& outcome)
+            : Key(key)
+            , Result(TDerived::ResultFromOutcome(outcome))
         {
         }
 
@@ -77,13 +80,14 @@ struct TEvS3Wrapper {
 
         TString Body;
 
-        explicit TResponseWithBody(const typename TGeneric::TOutcome& outcome)
-            : TGeneric(outcome)
+        explicit TResponseWithBody(const std::optional<TString>& key, const typename TGeneric::TOutcome& outcome)
+            : TGeneric(key, outcome)
         {
         }
 
-        explicit TResponseWithBody(const typename TGeneric::TOutcome& outcome, TString&& body)
-            : TGeneric(outcome)
+        explicit TResponseWithBody(const std::optional<TString>& key, const typename TGeneric::TOutcome& outcome,
+                                   TString&& body)
+            : TGeneric(key, outcome)
             , Body(std::move(body))
         {
         }
@@ -101,6 +105,7 @@ struct TEvS3Wrapper {
         EV_REQUEST_RESPONSE(GetObject),
         EV_REQUEST_RESPONSE(HeadObject),
         EV_REQUEST_RESPONSE(PutObject),
+        EV_REQUEST_RESPONSE(DeleteObject),
         EV_REQUEST_RESPONSE(CreateMultipartUpload),
         EV_REQUEST_RESPONSE(UploadPart),
         EV_REQUEST_RESPONSE(CompleteMultipartUpload),
@@ -156,6 +161,7 @@ struct TEvS3Wrapper {
     DEFINE_GENERIC_RESPONSE(UploadPart);
 
     DEFINE_GENERIC_REQUEST_RESPONSE(HeadObject);
+    DEFINE_GENERIC_REQUEST_RESPONSE(DeleteObject);
     DEFINE_GENERIC_REQUEST_RESPONSE(CreateMultipartUpload);
     DEFINE_GENERIC_REQUEST_RESPONSE(CompleteMultipartUpload);
     DEFINE_GENERIC_REQUEST_RESPONSE(AbortMultipartUpload);

@@ -8,6 +8,9 @@ namespace NKikimr::NOlap {
 
 class IBlobGroupSelector;
 
+TString DsToS3Key(const TString& s);
+TString S3ToDsKey(const TString& s);
+
 // Encapsulates different types of blob ids to simplify dealing with blobs for the
 // components that do not need to know where the blob is stored
 // Blob id formats:
@@ -81,10 +84,39 @@ class TUnifiedBlobId {
         }
     };
 
+    struct TS3BlobId {
+        TDsBlobId DsBlobId;
+        TString Bucket;
+        TString Key;
+
+        TS3BlobId() = default;
+
+        TS3BlobId(const TUnifiedBlobId& dsBlob, const TString& bucket)
+            : Bucket(bucket)
+        {
+            Y_VERIFY(dsBlob.IsDsBlob());
+            DsBlobId = std::get<TDsBlobId>(dsBlob.Id);
+            Key = DsToS3Key(DsBlobId.ToStringNew());
+        }
+
+        bool operator == (const TS3BlobId& other) const {
+            return Bucket == other.Bucket && Key == other.Key;
+        }
+
+        TString ToStringNew() const {
+            return Sprintf("%s|%s", Key.c_str(), Bucket.c_str());
+        }
+
+        ui64 Hash() const {
+            return CombineHashes<ui64>(THash<TString>()(Bucket), THash<TString>()(Key));
+        }
+    };
+
     std::variant<
         TInvalid,
         TDsBlobId,
-        TSmallBlobId
+        TSmallBlobId,
+        TS3BlobId
     > Id;
 
 public:
@@ -92,6 +124,7 @@ public:
         INVALID = 0,
         DS_BLOB = 1,
         TABLET_SMALL_BLOB = 2,
+        S3_BLOB = 3,
     };
 
     TUnifiedBlobId()
@@ -107,6 +140,13 @@ public:
     TUnifiedBlobId(ui64 tabletId, ui32 gen, ui32 step, ui32 cookie, ui32 size)
         : Id(TSmallBlobId{tabletId, gen, step, cookie, size})
     {}
+
+    // Make S3 blob Id from DS one
+    TUnifiedBlobId(const TUnifiedBlobId& blob, EBlobType type, const TString& bucket)
+        : Id(TS3BlobId(blob, bucket))
+    {
+        Y_VERIFY(type == S3_BLOB);
+    }
 
     TUnifiedBlobId(const TUnifiedBlobId& other) = default;
     TUnifiedBlobId& operator = (const TUnifiedBlobId& logoBlobId) = default;
@@ -134,9 +174,12 @@ public:
             return std::get<TDsBlobId>(Id).BlobId.BlobSize();
         case TABLET_SMALL_BLOB:
             return std::get<TSmallBlobId>(Id).Size;
-        default:
+        case S3_BLOB:
+            return std::get<TS3BlobId>(Id).DsBlobId.BlobId.BlobSize();
+        case INVALID:
             Y_FAIL("Invalid blob id");
         }
+        Y_FAIL();
     }
 
     bool IsSmallBlob() const {
@@ -145,6 +188,10 @@ public:
 
     bool IsDsBlob() const {
         return GetType() == DS_BLOB;
+    }
+
+    bool IsS3Blob() const {
+        return GetType() == S3_BLOB;
     }
 
     TLogoBlobID GetLogoBlobId() const {
@@ -157,15 +204,23 @@ public:
         return std::get<TDsBlobId>(Id).DsGroup;
     }
 
+    TString GetS3Key() const {
+        Y_VERIFY(IsS3Blob());
+        return std::get<TS3BlobId>(Id).Key;
+    }
+
     ui64 GetTabletId() const {
         switch (Id.index()) {
         case DS_BLOB:
             return std::get<TDsBlobId>(Id).BlobId.TabletID();
         case TABLET_SMALL_BLOB:
             return std::get<TSmallBlobId>(Id).TabletId;
-        default:
-            Y_FAIL("No Tablet Id");
+        case S3_BLOB:
+            return std::get<TS3BlobId>(Id).DsBlobId.BlobId.TabletID();
+        case INVALID:
+            Y_FAIL("Invalid blob id");
         }
+        Y_FAIL();
     }
 
     ui64 Hash() const noexcept {
@@ -176,9 +231,10 @@ public:
             return std::get<TDsBlobId>(Id).Hash();
         case TABLET_SMALL_BLOB:
             return std::get<TSmallBlobId>(Id).Hash();
-        default:
-            Y_FAIL("Not implemented");
+        case S3_BLOB:
+            return std::get<TS3BlobId>(Id).Hash();
         }
+        Y_FAIL();
     }
 
     // This is only implemented for DS for backward compatibility with persisted data.
@@ -194,9 +250,12 @@ public:
             return std::get<TDsBlobId>(Id).ToStringLegacy();
         case TABLET_SMALL_BLOB:
             return std::get<TSmallBlobId>(Id).ToStringLegacy();
-        default:
+        case S3_BLOB:
+            Y_FAIL("Not implemented");
+        case INVALID:
             return "<Invalid blob id>";
         }
+        Y_FAIL();
     }
 
     TString ToStringNew() const {
@@ -205,9 +264,12 @@ public:
             return std::get<TDsBlobId>(Id).ToStringNew();
         case TABLET_SMALL_BLOB:
             return std::get<TSmallBlobId>(Id).ToStringNew();
-        default:
+        case S3_BLOB:
+            return std::get<TS3BlobId>(Id).ToStringNew();
+        case INVALID:
             return "<Invalid blob id>";
         }
+        Y_FAIL();
     }
 };
 
@@ -244,6 +306,31 @@ struct TBlobRange {
     }
 };
 
+// Expected blob lifecycle: EVICTING -> SELF_CACHED -> EXTERN <-> CACHED
+enum class EEvictState : ui8 {
+    UNKNOWN = 0,
+    EVICTING = 1,       // source, extern, cached blobs: 1--
+    SELF_CACHED = 2,    // source, extern, cached blobs: 11-
+    EXTERN = 3,         // source, extern, cached blobs: -1-
+    CACHED = 4,         // source, extern, cached blobs: -11
+    ERASED = 5,         // source, extern, cached blobs: ---
+};
+
+struct TEvictedBlob {
+    EEvictState State = EEvictState::UNKNOWN;
+    TUnifiedBlobId Blob;
+    TUnifiedBlobId ExternBlob;
+    TUnifiedBlobId CachedBlob;
+
+    bool operator == (const TEvictedBlob& other) const {
+        return Blob == other.Blob;
+    }
+
+    ui64 Hash() const noexcept {
+        return Blob.Hash();
+    }
+};
+
 }
 
 inline
@@ -266,6 +353,13 @@ struct ::THash<NKikimr::NOlap::TUnifiedBlobId> {
 template <>
 struct THash<NKikimr::NOlap::TBlobRange> {
     inline size_t operator() (const NKikimr::NOlap::TBlobRange& key) const {
+        return key.Hash();
+    }
+};
+
+template <>
+struct THash<NKikimr::NOlap::TEvictedBlob> {
+    inline size_t operator() (const NKikimr::NOlap::TEvictedBlob& key) const {
         return key.Hash();
     }
 };

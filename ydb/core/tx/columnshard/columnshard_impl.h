@@ -17,6 +17,28 @@ namespace NKikimr::NColumnShard {
 
 extern bool gAllowLogBatchingDefaultValue;
 
+IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent);
+IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent);
+IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent);
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
+                         TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline = TInstant::Max());
+IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
+                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
+                         TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline = TInstant::Max());
+IActor* CreateReadActor(ui64 tabletId,
+                        const TActorId& dstActor,
+                        std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
+                        NOlap::TReadMetadata::TConstPtr readMetadata,
+                        const TInstant& deadline,
+                        const TActorId& columnShardActorId,
+                        ui64 requestCookie);
+IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
+IActor* CreateExportActor(ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
+#ifndef KIKIMR_DISABLE_S3_OPS
+IActor* CreateS3Actor(ui64 tabletId, const TActorId& parent, const TString& tierName);
+#endif
+
 struct TSettings {
     TControlWrapper BlobWriteGrouppingEnabled;
     TControlWrapper CacheDataAfterIndexing;
@@ -57,6 +79,8 @@ class TColumnShard
     friend class TTxRead;
     friend class TTxScan;
     friend class TTxWriteIndex;
+    friend class TTxExport;
+    friend class TTxForget;
     friend class TTxRunGC;
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
@@ -85,6 +109,8 @@ class TColumnShard
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvForget::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
@@ -178,6 +204,8 @@ protected:
             HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             HFunc(TEvPrivate::TEvWriteIndex, Handle);
+            HFunc(TEvPrivate::TEvExport, Handle);
+            HFunc(TEvPrivate::TEvForget, Handle);
             HFunc(TEvPrivate::TEvScanStats, Handle);
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
@@ -283,6 +311,21 @@ private:
         }
     };
 
+    struct TTierConfig {
+        using TTierProto = NKikimrSchemeOp::TStorageTierConfig;
+        using TS3SettingsProto = NKikimrSchemeOp::TS3Settings;
+
+        TTierProto Proto;
+
+        bool NeedExport() const {
+            return Proto.HasObjectStorage();
+        }
+
+        const TS3SettingsProto& S3Settings() const {
+            return Proto.GetObjectStorage();
+        }
+    };
+
     struct TLongTxWriteInfo {
         ui64 WriteId;
         NLongTxService::TLongTxId LongTxId;
@@ -296,6 +339,7 @@ private:
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
     ui64 LastCompactedGranule = 0;
+    ui64 LastExportNo = 0;
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
@@ -309,11 +353,13 @@ private:
     TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.
     TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compation.
     TActorId EvictionActor;
+    THashMap<TString, TActorId> S3Actors;
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
     TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    THashMap<TString, TTierConfig> TierConfigs;
     TTtl Ttl;
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
@@ -379,6 +425,8 @@ private:
     void SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions);
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    ui32 InitS3Actors(const TActorContext& ctx, bool init);
+    void StopS3Actors(const TActorContext& ctx);
 
     std::unique_ptr<TEvPrivate::TEvIndexing> SetupIndexation();
     std::unique_ptr<TEvPrivate::TEvCompaction> SetupCompaction();

@@ -34,6 +34,26 @@ inline Aws::Client::ClientConfiguration ConfigFromSettings(const NKikimrSchemeOp
         Y_FAIL("Unknown scheme");
     }
 
+    if (settings.HasVerifySSL()) {
+        config.verifySSL = settings.GetVerifySSL();
+    }
+
+    if (settings.HasProxyHost()) {
+        config.proxyHost = settings.GetProxyHost();
+        config.proxyPort = settings.GetProxyPort();
+
+        switch (settings.GetProxyScheme()) {
+        case NKikimrSchemeOp::TS3Settings::HTTP:
+            config.proxyScheme = Aws::Http::Scheme::HTTP;
+            break;
+        case NKikimrSchemeOp::TS3Settings::HTTPS:
+            config.proxyScheme = Aws::Http::Scheme::HTTPS;
+            break;
+        default:
+            break;
+        }
+    }
+
     return config;
 }
 

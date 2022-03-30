@@ -118,6 +118,10 @@ enum ECumulativeCounters {
     COUNTER_EVICTION_PORTIONS_WRITTEN = 64                  [(CounterOpts) = {Name: "EvictionPortionsWritten"}];
     COUNTER_EVICTION_BLOBS_WRITTEN = 65                     [(CounterOpts) = {Name: "EvictionBlobsWritten"}];
     COUNTER_EVICTION_BYTES_WRITTEN = 66                     [(CounterOpts) = {Name: "EvictionBytesWritten"}];
+    COUNTER_EXPORT_SUCCESS = 67                             [(CounterOpts) = {Name: "ExportSuccess"}];
+    COUNTER_EXPORT_FAIL = 68                                [(CounterOpts) = {Name: "ExportFail"}];
+    COUNTER_FORGET_SUCCESS = 69                             [(CounterOpts) = {Name: "ForgetSuccess"}];
+    COUNTER_FORGET_FAIL = 70                                [(CounterOpts) = {Name: "ForgetFail"}];
 }
 
 enum EPercentileCounters {
@@ -157,4 +161,6 @@ enum ETxTypes {
     TXTYPE_PROGRESS = 10                                    [(TxTypeOpts) = {Name: "TxProgress"}];
     TXTYPE_START_SCAN = 11                                  [(TxTypeOpts) = {Name: "TxStartScan"}];
     TXTYPE_READ_BLOB_RANGES = 12                            [(TxTypeOpts) = {Name: "TxReadBlobRanges"}];
+    TXTYPE_EXPORT = 13                                      [(TxTypeOpts) = {Name: "TxExport"}];
+    TXTYPE_FORGET = 14                                      [(TxTypeOpts) = {Name: "TxForget"}];
 }

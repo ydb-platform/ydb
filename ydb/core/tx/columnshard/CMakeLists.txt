@@ -38,6 +38,8 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob_manager.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob_manager_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blob_manager_txs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__export.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__forget.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__init.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__notify_tx_completion.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__plan_step.cpp
@@ -54,9 +56,11 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_common.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/compaction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/eviction_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/export_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/indexing_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/s3_actor.cpp
 )
 generate_enum_serilization(core-tx-columnshard
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.h

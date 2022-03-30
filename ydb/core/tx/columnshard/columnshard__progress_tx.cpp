@@ -76,6 +76,7 @@ public:
                             MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(Self->TabletID(), txId));
                     }
                     Self->AltersInFlight.erase(txId);
+                    Self->InitS3Actors(ctx, false);
                     break;
                 }
                 case NKikimrTxColumnShard::TX_KIND_COMMIT: {

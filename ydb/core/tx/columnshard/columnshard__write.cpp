@@ -1,5 +1,4 @@
 #include "columnshard_impl.h"
-#include "columnshard_txs.h"
 #include "columnshard_schema.h"
 #include "blob_manager_db.h"
 #include "blob_cache.h"
@@ -7,6 +6,23 @@
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
+
+class TTxWrite : public TTransactionBase<TColumnShard> {
+public:
+    TTxWrite(TColumnShard* self, TEvColumnShard::TEvWrite::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_WRITE; }
+
+private:
+    TEvColumnShard::TEvWrite::TPtr Ev;
+    std::unique_ptr<TEvColumnShard::TEvWriteResult> Result;
+};
+
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(Ev);
@@ -103,6 +119,48 @@ void TTxWrite::Complete(const TActorContext& ctx) {
     LOG_S_DEBUG("TTxWrite.Complete at tablet " << Self->TabletID());
 
     ctx.Send(Ev->Get()->GetSource(), Result.release());
+}
+
+
+// EvWrite -> WriteActor (attach BlobId without proto changes) -> EvWrite
+void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+
+    auto& data = Proto(ev->Get()).GetData();
+    const ui64 tableId = ev->Get()->Record.GetTableId();
+    bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !IsTableWritable(tableId)
+        || ev->Get()->PutStatus == NKikimrProto::ERROR;
+
+    if (error) {
+        LOG_S_WARN("Write (fail) " << data.size() << " bytes at tablet " << TabletID());
+
+        ev->Get()->PutStatus = NKikimrProto::ERROR;
+        Execute(new TTxWrite(this, ev), ctx);
+    } else if (InsertTable->IsOverloaded(tableId)) {
+        LOG_S_INFO("Write (overload) " << data.size() << " bytes for table " << tableId << " at tablet " << TabletID());
+
+        ev->Get()->PutStatus = NKikimrProto::TRYLATER;
+        Execute(new TTxWrite(this, ev), ctx);
+    } else if (ev->Get()->BlobId.IsValid()) {
+        LOG_S_DEBUG("Write (record) " << data.size() << " bytes at tablet " << TabletID());
+
+        Execute(new TTxWrite(this, ev), ctx);
+    } else {
+        if (IsAnyChannelYellowStop()) {
+            LOG_S_ERROR("Write (out of disk space) at tablet " << TabletID());
+
+            IncCounter(COUNTER_OUT_OF_SPACE);
+            ev->Get()->PutStatus = NKikimrProto::TRYLATER;
+            Execute(new TTxWrite(this, ev), ctx);
+        } else {
+            LOG_S_DEBUG("Write (blob) " << data.size() << " bytes at tablet " << TabletID());
+
+            ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
+
+            ctx.Register(CreateWriteActor(TabletID(), PrimaryIndex->GetIndexInfo(), ctx.SelfID,
+                BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
+        }
+    }
 }
 
 }

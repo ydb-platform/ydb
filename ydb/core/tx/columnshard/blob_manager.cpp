@@ -456,6 +456,129 @@ void TBlobManager::DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) 
     }
 }
 
+bool TBlobManager::ExportOneToOne(const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TEvictMetadata& meta,
+                                  IBlobManagerDb& db)
+{
+    NOlap::TEvictedBlob evict{
+        .State = EEvictState::EVICTING,
+        .Blob = blobId
+    };
+
+    if (EvictedBlobs.count(evict)) {
+        return false;
+    }
+
+    TString strMeta;
+    Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&strMeta);
+
+    db.UpdateEvictBlob(evict, strMeta);
+    EvictedBlobs.emplace(std::move(evict), meta);
+    return true;
+}
+
+bool TBlobManager::DropOneToOne(const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
+    NOlap::TEvictedBlob evict{
+        .State = EEvictState::UNKNOWN,
+        .Blob = blobId
+    };
+
+    TEvictMetadata meta;
+    bool extracted = ExtractEvicted(evict, meta);
+    if (!extracted) {
+        return false; // It's not at exported blob.
+    }
+#if 0 // TODO: SELF_CACHED logic
+    if (evict.State == EEvictState::SELF_CACHED) {
+        evict.State = EEvictState::EXTERN; // SELF_CACHED -> EXTERN for dropped
+    }
+#endif
+    db.DropEvictBlob(evict);
+    DroppedEvictedBlobs.emplace(std::move(evict), std::move(meta));
+    return true;
+}
+
+bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) {
+    TEvictMetadata meta;
+
+    TEvictedBlob old{.Blob = evict.Blob};
+    bool extracted = ExtractEvicted(old, meta);
+    dropped = false;
+    if (!extracted) {
+        dropped = DroppedEvictedBlobs.count(evict);
+        if (!dropped) {
+            return false; // update after erase
+        }
+        extracted = ExtractEvicted(old, meta, true);
+    }
+    Y_VERIFY(extracted);
+
+    switch (evict.State) {
+        case EEvictState::SELF_CACHED:
+            Y_VERIFY(old.State == EEvictState::EVICTING);
+            break;
+        case EEvictState::EXTERN:
+            Y_VERIFY(old.State == EEvictState::EVICTING || old.State == EEvictState::SELF_CACHED);
+            break;
+        default:
+            break;
+    }
+
+    if (dropped) {
+        if (evict.State == EEvictState::SELF_CACHED) {
+            evict.State = EEvictState::EXTERN; // SELF_CACHED -> EXTERN for dropped
+        }
+        DroppedEvictedBlobs.emplace(evict, meta);
+    } else {
+        EvictedBlobs.emplace(evict, meta);
+    }
+
+    // TODO: update meta if needed
+    db.UpdateEvictBlob(evict, {});
+    return true;
+}
+
+bool TBlobManager::EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) {
+    db.EraseEvictBlob(evict);
+    return DroppedEvictedBlobs.erase(evict);
+}
+
+bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db) {
+    EvictedBlobs.clear();
+    DroppedEvictedBlobs.clear();
+
+    TBlobGroupSelector dsGroupSelector(TabletInfo);
+    THashMap<TEvictedBlob, TString> evicted;
+    THashMap<TEvictedBlob, TString> dropped;
+    if (!db.LoadEvicted(evicted, dropped, dsGroupSelector)) {
+        return false;
+    }
+
+    for (auto& [evict, metadata] : evicted) {
+        NKikimrTxColumnShard::TEvictMetadata meta;
+        Y_VERIFY(meta.ParseFromString(metadata));
+
+        EvictedBlobs.emplace(evict, meta);
+    }
+
+    for (auto& [evict, metadata] : dropped) {
+        NKikimrTxColumnShard::TEvictMetadata meta;
+        Y_VERIFY(meta.ParseFromString(metadata));
+
+        DroppedEvictedBlobs.emplace(evict, meta);
+    }
+
+    return true;
+}
+
+TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) {
+    auto it = DroppedEvictedBlobs.find(TEvictedBlob{.Blob = blobId});
+    if (it != DroppedEvictedBlobs.end()) {
+        meta = it->second;
+        return it->first;
+    }
+    return {};
+}
+
 void TBlobManager::DeleteSmallBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) {
     LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Small Blob " << blobId);
     db.EraseSmallBlob(blobId);

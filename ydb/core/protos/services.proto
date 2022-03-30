@@ -882,5 +882,7 @@ message TActivity {
         YQ_AUDIT_ACTOR = 564;
         YQ_AUDIT_EVENT_SENDER_ACTOR = 565;
         BLOCKSTORE_USER_STATS = 566;
+        TX_COLUMNSHARD_S3_ACTOR = 567;
+        TX_COLUMNSHARD_EXPORT_ACTOR = 568;
     };
 };

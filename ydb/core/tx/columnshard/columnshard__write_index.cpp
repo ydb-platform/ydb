@@ -8,6 +8,28 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
+/// Common transaction for WriteIndex and GranuleCompaction.
+/// For WriteIndex it writes new portion from InsertTable into index.
+/// For GranuleCompaction it writes new portion of indexed data and mark old data with "switching" snapshot.
+class TTxWriteIndex : public TTransactionBase<TColumnShard> {
+public:
+    TTxWriteIndex(TColumnShard* self, TEvPrivate::TEvWriteIndex::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_WRITE_INDEX; }
+
+private:
+    TEvPrivate::TEvWriteIndex::TPtr Ev;
+    THashMap<TUnifiedBlobId, TString> BlobsToExport;
+    THashMap<TString, std::vector<NOlap::TEvictedBlob>> TierBlobsToForget;
+    ui64 ExportNo = 0;
+};
+
+
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
     Y_VERIFY(Ev);
     Y_VERIFY(Self->InsertTable);
@@ -92,6 +114,29 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
             }
 
             Self->IncCounter(COUNTER_EVICTION_PORTIONS_WRITTEN, changes->PortionsToEvict.size());
+            for (auto& [portionInfo, _] : changes->PortionsToEvict) {
+                auto& tierName = portionInfo.TierName;
+                if (tierName.empty()) {
+                    continue;
+                }
+
+                // Mark exported blobs
+                Y_VERIFY(Self->TierConfigs.count(tierName));
+                auto& config = Self->TierConfigs[tierName];
+
+                if (config.NeedExport()) {
+                    for (auto& rec : portionInfo.Records) {
+                        auto& blobId = rec.BlobRange.BlobId;
+                        if (!BlobsToExport.count(blobId)) {
+                            BlobsToExport.emplace(blobId, tierName);
+
+                            NKikimrTxColumnShard::TEvictMetadata meta;
+                            meta.SetTierName(tierName);
+                            Self->BlobManager->ExportOneToOne(blobId, meta, blobManagerDb);
+                        }
+                    }
+                }
+            }
 
             const auto& portionsToDrop = changes->PortionsToDrop;
             THashSet<TUnifiedBlobId> blobsToDrop;
@@ -104,14 +149,33 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
             }
 
             // Note: RAW_BYTES_ERASED and BYTES_ERASED counters are not in sync for evicted data
-            const auto& evictedRecords = changes->EvictedRecords;
-            for (const auto& rec : evictedRecords) {
-                blobsToDrop.insert(rec.BlobRange.BlobId);
+            THashSet<TUnifiedBlobId> blobsToEvict;
+            for (const auto& rec : changes->EvictedRecords) {
+                blobsToEvict.insert(rec.BlobRange.BlobId);
             }
 
-            Self->IncCounter(COUNTER_BLOBS_ERASED, blobsToDrop.size());
             for (const auto& blobId : blobsToDrop) {
+                if (Self->BlobManager->DropOneToOne(blobId, blobManagerDb)) {
+                    TEvictMetadata meta;
+                    auto evict = Self->BlobManager->GetDropped(blobId, meta);
+                    Y_VERIFY(evict.State != EEvictState::UNKNOWN);
+                    bool deleted = ui8(evict.State) >= ui8(EEvictState::EXTERN); // !EVICTING and !SELF_CACHED
+                    TierBlobsToForget[meta.GetTierName()].emplace_back(std::move(evict));
+                    if (deleted) {
+                        continue;
+                    }
+                }
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
+                Self->IncCounter(COUNTER_BLOBS_ERASED);
+                Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
+            }
+            for (const auto& blobId : blobsToEvict) {
+                if (BlobsToExport.count(blobId)) {
+                    // DS to S3 eviction. Keep source blob in DS till EEvictState::EXTERN state.
+                    continue;
+                }
+                Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
+                Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
             }
 
@@ -132,6 +196,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
     } else {
         LOG_S_ERROR("TTxWriteIndex (" << changes->TypeString()
             << ") cannot write index blobs at tablet " << Self->TabletID());
+    }
+
+    if (BlobsToExport.size()) {
+        ExportNo = ++Self->LastExportNo;
+
+        NIceDb::TNiceDb db(txc.DB);
+        Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
     }
 
     if (changes->IsInsert()) {
@@ -179,6 +250,67 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         ctx.Schedule(Self->FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
     } else {
         Self->EnqueueBackgroundActivities();
+    }
+
+    if (ExportNo) {
+        Y_VERIFY(BlobsToExport.size());
+        THashMap<TString, THashMap<TUnifiedBlobId, TString>> tierBlobs;
+        for (auto& [blobId, tierName] : BlobsToExport) {
+            tierBlobs[tierName].emplace(blobId, TString());
+        }
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvExport(ExportNo, std::move(tierBlobs)));
+    }
+
+    for (auto [tierName, blobs] : TierBlobsToForget) {
+        if (!Self->S3Actors.count(tierName)) {
+            TString tier(tierName);
+            LOG_S_ERROR("No S3 actor for tier '" << tier << "' (on forget) at tablet " << Self->TabletID());
+            continue;
+        }
+        auto& s3 = Self->S3Actors[tierName];
+        if (!s3) {
+            TString tier(tierName);
+            LOG_S_ERROR("Not started S3 actor for tier '" << tier << "' (on forget) at tablet " << Self->TabletID());
+            continue;
+        }
+
+        auto forget = std::make_unique<TEvPrivate::TEvForget>();
+        forget->Evicted = std::move(blobs);
+        ctx.Send(s3, forget.release());
+    }
+}
+
+
+void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
+    auto& blobs = ev->Get()->Blobs;
+    bool isCompaction = ev->Get()->GranuleCompaction;
+    if (isCompaction && blobs.empty()) {
+        ev->Get()->PutStatus = NKikimrProto::OK;
+    }
+
+    if (ev->Get()->PutStatus == NKikimrProto::UNKNOWN) {
+        if (IsAnyChannelYellowStop()) {
+            LOG_S_ERROR("WriteIndex (out of disk space) at tablet " << TabletID());
+
+            IncCounter(COUNTER_OUT_OF_SPACE);
+            ev->Get()->PutStatus = NKikimrProto::TRYLATER;
+            Execute(new TTxWriteIndex(this, ev), ctx);
+        } else {
+            LOG_S_DEBUG("WriteIndex (" << blobs.size() << " blobs) at tablet " << TabletID());
+
+            Y_VERIFY(!blobs.empty());
+            ctx.Register(CreateWriteActor(TabletID(), NOlap::TIndexInfo("dummy", 0), ctx.SelfID,
+                BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
+        }
+    } else {
+        if (ev->Get()->PutStatus == NKikimrProto::OK) {
+            LOG_S_DEBUG("WriteIndex (records) at tablet " << TabletID());
+        } else {
+            LOG_S_INFO("WriteIndex error at tablet " << TabletID());
+        }
+
+        OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+        Execute(new TTxWriteIndex(this, ev), ctx);
     }
 }
 

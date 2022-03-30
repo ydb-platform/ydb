@@ -684,17 +684,17 @@ public:
         switch (Slot)
         {
         case NUdf::EDataSlot::Bool:
-            return NUdf::TUnboxedValuePod(DatumGetBool(ScalarDatumFromPod(value)));
+            return NUdf::TUnboxedValuePod((bool)DatumGetBool(ScalarDatumFromPod(value)));
         case NUdf::EDataSlot::Int16:
-            return NUdf::TUnboxedValuePod(DatumGetInt16(ScalarDatumFromPod(value)));
+            return NUdf::TUnboxedValuePod((i16)DatumGetInt16(ScalarDatumFromPod(value)));
         case NUdf::EDataSlot::Int32:
-            return NUdf::TUnboxedValuePod(DatumGetInt32(ScalarDatumFromPod(value)));
+            return NUdf::TUnboxedValuePod((i32)DatumGetInt32(ScalarDatumFromPod(value)));
         case NUdf::EDataSlot::Int64:
-            return NUdf::TUnboxedValuePod(DatumGetInt64(ScalarDatumFromPod(value)));
+            return NUdf::TUnboxedValuePod((i64)DatumGetInt64(ScalarDatumFromPod(value)));
         case NUdf::EDataSlot::Float:
-            return NUdf::TUnboxedValuePod(DatumGetFloat4(ScalarDatumFromPod(value)));
+            return NUdf::TUnboxedValuePod((float)DatumGetFloat4(ScalarDatumFromPod(value)));
         case NUdf::EDataSlot::Double:
-            return NUdf::TUnboxedValuePod(DatumGetFloat8(ScalarDatumFromPod(value)));
+            return NUdf::TUnboxedValuePod((double)DatumGetFloat8(ScalarDatumFromPod(value)));
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
             if (value.IsEmbedded() || value.IsString()) {

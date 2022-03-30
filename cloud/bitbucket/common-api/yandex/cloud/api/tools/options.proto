@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package yandex.cloud.api.tools;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/common-api/yandex/cloud/api/tools;tools";
+option (cloud.api.tools.file).lint_skip.java_package = true;
+
+// NOTE(skipor): option extention names should have package scope unique names
+// and global unique ids per Options type from range 50000-99999 reserved for internal use.
+
+extend google.protobuf.FileOptions {FileOptions file = 67321;}
+extend google.protobuf.MessageOptions {MessageOptions message = 67321;}
+extend google.protobuf.FieldOptions {FieldOptions field = 67321;}
+extend google.protobuf.EnumOptions {EnumOptions enumeration = 67321;} // enum is reserved word :(
+extend google.protobuf.EnumValueOptions {EnumValueOptions value = 67321;}
+extend google.protobuf.ServiceOptions {ServiceOptions service = 67321;}
+extend google.protobuf.MethodOptions {MethodOptions method = 67321;}
+
+message FileOptions {
+  FileLintSkip lint_skip = 1;
+}
+
+message FileLintSkip {
+  bool all = 1;
+  bool go_package = 2;
+  bool file_path = 3;
+  bool java_package = 4;
+}
+
+message MessageOptions {
+  CommonLintSkip lint_skip = 1;
+  string openapi_name = 2;
+}
+
+message FieldOptions {
+  // Used to declare which schema may have protobuf.Struct field.
+  // TODO(skipor): if v1 and later apis use it move it to yandex.cloud.api package, and parse
+  // at lint stage, but not at options parse.
+  repeated string one_of = 1;
+  FieldLintSkip lint_skip = 2;
+}
+
+message FieldLintSkip {
+  bool all = 1;
+  bool int_type = 2;
+  bool float_type = 3;
+  bool json_name = 4;
+}
+
+message EnumOptions {
+  EnumLintSkip lint_skip = 2;
+  string openapi_name = 3;
+}
+
+message EnumLintSkip {
+  bool all = 1;
+  bool value_names_case = 2;
+  bool unspecified_value = 3;
+}
+
+message EnumValueOptions {
+  CommonLintSkip lint_skip = 1;
+}
+
+message ServiceOptions {
+  CommonLintSkip lint_skip = 1;
+  bool skip_generate = 2;
+}
+
+message MethodOptions {
+  MethodLintSkip lint_skip = 1;
+  bool skip_generate = 2;
+}
+
+message MethodLintSkip {
+  bool all = 1;
+  bool contains_resource_name = 2;
+  bool http_query_parameters = 3;
+  bool http_path = 4;
+  bool http_verb = 5;
+}
+
+message CommonLintSkip {
+  bool all = 1;
+}

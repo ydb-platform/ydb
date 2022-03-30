@@ -1,0 +1,135 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.serverless.functions.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1;functions";
+option java_outer_classname = "PSF";
+
+message Function {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    ACTIVE = 2;
+    DELETING = 3;
+    ERROR = 4;
+  }
+  string id = 1;
+  string folder_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string name = 4;
+  string description = 5;
+  map<string, string> labels = 6;
+  string log_group_id = 7;
+  string http_invoke_url = 8;
+  Status status = 9;
+}
+
+message Runtime {
+    string id = 1;
+    repeated string builders = 2;
+    string default_builder = 3;
+    string language = 4;
+    string version = 5;
+    string stage = 6;
+}
+
+message Version {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATING = 1;
+    ACTIVE = 2;
+    OBSOLETE = 3;
+  }
+
+  string id = 1;
+  string function_id = 2;
+  string description = 3;
+  google.protobuf.Timestamp created_at = 5;
+  string runtime = 6;
+  string entrypoint = 7;
+  Resources resources = 8;
+  google.protobuf.Duration execution_timeout = 9;
+  string service_account_id = 10;
+  int64 image_size = 12;
+  Status status = 13;
+  repeated string tags = 14;
+  string log_group_id = 15;
+  map<string, string> environment = 16;
+  string builder = 17;
+  bool tmpfs = 18;
+  map<string, string> named_service_accounts = 19;
+  int64 concurrency = 20;
+  Connectivity connectivity = 21;
+  DataDisk data_disk = 22;
+  OwnerData owner_data = 23;
+  repeated Secret secrets = 24;
+}
+
+message Resources {
+  int64 memory = 1 [(value) = "134217728-4294967296"];
+  int64 cores = 2 [(value) = ">=0"];
+  int64 core_fraction = 3 [(value) = "0-100"];
+}
+
+message Package {
+  string bucket_name = 1 [(required) = true];
+  string object_name = 2 [(required) = true];
+  string sha256 = 3;
+}
+
+message Connectivity {
+  string network_id = 1;
+  repeated string subnet_id = 2;
+}
+
+message DataDisk {
+  oneof source {
+    string image_id = 1;
+    string snapshot_id = 2;
+  }
+  string type_id = 3;
+  int64 size = 4;
+}
+
+message ScalingPolicy {
+  string function_id = 1;
+  string tag = 2;
+
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp modified_at = 4; // either version or params
+
+  // cached (current) field, no value means no version with this tag
+  string version_id = 5;
+
+  // Minimum guaranteed provisioned instances count for all zones in total.
+  // Billed separately.
+  int64 provisioned_instances_count = 6;
+
+  // Upper limit for instance count in each zone.
+  // 0 means no limit.
+  int64 zone_instances_limit = 7;
+
+  // Upper limit of requests count in each zone.
+  // 0 means no limit.
+  int64 zone_requests_limit = 8;
+}
+
+// OwnerData contains additional data from the owner resource (e.g. container, API Gateway, etc)
+message OwnerData {
+  google.protobuf.Struct data = 1;
+}
+
+message Secret {
+  string id = 1;
+  string version_id = 2;
+  string key = 3;
+  oneof reference {
+    string environment_variable = 4;
+    string file_path = 5;
+  }
+}

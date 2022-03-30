@@ -1,0 +1,441 @@
+role_groups:
+  primitive:
+    name: Primitive roles
+  staff:
+    name: Cloud Staff Roles
+  infra:
+    name: YC Infra roles
+
+roles:
+
+  ##############################################################################
+  # Primitive Roles
+  ##############################################################################
+
+  viewer:
+    name: viewer
+    groups: [primitive]
+    description: доступ ко всем функциям в режиме чтения
+    visibility: public
+    includedRoles:
+      - alb.viewer.pseudo
+      - api-gateway.viewer
+      - audit-trails.configViewer
+      - audit-trails.viewer
+      - billing.accounts.viewer
+      - cdn.viewer
+      - certificate-manager.viewer
+      - cic.partnerViewer
+      - cic.secretViewer
+      - cic.viewer
+      - compute.instanceGroups.viewer
+      - compute.viewer
+      - container-registry.viewer
+      - data-transfer.viewer
+      - dataproc.viewer
+      - datasphere.user
+      - dcnetwork.viewer # DoubleCloud Network
+      - dns.viewer
+      - gitlab.viewer
+      - iam.viewer
+      - iot.viewer
+      - k8s.cluster-api.viewer
+      - k8s.viewer
+      - kms.viewer
+      - load-balancer.viewer
+      - load-balancer.viewer
+      - loadtesting.viewer
+      - lockbox.viewer
+      - logging.reader
+      - logging.viewer
+      - marketplace.viewer
+      - mdb.viewer
+      - monitoring.viewer
+      - organization-manager.viewer
+      - quota-manager.viewer
+      - resource-manager.viewer
+      - serverless.containers.viewer
+      - serverless.functions.viewer.pseudo
+      - smart-captcha.viewer
+      - storage.viewer
+      - vdi.viewer
+      - vpc.viewer
+      - ydb.viewer
+      - ydb.viewer.pseudo
+      - yds.viewer
+      - ymq.viewer
+      - ymq.viewer.pseudo
+      - yq.viewer
+    scopes:
+      - yc.datalens.view
+      - yc.support.tickets.manage
+    permissions:
+      - cloudai.resources.{get,list}
+      - logs.logEvents.read
+
+  editor:
+    name: 'editor'
+    groups: [primitive]
+    description: доступ ко всем функциям в режиме чтения и записи
+    visibility: public
+    includedRoles:
+      - ai.speechkit-stt.user
+      - ai.speechkit-tts.user
+      - ai.translate.user
+      - ai.vision.user
+      - alb.editor.pseudo
+      - api-gateway.editor
+      - audit-trails.editor
+      - billing.accounts.editor
+      - cdn.editor
+      - certificate-manager.editor
+      - cic.editor
+      - cic.partnerEditor
+      - cic.secretEditor
+      - compute.editor
+      - compute.instanceGroups.editor
+      - compute.osLogin
+      - container-registry.editor
+      - data-transfer.editor
+      - datalens.instances.user
+      - dataproc.editor
+      - dcnetwork.editor # DoubleCloud Network
+      - dns.editor
+      - gitlab.editor
+      - iam.editor
+      - iot.editor
+      - k8s.cluster-api.cluster-admin
+      - k8s.editor
+      - kms.editor
+      - loadtesting.editor
+      - lockbox.editor
+      - logging.editor
+      - logging.writer
+      - marketplace.editor
+      - mdb.editor
+      - monitoring.editor
+      - organization-manager.editor
+      - quota-manager.editor
+      - resource-manager.editor
+      - serverless.containers.editor
+      - serverless.functions.editor.pseudo
+      - smart-captcha.editor
+      - storage.editor
+      - vdi.editor
+      - viewer
+      - vpc.privateEditor.pseudo
+      - vpc.publicEditor.pseudo
+      - vpc.securityGroups.editor.pseudo
+      - vpc.user
+      - ydb.editor
+      - yds.editor
+      - ylb.networkLoadBalancers.publicEditor.pseudo
+      - ylb.targetGroups.editor.pseudo
+      - ymq.editor
+      - yq.editor
+    permissions:
+      - cloudai.biometry.exec
+      - cloudai.locator.exec
+      - cloudai.predictor.exec
+      - cloudai.resources.{create,delete,update}
+      - cloudai.speller.exec
+      - cloudai.vocabulary.exec
+      - logs.logEvents.write
+
+  admin:
+    name: 'admin'
+    groups: [primitive]
+    description: доступ ко всем функциям в режиме чтения и записи, управление пользователями
+      и политиками
+    visibility: public
+    includedRoles:
+      - alb.admin.pseudo
+      - api-gateway.admin
+      - audit-trails.admin
+      - billing.accounts.admin
+      - cdn.admin
+      - certificate-manager.admin
+      - compute.admin
+      - compute.osAdminLogin
+      - container-registry.admin
+      - data-transfer.admin
+      - datalens.instances.admin
+      - dataproc.admin
+      - datasphere.admin
+      - dcnetwork.admin # DoubleCloud Network
+      - dns.admin
+      - editor
+      - gitlab.admin
+      - iam.admin
+      - iot.admin
+      - k8s.admin
+      - k8s.cluster-api.cluster-admin
+      - kms.admin
+      - loadtesting.admin
+      - lockbox.admin
+      - logging.admin
+      - mdb.admin
+      - monitoring.admin
+      - organization-manager.admin
+      - quota-manager.admin
+      - resource-manager.admin
+      - serverless.containers.admin
+      - serverless.functions.admin
+      - smart-captcha.admin
+      - storage.admin
+      - vdi.admin
+      - vpc.admin
+      - ydb.admin
+      - yds.admin
+      - ymq.admin
+      - yq.admin
+  
+  auditor:
+  #это временная роль, которая сейчас по составу неправильная и в таком виде ее нельзя пускать дальше в прод, пока сервисы не готовы поддерживать новую сервисную роль самостоятельно https://st.yandex-team.ru/CLOUDBIZ-6178
+    name: auditor
+    groups: [primitive]
+    description: доступ только к конфигурации и метадате
+    visibility: internal
+    includedRoles:
+      - storage.configViewer
+      - vpc.viewer
+      - k8s.viewer
+      - k8s.cluster-api.viewer
+      - lockbox.viewer
+      - kms.viewer
+      - audit-trails.configViewer
+      - load-balancer.viewer
+      - certificate-manager.viewer
+      - container-registry.viewer
+      - iam.viewer
+      - dns.viewer
+    permissions:
+      - compute.console.getFolderStats
+      - compute.console.getDiskLimits
+      - compute.diskOperations.list
+      - compute.disks.{get,list}
+      - compute.filesystemOperations.list
+      - compute.filesystems.{get,list}
+      - compute.imageOperations.list
+      - compute.images.getLatestByFamily
+      - compute.images.{get,list}
+      - compute.instanceOperations.list
+      - compute.instances.{get,list}
+      - compute.instanceGroups.{get,list}
+      - compute.networkInterfaces.{get,list}
+      - compute.operations.{get,list}
+      - compute.placementGroups.{get,list,listInstances}
+      - compute.placementGroupOperations.list
+      - compute.platforms.get
+      - compute.diskPlacementGroups.{get,list,listDisks}
+      - compute.diskPlacementGroupOperations.list
+      - compute.hostGroups.{get,list,listHosts,listInstances}
+      - compute.hostGroupOperations.list
+      - compute.quotas.getCloudLimit
+      - compute.snapshotOperations.list
+      - compute.snapshots.{get,list}
+      - compute.zones.{get,list}
+
+  ##############################################################################
+  # Support Roles
+  ##############################################################################
+
+  support:
+    groups: [staff]
+    name: Техподдержка
+    visibility: internal
+    description: возможность проведения специфичных для support операций
+    includedRoles:
+      - alb.support
+      - audit-trails.support
+      - billing.support
+      - cdn.support
+      - certificate-manager.support
+      - cic.support
+      - cloudai.support
+      - cloudsearch.cloudsIndex.support
+      - compute.instanceGroups.support
+      - compute.support
+      - container-registry.support
+      - data-transfer.support
+      - datalens.support
+      - disk-manager.support
+      - dns.support
+      - gitlab.support
+      - iam.support
+      - iot.support
+      - k8s.support
+      - kms.support
+      - load-balancer.support
+      - loadtesting.support
+      - lockbox.support
+      - logging.support
+      - logs.support
+      - marketplace.support
+      - mdb.supportMdb
+      - monitoring.support
+      - nbs.support
+      - quota-manager.support
+      - serverless.support
+      - storage.support
+      - vdi.support
+      - vpc.support
+      - ydb.support
+      - yds.support
+      - ymq.support
+    permissions: []
+
+  supportAdmin:
+    groups: [staff]
+    name: Техподдержка
+    visibility: internal
+    description: доступ к методам удаления объектов и квотам compute
+    includedRoles:
+      - alb.supportAdmin
+      - audit-trails.supportAdmin
+      - billing.supportAdmin
+      - cdn.supportAdmin
+      - certificate-manager.supportAdmin
+      - cic.supportAdmin
+      - cloudai.supportAdmin
+      - compute.instanceGroups.supportAdmin
+      - compute.supportAdmin
+      - container-registry.supportAdmin
+      - data-transfer.supportAdmin
+      - datalens.supportAdmin
+      - disk-manager.supportAdmin
+      - dns.supportAdmin
+      - gitlab.supportAdmin
+      - iam.supportAdmin
+      - iot.supportAdmin
+      - k8s.supportAdmin
+      - kms.supportAdmin
+      - load-balancer.supportAdmin
+      - loadtesting.supportAdmin
+      - lockbox.supportAdmin
+      - logging.supportAdmin
+      - logs.supportAdmin
+      - marketplace.supportAdmin
+      - mdb.supportAdmin
+      - monitoring.supportAdmin
+      - nbs.supportAdmin
+      - quota-manager.supportAdmin
+      - serverless.supportAdmin
+      - storage.supportAdmin
+      - vdi.supportAdmin
+      - vpc.supportAdmin
+      - ydb.supportAdmin
+      - yds.supportAdmin
+      - ymq.supportAdmin
+    permissions: []
+
+  supportadmin:
+    groups: [staff]
+    name: Техподдержка
+    visibility: internal
+    description: DEPRECATED
+    includedRoles:
+      - alb.supportAdmin
+      - audit-trails.supportAdmin
+      - billing.supportAdmin
+      - cdn.supportAdmin
+      - certificate-manager.supportAdmin
+      - cloudai.supportAdmin
+      - compute.supportAdmin
+      - container-registry.supportAdmin
+      - data-transfer.supportAdmin
+      - datalens.supportAdmin
+      - disk-manager.supportAdmin
+      - iam.supportAdmin
+      - iot.supportAdmin
+      - k8s.supportAdmin
+      - kms.supportAdmin
+      - load-balancer.supportAdmin
+      - lockbox.supportAdmin
+      - logs.supportAdmin
+      - marketplace.supportAdmin
+      - mdb.supportAdmin
+      - monitoring.supportAdmin
+      - nbs.supportAdmin
+      - serverless.supportAdmin
+      - storage.supportAdmin
+      - vdi.supportAdmin
+      - vpc.supportAdmin
+      - ydb.supportAdmin
+      - yds.supportAdmin
+      - ymq.supportAdmin
+    permissions: []
+
+
+  ##############################################################################
+  # On-call Roles
+  ##############################################################################
+
+  onCall:
+    groups: [staff]
+    name: Инженер on-call
+    visibility: internal
+    description: доступы для всех инженеров on-call
+    includedRoles:
+      - monitoring.viewer # все дежурные могут смотреть в мониторинге метрики любых облаков и ресурсов CLOUD-67217
+      - cloudsearch.cloudsIndex.onCall # все дежурные могут смотреть в индекс по всем ресурсам
+    permissions:
+      - organization-manager.organizations.get
+      - resource-manager.clouds.get
+      - resource-manager.folders.get
+
+
+  ##############################################################################
+  # Internal Roles
+  ##############################################################################
+
+  compute.admin:
+    groups: [compute, instance-group]
+    name: Администратор Compute
+    visibility: public
+    description: доступ ко всем функциям compute, включая instance-group
+    includedRoles:
+      - compute.admin.withoutVpc.pseudo
+      - compute.instanceGroups.admin
+      - vpc.user
+
+  internal.empty:
+    groups: [infra]
+    name: (Внутренняя) Пустая роль
+    visibility: internal
+    description: роль без полномочий для тестовых целей
+    permissions: []
+
+  internal.infra:
+    groups: [infra]
+    name: Роль для SA селфхоста
+    visibility: internal
+    description: ''
+    permissions: []
+
+  internal.teamcityagent:
+    groups: [infra]
+    name: (Внутренняя) Агент Teamcity
+    visibility: internal
+    description: доступ к Container Registry
+    permissions:
+    - container-registry.images.{create,update}
+    - container-registry.images.{get,list}
+    - container-registry.quotas.get
+    - container-registry.registries.{get,list}
+
+  internal.computehead:
+    groups: [infra]
+    name: "(Внутренняя) Роль для SA head'ов compute"
+    visibility: internal
+    description: ''
+    includedRoles:
+      - internal.compute.snapshotService.admin
+      - internal.marketplacelicense
+      - internal.disk-manager.user
+      - internal.nbs.admin
+    permissions:
+      - vpcInternal.computeInternal.use
+      - compute.worker.catchTasks
+      - resource-manager.folders.get
+      - resource-manager.clouds.get

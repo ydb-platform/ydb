@@ -1,0 +1,170 @@
+stages:
+  # Internal
+  - GA
+  - TEST_ALPHA # https://st.yandex-team.ru/CLOUD-36203
+
+  # Resource reaper flags https://st.yandex-team.ru/CLOUD-42619
+  - REAPER_NO_DELAY_FLAG
+  - REAPER_WHITELIST_FLAG
+
+  # MDB feature flags
+  - MDB_ALLOW_DECOMMISSIONED_ZONE_USE
+  - MDB_CLICKHOUSE_FAST_OPS
+  - MDB_CLICKHOUSE_SHARDING
+  - MDB_CLICKHOUSE_UNLIMITED_SHARD_COUNT
+  - MDB_CLICKHOUSE_UPGRADE
+  - MDB_CLICKHOUSE_CLOUD_STORAGE
+  - MDB_CLICKHOUSE_CLOUD_STORAGE_HA
+  - MDB_CLICKHOUSE_KEEPER
+  - MDB_CLICKHOUSE_SQL_MANAGEMENT
+  - MDB_CLICKHOUSE_TESTING_VERSIONS
+  - MDB_DATAPROC_INSTANCE_GROUPS
+  - MDB_DATAPROC_MANAGER
+  - MDB_DATAPROC_AUTOSCALING
+  - MDB_DATAPROC_ALLOW_DEPRECATED_VERSIONS
+  - MDB_HADOOP_ALPHA
+  - MDB_HADOOP_GPU
+  - MDB_LOCAL_DISK_RESIZE
+  - MDB_MONGODB_40
+  - MDB_MONGODB_4_2
+  - MDB_MONGODB_4_2_RS_UPGRADE
+  - MDB_MONGODB_4_2_SHARDED_UPGRADE
+  - MDB_MONGODB_EXTENDEDS
+  - MDB_MONGODB_FAST_OPS
+  - MDB_MONGODB_UNLIMITED_SHARD_COUNT
+  - MDB_MYSQL_80
+  - MDB_MYSQL_FAST_OPS
+  - MDB_NETWORK_DISK_NO_STOP_RESIZE
+  - MDB_NETWORK_DISK_TRUNCATE
+  - MDB_POSTGRESQL_10_1C
+  - MDB_POSTGRESQL_11
+  - MDB_POSTGRESQL_11_1C
+  - MDB_POSTGRESQL_12_1C
+  - MDB_POSTGRESQL_13
+  - MDB_POSTGRESQL_FAST_OPS
+  - MDB_GREENPLUM_CLUSTER
+  - MDB_REDIS
+  - MDB_REDIS_FAST_OPS
+  - MDB_REDIS_SHARDING
+  - MDB_KAFKA_CLUSTER
+  - MDB_KAFKA_CONNECT
+  - MDB_SQLSERVER_CLUSTER
+  - MDB_SQLSERVER_ALLOW_DEV
+  - MDB_SQLSERVER_ALLOW_17_19
+  - MDB_ELASTICSEARCH_CLUSTER
+  - MDB_ELASTICSEARCH_ALLOW_UNLIMITED_HOSTS
+  - MDB_DATAPROC_UI_PROXY
+  - MDB_MONGODB_RS_PITR
+  - MDB_ALLOW_NETWORK_SSD_NONREPLICATED
+  - MDB_DATAPROC_IMAGE_1_3
+  - MDB_MONGODB_INFRA_CFG
+  - MDB_MONGODB_4_4
+  - MDB_MONGODB_4_4_RS_UPGRADE
+  - MDB_MONGODB_4_4_SHARDED_UPGRADE
+  - MDB_MONGODB_SHARDED_PITR
+  - MDB_MONGODB_BACKUP_SERVICE
+  - MDB_FORCE_UNSAFE_RESIZE
+  - MDB_MONGODB_RESTORE_WITHOUT_REPLAY
+  - MDB_FLAVOR_80_512
+  - MDB_DATAPROC_IMAGE_2_0 # https://st.yandex-team.ru/MDB-8214
+  - MDB_MONGODB_ALLOW_DEPRECATED_VERSIONS
+  - MDB_MONGODB_PERF_DIAG
+  - MDB_V3GEN # https://st.yandex-team.ru/MDB-12883
+  - MDB_SQLSERVER_TWO_NODE_CLUSTER # https://st.yandex-team.ru/MDB-13389
+  - MDB_DEDICATED_HOSTS # https://st.yandex-team.ru/CLOUDFRONT-9054
+  - MDB_MONGODB_ENTERPRISE # https://st.yandex-team.ru/MDB-16140
+
+  # Other services feature flags
+  - KMS_STRONG_ENCRYPTION # https://st.yandex-team.ru/CLOUD-34154
+  - KMS_HSM_KEYS # https://st.yandex-team.ru/CLOUD-44371
+  - SOFTWARE_ACCELERATED_NETWORK_ALPHA # https://st.yandex-team.ru/CLOUDFRONT-2752
+  - VPC_DISABLE_ROUTE_TABLES_SUBNETS_CHECK # https://st.yandex-team.ru/CLOUD-30129
+  - STORAGE_ENABLE_ENCRYPTION # https://st.yandex-team.ru/MDS-11418
+  - STORAGE_ENABLE_SELECT # https://st.yandex-team.ru/MDS-13861
+  - CDN_ENABLE_ACCESS # https://st.yandex-team.ru/CLOUD-63401
+  - DATASPHERE_CUSTOM_LM_LEARNING # https://st.yandex-team.ru/CLOUD-52048
+  - DATA_TRANSFER_LOGBROKER
+  - DATA_TRANSFER_LOGFELLER
+  - DATA_TRANSFER_MONGODB
+  - DATA_TRANSFER_CLICKHOUSE
+  - DATA_TRANSFER_YDB
+  - DATA_TRANSFER_YDS # https://st.yandex-team.ru/TM-1460
+  - DATA_TRANSFER_KAFKA # https://st.yandex-team.ru/TM-2041
+  - DATA_TRANSFER_OBJECT_STORAGE  # https://st.yandex-team.ru/TM-1747
+  - DATA_TRANSFER_ORACLE # https://st.yandex-team.ru/TM-643
+  - DATA_TRANSFER_POSTGRESQL_TO_YDB #https://st.yandex-team.ru/TM-2477
+  - DATA_TRANSFER_MYSQL_TO_YDB #https://st.yandex-team.ru/TM-2477
+  - DATA_TRANSFER_POSTGRESQL_TO_OBJECT_STORAGE #https://st.yandex-team.ru/TM-2477
+  - DATA_TRANSFER_MYSQL_TO_OBJECT_STORAGE #https://st.yandex-team.ru/TM-2477
+  - DATA_TRANSFER_MONGO_TO_OBJECT_STORAGE #https://st.yandex-team.ru/TM-2477
+  - DATA_TRANSFER_ORACLE_TO_POSTGRESQL #https://st.yandex-team.ru/TM-2477
+  - DATA_TRANSFER_ORACLE_TO_CLICKHOUSE #https://st.yandex-team.ru/TM-2477
+  - DATA_TRANSFER_YC_FROM_LOGBROKER #https://st.yandex-team.ru/TM-2563
+  - DATA_TRANSFER_YC_TO_LOGBROKER #https://st.yandex-team.ru/TM-2563
+  - DATA_TRANSFER_AIRBYTE #https://st.yandex-team.ru/TM-2899
+  - DATASPHERE_GENERAL_NIRVANA_GRAPHS # https://st.yandex-team.ru/CLOUD-62288
+  - DATASPHERE_CELL_DEPLOYMENT
+  - IAM_FOLDER_SAML_FEDERATIONS # iam SAML-federations in folder https://st.yandex-team.ru/CLOUD-69157
+  - IAM_ACCESS_KEY_PREFIX # https://st.yandex-team.ru/CLOUD-80368
+  - SERVERLESS_FUNCTIONS_PROVISION_ALPHA # https://st.yandex-team.ru/CLOUD-71805
+  - LOADTESTING_PREVIEW_ALPHA # https://st.yandex-team.ru/CLOUDLOAD-77
+  - DATASPHERE_TAAS # https://st.yandex-team.ru/CLOUD-80447
+  - DATASPHERE_IDE_ON_SERVANT # https://st.yandex-team.ru/CLOUD-85578
+  - DATASPHERE_DISK_VERSIONING # https://st.yandex-team.ru/CLOUD-93160
+  - TRIGGERS_CLOUD_LOGS_ALPHA # https://st.yandex-team.ru/CLOUD-80291
+  - TRIGGERS_MAIL_ALPHA # https://st.yandex-team.ru/CLOUD-95233
+  - SMART_CAPTCHA_ALPHA # https://st.yandex-team.ru/CAPTCHA-2599
+  - SERVERLESS_FUNCTIONS_SECRETS_ALPHA # https://st.yandex-team.ru/CLOUD-52449
+
+  # Services in development
+  - APIGW_ALPHA # https://st.yandex-team.ru/CLOUD-31754
+  - SERVERLESS_VPC # https://st.yandex-team.ru/CLOUD-40827
+  - CERTIFICATE_MANAGER_ALPHA # https://st.yandex-team.ru/CLOUD-35187
+  - CUSTOM_FQDN_INSTANCES_ALPHA # https://st.yandex-team.ru/CLOUD-15718
+  - EGRESS_NAT_ALPHA # https://st.yandex-team.ru/CLOUD-35281
+  - CIC_ALPHA # https://st.yandex-team.ru/CLOUD-74655
+  - KMS_ALPHA # https://st.yandex-team.ru/CLOUD-26559
+  - ML_PLATFORM_ALPHA # https://st.yandex-team.ru/CLOUD-35731
+  - MULTI_INTERFACE_INSTANCES_ALPHA # https://st.yandex-team.ru/CLOUD-15718
+  - UDP_LISTENER_YLB_ALPHA # https://st.yandex-team.ru/CLOUD-34630
+  - YDB_ALPHA # https://st.yandex-team.ru/CLOUD-24439
+  - COMPUTE_OSLOGIN_ALPHA # https://st.yandex-team.ru/CLOUD-21127
+  - DATA_TRANSFER_ALPHA #https://st.yandex-team.ru/CLOUD-40128
+  - DNS_ALPHA #https://st.yandex-team.ru/CLOUD-42207
+  - MDBPROXY_ALPHA #https://st.yandex-team.ru/CLOUD-38110
+  - IMAGE_SCANNER_ALPHA #https://st.yandex-team.ru/CLOUD-34754
+  - LOCKBOX_ALPHA #https://st.yandex-team.ru/CLOUD-46437
+  - ALB_ALPHA #https://st.yandex-team.ru/CLOUD-58061
+  - LOGGING_ALPHA # https://st.yandex-team.ru/CLOUD-62388
+  - LOGS_ALPHA # deprecated, use LOGGING_ALPHA
+  - AUDIT_TRAILS_ALPHA # https://st.yandex-team.ru/CLOUD-51927
+  - RESOURCEMANAGER_DELETE_ALPHA # https://st.yandex-team.ru/CLOUD-63858
+  - DATA_STREAMS_ALPHA # https://st.yandex-team.ru/CLOUD-68113
+  - SERVERLESS_CONTAINERS_ALPHA # https://st.yandex-team.ru/CLOUD-72622
+  - SERVERLESS_CONTAINERS_PROVISION_ALPHA # https://st.yandex-team.ru/CLOUD-85491
+  - K8S_MARKETPLACE_ALPHA #https://st.yandex-team.ru/CLOUD-72635
+  - K8S_MARKETPLACE_FRONT_ALPHA # https://st.yandex-team.ru/CLOUD-84678
+  - VDI_ALPHA #https://st.yandex-team.ru/CLOUDBIZ-5195
+  - MANAGED_GITLAB_ALPHA # https://st.yandex-team.ru/CLOUD-71805
+  - CLOUD_BEAVER_ALPHA # https://st.yandex-team.ru/CLOUD-87921
+
+  # VPC
+  - INTERNAL_YLB_ALPHA # https://st.yandex-team.ru/CLOUD-18755
+  - VPC_SG_ALPHA # https://st.yandex-team.ru/CLOUD-35341
+  - VPC_IPV6_ALPHA # https://st.yandex-team.ru/CLOUD-40113
+  - VPC_YANDEX_SERVICES # https://st.yandex-team.ru/CLOUD-62110
+
+  # Marketplace
+  - DISABLE_PLACEMENT_HINT_WINDOWS_DC # https://st.yandex-team.ru/CLOUD-82570
+  - DISABLE_PLACEMENT_HINT_WINDOWS_DC_SQL_ENTERPRISE # https://st.yandex-team.ru/CLOUD-82570
+  - YAGA_MARKETPLACE_ALPHA # https://st.yandex-team.ru/CLOUD-85253
+  - MARKETPLACE_MONGODB_ENTERPRISE # https://st.yandex-team.ru/CLOUD-80323
+
+  # Yandex Query
+  - YANDEX_QUERY_ALPHA # https://st.yandex-team.ru/CLOUD-79231
+  - YANDEX_QUERY_CONNECTION_CH
+  - YANDEX_QUERY_CONNECTION_YDB
+
+  # Outdated, don't use these (Stages CAN'T BE REMOVED)
+  - VPC_DHCP_OPTIONS_ALPHA
+

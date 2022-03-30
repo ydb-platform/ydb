@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.serverless.functions.v1.inner;
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/inner;inner";
+
+service AliceIntegrationService {
+    rpc ListUserFunctions (ListUserFunctionsRequest) returns (ListUserFunctionsResponse);
+    rpc ValidateFunction (ValidateFunctionRequest) returns (ValidateFunctionResponse);
+}
+
+message FunctionMetadata {
+    string cloud_id = 1;
+    string cloud_name = 2;
+
+    string folder_id = 3;
+    string folder_name = 4;
+
+    string function_id = 5;
+    string function_name = 6;
+}
+
+message ListUserFunctionsRequest {
+    string session_id = 1;
+}
+
+message ListUserFunctionsResponse {
+    repeated FunctionMetadata functions = 1;
+}
+
+message ValidateFunctionRequest {
+    string session_id = 1;
+    string function_id = 2;
+}
+
+message ValidateFunctionResponse {
+    // empty struct, error will be reported on transport layer
+}

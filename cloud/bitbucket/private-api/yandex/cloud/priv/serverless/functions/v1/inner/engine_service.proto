@@ -1,0 +1,416 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.serverless.functions.v1.inner;
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/inner;inner";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "yandex/cloud/priv/serverless/functions/v1/function.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+service EngineService {
+    // On each GetStateRequest returns full state
+    // On each state change send state (might be full or delta)
+    // Used by Scheduler
+    rpc GetState (stream GetStateRequest) returns (stream EngineState);
+
+    // Synchronously spawn worker and return worker_id
+    // Used by Scheduler
+    rpc CreateWorker (CreateWorkerRequest) returns (CreateWorkerResponse);
+
+    // Synchronously terminate worker
+    // Used by Scheduler
+    rpc TerminateWorker (TerminateWorkerRequest) returns (TerminateWorkerResponse);
+
+    // Synchronously put job in the queue and wait for completion
+    // Used by Router
+    rpc Invoke (InvokeRequest) returns (InvokeResponse);
+
+    // Synchronously put job in the queue and wait for completion. Allows for big payloads.
+    // Used by Router.
+    rpc InvokeStreaming (stream InvokeStreamingRequest) returns (stream InvokeStreamingResponse);
+
+    // Synchronously update provisioned flag in workers state
+    rpc MarkProvisioned (MarkProvisionedRequest) returns (MarkProvisionedResponse);
+
+    // Download artifacts listed in request
+    // Used by Scheduler
+    rpc DownloadArtifacts(DownloadArtifactsRequest) returns (DownloadArtifactsResponse);
+
+    // Specifies which runtimes are latest
+    // Used by Scheduler
+    rpc SetLatestRuntimes(SetLatestRuntimesRequest) returns (SetLatestRuntimesResponse);
+
+    // Configures network interfaces of newly started engine.
+    // Used by Scheduler
+    rpc ConfigureNetwork(ConfigureNetworkRequest) returns (google.protobuf.Empty);
+}
+
+message GetStateRequest {
+}
+
+// TODO: replace with createWorkerSet (with version data + initial amount of workers[>=1]) and addWorkers (target amount of workers[>=1])
+
+message CreateWorkerRequest {
+    string worker_set_id = 1;
+    string function_id = 11;
+    string function_version_id = 12;
+    string log_group_id = 13; // logging v0, TODO: remove later
+    string log_stream_name = 14; // logging v0, TODO: remove later
+
+    string cloud_id = 16; // for network management & billing
+    string folder_id = 17; // for network management & billing
+
+    string subnet_id = 19; // for network management & billing, XXX: !!!differs from version to version!!!
+
+    string runtime = 20; // runtime name
+    StorageRef package_runtime = 2;
+
+    StorageRef package_code = 3;
+
+    int64 memory_limit_bytes = 4;
+    double cpu_limit_cores = 5; // 1.0 is 100% of 1 cpu core, TODO: replace with int: 1024 = 100% core
+    int64 concurrency = 10;
+    string entry_point = 6;
+    map<string, string> environment = 7 [(sensitive) = true];
+    map<string, string> labels = 8; // TODO: remove me
+    google.protobuf.Duration execution_timeout = 9;
+    bool tmpfs = 15;
+    NBSDiskSpec data_disk = 18;
+
+    InvokeRequest first_request = 21;
+    bool provisioned = 23;
+
+    OwnerData owner_data = 22;
+}
+
+message CreateWorkerResponse {
+    string worker_id = 1;
+}
+
+message TerminateWorkerRequest {
+    string worker_id = 1;
+    string worker_set_id = 2;
+}
+
+message TerminateWorkerResponse {
+}
+
+message MarkProvisionedRequest {
+    string worker_set_id = 1;
+
+    // workerIDs of workers that should be marked as provisioned
+    // (all others should become regular)
+    repeated string worker_ids = 2;
+}
+
+message MarkProvisionedResponse {
+
+}
+
+// TODO: keep in sync with InvokeStreamingRequest.Initial
+message InvokeRequest {
+    string worker_set_id = 1;
+    string request_id = 2;
+
+    google.protobuf.Duration timeout = 5;
+    bytes payload = 8;
+
+    map<string, string> iam_token_by_name = 9 [(sensitive) = true];
+
+    bool dummy = 10;
+}
+
+message InvokeResponse {
+    ErrorStatus status = 5;
+    bytes payload = 1;
+
+    // total time spent by worker (handle)
+    // it MUST be lower than overall request time
+    google.protobuf.Duration time_spent = 2;
+
+    // time spent in queue
+    google.protobuf.Duration queue_time_spent = 6;
+
+    // time spent in function/runtime init stage (part of `time_spent` time)
+    google.protobuf.Duration init_time_spent = 8;
+
+    // billed time (normally equal to time_spent, but could be lower in case of concurrency execution and/or provisioned worker)
+    // will be used in billing and reported in log
+    google.protobuf.Duration billed_duration = 10;
+
+    // provisioned worker was used
+    bool provisioned = 9;
+
+    int64 used_memory_bytes = 3;
+    int64 free_memory_bytes = 4;
+
+    string network_subnet = 13;
+    string network_iface = 11;
+    repeated string network_addr = 12;
+
+    enum ErrorStatus {
+        ERROR_STATUS_UNSPECIFIED = 0; // means no error
+        ERROR_STATUS_CLIENT_ERROR = 1; // both runtime init and execution error
+        ERROR_STATUS_EXECUTION_TIMEOUT_EXCEEDED = 2; // execution timeout (user code has already been started => never retry)
+        ERROR_STATUS_EXECUTION_CANCELLED = 3; // execution has been cancelled (user code has already been started => never retry)
+        ERROR_STATUS_UNDEFINED = 127; // undefined error
+    }
+}
+
+message InvokeStreamingRequest {
+    // TODO: keep in sync with InvokeRequest
+    message Initial {
+        string worker_set_id = 1;
+        string request_id = 2;
+        google.protobuf.Duration timeout = 3;
+        map<string, string> iam_token_by_name = 4 [(sensitive) = true];
+        bool dummy = 5;
+
+        map<string,string> metadata = 6;
+
+        bytes payload = 7;
+    }
+    message PayloadChunk {
+        bytes payload = 1;
+    }
+    oneof req {
+        Initial initial = 1;
+        PayloadChunk payload = 2;
+    }
+}
+
+message InvokeStreamingResponse {
+    message Initial {
+        InvokeResponse.ErrorStatus status = 5;
+        bytes payload = 1;
+
+        // time spent in queue
+        google.protobuf.Duration queue_time_spent = 6;
+
+        // time spent in function/runtime init stage (part of `time_spent` time)
+        google.protobuf.Duration init_time_spent = 8;
+
+        // provisioned worker was used
+        bool provisioned = 9;
+
+        string network_subnet = 13;
+        string network_iface = 11;
+        repeated string network_addr = 12;
+
+        map<string, string> metadata = 14;
+    }
+
+    message PayloadChunk {
+        bytes payload = 1;
+    }
+
+    message Final {
+        // total time spent by worker (handle)
+        // it MUST be lower than overall request time
+        google.protobuf.Duration time_spent = 2;
+
+        // billed time (normally equal to time_spent, but could be lower in case of concurrency execution and/or provisioned worker)
+        // will be used in billing and reported in log
+        google.protobuf.Duration billed_duration = 10;
+
+        int64 used_memory_bytes = 3;
+        int64 free_memory_bytes = 4;
+
+        map<string, string> metadata = 5;
+    }
+
+    oneof resp {
+        Initial initial = 1;
+        PayloadChunk payload = 2;
+        Final final = 3;
+    }
+}
+
+message DownloadArtifactsRequest {
+    repeated StorageRef artifacts = 1;
+}
+
+message DownloadArtifactsResponse {
+}
+
+message SetLatestRuntimesRequest {
+    repeated Runtime runtimes = 1;
+    message Runtime {
+        string name = 1;
+        StorageRef reference = 2;
+
+        bool flag_preload_enabled = 3;
+    }
+}
+
+message SetLatestRuntimesResponse {
+}
+
+message EngineState {
+    google.protobuf.Timestamp updated_at = 1;
+    google.protobuf.Timestamp previous_update_at = 21; // for diff - updated_at of previous full/diff state sent to channel
+    map<string, WorkerSet> worker_sets = 2; // Key: ID
+    map<string, Artifact> artifacts = 3; // Key: ID (unique) = contracts.StorageReference.String()
+    bool is_full_state = 4;
+
+    reserved 10; // removed
+    reserved 11; // removed
+    Resources resources = 19;
+
+    reserved 16; // removed
+    map<string, NetworkPoolState> subnet_pool_state = 18; // Key: subnetID, empty key means "common"
+    map<string, NetworkConfigState> subnet_config_state = 22; // Key: subnetID
+
+    // Amount of ready VMs in pool.
+    VMPoolState vm_pool_state = 17;
+    map<string, RuntimePoolState> runtime_pool_state = 20; // Key: runtime name
+
+    message WorkerSet {
+        string id = 1;
+        Status status = 2;
+
+        string function_id = 19;
+        string version_id = 20;
+        string cloud_id = 17;
+        string folder_id = 18;
+
+        int64 memory_limit_bytes = 3;
+        double cpu_limit_cores = 4;
+        int64 concurrency = 15;
+
+        int64 queue_length = 10;
+        int64 inflight = 13;
+
+        StorageRef runtime = 16;
+        google.protobuf.Duration avg_execution_time = 11;
+        google.protobuf.Duration execution_timeout = 14;
+
+        map<string, string> labels = 12; // TODO: remove me
+
+        map<string, Worker> workers = 30; // Key: ID
+
+        OwnerData owner_data = 21;
+
+        enum Status {
+            STATUS_UNSPECIFIED = 0;
+            CREATING = 1; // acquiring resources and going to create first worker
+            STARTED = 2; // at least one Worker is in >STARTED state
+            TERMINATING = 3; // there is no workers in <SERVING state
+            DELETED = 4; // WorkerSet should be removed from state
+        }
+    }
+
+    message Worker {
+        string id = 1;
+        Status status = 2;
+
+        int64 active_jobs = 16; // count of currently active jobs
+        int64 jobs_processed = 10; // total count of jobs processed in this worker
+        google.protobuf.Timestamp last_job_at = 11; // might be used for worker gc
+        google.protobuf.Timestamp spawned_at = 12; // might be used for worker gc
+        int64 restarts_count = 13;
+        int64 timeouts_count = 14;
+        int64 suspends_count = 15;
+
+        bool provisioned = 17;
+
+        enum Status {
+            STATUS_UNSPECIFIED = 0;
+            ACQUIRING = 1; // MicroVM are requested from MicroVMPool
+            STARTED = 2; // MicroVM was adopted from worker pool and adjusted for current spec
+            PREPARED = 3; // Worker executed runtime and initialize function
+            SERVING = 4; // runtime asked for the first job and ready to serve
+            SUSPENDED = 5; // worker suspended
+            TERMINATING = 6; // graceful shutdown, won't accept new job
+            DELETED = 7; // Worker should be removed from state
+        }
+    }
+
+    message Artifact {
+        Status status = 1;
+        StorageRef reference = 2;
+
+        enum Status {
+            STATUS_UNSPECIFIED = 0;
+            DOWNLOADING = 1;
+            DOWNLOADED = 2;
+            REMOVING = 3;
+            DELETED = 4; // artifact should be removed from state
+        }
+    }
+
+    message NetworkPoolState {
+        // Total amount of interfaces allocated to engine
+        int64 total = 1;
+        // Free interfaces: t=not attached to any user and ready to use
+        int64 free = 2;
+        // Failed interfaces: had error on attach/detach, not really safe to use right now, may be cleaned up later.
+        int64 failed = 3;
+        // Interfaces bound to user - traffic will be billed, but we are able to detach them at once.
+        int64 bound = 4;
+        // Interfaces in use: interfaces that are attached to microvm at the moment
+        int64 in_use = 5;
+    }
+
+    message NetworkConfigState {
+        message Addr {
+            string address = 1;
+            string subnet_cidr = 2;
+        }
+
+        string subnet_id = 1;
+        bool is_private = 2;
+        Addr ipv4 = 3;
+        Addr ipv6 = 4;
+        ConfigureNetworkRequest.HubConfig hub = 5;
+        int64 seed = 6;
+    }
+
+    message VMPoolState {
+        int64 size = 1;
+    }
+
+    message RuntimePoolState {
+        int64 size = 1;
+        StorageRef reference = 2;
+    }
+
+    message Resources {
+        int64 memory_bytes_total = 1;
+        int64 memory_bytes_used = 2;
+        double cpu_cores_total = 3;
+        double cpu_cores_used = 4;
+    }
+}
+
+message StorageRef {
+    string storage_bucket = 1;
+    string storage_object = 2;
+    int64 data_size = 3;
+}
+
+message NBSDiskSpec {
+    map<string, string> zone_disks = 1;
+}
+
+message ConfigureNetworkRequest {
+    message HubConfig {
+        message StaticRoute {
+            string destination_prefix = 1;
+            string next_hop_address = 2;
+        }
+        string allowlist_cidr = 1;
+        StaticRoute static_route = 2;
+        int64 interfaces_count = 3;
+    }
+    message Subnet {
+        string subnet_id = 1;
+        bool is_private = 2;
+        HubConfig hub = 3;
+        int64 seed = 4;
+    }
+
+    repeated Subnet subnets = 1;
+}

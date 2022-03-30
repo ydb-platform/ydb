@@ -186,6 +186,8 @@ struct TSqsEvents {
         bool QueueExists = false;
 
         // Queue info
+        ui32 TablesFormat = 0;
+        ui64 QueueVersion = 0;
         ui64 Shards = 1;
         bool Fifo = false;
         TMaybe<TQueueAttributes> QueueAttributes;
@@ -518,17 +520,19 @@ struct TSqsEvents {
         TString QueueId; // resource id in case of Yandex.Cloud mode and queue name in case of Yandex
         ui64 Version = 0; // last queue version registered in service actor
         ui64 ShardsCount = 0; // number of queue shards
+        ui32 TablesFormat = 0;
 
         TEvQueueId(const bool failed = false)
             : Failed(failed)
         {
         }
 
-        explicit TEvQueueId(const TString queueId, const ui64 version, const ui64 shardsCount)
+        explicit TEvQueueId(const TString& queueId, const ui64 version, const ui64 shardsCount, const ui32 tablesFormat)
             : Exists(true)
-            , QueueId(std::move(queueId))
+            , QueueId(queueId)
             , Version(version)
             , ShardsCount(shardsCount)
+            , TablesFormat(tablesFormat)
         {
         }
     };
@@ -792,6 +796,7 @@ struct TSqsEvents {
             ui64 LeaderTabletId = 0;
             TString CustomName;
             TString FolderId;
+            ui32 TablesFormat = 0;
             TString DlqName;
             ui64 Version = 0;
             ui64 ShardsCount = 0;

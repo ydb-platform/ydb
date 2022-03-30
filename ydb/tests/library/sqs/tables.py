@@ -184,9 +184,21 @@ def create_message_table(root, session, queue_type):
     columns = queue_keys + [
         ('Offset', ydb.PrimitiveType.Uint64),
         ('RandomId', ydb.PrimitiveType.Uint64),
-        ('SentTimestamp', ydb.PrimitiveType.Uint64),
-        ('DelayDeadline', ydb.PrimitiveType.Uint64),
     ]
+    if queue_type == QueueType.STD:
+        columns += [
+            ('SentTimestamp', ydb.PrimitiveType.Uint64),
+            ('DelayDeadline', ydb.PrimitiveType.Uint64),
+        ]
+    else:
+        columns += [
+            ('GroupId', ydb.PrimitiveType.String),
+            ('NextOffset', ydb.PrimitiveType.Uint64),
+            ('NextRandomId', ydb.PrimitiveType.Uint64),
+            ('ReceiveCount', ydb.PrimitiveType.Uint32),
+            ('FirstReceiveTimestamp', ydb.PrimitiveType.Uint64),
+            ('SentTimestamp', ydb.PrimitiveType.Uint64),
+        ]
     _create_table(root, session, 'Messages', columns, len(queue_keys) + 1, queue_type)
 
 
@@ -198,6 +210,8 @@ def create_sent_timestamp_idx_table(root, session, queue_type):
         ('RandomId', ydb.PrimitiveType.Uint64),
         ('DelayDeadline', ydb.PrimitiveType.Uint64)
     ]
+    if queue_type == QueueType.FIFO:
+        columns.append(('GroupId', ydb.PrimitiveType.String))
     _create_table(root, session, 'SentTimestampIdx', columns, len(queue_keys) + 2, queue_type)
 
 
@@ -213,7 +227,7 @@ def create_data_table(root, session):
         ("Data", ydb.PrimitiveType.String),
         ("MessageId", ydb.PrimitiveType.String),
     ]
-    _create_table(root, session, 'Data', columns, len(queue_keys) + 1, queue_type)
+    _create_table(root, session, 'Data', columns, len(queue_keys) + 2, queue_type)
 
 
 def create_deduplication_table(root, session):

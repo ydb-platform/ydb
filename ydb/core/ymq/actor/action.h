@@ -500,6 +500,8 @@ private:
         RootUrl_  = std::move(ev->Get()->RootUrl);
         UserExists_ = ev->Get()->UserExists;
         QueueExists_ = ev->Get()->QueueExists;
+        QueueVersion_ = ev->Get()->QueueVersion;
+        TablesFormat_ = ev->Get()->TablesFormat;
         Shards_   = ev->Get()->Shards;
         IsFifo_ = ev->Get()->Fifo;
         QueueAttributes_ = std::move(ev->Get()->QueueAttributes);
@@ -752,6 +754,8 @@ protected:
     bool QueueExists_ = false;
     ui64     Shards_;
     TMaybe<bool> IsFifo_;
+    TMaybe<ui64> QueueVersion_;
+    TMaybe<ui32> TablesFormat_;
     TInstant StartTs_;
     TInstant FinishTs_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them

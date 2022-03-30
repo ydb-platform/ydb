@@ -160,6 +160,7 @@ private:
     bool IsFifoQueue_ = false;
     TString QueueId_;
     ui64 QueueVersion_ = 0;
+    ui32 TablesFormat_ = 0;
     TActorId SchemeCache_;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     TLocalRateLimiterResource SendMessageQuoterResource_;
@@ -186,6 +187,7 @@ private:
         TString QueueId; // unique name or resource id in cloud
         ui64 QueueVersion = 0;
         ui64 ShardsCount = 0;
+        ui32 TablesFormat = 0;
     };
     TMaybe<TTargetDlqInfo> DlqInfo_;
     bool IsDlqQueue_ = false;

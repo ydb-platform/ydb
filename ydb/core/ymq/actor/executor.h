@@ -40,8 +40,28 @@ public:
         QueueVersion_ = version;
         return *this;
     }
+    TExecutorBuilder& DlqName(const TString& dlqName) {
+        DlqName_ = dlqName;
+        return *this;
+    }
+    TExecutorBuilder& DlqShard(ui64 dlqShard) {
+        DlqShard_ = dlqShard;
+        return *this;
+    }
+    TExecutorBuilder& DlqVersion(ui64 dlqVersion) {
+        DlqVersion_ = dlqVersion;
+        return *this;
+    }
+    TExecutorBuilder& DlqTablesFormat(ui32 dlqTablesFormat) {
+        DlqTablesFormat_ = dlqTablesFormat;
+        return *this;
+    }
     TExecutorBuilder& QueueLeader(const TActorId& queueLeaderActor) {
         QueueLeaderActor_ = queueLeaderActor;
+        return *this;
+    }
+    TExecutorBuilder& TablesFormat(ui32 tablesFormat) {
+        TablesFormat_ = tablesFormat;
         return *this;
     }
     TExecutorBuilder& Text(const TString& text, bool miniKql = true) {
@@ -94,6 +114,10 @@ public:
         }
         return *this;
     }
+    TExecutorBuilder& CreateExecutorActor(bool create) {
+        CreateExecutorActor_ = create;
+        return *this;
+    }
 
     TParameters& Params() {
         if (!Parameters_) {
@@ -126,8 +150,6 @@ private:
         return QueryId_ != EQueryId::QUERY_VECTOR_SIZE;
     }
 
-    const char* GetQueryById(size_t idx);
-
 private:
     const TActorId Parent_;
     TString RequestId_;
@@ -139,10 +161,16 @@ private:
     TString QueueName_;
     ui64 Shard_ = 0;
     ui64 QueueVersion_ = 0;
+    TString DlqName_;
+    ui64 DlqShard_ = 0;
+    ui64 DlqVersion_ = 0;
+    ui32 DlqTablesFormat_ = 0;
     TActorId QueueLeaderActor_;
+    ui32 TablesFormat_ = 0;
     TSqsEvents::TExecutedCallback Callback_;
     EQueryId QueryId_ = EQueryId::QUERY_VECTOR_SIZE;
     TIntrusivePtr<TTransactionCounters> TransactionCounters_;
+    bool CreateExecutorActor_ = false;
 };
 
 class TMiniKqlExecutionActor

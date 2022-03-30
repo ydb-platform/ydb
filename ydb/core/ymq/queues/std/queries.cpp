@@ -1,22 +1,29 @@
 #include "queries.h"
 #include <ydb/core/ymq/base/constants.h>
+#include <ydb/core/ymq/queues/common/db_queries_defs.h>
+
+#include <util/string/builder.h>
 
 namespace NKikimr::NSQS {
 namespace {
 
 static const char* const AddMessagesToInflyQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
         (let inflyLimit (Parameter 'INFLY_LIMIT (DataType 'Uint64)))
-        (let shard      (Parameter 'SHARD       (DataType 'Uint64)))
         (let from       (Parameter 'FROM        (DataType 'Uint64)))
         (let expectedMaxCount (Parameter 'EXPECTED_MAX_COUNT (DataType 'Uint64)))
 
-        (let inflyTable '%1$s/%2$i/Infly)
-        (let msgTable   '%1$s/%2$i/Messages)
-        (let stateTable '%1$s/State)
+        (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
+        (let msgTable   ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Messages)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let stateFields '(
             'InflyCount
             'MessageCount
@@ -38,6 +45,7 @@ static const char* const AddMessagesToInflyQuery = R"__(
         )
 
         (let msgRange '(
+            )__" QUEUE_ID_AND_SHARD_KEYS_RANGE_PARAM R"__(
             '('Offset from (Uint64 '18446744073709551615))))
         (let msgFields '(
             'Offset
@@ -72,7 +80,8 @@ static const char* const AddMessagesToInflyQuery = R"__(
 
             (ListIf (HasItems messages) (block '(
                 (let row '(
-                    '('State shard)))
+                    )__" STATE_KEYS_PARAM R"__(
+                ))
                 (let update '(
                     '('ReadOffset nextReadOffset)
                     '('InflyCount inflyCount)
@@ -81,6 +90,7 @@ static const char* const AddMessagesToInflyQuery = R"__(
 
             (Map messages (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (let update '(
                     '('RandomId (Member item 'RandomId))
@@ -95,6 +105,7 @@ static const char* const AddMessagesToInflyQuery = R"__(
 
             (Map messages (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (return (EraseRow msgTable row))))))))
     )
@@ -102,6 +113,10 @@ static const char* const AddMessagesToInflyQuery = R"__(
 
 const char* const ChangeMessageVisibilityQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
         (let now  (Parameter 'NOW      (DataType 'Uint64)))
         (let keys (Parameter 'KEYS
             (ListType (StructType
@@ -109,11 +124,12 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                 '('LockTimestamp (DataType 'Uint64))
                 '('NewVisibilityDeadline (DataType 'Uint64))))))
 
-        (let inflyTable '%1$s/%2$i/Infly)
+        (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
 
         (let records
             (MapParameter keys (lambda '(item) (block '(
                 (let messageRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (let inflySelect '(
                     'VisibilityDeadline
@@ -147,6 +163,7 @@ const char* const ChangeMessageVisibilityQuery = R"__(
 
             (Map recordsToChange (lambda '(item) (block '(
                 (let messageRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (let visibilityUpdate '(
                     '('VisibilityDeadline (Member item 'NewVisibilityDeadline))))
@@ -158,18 +175,23 @@ const char* const ChangeMessageVisibilityQuery = R"__(
 
 const char* const PurgeQueueQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+
         (let offsetFrom     (Parameter 'OFFSET_FROM (DataType 'Uint64)))
         (let offsetTo       (Parameter 'OFFSET_TO   (DataType 'Uint64)))
         (let now            (Parameter 'NOW         (DataType 'Uint64)))
-        (let shard          (Parameter 'SHARD       (DataType 'Uint64)))
         (let batchSize      (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
 
-        (let msgTable   '%1$s/%2$i/Messages)
-        (let inflyTable '%1$s/%2$i/Infly)
-        (let stateTable '%1$s/State)
+        (let msgTable   ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Messages)
+        (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let stateSelect '(
             'CleanupVersion
             'LastModifiedTimestamp))
@@ -212,6 +234,11 @@ const char* const PurgeQueueQuery = R"__(
 
 const char* const PurgeQueueStage2Query = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+
         (let shard (Parameter 'SHARD    (DataType 'Uint64)))
         (let cleanupVersion (Parameter 'CLEANUP_VERSION (DataType 'Uint64)))
         (let now (Parameter 'NOW (DataType 'Uint64)))
@@ -222,14 +249,15 @@ const char* const PurgeQueueStage2Query = R"__(
                 '('SentTimestamp (DataType 'Uint64))
         ))))
 
-        (let dataTable  '%1$s/%2$i/MessageData)
-        (let inflyTable '%1$s/%2$i/Infly)
-        (let msgTable   '%1$s/%2$i/Messages)
-        (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx)
-        (let stateTable '%1$s/State)
+        (let dataTable  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/MessageData)
+        (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
+        (let msgTable   ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Messages)
+        (let sentTsIdx  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/SentTimestampIdx)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let stateSelect '(
             'MessageCount
             'InflyCount
@@ -332,6 +360,11 @@ const char* const PurgeQueueStage2Query = R"__(
 
 const char* const DeleteMessageQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+
         (let keys (Parameter 'KEYS
             (ListType (StructType
                 '('Offset (DataType 'Uint64))
@@ -339,10 +372,10 @@ const char* const DeleteMessageQuery = R"__(
         (let now (Parameter 'NOW (DataType 'Uint64)))
         (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
 
-        (let dataTable  '%1$s/%2$i/MessageData)
-        (let inflyTable '%1$s/%2$i/Infly)
-        (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx)
-        (let stateTable '%1$s/State)
+        (let dataTable  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/MessageData)
+        (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
+        (let sentTsIdx  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/SentTimestampIdx)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let records
             (MapParameter keys (lambda '(item) (block '(
@@ -365,7 +398,8 @@ const char* const DeleteMessageQuery = R"__(
                     '('Offset (Member item 'Offset)))))))))
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let stateSelect '(
             'InflyCount
             'MessageCount
@@ -415,6 +449,13 @@ const char* const DeleteMessageQuery = R"__(
 
 const char* const SetQueueAttributesQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let delay           (Parameter 'DELAY             (OptionalType (DataType 'Uint64))))
         (let retention       (Parameter 'RETENTION         (OptionalType (DataType 'Uint64))))
         (let visibility      (Parameter 'VISIBILITY        (OptionalType (DataType 'Uint64))))
@@ -425,10 +466,10 @@ const char* const SetQueueAttributesQuery = R"__(
         (let dlqName         (Parameter 'DLQ_TARGET_NAME   (OptionalType (DataType 'Utf8String))))
         (let userName        (Parameter 'USER_NAME         (DataType 'Utf8String)))
 
-        (let attrsTable '%1$s/Attributes)
+        (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
         (let attrsRow '(
-            '('State (Uint64 '0))))
+            )__" ATTRS_KEYS_PARAM R"__())
         (let attrsSelect '(
             'DelaySeconds
             'MessageRetentionPeriod
@@ -450,10 +491,10 @@ const char* const SetQueueAttributesQuery = R"__(
             '('DlqArn (Coalesce dlqArn (Member attrsRead 'DlqArn)))
             '('MaximumMessageSize (Coalesce maxMessageSize (Member attrsRead 'MaximumMessageSize)))))
 
-        (let queuesTable '%5$s/.Queues)
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
         (let queuesRow '(
             '('Account   userName)
-            '('QueueName (Utf8String '"%4$s"))))
+            '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
 
         (let queuesRowSelect '(
             'DlqName))
@@ -471,10 +512,13 @@ const char* const SetQueueAttributesQuery = R"__(
 
 const char* const InternalGetQueueAttributesQuery = R"__(
     (
-        (let attrsTable '%1$s/Attributes)
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+
+        (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
         (let attrsRow '(
-            '('State (Uint64 '0))))
+            )__" ATTRS_KEYS_PARAM R"__())
         (let attrsSelect '(
             'ContentBasedDeduplication
             'DelaySeconds
@@ -498,7 +542,7 @@ const char* const ListQueuesQuery = R"__(
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
 
-        (let queuesTable '%5$s/.Queues)
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
 
         (let skipFolderIdFilter (Equal folderId (Utf8String '"")))
 
@@ -527,6 +571,9 @@ const char* const ListQueuesQuery = R"__(
 
 const char* const LoadMessageQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
         (let keys (Parameter 'KEYS
             (ListType (StructType
                 '('RandomId (DataType 'Uint64))
@@ -537,15 +584,15 @@ const char* const LoadMessageQuery = R"__(
                 '('VisibilityDeadline (DataType 'Uint64))))))
         (let now     (Parameter 'NOW     (DataType 'Uint64)))
         (let readId  (Parameter 'READ_ID (DataType 'Uint64)))
-        (let shard   (Parameter 'SHARD   (DataType 'Uint64)))
 
-        (let dataTable  '%1$s/%2$i/MessageData)
-        (let inflyTable '%1$s/%2$i/Infly)
+        (let dataTable  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/MessageData)
+        (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
 
         (let records
             (MapParameter keys (lambda '(item) (block '(
                 (let read (block '(
                     (let row '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('Offset (Member item 'Offset))))
                     (let fields '(
                         'LoadId
@@ -558,6 +605,7 @@ const char* const LoadMessageQuery = R"__(
 
                 (let data (block '(
                     (let row '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('RandomId (Member item 'RandomId))
                         '('Offset   (Member item 'Offset))))
                     (let fields '(
@@ -619,6 +667,7 @@ const char* const LoadMessageQuery = R"__(
 
             (Map result (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (let update '(
                     '('LoadId                readId)
@@ -641,23 +690,31 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                 '('IsDeadLetter (DataType 'Bool))
                 '('VisibilityDeadline (DataType 'Uint64))))))
 
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+
+        (let dlqIdNumber                (Parameter 'DLQ_ID_NUMBER (DataType 'Uint64)))
+        (let dlqShard                   (Parameter 'DLQ_SHARD  (DataType ')__" DLQ_SHARD_TYPE_PARAM R"__()))
+        (let dlqIdNumberAndShardHash    (Parameter 'DLQ_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+
         (let now     (Parameter 'NOW     (DataType 'Uint64)))
         (let readId  (Parameter 'READ_ID (DataType 'Uint64)))
-        (let shard   (Parameter 'SHARD   (DataType 'Uint64)))
         (let deadLettersCount (Parameter 'DEAD_LETTERS_COUNT (DataType 'Uint64)))
 
-        (let sourceMessageDataTable     '%1$s/%2$lu/MessageData)
-        (let sourceSentTsIdxTable       '%1$s/%2$lu/SentTimestampIdx)
-        (let sourceInflyTable           '%1$s/%2$lu/Infly)
-        (let sourceStateTable           '%1$s/State)
+        (let sourceMessageDataTable     ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/MessageData)
+        (let sourceSentTsIdxTable       ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/SentTimestampIdx)
+        (let sourceInflyTable           ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
+        (let sourceStateTable           ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
-        (let deadLetterMessageDataTable '%3$s/%4$lu/MessageData)
-        (let deadLetterMessagesTable    '%3$s/%4$lu/Messages)
-        (let deadLetterSentTsIdxTable   '%3$s/%4$lu/SentTimestampIdx)
-        (let deadLetterStateTable       '%3$s/State)
+        (let deadLetterMessageDataTable ')__" DLQ_TABLES_FOLDER_PER_SHARD_PARAM R"__(/MessageData)
+        (let deadLetterMessagesTable    ')__" DLQ_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Messages)
+        (let deadLetterSentTsIdxTable   ')__" DLQ_TABLES_FOLDER_PER_SHARD_PARAM R"__(/SentTimestampIdx)
+        (let deadLetterStateTable       ')__" DLQ_TABLES_FOLDER_PARAM R"__(/State)
 
         (let sourceStateRow '(
-            '('State (Uint64 '%2$lu))))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let sourceStateSelect '(
             'MessageCount
             'LastModifiedTimestamp
@@ -668,6 +725,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
             (MapParameter keys (lambda '(item) (block '(
                 (let read (block '(
                     (let row '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('Offset (Member item 'Offset))))
                     (let fields '(
                         'LoadId
@@ -679,6 +737,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
                 (let data (block '(
                     (let row '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('RandomId (Member item 'RandomId))
                         '('Offset   (Member item 'Offset))))
                     (let fields '(
@@ -733,7 +792,8 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                 (return (Coalesce (Not (Member item 'IsDeadLetter)) (Bool 'false))))))))
 
         (let deadLetterStateRow '(
-            '('State (Uint64 '%4$lu))))
+            )__" DLQ_STATE_KEYS_PARAM R"__(
+        ))
         (let deadLetterStateSelect '(
             'MessageCount
             'WriteOffset
@@ -766,6 +826,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
             (Map messagesToUpdate (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (let update '(
                     '('LoadId                readId)
@@ -777,6 +838,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
             (Map messagesToMove (lambda '(item) (block '(
                 (let msgRow '(
+                    )__" DLQ_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Add dlqStartOffset (Member item 'DlqIndex)))))
                 (let delayDeadline (Uint64 '0))
                 (let messageUpdate '(
@@ -787,6 +849,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
             (Map messagesToMove (lambda '(item) (block '(
                 (let sentTsRow '(
+                    )__" DLQ_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('SentTimestamp dlqMostRecentTimestamp)
                     '('Offset (Add dlqStartOffset (Member item 'DlqIndex)))))
                 (let delayDeadline (Uint64 '0))
@@ -797,6 +860,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
             (Map messagesToMove (lambda '(item) (block '(
                 (let dataRow '(
+                    )__" DLQ_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('RandomId readId)
                     '('Offset (Add dlqStartOffset (Member item 'DlqIndex)))))
 
@@ -809,11 +873,13 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
             (Map messagesToMove (lambda '(item) (block '(
                 (let inflyRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (return (EraseRow sourceInflyTable inflyRow))))))
 
             (Map messagesToMove (lambda '(item) (block '(
                 (let dataRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('RandomId (Member item 'RandomId))
                     '('Offset (Member item 'Offset))))
 
@@ -821,6 +887,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
             (Map messagesToMove (lambda '(item) (block '(
                 (let sentTsRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('SentTimestamp (Member item 'SentTimestamp))
                     '('Offset (Member item 'Offset))))
                 (return (EraseRow sourceSentTsIdxTable sentTsRow))))))
@@ -830,9 +897,11 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 
 const char* const WriteMessageQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
         (let randomId  (Parameter 'RANDOM_ID  (DataType 'Uint64)))
         (let timestamp (Parameter 'TIMESTAMP  (DataType 'Uint64)))
-        (let shard     (Parameter 'SHARD      (DataType 'Uint64)))
         (let messages  (Parameter 'MESSAGES
             (ListType (StructType
                 '('Attributes (DataType 'String))
@@ -844,13 +913,14 @@ const char* const WriteMessageQuery = R"__(
             ))
         ))
 
-        (let dataTable  '%1$s/%2$i/MessageData)
-        (let msgTable   '%1$s/%2$i/Messages)
-        (let sentTsIdx  '%1$s/%2$i/SentTimestampIdx)
-        (let stateTable '%1$s/State)
+        (let dataTable  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/MessageData)
+        (let msgTable   ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Messages)
+        (let sentTsIdx  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/SentTimestampIdx)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let stateSelect '(
             'MessageCount
             'WriteOffset
@@ -884,6 +954,7 @@ const char* const WriteMessageQuery = R"__(
 
             (MapParameter messages (lambda '(item) (block '(
                 (let msgRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Add startOffset (Member item 'Index)))))
                 (let delay (Member item 'Delay))
                 (let delayDeadline (If (Equal delay (Uint64 '0)) (Uint64 '0) (Add sentTimestamp delay)))
@@ -895,6 +966,7 @@ const char* const WriteMessageQuery = R"__(
 
             (MapParameter messages (lambda '(item) (block '(
                 (let sentTsRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('SentTimestamp sentTimestamp)
                     '('Offset (Add startOffset (Member item 'Index)))))
                 (let delay (Member item 'Delay))
@@ -906,6 +978,7 @@ const char* const WriteMessageQuery = R"__(
 
             (MapParameter messages (lambda '(item) (block '(
                 (let dataRow '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('RandomId randomId)
                     '('Offset (Add startOffset (Member item 'Index)))))
 
@@ -919,17 +992,20 @@ const char* const WriteMessageQuery = R"__(
     )
 )__";
 
+//  range more slow???
+// check column renames test
 const char* const SetRetentionQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
         (let now   (Parameter 'NOW   (DataType 'Uint64)))
         (let purge (Parameter 'PURGE (DataType 'Bool)))
 
-        (let attrsTable '%1$s/Attributes)
-        (let stateTable '%1$s/State)
+        (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let attrs (block '(
             (let row '(
-                '('State (Uint64 '0))))
+                )__" ATTRS_KEYS_PARAM R"__())
             (let fields '(
                 'MessageRetentionPeriod))
             (return (SelectRow attrsTable row fields)))))
@@ -938,9 +1014,10 @@ const char* const SetRetentionQuery = R"__(
             (If purge now (Coalesce (Sub now (Member attrs 'MessageRetentionPeriod)) (Uint64 '0))))
 
         (let range '(
-            '('State (Uint64 '0) (Uint64 '18446744073709551615))))
+            )__" ALL_SHARDS_RANGE_PARAM R"__(
+        ))
         (let fields '(
-            'State
+            ')__" SHARD_COLUMN_NAME_PARAM R"__(
             'RetentionBoundary))
         (let records (Member (SelectRange stateTable range fields '()) 'List))
 
@@ -952,7 +1029,9 @@ const char* const SetRetentionQuery = R"__(
                         (Bool 'false)))
 
                 (return (AsStruct
-                    '('Shard (Member item 'State))
+                    '('Shard (
+                        Member item ')__" SHARD_COLUMN_NAME_PARAM R"__(
+                    ))
                     '('RetentionBoundary (Max boundary (Member item 'RetentionBoundary)))
                     '('Updated updated))))))))
 
@@ -964,8 +1043,10 @@ const char* const SetRetentionQuery = R"__(
             (AsList (SetResult 'retention (Member attrs 'MessageRetentionPeriod)))
 
             (Map updated (lambda '(item) (block '(
+                (let shard (Member item 'Shard))
                 (let row '(
-                    '('State (Member item 'Shard))))
+                    )__" STATE_KEYS_PARAM R"__(
+                ))
                 (let update '(
                     '('RetentionBoundary (Member item 'RetentionBoundary))))
                 (return (UpdateRow stateTable row update))))))
@@ -975,11 +1056,15 @@ const char* const SetRetentionQuery = R"__(
 
 const char* const GetOldestMessageTimestampMetricsQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
         (let timeFrom (Parameter 'TIME_FROM (DataType 'Uint64)))
 
-        (let sentTsIdx '%1$s/%2$i/SentTimestampIdx)
+        (let sentTsIdx ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/SentTimestampIdx)
 
         (let sentIdxRange '(
+            )__" QUEUE_ID_AND_SHARD_KEYS_RANGE_PARAM R"__(
             '('SentTimestamp timeFrom (Uint64 '18446744073709551615))
             '('Offset (Uint64 '0) (Uint64 '18446744073709551615))))
         (let sentIdxSelect '(
@@ -995,14 +1080,18 @@ const char* const GetOldestMessageTimestampMetricsQuery = R"__(
 
 const char* const GetRetentionOffsetQuery = R"__(
     (
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
         (let offsetFrom (Parameter 'OFFSET_FROM (DataType 'Uint64)))
         (let timeFrom   (Parameter 'TIME_FROM   (DataType 'Uint64)))
         (let timeTo     (Parameter 'TIME_TO     (DataType 'Uint64)))
         (let batchSize  (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
 
-        (let sentTsIdx    '%1$s/%2$i/SentTimestampIdx)
+        (let sentTsIdx    ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/SentTimestampIdx)
 
         (let sentIdxRange '(
+            )__" QUEUE_ID_AND_SHARD_KEYS_RANGE_PARAM R"__(
             '('SentTimestamp timeFrom timeTo)
             '('Offset offsetFrom (Uint64 '18446744073709551615))))
         (let sentIdxSelect '(
@@ -1020,12 +1109,15 @@ const char* const GetRetentionOffsetQuery = R"__(
 
 const char* const LoadInflyQuery = R"__(
     (
-        (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
-        (let inflyTable '%1$s/%2$i/Infly)
-        (let stateTable '%1$s/State)
+        (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let range '(
+            )__" QUEUE_ID_AND_SHARD_KEYS_RANGE_PARAM R"__(
             '('Offset (Uint64 '0) (Uint64 '18446744073709551615))))
         (let fields '(
             'Offset
@@ -1036,7 +1128,8 @@ const char* const LoadInflyQuery = R"__(
         (let infly (Member (SelectRange inflyTable range fields '()) 'List))
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let stateFields '(
             'InflyVersion))
         (let state (SelectRow stateTable stateRow stateFields))
@@ -1049,13 +1142,16 @@ const char* const LoadInflyQuery = R"__(
 
 const char* const GetStateQuery = R"__(
     (
-        (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
-        (let stateTable '%1$s/State)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let state (block '(
             (let row '(
-                '('State shard)))
+                )__" STATE_KEYS_PARAM R"__(
+            ))
             (let fields '(
                 'InflyCount
                 'MessageCount
@@ -1074,11 +1170,11 @@ const char* const ListDeadLetterSourceQueuesQuery = R"__(
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
 
-        (let queuesTable '%5$s/.Queues)
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
 
         (let queuesRow '(
             '('Account userName)
-            '('QueueName (Utf8String '"%4$s"))))
+            '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
 
         (let queuesRowSelect '(
             'QueueName
@@ -1122,7 +1218,7 @@ const char* const GetUserSettingsQuery = R"__(
         (let fromName  (Parameter 'FROM_NAME  (DataType 'Utf8String)))
         (let batchSize (Parameter 'BATCH_SIZE (DataType 'Uint64)))
 
-        (let settingsTable '%5$s/.Settings)
+        (let settingsTable ')__" ROOT_PARAM R"__(/.Settings)
 
         (let range '(
             '('Account fromUser (Void))
@@ -1144,12 +1240,15 @@ const char* const GetUserSettingsQuery = R"__(
 
 const char* const GetMessageCountMetricsQuery = R"__(
     (
-        (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
+        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
-        (let stateTable '%1$s/State)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM R"__(
+        ))
         (let stateSelect '(
             'MessageCount
             'InflyCount
@@ -1171,7 +1270,7 @@ const char* const GetQueuesListQuery = R"__(
         (let fromQueue (Parameter 'FROM_QUEUE (DataType 'Utf8String)))
         (let batchSize (Parameter 'BATCH_SIZE (DataType 'Uint64)))
 
-        (let queuesTable '%5$s/.Queues)
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
 
         (let range '(
             '('Account fromUser (Void))
@@ -1186,7 +1285,8 @@ const char* const GetQueuesListQuery = R"__(
             'FolderId
             'MasterTabletId
             'Version
-            'Shards))
+            'Shards
+            'TablesFormat))
         (let queuesResult (SelectRange queuesTable range queuesSelect '('('"ItemsLimit" batchSize))))
         (let queues (Member queuesResult 'List))
         (let truncated (Coalesce (Member queuesResult 'Truncated) (Bool 'false)))

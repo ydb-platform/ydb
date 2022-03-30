@@ -9,6 +9,7 @@
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
+#include <ydb/core/ymq/queues/common/key_hashes.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <util/string/cast.h>
@@ -138,11 +139,15 @@ private:
             builder
                 .User(UserName_)
                 .Queue(GetQueueName())
+                .TablesFormat(TablesFormat_.GetRef())
                 .QueueLeader(QueueLeader_)
                 .QueryId(INTERNAL_GET_QUEUE_ATTRIBUTES_ID)
                 .Counters(QueueCounters_)
                 .RetryOnTimeout()
-                .Start();
+                .Params()
+                    .Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef())
+                    .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+                .ParentBuilder().Start();
             ++WaitCount_;
         }
 

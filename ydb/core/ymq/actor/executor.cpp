@@ -8,8 +8,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/base/debug_info.h>
-#include <ydb/core/ymq/queues/fifo/queries.h>
-#include <ydb/core/ymq/queues/std/queries.h>
+#include <ydb/core/ymq/queues/common/db_queries_maker.h>
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -45,7 +44,7 @@ TExecutorBuilder::TExecutorBuilder(TActorId parent, const TString& requestId)
 }
 
 void TExecutorBuilder::Start() {
-    if (HasQueryId() && QueueName_) {
+    if (!CreateExecutorActor_ && HasQueryId() && QueueName_) {
         SendToQueueLeader();
     } else {
         StartExecutorActor();
@@ -63,12 +62,20 @@ void TExecutorBuilder::StartExecutorActor() {
     if (HasQueryId()) {
         auto* trans = Request().Record.MutableTransaction()->MutableMiniKQLTransaction();
         if (!trans->MutableProgram()->HasText() && !trans->MutableProgram()->HasBin()) {
-            Text(Sprintf(GetQueryById(QueryId_),
-                         TString(path.GetVersionedQueuePath()).c_str(),
-                         Shard_,
-                         path.GetUserPath().c_str(),
-                         QueueName_.c_str(),
-                         Cfg().GetRoot().c_str()));
+            TDbQueriesMaker queryMaker(
+                Cfg().GetRoot(),
+                UserName_,
+                QueueName_,
+                QueueVersion_,
+                IsFifoQueue_,
+                Shard_,
+                TablesFormat_,
+                DlqName_,
+                DlqShard_,
+                DlqVersion_,
+                DlqTablesFormat_
+            );
+            Text(queryMaker(QueryId_));
         }
     }
 
@@ -107,12 +114,6 @@ void TExecutorBuilder::SendToQueueLeader() {
     RLOG_SQS_DEBUG("Sending execute request for query(idx=" << QueryId_ << ") to queue leader");
 
     TActivationContext::Send(new IEventHandle(QueueLeaderActor_, Parent_, ev.Release()));
-}
-
-const char* TExecutorBuilder::GetQueryById(size_t idx) {
-    const char* query = IsFifoQueue_ ? GetFifoQueryById(idx) : GetStdQueryById(idx);
-    Y_VERIFY(query);
-    return query;
 }
 
 TMiniKqlExecutionActor::TMiniKqlExecutionActor(

@@ -1,12 +1,16 @@
 #include "queries.h"
 #include <ydb/core/ymq/base/constants.h>
+#include <ydb/core/ymq/queues/common/db_queries_defs.h>
+
 
 namespace NKikimr::NSQS {
 namespace {
 
 const char* const ChangeMessageVisibilityQuery = R"__(
     (
-        (let now  (Parameter 'NOW      (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let now                (Parameter 'NOW      (DataType 'Uint64)))
         (let groupsReadAttemptIdsPeriod (Parameter 'GROUPS_READ_ATTEMPT_IDS_PERIOD (DataType 'Uint64)))
         (let keys (Parameter 'KEYS
             (ListType (StructType
@@ -16,12 +20,13 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                 '('LockTimestamp (DataType 'Uint64))
                 '('NewVisibilityDeadline (DataType 'Uint64))))))
 
-        (let groupTable '%1$s/Groups)
-        (let readsTable '%1$s/Reads)
+        (let groupTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Groups)
+        (let readsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Reads)
 
         (let records
             (MapParameter keys (lambda '(item) (block '(
                 (let groupRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member item 'GroupId))))
                 (let groupSelect '(
                     'Head
@@ -31,6 +36,7 @@ const char* const ChangeMessageVisibilityQuery = R"__(
                 (let groupRead (SelectRow groupTable groupRow groupSelect))
 
                 (let readsRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('ReceiveAttemptId (Member item 'ReceiveAttemptId))))
                 (let readsSelect '(
                     'Deadline))
@@ -86,6 +92,7 @@ const char* const ChangeMessageVisibilityQuery = R"__(
 
             (Map recordsToChange (lambda '(item) (block '(
                 (let groupRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member item 'GroupId))))
                 (let visibilityUpdate '(
                     '('VisibilityDeadline (Member item 'NewVisibilityDeadline))))
@@ -94,6 +101,7 @@ const char* const ChangeMessageVisibilityQuery = R"__(
 
             (Map recordsToEraseReceiveAttempt (lambda '(item) (block '(
                 (let readsRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('ReceiveAttemptId (Member item 'ReceiveAttemptId))))
                 (return (EraseRow readsTable readsRow))
             ))))
@@ -103,17 +111,20 @@ const char* const ChangeMessageVisibilityQuery = R"__(
 
 const char* const PurgeQueueQuery = R"__(
     (
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let offsetFrom     (Parameter 'OFFSET_FROM (DataType 'Uint64)))
         (let offsetTo       (Parameter 'OFFSET_TO   (DataType 'Uint64)))
         (let now            (Parameter 'NOW         (DataType 'Uint64)))
         (let shard          (Parameter 'SHARD       (DataType 'Uint64)))
         (let batchSize      (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
 
-        (let messageTable '%1$s/Messages)
-        (let stateTable   '%1$s/State)
+        (let messageTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Messages)
+        (let stateTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM  R"__(
+        ))
         (let stateSelect '(
             'CleanupVersion
             'LastModifiedTimestamp))
@@ -123,6 +134,7 @@ const char* const PurgeQueueQuery = R"__(
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
 
         (let messageRange '(
+            )__" QUEUE_ID_KEYS_RANGE_PARAM  R"__(
             '('Offset offsetFrom offsetTo)))
         (let messageSelect '(
             'SentTimestamp
@@ -151,6 +163,8 @@ const char* const PurgeQueueQuery = R"__(
 
 const char* const PurgeQueueStage2Query = R"__(
     (
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let cleanupVersion (Parameter 'CLEANUP_VERSION (DataType 'Uint64)))
         (let now  (Parameter 'NOW (DataType 'Uint64)))
         (let messages (Parameter 'MESSAGES
@@ -160,15 +174,16 @@ const char* const PurgeQueueStage2Query = R"__(
                 '('SentTimestamp (DataType 'Uint64))
         ))))
 
-        (let dataTable    '%1$s/Data)
-        (let groupTable   '%1$s/Groups)
-        (let messageTable '%1$s/Messages)
-        (let sentTsIdx    '%1$s/SentTimestampIdx)
-        (let stateTable   '%1$s/State)
+        (let dataTable    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Data)
+        (let groupTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Groups)
+        (let messageTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Messages)
+        (let sentTsIdx    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
+        (let stateTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let records
             (MapParameter messages (lambda '(item) (block '(
                 (let messageRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Member item 'Offset))))
                 (let messageSelect '(
                     'Offset
@@ -187,7 +202,8 @@ const char* const PurgeQueueStage2Query = R"__(
         )))))
 
         (let stateRow '(
-            '('State (Uint64 '0))))
+            )__" STATE_KEYS_PARAM  R"__(
+        ))
         (let stateSelect '(
             'MessageCount
             'CleanupVersion
@@ -223,6 +239,7 @@ const char* const PurgeQueueStage2Query = R"__(
             (If versionIsSame
                 (Map recordsExisted (lambda '(item) (block '(
                     (let groupRow '(
+                        )__" QUEUE_ID_KEYS_PARAM  R"__(
                         '('GroupId (Member item 'GroupId))))
                     (let update '(
                         '('RandomId (Member item 'NextRandomId))
@@ -247,6 +264,7 @@ const char* const PurgeQueueStage2Query = R"__(
             (If versionIsSame
                 (Map recordsExisted (lambda '(item) (block '(
                     (let row '(
+                        )__" QUEUE_ID_KEYS_PARAM  R"__(
                         '('RandomId (Member item 'RandomId))
                         '('Offset   (Member item 'Offset))))
                     (return (EraseRow dataTable row))))))
@@ -255,6 +273,7 @@ const char* const PurgeQueueStage2Query = R"__(
             (If versionIsSame
                 (Map recordsExisted (lambda '(item) (block '(
                     (let row '(
+                        )__" QUEUE_ID_KEYS_PARAM  R"__(
                         '('Offset (Member item 'Offset))))
                     (return (EraseRow messageTable row))))))
                 (AsList (Void)))
@@ -262,6 +281,7 @@ const char* const PurgeQueueStage2Query = R"__(
             (If versionIsSame
                 (Map recordsExisted (lambda '(item) (block '(
                     (let row '(
+                        )__" QUEUE_ID_KEYS_PARAM  R"__(
                         '('SentTimestamp (Member item 'SentTimestamp))
                         '('Offset        (Member item 'Offset))))
                     (return (EraseRow sentTsIdx row))))))
@@ -272,6 +292,8 @@ const char* const PurgeQueueStage2Query = R"__(
 
 const char* const DeleteMessageQuery = R"__(
     (
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let keys (Parameter 'KEYS
             (ListType (StructType
                 '('GroupId (DataType 'String))
@@ -281,16 +303,17 @@ const char* const DeleteMessageQuery = R"__(
         (let now  (Parameter 'NOW (DataType 'Uint64)))
         (let groupsReadAttemptIdsPeriod (Parameter 'GROUPS_READ_ATTEMPT_IDS_PERIOD (DataType 'Uint64)))
 
-        (let dataTable    '%1$s/Data)
-        (let groupTable   '%1$s/Groups)
-        (let messageTable '%1$s/Messages)
-        (let sentTsIdx    '%1$s/SentTimestampIdx)
-        (let stateTable   '%1$s/State)
-        (let readsTable   '%1$s/Reads)
+        (let dataTable    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Data)
+        (let groupTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Groups)
+        (let messageTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Messages)
+        (let sentTsIdx    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
+        (let stateTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
+        (let readsTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Reads)
 
         (let records
             (MapParameter keys (lambda '(item) (block '(
                 (let messageRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Member item 'Offset))))
                 (let messageSelect '(
                     'Offset
@@ -300,6 +323,7 @@ const char* const DeleteMessageQuery = R"__(
                     'SentTimestamp))
 
                 (let groupRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member item 'GroupId))))
                 (let groupSelect '(
                     'GroupId
@@ -308,6 +332,7 @@ const char* const DeleteMessageQuery = R"__(
                     'ReceiveAttemptId))
 
                 (let readsRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('ReceiveAttemptId (Member item 'ReceiveAttemptId))))
                 (let readsSelect '(
                     'Deadline))
@@ -359,7 +384,8 @@ const char* const DeleteMessageQuery = R"__(
                     '('Offset (Member msg 'Offset)))))))))
 
         (let stateRow '(
-            '('State (Uint64 '0))))
+            )__" STATE_KEYS_PARAM  R"__(
+        ))
         (let stateSelect '(
             'MessageCount
             'LastModifiedTimestamp))
@@ -381,6 +407,7 @@ const char* const DeleteMessageQuery = R"__(
                 (let msg   (Nth item '1))
 
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member group 'GroupId))))
                 (let update '(
                     '('RandomId (Member msg 'NextRandomId))
@@ -395,23 +422,27 @@ const char* const DeleteMessageQuery = R"__(
 
             (Map valid (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('RandomId (Member (Nth item '1) 'RandomId))
                     '('Offset   (Member (Nth item '1) 'Offset))))
                 (return (EraseRow dataTable row))))))
 
             (Map valid (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Member (Nth item '1) 'Offset))))
                 (return (EraseRow messageTable row))))))
 
             (Map valid (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('SentTimestamp (Member (Nth item '1) 'SentTimestamp))
                     '('Offset        (Member (Nth item '1) 'Offset))))
                 (return (EraseRow sentTsIdx row))))))
 
             (Map validWithReceiveAttemptToDelete (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('ReceiveAttemptId (Nth item '3))))
                 (return (EraseRow readsTable row))))))
         ))
@@ -420,6 +451,8 @@ const char* const DeleteMessageQuery = R"__(
 
 const char* const SetQueueAttributesQuery = R"__(
     (
+        (let queueIdNumber             (Parameter 'QUEUE_ID_NUMBER             (DataType 'Uint64)))
+        (let queueIdNumberHash         (Parameter 'QUEUE_ID_NUMBER_HASH        (DataType 'Uint64)))
         (let delay                     (Parameter 'DELAY                       (OptionalType (DataType 'Uint64))))
         (let retention                 (Parameter 'RETENTION                   (OptionalType (DataType 'Uint64))))
         (let visibility                (Parameter 'VISIBILITY                  (OptionalType (DataType 'Uint64))))
@@ -431,10 +464,10 @@ const char* const SetQueueAttributesQuery = R"__(
         (let dlqName                   (Parameter 'DLQ_TARGET_NAME             (OptionalType (DataType 'Utf8String))))
         (let userName                  (Parameter 'USER_NAME                   (DataType 'Utf8String)))
 
-        (let attrsTable '%1$s/Attributes)
+        (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
         (let attrsRow '(
-            '('State (Uint64 '0))))
+            )__" ATTRS_KEYS_PARAM R"__())
         (let attrsSelect '(
             'DelaySeconds
             'MessageRetentionPeriod
@@ -458,10 +491,10 @@ const char* const SetQueueAttributesQuery = R"__(
             '('DlqArn (Coalesce dlqArn (Member attrsRead 'DlqArn)))
             '('ContentBasedDeduplication (Coalesce contentBasedDeduplication (Member attrsRead 'ContentBasedDeduplication)))))
 
-        (let queuesTable '%5$s/.Queues)
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
         (let queuesRow '(
             '('Account userName)
-            '('QueueName (Utf8String '"%4$s"))))
+            '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
 
         (let queuesRowSelect '(
             'DlqName))
@@ -479,10 +512,13 @@ const char* const SetQueueAttributesQuery = R"__(
 
 const char* const InternalGetQueueAttributesQuery = R"__(
     (
-        (let attrsTable '%1$s/Attributes)
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+
+        (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
 
         (let attrsRow '(
-            '('State (Uint64 '0))))
+            )__" ATTRS_KEYS_PARAM R"__())
         (let attrsSelect '(
             'ContentBasedDeduplication
             'DelaySeconds
@@ -506,7 +542,7 @@ const char* const ListQueuesQuery = R"__(
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
 
-        (let queuesTable '%5$s/.Queues)
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
 
         (let skipFolderIdFilter (Equal folderId (Utf8String '"")))
 
@@ -535,19 +571,22 @@ const char* const ListQueuesQuery = R"__(
 
 const char* const LockGroupsQuery = R"__(
     (
-        (let attemptId (Parameter 'ATTEMPT_ID (DataType 'Utf8String)))
-        (let now       (Parameter 'NOW        (DataType 'Uint64)))
-        (let count     (Parameter 'COUNT      (DataType 'Uint64)))
-        (let visibilityTimeout (Parameter 'VISIBILITY_TIMEOUT (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let attemptId          (Parameter 'ATTEMPT_ID           (DataType 'Utf8String)))
+        (let now                (Parameter 'NOW                  (DataType 'Uint64)))
+        (let count              (Parameter 'COUNT                (DataType 'Uint64)))
+        (let visibilityTimeout  (Parameter 'VISIBILITY_TIMEOUT   (DataType 'Uint64)))
         (let groupsReadAttemptIdsPeriod (Parameter 'GROUPS_READ_ATTEMPT_IDS_PERIOD (DataType 'Uint64)))
-        (let fromGroup (Parameter 'FROM_GROUP (DataType 'String)))
-        (let batchSize (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
+        (let fromGroup          (Parameter 'FROM_GROUP           (DataType 'String)))
+        (let batchSize          (Parameter 'BATCH_SIZE           (DataType 'Uint64)))
 
-        (let groupTable '%1$s/Groups)
-        (let readsTable '%1$s/Reads)
-        (let sentTsIdx  '%1$s/SentTimestampIdx)
+        (let groupTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Groups)
+        (let readsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Reads)
+        (let sentTsIdx  ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
 
         (let readsRow '(
+            )__" QUEUE_ID_KEYS_PARAM  R"__(
             '('ReceiveAttemptId attemptId)))
         (let readsSelect (SelectRow readsTable readsRow '('Deadline)))
         (let readsUpdate '(
@@ -556,6 +595,7 @@ const char* const LockGroupsQuery = R"__(
         (let sameCond (IfPresent readsSelect (lambda '(x) (Coalesce (Less now (Member x 'Deadline)) (Bool 'false))) (Bool 'false)))
 
         (let groupRange '(
+            )__" QUEUE_ID_KEYS_RANGE_PARAM  R"__(
             '('GroupId fromGroup (Void))))
         (let groupSelect '(
             'GroupId
@@ -584,6 +624,7 @@ const char* const LockGroupsQuery = R"__(
             (let groupId (Member item 'GroupId))
 
             (let groupRow '(
+                )__" QUEUE_ID_KEYS_PARAM  R"__(
                 '('GroupId groupId)))
             (let groupUpdate '(
                 '('ReceiveAttemptId attemptId)
@@ -604,18 +645,21 @@ const char* const LockGroupsQuery = R"__(
 
 const char* const ReadMessageQuery = R"__(
     (
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let now                (Parameter 'NOW                  (DataType 'Uint64)))
         (let keys (Parameter 'KEYS
             (ListType (StructType
                 '('RandomId (DataType 'Uint64))
                 '('Offset   (DataType 'Uint64))))))
-        (let now  (Parameter 'NOW (DataType 'Uint64)))
 
-        (let dataTable    '%1$s/Data)
-        (let messageTable '%1$s/Messages)
+        (let dataTable    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Data)
+        (let messageTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Messages)
 
         (let unfilteredResult
             (MapParameter keys (lambda '(item) (block '(
                 (let dataRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('RandomId (Member item 'RandomId))
                     '('Offset   (Member item 'Offset))))
                 (let dataFields '(
@@ -627,6 +671,7 @@ const char* const ReadMessageQuery = R"__(
                     'SenderId))
 
                 (let messageRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Member item 'Offset))))
                 (let messageFields '(
                     'GroupId
@@ -654,6 +699,7 @@ const char* const ReadMessageQuery = R"__(
             (Map result (lambda '(item) (block '(
                 (let message (Member item 'SourceMessageFieldsRead))
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Member message 'Offset))))
                 (let receiveTimestamp
                     (If (Coalesce (Equal (Member message 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member message 'FirstReceiveTimestamp)))
@@ -672,26 +718,33 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                 '('GroupId  (DataType 'String))
                 '('Index    (DataType 'Uint64))
                 '('Offset   (DataType 'Uint64))))))
-        (let now              (Parameter 'NOW (DataType 'Uint64)))
-        (let maxReceiveCount  (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint32)))
-        (let randomId         (Parameter 'RANDOM_ID  (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
 
-        (let sourceDataTable    '%1$s/Data)
-        (let sourceStateTable   '%1$s/State)
-        (let sourceMsgTable     '%1$s/Messages)
-        (let sourceGroupTable   '%1$s/Groups)
-        (let sourceSentTsIdx    '%1$s/SentTimestampIdx)
+        (let dlqIdNumber        (Parameter 'DLQ_ID_NUMBER        (DataType 'Uint64)))
+        (let dlqIdNumberHash    (Parameter 'DLQ_ID_NUMBER_HASH   (DataType 'Uint64)))
 
-        (let dlqDataTable       '%3$s/Data)
-        (let dlqDedupTable      '%3$s/Deduplication)
-        (let dlqStateTable      '%3$s/State)
-        (let dlqMsgTable        '%3$s/Messages)
-        (let dlqGroupTable      '%3$s/Groups)
-        (let dlqSentTsIdx       '%3$s/SentTimestampIdx)
+        (let now                (Parameter 'NOW                  (DataType 'Uint64)))
+        (let maxReceiveCount    (Parameter 'MAX_RECEIVE_COUNT    (DataType 'Uint32)))
+        (let randomId           (Parameter 'RANDOM_ID            (DataType 'Uint64)))
+
+        (let sourceDataTable    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Data)
+        (let sourceStateTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
+        (let sourceMsgTable     ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Messages)
+        (let sourceGroupTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Groups)
+        (let sourceSentTsIdx    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
+
+        (let dlqDataTable       ')__" DLQ_TABLES_FOLDER_PARAM R"__(/Data)
+        (let dlqDedupTable      ')__" DLQ_TABLES_FOLDER_PARAM R"__(/Deduplication)
+        (let dlqStateTable      ')__" DLQ_TABLES_FOLDER_PARAM R"__(/State)
+        (let dlqMsgTable        ')__" DLQ_TABLES_FOLDER_PARAM R"__(/Messages)
+        (let dlqGroupTable      ')__" DLQ_TABLES_FOLDER_PARAM R"__(/Groups)
+        (let dlqSentTsIdx       ')__" DLQ_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
 
         (let unfilteredAllMessages
             (MapParameter keys (lambda '(item) (block '(
                 (let dataRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('RandomId (Member item 'RandomId))
                     '('Offset   (Member item 'Offset))))
                 (let dataFields '(
@@ -704,6 +757,7 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                     'SenderId))
 
                 (let messageRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Member item 'Offset))))
                 (let messageFields '(
                     'GroupId
@@ -715,6 +769,7 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                     'SentTimestamp))
 
                 (let dlqGroupRow '(
+                    )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member item 'GroupId))))
                 (let dlqGroupSelect '(
                     'Head
@@ -764,7 +819,8 @@ const char* const ReadOrRedriveMessageQuery = R"__(
         )))))
 
         (let dlqStateRow '(
-            '('State (Uint64 '0))))
+            )__" DLQ_STATE_KEYS_PARAM  R"__(
+        ))
         (let dlqStateSelect '(
             'MessageCount
             'WriteOffset
@@ -790,7 +846,8 @@ const char* const ReadOrRedriveMessageQuery = R"__(
         )
 
         (let sourceStateRow '(
-            '('State (Uint64 '0))))
+            )__" STATE_KEYS_PARAM  R"__(
+        ))
         (let sourceStateSelect '(
             'MessageCount
             'LastModifiedTimestamp))
@@ -811,21 +868,23 @@ const char* const ReadOrRedriveMessageQuery = R"__(
 
             # copy messages to dlq
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
-                (let dataRow '(
+                (let dlqDataRow '(
+                    )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('RandomId randomId)
                     '('Offset (Nth item '0))))
-                (let dataUpdate '(
+                (let dlqDataUpdate '(
                     '('Data (Member (Nth item '1) 'Data))
                     '('DedupId (Member (Nth item '1) 'DeduplicationId))
                     '('Attributes (Member (Nth item '1) 'Attributes))
                     '('SenderId (Member (Nth item '1) 'SenderId))
                     '('MessageId (Member (Nth item '1) 'MessageId))))
-                (return (UpdateRow dlqDataTable dataRow dataUpdate))))))
+                (return (UpdateRow dlqDataTable dlqDataRow dlqDataUpdate))))))
 
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
-                (let msgRow '(
+                (let dlqMsgRow '(
+                    )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('Offset (Nth item '0))))
-                (let messageUpdate '(
+                (let dlqMessageUpdate '(
                     '('RandomId randomId)
                     '('GroupId (Member (Nth item '1) 'GroupId))
                     '('NextOffset (Uint64 '0))
@@ -833,76 +892,83 @@ const char* const ReadOrRedriveMessageQuery = R"__(
                     '('ReceiveCount (Uint32 '0))
                     '('FirstReceiveTimestamp (Uint64 '0))
                     '('SentTimestamp dlqSentTimestamp)))
-                (return (UpdateRow dlqMsgTable msgRow messageUpdate))))))
+                (return (UpdateRow dlqMsgTable dlqMsgRow dlqMessageUpdate))))))
 
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
-                (let sentTsRow '(
+                (let dlqSentTsRow '(
+                    )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('SentTimestamp dlqSentTimestamp)
                     '('Offset (Nth item '0))))
                 (let delay (Member (Nth item '1) 'Delay))
                 (let delayDeadline (Uint64 '0))
-                (let sentTsUpdate '(
+                (let dlqSentTsUpdate '(
                     '('RandomId randomId)
                     '('DelayDeadline delayDeadline)
                     '('GroupId (Member (Nth item '1) 'GroupId))))
-                (return (UpdateRow dlqSentTsIdx sentTsRow sentTsUpdate))))))
+                (return (UpdateRow dlqSentTsIdx dlqSentTsRow dlqSentTsUpdate))))))
 
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
-                (let groupRow '(
+                (let dlqGroupRow '(
+                    )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member (Nth item '1) 'GroupId))))
                 (let delay (Member (Nth item '1) 'Delay))
                 (let delayDeadline (Uint64 '0))
-                (let groupInsert '(
+                (let dlqGroupInsert '(
                     '('RandomId randomId)
                     '('Head (Nth item '0))
                     '('Tail (Nth item '0))
                     '('LockTimestamp (Uint64 '0))
                     '('VisibilityDeadline  (Uint64 '0))))
                 (let dlqGroupRead (Member (Nth item '1) 'DlqGroupRead))
-                (let groupUpdate '(
+                (let dlqGroupUpdate '(
                     '('Head (Member dlqGroupRead 'Head))
                     '('Tail (Nth item '0))))
                 (let dlqTail (Member (Nth item '1) 'DlqTail))
                 (return
                     (If (Equal dlqTail (Uint64 '0))
-                        (UpdateRow dlqGroupTable groupRow groupInsert)
-                        (UpdateRow dlqGroupTable groupRow groupUpdate)
+                        (UpdateRow dlqGroupTable dlqGroupRow dlqGroupInsert)
+                        (UpdateRow dlqGroupTable dlqGroupRow dlqGroupUpdate)
                     )
                 )))))
 
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dlqTail (Member (Nth item '1) 'DlqTail))
-                (let prevMessageRow '(
+                (let dlqPrevMessageRow '(
+                    )__" DLQ_ID_KEYS_PARAM  R"__(
                     '('Offset dlqTail)))
-                (let prevMessageUpdate '(
+                (let dlqPrevMessageUpdate '(
                     '('NextOffset (Nth item '0))
                     '('NextRandomId randomId)))
                 (return
                     (If (NotEqual dlqTail (Uint64 '0))
-                        (UpdateRow dlqMsgTable prevMessageRow prevMessageUpdate)
+                        (UpdateRow dlqMsgTable dlqPrevMessageRow dlqPrevMessageUpdate)
                         (Void))
                 )))))
 
             # remove dead letters' content from source queue
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('RandomId (Member (Nth item '1) 'SourceRandomId))
                     '('Offset   (Member (Nth item '1) 'SourceOffset))))
                 (return (EraseRow sourceDataTable row))))))
 
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset   (Member (Nth item '1) 'SourceOffset))))
                 (return (EraseRow sourceMsgTable row))))))
 
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('SentTimestamp (Member (Nth item '1) 'SourceSentTimestamp))
                     '('Offset        (Member (Nth item '1) 'SourceOffset))))
                 (return (EraseRow sourceSentTsIdx row))))))
 
             (Map dlqMessagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member (Nth item '1) 'GroupId))))
                 (let update '(
                     '('RandomId (Member (Nth item '1) 'SourceNextRandomId))
@@ -919,6 +985,7 @@ const char* const ReadOrRedriveMessageQuery = R"__(
             (Map messagesToReturnAsStruct (lambda '(item) (block '(
                 (let message (Member item 'SourceMessageFieldsRead))
                 (let row '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Member message 'Offset))))
                 (let receiveTimestamp
                     (If (Coalesce (Equal (Member message 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member message 'FirstReceiveTimestamp)))
@@ -931,8 +998,10 @@ const char* const ReadOrRedriveMessageQuery = R"__(
 
 const char* const WriteMessageQuery = R"__(
     (
-        (let randomId   (Parameter 'RANDOM_ID  (DataType 'Uint64)))
-        (let timestamp  (Parameter 'TIMESTAMP  (DataType 'Uint64)))
+        (let queueIdNumber       (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash   (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let randomId            (Parameter 'RANDOM_ID            (DataType 'Uint64)))
+        (let timestamp           (Parameter 'TIMESTAMP            (DataType 'Uint64)))
         (let deduplicationPeriod (Parameter 'DEDUPLICATION_PERIOD (DataType 'Uint64)))
         (let messages  (Parameter 'MESSAGES
             (ListType (StructType
@@ -947,15 +1016,16 @@ const char* const WriteMessageQuery = R"__(
             ))
         ))
 
-        (let dataTable  '%1$s/Data)
-        (let dedupTable '%1$s/Deduplication)
-        (let stateTable '%1$s/State)
-        (let msgTable   '%1$s/Messages)
-        (let groupTable '%1$s/Groups)
-        (let sentTsIdx  '%1$s/SentTimestampIdx)
+        (let dataTable  ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Data)
+        (let dedupTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Deduplication)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
+        (let msgTable   ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Messages)
+        (let groupTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Groups)
+        (let sentTsIdx  ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
 
         (let stateRow '(
-            '('State (Uint64 '0))))
+            )__" STATE_KEYS_PARAM  R"__(
+        ))
         (let stateSelect '(
             'MessageCount
             'WriteOffset
@@ -969,6 +1039,7 @@ const char* const WriteMessageQuery = R"__(
         (let messagesInfo
             (MapParameter messages (lambda '(item) (block '(
                 (let dedupRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('DedupId (Member item 'DeduplicationId))))
                 (let dedupSelect '(
                     'Deadline
@@ -979,6 +1050,7 @@ const char* const WriteMessageQuery = R"__(
                 (let dedupCond (IfPresent dedupRead (lambda '(x) (Coalesce (Less (Member x 'Deadline) sentTimestamp) (Bool 'false))) (Bool 'true)))
 
                 (let groupRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member item 'GroupId))))
                 (let groupSelect '(
                     'Head
@@ -1053,6 +1125,7 @@ const char* const WriteMessageQuery = R"__(
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let dedupRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('DedupId (Member (Nth item '1) 'DeduplicationId))))
                 (let dedupUpdate '(
                     '('Deadline (Add sentTimestamp deduplicationPeriod))
@@ -1063,6 +1136,7 @@ const char* const WriteMessageQuery = R"__(
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let dataRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('RandomId randomId)
                     '('Offset (Nth item '0))))
                 (let dataUpdate '(
@@ -1076,6 +1150,7 @@ const char* const WriteMessageQuery = R"__(
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let msgRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset (Nth item '0))))
                 (let messageUpdate '(
                     '('RandomId randomId)
@@ -1090,6 +1165,7 @@ const char* const WriteMessageQuery = R"__(
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let sentTsRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('SentTimestamp sentTimestamp)
                     '('Offset (Nth item '0))))
                 (let delay (Member (Nth item '1) 'Delay))
@@ -1103,6 +1179,7 @@ const char* const WriteMessageQuery = R"__(
             (Map messagesInfoWithProperIndexesSorted (lambda '(item) (block '(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let groupRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('GroupId (Member (Nth item '1) 'GroupId))))
                 (let delay (Member (Nth item '1) 'Delay))
                 (let delayDeadline (If (Equal delay (Uint64 '0)) (Uint64 '0) (Add sentTimestamp delay)))
@@ -1130,6 +1207,7 @@ const char* const WriteMessageQuery = R"__(
                 (let dedupCond (Member (Nth item '1) 'dedupCond))
                 (let tail (Member (Nth item '1) 'tail))
                 (let prevMessageRow '(
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
                     '('Offset tail)))
                 (let prevMessageUpdate '(
                     '('NextOffset (Nth item '0))
@@ -1145,13 +1223,16 @@ const char* const WriteMessageQuery = R"__(
 
 static const char* const DeduplicationCleanupQuery = R"__(
     (
-        (let now           (Parameter 'NOW             (DataType 'Uint64)))
-        (let batchSize     (Parameter 'BATCH_SIZE      (DataType 'Uint64)))
-        (let keyRangeStart (Parameter 'KEY_RANGE_START (DataType 'String)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let now                (Parameter 'NOW                  (DataType 'Uint64)))
+        (let batchSize          (Parameter 'BATCH_SIZE           (DataType 'Uint64)))
+        (let keyRangeStart      (Parameter 'KEY_RANGE_START      (DataType 'String)))
 
-        (let dedupTable '%1$s/Deduplication)
+        (let dedupTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Deduplication)
 
         (let dedupRange '(
+            )__" QUEUE_ID_KEYS_RANGE_PARAM R"__(
             '('DedupId keyRangeStart (Void))))
         (let dedupSelect '(
             'DedupId
@@ -1179,13 +1260,16 @@ static const char* const DeduplicationCleanupQuery = R"__(
 
 static const char* const ReadsCleanupQuery = R"__(
     (
-        (let now           (Parameter 'NOW             (DataType 'Uint64)))
-        (let batchSize     (Parameter 'BATCH_SIZE      (DataType 'Uint64)))
-        (let keyRangeStart (Parameter 'KEY_RANGE_START (DataType 'Utf8String)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let now                (Parameter 'NOW                  (DataType 'Uint64)))
+        (let batchSize          (Parameter 'BATCH_SIZE           (DataType 'Uint64)))
+        (let keyRangeStart      (Parameter 'KEY_RANGE_START      (DataType 'Utf8String)))
 
-        (let readsTable '%1$s/Reads)
+        (let readsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Reads)
 
         (let readRange '(
+            )__" QUEUE_ID_KEYS_RANGE_PARAM R"__(
             '('ReceiveAttemptId keyRangeStart (Void))))
         (let readSelect '(
             'ReceiveAttemptId
@@ -1213,28 +1297,31 @@ static const char* const ReadsCleanupQuery = R"__(
 
 const char* const SetRetentionQuery = R"__(
     (
-        (let now   (Parameter 'NOW   (DataType 'Uint64)))
-        (let purge (Parameter 'PURGE (DataType 'Bool)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let now                (Parameter 'NOW                  (DataType 'Uint64)))
+        (let purge              (Parameter 'PURGE                (DataType 'Bool)))
 
-        (let attrsTable '%1$s/Attributes)
-        (let stateTable '%1$s/State)
+        (let attrsTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/Attributes)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let attrs (block '(
-            (let row '(
-                '('State (Uint64 '0))))
+            (let attrsRow '(
+                )__" ATTRS_KEYS_PARAM R"__(
+            ))
             (let fields '(
                 'MessageRetentionPeriod))
-            (return (SelectRow attrsTable row fields)))))
+            (return (SelectRow attrsTable attrsRow fields)))))
 
         (let boundary
             (If purge now (Coalesce (Sub now (Member attrs 'MessageRetentionPeriod)) (Uint64 '0))))
 
-        (let range '(
-            '('State (Uint64 '0) (Uint64 '18446744073709551615))))
+        (let stateRange '(
+            )__" ALL_SHARDS_RANGE_PARAM R"__(
+        ))
         (let fields '(
-            'State
             'RetentionBoundary))
-        (let records (Member (SelectRange stateTable range fields '()) 'List))
+        (let records (Member (SelectRange stateTable stateRange fields '()) 'List))
 
         (let result
             (Map records (lambda '(item) (block '(
@@ -1244,7 +1331,7 @@ const char* const SetRetentionQuery = R"__(
                         (Bool 'false)))
 
                 (return (AsStruct
-                    '('Shard (Member item 'State))
+                    '('Shard (Uint64 '0))
                     '('RetentionBoundary (Max boundary (Member item 'RetentionBoundary)))
                     '('Updated updated))))))))
 
@@ -1257,7 +1344,8 @@ const char* const SetRetentionQuery = R"__(
 
             (Map updated (lambda '(item) (block '(
                 (let row '(
-                    '('State (Member item 'Shard))))
+                    )__" STATE_KEYS_PARAM R"__(
+                ))
                 (let update '(
                     '('RetentionBoundary (Member item 'RetentionBoundary))))
                 (return (UpdateRow stateTable row update))))))
@@ -1267,12 +1355,14 @@ const char* const SetRetentionQuery = R"__(
 
 const char* const GetMessageCountMetricsQuery = R"__(
     (
-        (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
 
-        (let stateTable '%1$s/State)
+        (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
         (let stateRow '(
-            '('State shard)))
+            )__" STATE_KEYS_PARAM  R"__(
+        ))
         (let stateSelect '(
             'MessageCount
             'InflyCount
@@ -1290,11 +1380,14 @@ const char* const GetMessageCountMetricsQuery = R"__(
 
 const char* const GetOldestMessageTimestampMetricsQuery = R"__(
     (
-        (let timeFrom (Parameter 'TIME_FROM (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let timeFrom           (Parameter 'TIME_FROM            (DataType 'Uint64)))
 
-        (let sentTsIdx '%1$s/SentTimestampIdx)
+        (let sentTsIdx ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
 
         (let sentIdxRange '(
+            )__" QUEUE_ID_KEYS_RANGE_PARAM  R"__(
             '('SentTimestamp timeFrom (Uint64 '18446744073709551615))
             '('Offset (Uint64 '0) (Uint64 '18446744073709551615))))
         (let sentIdxSelect '(
@@ -1310,14 +1403,17 @@ const char* const GetOldestMessageTimestampMetricsQuery = R"__(
 
 const char* const GetRetentionOffsetQuery = R"__(
     (
-        (let offsetFrom (Parameter 'OFFSET_FROM (DataType 'Uint64)))
-        (let timeFrom   (Parameter 'TIME_FROM   (DataType 'Uint64)))
-        (let timeTo     (Parameter 'TIME_TO     (DataType 'Uint64)))
-        (let batchSize  (Parameter 'BATCH_SIZE  (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER      (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let offsetFrom         (Parameter 'OFFSET_FROM          (DataType 'Uint64)))
+        (let timeFrom           (Parameter 'TIME_FROM            (DataType 'Uint64)))
+        (let timeTo             (Parameter 'TIME_TO              (DataType 'Uint64)))
+        (let batchSize          (Parameter 'BATCH_SIZE           (DataType 'Uint64)))
 
-        (let sentTsIdx    '%1$s/SentTimestampIdx)
+        (let sentTsIdx    ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/SentTimestampIdx)
 
         (let sentIdxRange '(
+            )__" QUEUE_ID_KEYS_RANGE_PARAM  R"__(
             '('SentTimestamp timeFrom timeTo)
             '('Offset offsetFrom (Uint64 '18446744073709551615))))
         (let sentIdxSelect '(
@@ -1338,11 +1434,11 @@ const char* const ListDeadLetterSourceQueuesQuery = R"__(
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
 
-        (let queuesTable '%5$s/.Queues)
+        (let queuesTable ')__" ROOT_PARAM R"__(/.Queues)
 
         (let queuesRow '(
             '('Account userName)
-            '('QueueName (Utf8String '"%4$s"))))
+            '('QueueName (Utf8String '")__" QUEUE_NAME_PARAM R"__("))))
 
         (let queuesRowSelect '(
             'QueueName

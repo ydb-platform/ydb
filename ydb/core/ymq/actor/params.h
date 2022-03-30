@@ -89,6 +89,18 @@ public:
 
         return *this;
     }
+    
+    TParameters& AddWithType(const TString& name, ui64 value, NScheme::TTypeId typeId) {
+        DataType(name, typeId);
+        if (typeId == NScheme::NTypeIds::Uint32) {
+            Params_->MutableValue()->AddStruct()->SetUint32(value);
+        } else if (typeId == NScheme::NTypeIds::Uint64) {
+            Params_->MutableValue()->AddStruct()->SetUint64(value);
+        } else {
+            Y_VERIFY(false);
+        }
+        return *this;
+    }
 
 private:
     void DataType(const TString& name, NScheme::TTypeId typeId) {

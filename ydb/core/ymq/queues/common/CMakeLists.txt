@@ -15,4 +15,5 @@ target_link_libraries(ymq-queues-common PUBLIC
 )
 target_sources(ymq-queues-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/common/queries.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/queues/common/db_queries_maker.cpp
 )

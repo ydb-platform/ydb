@@ -15,6 +15,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/quoter.h>
 #include <ydb/core/ymq/queues/common/queries.h>
+#include <ydb/core/ymq/queues/common/key_hashes.h>
+#include <ydb/core/ymq/queues/common/db_queries_maker.h>
 #include <ydb/core/ymq/queues/fifo/queries.h>
 #include <ydb/core/ymq/queues/std/queries.h>
 
@@ -267,6 +269,7 @@ void TQueueLeader::Prepare(TSqsEvents::TEvExecute::TPtr& ev) {
         .Shard(req.Shard)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
+        .TablesFormat(TablesFormat_)
         .Mode(NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE)
         .QueryId(req.QueryIdx)
         .RetryOnTimeout(req.RetryOnTimeout)
@@ -339,6 +342,7 @@ void TQueueLeader::ExecuteRequest(TSqsEvents::TEvExecute::TPtr& ev, const TStrin
         .Shard(req.Shard)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
+        .TablesFormat(TablesFormat_)
         .QueryId(req.QueryIdx)
         .Bin(compiled)
         .RetryOnTimeout(req.RetryOnTimeout)
@@ -520,11 +524,14 @@ void TQueueLeader::LockFifoGroup(TReceiveMessageBatchRequestProcessing& reqInfo)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .QueryId(LOCK_GROUP_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
         .OnExecuted(onExecuted)
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
             .Uint64("NOW", reqInfo.LockSendTs.MilliSeconds())
             .Utf8("ATTEMPT_ID", reqInfo.Event->Get()->ReceiveAttemptId)
             .Uint64("COUNT", reqInfo.Event->Get()->MaxMessagesCount - reqInfo.LockedFifoMessages.size())
@@ -595,10 +602,13 @@ void TQueueLeader::ReadFifoMessages(TReceiveMessageBatchRequestProcessing& reqIn
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .Counters(Counters_)
         .RetryOnTimeout();
 
     NClient::TWriteValue params = builder.ParamsValue();
+    params["QUEUE_ID_NUMBER"] = QueueVersion_;
+    params["QUEUE_ID_NUMBER_HASH"] = GetKeysHash(QueueVersion_);
     params["NOW"] = ui64(TActivationContext::Now().MilliSeconds());
     ui64 index = 0;
 
@@ -621,16 +631,15 @@ void TQueueLeader::ReadFifoMessages(TReceiveMessageBatchRequestProcessing& reqIn
         // perform heavy read and move transaction (DLQ)
         Y_VERIFY(DlqInfo_);
 
-        const TQueuePath currentQueuePath = { Cfg().GetRoot(), UserName_, QueueName_, QueueVersion_ };
-        const TQueuePath deadLetterQueuePath = { Cfg().GetRoot(), UserName_, DlqInfo_->QueueId, DlqInfo_->QueueVersion };
-
-        const TString transactionText = Sprintf(GetFifoQueryById(READ_OR_REDRIVE_MESSAGE_ID),
-                                                currentQueuePath.GetVersionedQueuePath().c_str(),
-                                                0,
-                                                deadLetterQueuePath.GetVersionedQueuePath().c_str());
         builder
-            .Text(transactionText)
+            .DlqName(DlqInfo_->QueueId)
+            .DlqVersion(DlqInfo_->QueueVersion)
+            .DlqTablesFormat(DlqInfo_->TablesFormat)
+            .CreateExecutorActor(true)
+            .QueryId(READ_OR_REDRIVE_MESSAGE_ID)
             .Params()
+                .Uint64("DLQ_ID_NUMBER", DlqInfo_->QueueVersion)
+                .Uint64("DLQ_ID_NUMBER_HASH", GetKeysHash(DlqInfo_->QueueVersion))
                 .Uint32("MAX_RECEIVE_COUNT", maxReceiveCount)
                 .Uint64("RANDOM_ID",  RandomNumber<ui64>());
     } else {
@@ -1119,6 +1128,7 @@ void TQueueLeader::ProcessChangeMessageVisibilityBatch(TChangeMessageVisibilityB
         .Fifo(IsFifoQueue_)
         .Shard(req.Shard)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .QueryId(CHANGE_VISIBILITY_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
@@ -1217,6 +1227,8 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
     resp->SqsCoreCounters = Counters_->RootCounters.SqsCounters;
     resp->QueueCounters = Counters_;
     resp->UserCounters = UserCounters_;
+    resp->TablesFormat = TablesFormat_;
+    resp->QueueVersion = QueueVersion_;
     resp->Shards = ShardsCount_;
     resp->UserExists = true;
     resp->QueueExists = true;
@@ -1249,6 +1261,7 @@ void TQueueLeader::RequestConfiguration() {
     TExecutorBuilder(SelfId(), "")
         .User(UserName_)
         .Queue(QueueName_)
+        .TablesFormat(TablesFormat_)
         .RetryOnTimeout()
         .Text(Sprintf(GetQueueParamsQuery, Cfg().GetRoot().c_str()))
         .OnExecuted([this](const TSqsEvents::TEvExecuted::TRecord& ev) { OnQueueConfiguration(ev); })
@@ -1271,6 +1284,9 @@ void TQueueLeader::OnQueueConfiguration(const TSqsEvents::TEvExecuted::TRecord& 
             QueueId_ = data["QueueId"];
             if (data["Version"].HaveValue()) {
                 QueueVersion_ = ui64(data["Version"]);
+            }
+            if (data["TablesFormat"].HaveValue()) {
+                TablesFormat_ = ui32(data["TablesFormat"]);
             }
             IsFifoQueue_ = bool(data["FifoQueue"]);
             Shards_.resize(ShardsCount_);
@@ -1364,10 +1380,14 @@ void TQueueLeader::AskQueueAttributes() {
         .QueryId(INTERNAL_GET_QUEUE_ATTRIBUTES_ID)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
+        .TablesFormat(TablesFormat_)
         .RetryOnTimeout()
         .OnExecuted([this](const TSqsEvents::TEvExecuted::TRecord& ev) { OnQueueAttributes(ev); })
         .Counters(Counters_)
-        .Start();
+        .Params()
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+        .ParentBuilder().Start();
 }
 
 void TQueueLeader::OnQueueAttributes(const TSqsEvents::TEvExecuted::TRecord& ev) {
@@ -1434,8 +1454,14 @@ void TQueueLeader::HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
             DlqInfo_->QueueId = ev->Get()->QueueId;
             DlqInfo_->QueueVersion = ev->Get()->Version;
             DlqInfo_->ShardsCount = ev->Get()->ShardsCount;
+            DlqInfo_->TablesFormat = ev->Get()->TablesFormat;
 
-            LOG_SQS_DEBUG("Discovered DLQ: name: " << DlqInfo_->DlqName << ", maxReceiveCount: " << DlqInfo_->MaxReceiveCount << ", queueId: " << DlqInfo_->QueueId << ", version: " << DlqInfo_->QueueVersion << ", shards count: " << DlqInfo_->ShardsCount);
+            LOG_SQS_DEBUG("Discovered DLQ: name: " << DlqInfo_->DlqName
+                << ", maxReceiveCount: " << DlqInfo_->MaxReceiveCount
+                << ", queueId: " << DlqInfo_->QueueId
+                << ", version: " << DlqInfo_->QueueVersion
+                << ", shards count: " << DlqInfo_->ShardsCount
+                << ", tables format: " << DlqInfo_->TablesFormat);
             return;
         }
     }
@@ -1479,6 +1505,7 @@ void TQueueLeader::RequestMessagesCountMetrics(ui64 shard) {
         .User(UserName_)
         .Queue(QueueName_)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .QueryId(GET_MESSAGE_COUNT_METRIC_ID)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
@@ -1486,7 +1513,9 @@ void TQueueLeader::RequestMessagesCountMetrics(ui64 shard) {
         .OnExecuted([this, shard](const TSqsEvents::TEvExecuted::TRecord& ev) { ReceiveMessagesCountMetrics(shard, ev); })
         .Counters(Counters_)
         .Params()
-            .Uint64("SHARD", shard)
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+            .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
         .ParentBuilder().Start();
     ++MetricsQueriesInfly_;
 
@@ -1503,6 +1532,7 @@ void TQueueLeader::RequestOldestTimestampMetrics(ui64 shard) {
         .Queue(QueueName_)
         .Shard(shard)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .QueryId(GET_OLDEST_MESSAGE_TIMESTAMP_METRIC_ID)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
@@ -1510,6 +1540,8 @@ void TQueueLeader::RequestOldestTimestampMetrics(ui64 shard) {
         .OnExecuted([this, shard](const TSqsEvents::TEvExecuted::TRecord& ev) { ReceiveOldestTimestampMetrics(shard, ev); })
         .Counters(Counters_)
         .Params()
+            .Uint64("QUEUE_ID_QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
             .Uint64("TIME_FROM", Shards_[shard].LastSuccessfulOldestMessageTimestampValueMs) // optimization for accurate range selection // timestamp is always nondecreasing
         .ParentBuilder().Start();
     ++MetricsQueriesInfly_;
@@ -1697,6 +1729,7 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
         .Queue(QueueName_)
         .Shard(shard)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .QueryId(LOAD_INFLY_ID)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
@@ -1704,7 +1737,9 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
         .OnExecuted([this, shard](const TSqsEvents::TEvExecuted::TRecord& ev) { OnInflyLoaded(shard, ev); })
         .Counters(Counters_)
         .Params()
-            .Uint64("SHARD", shard)
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
         .ParentBuilder().Start();
 
     TExecutorBuilder(SelfId(), "")
@@ -1712,6 +1747,7 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
         .Queue(QueueName_)
         .Shard(shard)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .QueryId(GET_STATE_ID)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
@@ -1719,7 +1755,9 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
         .OnExecuted([this, shard](const TSqsEvents::TEvExecuted::TRecord& ev) { OnStateLoaded(shard, ev); })
         .Counters(Counters_)
         .Params()
-            .Uint64("SHARD", shard)
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
         .ParentBuilder().Start();
 }
 
@@ -1834,13 +1872,17 @@ bool TQueueLeader::AddMessagesToInfly(ui64 shard) {
         .Queue(QueueName_)
         .Shard(shard)
         .QueueLeader(SelfId())
+        .TablesFormat(TablesFormat_)
         .QueryId(ADD_MESSAGES_TO_INFLY_ID)
         .QueueVersion(QueueVersion_)
         .Fifo(IsFifoQueue_)
         .OnExecuted([this, shard](const TSqsEvents::TEvExecuted::TRecord& ev) { OnAddedMessagesToInfly(shard, ev); })
         .Counters(Counters_)
         .Params()
-            .Uint64("SHARD", shard)
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
+            .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("INFLY_LIMIT", limit)
             .Uint64("FROM", shardInfo.ReadOffset)
             .Uint64("EXPECTED_MAX_COUNT", Min(limit - shardInfo.Infly->GetCapacity(), Cfg().GetAddMesagesToInflyBatchSize()))
@@ -2413,15 +2455,19 @@ void TQueueLeader::TSendBatch::Execute(TQueueLeader* leader) {
         .Shard(Shard)
         .QueueVersion(leader->QueueVersion_)
         .QueueLeader(SelfId())
+        .TablesFormat(leader->TablesFormat_)
         .QueryId(WRITE_MESSAGE_ID)
         .Fifo(IsFifoQueue)
         .Counters(leader->Counters_)
         .RetryOnTimeout(IsFifoQueue) // Fifo queues have deduplication, so we can retry even on unknown transaction state
         .OnExecuted([leader, shard = Shard, batchId = BatchId](const TSqsEvents::TEvExecuted::TRecord& ev) { leader->OnSendBatchExecuted(shard, batchId, ev); })
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", leader->QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(leader->QueueVersion_))
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(leader->QueueVersion_, Shard))
             .Uint64("RANDOM_ID",  RandomNumber<ui64>())
             .Uint64("TIMESTAMP",  TransactionStartedTime.MilliSeconds())
-            .Uint64("SHARD",      Shard)
+            .AddWithType("SHARD", Shard, leader->TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("DEDUPLICATION_PERIOD", Cfg().GetDeduplicationPeriodMs());
 
     NClient::TWriteValue params = builder.ParamsValue();
@@ -2466,6 +2512,7 @@ void TQueueLeader::TDeleteBatch::Execute(TQueueLeader* leader) {
         .Shard(Shard)
         .QueueVersion(leader->QueueVersion_)
         .QueueLeader(SelfId())
+        .TablesFormat(leader->TablesFormat_)
         .Fifo(IsFifoQueue)
         .QueryId(DELETE_MESSAGE_ID)
         .Counters(leader->Counters_)
@@ -2473,7 +2520,7 @@ void TQueueLeader::TDeleteBatch::Execute(TQueueLeader* leader) {
         .OnExecuted([leader, shard = Shard, batchId = BatchId](const TSqsEvents::TEvExecuted::TRecord& ev) { leader->OnDeleteBatchExecuted(shard, batchId, ev); })
         .Params()
             .Uint64("NOW", TActivationContext::Now().MilliSeconds())
-            .Uint64("SHARD", Shard)
+            .AddWithType("SHARD", Shard, leader->TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("GROUPS_READ_ATTEMPT_IDS_PERIOD", Cfg().GetGroupsReadAttemptIdsPeriodMs());
 
     NClient::TWriteValue params = builder.ParamsValue();
@@ -2531,12 +2578,15 @@ void TQueueLeader::TLoadBatch::Execute(TQueueLeader* leader) {
         .QueueVersion(leader->QueueVersion_)
         .Fifo(IsFifoQueue)
         .QueueLeader(SelfId())
+        .TablesFormat(leader->TablesFormat_)
         .Counters(leader->Counters_)
         .RetryOnTimeout()
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", leader->QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(leader->QueueVersion_, Shard))
             .Uint64("NOW", now.MilliSeconds())
             .Uint64("READ_ID", RandomNumber<ui64>())
-            .Uint64("SHARD", Shard);
+            .AddWithType("SHARD", Shard, leader->TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64);
 
     ui32 maxReceiveCount = 0; // not set
     if (Cfg().GetEnableDeadLetterQueues() && leader->DlqInfo_) {
@@ -2578,17 +2628,20 @@ void TQueueLeader::TLoadBatch::Execute(TQueueLeader* leader) {
         // perform heavy read and move transaction (DLQ)
         Y_VERIFY(leader->DlqInfo_);
         const auto& dlqInfo(*leader->DlqInfo_);
+        const auto dlqShard = Shard % dlqInfo.ShardsCount;
+        builder
+            .DlqName(dlqInfo.QueueId)
+            .DlqShard(dlqShard)
+            .DlqVersion(dlqInfo.QueueVersion)
+            .DlqTablesFormat(dlqInfo.TablesFormat)
+            .CreateExecutorActor(true)
+            .QueryId(LOAD_OR_REDRIVE_MESSAGE_ID);
 
-        const TQueuePath currentQueuePath = { Cfg().GetRoot(), leader->UserName_, leader->QueueName_, leader->QueueVersion_ };
-        const TQueuePath deadLetterQueuePath = { Cfg().GetRoot(), leader->UserName_, dlqInfo.QueueId, dlqInfo.QueueVersion };
-
-        const TString transactionText = Sprintf(GetStdQueryById(LOAD_OR_REDRIVE_MESSAGE_ID),
-                                                currentQueuePath.GetVersionedQueuePath().c_str(), Shard,
-                                                deadLetterQueuePath.GetVersionedQueuePath().c_str(), Shard % dlqInfo.ShardsCount); // TODO: shard inserts aren't balanced
-
-        builder.Text(transactionText)
-            .Params()
-                .Uint64("DEAD_LETTERS_COUNT", deadLettersCounter);
+        builder.Params()
+            .Uint64("DLQ_ID_NUMBER", dlqInfo.QueueVersion)
+            .AddWithType("DLQ_SHARD", dlqShard, dlqInfo.TablesFormat == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
+            .Uint64("DLQ_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(dlqInfo.QueueVersion, dlqShard))
+            .Uint64("DEAD_LETTERS_COUNT", deadLettersCounter);
     } else {
         // perform simple read transaction
         builder.QueryId(LOAD_MESSAGES_ID);

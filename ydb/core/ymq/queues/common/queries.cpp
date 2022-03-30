@@ -18,7 +18,8 @@ extern const char* const GetQueueParamsQuery = R"__(
             'FifoQueue
             'Shards
             'Version
-            'Partitions))
+            'Partitions
+            'TablesFormat))
         (let queuesRead
             (SelectRow queuesTable queuesRow queuesSelect))
         (let exists

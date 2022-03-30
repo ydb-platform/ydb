@@ -124,6 +124,10 @@ void TQueuesListReader::OnQueuesList(const TSqsEvents::TEvExecuted::TRecord& rec
             if (version.HaveValue()) {
                 rec.Version = version;
             }
+            const TValue tablesFormat = row["TablesFormat"];
+            if (tablesFormat.HaveValue()) {
+                rec.TablesFormat = tablesFormat;
+            }
             rec.FolderId = row["FolderId"];
             rec.ShardsCount = row["Shards"];
             rec.DlqName = row["DlqName"];

@@ -6,12 +6,11 @@
 #include "serviceid.h"
 
 #include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/queues/common/key_hashes.h>
 #include <ydb/core/ymq/queues/fifo/schema.h>
 #include <ydb/core/ymq/queues/std/schema.h>
 
-#include <util/digest/city.h>
 #include <util/generic/utility.h>
-#include <util/string/join.h>
 
 using NKikimr::NClient::TValue;
 
@@ -19,11 +18,6 @@ namespace NKikimr::NSQS {
 
 constexpr TStringBuf FIFO_TABLES_DIR = ".FIFO";
 constexpr TStringBuf STD_TABLES_DIR = ".STD";
-
-template <class... TArgs>
-ui64 GetHash(TArgs&&... args) {
-    return CityHash64(Join("#", args...));
-}
 
 static bool IsGoodStatusCode(ui32 code) {
     switch (NTxProxy::TResultStatus::EStatus(code)) {
@@ -940,7 +934,7 @@ TString GetAttrTableKeys(ui32 tablesFormat) {
 TString GetQueueIdAndShardHashesList(ui64 version, ui32 shards) {
     TStringBuilder hashes;
     for (ui32 i = 0; i < shards; ++i) {
-        hashes << "(Uint64 '" << GetHash(version, i) << ") ";
+        hashes << "(Uint64 '" << GetKeysHash(version, i) << ") ";
     }
     return hashes;
 }
@@ -980,7 +974,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
         .Uint32("TABLES_FORMAT", TablesFormat_)
         .Uint64("VERSION", Version_)
-        .Uint64("QUEUE_ID_NUMBER_HASH", GetHash(Version_))
+        .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(Version_))
         .Uint64("MAX_SIZE", *ValidatedAttributes_.MaximumMessageSize)
         .Uint64("DELAY", SecondsToMs(*ValidatedAttributes_.DelaySeconds))
         .Uint64("VISIBILITY", SecondsToMs(*ValidatedAttributes_.VisibilityTimeout))

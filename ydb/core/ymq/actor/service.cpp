@@ -70,7 +70,7 @@ bool IsInternalFolder(const TString& folder) {
 struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TQueueInfo(
             TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, TString customName,
-            TString folderId, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
+            TString folderId, ui32 tablesFormat, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
             const TIntrusivePtr<TFolderCounters>& folderCounters,
             const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser,
             bool insertCounters
@@ -79,6 +79,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         , QueueName_(std::move(queueName))
         , CustomName_(std::move(customName))
         , FolderId_(std::move(folderId))
+        , TablesFormat_(tablesFormat)
         , Version_(version)
         , ShardsCount_(shardsCount)
         , RootUrl_(std::move(rootUrl))
@@ -174,6 +175,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TString QueueName_;
     TString CustomName_;
     TString FolderId_;
+    ui32 TablesFormat_;
     ui64 Version_;
     ui64 ShardsCount_;
     TString RootUrl_;
@@ -575,6 +577,8 @@ void TSqsService::AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration:
     answer->RootUrl = RootUrl_;
     answer->SqsCoreCounters = SqsCoreCounters_;
     answer->QueueCounters = queueInfo->Counters_;
+    answer->TablesFormat = queueInfo->TablesFormat_;
+    answer->QueueVersion = queueInfo->Version_;
     answer->UserCounters = userInfo->Counters_;
     answer->Fail = false;
     answer->SchemeCache = SchemeCache_;
@@ -663,8 +667,16 @@ void TSqsService::HandleGetQueueId(TSqsEvents::TEvGetQueueId::TPtr& ev) {
         return;
     }
 
-    RLOG_SQS_REQ_DEBUG(reqId, "Queue id is " << queueIt->second->QueueName_  << " and version is " << queueIt->second->Version_ << " with shards count: " << queueIt->second->ShardsCount_);
-    Send(ev->Sender, new TSqsEvents::TEvQueueId(queueIt->second->QueueName_, queueIt->second->Version_, queueIt->second->ShardsCount_));
+    const auto& info = *queueIt->second;
+    RLOG_SQS_REQ_DEBUG(
+        reqId,
+        "Queue id is " << info.QueueName_ << " and version is " << info.Version_ 
+            << " with shards count: " << info.ShardsCount_ << " tables format: " << info.TablesFormat_
+    );
+    Send(
+        ev->Sender,
+        new TSqsEvents::TEvQueueId(info.QueueName_, info.Version_, info.ShardsCount_, info.TablesFormat_)
+    );
 }
 
 void TSqsService::HandleGetQueueFolderIdAndCustomName(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev) {
@@ -805,6 +817,7 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                            newListIt->LeaderTabletId,
                                            newListIt->CustomName,
                                            newListIt->FolderId,
+                                           newListIt->TablesFormat,
                                            newListIt->Version,
                                            newListIt->ShardsCount,
                                            newListIt->CreatedTimestamp);
@@ -823,6 +836,7 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                        newListIt->LeaderTabletId,
                                        newListIt->CustomName,
                                        newListIt->FolderId,
+                                       newListIt->TablesFormat,
                                        newListIt->Version,
                                        newListIt->ShardsCount,
                                        newListIt->CreatedTimestamp);
@@ -841,6 +855,7 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                          newListIt->LeaderTabletId,
                          newListIt->CustomName,
                          newListIt->FolderId,
+                         newListIt->TablesFormat,
                          newListIt->Version,
                          newListIt->ShardsCount,
                          newListIt->CreatedTimestamp);
@@ -1031,6 +1046,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
                                                                               ui64 leaderTabletId,
                                                                               const TString& customName,
                                                                               const TString& folderId,
+                                                                              const ui32 tablesFormat,
                                                                               const ui64 version,
                                                                               const ui64 shardsCount,
                                                                               const TInstant createdTimestamp) {
@@ -1048,7 +1064,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
     }
 
     auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(
-            userName, queue, RootUrl_, leaderTabletId, customName, folderId, version, shardsCount,
+            userName, queue, RootUrl_, leaderTabletId, customName, folderId, tablesFormat, version, shardsCount,
             user->Counters_, folderCntrIter->second, SchemeCache_, user->QuoterResources_, insertCounters)))
     ).first;
 
@@ -1079,7 +1095,15 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
         auto requests = user->GetQueueIdRequests_.equal_range(std::make_pair(customName, folderId));
         for (auto i = requests.first; i != requests.second; ++i) {
             auto& req = i->second;
-            Send(req->Sender, new TSqsEvents::TEvQueueId(queueInfo->QueueName_, queueInfo->Version_, queueInfo->ShardsCount_));
+            Send(
+                req->Sender,
+                new TSqsEvents::TEvQueueId(
+                    queueInfo->QueueName_,
+                    queueInfo->Version_,
+                    queueInfo->ShardsCount_,
+                    queueInfo->TablesFormat_
+                )
+            );
         }
         user->GetQueueIdRequests_.erase(requests.first, requests.second);
     }

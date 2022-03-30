@@ -290,6 +290,10 @@ void TQueueMigrationActor::OnQueueParams(const TSqsEvents::TEvExecuted::TRecord&
 
         if (bool(val["exists"])) {
             const auto data(val["queue"]);
+            if (data["TablesFormat"].HaveValue() && static_cast<ui32>(data["TablesFormat"]) == 1) {
+                SendReplyAndDie(true);
+            }
+
             ShardsCount = data["Shards"];
             if (data["Version"].HaveValue()) {
                 QueueVersion = data["Version"];

@@ -192,6 +192,13 @@ public:
         TConfig() = default;
     };
 
+    // Enumeration defines round robin order
+    enum class EActiveQueue {
+        ByLastCompaction, // must be first
+        BySearchHeight,
+        ByRowDeletes,     // must be last, see PopFront()
+    };
+
 private:
     using TCompactionQueueLastCompaction = NOperationQueue::TQueueWithPriority<
         TShardCompactionInfo,
@@ -204,13 +211,6 @@ private:
      using TCompactionQueueRowDeletes = NOperationQueue::TQueueWithPriority<
         TShardCompactionInfo,
         TShardCompactionInfo::TLessByRowDeletes>;
-
-    // Enumeration defines round robin order
-    enum class EActiveQueue {
-        ByLastCompaction, // must be first
-        BySearchHeight,
-        ByRowDeletes, // must be last, see PopFront()
-    };
 
 private:
     TConfig Config;
@@ -267,7 +267,10 @@ public:
     bool Remove(const TShardCompactionInfo& info) {
         QueueSearchHeight.Remove(info);
         QueueRowDeletes.Remove(info);
-        return QueueLastCompaction.Remove(info);
+        bool res = QueueLastCompaction.Remove(info);
+
+        UpdateActiveQueue();
+        return res;
     }
 
     bool UpdateIfFound(const TShardCompactionInfo& info) {
@@ -275,19 +278,27 @@ public:
             return Remove(info);
         }
 
+        if (!QueueLastCompaction.UpdateIfFound(info)) {
+            // this queue contains all shards, no reason to check other shards
+            return false;
+        }
+
         if (info.SearchHeight >= Config.SearchHeightThreshold) {
-            QueueSearchHeight.UpdateIfFound(info);
+            if (!QueueSearchHeight.UpdateIfFound(info))
+                QueueSearchHeight.Enqueue(info);
         } else {
             QueueSearchHeight.Remove(info);
         }
 
         if (info.RowDeletes >= Config.RowDeletesThreshold) {
-            QueueRowDeletes.UpdateIfFound(info);
+            if (!QueueRowDeletes.UpdateIfFound(info))
+                QueueRowDeletes.Enqueue(info);
         } else {
             QueueRowDeletes.Remove(info);
         }
 
-        return QueueLastCompaction.UpdateIfFound(info);
+        UpdateActiveQueue();
+        return true;
     }
 
     void Clear() {
@@ -299,10 +310,13 @@ public:
     const TShardCompactionInfo& Front() const {
         switch (ActiveQueue) {
         case EActiveQueue::ByLastCompaction:
+            Y_VERIFY(!QueueLastCompaction.Empty(), "QueueLastCompaction empty");
             return QueueLastCompaction.Front();
         case EActiveQueue::BySearchHeight:
+            Y_VERIFY(!QueueSearchHeight.Empty(), "QueueSearchHeight empty");
             return QueueSearchHeight.Front();
         case EActiveQueue::ByRowDeletes:
+            Y_VERIFY(!QueueRowDeletes.Empty(), "QueueRowDeletes empty");
             return QueueRowDeletes.Front();
         }
     }
@@ -332,18 +346,32 @@ public:
 
         switch (ActiveQueue) {
         case EActiveQueue::ByLastCompaction:
-            if (!QueueSearchHeight.Empty()) {
                 ActiveQueue = EActiveQueue::BySearchHeight;
                 break;
-            }
-            [[fallthrough]];
         case EActiveQueue::BySearchHeight:
-            if (!QueueRowDeletes.Empty()) {
                 ActiveQueue = EActiveQueue::ByRowDeletes;
                 break;
-            }
+        case EActiveQueue::ByRowDeletes:
+            ActiveQueue = EActiveQueue::ByLastCompaction;
+        }
+        UpdateActiveQueue();
+    }
+
+    void UpdateActiveQueue() {
+        switch (ActiveQueue) {
+        case EActiveQueue::ByLastCompaction:
+            // if this queue is empty, all other queues are empty too,
+            // thus no reason to do any check
+            return;
+        case EActiveQueue::BySearchHeight:
+            if (!QueueSearchHeight.Empty())
+                return;
+            ActiveQueue = EActiveQueue::ByRowDeletes;
             [[fallthrough]];
         case EActiveQueue::ByRowDeletes:
+            if (!QueueRowDeletes.Empty()) {
+                return;
+            }
             ActiveQueue = EActiveQueue::ByLastCompaction;
         }
     }
@@ -362,6 +390,23 @@ public:
 
     size_t SizeByRowDeletes() const {
         return QueueRowDeletes.Size();
+    }
+
+    // for tests
+    size_t ActiveQueueSize() const {
+        switch (ActiveQueue) {
+        case EActiveQueue::ByLastCompaction:
+            return QueueLastCompaction.Size();
+        case EActiveQueue::BySearchHeight:
+            return QueueSearchHeight.Size();
+        case EActiveQueue::ByRowDeletes:
+            return QueueRowDeletes.Size();
+        }
+    }
+
+    // for tests
+    EActiveQueue ActiveQueueType() const {
+        return ActiveQueue;
     }
 
     TString DumpQueueFronts() const {

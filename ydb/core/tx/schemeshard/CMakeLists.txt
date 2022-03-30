@@ -191,3 +191,8 @@ generate_enum_serilization(core-tx-schemeshard
   INCLUDE_HEADERS
   ydb/core/tx/schemeshard/schemeshard_types.h
 )
+generate_enum_serilization(core-tx-schemeshard
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/operation_queue_timer.h
+  INCLUDE_HEADERS
+  ydb/core/tx/schemeshard/operation_queue_timer.h
+)

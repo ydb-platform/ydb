@@ -4743,6 +4743,39 @@ TExprNode::TPtr SqlEqualTuples(const TExprNode& node, TExprContext& ctx) {
 }
 
 template <bool Equals>
+TExprNode::TPtr AggrEqualPg(const TExprNode& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
+    auto ret = ctx.Builder(node.Pos())
+        .Callable("If")
+            .Callable(0, "Exists")
+                .Add(0, node.ChildPtr(0))
+            .Seal()
+            .Callable(1, "Coalesce")
+                .Callable(0,"FromPg")
+                    .Callable(0, "PgOp")
+                        .Atom(0, "<>")
+                        .Add(1, node.ChildPtr(0))
+                        .Add(2, node.ChildPtr(1))
+                    .Seal()
+                .Seal()
+                .Callable(1, "Bool")
+                    .Atom(0, "true")
+                .Seal()
+            .Seal()
+            .Callable(2, "Exists")
+                .Add(0, node.ChildPtr(1))
+            .Seal()
+        .Seal()
+        .Build();
+
+    if (Equals) {
+        ret = ctx.NewCallable(node.Pos(), "Not", { ret });
+    }
+
+    return ret;
+}
+
+template <bool Equals>
 TExprNode::TPtr AggrEqualTuples(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Tuples.";
 
@@ -5656,6 +5689,8 @@ TExprNode::TPtr ExpandAggrEqual(const TExprNode::TPtr& node, TExprContext& ctx) 
             return AggrCompareVariants<true, !Equals>(*node, ctx);
         case ETypeAnnotationKind::Tagged:
             return CompareTagged(*node, ctx);
+        case ETypeAnnotationKind::Pg:
+            return AggrEqualPg<Equals>(*node, ctx);
         case ETypeAnnotationKind::Optional:
             if (type->Cast<TOptionalExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Data)
                 return AggrEqualOpt<Equals>(*node, ctx);

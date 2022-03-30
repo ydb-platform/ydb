@@ -52,7 +52,7 @@ private:
             return;
         }
 
-        Schedule(GetRetryDelay(), new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(res->Request));
+        Schedule(GetRetryDelay(), new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(res->Request->Duplicate()));
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {

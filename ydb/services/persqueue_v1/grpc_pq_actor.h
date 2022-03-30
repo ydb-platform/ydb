@@ -1148,7 +1148,9 @@ public:
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
 };
 
-class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest> {
+class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest>
+                          , public TCdcStreamCompatible
+{
 using TBase = TPQGrpcSchemaBase<TDescribeTopicActor, TEvPQDescribeTopicRequest>;
 
 public:
@@ -1163,8 +1165,10 @@ public:
 };
 
 
-class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest, true> {
-    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest, true>;
+class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>
+                        , public TCdcStreamCompatible
+{
+    using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
 
 public:
     TAddReadRuleActor(NKikimr::NGRpcService::TEvPQAddReadRuleRequest *request);
@@ -1176,8 +1180,10 @@ public:
                                const NKikimrSchemeOp::TDirEntry& selfInfo);
 };
 
-class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest, true> {
-    using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest, true>;
+class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>
+                           , public TCdcStreamCompatible
+{
+    using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>;
 
 public:
     TRemoveReadRuleActor(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest* request);

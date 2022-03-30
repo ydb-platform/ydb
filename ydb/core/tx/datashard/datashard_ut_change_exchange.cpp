@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     struct PqRunner {
-        static void Run(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
+        static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<std::pair<TString, TString>>& records)
         {
             TTestPqEnv env(tableDesc, streamDesc);
@@ -752,10 +752,32 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
         }
+
+        static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            TTestPqEnv env(tableDesc, streamDesc);
+
+            auto session = env.GetClient().CreateSimpleBlockingWriteSession(TWriteSessionSettings()
+                .Path("/Root/Table/Stream")
+                .MessageGroupId("user")
+                .ClusterDiscoveryMode(EClusterDiscoveryMode::Off)
+            );
+
+            const bool failed = !session->Write("message-1");
+            UNIT_ASSERT(failed);
+
+            session->Close();
+        }
+
+        static void Drop(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            TTestPqEnv env(tableDesc, streamDesc);
+
+            auto res = env.GetClient().DropTopic("/Root/Table/Stream").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
     };
 
     struct YdsRunner {
-        static void Run(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
+        static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
                 const TVector<TString>& queries, const TVector<std::pair<TString, TString>>& records)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
@@ -770,6 +792,15 @@ Y_UNIT_TEST_SUITE(Cdc) {
             {
                 auto res = client.RegisterStreamConsumer("/Root/Table/Stream", "user").ExtractValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+
+            // list consumers
+            {
+                auto res = client.ListStreamConsumers("/Root/Table/Stream", TListStreamConsumersSettings()
+                    .MaxResults(100)).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(res.GetResult().consumers().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(res.GetResult().consumers().begin()->consumer_name(), "user");
             }
 
             // get shards
@@ -809,6 +840,20 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
         }
+
+        static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            TTestYdsEnv env(tableDesc, streamDesc);
+
+            auto res = env.GetClient().PutRecord("/Root/Table/Stream", {"data", "key", ""}).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+
+        static void Drop(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            TTestYdsEnv env(tableDesc, streamDesc);
+
+            auto res = env.GetClient().DeleteStream("/Root/Table/Stream").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
     };
 
     #define Y_UNIT_TEST_TWIN(N, VAR1, VAR2)                                                                            \
@@ -824,7 +869,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         void N(NUnitTest::TTestContext&)
 
     Y_UNIT_TEST_TWIN(KeysOnlyLog, PqRunner, YdsRunner) {
-        TRunner::Run(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+        TRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
             (2, 20),
@@ -840,7 +885,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST_TWIN(UpdatesLog, PqRunner, YdsRunner) {
-        TRunner::Run(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+        TRunner::Read(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
             (2, 20),
@@ -856,7 +901,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     Y_UNIT_TEST_TWIN(NewAndOldImagesLog, PqRunner, YdsRunner) {
-        TRunner::Run(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+        TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
             (2, 20),
@@ -877,6 +922,73 @@ Y_UNIT_TEST_SUITE(Cdc) {
             {"[3]", R"({"update":{},"newImage":{"value":300},"oldImage":{"value":30}})"},
             {"[1]", R"({"erase":{},"oldImage":{"value":100}})"},
         });
+    }
+
+    Y_UNIT_TEST_TWIN(Write, PqRunner, YdsRunner) {
+        TRunner::Write(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+    }
+
+    Y_UNIT_TEST_TWIN(Drop, PqRunner, YdsRunner) {
+        TRunner::Drop(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+    }
+
+    // Pq specific
+    Y_UNIT_TEST(Alter) {
+        TTestPqEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+        auto& client = env.GetClient();
+
+        auto desc = client.DescribeTopic("/Root/Table/Stream").ExtractValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+
+        // try to update partitions count
+        {
+            UNIT_ASSERT_VALUES_EQUAL(desc.TopicSettings().PartitionsCount(), 1);
+            auto res = client.AlterTopic("/Root/Table/Stream", TAlterTopicSettings()
+                .SetSettings(desc.TopicSettings()).PartitionsCount(2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+
+        // try to update retention period
+        {
+            UNIT_ASSERT_VALUES_EQUAL(desc.TopicSettings().RetentionPeriod().Hours(), 24);
+            auto res = client.AlterTopic("/Root/Table/Stream", TAlterTopicSettings()
+                .SetSettings(desc.TopicSettings()).RetentionPeriod(TDuration::Hours(48))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+    }
+
+    // Yds specific
+    Y_UNIT_TEST(UpdateStream) {
+        TTestYdsEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+
+        auto res = env.GetClient().UpdateStream("/Root/Table/Stream", TUpdateStreamSettings()
+            .RetentionPeriodHours(8).TargetShardCount(2).WriteQuotaKbPerSec(128)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(UpdateShardCount) {
+        TTestYdsEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+
+        auto res = env.GetClient().UpdateShardCount("/Root/Table/Stream", TUpdateShardCountSettings()
+            .TargetShardCount(2)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(UpdateRetentionPeriod) {
+        TTestYdsEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+        auto& client = env.GetClient();
+
+        {
+            auto res = client.DecreaseStreamRetentionPeriod("/Root/Table/Stream", TDecreaseStreamRetentionPeriodSettings()
+                .RetentionPeriodHours(12)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+
+        {
+            auto res = client.IncreaseStreamRetentionPeriod("/Root/Table/Stream", TIncreaseStreamRetentionPeriodSettings()
+                .RetentionPeriodHours(48)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
     }
 
 } // Cdc

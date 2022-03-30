@@ -423,7 +423,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    class TDescribeStreamActor : public TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest> {
+    class TDescribeStreamActor : public TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest>
+                               , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest>;
 
     public:
@@ -746,7 +748,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    class TListStreamConsumersActor : public TPQGrpcSchemaBase<TListStreamConsumersActor, NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest> {
+    class TListStreamConsumersActor : public TPQGrpcSchemaBase<TListStreamConsumersActor, NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest>
+                                    , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TListStreamConsumersActor, TEvDataStreamsListStreamConsumersRequest>;
 
     public:
@@ -866,8 +870,10 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest, true> {
-        using TBase = TUpdateSchemeActor<TRegisterStreamConsumerActor, TEvDataStreamsRegisterStreamConsumerRequest, true>;
+    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest>
+                                       , public TCdcStreamCompatible
+    {
+        using TBase = TUpdateSchemeActor<TRegisterStreamConsumerActor, TEvDataStreamsRegisterStreamConsumerRequest>;
 
     public:
         TRegisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest* request);
@@ -941,8 +947,10 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest, true> {
-        using TBase = TUpdateSchemeActor<TDeregisterStreamConsumerActor, TEvDataStreamsDeregisterStreamConsumerRequest, true>;
+    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest>
+                                         , public TCdcStreamCompatible
+    {
+        using TBase = TUpdateSchemeActor<TDeregisterStreamConsumerActor, TEvDataStreamsDeregisterStreamConsumerRequest>;
 
     public:
         TDeregisterStreamConsumerActor(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest* request);
@@ -989,7 +997,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TGetShardIteratorActor : public TPQGrpcSchemaBase<TGetShardIteratorActor, NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest> {
+    class TGetShardIteratorActor : public TPQGrpcSchemaBase<TGetShardIteratorActor, NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest>
+                                 , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TGetShardIteratorActor, TEvDataStreamsGetShardIteratorRequest>;
 
     public:
@@ -1129,7 +1139,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest> {
+    class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>
+                           , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>;
 
         static constexpr ui32 READ_TIMEOUT_MS = 150;
@@ -1350,7 +1362,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TListShardsActor : public TPQGrpcSchemaBase<TListShardsActor, NKikimr::NGRpcService::TEvDataStreamsListShardsRequest> {
+    class TListShardsActor : public TPQGrpcSchemaBase<TListShardsActor, NKikimr::NGRpcService::TEvDataStreamsListShardsRequest>
+                           , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TListShardsActor, TEvDataStreamsListShardsRequest>;
 
     public:

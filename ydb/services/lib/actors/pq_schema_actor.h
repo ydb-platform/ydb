@@ -46,6 +46,21 @@ namespace NKikimr::NGRpcProxy::V1 {
     NYql::TIssue FillIssue(const TString &errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode);
 
 
+    template <typename T>
+    class THasCdcStreamCompatibility {
+        template <typename U> static constexpr std::false_type Detect(...);
+        template <typename U> static constexpr auto Detect(U*)
+            -> typename std::is_same<bool, decltype(std::declval<U>().IsCdcStreamCompatible())>::type;
+    public:
+        static constexpr bool Value = decltype(Detect<T>(0))::value;
+    };
+
+    struct TCdcStreamCompatible {
+        bool IsCdcStreamCompatible() const {
+            return true;
+        }
+    };
+
     template<class TDerived, class TRequest>
     class TPQGrpcSchemaBase : public NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest> {
     protected:
@@ -155,13 +170,23 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             switch (response.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: {
-                if (!response.PQGroupInfo) {
-                    if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                        Y_VERIFY(response.ListNodeEntry->Children.size() == 1);
-                        PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
-                        return SendDescribeProposeRequest(ctx);
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
+                        if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
+                            Y_VERIFY(response.ListNodeEntry->Children.size() == 1);
+                            PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
+                            return SendDescribeProposeRequest(ctx);
+                        }
                     }
 
+                    this->Request_->RaiseIssue(
+                        FillIssue(
+                            TStringBuilder() << "path '" << path << "' is not compatible scheme object",
+                            Ydb::PersQueue::ErrorCode::ERROR
+                        )
+                    );
+                    return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                } else if (!response.PQGroupInfo) {
                     this->Request_->RaiseIssue(
                         FillIssue(
                             TStringBuilder() << "path '" << path << "' creation is not completed",
@@ -256,7 +281,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    template<class TDerived, class TRequest, bool AllowAccessToPrivatePaths = false>
+    template<class TDerived, class TRequest>
     class TUpdateSchemeActor : public TPQGrpcSchemaBase<TDerived, TRequest> {
         using TBase = TPQGrpcSchemaBase<TDerived, TRequest>;
 
@@ -274,7 +299,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
             modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
             modifyScheme.SetWorkingDir(workingDir);
-            modifyScheme.SetAllowAccessToPrivatePaths(AllowAccessToPrivatePaths);
+
+            if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
+                modifyScheme.SetAllowAccessToPrivatePaths(static_cast<TDerived*>(this)->IsCdcStreamCompatible());
+            }
 
             auto* config = modifyScheme.MutableAlterPersQueueGroup();
             Y_VERIFY(response.Self);

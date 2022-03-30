@@ -75,22 +75,11 @@ namespace {
     SIMPLE_UDF(TGetPort, TOptional<ui64>(TOptional<char*>)) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
         Y_UNUSED(valueBuilder);
-        const std::string_view url(args[0].AsStringRef());
-        const std::string_view host(GetHostAndPort(url));
-        const auto pos = host.find(':');
-        ui64 port;
-        bool success = false;
-        if (pos != std::string_view::npos) {
-            success = TryFromString(host.substr(pos + 1), port);
-        } else {
-            const std::string_view scheme(GetSchemePrefix(url));
-            if (scheme.empty() || scheme == "http://") {
-                port = 80;
-            } else if (scheme == "https://") {
-                port = 443;
-            }
-        }
-        return success ? TUnboxedValuePod(port) : TUnboxedValuePod();
+        ui16 port = 0;
+        TStringBuf scheme, host;
+        return TryGetSchemeHostAndPort(TStringBuf(args[0].AsStringRef()), scheme, host, port) && port
+            ? TUnboxedValuePod(port)
+            : TUnboxedValuePod();
     }
 
     SIMPLE_UDF(TGetTail, TOptional<char*>(TOptional<char*>)) {
@@ -137,11 +126,8 @@ namespace {
     }
 
     SIMPLE_UDF(TGetTLD, char*(TAutoMap<char*>)) {
-        const std::string_view url(args[0].AsStringRef());
-        const std::string_view host(GetOnlyHost(url));
-        const auto offset = host.rfind('.');
-        const auto& cut = std::string_view::npos == offset ? host : host.substr(offset + 1);
-        return valueBuilder->SubString(args[0], std::distance(url.begin(), cut.begin()), cut.length());
+        const TStringBuf url(args[0].AsStringRef());
+        return valueBuilder->NewString(GetZone(GetOnlyHost(url)));
     }
 
     SIMPLE_UDF(TGetDomainLevel, ui64(TAutoMap<char*>)) {

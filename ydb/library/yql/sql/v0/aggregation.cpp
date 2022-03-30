@@ -84,7 +84,7 @@ protected:
             return false;
         }
         if (Expr->IsAggregated() && !Expr->IsAggregationKey() && !IsOverWindow()) {
-            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden for no window functions";
+            ctx.Error(Pos) << "Aggregation of aggregated values is forbidden for non window functions";
             return false;
         }
         if (AggMode == EAggregateMode::Distinct) {

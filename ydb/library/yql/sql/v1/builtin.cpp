@@ -172,7 +172,7 @@ private:
         if (PreaggregateExpr) {
             YQL_ENSURE(PreaggregateExpr->HasState(ENodeState::Initialized));
             if (PreaggregateExpr->IsAggregated() && !PreaggregateExpr->IsAggregationKey() && !Aggr->IsOverWindow()) {
-                ctx.Error(Aggr->GetPos()) << "Aggregation of aggregated values is forbidden for no window functions";
+                ctx.Error(Aggr->GetPos()) << "Aggregation of aggregated values is forbidden for non window functions";
                 return false;
             }
         }

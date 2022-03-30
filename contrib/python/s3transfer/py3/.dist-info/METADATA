@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: s3transfer
-Version: 0.5.1
+Version: 0.5.2
 Summary: An Amazon S3 Transfer Manager
 Home-page: https://github.com/boto/s3transfer
 Author: Amazon Web Services

@@ -20,6 +20,11 @@ namespace NTable {
             , Defs(defs)
         {
             Y_VERIFY(Defs.size() > 0 && Defs.size() == Types.size());
+            for (size_t index = 0; index < Types.size(); ++index) {
+                if (auto error = NScheme::HasUnexpectedValueSize(Defs[index], Types[index])) {
+                    Y_FAIL("Column default at index %" PRISZT " validation failed: %s", index, error.c_str());
+                }
+            }
         }
 
     public:

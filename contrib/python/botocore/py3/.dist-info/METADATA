@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: botocore
-Version: 1.23.54
+Version: 1.24.29
 Summary: Low-level, data-driven core of boto 3.
 Home-page: https://github.com/boto/botocore
 Author: Amazon Web Services
@@ -21,11 +21,11 @@ Classifier: Programming Language :: Python :: 3.10
 Requires-Python: >= 3.6
 License-File: LICENSE.txt
 License-File: NOTICE
-Requires-Dist: jmespath (<1.0.0,>=0.7.1)
 Requires-Dist: python-dateutil (<3.0.0,>=2.1)
 Requires-Dist: urllib3 (<1.27,>=1.25.4)
+Requires-Dist: jmespath (<2.0.0,>=0.7.1)
 Provides-Extra: crt
-Requires-Dist: awscrt (==0.12.5) ; extra == 'crt'
+Requires-Dist: awscrt (==0.13.5) ; extra == 'crt'
 
 botocore
 ========
@@ -42,12 +42,15 @@ Botocore is maintained and published by `Amazon Web Services`_.
 Notices
 -------
 
-On 01/15/2021 deprecation for Python 2.7 was announced and support was dropped
-on 07/15/2021. To avoid disruption, customers using Botocore on Python 2.7 may
+On 2021-01-15, deprecation for Python 2.7 was announced and support was dropped
+on 2021-07-15. To avoid disruption, customers using Botocore on Python 2.7 may
 need to upgrade their version of Python or pin the version of Botocore. For
 more information, see this `blog post <https://aws.amazon.com/blogs/developer/announcing-end-of-support-for-python-2-7-in-aws-sdk-for-python-and-aws-cli-v1/>`__.
 
-Starting in May 2022, we will be dropping support for Python 3.6. This follows the Python Software Foundation `end of support <https://www.python.org/dev/peps/pep-0494/#lifespan>`__ for the runtime which occurred on 2021-12-23.
+On 2022-05-30, we will be dropping support for Python 3.6. This follows the
+Python Software Foundation `end of support <https://www.python.org/dev/peps/pep-0494/#lifespan>`__
+for the runtime which occurred on 2021-12-23.
+For more information, see this `blog post <https://aws.amazon.com/blogs/developer/python-support-policy-updates-for-aws-sdks-and-tools/>`__.
 
 .. _`Amazon Web Services`: https://aws.amazon.com/what-is-aws/
 .. |Python| image:: https://img.shields.io/pypi/pyversions/botocore.svg?style=flat

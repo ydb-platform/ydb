@@ -11,24 +11,25 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
-import io
-import logging
 import functools
+import logging
 
 import urllib3.util
-from urllib3.connection import VerifiedHTTPSConnection
-from urllib3.connection import HTTPConnection
-from urllib3.connectionpool import HTTPConnectionPool
-from urllib3.connectionpool import HTTPSConnectionPool
+from urllib3.connection import HTTPConnection, VerifiedHTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 import botocore.utils
-from botocore.compat import six
 from botocore.compat import (
-    HTTPHeaders, HTTPResponse, urlunsplit, urlsplit,
-    urlencode, urlparse, MutableMapping
+    HTTPHeaders,
+    HTTPResponse,
+    MutableMapping,
+    six,
+    urlencode,
+    urlparse,
+    urlsplit,
+    urlunsplit,
 )
 from botocore.exceptions import UnseekableStreamError
-
 
 logger = logging.getLogger(__name__)
 
@@ -397,32 +398,7 @@ class AWSRequestPreparer(object):
         return body
 
     def _determine_content_length(self, body):
-        # No body, content length of 0
-        if not body:
-            return 0
-
-        # Try asking the body for it's length
-        try:
-            return len(body)
-        except (AttributeError, TypeError):
-            pass
-
-        # Try getting the length from a seekable stream
-        if hasattr(body, 'seek') and hasattr(body, 'tell'):
-            try:
-                orig_pos = body.tell()
-                body.seek(0, 2)
-                end_file_pos = body.tell()
-                body.seek(orig_pos)
-                return end_file_pos - orig_pos
-            except io.UnsupportedOperation:
-                # in case when body is, for example, io.BufferedIOBase object
-                # it has "seek" method which throws "UnsupportedOperation"
-                # exception in such case we want to fall back to "chunked"
-                # encoding
-                pass
-        # Failed to determine the length
-        return None
+        return botocore.utils.determine_content_length(body)
 
 
 class AWSRequest(object):

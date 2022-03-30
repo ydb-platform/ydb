@@ -16,27 +16,37 @@ from botocore import waiter, xform_name
 from botocore.args import ClientArgsCreator
 from botocore.auth import AUTH_TYPE_MAPS
 from botocore.awsrequest import prepare_request_dict
-from botocore.docs.docstring import ClientMethodDocstring
-from botocore.docs.docstring import PaginatorDocstring
-from botocore.exceptions import (
-    DataNotFoundError, OperationNotPageableError, UnknownSignatureVersionError,
-    InvalidEndpointDiscoveryConfigurationError
+from botocore.discovery import (
+    EndpointDiscoveryHandler,
+    EndpointDiscoveryManager,
+    block_endpoint_discovery_required_operations,
 )
-from botocore.hooks import first_non_none_response
-from botocore.model import ServiceModel
-from botocore.paginate import Paginator
-from botocore.utils import (
-    CachedProperty, get_service_module_name, S3RegionRedirector,
-    S3ArnParamHandler, S3EndpointSetter, ensure_boolean,
-    S3ControlArnParamHandler, S3ControlEndpointSetter,
+from botocore.docs.docstring import ClientMethodDocstring, PaginatorDocstring
+from botocore.exceptions import (
+    DataNotFoundError,
+    InvalidEndpointDiscoveryConfigurationError,
+    OperationNotPageableError,
+    UnknownSignatureVersionError,
 )
 from botocore.history import get_global_history_recorder
-from botocore.discovery import (
-    EndpointDiscoveryHandler, EndpointDiscoveryManager,
-    block_endpoint_discovery_required_operations
+from botocore.hooks import first_non_none_response
+from botocore.httpchecksum import (
+    apply_request_checksum,
+    resolve_checksum_context,
 )
-from botocore.retries import standard
-from botocore.retries import adaptive
+from botocore.model import ServiceModel
+from botocore.paginate import Paginator
+from botocore.retries import adaptive, standard
+from botocore.utils import (
+    CachedProperty,
+    S3ArnParamHandler,
+    S3ControlArnParamHandler,
+    S3ControlEndpointSetter,
+    S3EndpointSetter,
+    S3RegionRedirector,
+    ensure_boolean,
+    get_service_module_name,
+)
 
 # Keep these imported.  There's pre-existing code that uses:
 # "from botocore.client import Config"
@@ -690,6 +700,7 @@ class BaseClient(object):
         }
         request_dict = self._convert_to_request_dict(
             api_params, operation_model, context=request_context)
+        resolve_checksum_context(request_dict, operation_model, api_params)
 
         service_id = self._service_model.service_id.hyphenize()
         handler, event_response = self.meta.events.emit_until_response(
@@ -702,6 +713,7 @@ class BaseClient(object):
         if event_response is not None:
             http, parsed_response = event_response
         else:
+            apply_request_checksum(request_dict)
             http, parsed_response = self._make_request(
                 operation_model, request_dict, request_context)
 

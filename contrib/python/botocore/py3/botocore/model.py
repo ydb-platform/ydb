@@ -13,11 +13,12 @@
 """Abstractions to interact with service models."""
 from collections import defaultdict
 
-from botocore.utils import (CachedProperty, instance_cache,
-                            hyphenize_service_id)
 from botocore.compat import OrderedDict
-from botocore.exceptions import MissingServiceIdError
-from botocore.exceptions import UndefinedModelAttributeError
+from botocore.exceptions import (
+    MissingServiceIdError,
+    UndefinedModelAttributeError,
+)
+from botocore.utils import CachedProperty, hyphenize_service_id, instance_cache
 
 NOT_SET = object()
 
@@ -54,7 +55,7 @@ class Shape(object):
                         'xmlNamespace', 'resultWrapper', 'xmlAttribute',
                         'eventstream', 'event', 'eventheader', 'eventpayload',
                         'jsonvalue', 'timestampFormat', 'hostLabel']
-    METADATA_ATTRS = ['required', 'min', 'max', 'sensitive', 'enum',
+    METADATA_ATTRS = ['required', 'min', 'max', 'pattern', 'sensitive', 'enum',
                       'idempotencyToken', 'error', 'exception',
                       'endpointdiscoveryid', 'retryable', 'document', 'union']
     MAP_TYPE = OrderedDict
@@ -134,6 +135,7 @@ class Shape(object):
 
             * min
             * max
+            * pattern
             * enum
             * sensitive
             * required
@@ -545,6 +547,10 @@ class OperationModel(object):
     @CachedProperty
     def http_checksum_required(self):
         return self._operation_model.get('httpChecksumRequired', False)
+
+    @CachedProperty
+    def http_checksum(self):
+        return self._operation_model.get('httpChecksum', {})
 
     @CachedProperty
     def has_event_stream_input(self):

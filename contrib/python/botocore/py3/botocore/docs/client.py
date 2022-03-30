@@ -10,15 +10,16 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
-from botocore.docs.utils import get_official_service_name
-from botocore.docs.method import document_custom_method
-from botocore.docs.method import document_model_driven_method
-from botocore.docs.method import get_instance_public_methods
-from botocore.docs.sharedexample import document_shared_examples
-from botocore.docs.example import ResponseExampleDocumenter
-from botocore.docs.params import ResponseParamsDocumenter
-from botocore.docs.utils import DocumentedShape
 from botocore.compat import OrderedDict
+from botocore.docs.example import ResponseExampleDocumenter
+from botocore.docs.method import (
+    document_custom_method,
+    document_model_driven_method,
+    get_instance_public_methods,
+)
+from botocore.docs.params import ResponseParamsDocumenter
+from botocore.docs.sharedexample import document_shared_examples
+from botocore.docs.utils import DocumentedShape, get_official_service_name
 
 
 def _allowlist_generate_presigned_url(method_name, service_name, **kwargs):

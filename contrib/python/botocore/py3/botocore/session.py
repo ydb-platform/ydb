@@ -23,36 +23,50 @@ import platform
 import socket
 import warnings
 
-from botocore import __version__
-from botocore import UNSIGNED
+import botocore.client
 import botocore.configloader
 import botocore.credentials
-import botocore.client
-from botocore.configprovider import ConfigValueStore
-from botocore.configprovider import ConfigChainFactory
-from botocore.configprovider import create_botocore_default_config_mapping
-from botocore.configprovider import BOTOCORE_DEFAUT_SESSION_VARIABLES
-from botocore.configprovider import DefaultConfigResolver
-from botocore.configprovider import SmartDefaultsConfigStoreFactory
-from botocore.exceptions import (
-    ConfigNotFound, ProfileNotFound, UnknownServiceError, InvalidDefaultsMode,
-    PartialCredentialsError,
+from botocore import (
+    UNSIGNED,
+    __version__,
+    handlers,
+    monitoring,
+    paginate,
+    retryhandler,
+    translate,
+    waiter,
+)
+from botocore.compat import HAS_CRT, MutableMapping
+from botocore.configprovider import (
+    BOTOCORE_DEFAUT_SESSION_VARIABLES,
+    ConfigChainFactory,
+    ConfigValueStore,
+    DefaultConfigResolver,
+    SmartDefaultsConfigStoreFactory,
+    create_botocore_default_config_mapping,
 )
 from botocore.errorfactory import ClientExceptionsFactory
-from botocore import handlers
-from botocore.hooks import HierarchicalEmitter, first_non_none_response
-from botocore.hooks import EventAliaser
+from botocore.exceptions import (
+    ConfigNotFound,
+    InvalidDefaultsMode,
+    PartialCredentialsError,
+    ProfileNotFound,
+    UnknownServiceError,
+)
+from botocore.hooks import (
+    EventAliaser,
+    HierarchicalEmitter,
+    first_non_none_response,
+)
 from botocore.loaders import create_loader
+from botocore.model import ServiceModel
 from botocore.parsers import ResponseParserFactory
 from botocore.regions import EndpointResolver
-from botocore.model import ServiceModel
-from botocore import monitoring
-from botocore import paginate
-from botocore import waiter
-from botocore import retryhandler, translate
-from botocore.utils import EVENT_ALIASES, validate_region_name, IMDSRegionProvider
-from botocore.compat import MutableMapping, HAS_CRT
-
+from botocore.utils import (
+    EVENT_ALIASES,
+    IMDSRegionProvider,
+    validate_region_name,
+)
 
 logger = logging.getLogger(__name__)
 

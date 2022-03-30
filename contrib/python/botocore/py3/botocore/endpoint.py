@@ -13,25 +13,26 @@
 # language governing permissions and limitations under the License.
 
 import datetime
-import os
 import logging
-import time
+import os
 import threading
+import time
 import uuid
 
-from botocore.compat import six
-
+from botocore import parsers
 from botocore.awsrequest import create_request_object
 from botocore.exceptions import HTTPClientError
-from botocore.httpsession import URLLib3Session
-from botocore.utils import (
-    is_valid_endpoint_url, is_valid_ipv6_endpoint_url, get_environ_proxies
-)
-from botocore.hooks import first_non_none_response
 from botocore.history import get_global_history_recorder
+from botocore.hooks import first_non_none_response
+from botocore.httpchecksum import handle_checksum_body
+from botocore.httpsession import URLLib3Session
 from botocore.response import StreamingBody
-from botocore import parsers
-
+from botocore.utils import (
+    get_environ_proxies,
+    is_valid_endpoint_url,
+    is_valid_ipv6_endpoint_url,
+)
+from botocore.compat import six
 
 logger = logging.getLogger(__name__)
 history_recorder = get_global_history_recorder()
@@ -212,7 +213,7 @@ class Endpoint(object):
         # If an exception occurs then the success_response is None.
         # If no exception occurs then exception is None.
         success_response, exception = self._do_get_response(
-            request, operation_model)
+            request, operation_model, context)
         kwargs_to_emit = {
             'response_dict': None,
             'parsed_response': None,
@@ -230,7 +231,7 @@ class Endpoint(object):
                 service_id, operation_model.name), **kwargs_to_emit)
         return success_response, exception
 
-    def _do_get_response(self, request, operation_model):
+    def _do_get_response(self, request, operation_model, context):
         try:
             logger.debug("Sending http request: %s", request)
             history_recorder.record('HTTP_REQUEST', {
@@ -254,6 +255,9 @@ class Endpoint(object):
             return (None, e)
         # This returns the http_response and the parsed_data.
         response_dict = convert_to_response_dict(http_response, operation_model)
+        handle_checksum_body(
+            http_response, response_dict, context, operation_model,
+        )
 
         http_response_record_dict = response_dict.copy()
         http_response_record_dict['streaming'] = \

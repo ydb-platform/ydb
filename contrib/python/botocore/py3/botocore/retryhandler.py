@@ -12,16 +12,18 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 
-import random
 import functools
 import logging
+import random
 from binascii import crc32
 
 from botocore.exceptions import (
-    ChecksumError, EndpointConnectionError, ReadTimeoutError,
-    ConnectionError, ConnectionClosedError,
+    ChecksumError,
+    ConnectionClosedError,
+    ConnectionError,
+    EndpointConnectionError,
+    ReadTimeoutError,
 )
-
 
 logger = logging.getLogger(__name__)
 # The only supported error for now is GENERAL_CONNECTION_ERROR

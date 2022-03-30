@@ -7927,7 +7927,7 @@
         "qyp": {
             "formula": {
                 "sandbox_id": [
-                    1197649240
+                    1253668008
                 ],
                 "match": "infra/qyp/vmctl/bin/vmctl"
             },
@@ -8559,7 +8559,7 @@
         },
         "lama": {
             "formula": {
-                "sandbox_id": 1260998424,
+                "sandbox_id": 1261281509,
                 "match": "lama"
             },
             "executable": {

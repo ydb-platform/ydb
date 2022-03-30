@@ -13,6 +13,7 @@
 import copy
 import logging
 from collections import deque, namedtuple
+
 from botocore.compat import accepts_kwargs, six
 from botocore.utils import EVENT_ALIASES
 

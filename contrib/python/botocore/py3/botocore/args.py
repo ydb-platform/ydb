@@ -21,12 +21,12 @@ import logging
 import socket
 
 import botocore.exceptions
+import botocore.parsers
 import botocore.serialize
 import botocore.utils
-from botocore.signers import RequestSigner
 from botocore.config import Config
 from botocore.endpoint import EndpointCreator
-
+from botocore.signers import RequestSigner
 
 logger = logging.getLogger(__name__)
 

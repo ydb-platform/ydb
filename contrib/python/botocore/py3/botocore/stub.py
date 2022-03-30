@@ -14,10 +14,14 @@ import copy
 from collections import deque
 from pprint import pformat
 
-from botocore.validate import validate_parameters
-from botocore.exceptions import ParamValidationError, \
-    StubResponseError, StubAssertionError, UnStubbedResponseError
 from botocore.awsrequest import AWSResponse
+from botocore.exceptions import (
+    ParamValidationError,
+    StubAssertionError,
+    StubResponseError,
+    UnStubbedResponseError,
+)
+from botocore.validate import validate_parameters
 
 
 class _ANY(object):
@@ -237,7 +241,7 @@ class Stubber(object):
         http_response = AWSResponse(None, 200, {}, None)
 
         operation_name = self.client.meta.method_to_api_mapping.get(method)
-        self._validate_response(operation_name, service_response)
+        self._validate_operation_response(operation_name, service_response)
 
         # Add the service_response to the queue for returning responses
         response = {
@@ -250,7 +254,7 @@ class Stubber(object):
     def add_client_error(self, method, service_error_code='',
                          service_message='', http_status_code=400,
                          service_error_meta=None, expected_params=None,
-                         response_meta=None):
+                         response_meta=None, modeled_fields=None):
         """
         Adds a ``ClientError`` to the response queue.
 
@@ -283,6 +287,12 @@ class Stubber(object):
             response's ResponseMetadata
         :type response_meta: dict
 
+        :param modeled_fields: Additional keys to be added to the response
+            based on fields that are modeled for the particular error code.
+            These keys will be validated against the particular error shape
+            designated by the error code.
+        :type modeled_fields: dict
+
         """
         http_response = AWSResponse(None, http_status_code, {}, None)
 
@@ -302,6 +312,12 @@ class Stubber(object):
 
         if response_meta is not None:
             parsed_response['ResponseMetadata'].update(response_meta)
+
+        if modeled_fields is not None:
+            service_model = self.client.meta.service_model
+            shape = service_model.shape_for_error_code(service_error_code)
+            self._validate_response(shape, modeled_fields)
+            parsed_response.update(modeled_fields)
 
         operation_name = self.client.meta.method_to_api_mapping.get(method)
         # Note that we do not allow for expected_params while
@@ -374,7 +390,7 @@ class Stubber(object):
         if context and context.get('is_presign_request'):
             return True
 
-    def _validate_response(self, operation_name, service_response):
+    def _validate_operation_response(self, operation_name, service_response):
         service_model = self.client.meta.service_model
         operation_model = service_model.operation_model(operation_name)
         output_shape = operation_model.output_shape
@@ -386,8 +402,11 @@ class Stubber(object):
             response = copy.copy(service_response)
             del response['ResponseMetadata']
 
-        if output_shape is not None:
-            validate_parameters(response, output_shape)
+        self._validate_response(output_shape, response)
+
+    def _validate_response(self, shape, response):
+        if shape is not None:
+            validate_parameters(response, shape)
         elif response:
             # If the output shape is None, that means the response should be
             # empty apart from ResponseMetadata

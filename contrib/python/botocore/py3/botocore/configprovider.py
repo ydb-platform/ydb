@@ -13,12 +13,11 @@
 """This module contains the inteface for controlling how configuration
 is loaded.
 """
+import copy
 import logging
 import os
-import copy
 
 from botocore import utils
-
 
 logger = logging.getLogger(__name__)
 

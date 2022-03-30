@@ -16,36 +16,53 @@
 This module contains builtin handlers for events emitted by botocore.
 """
 
-import os
 import base64
-import logging
 import copy
+import logging
+import os
 import re
-import warnings
 import uuid
+import warnings
 
-from botocore.compat import (
-    unquote, json, six, unquote_str, ensure_bytes, get_md5,
-    OrderedDict, urlsplit, urlunsplit, XMLParseError,
-    ETree, quote,
-)
-from botocore.docs.utils import AutoPopulatedParam
-from botocore.docs.utils import HideParamFromOperations
-from botocore.docs.utils import AppendParamDocumentation
-from botocore.signers import add_generate_presigned_url
-from botocore.signers import add_generate_presigned_post
-from botocore.signers import add_generate_db_auth_token
-from botocore.exceptions import ParamValidationError
-from botocore.exceptions import AliasConflictParameterError
-from botocore.exceptions import UnsupportedTLSVersionWarning
-from botocore.utils import percent_encode, SAFE_CHARS
-from botocore.utils import switch_host_with_param
-from botocore.utils import conditionally_calculate_md5
-from botocore.utils import is_global_accesspoint
-
-from botocore import utils
 import botocore
 import botocore.auth
+from botocore import utils
+from botocore.compat import (
+    ETree,
+    OrderedDict,
+    XMLParseError,
+    ensure_bytes,
+    get_md5,
+    json,
+    quote,
+    six,
+    unquote,
+    unquote_str,
+    urlsplit,
+    urlunsplit,
+)
+from botocore.docs.utils import (
+    AppendParamDocumentation,
+    AutoPopulatedParam,
+    HideParamFromOperations,
+)
+from botocore.exceptions import (
+    AliasConflictParameterError,
+    ParamValidationError,
+    UnsupportedTLSVersionWarning,
+)
+from botocore.signers import (
+    add_generate_db_auth_token,
+    add_generate_presigned_post,
+    add_generate_presigned_url,
+)
+from botocore.utils import (
+    SAFE_CHARS,
+    conditionally_calculate_md5,
+    is_global_accesspoint,
+    percent_encode,
+    switch_host_with_param,
+)
 
 # Keep these imported.  There's pre-existing code that uses them.
 from botocore import retryhandler # noqa
@@ -102,22 +119,12 @@ def escape_xml_payload(params, **kwargs):
     # this operation \r and \n can only appear in the XML document if they were
     # passed as part of the customer input.
     body = params['body']
-    replaced = False
     if b'\r' in body:
-        replaced = True
         body = body.replace(b'\r', b'&#xD;')
     if b'\n' in body:
-        replaced = True
         body = body.replace(b'\n', b'&#xA;')
 
-    if not replaced:
-        return
-
     params['body'] = body
-    if 'Content-MD5' in params['headers']:
-        # The Content-MD5 is now wrong, so we'll need to recalculate it
-        del params['headers']['Content-MD5']
-        conditionally_calculate_md5(params, **kwargs)
 
 
 def check_for_200_error(response, **kwargs):

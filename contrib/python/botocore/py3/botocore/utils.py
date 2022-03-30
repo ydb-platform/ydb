@@ -11,42 +11,66 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 import base64
-import re
-import time
-import logging
-import datetime
-import hashlib
 import binascii
-import functools
-import weakref
-import random
-import os
-import socket
 import cgi
+import datetime
+import functools
+import hashlib
+import io
+import logging
+import os
+import random
+import re
+import socket
+import time
+import weakref
 
 import dateutil.parser
 from dateutil.tz import tzutc
+from urllib3.exceptions import LocationParseError
 
 import botocore
 import botocore.awsrequest
 import botocore.httpsession
 from botocore.compat import (
-    json, quote, zip_longest, urlsplit, urlunsplit, OrderedDict,
-    six, urlparse, get_tzinfo_options, get_md5, MD5_AVAILABLE,
-    HAS_CRT
+    HAS_CRT,
+    MD5_AVAILABLE,
+    OrderedDict,
+    get_md5,
+    get_tzinfo_options,
+    json,
+    quote,
+    six,
+    urlparse,
+    urlsplit,
+    urlunsplit,
+    zip_longest,
+)
+from botocore.exceptions import (
+    ClientError,
+    ConfigNotFound,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    HTTPClientError,
+    InvalidDNSNameError,
+    InvalidExpressionError,
+    InvalidHostLabelError,
+    InvalidIMDSEndpointError,
+    InvalidIMDSEndpointModeError,
+    InvalidRegionError,
+    MetadataRetrievalError,
+    MissingDependencyException,
+    ReadTimeoutError,
+    SSOTokenLoadError,
+    UnsupportedOutpostResourceError,
+    UnsupportedS3AccesspointConfigurationError,
+    UnsupportedS3ArnError,
+    UnsupportedS3ConfigurationError,
+    UnsupportedS3ControlArnError,
+    UnsupportedS3ControlConfigurationError,
 )
 from six.moves.urllib.request import getproxies, proxy_bypass
-from botocore.exceptions import (
-    InvalidExpressionError, ConfigNotFound, InvalidDNSNameError, ClientError,
-    MetadataRetrievalError, EndpointConnectionError, ReadTimeoutError,
-    ConnectionClosedError, ConnectTimeoutError, UnsupportedS3ArnError,
-    UnsupportedS3AccesspointConfigurationError, SSOTokenLoadError,
-    InvalidRegionError, InvalidIMDSEndpointError, InvalidIMDSEndpointModeError,
-    UnsupportedOutpostResourceError, UnsupportedS3ControlConfigurationError,
-    UnsupportedS3ControlArnError, InvalidHostLabelError, HTTPClientError,
-    UnsupportedS3ConfigurationError, MissingDependencyException
-)
-from urllib3.exceptions import LocationParseError
 
 logger = logging.getLogger(__name__)
 DEFAULT_METADATA_SERVICE_TIMEOUT = 1
@@ -177,6 +201,12 @@ IPV6_ADDRZ_RE = re.compile("^" + IPV6_ADDRZ_PAT + "$")
 
 # These are the characters that are stripped by post-bpo-43882 urlparse().
 UNSAFE_URL_CHARS = frozenset('\t\r\n')
+
+# This pattern can be used to detect if a header is a flexible checksum header
+CHECKSUM_HEADER_PATTERN = re.compile(
+    r'^X-Amz-Checksum-([a-z0-9]*)$',
+    flags=re.IGNORECASE,
+)
 
 
 def ensure_boolean(val):
@@ -2525,6 +2555,35 @@ def should_bypass_proxies(url):
     return False
 
 
+def determine_content_length(body):
+    # No body, content length of 0
+    if not body:
+        return 0
+
+    # Try asking the body for it's length
+    try:
+        return len(body)
+    except (AttributeError, TypeError):
+        pass
+
+    # Try getting the length from a seekable stream
+    if hasattr(body, 'seek') and hasattr(body, 'tell'):
+        try:
+            orig_pos = body.tell()
+            body.seek(0, 2)
+            end_file_pos = body.tell()
+            body.seek(orig_pos)
+            return end_file_pos - orig_pos
+        except io.UnsupportedOperation:
+            # in case when body is, for example, io.BufferedIOBase object
+            # it has "seek" method which throws "UnsupportedOperation"
+            # exception in such case we want to fall back to "chunked"
+            # encoding
+            pass
+    # Failed to determine the length
+    return None
+
+
 def get_encoding_from_headers(headers, default='ISO-8859-1'):
     """Returns encodings from given HTTP Header Dict.
 
@@ -2572,6 +2631,16 @@ def conditionally_calculate_md5(params, **kwargs):
     """Only add a Content-MD5 if the system supports it."""
     headers = params['headers']
     body = params['body']
+    checksum_context = params.get('context', {}).get('checksum', {})
+    checksum_algorithm = checksum_context.get('request_algorithm')
+    if checksum_algorithm and checksum_algorithm != 'conditional-md5':
+        # Skip for requests that will have a flexible checksum applied
+        return
+    # If a header matching the x-amz-checksum-* pattern is present, we
+    # assume a checksum has already been provided and an md5 is not needed
+    for header in headers:
+        if CHECKSUM_HEADER_PATTERN.match(header):
+            return
     if MD5_AVAILABLE and body is not None and 'Content-MD5' not in headers:
         md5_digest = calculate_md5(body, **kwargs)
         params['headers']['Content-MD5'] = md5_digest

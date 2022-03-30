@@ -1,6 +1,6 @@
 --- contrib/python/botocore/py3/botocore/data/endpoints.json	(index)
 +++ contrib/python/botocore/py3/botocore/data/endpoints.json	(working tree)
-@@ -18009,6 +18009,46 @@
+@@ -18343,6 +18343,46 @@
          }
        }
      }
@@ -61,7 +61,7 @@
  # Used to specify anonymous (unsigned) request signature
 --- contrib/python/botocore/py3/botocore/configprovider.py	(index)
 +++ contrib/python/botocore/py3/botocore/configprovider.py	(working tree)
-@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
+@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
  BOTOCORE_DEFAUT_SESSION_VARIABLES = {
      # logical:  config_file, env_var,        default_value, conversion_func
      'profile': (None, ['AWS_DEFAULT_PROFILE', 'AWS_PROFILE'], None, None),
@@ -72,27 +72,26 @@
      'ca_bundle': ('ca_bundle', 'AWS_CA_BUNDLE', None, None),
 --- contrib/python/botocore/py3/botocore/loaders.py	(index)
 +++ contrib/python/botocore/py3/botocore/loaders.py	(working tree)
-@@ -101,15 +101,19 @@ information that doesn't quite fit in the original models, but is still needed
+@@ -101,14 +101,17 @@ information that doesn't quite fit in the original models, but is still needed
  for the sdk. For instance, additional operation parameters might be added here
  which don't represent the actual service api.
  """
 +import collections
- import os
  import logging
+ import os
  
  from botocore import BOTOCORE_ROOT
- from botocore.compat import json
-+from botocore.compat import six
- from botocore.compat import OrderedDict
+-from botocore.compat import OrderedDict, json
++from botocore.compat import OrderedDict, json, six
  from botocore.exceptions import DataNotFoundError, UnknownServiceError
  from botocore.utils import deep_merge
  
 +from library.python import resource
 +
- 
  logger = logging.getLogger(__name__)
  
-@@ -176,6 +180,51 @@ class JSONFileLoader(object):
+ 
+@@ -174,6 +177,51 @@ class JSONFileLoader(object):
          return json.loads(payload, object_pairs_hook=OrderedDict)
  
  
@@ -144,7 +143,7 @@
  def create_loader(search_path_string=None):
      """Create a Loader class.
  
-@@ -209,7 +258,7 @@ class Loader(object):
+@@ -207,7 +255,7 @@ class Loader(object):
      convenience method over ``load_data`` and ``determine_latest_version``.
  
      """
@@ -153,7 +152,7 @@
      # The included models in botocore/data/ that we ship with botocore.
      BUILTIN_DATA_PATH = os.path.join(BOTOCORE_ROOT, 'data')
      # For convenience we automatically add ~/.aws/models to the data path.
-@@ -285,6 +334,11 @@ class Loader(object):
+@@ -283,6 +331,11 @@ class Loader(object):
                      if self.file_loader.exists(full_load_path):
                          services.add(service_name)
                          break
@@ -165,7 +164,7 @@
          return sorted(services)
  
      @instance_cache
-@@ -336,6 +390,11 @@ class Loader(object):
+@@ -334,6 +387,11 @@ class Loader(object):
                  # to the type_name passed in.
                  if self.file_loader.exists(full_path):
                      known_api_versions.add(dirname)
@@ -177,7 +176,7 @@
          if not known_api_versions:
              raise DataNotFoundError(data_path=service_name)
          return sorted(known_api_versions)
-@@ -421,6 +480,12 @@ class Loader(object):
+@@ -419,6 +477,12 @@ class Loader(object):
              found = self.file_loader.load_file(possible_path)
              if found is not None:
                  return found

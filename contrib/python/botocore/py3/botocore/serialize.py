@@ -37,22 +37,20 @@ The input to the serializers should be text (str/unicode), not bytes,
 with the exception of blob types.  Those are assumed to be binary,
 and if a str/unicode type is passed in, it will be encoded as utf-8.
 """
-import re
 import base64
 import calendar
 import datetime
+import re
 from xml.etree import ElementTree
 
-from botocore.compat import six
-
-from botocore.compat import json, formatdate
-from botocore.utils import parse_to_aware_datetime
-from botocore.utils import percent_encode
-from botocore.utils import is_json_value_header
-from botocore.utils import conditionally_calculate_md5
-from botocore.utils import has_header
 from botocore import validate
-
+from botocore.compat import formatdate, json, six
+from botocore.utils import (
+    has_header,
+    is_json_value_header,
+    parse_to_aware_datetime,
+    percent_encode,
+)
 
 # From the spec, the default timestamp format if not specified is iso8601.
 DEFAULT_TIMESTAMP_FORMAT = 'iso8601'
@@ -186,12 +184,6 @@ class Serializer(object):
 
         return host_prefix_expression.format(**format_kwargs)
 
-    def _prepare_additional_traits(self, request, operation_model):
-        """Determine if additional traits are required for given model"""
-        if operation_model.http_checksum_required:
-            conditionally_calculate_md5(request)
-        return request
-
 
 class QuerySerializer(Serializer):
 
@@ -218,9 +210,6 @@ class QuerySerializer(Serializer):
         if host_prefix is not None:
             serialized['host_prefix'] = host_prefix
 
-        serialized = self._prepare_additional_traits(
-            serialized, operation_model
-        )
         return serialized
 
     def _serialize(self, serialized, value, shape, prefix=''):
@@ -354,9 +343,6 @@ class JSONSerializer(Serializer):
         if host_prefix is not None:
             serialized['host_prefix'] = host_prefix
 
-        serialized = self._prepare_additional_traits(
-            serialized, operation_model
-        )
         return serialized
 
     def _serialize(self, serialized, value, shape, key=None):
@@ -478,9 +464,6 @@ class BaseRestSerializer(Serializer):
         if host_prefix is not None:
             serialized['host_prefix'] = host_prefix
 
-        serialized = self._prepare_additional_traits(
-            serialized, operation_model
-        )
         return serialized
 
     def _render_uri_template(self, uri_template, params):

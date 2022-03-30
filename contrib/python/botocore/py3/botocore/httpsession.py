@@ -1,27 +1,33 @@
-import os.path
-import os
 import logging
+import os
+import os.path
 import socket
-from base64 import b64encode
 import sys
+from base64 import b64encode
 
-from urllib3 import PoolManager, proxy_from_url, Timeout
+from urllib3 import PoolManager, Timeout, proxy_from_url
+from urllib3.exceptions import (
+    ConnectTimeoutError as URLLib3ConnectTimeoutError,
+)
+from urllib3.exceptions import NewConnectionError, ProtocolError, ProxyError
+from urllib3.exceptions import ReadTimeoutError as URLLib3ReadTimeoutError
+from urllib3.exceptions import SSLError as URLLib3SSLError
 from urllib3.util.retry import Retry
 from urllib3.util.ssl_ import (
-    ssl, OP_NO_SSLv2, OP_NO_SSLv3, OP_NO_COMPRESSION,
-    PROTOCOL_TLS, DEFAULT_CIPHERS,
+    DEFAULT_CIPHERS,
+    OP_NO_COMPRESSION,
+    PROTOCOL_TLS,
+    OP_NO_SSLv2,
+    OP_NO_SSLv3,
+    ssl,
 )
-from urllib3.exceptions import SSLError as URLLib3SSLError
-from urllib3.exceptions import ReadTimeoutError as URLLib3ReadTimeoutError
-from urllib3.exceptions import ConnectTimeoutError as URLLib3ConnectTimeoutError
-from urllib3.exceptions import NewConnectionError, ProtocolError, ProxyError
 
 try:
-    from urllib3.util.ssl_ import PROTOCOL_TLS_CLIENT, OP_NO_TICKET
+    from urllib3.util.ssl_ import OP_NO_TICKET, PROTOCOL_TLS_CLIENT
 except ImportError:
     # Fallback directly to ssl for version of urllib3 before 1.26.
     # They are available in the standard library starting in Python 3.6.
-    from ssl import PROTOCOL_TLS_CLIENT, OP_NO_TICKET
+    from ssl import OP_NO_TICKET, PROTOCOL_TLS_CLIENT
 
 try:
     # Always import the original SSLContext, even if it has been patched
@@ -30,13 +36,18 @@ except ImportError:
     from urllib3.util.ssl_ import SSLContext
 
 import botocore.awsrequest
-from six.moves.urllib_parse import unquote
-from botocore.compat import filter_ssl_warnings, urlparse
+from botocore.compat import ensure_bytes, filter_ssl_warnings, urlparse
 from botocore.exceptions import (
-    ConnectionClosedError, EndpointConnectionError, HTTPClientError,
-    ReadTimeoutError, ProxyConnectionError, ConnectTimeoutError, SSLError,
-    InvalidProxiesConfigError
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    HTTPClientError,
+    InvalidProxiesConfigError,
+    ProxyConnectionError,
+    ReadTimeoutError,
+    SSLError,
 )
+from six.moves.urllib_parse import unquote
 
 filter_ssl_warnings()
 logger = logging.getLogger(__name__)
@@ -381,7 +392,9 @@ class URLLib3Session(object):
             return self._path_url(url)
 
     def _chunked(self, headers):
-        return headers.get('Transfer-Encoding', '') == 'chunked'
+        transfer_encoding = headers.get('Transfer-Encoding', b'')
+        transfer_encoding = ensure_bytes(transfer_encoding)
+        return transfer_encoding.lower() == b'chunked'
 
     def send(self, request):
         try:

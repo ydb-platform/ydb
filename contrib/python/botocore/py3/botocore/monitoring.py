@@ -15,9 +15,8 @@ import logging
 import re
 import time
 
-from botocore.compat import ensure_unicode, ensure_bytes, urlparse
+from botocore.compat import ensure_bytes, ensure_unicode, urlparse
 from botocore.retryhandler import EXCEPTION_MAP as RETRYABLE_EXCEPTIONS
-
 
 logger = logging.getLogger(__name__)
 

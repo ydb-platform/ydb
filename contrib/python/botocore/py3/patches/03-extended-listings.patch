@@ -154,7 +154,7 @@ date: 2021-10-27T00:34:16+03:00
        "members":{
 --- contrib/python/botocore/py3/botocore/handlers.py	(73e85ed9c4be248886f10db6b7d83f27d446916c)
 +++ contrib/python/botocore/py3/botocore/handlers.py	(cc02b99f18408f40978b56abfd8e5e9b2c2492d7)
-@@ -756,6 +756,27 @@ def decode_list_object_v2(parsed, context, **kwargs):
+@@ -763,6 +763,27 @@ def decode_list_object_v2(parsed, context, **kwargs):
      )
  
  
@@ -182,7 +182,7 @@ date: 2021-10-27T00:34:16+03:00
  def decode_list_object_versions(parsed, context, **kwargs):
      # From the documentation: If you specify encoding-type request parameter,
      # Amazon S3 includes this element in the response, and returns encoded key
-@@ -1052,6 +1073,7 @@ BUILTIN_HANDLERS = [
+@@ -1059,6 +1080,7 @@ BUILTIN_HANDLERS = [
      ('before-parameter-build.glacier', inject_account_id),
      ('after-call.s3.ListObjects', decode_list_object),
      ('after-call.s3.ListObjectsV2', decode_list_object_v2),

@@ -12,6 +12,7 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 from __future__ import unicode_literals
+
 from botocore.vendored import requests
 from botocore.vendored.requests.packages import urllib3
 
@@ -709,3 +710,11 @@ class InvalidDefaultsMode(BotoCoreError):
         'Client configured with invalid defaults mode: {mode}. '
         'Valid defaults modes include: {valid_modes}.'
     )
+
+
+class AwsChunkedWrapperError(BotoCoreError):
+    fmt = '{error_msg}'
+
+
+class FlexibleChecksumError(BotoCoreError):
+    fmt = '{error_msg}'

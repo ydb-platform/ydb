@@ -194,11 +194,11 @@ using TNthAlgorithm = void(*)(TKeyPayloadPairVector::iterator, TKeyPayloadPairVe
 
 struct TCompareDescr {
     TCompareDescr(TComputationMutables& mutables, std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
-        NUdf::ICompare::TPtr comparator)
+        const TVector<NUdf::ICompare::TPtr>& comparators)
         : KeySchemeTypes(std::move(keySchemeTypes))
         , KeyTypes(PrepareKeyTypesByScheme(KeySchemeTypes))
         , Encoders(mutables)
-        , Comparator(comparator)
+        , Comparators(comparators)
     {}
 
     static TKeyPayloadPairVector::value_type::first_type& Set(TKeyPayloadPairVector::value_type& item) { return item.first; }
@@ -212,7 +212,7 @@ struct TCompareDescr {
     MakeComparator(const NUdf::TUnboxedValue& ascending) const {
         if (KeyTypes.size() > 1U) {
             // sort tuples
-            if (Comparator) {
+            if (!Comparators.empty()) {
                 return [this, &ascending](const typename Container::value_type& x, const typename Container::value_type& y) {
                     const auto& left = Get(x);
                     const auto& right = Get(y);
@@ -223,7 +223,7 @@ struct TCompareDescr {
                         const auto& rightElem = right.GetElement(i);
                         const bool asc = ascending.GetElement(i).Get<bool>();
 
-                        if (const auto cmp = Comparator->Compare(leftElem, rightElem)) {
+                        if (const auto cmp = Comparators[i]->Compare(leftElem, rightElem)) {
                             return asc ? cmp < 0 : cmp > 0;
                         }
                     }
@@ -254,9 +254,9 @@ struct TCompareDescr {
             const bool isOptional = std::get<1>(KeySchemeTypes.front());
             const bool asc = ascending.Get<bool>();
 
-            if (Comparator) {
+            if (!Comparators.empty()) {
                 return [this, asc](const typename Container::value_type& x, const typename Container::value_type& y) {
-                    auto cmp = Comparator->Compare(Get(x), Get(y));
+                    auto cmp = Comparators.front()->Compare(Get(x), Get(y));
                     return asc ? cmp < 0 : cmp > 0;
                 };
             }
@@ -270,7 +270,7 @@ struct TCompareDescr {
     template<class Container>
     void Prepare(TComputationContext& ctx, Container& items) const {
         if (!KeyTypes.empty()) {
-            auto& encoders = Encoders.RefMutableObject(ctx, KeySchemeTypes, !Comparator);
+            auto& encoders = Encoders.RefMutableObject(ctx, KeySchemeTypes, Comparators.empty());
             if (KeyTypes.size() > 1U) {
                 // sort tuples
                 if (encoders.NeedEncode) {
@@ -299,7 +299,7 @@ struct TCompareDescr {
 
     const std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> KeySchemeTypes;
     const std::vector<NUdf::EDataSlot> KeyTypes;
-    NUdf::ICompare::TPtr Comparator;
+    const TVector<NUdf::ICompare::TPtr> Comparators;
     TMutableObjectOverBoxedValue<TEncoders> Encoders;
 };
 
@@ -310,14 +310,14 @@ protected:
     TAlgoBaseWrapper(
             TComputationMutables& mutables,
             std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
-            NUdf::ICompare::TPtr comparator,
+            const TVector<NUdf::ICompare::TPtr>& comparators,
             IComputationNode* list,
             IComputationExternalNode* item,
             IComputationNode* key,
             IComputationNode* ascending,
             bool stealed)
         : TBaseComputation(mutables)
-        , Description(mutables, std::move(keySchemeTypes), comparator)
+        , Description(mutables, std::move(keySchemeTypes), comparators)
         , List(list)
         , Item(item)
         , Key(key)
@@ -417,13 +417,13 @@ public:
             TAlgorithmInplace algorithmInplace,
             TComputationMutables& mutables,
             std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
-            NUdf::ICompare::TPtr comparator,
+            const TVector<NUdf::ICompare::TPtr>& comparators,
             IComputationNode* list,
             IComputationExternalNode* item,
             IComputationNode* key,
             IComputationNode* ascending,
             bool stealed)
-        : TBaseComputation(mutables, std::move(keySchemeTypes), comparator, list, item, key, ascending, stealed)
+        : TBaseComputation(mutables, std::move(keySchemeTypes), comparators, list, item, key, ascending, stealed)
         , Algorithm(algorithm)
         , AlgorithmInplace(algorithmInplace)
     {}
@@ -455,13 +455,13 @@ public:
             TNthAlgorithm algorithm,
             TComputationMutables& mutables,
             std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
-            NUdf::ICompare::TPtr comparator,
+            const TVector<NUdf::ICompare::TPtr>& comparators,
             IComputationNode* list,
             IComputationNode* nth,
             IComputationExternalNode* item,
             IComputationNode* key,
             IComputationNode* ascending)
-        : TBaseComputation(mutables, std::move(keySchemeTypes), comparator, list, item, key, ascending, false)
+        : TBaseComputation(mutables, std::move(keySchemeTypes), comparators, list, item, key, ascending, false)
         , Algorithm(algorithm), Nth(nth)
     {}
 
@@ -507,7 +507,7 @@ public:
     TKeepTopWrapper(
             TComputationMutables& mutables,
             std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>>&& keySchemeTypes,
-            NUdf::ICompare::TPtr comparator,
+            const TVector<NUdf::ICompare::TPtr>& comparators,
             IComputationNode* count,
             IComputationNode* list,
             IComputationNode* item,
@@ -516,7 +516,7 @@ public:
             IComputationNode* ascending,
             IComputationExternalNode* hotkey)
         : TBaseComputation(mutables)
-        , Description(mutables, std::move(keySchemeTypes), comparator)
+        , Description(mutables, std::move(keySchemeTypes), comparators)
         , Count(count)
         , List(list)
         , Item(item)
@@ -647,12 +647,24 @@ std::vector<std::tuple<NUdf::EDataSlot, bool, TType*>> GetKeySchemeTypes(TType* 
     return keySchemeTypes;
 }
 
-NUdf::ICompare::TPtr MakeComparator(TType* keyType) {
+TVector<NUdf::ICompare::TPtr> MakeComparators(TType* keyType, bool isTuple) {
     if (keyType->IsPresortSupported()) {
-        return nullptr;
+        return {};
     }
 
-    return MakeCompareImpl(keyType);
+    if (!isTuple) {
+        return { MakeCompareImpl(keyType) };
+    } else {
+        MKQL_ENSURE(keyType->IsTuple(), "Key must be tuple");
+        const auto keyDetailedType = static_cast<TTupleType*>(keyType);
+        const auto keyElementsCount = keyDetailedType->GetElementsCount();
+        TVector<NUdf::ICompare::TPtr> ret;
+        for (ui32 i = 0; i < keyElementsCount; ++i) {
+            ret.emplace_back(MakeCompareImpl(keyDetailedType->GetElementType(i)));
+        }
+
+        return ret;
+    }
 }
 
 IComputationNode* WrapAlgo(TAlgorithm algorithm, TAlgorithmInplace algorithmInplace, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -682,8 +694,8 @@ IComputationNode* WrapAlgo(TAlgorithm algorithm, TAlgorithmInplace algorithmInpl
     const auto ascending = LocateNode(ctx.NodeLocator, callable, 3);
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
 
-    NUdf::ICompare::TPtr comparator = MakeComparator(keyType);
-    return new TAlgoWrapper(algorithm, algorithmInplace, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), comparator, list,
+    auto comparators = MakeComparators(keyType, ascType->IsTuple());
+    return new TAlgoWrapper(algorithm, algorithmInplace, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), comparators, list,
         itemArg, key, ascending, stealed);
 }
 
@@ -702,8 +714,8 @@ IComputationNode* WrapNthAlgo(TNthAlgorithm algorithm, TCallable& callable, cons
     const auto ascending = LocateNode(ctx.NodeLocator, callable, 4);
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 2);
 
-    NUdf::ICompare::TPtr comparator = MakeComparator(keyType);
-    return new TNthAlgoWrapper(algorithm, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), comparator, list, nth, itemArg, key, ascending);
+    auto comparators = MakeComparators(keyType, ascType->IsTuple());
+    return new TNthAlgoWrapper(algorithm, ctx.Mutables, GetKeySchemeTypes(keyType, ascType), comparators, list, nth, itemArg, key, ascending);
 }
 
 }
@@ -744,8 +756,8 @@ IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactory
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 3);
     const auto hotkey = LocateExternalNode(ctx.NodeLocator, callable, 6);
 
-    NUdf::ICompare::TPtr comparator = MakeComparator(keyType);
-    return new TKeepTopWrapper(ctx.Mutables, GetKeySchemeTypes(keyType, ascType), comparator, count, list, item, itemArg, key, ascending, hotkey);
+    auto comparators = MakeComparators(keyType, ascType->IsTuple());
+    return new TKeepTopWrapper(ctx.Mutables, GetKeySchemeTypes(keyType, ascType), comparators, count, list, item, itemArg, key, ascending, hotkey);
 }
 
 }

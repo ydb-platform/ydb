@@ -142,6 +142,8 @@ message TPQConfig {
 
     optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000];
     optional bool MetaCacheSkipVersionCheck = 42 [default = false];
+
+    repeated string NonChargeableUser = 44;
 }
 
 message TChannelProfile {

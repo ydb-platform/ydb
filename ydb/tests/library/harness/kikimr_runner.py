@@ -60,7 +60,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__binary_path = binary_path
 
         self.__encryption_key = encryption_key
-        self._tenant_affiliation = tenant_affiliation if tenant_affiliation is not None else 'dynamic'
+        self._tenant_affiliation = tenant_affiliation
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
         self.ic_port = port_allocator.ic_port
@@ -146,7 +146,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--ca=%s" % self.__configurator.grpc_tls_ca_path
             )
 
-        if self.__role == 'slot':
+        if self.__role == 'slot' or (self.__configurator.node_kind == "yq" and self._tenant_affiliation is not None):
             command.append(
                 "--tenant=%s" % self._tenant_affiliation
             )
@@ -364,6 +364,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             cluster_name=self.__cluster_name,
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
+            tenant_affiliation=self.__configurator.yq_tenant,
         )
         return self._nodes[node_index]
 
@@ -394,7 +395,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             udfs_dir=self.__common_udfs_dir,
             role='slot',
             node_broker_port=node_broker_port,
-            tenant_affiliation=tenant_affiliation,
+            tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
             encryption_key=encryption_key,
         )
         return self._slots[slot_index]

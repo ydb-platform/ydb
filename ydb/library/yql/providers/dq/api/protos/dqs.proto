@@ -4,6 +4,7 @@ option cc_enable_arenas = true;
 package NYql.NDqProto;
 
 import "google/protobuf/any.proto";
+import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
@@ -177,6 +178,7 @@ message TQueryResponse {
     repeated TMetric Metric = 5;
     bool Truncated = 7;
     uint64 RowsCount = 8;
+    NYql.NDqProto.StatusIds.StatusCode StatusCode = 9;
 }
 
 message TDqFailure {
@@ -184,6 +186,7 @@ message TDqFailure {
     repeated TMetric Metric = 5;
     bool Retriable = 6;
     bool NeedFallback = 7;
+    NYql.NDqProto.StatusIds.StatusCode StatusCode = 8;
 };
 
 message TGraphRequest {

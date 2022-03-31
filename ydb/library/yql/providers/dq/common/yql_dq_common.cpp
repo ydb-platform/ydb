@@ -95,8 +95,8 @@ bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TStri
 }
 
 bool IsRetriable(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
-    const auto& ydbStatusId = ev->Get()->Record.GetStatusCode();
-    return ydbStatusId != Ydb::StatusIds::BAD_REQUEST;
+    const auto statusCode = ev->Get()->Record.GetStatusCode();
+    return statusCode != NYql::NDqProto::StatusIds::BAD_REQUEST;
 }
 
 bool NeedFallback(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {

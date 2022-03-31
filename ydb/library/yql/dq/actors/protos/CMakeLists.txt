@@ -22,10 +22,12 @@ target_link_libraries(dq-actors-protos PUBLIC
 target_proto_messages(dq-actors-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_events.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_stats.proto
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/protos/dq_status_codes.proto
 )
 target_sources(dq-actors-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/actors/protos/dq_events.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/actors/protos/dq_stats.pb.cc
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/actors/protos/dq_status_codes.pb.cc
 )
 target_proto_addincls(dq-actors-protos
   ./

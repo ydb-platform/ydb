@@ -188,7 +188,7 @@ private:
             }
 
             case NDqProto::COMPUTE_STATE_FAILURE: {
-                ReplyErrorAndDie(state.GetStatus(), state.MutableIssues());
+                ReplyErrorAndDie(DqStatusToYdbStatus(state.GetStatusCode()), state.MutableIssues());
                 return;
             }
 

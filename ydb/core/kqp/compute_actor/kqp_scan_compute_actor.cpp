@@ -240,7 +240,7 @@ private:
              << " stream will be terminated");
 
         State = NDqProto::COMPUTE_STATE_FAILURE;
-        ReportStateAndMaybeDie(Ydb::StatusIds::OVERLOADED, TIssues({issue}));
+        ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::OVERLOADED, TIssues({issue}));
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
@@ -500,7 +500,7 @@ private:
                     }
 
                     State = NDqProto::COMPUTE_STATE_FAILURE;
-                    ReportStateAndMaybeDie(status, issues);
+                    ReportStateAndMaybeDie(YdbStatusToDqStatus(status), issues);
                     return;
                 }
 
@@ -905,7 +905,7 @@ private:
     void TerminateExpiredScan(const TActorId& actorId, TStringBuf msg) {
         CA_LOG_W(msg);
 
-        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::CANCELLED, "Cancel unexpected/expired scan");
+        auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Cancel unexpected/expired scan");
         Send(actorId, abortEv.Release());
     }
 
@@ -1004,7 +1004,7 @@ private:
                 << ScanData->TablePath << ", scan actor: " << state.ActorId << ", message: " << issues.ToOneLineString());
 
             Send(state.ActorId, new TEvKqp::TEvAbortExecution(
-                success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED, issues));
+                success ? NYql::NDqProto::StatusIds::SUCCESS : NYql::NDqProto::StatusIds::ABORTED, issues));
         } else {
             CA_LOG(prio, "Table: " << ScanData->TablePath << ", scan has not been started yet");
         }

@@ -450,10 +450,10 @@ private:
         NYql::TIssues issues = ev->Get()->GetIssues();
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Got abort execution event, from: "
-            << ev->Sender << ", code: " << Ydb::StatusIds::StatusCode_Name(record.GetStatusCode())
+            << ev->Sender << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(record.GetStatusCode())
             << ", message: " << issues.ToOneLineString());
 
-        ReplyFinishStream(record.GetStatusCode(), issues, ctx);
+        ReplyFinishStream(NYql::NDq::DqStatusToYdbStatus(record.GetStatusCode()), issues, ctx);
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
@@ -545,7 +545,7 @@ private:
                 LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, message);
 
                 if (ExecuterActorId_) {
-                    auto timeoutEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, "Client timeout");
+                    auto timeoutEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Client timeout");
 
                     ctx.Send(ExecuterActorId_, timeoutEv.Release());
                 }

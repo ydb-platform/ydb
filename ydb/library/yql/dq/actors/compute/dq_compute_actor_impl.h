@@ -438,8 +438,8 @@ protected:
     void ReportStateAndMaybeDie(TIssue&& issue) {
         ReportStateAndMaybeDie(
             State == NDqProto::COMPUTE_STATE_FINISHED ?
-            Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
-            : Ydb::StatusIds::ABORTED, TIssues({std::move(issue)}));
+            NYql::NDqProto::StatusIds::UNSPECIFIED
+            : NYql::NDqProto::StatusIds::ABORTED, TIssues({std::move(issue)}));
     }
 
     void ReportStateAndDie(NDqProto::EComputeState state, TIssue&& issue) {
@@ -448,9 +448,9 @@ protected:
 
         record.SetState(state);
         if (state != NDqProto::COMPUTE_STATE_FINISHED) {
-            record.SetStatus(Ydb::StatusIds::ABORTED);
+            record.SetStatusCode(NYql::NDqProto::StatusIds::ABORTED);
         } else {
-            record.SetStatus(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+            record.SetStatusCode(NYql::NDqProto::StatusIds::UNSPECIFIED);
         }
         record.SetTaskId(Task.GetId());
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
@@ -467,13 +467,13 @@ protected:
         Terminate(state == NDqProto::COMPUTE_STATE_FINISHED, TIssues({std::move(issue)}));
     }
 
-    void ReportStateAndMaybeDie(Ydb::StatusIds::StatusCode status, const TIssues& issues)
+    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
 
         record.SetState(State);
-        record.SetStatus(status);
+        record.SetStatusCode(statusCode);
         record.SetTaskId(Task.GetId());
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             FillStats(record.MutableStats(), /* last */ true);
@@ -838,7 +838,7 @@ protected:
         auto tag = (EEvWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case EEvWakeupTag::TimeoutTag: {
-                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, TStringBuilder()
+                auto abortEv = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, TStringBuilder()
                     << "Timeout event from compute actor " << this->SelfId()
                     << ", TxId: " << TxId << ", task: " << Task.GetId());
 
@@ -897,7 +897,7 @@ protected:
         CA_LOG_D("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
         auto evState = MakeHolder<TEvDqCompute::TEvState>();
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
-        evState->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+        evState->Record.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
         evState->Record.SetTaskId(Task.GetId());
         FillStats(evState->Record.MutableStats(), /* last */ false);
         this->Send(ev->Sender, evState.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
@@ -916,10 +916,10 @@ protected:
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
         TIssues issues = ev->Get()->GetIssues();
         CA_LOG_E("Handle abort execution event from: " << ev->Sender
-            << ", status: " << Ydb::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
             << ", reason: " << issues.ToOneLineString());
 
-        bool success = ev->Get()->Record.GetStatusCode() == Ydb::StatusIds::SUCCESS;
+        bool success = ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS;
 
         this->TerminateSources(issues, success);
 

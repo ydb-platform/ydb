@@ -333,7 +333,7 @@ private:
                 Schedule(PingPeriod, new TEvents::TEvWakeup);
             }
         } catch (...) {
-            SendFailure(MakeHolder<TEvDqFailure>(CurrentExceptionMessage(), false, false));
+            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage(), false, false));
         }
     }
 
@@ -386,7 +386,7 @@ private:
 
             Run(ctx);
         } catch (...) {
-            SendFailure(MakeHolder<TEvDqFailure>(CurrentExceptionMessage(), false, false));
+            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage(), false, false));
         }
     }
 
@@ -410,7 +410,7 @@ private:
             return;
         }
         if (responseType == ERROR) {
-            Send(SelfId(), MakeHolder<TEvDqFailure>(ev->Get()->Record.GetErrorMessage(), false, false));
+            Send(SelfId(), MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, ev->Get()->Record.GetErrorMessage(), false, false));
             return;
         }
         Y_VERIFY (responseType == FINISH || responseType == CONTINUE);
@@ -446,7 +446,7 @@ private:
                 channel.PingStartTime = now;
             } else if ((now - channel.PingStartTime) > PingTimeout) {
                 Stat.AddCounter("PingTimeout", static_cast<ui64>(1));
-                SendFailure(MakeHolder<TEvDqFailure>("PingTimeout " + TimeoutInfo(channel.ActorID, now, channel.PingStartTime), true, true));
+                SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::TIMEOUT, "PingTimeout " + TimeoutInfo(channel.ActorID, now, channel.PingStartTime), true, true));
             }
         }
 
@@ -489,7 +489,7 @@ private:
                         ? 0
                         : maybeChannel->second.Retries
                 ) + " " + JobDebugInfo(ev->Sender);
-            SendFailure(MakeHolder<TEvDqFailure>(message, /*retriable = */ true, /*fallback =*/ true));
+            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, message, /*retriable = */ true, /*fallback =*/ true));
         } else if (ev->Get()->SourceType == TEvPullDataRequest::EventType) {
             TActivationContext::Schedule(TDuration::MilliSeconds(100),
                 new IEventHandle(maybeChannel->second.ActorID, SelfId(), new TEvPullDataRequest(INPUT_SIZE), IEventHandle::FlagTrackDelivery)
@@ -559,7 +559,7 @@ private:
                     } else if (channel.Requested && !channel.Finished) {
                         if (PullRequestTimeout && (now - channel.RequestTime) > PullRequestTimeout) {
                             Stat.AddCounter("ReadTimeout", static_cast<ui64>(1));
-                            SendFailure(MakeHolder<TEvDqFailure>("PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime), false, true));
+                            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::TIMEOUT, "PullTimeout " + TimeoutInfo(channel.ActorID, now, channel.RequestTime), false, true));
                         }
                     }
                 }
@@ -676,12 +676,12 @@ private:
             source.HasData = true;
             Send(SelfId(), new TEvContinueRun());
         } catch (...) {
-            SendFailure(MakeHolder<TEvDqFailure>(CurrentExceptionMessage(), false, false));
+            SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage(), false, false));
         }
     }
     void OnSourceError(const IDqSourceActor::TEvSourceError::TPtr& ev) {
         Y_UNUSED(ev->Get()->InputIndex);
-        SendFailure(MakeHolder<TEvDqFailure>(ev->Get()->Issues.ToString(), !ev->Get()->IsFatal, !ev->Get()->IsFatal));
+        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, ev->Get()->Issues.ToString(), !ev->Get()->IsFatal, !ev->Get()->IsFatal));
     }
     void OnSourcePushFinished(TEvSourcePushFinished::TPtr& ev, const TActorContext& ctx) {
         auto index = ev->Get()->Index;
@@ -697,14 +697,14 @@ private:
 
     void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
         Y_UNUSED(outputIndex);
-        SendFailure(MakeHolder<TEvDqFailure>(issues.ToString(), !isFatal, !isFatal));
+        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, issues.ToString(), !isFatal, !isFatal));
     }
 
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
         Y_UNUSED(state);
         Y_UNUSED(outputIndex);
         Y_UNUSED(checkpoint);
-        SendFailure(MakeHolder<TEvDqFailure>("Unimplemented", false, false));
+        SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::BAD_REQUEST, "Unimplemented", false, false));
     }
 
     void SinkSend(

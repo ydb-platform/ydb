@@ -198,7 +198,7 @@ private:
 
         if (ControlId) {
             LOG_D("Cancel running query");
-            Send(ControlId, new NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::ABORTED, YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
+            Send(ControlId, new NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, YandexQuery::QueryMeta::ComputeStatus_Name(FinalQueryStatus)));
         } else {
             QueryResponseArrived = true;
         }

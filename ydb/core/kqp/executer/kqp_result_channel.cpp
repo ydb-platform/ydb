@@ -89,7 +89,7 @@ private:
     void InternalError(const TString& msg) {
         LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, msg);
 
-        auto evAbort = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::INTERNAL_ERROR, msg);
+        auto evAbort = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, msg);
         Send(Executer, evAbort.Release());
 
         Become(&TResultCommonChannelProxy::DeadState);

@@ -9,6 +9,7 @@
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -73,7 +74,7 @@ protected:
                 << ", owner: " << OwnerActorId
                 << ", scan id: " << ScanId
                 << ", table id: " << TableId
-                << ", code: " << Ydb::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
+                << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
                 << ", error: " << ev->Get()->GetIssues().ToOneLineString());
 
         this->PassAway();

@@ -304,7 +304,7 @@ private:
         IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
 
         State = NDqProto::COMPUTE_STATE_FAILURE;
-        ReportStateAndMaybeDie(status, issues);
+        ReportStateAndMaybeDie(YdbStatusToDqStatus(status), issues);
     }
 
 private:

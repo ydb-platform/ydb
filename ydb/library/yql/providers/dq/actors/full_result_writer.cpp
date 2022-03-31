@@ -87,7 +87,7 @@ private:
             TFailureInjector::Reach("full_result_fail_on_finish", [] { throw yexception() << "full_result_fail_on_finish"; });
             FullResultWriter->Finish();
             if (ErrorMessage) {
-                Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, false, true));
+                Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ErrorMessage, false, true));
             } else {
                 Send(AggregatorID, MakeHolder<TEvDqFailure>().Release());
             }
@@ -97,7 +97,7 @@ private:
             if (ErrorMessage) {
                 issue.AddSubIssue(MakeIntrusive<TIssue>(*ErrorMessage));
             }
-            Send(AggregatorID, MakeHolder<TEvDqFailure>(issue, false, false).Release());
+            Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, issue, false, false).Release());
         }
         Send(SelfId(), MakeHolder<NActors::TEvents::TEvPoison>());
     }
@@ -126,7 +126,7 @@ private:
             Send(AggregatorID, MakeHolder<TEvFullResultWriterAck>(ackRecord));
         } catch (...) {
             ErrorMessage = CurrentExceptionMessage();
-            Send(AggregatorID, MakeHolder<TEvDqFailure>(*ErrorMessage, false, true));
+            Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ErrorMessage, false, true));
         }
 
         if (ErrorMessage) {

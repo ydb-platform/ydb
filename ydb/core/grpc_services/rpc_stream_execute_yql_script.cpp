@@ -406,7 +406,7 @@ private:
                 LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, message);
 
                 if (GatewayRequestHandlerActorId_) {
-                    auto timeoutEv = MakeHolder<NKqp::TEvKqp::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, "Client timeout");
+                    auto timeoutEv = MakeHolder<NKqp::TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Client timeout");
                     ctx.Send(GatewayRequestHandlerActorId_, timeoutEv.Release());
                 }
 
@@ -426,7 +426,7 @@ private:
         LOG_INFO_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << this->SelfId() << " Operation timeout.");
 
         if (GatewayRequestHandlerActorId_) {
-            auto timeoutEv = MakeHolder<NKqp::TEvKqp::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, "Operation timeout");
+            auto timeoutEv = MakeHolder<NKqp::TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Operation timeout");
             ctx.Send(GatewayRequestHandlerActorId_, timeoutEv.Release());
         }
 

@@ -179,7 +179,7 @@ private:
                 issue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.GetOrElse(TPosition()), TIssuesIds::DQ_GATEWAY_ERROR, TString{terminationMessage})));
             }
         }
-        return MakeHolder<NDq::TEvDq::TEvAbortExecution>(runResult.Retriable ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::BAD_REQUEST, TVector<TIssue>{issue});
+        return MakeHolder<NDq::TEvDq::TEvAbortExecution>(runResult.Retriable ? NYql::NDqProto::StatusIds::UNAVAILABLE : NYql::NDqProto::StatusIds::BAD_REQUEST, TVector<TIssue>{issue});
     }
 
     void PassAway() override {
@@ -451,7 +451,7 @@ private:
             TaskRunner = Factory->GetOld(ev->Get()->Task, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
-            Send(replyTo, MakeHolder<TEvDqFailure>(message, /*retriable = */ true, /*fallback=*/ true), 0, cookie);
+            Send(replyTo, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message, /*retriable = */ true, /*fallback=*/ true), 0, cookie);
             return;
         }
 

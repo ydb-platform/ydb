@@ -279,11 +279,11 @@ private:
         auto& msg = ev->Get()->Record;
         TString reason = ev->Get()->GetIssues().ToOneLineString();
 
-        auto prio = msg.GetStatusCode() == Ydb::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
+        auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got AbortExecution"
             << ", at: " << ScanActorId
             << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-            << ", code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
+            << ", code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", reason: " << reason);
 
         AbortReason = std::move(reason);

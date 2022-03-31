@@ -265,7 +265,7 @@ private:
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {
-        return MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::BAD_REQUEST, TVector<TIssue>{TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR)});
+        return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::BAD_REQUEST, TVector<TIssue>{TIssue(message).SetCode(TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR)});
     }
 
     NActors::TActorId ParentId;

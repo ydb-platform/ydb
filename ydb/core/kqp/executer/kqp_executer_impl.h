@@ -173,18 +173,19 @@ protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        LOG_D("Got EvAbortExecution, status: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
+        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", message: " << issues.ToOneLineString());
-        if (msg.GetStatusCode() == Ydb::StatusIds::INTERNAL_ERROR) {
+        auto statusCode = NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode());
+        if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
-        } else if (msg.GetStatusCode() == Ydb::StatusIds::TIMEOUT) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, "Request timeout exceeded");
+        } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
             this->Send(Target, abortEv.Release());
 
             TerminateComputeActors(Ydb::StatusIds::TIMEOUT, "timeout");
             this->PassAway();
         } else {
-            RuntimeError(msg.GetStatusCode(), issues);
+            RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
         }
     }
 
@@ -193,11 +194,11 @@ protected:
         LOG_I((cancel ? "CancelAt" : "Timeout") << " exceeded. Send timeout event to the rpc actor " << Target);
 
         if (cancel) {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::CANCELLED, "Request timeout exceeded");
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Request timeout exceeded");
             this->Send(Target, abortEv.Release());
             CancelAtActor = {};
         } else {
-            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::TIMEOUT, "Request timeout exceeded");
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
             this->Send(Target, abortEv.Release());
             DeadlineActor = {};
         }
@@ -506,7 +507,7 @@ protected:
                 LOG_I("aborting compute actor execution, message: " << issues.ToOneLineString()
                     << ", compute actor: " << task.ComputeActorId << ", task: " << task.Id);
 
-                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(code, issues);
+                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(code), issues);
                 this->Send(task.ComputeActorId, ev.Release());
             } else {
                 LOG_I("task: " << task.Id << ", does not have Compute ActorId yet");
@@ -571,7 +572,7 @@ protected:
         for (auto computeActor : PendingComputeActors) {
             LOG_D("terminate compute actor " << computeActor.first);
 
-            auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(status, "Terminate execution");
+            auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(status), "Terminate execution");
             this->Send(computeActor.first, ev.Release());
         }
 

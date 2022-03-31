@@ -955,9 +955,9 @@ public:
         auto& msg = ev->Get()->Record;
 
         const auto& issues = ev->Get()->GetIssues();
-        LOG_I("Got TEvAbortExecution, status: " << msg.GetStatusCode());
+        LOG_I("Got TEvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()));
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-        ReplyQueryError(requestInfo, msg.GetStatusCode(), "Got AbortExecution", MessageFromIssues(issues));
+        ReplyQueryError(requestInfo, NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "Got AbortExecution", MessageFromIssues(issues));
     }
 
     TString ExtractQueryText() const {

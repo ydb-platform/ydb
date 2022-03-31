@@ -5,6 +5,7 @@
 #include <ydb/core/yq/libs/common/rows_proto_splitter.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -85,7 +86,7 @@ private:
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext& ) {
-        auto req = MakeHolder<TEvDqFailure>(TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), true, /*needFallback=*/false);
+        auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNAVAILABLE, TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), true, /*needFallback=*/false);
         Send(ExecuterId, req.Release());
         HasError = true;
     }
@@ -94,7 +95,7 @@ private:
         LOG_E("ControlPlane WriteResult Issues: " << issues.ToString());
         Issues.AddIssues(issues);
         HasError = true;
-        auto req = MakeHolder<TEvDqFailure>(Issues);
+        auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, Issues);
         Send(ExecuterId, req.Release());
     }
 
@@ -130,7 +131,7 @@ private:
 
         if (it == Requests.end()) {
             HasError = true;
-            auto req = MakeHolder<TEvDqFailure>(TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false, /*needFallback=*/false);
+            auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false, /*needFallback=*/false);
             Send(ExecuterId, req.Release());
             return;
         }
@@ -307,7 +308,7 @@ private:
             }
         } catch (...) {
             LOG_E(CurrentExceptionMessage());
-            auto req = MakeHolder<TEvDqFailure>(TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false,
+            auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false,
                 /*needFallback=*/false);
             Send(ExecuterId, req.Release());
             HasError = true;

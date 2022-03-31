@@ -8,19 +8,21 @@ namespace NYql::NDqs {
         *Record.MutableTask() = std::move(task);
     }
 
-    TEvDqFailure::TEvDqFailure(const TIssues& issues, bool retriable, bool needFallback) {
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool retriable, bool needFallback) {
         IssuesToMessage(issues, Record.MutableIssues());
         Record.SetRetriable(retriable);
         Record.SetNeedFallback(needFallback);
+        Record.SetStatusCode(statusCode);
     }
 
-    TEvDqFailure::TEvDqFailure(const TIssue& issue, bool retriable, bool needFallback)
-        : TEvDqFailure(TIssues({issue}), retriable, needFallback)
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssue& issue, bool retriable, bool needFallback)
+        : TEvDqFailure(statusCode, TIssues({issue}), retriable, needFallback)
     {
     }
 
-    TEvDqFailure::TEvDqFailure(const TString& error, bool retriable, bool needFallback) 
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& error, bool retriable, bool needFallback) 
         : TEvDqFailure(
+            statusCode,
             TIssue(error).SetCode(
                 needFallback ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR : TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR), 
             retriable, 

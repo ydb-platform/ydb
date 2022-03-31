@@ -904,10 +904,10 @@ private:
 
         LOG_ERROR_S(ctx, NKikimrServices::KQP_GATEWAY,
             "TKqpExecPhysicalRequestHandler, got EvAbortExecution event."
-             << " Code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
+             << " Code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
              << ", reason: " << issues.ToOneLineString());
 
-        auto issueCode = NYql::YqlStatusFromYdbStatus(msg.GetStatusCode());
+        auto issueCode = NYql::YqlStatusFromYdbStatus(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()));
         NYql::TIssues resultIssues;
         for (const auto& i : issues) {
             NYql::TIssue issue(i);

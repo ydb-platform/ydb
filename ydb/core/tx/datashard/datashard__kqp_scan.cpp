@@ -138,11 +138,11 @@ private:
 
         auto& msg = ev->Get()->Record;
 
-        auto prio = msg.GetStatusCode() == Ydb::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
+        auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Got AbortExecution"
             << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
             << ", scanId: " << ScanId << ", table: " << TablePath
-            << ", code: " << Ydb::StatusIds_StatusCode_Name(msg.GetStatusCode())
+            << ", code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
             << ", reason: " << ev->Get()->GetIssues().ToOneLineString());
 
         AbortEvent = ev->Release();
@@ -340,7 +340,7 @@ private:
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation);
 
             if (AbortEvent) {
-                ev->Record.SetStatus(AbortEvent->Record.GetStatusCode());
+                ev->Record.SetStatus(NYql::NDq::DqStatusToYdbStatus(AbortEvent->Record.GetStatusCode()));
                 auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
                     << "Table " << TablePath << " scan failed");
                 for (const NYql::TIssue& i : AbortEvent->GetIssues()) {
@@ -458,14 +458,14 @@ private:
             if (sendBytes >= 48_MB) {
                 LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Query size limit exceeded.");
                 if (finish) {
-                    bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(Ydb::StatusIds::PRECONDITION_FAILED,
+                    bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
                     Y_VERIFY(sent);
 
                     ReportDatashardStats();
                     return true;
                 } else {
-                    bool sent = Send(SelfId(), new TEvKqp::TEvAbortExecution(Ydb::StatusIds::PRECONDITION_FAILED,
+                    bool sent = Send(SelfId(), new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
                     Y_VERIFY(sent);
 

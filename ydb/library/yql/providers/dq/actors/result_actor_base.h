@@ -95,7 +95,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                         return true;
                     });
                 } catch (...) {
-                    OnError(CurrentExceptionMessage(), false, true);
+                    OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage(), false, true);
                     return;
                 }
 
@@ -124,14 +124,14 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
         }
 
-        void OnError(const TString& message, bool retriable, bool needFallback) {
+        void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, bool retriable, bool needFallback) {
             YQL_LOG(ERROR) << "OnError " << message;
             auto issueCode = needFallback
                 ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
                 : TIssuesIds::DQ_GATEWAY_ERROR;
             const auto issue = TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});  // remember issue to pass it with TEvQueryResponse, cause executor_actor ignores TEvDqFailure after finish
-            auto req = MakeHolder<TEvDqFailure>(issue, retriable, needFallback);
+            auto req = MakeHolder<TEvDqFailure>(statusCode, issue, retriable, needFallback);
             FlushCounters(req->Record);
             TBase::Send(ExecuterID, req.Release());
         }
@@ -222,7 +222,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             TString message = "Undelivered from " + ToString(ev->Sender) + " to " + ToString(TBase::SelfId())
                 + " reason: " + ToString(ev->Get()->Reason) + " sourceType: " + ToString(ev->Get()->SourceType >> 16)
                 + "." + ToString(ev->Get()->SourceType & 0xFFFF);
-            OnError(message, true, true);
+            OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, true, true);
         }
 
         void OnFullResultWriterAck(TEvFullResultWriterAck::TPtr& ev, const NActors::TActorContext&) {
@@ -283,7 +283,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                 YQL_LOG_CTX_SCOPE(TraceId);
 
                 if (auto msg = ev->Get()->Record.GetErrorMessage()) {
-                    OnError(msg, false, true);
+                    OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, msg, false, true);
                 } else {
                     NActorsProto::TActorId fullResultWriterProto;
                     ev->Get()->Record.GetMessage().UnpackTo(&fullResultWriterProto);

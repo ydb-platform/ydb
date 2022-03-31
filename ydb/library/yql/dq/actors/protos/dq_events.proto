@@ -3,6 +3,7 @@ option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
+import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 import "ydb/library/yql/dq/proto/dq_state_load_plan.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
@@ -50,10 +51,11 @@ message TComputeActorStats {
 message TEvComputeActorState {
     optional uint32 State = 1; // == EComputeState
     optional TComputeActorStats LegacyStats = 2;
-    optional Ydb.StatusIds.StatusCode Status = 3;
+    optional Ydb.StatusIds.StatusCode YdbStatusCode = 3; // TODO: remove (deprecated)
     repeated Ydb.Issue.IssueMessage Issues = 4;
     optional uint64 TaskId = 5;
     optional TDqComputeActorStats Stats = 6;
+    optional NYql.NDqProto.StatusIds.StatusCode StatusCode = 7;
 };
 
 message TEvComputeStateRequest {
@@ -74,8 +76,9 @@ message TEvComputeChannelDataAck {
 };
 
 message TEvAbortExecution {
-    optional Ydb.StatusIds.StatusCode StatusCode = 1;
-    optional string LegacyMessage = 2; // TODO: remove
+    optional Ydb.StatusIds.StatusCode YdbStatusCode = 1; // TODO: remove (deprecated)
+    optional string LegacyMessage = 2;                   // TODO: remove (deprecated)
+    optional NYql.NDqProto.StatusIds.StatusCode StatusCode = 3;
     repeated Ydb.Issue.IssueMessage Issues = 4;
 }
 

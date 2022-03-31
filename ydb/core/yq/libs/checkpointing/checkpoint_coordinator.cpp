@@ -230,7 +230,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
     }
 
     if (!result) {
-        Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(Ydb::StatusIds::BAD_REQUEST, issues));
+        Send(TaskControllerId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::BAD_REQUEST, issues));
         return;
     } else { // Report as transient issues
         Send(RunActorId, new TEvents::TEvRaiseTransientIssues(std::move(issues)));

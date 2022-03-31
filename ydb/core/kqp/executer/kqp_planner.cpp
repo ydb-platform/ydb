@@ -131,7 +131,7 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
         }
 
         LOG_E("Not enough resources to execute query locally and no information about other nodes");
-        auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::PRECONDITION_FAILED,
+        auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             "Not enough resources to execute query locally and no information about other nodes");
         Send(ExecuterId, ev.Release());
         PassAway();
@@ -178,7 +178,7 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
         }
         Y_VERIFY(ScanTasks.empty());
     } else {
-        auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::PRECONDITION_FAILED,
+        auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             "Not enough resources to execute query");
         Send(ExecuterId, ev.Release());
     }

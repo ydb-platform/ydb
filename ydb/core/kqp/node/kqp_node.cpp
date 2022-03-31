@@ -400,7 +400,7 @@ private:
             ResourceManager()->FreeResources(txId);
 
             for (auto& [taskId, task] : request.InFlyTasks) {
-                auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, reason);
+                auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, reason);
                 Send(task.ComputeActorId, abortEv.Release());
             }
         });

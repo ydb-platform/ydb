@@ -553,11 +553,34 @@ struct TEnvironmentSetup {
         }
     }
 
+    void UpdateSettings(bool selfHeal, bool donorMode) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand();
+        auto *us = cmd->MutableUpdateSettings();
+        us->AddEnableSelfHeal(selfHeal);
+        us->AddEnableDonorMode(donorMode);
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
     void EnableDonorMode() {
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableEnableDonorMode()->SetEnable(true);
         auto response = Invoke(request);
         UNIT_ASSERT(response.GetSuccess());
+    }
+
+    void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,
+            NKikimrBlobStorage::EDecommitStatus decommitStatus) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand();
+        auto *ds = cmd->MutableUpdateDriveStatus();
+        ds->MutableHostKey()->SetNodeId(nodeId);
+        ds->SetPDiskId(pdiskId);
+        ds->SetStatus(status);
+        ds->SetDecommitStatus(decommitStatus);
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
     void SetScrubPeriodicity(TDuration periodicity) {

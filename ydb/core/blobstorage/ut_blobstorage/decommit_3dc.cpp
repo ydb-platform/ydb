@@ -2,71 +2,87 @@
 
 Y_UNIT_TEST_SUITE(Decommit3dc) {
     Y_UNIT_TEST(Test) {
-        TEnvironmentSetup env{{
-            .NodeCount = 12,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
-            .NumDataCenters = 4,
-        }};
+        for (ui32 numNodes : {12, 16})
+        for (ui32 numGroups : {1, 7})
+        for (bool resetToNone : {false, true})
+        for (ui32 numDecommitted = 0; numDecommitted <= numNodes / 4; ++numDecommitted) {
+            Cerr << "numNodes# " << numNodes
+                << " numGroups# " << numGroups
+                << " resetToNone# " << (resetToNone ? "true" : "false")
+                << " numDecommitted# " << numDecommitted
+                << Endl;
 
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto *cmd = request.AddCommand();
-            auto *us = cmd->MutableUpdateSettings();
-            us->AddEnableDonorMode(true);
-            us->AddEnableSelfHeal(true);
-            auto response = env.Invoke(request);
-            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        }
+            TEnvironmentSetup env{{
+                .NodeCount = numNodes,
+                .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+                .NumDataCenters = 4,
+            }};
 
-        env.CreateBoxAndPool(1, 1);
-        env.Sim(TDuration::Seconds(30));
-        auto config = env.FetchBaseConfig();
-
-        std::set<ui32> nodesToSettle;
-        TString datacenterToSettle;
-        for (const auto& node : config.GetNode()) {
-            const auto& location = node.GetLocation();
-            if (!datacenterToSettle) {
-                datacenterToSettle = location.GetDataCenter();
-            }
-            if (datacenterToSettle == location.GetDataCenter()) {
-                nodesToSettle.insert(node.GetNodeId());
-            }
-        }
-
-        NKikimrBlobStorage::TConfigRequest request;
-
-        std::set<std::pair<ui32, ui32>> pdisksToSettle;
-        for (const auto& pdisk : config.GetPDisk()) {
-            if (nodesToSettle.count(pdisk.GetNodeId())) {
-                pdisksToSettle.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
-                auto *cmd = request.AddCommand();
-                auto *ds = cmd->MutableUpdateDriveStatus();
-                ds->MutableHostKey()->SetNodeId(pdisk.GetNodeId());
-                ds->SetPDiskId(pdisk.GetPDiskId());
-                ds->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING);
-            }
-        }
-
-        auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-
-        std::set<std::pair<ui32, ui32>> movedOutPDisks;
-        for (const auto& [nodeId, pdiskId] : pdisksToSettle) {
-            request.Clear();
-            auto *cmd = request.AddCommand();
-            auto *ds = cmd->MutableUpdateDriveStatus();
-            ds->MutableHostKey()->SetNodeId(nodeId);
-            ds->SetPDiskId(pdiskId);
-            ds->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT);
-            movedOutPDisks.emplace(nodeId, pdiskId);
-            auto response = env.Invoke(request);
-            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-            env.Sim(TDuration::Seconds(60));
+            env.UpdateSettings(true, true);
+            env.CreateBoxAndPool(1, numGroups);
+            env.Sim(TDuration::Seconds(30));
             auto config = env.FetchBaseConfig();
-            for (const auto& vslot : config.GetVSlot()) {
-                const auto& vslotId = vslot.GetVSlotId();
-                UNIT_ASSERT(!movedOutPDisks.count({vslotId.GetNodeId(), vslotId.GetPDiskId()}));
+
+            std::set<ui32> nodesToSettle;
+            TString datacenterToSettle;
+            for (const auto& node : config.GetNode()) {
+                const auto& location = node.GetLocation();
+                if (!datacenterToSettle) {
+                    datacenterToSettle = location.GetDataCenter();
+                }
+                if (datacenterToSettle == location.GetDataCenter()) {
+                    nodesToSettle.insert(node.GetNodeId());
+                }
+            }
+
+            std::set<std::pair<ui32, ui32>> pdisksToSettle;
+            for (const auto& pdisk : config.GetPDisk()) {
+                if (nodesToSettle.count(pdisk.GetNodeId())) {
+                    pdisksToSettle.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+                    env.UpdateDriveStatus(pdisk.GetNodeId(), pdisk.GetPDiskId(), {},
+                        NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING);
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(pdisksToSettle.size(), numNodes / 4);
+            std::set<std::pair<ui32, ui32>> movedOutPDisks;
+            auto it = pdisksToSettle.begin();
+            for (ui32 i = 0; i < numDecommitted; ++i, ++it) {
+                UNIT_ASSERT(it != pdisksToSettle.end());
+                movedOutPDisks.insert(*it);
+                env.UpdateDriveStatus(it->first, it->second, {}, NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT);
+
+                env.Sim(TDuration::Seconds(60));
+                auto config = env.FetchBaseConfig();
+                for (const auto& vslot : config.GetVSlot()) {
+                    const auto& vslotId = vslot.GetVSlotId();
+                    UNIT_ASSERT(!movedOutPDisks.count({vslotId.GetNodeId(), vslotId.GetPDiskId()}));
+                }
+            }
+            if (resetToNone) {
+                for (const auto& [nodeId, pdiskId] : pdisksToSettle) {
+                    env.UpdateDriveStatus(nodeId, pdiskId, {}, NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
+                }
+                movedOutPDisks.clear();
+            }
+            for (const auto& [nodeId, pdiskId] : pdisksToSettle) {
+                Cerr << "nodeId# " << nodeId << " pdiskId# " << pdiskId << Endl;
+
+                env.UpdateDriveStatus(nodeId, pdiskId, NKikimrBlobStorage::EDriveStatus::FAULTY, {});
+                movedOutPDisks.emplace(nodeId, pdiskId);
+
+                env.Sim(TDuration::Seconds(90));
+                auto config = env.FetchBaseConfig();
+                for (const auto& vslot : config.GetVSlot()) {
+                    const auto& vslotId = vslot.GetVSlotId();
+                    Cerr << vslotId.GetNodeId() << ":" << vslotId.GetPDiskId() << " " << vslot.GetFailRealmIdx()
+                        << " " << vslot.GetFailDomainIdx() << Endl;
+                    UNIT_ASSERT(!movedOutPDisks.count({vslotId.GetNodeId(), vslotId.GetPDiskId()}) ||
+                        (numNodes == 12 && numDecommitted == 0));
+                }
+
+                env.UpdateDriveStatus(nodeId, pdiskId, NKikimrBlobStorage::EDriveStatus::ACTIVE, {});
+                movedOutPDisks.erase({nodeId, pdiskId});
             }
         }
     }

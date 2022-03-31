@@ -639,4 +639,159 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         }
     }
 
+    Y_UNIT_TEST(ReassignGroupTest3dc) {
+        for (ui32 i = 0; i < 10000; ++i) {
+            Ctest << "iteration# " << i << Endl;
+            std::map<ui32, std::pair<ui32, ui32>> nodeToLocation;
+            auto populate = [&](ui32 decommittedDatacenter, const std::set<std::pair<ui32, ui32>>& unusableDisks,
+                    TGroupMapper::TGroupDefinition group) {
+                auto mapper = std::make_unique<TGroupMapper>(TTestContext::CreateGroupGeometry(
+                    TBlobStorageGroupType::ErasureMirror3dc));
+                std::map<TPDiskId, ui32> slots;
+                for (const auto& realm : group) {
+                    for (const auto& domain : realm) {
+                        for (const auto& pdisk : domain) {
+                            if (pdisk == TPDiskId()) {
+                                ++slots[pdisk];
+                            }
+                        }
+                    }
+                }
+                for (ui32 datacenter = 1, nodeId = 1; datacenter <= 4; ++datacenter) {
+                    for (ui32 rack = 1; rack <= 4; ++rack, ++nodeId) {
+                        NActorsInterconnect::TNodeLocation proto;
+                        proto.SetDataCenter(ToString(datacenter));
+                        proto.SetModule("");
+                        proto.SetRack(ToString(rack));
+                        proto.SetUnit("");
+                        TPDiskId pdiskId(nodeId, 1);
+                        mapper->RegisterPDisk({
+                            .PDiskId = pdiskId,
+                            .Location{proto},
+                            .Usable = datacenter != decommittedDatacenter && !unusableDisks.contains({datacenter, rack}),
+                            .NumSlots = slots[pdiskId],
+                            .MaxSlots = 1,
+                            .Groups{slots[pdiskId], 0},
+                            .SpaceAvailable = 0,
+                            .Operational = true,
+                            .Decommitted = datacenter == decommittedDatacenter,
+                        });
+                        nodeToLocation[nodeId] = {datacenter, rack};
+                    }
+                }
+                return mapper;
+            };
+
+            auto dumpGroup = [&](const auto& group) {
+                std::map<std::pair<ui32, ui32>, TString> cells;
+
+                for (ui32 i = 0; i < group.size(); ++i) {
+                    for (ui32 j = 0; j < group[i].size(); ++j) {
+                        const auto& [datacenter, rack] = nodeToLocation[group[i][j][0].NodeId];
+                        cells[{datacenter, rack}] = TStringBuilder() << i << "/" << j;
+                    }
+                }
+
+                for (ui32 rack = 1; rack <= 4; ++rack) {
+                    for (ui32 datacenter = 1; datacenter <= 4; ++datacenter) {
+                        TString cell = cells[{datacenter, rack}];
+                        if (!cell) {
+                            cell = "xxx";
+                        }
+                        Ctest << cell << " ";
+                    }
+                    Ctest << Endl;
+                }
+            };
+
+            TGroupMapper::TGroupDefinition group;
+            {
+                auto mapper = populate(0, {}, group);
+                TString error;
+                bool success = mapper->AllocateGroup(0, group, nullptr, 0, {}, 0, false, error);
+                UNIT_ASSERT_C(success, error);
+                Ctest << "After allocation" << Endl;
+                dumpGroup(group);
+            }
+
+            ui32 decommittedDatacenter = RandomNumber<ui32>(5);
+            Ctest << "decommittedDatacenter# " << decommittedDatacenter << Endl;
+            {
+                for (auto& realm : group) {
+                    for (auto& domain : realm) {
+                        for (auto& pdisk : domain) {
+                            if (nodeToLocation[pdisk.NodeId].first == decommittedDatacenter && RandomNumber(2u)) {
+                                pdisk = {}; // reassign disk
+                            }
+                        }
+                    }
+                }
+                auto mapper = populate(decommittedDatacenter, {}, group);
+                TString error;
+                bool success = mapper->AllocateGroup(0, group, nullptr, 0, {}, 0, false, error);
+                UNIT_ASSERT_C(success, error);
+                Ctest << "After decomission" << Endl;
+                dumpGroup(group);
+            }
+
+            std::set<std::pair<ui32, ui32>> unusableDisks;
+            ui32 unusableDatacenter = RandomNumber<ui32>(5);
+            if (unusableDatacenter) {
+                for (ui32 rack = 1; rack <= 4; ++rack) {
+                    unusableDisks.emplace(unusableDatacenter, rack);
+                }
+            }
+
+            for (ui32 i = 0; i < 2; ++i) {
+                unusableDatacenter = RandomNumber<ui32>(5);
+                if (unusableDatacenter) {
+                    ui32 unusableRack = 1 + RandomNumber<ui32>(4);
+                    unusableDisks.emplace(unusableDatacenter, unusableRack);
+                }
+            }
+
+            {
+                for (auto& realm : group) {
+                    for (auto& domain : realm) {
+                        for (auto& pdisk : domain) {
+                            if (unusableDisks.contains(nodeToLocation[pdisk.NodeId])) {
+                                pdisk = {}; // reassign disk
+                            }
+                        }
+                    }
+                }
+                auto mapper = populate(decommittedDatacenter, {}, group);
+                TString error;
+                bool success = mapper->AllocateGroup(0, group, nullptr, 0, {}, 0, false, error);
+                UNIT_ASSERT_C(success, error);
+                Ctest << "After remapping" << Endl;
+                dumpGroup(group);
+            }
+
+            for (ui32 i = 0; i < group.size(); ++i) {
+                ui32 datacenterForRealm = 0;
+
+                for (ui32 j = 0; j < group[i].size(); ++j) {
+                    std::set<ui32> racksInRealm;
+
+                    for (const auto& pdiskId : group[i][j]) {
+                        const auto& [datacenter, rack] = nodeToLocation[pdiskId.NodeId];
+                        if (!datacenterForRealm) {
+                            datacenterForRealm = datacenter;
+                        } else if (datacenterForRealm == datacenter) {
+                            // it's okay
+                        } else if (decommittedDatacenter && (datacenter == decommittedDatacenter || datacenterForRealm == decommittedDatacenter)) {
+                            // it's okay too, decomitted datacenter is partially broken
+                        } else {
+                            UNIT_FAIL("incorrect datacenter for realm");
+                        }
+                        UNIT_ASSERT(racksInRealm.insert(rack).second);
+                    }
+                }
+            }
+
+            Ctest << Endl;
+        }
+    }
+
 }

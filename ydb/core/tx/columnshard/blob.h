@@ -7,9 +7,10 @@
 namespace NKikimr::NOlap {
 
 class IBlobGroupSelector;
+class TUnifiedBlobId;
 
-TString DsToS3Key(const TString& s);
-TString S3ToDsKey(const TString& s);
+TString DsIdToS3Key(const TUnifiedBlobId& dsid);
+TUnifiedBlobId S3KeyToDsId(const TString& s, TString& error);
 
 // Encapsulates different types of blob ids to simplify dealing with blobs for the
 // components that do not need to know where the blob is stored
@@ -96,7 +97,7 @@ class TUnifiedBlobId {
         {
             Y_VERIFY(dsBlob.IsDsBlob());
             DsBlobId = std::get<TDsBlobId>(dsBlob.Id);
-            Key = DsToS3Key(DsBlobId.ToStringNew());
+            Key = DsIdToS3Key(dsBlob);
         }
 
         bool operator == (const TS3BlobId& other) const {

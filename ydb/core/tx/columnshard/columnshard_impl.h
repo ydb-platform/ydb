@@ -360,6 +360,7 @@ private:
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     THashMap<TString, TTierConfig> TierConfigs;
+    THashSet<NOlap::TUnifiedBlobId> DelayedForgetBlobs;
     TTtl Ttl;
 
     THashMap<ui64, TBasicTxInfo> BasicTxInfo;
@@ -425,6 +426,9 @@ private:
     void SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions);
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
+                     THashMap<TUnifiedBlobId, TString>&& blobsIds);
+    void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs);
     ui32 InitS3Actors(const TActorContext& ctx, bool init);
     void StopS3Actors(const TActorContext& ctx);
 

@@ -25,6 +25,7 @@ public:
 private:
     TEvPrivate::TEvWriteIndex::TPtr Ev;
     THashMap<TUnifiedBlobId, TString> BlobsToExport;
+    THashMap<TString, THashMap<TUnifiedBlobId, TString>> ExportTierBlobs;
     THashMap<TString, std::vector<NOlap::TEvictedBlob>> TierBlobsToForget;
     ui64 ExportNo = 0;
 };
@@ -159,12 +160,23 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                     TEvictMetadata meta;
                     auto evict = Self->BlobManager->GetDropped(blobId, meta);
                     Y_VERIFY(evict.State != EEvictState::UNKNOWN);
+
+                    bool exported = ui8(evict.State) == ui8(EEvictState::SELF_CACHED) ||
+                                    ui8(evict.State) == ui8(EEvictState::EXTERN);
+                    if (exported) {
+                        LOG_S_DEBUG("Forget blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                        TierBlobsToForget[meta.GetTierName()].emplace_back(std::move(evict));
+                    } else {
+                        LOG_S_DEBUG("Deleyed forget blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                        Self->DelayedForgetBlobs.insert(blobId);
+                    }
+
                     bool deleted = ui8(evict.State) >= ui8(EEvictState::EXTERN); // !EVICTING and !SELF_CACHED
-                    TierBlobsToForget[meta.GetTierName()].emplace_back(std::move(evict));
                     if (deleted) {
                         continue;
                     }
                 }
+                LOG_S_DEBUG("Delete evicting blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
@@ -199,7 +211,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
     }
 
     if (BlobsToExport.size()) {
-        ExportNo = ++Self->LastExportNo;
+        for (auto& [blobId, tierName] : BlobsToExport) {
+            ExportTierBlobs[tierName].emplace(blobId, TString{});
+        }
+        BlobsToExport.clear();
+
+        ExportNo = Self->LastExportNo + 1;
+        Self->LastExportNo += ExportTierBlobs.size();
 
         NIceDb::TNiceDb db(txc.DB);
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);
@@ -252,31 +270,14 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
         Self->EnqueueBackgroundActivities();
     }
 
-    if (ExportNo) {
-        Y_VERIFY(BlobsToExport.size());
-        THashMap<TString, THashMap<TUnifiedBlobId, TString>> tierBlobs;
-        for (auto& [blobId, tierName] : BlobsToExport) {
-            tierBlobs[tierName].emplace(blobId, TString());
-        }
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvExport(ExportNo, std::move(tierBlobs)));
+    for (auto& [tierName, blobIds] : ExportTierBlobs) {
+        Y_VERIFY(ExportNo);
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvExport(ExportNo, tierName, std::move(blobIds)));
+        ++ExportNo;
     }
 
-    for (auto [tierName, blobs] : TierBlobsToForget) {
-        if (!Self->S3Actors.count(tierName)) {
-            TString tier(tierName);
-            LOG_S_ERROR("No S3 actor for tier '" << tier << "' (on forget) at tablet " << Self->TabletID());
-            continue;
-        }
-        auto& s3 = Self->S3Actors[tierName];
-        if (!s3) {
-            TString tier(tierName);
-            LOG_S_ERROR("Not started S3 actor for tier '" << tier << "' (on forget) at tablet " << Self->TabletID());
-            continue;
-        }
-
-        auto forget = std::make_unique<TEvPrivate::TEvForget>();
-        forget->Evicted = std::move(blobs);
-        ctx.Send(s3, forget.release());
+    for (auto& [tierName, blobs] : TierBlobsToForget) {
+        Self->ForgetBlobs(ctx, tierName, std::move(blobs));
     }
 }
 

@@ -131,8 +131,8 @@ public:
 
         for (auto& evict : forget.Event->Evicted) {
             if (!evict.ExternBlob.IsValid()) {
-                LOG_S_INFO("[S3] Forget not exported '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
-                continue; // TODO
+                LOG_S_ERROR("[S3] Forget not exported '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
+                continue;
             }
 
             TString key = evict.ExternBlob.GetS3Key();

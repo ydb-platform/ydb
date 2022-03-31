@@ -97,25 +97,32 @@ struct TEvPrivate {
 
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
         ui64 ExportNo{};
+        TString TierName;
         TActorId DstActor;
-        THashMap<TString, TBlobDataMap> TierBlobs;
         TBlobDataMap Blobs;
         THashMap<TUnifiedBlobId, TUnifiedBlobId> SrcToDstBlobs;
         TString ErrorStr;
 
-        explicit TEvExport(ui64 exportNo, THashMap<TString, TBlobDataMap>&& tierBlobs)
+        explicit TEvExport(ui64 exportNo, const TString& tierName, TBlobDataMap&& tierBlobs)
             : ExportNo(exportNo)
-            , TierBlobs(std::move(tierBlobs))
+            , TierName(tierName)
+            , Blobs(std::move(tierBlobs))
         {
             Y_VERIFY(ExportNo);
+            Y_VERIFY(!TierName.empty());
+            Y_VERIFY(!Blobs.empty());
         }
 
-        TEvExport(ui64 exportNo, TActorId dstActor, TBlobDataMap&& blobs)
+        TEvExport(ui64 exportNo, const TString& tierName, TActorId dstActor, TBlobDataMap&& blobs)
             : ExportNo(exportNo)
+            , TierName(tierName)
             , DstActor(dstActor)
             , Blobs(std::move(blobs))
         {
             Y_VERIFY(ExportNo);
+            Y_VERIFY(!TierName.empty());
+            Y_VERIFY(DstActor);
+            Y_VERIFY(!Blobs.empty());
         }
     };
 

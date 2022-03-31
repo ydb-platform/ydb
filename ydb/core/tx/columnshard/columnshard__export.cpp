@@ -18,6 +18,7 @@ public:
 
 private:
     TEvPrivate::TEvExport::TPtr Ev;
+    std::vector<NOlap::TEvictedBlob> BlobsToForget;
 };
 
 
@@ -34,7 +35,8 @@ bool TTxExport::Execute(TTransactionContext& txc, const TActorContext&) {
     if (status == NKikimrProto::OK) {
         TBlobManagerDb blobManagerDb(txc.DB);
 
-        for (auto& [blobId, externId] : msg.SrcToDstBlobs) {
+        for (auto& [blob, externId] : msg.SrcToDstBlobs) {
+            auto& blobId = blob;
             Y_VERIFY(blobId.IsDsBlob());
             Y_VERIFY(externId.IsS3Blob());
             bool dropped = false;
@@ -56,9 +58,26 @@ bool TTxExport::Execute(TTransactionContext& txc, const TActorContext&) {
 
             // Delayed erase of evicted blob. Blob could be already deleted.
             if (present && !dropped) {
+                LOG_S_DEBUG("Delete exported blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
+            } else if (present) {
+                LOG_S_DEBUG("Stale exported blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+
+                TEvictMetadata meta;
+                evict = Self->BlobManager->GetDropped(blobId, meta);
+                Y_VERIFY(evict.State == EEvictState::EXTERN);
+
+                if (Self->DelayedForgetBlobs.count(blobId)) {
+                    Self->DelayedForgetBlobs.erase(blobId);
+                    BlobsToForget.emplace_back(std::move(evict));
+                } else {
+                    LOG_S_ERROR("No delayed forget for stale exported blob '"
+                        << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
+                }
+            } else {
+                LOG_S_ERROR("Exported but unknown blob '" << blobId.ToStringNew() << "' at tablet " << Self->TabletID());
             }
 
             // TODO: delete not present in S3 for sure (avoid race between export and forget)
@@ -73,41 +92,36 @@ bool TTxExport::Execute(TTransactionContext& txc, const TActorContext&) {
     return true;
 }
 
-void TTxExport::Complete(const TActorContext&) {
+void TTxExport::Complete(const TActorContext& ctx) {
+    Y_VERIFY(Ev);
     LOG_S_DEBUG("TTxExport.Complete at tablet " << Self->TabletID());
+
+    auto& msg = *Ev->Get();
+    Y_VERIFY(!msg.TierName.empty());
+
+    if (!BlobsToForget.empty()) {
+        Self->ForgetBlobs(ctx, msg.TierName, std::move(BlobsToForget));
+    }
 }
 
 
 void TColumnShard::Handle(TEvPrivate::TEvExport::TPtr& ev, const TActorContext& ctx) {
     auto status = ev->Get()->Status;
+    ui64 exportNo = ev->Get()->ExportNo;
+    auto& tierName = ev->Get()->TierName;
     bool error = status == NKikimrProto::ERROR;
 
     if (error) {
-        LOG_S_WARN("Export (fail): '" << ev->Get()->ErrorStr << "' at tablet " << TabletID());
+        LOG_S_WARN("Export (fail): " << exportNo << " tier '" << tierName << "' error: "
+            << ev->Get()->ErrorStr << "' at tablet " << TabletID());
     } else if (status == NKikimrProto::UNKNOWN) {
-        ui64 exportNo = ev->Get()->ExportNo;
-        auto& tierBlobs = ev->Get()->TierBlobs;
+        LOG_S_DEBUG("Export (write): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
+
+        auto& tierBlobs = ev->Get()->Blobs;
         Y_VERIFY(tierBlobs.size());
-
-        LOG_S_DEBUG("Export (write): " << exportNo << " at tablet " << TabletID());
-
-        for (auto& [tierName, blobIds] : tierBlobs) {
-            if (!S3Actors.count(tierName)) {
-                TString tier(tierName);
-                LOG_S_ERROR("No S3 actor for tier '" << tier << "' (on export) at tablet " << TabletID());
-                continue;
-            }
-            auto& s3 = S3Actors[tierName];
-            if (!s3) {
-                TString tier(tierName);
-                LOG_S_ERROR("Not started S3 actor for tier '" << tier << "' (on export) at tablet " << TabletID());
-                continue;
-            }
-            auto event = std::make_unique<TEvPrivate::TEvExport>(exportNo, s3, std::move(blobIds));
-            ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
-        }
+        ExportBlobs(ctx, exportNo, tierName, std::move(tierBlobs));
     } else if (status == NKikimrProto::OK) {
-        LOG_S_DEBUG("Export (apply) at tablet " << TabletID());
+        LOG_S_DEBUG("Export (apply): " << exportNo << " tier '" << tierName << "' at tablet " << TabletID());
 
         Execute(new TTxExport(this, ev), ctx);
     } else {

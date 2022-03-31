@@ -129,11 +129,13 @@ bool TBlobManagerDb::LoadEvicted(THashMap<TEvictedBlob, TString>& evicted, THash
         TString strExternId = rowset.GetValue<Schema::OneToOneEvictedBlobs::ExternBlobId>();
         // TODO: CachedBlob
 
+        Y_VERIFY(state != ui8(EEvictState::UNKNOWN));
+
         TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(strBlobId, &dsGroupSelector, error);
         Y_VERIFY(blobId.IsValid(), "%s", error.c_str());
 
         TUnifiedBlobId externId = TUnifiedBlobId::ParseFromString(strExternId, nullptr, error);
-        Y_VERIFY(externId.IsValid(), "%s", error.c_str());
+        Y_VERIFY((state == ui8(EEvictState::EVICTING) || externId.IsValid()), "%s", error.c_str());
 
         TEvictedBlob evict{
             .State = (EEvictState)state,

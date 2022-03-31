@@ -7,46 +7,49 @@
 
 namespace NKikimr::NOlap {
 
-TString DsToS3Key(const TString& s) {
-    Y_VERIFY(s.size() > 2);
-    TString res = s;
-    res[0] = 'S';
-    res[1] = '3';
-    for (size_t i = 2; i < res.size(); ++i) {
+// Format: "S3-f(logoBlobId)-group"
+// Example: "S3-72075186224038245_51_31595_2_0_11952_0-2181038103"
+TString DsIdToS3Key(const TUnifiedBlobId& dsid) {
+    TString res = TString("S3") + dsid.GetLogoBlobId().ToString();
+    res[2] = '-'; // replace '['
+    res[res.size() - 1] = '-'; // replace ']'
+
+    for (size_t i = 0; i < res.size(); ++i) {
         switch (res[i]) {
-            case '[':
-                res[i] = 'a';
-                break;
-            case ']':
-                res[i] = 'b';
-                break;
             case ':':
                 res[i] = '_';
-                break;
         }
     }
+
+    res += ToString(dsid.GetDsGroup());
     return res;
 }
 
-TString S3ToDsKey(const TString& s) {
-    Y_VERIFY(s.size() > 2);
-    TString res = s;
-    res[0] = 'D';
-    res[1] = 'S';
-    for (size_t i = 2; i < res.size(); ++i) {
-        switch (res[i]) {
-            case 'a':
-                res[i] = '[';
-                break;
-            case 'b':
-                res[i] = ']';
-                break;
+TUnifiedBlobId S3KeyToDsId(const TString& s, TString& error) {
+    TVector<TString> keyBucket;
+    Split(s, "-", keyBucket);
+
+    ui32 dsGroup;
+    if (keyBucket.size() != 3 || keyBucket[0] != "S3" || !TryFromString<ui32>(keyBucket[2], dsGroup)) {
+        error = TStringBuilder() << "Wrong S3 key '" << s << "'";
+        return TUnifiedBlobId();
+    }
+
+    TString blobId = "[" + keyBucket[1] + "]";
+    for (size_t i = 0; i < blobId.size(); ++i) {
+        switch (blobId[i]) {
             case '_':
-                res[i] = ':';
+                blobId[i] = ':';
                 break;
         }
     }
-    return res;
+
+    TLogoBlobID logoBlobId;
+    if (!TLogoBlobID::Parse(logoBlobId, blobId, error)) {
+        return TUnifiedBlobId();
+    }
+
+    return TUnifiedBlobId(dsGroup, logoBlobId);
 }
 
 namespace {
@@ -126,13 +129,12 @@ TUnifiedBlobId ParseS3BlobId(const TString& s, TString& error) {
     TVector<TString> keyBucket;
     Split(s, "|", keyBucket);
 
-    if (s.size() < 2 || s[0] != 'S' || s[1] != '3' ||
-        keyBucket.size() != 2) {
+    if (keyBucket.size() != 2) {
         error = TStringBuilder() << "Wrong S3 id '" << s << "'";
         return TUnifiedBlobId();
     }
 
-    TUnifiedBlobId dsBlobId = ParseExtendedDsBlobId(S3ToDsKey(keyBucket[0]), error);
+    TUnifiedBlobId dsBlobId = S3KeyToDsId(keyBucket[0], error);
     if (!dsBlobId.IsValid()) {
         return TUnifiedBlobId();
     }

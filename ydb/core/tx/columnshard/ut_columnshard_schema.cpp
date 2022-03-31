@@ -316,12 +316,16 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
                                  {++planStep, ++txId});
             UNIT_ASSERT(ok);
             PlanSchemaTx(runtime, sender, {planStep, txId});
+
+            if (reboots) {
+                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            }
         }
 
         TriggerTTL(runtime, sender, {++planStep, ++txId}, {});
 #if 0
         if (i) {
-            sleep(1); // TODO: wait export
+            sleep(10); // TODO: wait export
         }
 #endif
         // Read
@@ -354,6 +358,10 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
             resColumns.emplace_back(tsColumn, numBytes);
         } else {
             resColumns.emplace_back(nullptr, 0);
+        }
+
+        if (reboots) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
     }
 
@@ -598,12 +606,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     Y_UNIT_TEST(ColdTiers) {
         TestHotAndColdTiers(false);
     }
-#if 0
+
     Y_UNIT_TEST(RebootColdTiers) {
         NColumnShard::gAllowLogBatchingDefaultValue = false;
         TestHotAndColdTiers(true);
     }
-#endif
+
     Y_UNIT_TEST(Drop) {
         TestDrop(false);
     }

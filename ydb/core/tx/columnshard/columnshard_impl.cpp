@@ -859,6 +859,40 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     return indexInfo;
 }
 
+void TColumnShard::ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
+                               THashMap<TUnifiedBlobId, TString>&& blobsIds) {
+    if (!S3Actors.count(tierName)) {
+        TString tier(tierName);
+        LOG_S_ERROR("No S3 actor for tier '" << tier << "' (on export) at tablet " << TabletID());
+        return;
+    }
+    auto& s3 = S3Actors[tierName];
+    if (!s3) {
+        TString tier(tierName);
+        LOG_S_ERROR("Not started S3 actor for tier '" << tier << "' (on export) at tablet " << TabletID());
+        return;
+    }
+    auto event = std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, s3, std::move(blobsIds));
+    ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
+}
+
+void TColumnShard::ForgetBlobs(const TActorContext& ctx, const TString& tierName,
+                               std::vector<NOlap::TEvictedBlob>&& blobs) {
+    if (!S3Actors.count(tierName)) {
+        LOG_S_ERROR("No S3 actor for tier '" << tierName << "' (on forget) at tablet " << TabletID());
+        return;
+    }
+    auto& s3 = S3Actors[tierName];
+    if (!s3) {
+        LOG_S_ERROR("Not started S3 actor for tier '" << tierName << "' (on forget) at tablet " << TabletID());
+        return;
+    }
+
+    auto forget = std::make_unique<TEvPrivate::TEvForget>();
+    forget->Evicted = std::move(blobs);
+    ctx.Send(s3, forget.release());
+}
+
 ui32 TColumnShard::InitS3Actors(const TActorContext& ctx, bool init) {
     ui32 count = 0;
 #ifndef KIKIMR_DISABLE_S3_OPS

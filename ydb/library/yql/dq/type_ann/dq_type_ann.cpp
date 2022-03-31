@@ -4,6 +4,7 @@
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
+#include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
@@ -98,6 +99,19 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         }
 
         auto* argType = input->GetTypeAnn();
+        if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
+            if (TDqConnection::Match(input.Get()) && argType->GetKind() == ETypeAnnotationKind::List) {
+                auto* itemType = argType->Cast<TListExprType>()->GetItemType();
+                if (!itemType->IsPersistable()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                                        << "Expected persistable data, but got: "
+                                        << *itemType));
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Persistable required. Atom, type, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable"));
+                    return TStatus::Error;
+                }
+            }
+        }
+
         if (!TDqPhyPrecompute::Match(input.Get()) && input->Content() != "KqpTxResultBinding") {
             if (argType->GetKind() == ETypeAnnotationKind::List) {
                 auto* listItemType = argType->Cast<TListExprType>()->GetItemType();

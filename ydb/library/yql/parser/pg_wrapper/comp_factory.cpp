@@ -23,7 +23,6 @@ extern "C" {
 #include "catalog/pg_type_d.h"
 #include "catalog/pg_collation_d.h"
 #include "utils/builtins.h"
-#include "utils/datum.h"
 #include "utils/memutils.h"
 #include "nodes/execnodes.h"
 #include "lib/stringinfo.h"
@@ -52,6 +51,44 @@ namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
 
+ui32 GetFullVarSize(const text* s) {
+    return VARSIZE(s);
+}
+
+ui32 GetCleanVarSize(const text* s) {
+    return VARSIZE(s) - VARHDRSZ;
+}
+
+const char* GetVarData(const text* s) {
+    return VARDATA(s);
+}
+
+TStringBuf GetVarBuf(const text* s) {
+    return TStringBuf(GetVarData(s), GetCleanVarSize(s));
+}
+
+char* GetMutableVarData(text* s) {
+    return VARDATA(s);
+}
+
+void UpdateCleanVarSize(text* s, ui32 cleanSize) {
+    SET_VARSIZE(s, cleanSize + VARHDRSZ);
+}
+
+char* MakeCString(TStringBuf s) {
+    char* ret = (char*)palloc(s.Size() + 1);
+    memcpy(ret, s.Data(), s.Size());
+    ret[s.Size()] = '\0';
+    return ret;
+}
+
+text* MakeVar(TStringBuf s) {
+    text* ret = (text*)palloc(s.Size() + VARHDRSZ);
+    UpdateCleanVarSize(ret, s.Size());
+    memcpy(GetMutableVarData(ret), s.Data(), s.Size());
+    return ret;
+}
+
 // allow to construct TListEntry in the space for IBoxedValue
 static_assert(sizeof(NUdf::IBoxedValue) >= sizeof(TAllocState::TListEntry));
 
@@ -79,6 +116,13 @@ NUdf::TUnboxedValuePod PointerDatumToPod(Datum datum) {
 
     auto raw = (NUdf::IBoxedValue*)original;
     new(raw) TBoxedValueWithFree();
+    NUdf::IBoxedValuePtr ref(raw);
+    return NUdf::TUnboxedValuePod(std::move(ref));
+}
+
+NUdf::TUnboxedValuePod OwnedPointerDatumToPod(Datum datum) {
+    auto original = (char*)datum - PallocHdrSize;
+    auto raw = (NUdf::IBoxedValue*)original;
     NUdf::IBoxedValuePtr ref(raw);
     return NUdf::TUnboxedValuePod(std::move(ref));
 }
@@ -172,6 +216,24 @@ struct TMkqlPgAdapter {
 
     MemoryContextData Data;
 };
+
+class TVPtrHolder {
+public:
+    TVPtrHolder() {
+        new(Dummy) TBoxedValueWithFree();
+    }
+
+    static bool IsBoxedVPtr(Datum ptr) {
+        return *(const uintptr_t*)((char*)ptr - PallocHdrSize) == *(const uintptr_t*)Instance.Dummy;
+    }
+
+private:
+    char Dummy[sizeof(NUdf::IBoxedValue)];
+
+    static TVPtrHolder Instance;
+};
+
+TVPtrHolder TVPtrHolder::Instance;
 
 #define SET_MEMORY_CONTEXT \
     CurrentMemoryContext = ErrorContext = TMkqlPgAdapter::Instance();
@@ -382,11 +444,9 @@ public:
                 return ScalarDatumToPod(ret);
             }
 
-            for (ui32 i = 0; i < ArgNodes.size(); ++i) {
-                if (!ArgDesc[i].PassByValue && !callInfo.args[i].isnull && callInfo.args[i].value == ret) {
-                    ret = datumCopy(ret, RetTypeDesc.PassByValue, RetTypeDesc.TypeLen);
-                    break;
-                }
+            if (TVPtrHolder::IsBoxedVPtr(ret)) {
+                // returned one of arguments
+                return OwnedPointerDatumToPod(ret);
             }
 
             return PointerDatumToPod(ret);
@@ -540,7 +600,7 @@ public:
             ScalarDatumFromPod(value) :
             PointerDatumFromPod(value), false };
         if (ConvertArgToCString) {
-            argDatum.value = (Datum)text_to_cstring((const text*)argDatum.value);
+            argDatum.value = (Datum)MakeCString(GetVarBuf((const text*)argDatum.value));
             Y_DEFER {
                 pfree((void*)argDatum.value);
             };
@@ -571,7 +631,7 @@ public:
 
             if (ConvertResFromCString) {
                 freeMem = (void*)ret;
-                ret = (Datum)cstring_to_text((const char*)ret);
+                ret = (Datum)MakeVar((const char*)ret);
             }
 
             if (FInfo2.fn_addr) {
@@ -592,7 +652,7 @@ public:
 
             if (ConvertResFromCString2) {
                 freeMem2 = (void*)ret;
-                ret = (Datum)cstring_to_text((const char*)ret);
+                ret = (Datum)MakeVar((const char*)ret);
             }
 
             return TargetTypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);
@@ -681,23 +741,12 @@ public:
             return NUdf::TUnboxedValuePod((double)DatumGetFloat8(ScalarDatumFromPod(value)));
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8:
-            if (value.IsEmbedded() || value.IsString()) {
-                return value.Release();
-            }
-
             if (IsCString) {
                 auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
                 return MakeString(TStringBuf(x));
             } else {
                 auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
-                ui32 len = VARSIZE_ANY_EXHDR(x);
-                TString s;
-                if (len) {
-                    s = TString::Uninitialized(len);
-                    text_to_cstring_buffer(x, s.begin(), len + 1);
-                }
-
-                return MakeString(s);
+                return MakeString(GetVarBuf(x));
             }
         default:
             Y_UNREACHABLE();
@@ -746,7 +795,7 @@ public:
         case NUdf::EDataSlot::Utf8: {
             const auto& ref = value.AsStringRef();
             SET_MEMORY_CONTEXT;
-            return PointerDatumToPod((Datum)cstring_to_text_with_len(ref.Data(), ref.Size()));
+            return PointerDatumToPod((Datum)MakeVar(ref));
         }
         default:
             Y_UNREACHABLE();
@@ -912,16 +961,10 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
-        ui32 len = VARSIZE_ANY_EXHDR(x);
-        TString s;
-        if (len) {
-            s = TString::Uninitialized(len);
-            text_to_cstring_buffer(x, s.begin(), len + 1);
-        }
-
+        auto s = GetVarBuf(x);
         buf.Write(StringMarker);
-        buf.WriteVarI32(len);
-        buf.WriteMany(s);
+        buf.WriteVarI32(s.Size());
+        buf.WriteMany(s.Data(), s.Size());
         break;
     }
     case CSTRINGOID: {
@@ -958,16 +1001,10 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
             pfree(x);
         };
 
-        ui32 len = VARSIZE_ANY_EXHDR(x);
-        TString s;
-        if (len) {
-            s = TString::Uninitialized(len);
-            text_to_cstring_buffer(x, s.begin(), len + 1);
-        }
-
+        auto s = GetVarBuf(x);
         buf.Write(StringMarker);
-        buf.WriteVarI32(len);
-        buf.WriteMany(s);
+        buf.WriteVarI32(s.Size());
+        buf.WriteMany(s.Data(), s.Size());
         break;
     }
 }
@@ -1003,11 +1040,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
-        ui32 len = VARSIZE_ANY_EXHDR(x);
-        if (len) {
-            ret = TString::Uninitialized(len);
-            text_to_cstring_buffer(x, ret.begin(), len + 1);
-        }
+        ret = GetVarBuf(x);
         break;
     }
     case CSTRINGOID: {
@@ -1091,16 +1124,14 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
         CHECK_EXPECTED(cmd, StringMarker);
         auto s = buf.ReadYtString();
         SET_MEMORY_CONTEXT;
-        auto ret = cstring_to_text_with_len(s.Data(), s.Size());
+        auto ret = MakeVar(s);
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
         CHECK_EXPECTED(cmd, StringMarker);
         auto s = buf.ReadYtString();
         SET_MEMORY_CONTEXT;
-        auto ret = (char*)palloc(s.Size() + 1);
-        memcpy(ret, s.Data(), s.Size());
-        ret[s.Size()] = '\0';
+        auto ret = MakeCString(s);
         return PointerDatumToPod((Datum)ret);
     }
     default:
@@ -1181,31 +1212,40 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
-        TString s;
-        if (size) {
-            s = TString::Uninitialized(size);
-            buf.ReadMany(s.begin(), size);
-        }
-
         SET_MEMORY_CONTEXT;
-        auto ret = cstring_to_text_with_len(s.Data(), s.Size());
-        return PointerDatumToPod((Datum)ret);
+        text* s = (text*)palloc(size + VARHDRSZ);
+        auto mem = s;
+        Y_DEFER {
+            if (mem) {
+                pfree(mem);
+            }
+        };
+
+        UpdateCleanVarSize(s, size);
+        buf.ReadMany(GetMutableVarData(s), size);
+        mem = nullptr;
+
+        return PointerDatumToPod((Datum)s);
     }
+
     case CSTRINGOID: {
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
-        TString s;
-        if (size) {
-            s = TString::Uninitialized(size);
-            buf.ReadMany(s.begin(), size);
-        }
-
         SET_MEMORY_CONTEXT;
-        auto ret = (char*)palloc(s.Size() + 1);
-        memcpy(ret, s.Data(), s.Size());
-        ret[s.Size()] = '\0';
-        return PointerDatumToPod((Datum)ret);
+        char* s = (char*)palloc(size + 1);
+        auto mem = s;
+        Y_DEFER {
+            if (mem) {
+                pfree(mem);
+            }
+        };
+
+        buf.ReadMany(s, size);
+        mem = nullptr;
+        s[size] = '\0';
+
+        return PointerDatumToPod((Datum)s);
     }
     default:
         SET_MEMORY_CONTEXT;
@@ -1213,16 +1253,17 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
-        TString s;
-        if (size) {
-            s = TString::Uninitialized(size);
-            buf.ReadMany(s.begin(), size);
-        }
+        char* s = (char*)MKQLAllocWithSize(size);
+        Y_DEFER {
+            MKQLFreeWithSize(s, size);
+        };
+
+        buf.ReadMany(s, size);
 
         StringInfoData stringInfo;
-        stringInfo.data = (char*)s.Data();
-        stringInfo.len = s.Size();
-        stringInfo.maxlen = s.Size();
+        stringInfo.data = s;
+        stringInfo.len = size;
+        stringInfo.maxlen = size;
         stringInfo.cursor = 0;
 
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
@@ -1293,15 +1334,10 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
     case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
-        ui32 len = VARSIZE_ANY_EXHDR(x);
+        auto s = GetVarBuf(x);
+        ui32 len = s.Size();
         buf.WriteMany((const char*)&len, sizeof(len));
-        TString s;
-        if (len) {
-            s = TString::Uninitialized(len);
-            text_to_cstring_buffer(x, s.begin(), len + 1);
-        }
-
-        buf.WriteMany(s.Data(), s.size());
+        buf.WriteMany(s.Data(), len);
         break;
     }
     case CSTRINGOID: {
@@ -1333,19 +1369,14 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
             PointerDatumFromPod(value), false };
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
-        Y_DEFER{
+        Y_DEFER {
             pfree(x);
         };
 
-        ui32 len = VARSIZE_ANY_EXHDR(x);
+        auto s = GetVarBuf(x);
+        ui32 len = s.Size();
         buf.WriteMany((const char*)&len, sizeof(len));
-        TString s;
-        if (len) {
-            s = TString::Uninitialized(len);
-            text_to_cstring_buffer(x, s.begin(), len + 1);
-        }
-
-        buf.WriteMany(s.Data(), s.size());
+        buf.WriteMany(s.Data(), len);
     }
 }
 
@@ -1448,12 +1479,9 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
     case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
-        ui32 len = VARSIZE_ANY_EXHDR(x);
-        NDetails::PackUInt32(len, buf);
-        auto off = buf.Size();
-        buf.Advance(len + 1);
-        text_to_cstring_buffer(x, buf.Data() + off, len + 1);
-        buf.EraseBack(1);
+        auto s = GetVarBuf(x);
+        NDetails::PackUInt32(s.Size(), buf);
+        buf.Append(s.Data(), s.Size());
         break;
     }
     case CSTRINGOID: {
@@ -1489,12 +1517,9 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
             pfree(x);
         };
 
-        ui32 len = VARSIZE_ANY_EXHDR(x);
-        NDetails::PackUInt32(len, buf);
-        auto off = buf.Size();
-        buf.Advance(len + 1);
-        text_to_cstring_buffer(x, buf.Data() + off, len + 1);
-        buf.EraseBack(1);
+        auto s = GetVarBuf(x);
+        NDetails::PackUInt32(s.Size(), buf);
+        buf.Append(s.Data(), s.Size());
     }
 }
 
@@ -1532,7 +1557,7 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
         const char* ptr = buf.data();
         buf.Skip(size);
-        auto ret = cstring_to_text_with_len(ptr, size);
+        auto ret = MakeVar(TStringBuf(ptr, size));
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
@@ -1541,9 +1566,7 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
         const char* ptr = buf.data();
         buf.Skip(size);
-        auto ret = (char*)palloc(size + 1);
-        memcpy(ret, ptr, size);
-        ret[size] = '\0';
+        auto ret = MakeCString(TStringBuf(ptr, size));
         return PointerDatumToPod((Datum)ret);
     }
     default:
@@ -1619,14 +1642,8 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
     case VARCHAROID:
     case TEXTOID: {
         const auto x = (const text*)PointerDatumFromPod(value);
-        ui32 len = VARSIZE_ANY_EXHDR(x);
-        TString ret;
-        if (len) {
-            ret = TString::Uninitialized(len);
-            text_to_cstring_buffer(x, ret.begin(), len + 1);
-        }
-
-        NDetail::EncodeString<false>(output, ret);
+        auto s = GetVarBuf(x);
+        NDetail::EncodeString<false>(output, s);
         break;
     }
     case CSTRINGOID: {
@@ -1660,14 +1677,8 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
             pfree(x);
         };
 
-        ui32 len = VARSIZE_ANY_EXHDR(x);
-        TString ret;
-        if (len) {
-            ret = TString::Uninitialized(len);
-            text_to_cstring_buffer(x, ret.begin(), len + 1);
-        }
-
-        NDetail::EncodeString<false>(output, ret);
+        auto s = GetVarBuf(x);
+        NDetail::EncodeString<false>(output, s);
     }
 }
 
@@ -1703,16 +1714,14 @@ NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVect
         buffer.clear();
         const auto s = NDetail::DecodeString<false>(input, buffer);
         SET_MEMORY_CONTEXT;
-        auto ret = cstring_to_text_with_len(s.Data(), s.Size());
+        auto ret = MakeVar(s);
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
         buffer.clear();
         const auto s = NDetail::DecodeString<false>(input, buffer);
         SET_MEMORY_CONTEXT;
-        auto ret = (char*)palloc(s.Size() + 1);
-        memcpy(ret, s.Data(), s.Size());
-        ret[s.Size()] = '\0';
+        auto ret = MakeCString(s);
         return PointerDatumToPod((Datum)ret);
     }
     default:

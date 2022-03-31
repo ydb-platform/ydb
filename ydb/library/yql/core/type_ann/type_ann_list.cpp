@@ -4940,16 +4940,6 @@ namespace {
     }
 
     IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (input->IsCallable("WinOnGroups")) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "GROUPS in frame specification are not supported yet"));
-            return IGraphTransformer::TStatus::Error;
-        }
-        if (input->IsCallable("WinOnRange")) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "RANGE in frame specification is not supported yet"));
-            return IGraphTransformer::TStatus::Error;
-        }
-        YQL_ENSURE(input->IsCallable("WinOnRows"));
-
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4968,8 +4958,23 @@ namespace {
             }
         }
 
-        if (!TWindowFrameSettings::TryParse(*input, ctx.Expr)) {
+        auto frameSettings = TWindowFrameSettings::TryParse(*input, ctx.Expr);
+        if (!frameSettings) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        auto frameType = frameSettings->GetFrameType();
+        if (frameType == EFrameType::FrameByGroups) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "GROUPS in frame specification are not supported yet"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (frameType == EFrameType::FrameByRange) {
+            // only UNBOUNDED PRECEDING -> CURRENT ROW is currently supported
+            if (!(IsUnbounded(frameSettings->GetFirst()) && IsCurrentRow(frameSettings->GetLast()))) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "RANGE in frame specification is not supported yet"));
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         auto status = NormalizeKeyValueTuples(input, 1, output, ctx.Expr);

@@ -2835,43 +2835,52 @@ TExprNodeList DeduplicateAndSplitTupleCollectionByTypes(const TExprNode &collect
 TExprNode::TPtr MergeCalcOverWindowFrames(const TExprNode::TPtr& frames, TExprContext& ctx) {
     YQL_ENSURE(frames->IsList());
 
-
-    TNodeMap<size_t> uniqueFrameIndexes;
-    struct TWinOnRowsContent {
+    struct TWinOnContent {
         TExprNodeList Args;
         TPositionHandle Pos;
     };
 
-    TVector<TWinOnRowsContent> winOnRows;
+    struct TMergedFrames {
+        TNodeMap<size_t> UniqIndexes;
+        TVector<TWinOnContent> Frames;
+    };
+
+    TMap<TStringBuf, TMergedFrames> mergeMap;
+    size_t uniqFrameSpecs = 0;
 
     for (auto& winOn: frames->Children()) {
-        YQL_ENSURE(winOn->IsCallable("WinOnRows"));
+        YQL_ENSURE(TCoWinOnBase::Match(winOn.Get()));
 
         if (winOn->ChildrenSize() == 1) {
             // skip empty frames
             continue;
         }
+
+        TMergedFrames& merged = mergeMap[winOn->Content()];
+
         auto args = winOn->ChildrenList();
         auto frameSpec = winOn->Child(0);
-        auto frameIt = uniqueFrameIndexes.find(frameSpec);
-        if (frameIt == uniqueFrameIndexes.end()) {
-            YQL_ENSURE(uniqueFrameIndexes.size() == winOnRows.size());
-            uniqueFrameIndexes[frameSpec] = winOnRows.size();
-
-            TWinOnRowsContent content{std::move(args), winOn->Pos()};
-            winOnRows.emplace_back(std::move(content));
+        auto frameIt = merged.UniqIndexes.find(frameSpec);
+        if (frameIt == merged.UniqIndexes.end()) {
+            YQL_ENSURE(merged.UniqIndexes.size() == merged.Frames.size());
+            merged.UniqIndexes[frameSpec] = merged.Frames.size();
+            TWinOnContent content{std::move(args), winOn->Pos()};
+            merged.Frames.emplace_back(std::move(content));
+            ++uniqFrameSpecs;
         } else {
-            auto& combined = winOnRows[frameIt->second];
+            auto& combined = merged.Frames[frameIt->second];
             combined.Args.insert(combined.Args.end(), args.begin() + 1, args.end());
         }
     }
 
-    if (uniqueFrameIndexes.size() != frames->ChildrenSize()) {
-        TExprNodeList winOnRowsNodes;
-        for (auto &item : winOnRows) {
-            winOnRowsNodes.emplace_back(ctx.NewCallable(item.Pos, "WinOnRows", std::move(item.Args)));
+    if (uniqFrameSpecs != frames->ChildrenSize()) {
+        TExprNodeList newFrames;
+        for (auto& [name, merged] : mergeMap) {
+            for (auto& item : merged.Frames) {
+                newFrames.emplace_back(ctx.NewCallable(item.Pos, name, std::move(item.Args)));
+            }
         }
-        return ctx.NewList(frames->Pos(), std::move(winOnRowsNodes));
+        return ctx.NewList(frames->Pos(), std::move(newFrames));
     }
 
     return frames;

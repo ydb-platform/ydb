@@ -76,6 +76,22 @@ extern "C" void WriteSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, const NKikim
 namespace NKikimr {
 namespace NMiniKQL {
 
+void* PgInitializeMainContext() {
+    return nullptr;
+}
+
+void PgDestroyMainContext(void* ctx) {
+    Y_UNUSED(ctx);
+}
+
+void PgAcquireThreadContext(void* ctx) {
+    Y_UNUSED(ctx);
+}
+
+void PgReleaseThreadContext(void* ctx) {
+    Y_UNUSED(ctx);
+}
+
 void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
    Y_UNUSED(type);
    Y_UNUSED(value);

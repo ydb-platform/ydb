@@ -233,21 +233,23 @@ static struct TGlobalInit {
 void PGParse(const TString& input, IPGParseEvents& events) {
     pg_thread_init();
 
-    MemoryContext ctx = NULL;
     PgQueryInternalParsetreeAndError parsetree_and_error;
+
+    auto prevCurrentMemoryContext = CurrentMemoryContext;
+    auto prevErrorContext = ErrorContext;
 
     CurrentMemoryContext = (MemoryContext)malloc(sizeof(MemoryContextData));
     MemoryContextCreate(CurrentMemoryContext,
         T_AllocSetContext,
         &MyMethods,
         nullptr,
-        "yql");
+        "parser");
     ErrorContext = CurrentMemoryContext;
 
     Y_DEFER {
         free(CurrentMemoryContext);
-        CurrentMemoryContext = nullptr;
-        ErrorContext = nullptr;
+        CurrentMemoryContext = prevCurrentMemoryContext;
+        ErrorContext = prevErrorContext;
     };
 
     TAlloc alloc;

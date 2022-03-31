@@ -51,6 +51,12 @@ namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
 
+struct TMainContext {
+    MemoryContextData Data;
+    MemoryContext PrevCurrentMemoryContext = nullptr;
+    MemoryContext PrevErrorContext = nullptr;
+};
+
 ui32 GetFullVarSize(const text* s) {
     return VARSIZE(s);
 }
@@ -201,22 +207,6 @@ const MemoryContextMethods MkqlMethods = {
 #endif
 };
 
-struct TMkqlPgAdapter {
-    TMkqlPgAdapter() {
-        MemoryContextCreate((MemoryContext)&Data,
-            T_AllocSetContext,
-            &MkqlMethods,
-            nullptr,
-            "mkql");
-    }
-
-    static MemoryContext Instance() {
-        return (MemoryContext)&Singleton<TMkqlPgAdapter>()->Data;
-    }
-
-    MemoryContextData Data;
-};
-
 class TVPtrHolder {
 public:
     TVPtrHolder() {
@@ -234,9 +224,6 @@ private:
 };
 
 TVPtrHolder TVPtrHolder::Instance;
-
-#define SET_MEMORY_CONTEXT \
-    CurrentMemoryContext = ErrorContext = TMkqlPgAdapter::Instance();
 
 inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
     return desc.ElementTypeId ? desc.ElementTypeId : desc.TypeId;
@@ -261,8 +248,6 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        SET_MEMORY_CONTEXT;
-
         LOCAL_FCINFO(callInfo, 3);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfo);
@@ -402,7 +387,6 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        SET_MEMORY_CONTEXT;
         auto& state = GetState(compCtx);
         auto& callInfo = state.CallInfo.Ref();
         if (UseContext) {
@@ -591,7 +575,6 @@ public:
             return value.Release();
         }
 
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         auto& state = GetState(compCtx);
         auto& callInfo1 = state.CallInfo1.Ref();
@@ -794,7 +777,6 @@ public:
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Utf8: {
             const auto& ref = value.AsStringRef();
-            SET_MEMORY_CONTEXT;
             return PointerDatumToPod((Datum)MakeVar(ref));
         }
         default:
@@ -812,7 +794,6 @@ private:
 
 TComputationNodeFactory GetPgFactory() {
     return [] (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-            pg_thread_init();
             TStringBuf name = callable.GetType()->GetName();
             if (name == "PgConst") {
                 const auto typeIdData = AS_VALUE(TDataLiteral, callable.GetInput(0));
@@ -976,7 +957,6 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         break;
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
@@ -1049,7 +1029,6 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         break;
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
@@ -1123,19 +1102,16 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
     case TEXTOID: {
         CHECK_EXPECTED(cmd, StringMarker);
         auto s = buf.ReadYtString();
-        SET_MEMORY_CONTEXT;
         auto ret = MakeVar(s);
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
         CHECK_EXPECTED(cmd, StringMarker);
         auto s = buf.ReadYtString();
-        SET_MEMORY_CONTEXT;
         auto ret = MakeCString(s);
         return PointerDatumToPod((Datum)ret);
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         auto s = buf.ReadYtString();
         StringInfoData stringInfo;
@@ -1212,7 +1188,6 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
-        SET_MEMORY_CONTEXT;
         text* s = (text*)palloc(size + VARHDRSZ);
         auto mem = s;
         Y_DEFER {
@@ -1232,7 +1207,6 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
-        SET_MEMORY_CONTEXT;
         char* s = (char*)palloc(size + 1);
         auto mem = s;
         Y_DEFER {
@@ -1248,7 +1222,6 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NComm
         return PointerDatumToPod((Datum)s);
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
@@ -1348,7 +1321,6 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
         break;
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
@@ -1492,7 +1464,6 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         break;
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
@@ -1552,7 +1523,6 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        SET_MEMORY_CONTEXT;
         auto size = NDetails::UnpackUInt32(buf);
         MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
         const char* ptr = buf.data();
@@ -1561,7 +1531,6 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
-        SET_MEMORY_CONTEXT;
         auto size = NDetails::UnpackUInt32(buf);
         MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
         const char* ptr = buf.data();
@@ -1570,7 +1539,6 @@ NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf) {
         return PointerDatumToPod((Datum)ret);
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         auto size = NDetails::UnpackUInt32(buf);
         MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
@@ -1652,7 +1620,6 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
         break;
     }
     default:
-        SET_MEMORY_CONTEXT;
         TPAllocScope call;
         const auto& typeInfo = NPg::LookupType(type->GetTypeId());
         FmgrInfo finfo;
@@ -1713,14 +1680,12 @@ NUdf::TUnboxedValue DecodePresortPGValue(TPgType* type, TStringBuf& input, TVect
     case TEXTOID: {
         buffer.clear();
         const auto s = NDetail::DecodeString<false>(input, buffer);
-        SET_MEMORY_CONTEXT;
         auto ret = MakeVar(s);
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
         buffer.clear();
         const auto s = NDetail::DecodeString<false>(input, buffer);
-        SET_MEMORY_CONTEXT;
         auto ret = MakeCString(s);
         return PointerDatumToPod((Datum)ret);
     }
@@ -1767,13 +1732,13 @@ void* PgInitializeContext(const std::string_view& contextType) {
         *(NodeTag*)ctx = T_AggState;
         ctx->curaggcontext = (ExprContext*)MKQLAllocWithSize(sizeof(ExprContext));
         Zero(*ctx->curaggcontext);
-        ctx->curaggcontext->ecxt_per_tuple_memory = TMkqlPgAdapter::Instance();
+        ctx->curaggcontext->ecxt_per_tuple_memory = (MemoryContext)&((TMainContext*)TlsAllocState->MainContext)->Data;
         return ctx;
     } else if (contextType == "WinAgg") {
         auto ctx = (WindowAggState*)MKQLAllocWithSize(sizeof(WindowAggState));
         Zero(*ctx);
         *(NodeTag*)ctx = T_WindowAggState;
-        ctx->curaggcontext = TMkqlPgAdapter::Instance();
+        ctx->curaggcontext = (MemoryContext)&((TMainContext*)TlsAllocState->MainContext)->Data;
         return ctx;
     } else {
         ythrow yexception() << "Unsupported context type: " << contextType;
@@ -1807,7 +1772,6 @@ public:
     }
 
     ui64 Hash(NUdf::TUnboxedValuePod lhs) const override {
-        SET_MEMORY_CONTEXT;
         LOCAL_FCINFO(callInfo, 1);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash);
@@ -1861,7 +1825,6 @@ public:
     }
 
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
-        SET_MEMORY_CONTEXT;
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess);
@@ -1893,7 +1856,6 @@ public:
     }
 
     int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
-        SET_MEMORY_CONTEXT;
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare);
@@ -1951,7 +1913,6 @@ public:
     }
 
     bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
-        SET_MEMORY_CONTEXT;
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquate);
@@ -1991,6 +1952,38 @@ private:
 
 NUdf::IEquate::TPtr MakePgEquate(const NMiniKQL::TPgType* type) {
     return new TPgEquate(type);
+}
+
+void* PgInitializeMainContext() {
+    auto ctx = (TMainContext*)malloc(sizeof(TMainContext));
+    MemoryContextCreate((MemoryContext)&ctx->Data,
+        T_AllocSetContext,
+        &MkqlMethods,
+        nullptr,
+        "mkql");
+    return ctx;
+}
+
+void PgDestroyMainContext(void* ctx) {
+    free(ctx);
+}
+
+void PgAcquireThreadContext(void* ctx) {
+    if (ctx) {
+        pg_thread_init();
+        auto main = (TMainContext*)ctx;
+        main->PrevCurrentMemoryContext = CurrentMemoryContext;
+        main->PrevErrorContext = ErrorContext;
+        CurrentMemoryContext = ErrorContext = (MemoryContext)&main->Data;
+    }
+}
+
+void PgReleaseThreadContext(void* ctx) {
+    if (ctx) {
+        auto main = (TMainContext*)ctx;
+        CurrentMemoryContext = main->PrevCurrentMemoryContext;
+        ErrorContext = main->PrevErrorContext;
+    }
 }
 
 } // namespace NMiniKQL

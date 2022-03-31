@@ -57,6 +57,7 @@ struct TAllocState : public TAlignedPagePool
     TListEntry OffloadedBlocksRoot;
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
+    void* MainContext = nullptr;
     void* CurrentContext = nullptr;
 
     ::NKikimr::NUdf::TBoxedValueLink Root;
@@ -73,6 +74,11 @@ struct TAllocState : public TAlignedPagePool
 };
 
 extern Y_POD_THREAD(TAllocState*) TlsAllocState;
+
+void* PgInitializeMainContext();
+void PgDestroyMainContext(void* ctx);
+void PgAcquireThreadContext(void* ctx);
+void PgReleaseThreadContext(void* ctx);
 
 class TPAllocScope {
 public:
@@ -115,6 +121,7 @@ public:
     explicit TScopedAlloc(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters(), bool supportsSizedAllocators = false)
         : MyState_(counters, supportsSizedAllocators)
     {
+        MyState_.MainContext = PgInitializeMainContext();
         Acquire();
     }
 
@@ -122,6 +129,7 @@ public:
     {
         MyState_.KillAllBoxed();
         Release();
+        PgDestroyMainContext(MyState_.MainContext);
     }
 
     TAllocState& Ref() {
@@ -132,6 +140,7 @@ public:
         if (!AttachedCount_) {
             PrevState_ = TlsAllocState;
             TlsAllocState = &MyState_;
+            PgAcquireThreadContext(MyState_.MainContext);
         } else {
             Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
         }
@@ -142,6 +151,7 @@ public:
     void Release() {
         if (AttachedCount_ && --AttachedCount_ == 0) {
             Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
+            PgReleaseThreadContext(MyState_.MainContext);
             TlsAllocState = PrevState_;
             PrevState_ = nullptr;
         }

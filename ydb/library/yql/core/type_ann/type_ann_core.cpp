@@ -8846,14 +8846,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (ctx.Types.PgTypes || isResolved) {
             TVector<ui32> argTypes;
+            bool needRetype = false;
             for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
                 auto type = input->Child(i)->GetTypeAnn();
                 ui32 argType;
-                if (!ExtractPgType(type, argType, input->Child(i)->Pos(), ctx.Expr)) {
+                bool convertToPg;
+                if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
+                if (convertToPg) {
+                    input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+                    needRetype = true;
+                }
+
                 argTypes.push_back(argType);
+            }
+
+            if (needRetype) {
+                return IGraphTransformer::TStatus::Repeat;
             }
 
             if (isResolved) {
@@ -9074,14 +9085,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TVector<ui32> argTypes;
+        bool needRetype = false;
         for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
             auto type = input->Child(i)->GetTypeAnn();
             ui32 argType;
-            if (!ExtractPgType(type, argType, input->Child(i)->Pos(), ctx.Expr)) {
+            bool convertToPg;
+            if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
+            if (convertToPg) {
+                input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+                needRetype = true;
+            }
+
             argTypes.push_back(argType);
+        }
+
+        if (needRetype) {
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         if (isResolved) {
@@ -9178,14 +9200,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (ctx.Types.PgTypes) {
             TVector<ui32> argTypes;
+            bool needRetype = false;
             for (ui32 i = overWindow ? 2 : 1; i < input->ChildrenSize(); ++i) {
                 auto type = input->Child(i)->GetTypeAnn();
                 ui32 argType;
-                if (!ExtractPgType(type, argType, input->Child(i)->Pos(), ctx.Expr)) {
+                bool convertToPg;
+                if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
+                if (convertToPg) {
+                    input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+                    needRetype = true;
+                }
+
                 argTypes.push_back(argType);
+            }
+
+            if (needRetype) {
+                return IGraphTransformer::TStatus::Repeat;
             }
 
             const auto& aggDesc = NPg::LookupAggregation(name, argTypes);
@@ -9687,8 +9720,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto type = input->Head().GetTypeAnn();
         ui32 inputTypeId = 0;
-        if (!ExtractPgType(type, inputTypeId, input->Pos(), ctx.Expr)) {
+        bool convertToPg;
+        if (!ExtractPgType(type, inputTypeId, convertToPg, input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            input->ChildRef(0) = ctx.Expr.NewCallable(input->Child(0)->Pos(), "ToPg", { input->ChildPtr(0) });
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         if (!EnsureTypePg(input->Tail(), ctx.Expr)) {
@@ -9738,14 +9777,38 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TVector<ui32> argTypes;
+        bool needRetype = false;
         for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
             auto type = lambda->Child(i)->GetTypeAnn();
             ui32 argType;
-            if (!ExtractPgType(type, argType, lambda->Child(i)->Pos(), ctx.Expr)) {
+            bool convertToPg;
+            if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
+            if (convertToPg) {
+                needRetype = true;
+            }
+
             argTypes.push_back(argType);
+        }
+
+        if (needRetype) {
+            lambda = ctx.Expr.DeepCopyLambda(*lambda);
+            for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
+                auto type = lambda->Child(i)->GetTypeAnn();
+                ui32 argType;
+                bool convertToPg;
+                if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (convertToPg) {
+                    lambda->ChildRef(i) = ctx.Expr.NewCallable(lambda->Child(i)->Pos(), "ToPg", { lambda->ChildPtr(i) });
+                }
+            }
+
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         const auto& aggDesc = NPg::LookupAggregation(func, argTypes);

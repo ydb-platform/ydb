@@ -4963,8 +4963,9 @@ bool IsCallableTypeHasStreams(const TCallableExprType* callableType) {
     return false;
 }
 
-bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, TPositionHandle pos, TExprContext& ctx) {
+bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx) {
     pgType = 0;
+    convertToPg = false;
     if (type->GetKind() == ETypeAnnotationKind::Null) {
         return true;
     }
@@ -4986,6 +4987,7 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, TPositionHandl
         }
 
         pgType = *convertedTypeId;
+        convertToPg = true;
         return true;
     } else if (type->GetKind() != ETypeAnnotationKind::Pg) {
         ctx.AddError(TIssue(ctx.GetPosition(pos),

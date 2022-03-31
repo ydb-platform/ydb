@@ -83,21 +83,8 @@ NUdf::TUnboxedValuePod PointerDatumToPod(Datum datum) {
     return NUdf::TUnboxedValuePod(std::move(ref));
 }
 
-Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value, bool isVar) {
-    if (value.IsBoxed()) {
-        return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
-    }
-
-    // temporary palloc, should be handled by TPAllocScope
-    const auto& ref = value.AsStringRef();
-    if (isVar) {
-        return (Datum)cstring_to_text_with_len(ref.Data(), ref.Size());
-    } else {
-        auto ret = (char*)palloc(ref.Size() + 1);
-        memcpy(ret, ref.Data(), ref.Size());
-        ret[ref.Size()] = '\0';
-        return (Datum)ret;
-    }
+Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value) {
+    return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
 }
 
 void *MkqlAllocSetAlloc(MemoryContext context, Size size) {
@@ -354,8 +341,6 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         SET_MEMORY_CONTEXT;
-        TPAllocScope inputArgs;
-
         auto& state = GetState(compCtx);
         auto& callInfo = state.CallInfo.Ref();
         if (UseContext) {
@@ -375,13 +360,12 @@ public:
             } else {
                 argDatum.value = ArgDesc[i].PassByValue ?
                     ScalarDatumFromPod(value) :
-                    PointerDatumFromPod(value, ArgDesc[i].TypeLen == -1);
+                    PointerDatumFromPod(value);
             }
 
             callInfo.args[i] = argDatum;
         }
 
-        inputArgs.Detach();
         TMaybe<TPAllocScope> call;
         if (!callInfo.context) {
             call.ConstructInPlace();
@@ -554,7 +538,7 @@ public:
         callInfo1.isnull = false;
         NullableDatum argDatum = { SourceTypeDesc.PassByValue ?
             ScalarDatumFromPod(value) :
-            PointerDatumFromPod(value, SourceTypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(value), false };
         if (ConvertArgToCString) {
             argDatum.value = (Datum)text_to_cstring((const text*)argDatum.value);
             Y_DEFER {
@@ -927,9 +911,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const text*)PointerDatumFromPod(value, true);
+        const auto x = (const text*)PointerDatumFromPod(value);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         TString s;
         if (len) {
@@ -943,9 +925,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         break;
     }
     case CSTRINGOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        auto s = (const char*)PointerDatumFromPod(value, false);
+        auto s = (const char*)PointerDatumFromPod(value);
         auto len = strlen(s);
         buf.Write(StringMarker);
         buf.WriteVarI32(len);
@@ -971,7 +951,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value):
-            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
+            PointerDatumFromPod(value), false };
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER {
@@ -1022,9 +1002,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const text*)PointerDatumFromPod(value, true);
+        const auto x = (const text*)PointerDatumFromPod(value);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         if (len) {
             ret = TString::Uninitialized(len);
@@ -1033,9 +1011,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         break;
     }
     case CSTRINGOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        auto str = (const char*)PointerDatumFromPod(value, false);
+        auto str = (const char*)PointerDatumFromPod(value);
         ret = str;
         break;
     }
@@ -1058,7 +1034,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value):
-            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
+            PointerDatumFromPod(value), false };
         auto str = (char*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER {
@@ -1316,9 +1292,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const text*)PointerDatumFromPod(value, true);
+        const auto x = (const text*)PointerDatumFromPod(value);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         buf.WriteMany((const char*)&len, sizeof(len));
         TString s;
@@ -1331,9 +1305,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
         break;
     }
     case CSTRINGOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const char*)PointerDatumFromPod(value, false);
+        const auto x = (const char*)PointerDatumFromPod(value);
         ui32 len = strlen(x);
         buf.WriteMany((const char*)&len, sizeof(len));
         buf.WriteMany(x, len);
@@ -1358,7 +1330,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
-            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
+            PointerDatumFromPod(value), false };
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER{
@@ -1475,9 +1447,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const text*)PointerDatumFromPod(value, true);
+        const auto x = (const text*)PointerDatumFromPod(value);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         NDetails::PackUInt32(len, buf);
         auto off = buf.Size();
@@ -1487,9 +1457,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         break;
     }
     case CSTRINGOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const char*)PointerDatumFromPod(value, false);
+        const auto x = (const char*)PointerDatumFromPod(value);
         const auto len = strlen(x);
         NDetails::PackUInt32(len, buf);
         buf.Append(x, len);
@@ -1514,7 +1482,7 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
-            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
+            PointerDatumFromPod(value), false };
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER{
@@ -1650,9 +1618,7 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const text*)PointerDatumFromPod(value, true);
+        const auto x = (const text*)PointerDatumFromPod(value);
         ui32 len = VARSIZE_ANY_EXHDR(x);
         TString ret;
         if (len) {
@@ -1664,9 +1630,7 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
         break;
     }
     case CSTRINGOID: {
-        SET_MEMORY_CONTEXT;
-        TPAllocScope call;
-        const auto x = (const char*)PointerDatumFromPod(value, false);
+        const auto x = (const char*)PointerDatumFromPod(value);
         NDetail::EncodeString<false>(output, x);
         break;
     }
@@ -1689,7 +1653,7 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
         callInfo->isnull = false;
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
-            PointerDatumFromPod(value, typeInfo.TypeLen == -1), false };
+            PointerDatumFromPod(value), false };
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER {
@@ -1835,7 +1799,6 @@ public:
 
     ui64 Hash(NUdf::TUnboxedValuePod lhs) const override {
         SET_MEMORY_CONTEXT;
-        TPAllocScope call;
         LOCAL_FCINFO(callInfo, 1);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash);
@@ -1848,7 +1811,7 @@ public:
 
         callInfo->args[0] = { TypeDesc.PassByValue ?
             ScalarDatumFromPod(lhs) :
-            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(lhs), false };
 
         auto x = FInfoHash.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
@@ -1890,7 +1853,6 @@ public:
 
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         SET_MEMORY_CONTEXT;
-        TPAllocScope call;
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess);
@@ -1911,10 +1873,10 @@ public:
 
         callInfo->args[0] = { TypeDesc.PassByValue ?
             ScalarDatumFromPod(lhs) :
-            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(lhs), false };
         callInfo->args[1] = { TypeDesc.PassByValue ?
             ScalarDatumFromPod(rhs) :
-            PointerDatumFromPod(rhs, TypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(rhs), false };
 
         auto x = FInfoLess.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
@@ -1923,7 +1885,6 @@ public:
 
     int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         SET_MEMORY_CONTEXT;
-        TPAllocScope call;
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare);
@@ -1944,10 +1905,10 @@ public:
 
         callInfo->args[0] = { TypeDesc.PassByValue ?
             ScalarDatumFromPod(lhs) :
-            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(lhs), false };
         callInfo->args[1] = { TypeDesc.PassByValue ?
             ScalarDatumFromPod(rhs) :
-            PointerDatumFromPod(rhs, TypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(rhs), false };
 
         auto x = FInfoCompare.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
@@ -1982,7 +1943,6 @@ public:
 
     bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         SET_MEMORY_CONTEXT;
-        TPAllocScope call;
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
         callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquate);
@@ -2003,10 +1963,10 @@ public:
 
         callInfo->args[0] = { TypeDesc.PassByValue ?
             ScalarDatumFromPod(lhs) :
-            PointerDatumFromPod(lhs, TypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(lhs), false };
         callInfo->args[1] = { TypeDesc.PassByValue ?
             ScalarDatumFromPod(rhs) :
-            PointerDatumFromPod(rhs, TypeDesc.TypeLen == -1), false };
+            PointerDatumFromPod(rhs), false };
 
         auto x = FInfoEquate.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);

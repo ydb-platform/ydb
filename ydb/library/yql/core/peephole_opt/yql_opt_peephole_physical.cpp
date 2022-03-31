@@ -3423,12 +3423,12 @@ TExprNode::TPtr OptimizeExpandMap(const TExprNode::TPtr& node, TExprContext& ctx
             }
         }
     }
-
+/* TODO
     if (const auto& input = node->Head(); input.IsCallable("WithContext")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         return ctx.ChangeChild(input, 1, ctx.ChangeChild(*node, 0, input.TailPtr()));
     }
-
+*/
     return node;
 }
 
@@ -4304,6 +4304,9 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
         YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << input.Content();
         auto lambda = ctx.FuseLambdas(node->Tail(), input.Tail());
         return ctx.ChangeChildren(*node, {input.HeadPtr(), std::move(lambda)});
+    }  else if (input.IsCallable("WithContext")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
+        return ctx.ChangeChild(input, 1U, ctx.ChangeChild(*node, 0U, input.TailPtr()));
     }
 
     return node;

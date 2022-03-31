@@ -99,6 +99,12 @@ message TVolumeConfig {
 
     // Channel descriptions for volume tablets
     repeated TChannelProfile VolumeExplicitChannelProfiles = 41;
+
+    // Storage pool name (e.g. local:ssd), allowed only for nonreplicated volumes.
+    optional string StoragePoolName = 42;
+
+    // List of nodes to allocate disk, allowed only for nonreplicated volumes.
+    repeated string StorageNodes = 43;
 }
 
 message TUpdateVolumeConfig {

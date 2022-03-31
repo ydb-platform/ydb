@@ -1441,7 +1441,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     }
 
     // We don't want to merge shards that have borrowed non-compacted data
-    if (stats->HasBorrowed)
+    if (stats->HasBorrowedData)
         return false;
 
     bool canMerge = false;

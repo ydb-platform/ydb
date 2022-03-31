@@ -78,7 +78,8 @@ private:
     using TCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
         TShardCompactionInfo,
         TCompactionQueueImpl,
-        TEvPrivate::EvRunBackgroundCompaction>;
+        TEvPrivate::EvRunBackgroundCompaction,
+        NKikimrServices::FLAT_TX_SCHEMESHARD>;
 
     class TCompactionStarter : public TCompactionQueue::IStarter {
     public:
@@ -87,11 +88,11 @@ private:
         { }
 
         NOperationQueue::EStartStatus StartOperation(const TShardCompactionInfo& info) override {
-            return Self->StartBackgroundCompaction(info.ShardIdx);
+            return Self->StartBackgroundCompaction(info);
         }
 
         void OnTimeout(const TShardCompactionInfo& info) override {
-            Self->OnBackgroundCompactionTimeout(info.ShardIdx);
+            Self->OnBackgroundCompactionTimeout(info);
         }
 
     private:
@@ -205,7 +206,8 @@ public:
 
     TCompactionStarter CompactionStarter;
     TCompactionQueue* CompactionQueue = nullptr;
-    THashSet<TShardIdx> ShardsWithBorrowed;
+    THashSet<TShardIdx> ShardsWithBorrowed; // shards have parts from another shards
+    THashSet<TShardIdx> ShardsWithLoaned;   // shards have parts loaned to another shards
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
 
@@ -645,8 +647,8 @@ public:
 
     void ShardRemoved(const TShardIdx& shardIdx);
 
-    NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardIdx& shardId);
-    void OnBackgroundCompactionTimeout(const TShardIdx& shardId);
+    NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardCompactionInfo& info);
+    void OnBackgroundCompactionTimeout(const TShardCompactionInfo& info);
     void UpdateBackgroundCompactionQueueMetrics();
 
     struct TTxCleanDroppedSubDomains;

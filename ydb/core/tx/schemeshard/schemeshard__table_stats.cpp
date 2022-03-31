@@ -178,10 +178,11 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     newStats.FullCompactionTs = tableStats.GetLastFullCompactionTs();
     newStats.MemDataSize = tableStats.GetInMemSize();
     newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime());
+    newStats.HasLoanedData = tableStats.GetHasLoanedParts();
     for (ui64 tabletId : rec.GetUserTablePartOwners()) {
         newStats.PartOwners.insert(TTabletId(tabletId));
         if (tabletId != rec.GetDatashardId()) {
-            newStats.HasBorrowed = true;
+            newStats.HasBorrowedData = true;
         }
     }
     for (ui64 tabletId : rec.GetSysTablesPartOwners()) {
@@ -328,7 +329,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         }
     }
 
-    if (newStats.HasBorrowed) {
+    if (newStats.HasBorrowedData) {
         // We don't want to split shards that have borrow parts
         // We must ask them to compact first
         CompactEv.Reset(new TEvDataShard::TEvCompactBorrowed(tableId));

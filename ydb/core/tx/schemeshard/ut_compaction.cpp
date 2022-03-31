@@ -46,6 +46,69 @@ std::pair<TTableInfoMap, ui64> GetTables(
     return std::make_pair(result, ownerId);
 }
 
+struct TPathInfo {
+    ui64 OwnerId = TTestTxConfig::SchemeShard;
+    NKikimrTxDataShard::TEvGetInfoResponse::TUserTable UserTable;
+    TVector<ui64> Shards;
+};
+
+TPathInfo GetPathInfo(
+    TTestActorRuntime &runtime,
+    const char* fullPath,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    TPathInfo info;
+    auto description = DescribePrivatePath(runtime, schemeshardId,  fullPath, true, true);
+    for (auto &part : description.GetPathDescription().GetTablePartitions())
+        info.Shards.push_back(part.GetDatashardId());
+
+    auto [tables, ownerId] = GetTables(runtime, info.Shards.at(0));
+    auto userTableName = TStringBuf(fullPath).RNextTok('/');
+    info.UserTable = tables[userTableName];
+    info.OwnerId = ownerId;
+
+    return info;
+}
+
+void CreateTableWithData(
+    TTestActorRuntime &runtime,
+    TTestEnv& env,
+    const char* path,
+    const char* name,
+    ui32 shardsCount,
+    ui64& txId,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    TestCreateTable(runtime, schemeshardId, ++txId, path,
+        Sprintf(R"____(
+            Name: "%s"
+            Columns { Name: "key"  Type: "Uint64"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: %d
+        )____", name, shardsCount));
+    env.TestWaitNotification(runtime, txId, schemeshardId);
+
+    auto fnWriteRow = [&] (ui64 tabletId, ui64 key, const char* tableName) {
+        TString writeQuery = Sprintf(R"(
+            (
+                (let key '( '('key (Uint64 '%lu)) ) )
+                (let value '('('value (Utf8 'MostMeaninglessValueInTheWorld)) ) )
+                (return (AsList (UpdateRow '__user__%s key value) ))
+            )
+        )", key, tableName);
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+        UNIT_ASSERT_VALUES_EQUAL(err, "");
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+    };
+
+    for (ui64 key = 0; key < 100; ++key) {
+        fnWriteRow(TTestTxConfig::FakeHiveTablets, key, name);
+    }
+}
+
 void SetFeatures(
     TTestActorRuntime &runtime,
     TTestEnv&,
@@ -60,6 +123,11 @@ void SetFeatures(
     compactionConfig->MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig->MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig->MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+
+    // 1 compaction / second
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMaxRate(1);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
 
     auto sender = runtime.AllocateEdgeActor();
 
@@ -96,6 +164,11 @@ void DisableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
 
+    // 1 compaction / second
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMaxRate(1);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
+
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
 }
@@ -116,11 +189,33 @@ void EnableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
 
+    // 1 compaction / second
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMaxRate(1);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
+
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
 }
 
-ui64 GetCompactionsCount(
+struct TCompactionStats {
+    ui64 BackgroundRequestCount = 0;
+    ui64 BackgroundCompactionCount = 0;
+
+    TCompactionStats() = default;
+
+    TCompactionStats(const NKikimrTxDataShard::TEvGetCompactTableStatsResult& stats)
+        : BackgroundRequestCount(stats.GetBackgroundCompactionRequests())
+        , BackgroundCompactionCount(stats.GetBackgroundCompactionCount())
+    {}
+
+    void Update(const TCompactionStats& other) {
+        BackgroundRequestCount += other.BackgroundRequestCount;
+        BackgroundCompactionCount += other.BackgroundCompactionCount;
+    }
+};
+
+TCompactionStats GetCompactionStats(
     TTestActorRuntime &runtime,
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     ui64 tabletId,
@@ -135,25 +230,41 @@ ui64 GetCompactionsCount(
     auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetCompactTableStatsResult>(handle);
     UNIT_ASSERT(response->Record.HasBackgroundCompactionRequests());
 
-    return response->Record.GetBackgroundCompactionRequests();
+    return TCompactionStats(response->Record);
 }
 
-ui64 GetCompactionsCount(
+TCompactionStats GetCompactionStats(
     TTestActorRuntime &runtime,
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     const TVector<ui64>& shards,
     ui64 ownerId)
 {
-    ui64 compactionsCount = 0;
+    TCompactionStats stats;
+
     for (auto shard: shards) {
-        compactionsCount += GetCompactionsCount(
+        stats.Update(GetCompactionStats(
             runtime,
             userTable,
             shard,
-            ownerId);
+            ownerId));
     }
 
-    return compactionsCount;
+    return stats;
+}
+
+TCompactionStats GetCompactionStats(
+    TTestActorRuntime &runtime,
+    const TString& path,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    auto info = GetPathInfo(runtime, path.c_str(), schemeshardId);
+    UNIT_ASSERT(!info.Shards.empty());
+
+    return GetCompactionStats(
+        runtime,
+        info.UserTable,
+        info.Shards,
+        info.OwnerId);
 }
 
 void CheckShardCompacted(
@@ -163,11 +274,11 @@ void CheckShardCompacted(
     ui64 ownerId,
     bool shouldCompacted = true)
 {
-    auto count = GetCompactionsCount(
+    auto count = GetCompactionStats(
         runtime,
         userTable,
         tabletId,
-        ownerId);
+        ownerId).BackgroundRequestCount;
 
     if (shouldCompacted) {
         UNIT_ASSERT(count > 0);
@@ -176,39 +287,30 @@ void CheckShardCompacted(
     }
 }
 
-void CheckNoCompactions(
+void CheckNoCompactionsInPeriod(
     TTestActorRuntime &runtime,
     TTestEnv& env,
-    ui64 schemeshardId,
-    const TString& path)
+    const TString& path,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
 {
-    auto description = DescribePrivatePath(runtime, schemeshardId, path, true, true);
-    TVector<ui64> shards;
-    for (auto &part : description.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
-
-    UNIT_ASSERT(!shards.empty());
+    auto info = GetPathInfo(runtime, path.c_str(), schemeshardId);
+    UNIT_ASSERT(!info.Shards.empty());
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto [tables, ownerId] = GetTables(runtime, shards.at(0));
-
-    auto userTableName = TStringBuf(path).RNextTok('/');
-    const auto& userTable = tables[userTableName];
-
-    auto count1 = GetCompactionsCount(
+    auto count1 = GetCompactionStats(
         runtime,
-        userTable,
-        shards,
-        ownerId);
+        info.UserTable,
+        info.Shards,
+        info.OwnerId).BackgroundRequestCount;
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto count2 = GetCompactionsCount(
+    auto count2 = GetCompactionStats(
         runtime,
-        userTable,
-        shards,
-        ownerId);
+        info.UserTable,
+        info.Shards,
+        info.OwnerId).BackgroundRequestCount;
 
     UNIT_ASSERT_VALUES_EQUAL(count1, count2);
 }
@@ -221,29 +323,14 @@ void TestBackgroundCompaction(
 {
     ui64 txId = 1000;
 
-    TestCreateTable(runtime, ++txId, "/MyRoot",
-        R"____(
-            Name: "Simple"
-            Columns { Name: "key1"  Type: "Uint32"}
-            Columns { Name: "Value" Type: "Utf8"}
-            KeyColumnNames: ["key1"]
-            UniformPartitionsCount: 2
-        )____");
-    env.TestWaitNotification(runtime, txId);
+    CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
+    auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
     enableBackgroundCompactionFunc(runtime, env);
-
-    auto description = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
-    TVector<ui64> shards;
-    for (auto &part : description.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
-
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto [tables, ownerId] = GetTables(runtime, shards.at(0));
-
-    for (auto shard: shards)
-        CheckShardCompacted(runtime, tables["Simple"], shard, ownerId);
+    for (auto shard: info.Shards)
+        CheckShardCompacted(runtime, info.UserTable, shard, info.OwnerId);
 }
 
 ui64 TestServerless(
@@ -329,17 +416,13 @@ ui64 TestServerless(
     // turn on background compaction
     EnableBackgroundCompactionViaRestart(runtime, env, schemeshardId, enableServerless);
 
-    auto description = DescribePrivatePath(runtime, schemeshardId, "/MyRoot/User/Simple", true, true);
-    TVector<ui64> shards;
-    for (auto &part : description.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
+    auto info = GetPathInfo(runtime, "/MyRoot/User/Simple", schemeshardId);
+    UNIT_ASSERT(!info.Shards.empty());
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto [tables, ownerId] = GetTables(runtime, shards.at(0));
-
-    for (auto shard: shards)
-        CheckShardCompacted(runtime, tables["Simple"], shard, ownerId, enableServerless);
+    for (auto shard: info.Shards)
+        CheckShardCompacted(runtime, info.UserTable, shard, info.OwnerId, enableServerless);
 
     return schemeshardId;
 }
@@ -402,7 +485,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // some time to finish compactions in progress
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        CheckNoCompactions(runtime, env, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
     }
 
     Y_UNIT_TEST(ShouldNotCompactServerless) {
@@ -444,7 +527,88 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // some time to finish compactions in progress
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        CheckNoCompactions(runtime, env, schemeshardId, "/MyRoot/User/Simple");
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/User/Simple", schemeshardId);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactBackups) {
+        // enabled via schemeshard restart
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        // disable for the case, when compaction is enabled by default
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
+
+        // backup table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
+        UNIT_ASSERT_VALUES_EQUAL(GetCompactionStats(runtime, "/MyRoot/CopyTable").BackgroundRequestCount, 0UL);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactBorrowed) {
+        // enabled via schemeshard restart
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        //runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_TRACE);
+
+        // disable for the case, when compaction is enabled by default
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
+
+        // capture original observer func by setting dummy one
+        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // now set our observer backed up by original
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactBorrowed:
+                // we should not compact borrowed to check that background compaction
+                // will not compact shard with borrowed parts as well
+                Y_UNUSED(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            default:
+                return originalObserver(runtime, ev);
+            }
+        });
+
+        ui64 txId = 1000;
+
+        // note that we create 1-sharded table to avoid complications
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        // copy table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
+        UNIT_ASSERT_VALUES_EQUAL(GetCompactionStats(runtime, "/MyRoot/CopyTable").BackgroundRequestCount, 0UL);
+
+        // original table should not be compacted as well
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
     }
 };
 

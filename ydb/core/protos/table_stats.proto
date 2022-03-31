@@ -43,4 +43,7 @@ message TTableStats {
 
     // seconds since epoch
     optional uint64 LastFullCompactionTs = 28;
+
+    // i.e. this shard lent to other shards
+    optional bool HasLoanedParts = 29;
 }

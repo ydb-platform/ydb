@@ -3,15 +3,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardIdx& shardId) {
+NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardCompactionInfo& info) {
     UpdateBackgroundCompactionQueueMetrics();
 
     auto ctx = TActivationContext::ActorContextFor(SelfId());
 
-    auto it = ShardInfos.find(shardId);
+    const auto& shardIdx = info.ShardIdx;
+    auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve shard info "
-            "for background compaction# " << shardId
+            "for background compaction# " << shardIdx
             << " at schemeshard# " << TabletID());
 
         return NOperationQueue::EStartStatus::EOperationRemove;
@@ -22,6 +23,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RunBackgroundCompaction "
         "for pathId# " << pathId << ", datashard# " << datashardId
+        << ", compactionInfo# " << info
         << ", next wakeup# " << CompactionQueue->GetWakeupTime()
         << ", rate# " << CompactionQueue->GetRate()
         << ", in queue# " << CompactionQueue->Size() << " shards"
@@ -42,17 +44,17 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
 
-void TSchemeShard::OnBackgroundCompactionTimeout(const TShardIdx& shardId) {
+void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& info) {
     UpdateBackgroundCompactionQueueMetrics();
-
     TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_TIMEOUT].Increment(1);
 
     auto ctx = TActivationContext::ActorContextFor(SelfId());
 
-    auto it = ShardInfos.find(shardId);
+    const auto& shardIdx = info.ShardIdx;
+    auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve shard info "
-            "for timeout background compaction# " << shardId
+            "for timeout background compaction# " << shardIdx
             << " at schemeshard# " << TabletID());
         return;
     }
@@ -62,6 +64,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardIdx& shardId) {
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Background compaction timeout "
         "for pathId# " << pathId << ", datashard# " << datashardId
+        << ", compactionInfo# " << info
         << ", next wakeup# " << CompactionQueue->GetWakeupTime()
         << ", rate# " << CompactionQueue->GetRate()
         << ", in queue# " << CompactionQueue->Size() << " shards"
@@ -100,6 +103,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     } else {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished background compaction "
             "for pathId# " << pathId << ", datashard# " << tabletId
+            << ", shardIdx# " << shardIdx
             << " in# " << duration.MilliSeconds() << " ms, with status# " << (int)record.GetStatus()
             << ", next wakeup# " << CompactionQueue->GetWakeupTime()
             << ", rate# " << CompactionQueue->GetRate()
@@ -126,6 +130,9 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     case NKikimrTxDataShard::TEvCompactTableResult::BORROWED:
         TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_BORROWED].Increment(1);
         break;
+    case NKikimrTxDataShard::TEvCompactTableResult::LOANED:
+        TabletCounters->Cumulative()[COUNTER_BACKGROUND_COMPACTION_LOANED].Increment(1);
+        break;
     }
 
     UpdateBackgroundCompactionQueueMetrics();
@@ -138,8 +145,30 @@ void TSchemeShard::EnqueueCompaction(
     if (!CompactionQueue)
         return;
 
-    if (stats.HasBorrowed)
+    auto ctx = TActivationContext::ActorContextFor(SelfId());
+
+    if (stats.HasBorrowedData) {
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "background compaction enqueue skipped shard# " << shardIdx
+            << " with borrowed parts at schemeshard " << TabletID());
         return;
+    }
+
+    if (stats.HasLoanedData) {
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "background compaction enqueue skipped shard# " << shardIdx
+            << " with loaned parts at schemeshard " << TabletID());
+        return;
+    }
+
+    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "background compaction enqueue shard# " << shardIdx
+        << " with partCount# " << stats.PartCount
+        << ", rowCount# " << stats.RowCount
+        << ", searchHeight# " << stats.SearchHeight
+        << ", memDataSize# " << stats.MemDataSize
+        << ", lastFullCompaction# " << TInstant::Seconds(stats.FullCompactionTs)
+        << " at schemeshard " << TabletID());
 
     CompactionQueue->Enqueue(TShardCompactionInfo(shardIdx, stats));
     UpdateBackgroundCompactionQueueMetrics();
@@ -152,10 +181,32 @@ void TSchemeShard::UpdateCompaction(
     if (!CompactionQueue)
         return;
 
-    if (newStats.HasBorrowed) {
+    auto ctx = TActivationContext::ActorContextFor(SelfId());
+
+    if (newStats.HasBorrowedData) {
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "background compaction update removed shard# " << shardIdx
+            << " with borrowed parts at schemeshard " << TabletID());
         RemoveCompaction(shardIdx);
         return;
     }
+
+    if (newStats.HasLoanedData) {
+        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "background compaction update removed shard# " << shardIdx
+            << " with loaned parts at schemeshard " << TabletID());
+        RemoveCompaction(shardIdx);
+        return;
+    }
+
+    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "background compaction enqueue/update shard# " << shardIdx
+        << " with partCount# " << newStats.PartCount
+        << ", rowCount# " << newStats.RowCount
+        << ", searchHeight# " << newStats.SearchHeight
+        << ", memDataSize# " << newStats.MemDataSize
+        << ", lastFullCompaction# " << TInstant::Seconds(newStats.FullCompactionTs)
+        << " at schemeshard " << TabletID());
 
     TShardCompactionInfo info(shardIdx, newStats);
     if (!CompactionQueue->Update(info))
@@ -191,11 +242,17 @@ void TSchemeShard::UpdateShardMetrics(
     const TShardIdx& shardIdx,
     const TTableInfo::TPartitionStats& newStats)
 {
-    if (newStats.HasBorrowed)
+    if (newStats.HasBorrowedData)
         ShardsWithBorrowed.insert(shardIdx);
     else
         ShardsWithBorrowed.erase(shardIdx);
     TabletCounters->Simple()[COUNTER_SHARDS_WITH_BORROWED_DATA].Set(ShardsWithBorrowed.size());
+
+    if (newStats.HasLoanedData)
+        ShardsWithLoaned.insert(shardIdx);
+    else
+        ShardsWithLoaned.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_LOANED_DATA].Set(ShardsWithLoaned.size());
 
     THashMap<TShardIdx, TPartitionMetrics>::insert_ctx insertCtx;
     auto it = PartitionMetricsMap.find(shardIdx, insertCtx);
@@ -229,6 +286,9 @@ void TSchemeShard::UpdateShardMetrics(
 void TSchemeShard::RemoveShardMetrics(const TShardIdx& shardIdx) {
     ShardsWithBorrowed.erase(shardIdx);
     TabletCounters->Simple()[COUNTER_SHARDS_WITH_BORROWED_DATA].Set(ShardsWithBorrowed.size());
+
+    ShardsWithLoaned.erase(shardIdx);
+    TabletCounters->Simple()[COUNTER_SHARDS_WITH_LOANED_DATA].Set(ShardsWithLoaned.size());
 
     auto it = PartitionMetricsMap.find(shardIdx);
     if (it == PartitionMetricsMap.end())

@@ -7,6 +7,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/util/operation_queue.h>
 
+#include <library/cpp/actors/core/log.h>
+
 // TODO: TOperationQueueWithTimer is a good candidate for core/util, but since
 // it uses actorlib_impl, which depends on core/util, it
 // can't be part of util. No other better place yet and since
@@ -17,14 +19,14 @@ namespace NKikimr {
 // TODO: make part of util?
 namespace NOperationQueue {
 
-template <typename T, typename TQueue, int Ev>
+template <typename T, typename TQueue, int Ev, int LogServiceId>
 class TOperationQueueWithTimer
-    : public TActor<TOperationQueueWithTimer<T, TQueue, Ev>>
+    : public TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId>>
     , public ITimer
     , public TOperationQueue<T, TQueue>
 {
-    using TThis = ::NKikimr::NOperationQueue::TOperationQueueWithTimer<T, TQueue, Ev>;
-    using TActorBase = TActor<TOperationQueueWithTimer<T, TQueue, Ev>>;
+    using TThis = ::NKikimr::NOperationQueue::TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId>;
+    using TActorBase = TActor<TOperationQueueWithTimer<T, TQueue, Ev, LogServiceId>>;
     using TBase = TOperationQueue<T, TQueue>;
 
     struct TEvWakeupQueue : public TEventLocal<TEvWakeupQueue, Ev> {
@@ -32,6 +34,7 @@ class TOperationQueueWithTimer
     };
 
 private:
+    NKikimrServices::EServiceKikimr ServiceId = NKikimrServices::EServiceKikimr(LogServiceId);
     TActorId LongTimerId;
     TInstant When;
 
@@ -67,22 +70,28 @@ private:
             this->Send(LongTimerId, new TEvents::TEvPoison);
 
         When = t;
-        LongTimerId = CreateLongTimer(t - Now(),
+        auto delta = t - this->Now();
+        auto ctx = TActivationContext::ActorContextFor(TActorBase::SelfId());
+        LongTimerId = CreateLongTimer(ctx, delta,
             new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue));
+
+        LOG_DEBUG_S(ctx, ServiceId,
+            "Operation queue set NextWakeup# " << When << ", delta# " << delta.Seconds() << " seconds");
     }
 
     TInstant Now() override {
         return AppData()->TimeProvider->Now();
     }
 
-    void HandleWakeup() {
+    void HandleWakeup(const TActorContext &ctx) {
+        LOG_DEBUG_S(ctx, ServiceId, "Operation queue wakeup# " << this->Now());
         TBase::Wakeup();
     }
 
     STFUNC(StateWork) {
         Y_UNUSED(ctx);
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvWakeupQueue::EventType, HandleWakeup);
+            CFunc(TEvWakeupQueue::EventType, HandleWakeup);
         }
     }
 };

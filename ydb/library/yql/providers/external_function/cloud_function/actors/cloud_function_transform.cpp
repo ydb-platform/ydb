@@ -99,9 +99,9 @@ STATEFN(TCloudFunctionTransformActor::DeadState) {
 void TCloudFunctionTransformActor::Handle(TEvDq::TEvAbortExecution::TPtr& ev) {
     auto& msg = ev->Get()->Record;
     TIssues issues = ev->Get()->GetIssues();
-    if (msg.GetStatusCode() == Ydb::StatusIds::INTERNAL_ERROR) {
+    if (msg.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
         InternalError(issues);
-    } else if (msg.GetStatusCode() == Ydb::StatusIds::ABORTED) {
+    } else if (msg.GetStatusCode() == NYql::NDqProto::StatusIds::ABORTED) {
         Aborted(issues);
     } else {
         RuntimeError(issues);
@@ -265,7 +265,7 @@ void TCloudFunctionTransformActor::RuntimeError(const TString& message, const TI
 
 void TCloudFunctionTransformActor::RuntimeError(const TIssues& issues) {
     TransformInProgress = false;
-    auto ev = MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::UNAVAILABLE, issues);
+    auto ev = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNAVAILABLE, issues);
     Send(Owner, ev.Release());
 
     Become(&TCloudFunctionTransformActor::DeadState);
@@ -278,7 +278,7 @@ void TCloudFunctionTransformActor::InternalError(const TString& message, const T
 
 void TCloudFunctionTransformActor::InternalError(const TIssues& issues) {
     TransformInProgress = false;
-    auto ev = MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::INTERNAL_ERROR, issues);
+    auto ev = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, issues);
     Send(Owner, ev.Release());
 
     Become(&TCloudFunctionTransformActor::DeadState);
@@ -291,7 +291,7 @@ void TCloudFunctionTransformActor::Aborted(const TString& message, const TIssues
 
 void TCloudFunctionTransformActor::Aborted(const TIssues& issues) {
     TransformInProgress = false;
-    auto ev = MakeHolder<TEvDq::TEvAbortExecution>(Ydb::StatusIds::ABORTED, issues);
+    auto ev = MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::ABORTED, issues);
     Send(Owner, ev.Release());
 
     Become(&TCloudFunctionTransformActor::DeadState);

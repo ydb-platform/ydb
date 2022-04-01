@@ -5,7 +5,7 @@
 
 namespace NYql {
 
-TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, bool forceCompact) {
+TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, bool forceCompact) {
     auto list = node->HeadPtr();
     auto keyColumns = node->ChildPtr(1);
     auto aggregatedColumns = node->Child(2);
@@ -124,7 +124,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
         YQL_ENSURE(index, "Unknown column: " << keyColumn->Content());
         auto type = rowType->GetItems()[*index]->GetItemType();
         keyItemTypes.push_back(type);
-        needPickle = needPickle || !IsDataOrOptionalOfData(type);
+        needPickle = needPickle || allowPickle && !IsDataOrOptionalOfData(type);
     }
 
     const TTypeAnnotationNode* pickleType = nullptr;

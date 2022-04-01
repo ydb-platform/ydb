@@ -2849,49 +2849,43 @@ bool IsInstantEqual(const TTypeAnnotationNode& type) {
     return true;
 }
 
-static bool EnsureKeyProperty(TPositionHandle position, const TTypeAnnotationNode* keyType,
-    const std::function<bool(TPositionHandle, EDataSlot, TExprContext&)>& propertyCheck, TExprContext& ctx) {
-
+bool EnsureHashableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx) {
     if (HasError(keyType, ctx)) {
         return false;
     }
 
-    TTypeAnnotationNode::TListType keyTypes;
-    if (keyType->GetKind() != ETypeAnnotationKind::Tuple) {
-        keyTypes.push_back(keyType);
-    }
-    else {
-        auto tuple = keyType->Cast<TTupleExprType>();
-        for (auto& x : tuple->GetItems()) {
-            keyTypes.push_back(x);
-        }
-    }
-
-    for (auto& x : keyTypes) {
-        bool isOptional;
-        const TDataExprType* dataType;
-        if (!EnsureDataOrOptionalOfData(position, x, isOptional, dataType, ctx)) {
-            return false;
-        }
-
-        if (!propertyCheck(position, dataType->GetSlot(), ctx)) {
-            return false;
-        }
+    if (!keyType->IsHashable()) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected hashable type, but got: " << *keyType));
+        return false;
     }
 
     return true;
 }
 
-bool EnsureHashableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx) {
-    return EnsureKeyProperty(position, keyType, EnsureHashableDataType, ctx);
-}
-
 bool EnsureComparableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx) {
-    return EnsureKeyProperty(position, keyType, EnsureComparableDataType, ctx);
+    if (HasError(keyType, ctx)) {
+        return false;
+    }
+
+    if (!keyType->IsComparable()) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected comparable type, but got: " << *keyType));
+        return false;
+    }
+
+    return true;
 }
 
 bool EnsureEquatableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx) {
-    return EnsureKeyProperty(position, keyType, EnsureEquatableDataType, ctx);
+    if (HasError(keyType, ctx)) {
+        return false;
+    }
+
+    if (!keyType->IsEquatable()) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected equatable type, but got: " << *keyType));
+        return false;
+    }
+
+    return true;
 }
 
 bool UpdateLambdaAllArgumentsTypes(TExprNode::TPtr& lambda, const std::vector<const TTypeAnnotationNode*>& argumentsAnnotations, TExprContext& ctx) {

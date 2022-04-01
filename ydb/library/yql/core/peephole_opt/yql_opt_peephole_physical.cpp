@@ -2234,78 +2234,74 @@ TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ct
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    const bool isStream = node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow ||
+        node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream;
     TExprNode::TPtr sort;
-    if (node->Child(2)->IsCallable("Void") || node->Child(3)->IsCallable("Void")) {
-        sort = ctx.NewCallable(node->Pos(), "Sort", {node->HeadPtr(), MakeBool<true>(node->Pos(), ctx), node->ChildPtr(1)});
-    } else {
-        if (node->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-            if (const auto size = node->Child(2)->GetTypeAnn()->Cast<TTupleExprType>()->GetSize()) {
-                sort = ctx.Builder(node->Pos())
-                    .Callable("Sort")
-                        .Add(0, node->HeadPtr())
-                        .List(1)
-                            .Callable(0, "Bool")
-                                .Atom(0, "true", TNodeFlags::Default)
-                            .Seal()
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                const bool isList = node->Child(2)->IsList();
-                                for (ui32 i = 0U; i < size; ++i) {
-                                    if (isList) {
-                                        parent.Add(i + 1U, node->Child(2)->ChildPtr(i));
-                                    } else {
-                                        parent.Callable(i + 1U, "Nth")
-                                                .Add(0, node->ChildPtr(2))
-                                                .Atom(1, ToString(i), TNodeFlags::Default)
-                                            .Seal();
-                                    }
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                        .Lambda(2)
-                            .Param("item")
-                            .List()
-                                .Apply(0, *node->Child(1))
-                                    .With(0, "item")
-                                .Seal()
-                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                    for (ui32 pos = 0U; pos < size; ++pos) {
-                                        parent.Callable(pos + 1U, "Nth")
-                                            .Apply(0, *node->Child(3))
-                                                .With(0, "item")
-                                            .Seal()
-                                            .Atom(1, ToString(pos), TNodeFlags::Default)
-                                        .Seal();
-                                    }
-                                    return parent;
-                                })
-                            .Seal()
-                        .Seal()
-                    .Seal().Build();
-            }
-        } else {
-            sort = ctx.Builder(node->Pos())
-                .Callable("Sort")
+    auto keyExtractor = node->ChildPtr(1);
+    const bool haveSort = !node->Child(2)->IsCallable("Void");
+    auto idLambda = ctx.Builder(node->Pos())
+        .Lambda()
+            .Param("x")
+            .Arg("x")
+        .Seal()
+        .Build();
+
+    auto sortLambda =  ctx.Builder(node->Pos())
+        .Lambda()
+            .Param("x")
+            .Callable("Sort")
+                .Arg(0, "x")
+                .Add(1, node->ChildPtr(2))
+                .Add(2, node->ChildPtr(3))
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto settings = ctx.Builder(node->Pos())
+        .List()
+            .Atom(0, "Hashed")
+            .Atom(1, "Many")
+            .Atom(2, "Compact")
+        .Seal()
+        .Build();
+
+    auto flatten = ctx.Builder(node->Pos())
+        .Lambda()
+            .Param("dict")
+            .Callable("OrderedFlatMap")
+                .Callable(0, "DictPayloads")
+                    .Arg(0, "dict")
+                .Seal()
+                .Add(1, haveSort ? sortLambda : idLambda)
+            .Seal()
+        .Seal()
+        .Build();
+
+    if (isStream) {
+        sort = ctx.Builder(node->Pos())
+            .Callable("OrderedFlatMap")
+                .Callable(0, "SqueezeToDict")
                     .Add(0, node->HeadPtr())
-                    .List(1)
-                        .Callable(0, "Bool")
-                            .Atom(0, "true", TNodeFlags::Default)
-                        .Seal()
-                        .Add(1, node->ChildPtr(2))
+                    .Add(1, keyExtractor)
+                    .Add(2, idLambda)
+                    .Add(3, settings)
+                .Seal()
+                .Add(1, flatten)
+            .Seal()
+            .Build();
+    } else {
+        sort = ctx.Builder(node->Pos())
+            .Apply(flatten)
+                .With(0)
+                    .Callable("ToDict")
+                        .Add(0, node->HeadPtr())
+                        .Add(1, keyExtractor)
+                        .Add(2, idLambda)
+                        .Add(3, settings)
                     .Seal()
-                    .Lambda(2)
-                        .Param("item")
-                        .List()
-                            .Apply(0, *node->Child(1))
-                                .With(0, "item")
-                            .Seal()
-                            .Apply(1, *node->Child(3))
-                                .With(0, "item")
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                .Seal().Build();
-        }
+                .Done()
+            .Seal()
+            .Build();
     }
 
     return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
@@ -5789,7 +5785,7 @@ struct TPeepHoleRules {
         {"OptionalReduce", &ExpandOptionalReduce},
         {"AggrMin", &ExpandAggrMinMax<true>},
         {"AggrMax", &ExpandAggrMinMax<false>},
-        {"Aggregate", &ExpandAggregateCompact},
+        {"Aggregate", &ExpandAggregatePeephole},
         {"And", &OptimizeLogicalDups<true>},
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},

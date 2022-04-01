@@ -3107,9 +3107,12 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!lambdaKeySelector->GetTypeAnn()->IsHashable() || !lambdaKeySelector->GetTypeAnn()->IsEquatable()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaKeySelector->Pos()), TStringBuilder()
-                << "Expected hashable and equatable type for key, but got: " << *lambdaKeySelector->GetTypeAnn()));
+        auto keyType = lambdaKeySelector->GetTypeAnn();
+        if (!EnsureHashableKey(lambdaKeySelector->Pos(), keyType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureEquatableKey(lambdaKeySelector->Pos(), keyType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3192,9 +3195,12 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!lambdaKeySelector->GetTypeAnn()->IsHashable() || !lambdaKeySelector->GetTypeAnn()->IsEquatable()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaKeySelector->Pos()), TStringBuilder()
-                << "Expected hashable and equatable type for key, but got: " << *lambdaKeySelector->GetTypeAnn()));
+        auto keyType = lambdaKeySelector->GetTypeAnn();
+        if (!EnsureHashableKey(lambdaKeySelector->Pos(), keyType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureEquatableKey(lambdaKeySelector->Pos(), keyType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -3882,13 +3888,12 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureOneOrTupleOfDataOrOptionalOfData(*lambdaKeySelector, ctx.Expr)) {
+        auto keyType = lambdaKeySelector->GetTypeAnn();
+        if (!EnsureHashableKey(lambdaKeySelector->Pos(), keyType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (lambdaKeySelector->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple &&
-            lambdaKeySelector->GetTypeAnn()->Cast<TTupleExprType>()->GetSize() < 2) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambdaKeySelector->Pos()), "Tuple must contain at least 2 items"));
+        if (!EnsureEquatableKey(lambdaKeySelector->Pos(), keyType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -5896,9 +5901,6 @@ namespace {
         if (!keyExtractor->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
         }
-        if (!EnsureOneOrTupleOfDataOrOptionalOfData(*keyExtractor, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
         auto keyType = keyExtractor->GetTypeAnn();
         if (!EnsureHashableKey(keyExtractor->Pos(), keyType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -5992,14 +5994,16 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!keyExtractor->GetTypeAnn()->IsHashable() || !keyExtractor->GetTypeAnn()->IsEquatable()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyExtractor->Pos()), TStringBuilder()
-                << "Expected hashable and equatable type for key, but got: " << *keyExtractor->GetTypeAnn()));
+        auto keyType = keyExtractor->GetTypeAnn();
+        if (!EnsureHashableKey(keyExtractor->Pos(), keyType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureEquatableKey(keyExtractor->Pos(), keyType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         // groupSwitch
-        auto keyType = keyExtractor->GetTypeAnn();
         if (!UpdateLambdaAllArgumentsTypes(groupSwitch, {keyType, itemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }

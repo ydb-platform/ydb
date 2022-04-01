@@ -120,7 +120,7 @@ TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
     }
 
     YQL_CLOG(INFO, ProviderKikimr) << "KiRewriteAggregate";
-    return ExpandAggregate(node.Ptr(), ctx);
+    return ExpandAggregate(true, node.Ptr(), ctx);
 }
 
 TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,

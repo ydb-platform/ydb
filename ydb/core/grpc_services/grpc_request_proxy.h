@@ -50,10 +50,6 @@ public:
 protected:
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvCreateCoordinationNode::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvAlterCoordinationNode::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDropCoordinationNode::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeCoordinationNode::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvGetShardLocationsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseDescribeTableRequest::TPtr& ev, const TActorContext& ctx);

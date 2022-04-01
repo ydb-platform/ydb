@@ -568,10 +568,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TRefreshTokenImpl, PreHandle);
         HFunc(TEvLoginRequest, PreHandle);
         HFunc(TEvListEndpointsRequest, PreHandle);
-        HFunc(TEvCreateCoordinationNode, PreHandle);
-        HFunc(TEvAlterCoordinationNode, PreHandle);
-        HFunc(TEvDropCoordinationNode, PreHandle);
-        HFunc(TEvDescribeCoordinationNode, PreHandle);
         HFunc(TEvReadColumnsRequest, PreHandle);
         HFunc(TEvGetShardLocationsRequest, PreHandle);
         HFunc(TEvKikhouseDescribeTableRequest, PreHandle);

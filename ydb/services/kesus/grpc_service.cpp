@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/grpc_services/service_coordination.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -644,35 +645,26 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #error ADD_REQUEST macro is already defined
 #endif
 
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
+#define ADD_REQUEST(NAME, IN, OUT, CB) \
     MakeIntrusive<NGRpcService::TGRpcRequest<Ydb::Coordination::IN, Ydb::Coordination::OUT, TKesusGRpcService>>( \
         this, \
         &Service_, \
         CQ, \
         [this](NGrpc::IRequestContextBase* reqCtx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer()); \
-            ACTION; \
+            ActorSystem->Send(GRpcRequestProxyId, \
+                new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \
+                    (reqCtx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Rps, nullptr})); \
         }, \
         &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
         "Coordination/" #NAME,             \
         logger, \
         getCounterBlock("coordination", #NAME))->Run();
 
-    ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, {
-        ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::TEvCreateCoordinationNode(reqCtx));
-    });
-
-    ADD_REQUEST(AlterNode, AlterNodeRequest, AlterNodeResponse, {
-        ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::TEvAlterCoordinationNode(reqCtx));
-    });
-
-    ADD_REQUEST(DropNode, DropNodeRequest, DropNodeResponse, {
-        ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::TEvDropCoordinationNode(reqCtx));
-    });
-
-    ADD_REQUEST(DescribeNode, DescribeNodeRequest, DescribeNodeResponse, {
-        ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::TEvDescribeCoordinationNode(reqCtx));
-    });
+    ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, NGRpcService::DoCreateCoordinationNode);
+    ADD_REQUEST(AlterNode, AlterNodeRequest, AlterNodeResponse, NGRpcService::DoAlterCoordinationNode);
+    ADD_REQUEST(DropNode, DropNodeRequest, DropNodeResponse, NGRpcService::DoDropCoordinationNode);
+    ADD_REQUEST(DescribeNode, DescribeNodeRequest, DescribeNodeResponse, NGRpcService::DoDescribeCoordinationNode);
 
 #undef ADD_REQUEST
 

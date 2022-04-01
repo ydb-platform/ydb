@@ -1,6 +1,6 @@
-#include "grpc_request_proxy.h"
+#include "service_coordination.h"
+#include <ydb/core/grpc_services/base/base.h>
 
-#include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
 
@@ -10,11 +10,14 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
+using TEvDropCoordinationNode = TGrpcRequestOperationCall<Ydb::Coordination::DropNodeRequest,
+    Ydb::Coordination::DropNodeResponse>;
+
 class TDropCoordinationNodeRPC : public TRpcSchemeRequestActor<TDropCoordinationNodeRPC, TEvDropCoordinationNode> {
     using TBase = TRpcSchemeRequestActor<TDropCoordinationNodeRPC, TEvDropCoordinationNode>;
 
 public:
-    TDropCoordinationNodeRPC(TEvDropCoordinationNode* msg)
+    TDropCoordinationNodeRPC(IRequestOpCtx* msg)
         : TBase(msg) {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -54,8 +57,8 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvDropCoordinationNode::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TDropCoordinationNodeRPC(ev->Release().Release()));
+void DoDropCoordinationNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDropCoordinationNodeRPC(p.release()));
 }
 
 } // namespace NKikimr

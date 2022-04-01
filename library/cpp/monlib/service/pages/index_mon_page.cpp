@@ -133,7 +133,7 @@ void TIndexMonPage::OutputBody(IMonHttpRequest& req) {
     out << "<div class='container'>\n"
              << "<h2>" << Title << "</h2>\n";
     OutputIndex(out, req.GetPathInfo().EndsWith('/'));
-    out << "<div>\n"
+    out << "</div>\n"
         << "</body>\n";
 }
 

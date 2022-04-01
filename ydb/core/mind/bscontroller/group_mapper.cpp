@@ -277,6 +277,51 @@ namespace NKikimr::NBsController {
                         Y_FAIL();
                     }
                 }
+
+                ui32 numMatchingDisksInDomain = 0;
+                ui32 numMatchingDomainsInRealm = 0;
+                ui32 numMatchingRealmsInRealmGroup = 0;
+
+                const ui32 numFailRealms = Self.Geom.GetNumFailRealms();
+                const ui32 numFailDomainsPerFailRealm = Self.Geom.GetNumFailDomainsPerFailRealm();
+                const ui32 numVDisksPerFailDomain = Self.Geom.GetNumVDisksPerFailDomain();
+
+                auto advance = [&](bool domainExhausted, bool realmExhausted, bool realmGroupExhausted, const TPDiskLayoutPosition& prev) {
+                    if (domainExhausted) {
+                        if (numMatchingDisksInDomain < numVDisksPerFailDomain) {
+                            ForbiddenEntities.Set(prev.Domain);
+                        } else {
+                            ++numMatchingDomainsInRealm;
+                        }
+                        numMatchingDisksInDomain = 0;
+                    }
+                    if (realmExhausted) {
+                        if (numMatchingDomainsInRealm < numFailDomainsPerFailRealm) {
+                            ForbiddenEntities.Set(prev.Realm);
+                        } else {
+                            ++numMatchingRealmsInRealmGroup;
+                        }
+                        numMatchingDomainsInRealm = 0;
+                    }
+                    if (realmGroupExhausted) {
+                        if (numMatchingRealmsInRealmGroup < numFailRealms) {
+                            ForbiddenEntities.Set(prev.RealmGroup);
+                        }
+                        numMatchingRealmsInRealmGroup = 0;
+                    }
+                };
+
+                if (const auto *begin = Self.PDiskByPosition.data(), *end = begin + Self.PDiskByPosition.size(); begin != end) {
+                    --end;
+                    while (begin != end) {
+                        numMatchingDisksInDomain += begin->second->Matching || Ctx.NewGroupContent.contains(begin->second->PDiskId);
+                        const auto& prev = begin++->first;
+                        const auto& cur = begin->first;
+                        advance(prev.Domain != cur.Domain, prev.Realm != cur.Realm, prev.RealmGroup != cur.RealmGroup, prev);
+                    }
+                    numMatchingDisksInDomain += begin->second->Matching || Ctx.NewGroupContent.contains(begin->second->PDiskId);
+                    advance(true, true, true, begin->first);
+                }
             }
 
             TPDiskId AddBestDisk(ui32 realmIdx, ui32 domainIdx) {

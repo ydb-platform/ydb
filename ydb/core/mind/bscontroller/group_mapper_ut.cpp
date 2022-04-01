@@ -146,7 +146,7 @@ public:
         if (!success) {
             Ctest << "error# " << error << Endl;
         }
-        UNIT_ASSERT(success);
+        UNIT_ASSERT_C(success, error);
         TGroupRecord& record = Groups[groupId];
         record.Group = group;
         for (const auto& realm : group) {
@@ -477,6 +477,50 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         }
     }
 
+    Y_UNIT_TEST(NonUniformClusterMirror3dcWithUnusableDomain) {
+        std::vector<std::vector<ui32>> disposition{
+            { // datacenter1
+                4, 4, 4, 4, 4, 2, 2, 4, 2, 5, 5, 5,
+            },
+            { // datacenter2
+                2, 2, 2, 2, 2, 2, 1, 1, 2, 4, 8, 8, 9,
+            },
+            { // datacenter3
+                4, 4, 1, 3, 4, 4, 2, 6, 9, 8,
+            },
+            { // datacenter4
+                1,
+            },
+        };
+        TTestContext context(disposition, 4);
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc));
+        context.PopulateGroupMapper(mapper, 9);
+        for (ui32 i = 0; i < context.GetTotalDisks() - 4; ++i) {
+            Ctest << i << "/" << (context.GetTotalDisks() - 4) << Endl;
+            TGroupMapper::TGroupDefinition group;
+            context.AllocateGroup(mapper, group);
+            context.CheckGroupErasure(group);
+
+            TVector<ui32> slots = context.GetSlots();
+            UNIT_ASSERT(slots);
+            ui32 min = Max<ui32>();
+            ui32 max = 0;
+            for (const ui32 x : slots) {
+                if (x) {
+                    min = Min(min, x);
+                    max = Max(max, x);
+                }
+            }
+            UNIT_ASSERT_C(max - min <= 1, Sprintf("min# %" PRIu32 " max# %" PRIu32, min, max));
+        }
+        TVector<ui32> slots = context.GetSlots();
+        for (ui32 numSlots : slots) {
+            if (numSlots) {
+                UNIT_ASSERT_VALUES_EQUAL(9, numSlots);
+            }
+        }
+    }
+
     Y_UNIT_TEST(MakeDisksUnusable) {
         TTestContext context(1, 1, 10, 1, 1);
         TVector<ui32> groupIds;
@@ -793,5 +837,4 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
             Ctest << Endl;
         }
     }
-
 }

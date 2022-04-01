@@ -56,14 +56,26 @@ TExprBase BuildSkipNullKeys(TExprContext& ctx, TPositionHandle pos,
         .Done();
 };
 
+TExprBase BuildDqJoinInput(const TExprBase& input, const TVector<TCoAtom>& joinKeys, bool any, TExprContext& ctx) {
+    if (!any) {
+        return input;
+    }
+
+    return Build<TCoAggregate>(ctx, input.Pos())
+        .Input(input)
+        .Keys().Add(joinKeys).Build()
+        .Handlers().Build()
+        .Settings().Build()
+        .Done();
+}
+
 TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     const THashMap<TStringBuf, TJoinInputDesc>& inputs, TExprContext& ctx)
 {
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
-    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) {
-        return {};
-    }
+    auto leftAny = linkSettings.LeftHints.contains("any");
+    auto rightAny = linkSettings.RightHints.contains("any");
 
     TMaybe<TJoinInputDesc> left;
     if (joinTuple.LeftScope().Maybe<TCoAtom>()) {
@@ -141,9 +153,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     }
 
     auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
-        .LeftInput(left->Input)
+        .LeftInput(BuildDqJoinInput(left->Input, leftJoinKeys, leftAny, ctx))
         .LeftLabel(leftTableLabel)
-        .RightInput(right->Input)
+        .RightInput(BuildDqJoinInput(right->Input, rightJoinKeys, rightAny, ctx))
         .RightLabel(rightTableLabel)
         .JoinType(joinTuple.Type())
         .JoinKeys(joinKeysBuilder.Done())

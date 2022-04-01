@@ -68,7 +68,8 @@ TCloudFunctionTransformActor::TCloudFunctionTransformActor(TActorId owner,
 , CredentialsProvider(std::move(credentialsProvider))
 , TransformInput(std::move(transformInput))
 , TaskOutput(std::move(taskOutput))
-, TransformName(UrlEscapeRet(transform.GetFunctionName(), true))
+  //, TransformName(UrlEscapeRet(transform.GetFunctionName(), true))
+, TransformName("TransformNameTODO")
 , HolderFactory(holderFactory)
 , TypeEnv(typeEnv)
 , ProgramBuilder(programBuilder)
@@ -316,12 +317,15 @@ std::pair<IDqTransformActor*, NActors::IActor*> CreateCloudFunctionTransformActo
         TDqTransformActorFactory::TArguments&& args) {
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credProviderFactory;
+    Y_UNUSED(credentialsFactory);
+    /*
     if (transform.HasConnectionName()) {
         const auto token = args.SecureParams.Value(transform.GetConnectionName(), TString{});
         credProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, true);
     } else {
+    */
         credProviderFactory = NYdb::CreateInsecureCredentialsProviderFactory();
-    }
+    //}
 
     const auto actor = new TCloudFunctionTransformActor(
             args.ComputeActorId, transform,

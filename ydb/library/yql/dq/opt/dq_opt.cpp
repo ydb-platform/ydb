@@ -29,7 +29,7 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
         } else if (name == TransformTypeSetting) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             if (const auto type = tuple.Value().Cast<TCoAtom>().Value(); type == "YANDEX-CLOUD") {
-                settings.TransformType = NDqProto::TRANSFORM_CLOUD_FUNCTION;
+                settings.TransformType = "YandexCloudFunction";
             } else {
                 YQL_ENSURE(false, "Unknown transform type: " << type);
             }

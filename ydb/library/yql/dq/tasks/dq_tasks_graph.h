@@ -153,9 +153,8 @@ struct TTaskOutput {
 };
 
 struct TTransform {
-    NDqProto::ETransformType Type;
-    TString FunctionName;
-    TString ConnectionName;
+    TString Type;
+    ::google::protobuf::Any TransformSettings;
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>

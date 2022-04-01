@@ -84,6 +84,7 @@ message TTaskInput {
         TSourceInput Source = 11;
         TMergeInput Merge = 12;
     }
+    TDqTransform Transform = 30;
 }
 
 message TTaskOutputMap {
@@ -127,21 +128,17 @@ message TTaskOutput {
         TTaskOutputEffects Effects = 14;
         TTaskOutputSink Sink = 15;
     }
-}
-
-enum ETransformType {
-    TRANSFORM_UNSPECIFIED = 0;
-    TRANSFORM_CLOUD_FUNCTION = 1;
+    TDqTransform Transform = 30;
 }
 
 message TDqTransform {
-    ETransformType Type = 1;
-    string FunctionName = 2;
-    optional string ConnectionName = 3;
+    string Type = 1;
 
     // binary YSON(codec ydb/library/yql/providers/common/schema/mkql)
-    string InputType = 4;
-    string OutputType = 5;
+    bytes InputType = 2;
+    bytes OutputType = 3;
+
+    google.protobuf.Any Settings = 4;
 }
 
 message TDqTask {
@@ -154,5 +151,4 @@ message TDqTask {
     repeated TTaskOutput Outputs = 6;
     google.protobuf.Any Meta = 7;
     bool CreateSuspended = 8;
-    optional TDqTransform OutputTransform = 12;
 }

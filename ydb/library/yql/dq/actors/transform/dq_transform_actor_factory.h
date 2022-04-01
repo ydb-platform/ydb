@@ -33,9 +33,9 @@ public:
             const NDqProto::TDqTransform& transform, TArguments&& args)>;
 
     std::pair<IDqTransformActor*, NActors::IActor*> CreateDqTransformActor(const NDqProto::TDqTransform& transform, TArguments&& args);
-    void Register(NDqProto::ETransformType type, TTransformCreator creator);
+    void Register(TString type, TTransformCreator creator);
 
 private:
-    std::unordered_map<NDqProto::ETransformType, TTransformCreator> CreatorsByType;
+    std::unordered_map<TString, TTransformCreator> CreatorsByType;
 };
 }

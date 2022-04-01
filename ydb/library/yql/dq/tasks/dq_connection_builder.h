@@ -50,7 +50,7 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
         if (stageSettings.IsExternalFunction) {
             auto& transform = task.OutputTransform;
             transform.Type = stageSettings.TransformType;
-            transform.FunctionName = stageSettings.TransformName;
+            //transform.FunctionName = stageSettings.TransformName;
         }
     }
 }

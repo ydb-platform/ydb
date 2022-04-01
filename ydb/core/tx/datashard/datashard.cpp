@@ -142,6 +142,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , BackupReadAheadHi(0, 0, 128*1024*1024)
     , EnablePrioritizedMvccSnapshotReads(0, 0, 1)
     , EnableUnprotectedMvccSnapshotReads(0, 0, 1)
+    , EnableLeaderLeases(0, 0, 1)
+    , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
     , DataShardSysTables(InitDataShardSysTables(this))
     , ChangeSenderActivator(info->TabletID)
     , ChangeExchangeSplitter(this)
@@ -281,31 +283,56 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
     }
 }
 
+void TDataShard::IcbRegister() {
+    if (!IcbRegistered) {
+        auto* appData = AppData();
+
+        appData->Icb->RegisterSharedControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
+        appData->Icb->RegisterSharedControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
+        appData->Icb->RegisterSharedControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
+        appData->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
+        appData->Icb->RegisterSharedControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
+        appData->Icb->RegisterSharedControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
+
+        appData->Icb->RegisterSharedControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
+        appData->Icb->RegisterSharedControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
+        appData->Icb->RegisterSharedControl(CpuUsageReportThreshlodPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
+        appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
+        appData->Icb->RegisterSharedControl(HighDataSizeReportThreshlodBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
+        appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
+
+        appData->Icb->RegisterSharedControl(ReadColumnsScanEnabled, "DataShardControls.ReadColumnsScanEnabled");
+        appData->Icb->RegisterSharedControl(ReadColumnsScanInUserPool, "DataShardControls.ReadColumnsScanInUserPool");
+
+        appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
+        appData->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
+
+        appData->Icb->RegisterSharedControl(EnablePrioritizedMvccSnapshotReads, "DataShardControls.PrioritizedMvccSnapshotReads");
+        appData->Icb->RegisterSharedControl(EnableUnprotectedMvccSnapshotReads, "DataShardControls.UnprotectedMvccSnapshotReads");
+
+        appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
+        appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");
+
+        IcbRegistered = true;
+    }
+}
+
+bool TDataShard::ReadOnlyLeaseEnabled() {
+    IcbRegister();
+    ui64 value = EnableLeaderLeases;
+    return value != 0;
+}
+
+TDuration TDataShard::ReadOnlyLeaseDuration() {
+    IcbRegister();
+    ui64 value = MinLeaderLeaseDurationUs;
+    return TDuration::MicroSeconds(value);
+}
+
 void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::OnActivateExecutor: tablet " << TabletID() << " actor " << ctx.SelfID);
 
-    AppData(ctx)->Icb->RegisterSharedControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
-    AppData(ctx)->Icb->RegisterSharedControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
-    AppData(ctx)->Icb->RegisterSharedControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
-    AppData(ctx)->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
-    AppData(ctx)->Icb->RegisterSharedControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
-    AppData(ctx)->Icb->RegisterSharedControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
-
-    AppData(ctx)->Icb->RegisterSharedControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
-    AppData(ctx)->Icb->RegisterSharedControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
-    AppData(ctx)->Icb->RegisterSharedControl(CpuUsageReportThreshlodPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
-    AppData(ctx)->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
-    AppData(ctx)->Icb->RegisterSharedControl(HighDataSizeReportThreshlodBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
-    AppData(ctx)->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
-
-    AppData(ctx)->Icb->RegisterSharedControl(ReadColumnsScanEnabled, "DataShardControls.ReadColumnsScanEnabled");
-    AppData(ctx)->Icb->RegisterSharedControl(ReadColumnsScanInUserPool, "DataShardControls.ReadColumnsScanInUserPool");
-
-    AppData(ctx)->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
-    AppData(ctx)->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
-
-    AppData(ctx)->Icb->RegisterSharedControl(EnablePrioritizedMvccSnapshotReads, "DataShardControls.PrioritizedMvccSnapshotReads");
-    AppData(ctx)->Icb->RegisterSharedControl(EnableUnprotectedMvccSnapshotReads, "DataShardControls.UnprotectedMvccSnapshotReads");
+    IcbRegister();
 
     // OnActivateExecutor might be called multiple times for a follower
     // but the counters should be initialized only once
@@ -1486,6 +1513,38 @@ void TDataShard::SendImmediateWriteResult(
         Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
     }
+}
+
+void TDataShard::SendImmediateReadResult(TMonotonic readTime, const TActorId& target, IEventBase* event, ui64 cookie) {
+    if (IsFollower() || !ReadOnlyLeaseEnabled()) {
+        // We just send possibly stale result (old behavior)
+        Send(target, event, 0, cookie);
+        return;
+    }
+
+    struct TSendState : public TThrRefBase {
+        TActorId Target;
+        THolder<IEventBase> Event;
+        ui64 Cookie;
+
+        TSendState(const TActorId& target, IEventBase* event, ui64 cookie)
+            : Target(target)
+            , Event(event)
+            , Cookie(cookie)
+        { }
+    };
+
+    if (!readTime) {
+        readTime = AppData()->MonotonicTimeProvider->Now();
+    }
+
+    Executor()->ConfirmReadOnlyLease(readTime, [this, state = MakeIntrusive<TSendState>(target, event, cookie)] {
+        Send(state->Target, state->Event.Release(), 0, state->Cookie);
+    });
+}
+
+void TDataShard::SendImmediateReadResult(const TActorId& target, IEventBase* event, ui64 cookie) {
+    SendImmediateReadResult(TMonotonic::Zero(), target, event, cookie);
 }
 
 void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {

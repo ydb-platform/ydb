@@ -178,6 +178,9 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
     if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
         if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
             DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie());
+        } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {
+            // TODO: we should actually measure a read timestamp and use it here
+            DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie());
         } else {
             ctx.Send(op->GetTarget(), res.Release(), 0, op->GetCookie());
         }

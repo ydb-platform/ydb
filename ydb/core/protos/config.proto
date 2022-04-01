@@ -1191,6 +1191,17 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+
+        optional uint64 EnableLeaderLeases = 10 [(ControlOptions) = {
+            Description: "Enables leader leases for processing read-only queries",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MinLeaderLeaseDurationUs = 11 [(ControlOptions) = {
+            Description: "The minimum leader lease duration in microseconds",
+            MinValue: 1000,
+            MaxValue: 5000000,
+            DefaultValue: 250000 }];
     }
 
     message TTxLimitControls {

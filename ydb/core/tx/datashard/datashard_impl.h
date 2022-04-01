@@ -1041,6 +1041,9 @@ class TDataShard
     void OnStopGuardStarting(const TActorContext &ctx);
     void OnStopGuardComplete(const TActorContext &ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
+    void IcbRegister();
+    bool ReadOnlyLeaseEnabled() override;
+    TDuration ReadOnlyLeaseDuration() override;
     void OnActivateExecutor(const TActorContext &ctx) override;
 
     void Cleanup(const TActorContext &ctx);
@@ -1473,6 +1476,8 @@ public:
     ui64 GetMaxObservedStep() const;
     void SendImmediateWriteResult(
             const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0);
+    void SendImmediateReadResult(TMonotonic readTime, const TActorId& target, IEventBase* event, ui64 cookie = 0);
+    void SendImmediateReadResult(const TActorId& target, IEventBase* event, ui64 cookie = 0);
     void SendAfterMediatorStepActivate(ui64 mediatorStep);
 
     void CheckMediatorStateRestored();
@@ -2056,6 +2061,8 @@ private:
     bool MediatorStateWaiting = false;
     bool MediatorStateBackupInitiated = false;
 
+    bool IcbRegistered = false;
+
     TControlWrapper DisableByKeyFilter;
     TControlWrapper MaxTxInFly;
     TControlWrapper MaxTxLagMilliseconds;
@@ -2078,6 +2085,9 @@ private:
 
     TControlWrapper EnablePrioritizedMvccSnapshotReads;
     TControlWrapper EnableUnprotectedMvccSnapshotReads;
+
+    TControlWrapper EnableLeaderLeases;
+    TControlWrapper MinLeaderLeaseDurationUs;
 
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;

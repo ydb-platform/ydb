@@ -13874,6 +13874,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListMin"] = &ListMinWrapper;
         Functions["ListMax"] = &ListMaxWrapper;
         Functions["ListSum"] = &ListSumWrapper;
+        Functions["ListFold"] = &ListFoldWrapper;
+        Functions["ListFold1"] = &ListFold1Wrapper;
+        Functions["ListFoldMap"] = &ListFoldMapWrapper;
+        Functions["ListFold1Map"] = &ListFold1MapWrapper;
         Functions["ListConcat"] = &ListConcatWrapper;
         Functions["ListHas"] = &ContainsLookupWrapper<true, true>;
         Functions["ListAvg"] = &ListAvgWrapper;

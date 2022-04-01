@@ -1402,6 +1402,22 @@ namespace {
         return OptListFold1WrapperImpl(input, output, ctx, std::move(lambda));
     }
 
+    IGraphTransformer::TStatus ListFoldWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<3U>(input, output, ctx, "Fold");
+    }
+
+    IGraphTransformer::TStatus ListFold1Wrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<3U, 3U, true>(input, output, ctx, "Fold1");
+    }
+
+    IGraphTransformer::TStatus ListFoldMapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<3U>(input, output, ctx, "FoldMap");
+    }
+
+    IGraphTransformer::TStatus ListFold1MapWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        return OptListWrapperImpl<3U>(input, output, ctx, "Fold1Map");
+    }
+
     IGraphTransformer::TStatus ListMinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         return OptListFold1WrapperImpl(input, output, ctx, "AggrMin");
     }

@@ -388,6 +388,7 @@ private:
         TOnDowloadFinsh onFinish) final
     {
         auto easy = TEasyCurlStream::Make(std::move(url), std::move(headers), expectedSize, std::move(onNewData), std::move(onFinish));
+        const std::unique_lock lock(Sync);
         Await.emplace(std::move(easy));
         Wakeup(expectedSize);
     }

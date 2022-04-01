@@ -1365,7 +1365,7 @@ message TCompactionConfig {
         // compaction only after this amount of time
         optional uint64 MinCompactionRepeatDelaySeconds = 5 [default = 600];
 
-        optional uint32 SearchHeightThreshold = 6 [default = 10];
+        optional uint32 SearchHeightThreshold = 6 [default = 5];
 
         // TODO: enable, when schemeshard receive proper stat
         optional uint32 RowDeletesThreshold = 7 [default = 4294967295];
@@ -1391,7 +1391,7 @@ message TCompactionConfig {
         // guarantee, that at least 1/3 unique shards will be compacted, the
         // rest 2/3 can be shards compacted multiple times, i.e. all shards
         // must be compacted within at most RoundSeconds*3.
-        optional uint64 RoundSeconds = 9 [default = 86400];
+        optional uint64 RoundSeconds = 9 [default = 172800]; // 2 days
 
         // Compact even if shard has single part and empty memtable
         optional bool CompactSinglePartedShards = 10 [default = false];

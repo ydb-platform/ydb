@@ -65,7 +65,6 @@ namespace {
         runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, otherPriority);
         runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, otherPriority);
         runtime.SetLogPriority(NKikimrServices::BS_NODE, otherPriority);
-        runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, otherPriority);
         runtime.SetLogPriority(NKikimrServices::BS_PROXY, otherPriority);
         runtime.SetLogPriority(NKikimrServices::BS_SYNCLOG, NLog::PRI_CRIT);
         runtime.SetLogPriority(NKikimrServices::BS_SYNCER, NLog::PRI_CRIT);
@@ -252,6 +251,7 @@ namespace {
 
         app.SetMinRequestSequenceSize(10); // for smaller sequences and high interaction between root and domain hives
         app.SetRequestSequenceSize(10);
+        app.SetHiveStoragePoolFreshPeriod(0);
 
         SetupNodeWarden(runtime);
         SetupPDisk(runtime);
@@ -2418,6 +2418,21 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
             MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        auto updateDiskStatus = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+
+        NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = updateDiskStatus->Record.AddVDisksMetrics();
+
+        vdiskMetrics->MutableVDiskId()->SetGroupID(2147483650);
+        vdiskMetrics->MutableVDiskId()->SetGroupGeneration(1);
+        vdiskMetrics->MutableVDiskId()->SetRing(0);
+        vdiskMetrics->MutableVDiskId()->SetDomain(0);
+        vdiskMetrics->MutableVDiskId()->SetVDisk(0);
+        vdiskMetrics->SetAvailableSize(100000);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(MakeBSControllerID(0), sender, updateDiskStatus.Release(), 0, GetPipeConfigWithRetries());
+
         SendReassignTabletSpace(runtime, hiveTablet, tabletId, {}, 0);
         {
             TDispatchOptions options;

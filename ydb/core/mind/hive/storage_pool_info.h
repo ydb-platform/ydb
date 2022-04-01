@@ -11,7 +11,6 @@ using namespace NKikimrBlobStorage;
 class THive;
 
 struct TStoragePoolInfo {
-    static constexpr TDuration FreshPeriod = TDuration::Minutes(1);
     THiveSharedSettings* Settings;
 
     NKikimrConfig::THiveConfig::EHiveStorageBalanceStrategy GetBalanceStrategy() const {

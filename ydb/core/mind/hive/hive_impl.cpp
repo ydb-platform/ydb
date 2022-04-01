@@ -880,7 +880,7 @@ void THive::AssignTabletGroups(TLeaderTabletInfo& tablet) {
     }
 
     if (!storagePoolsToRefresh.empty()) {
-        // we had to refresh storage pool state from BSC
+        // we need to refresh storage pool state from BSC
         TVector<THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
         for (TString storagePoolName : storagePoolsToRefresh) {
             TStoragePoolInfo& storagePool = GetStoragePool(storagePoolName);

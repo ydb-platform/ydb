@@ -63,7 +63,11 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         passed = timer.Passed();
         Ctest << "Process = " << passed << Endl;
 #ifndef SANITIZER_TYPE
+#ifndef NDEBUG
+        UNIT_ASSERT(passed < 10);
+#else
         UNIT_ASSERT(passed < 2);
+#endif
 #endif
 
         timer.Reset();

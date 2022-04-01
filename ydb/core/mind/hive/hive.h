@@ -132,6 +132,10 @@ struct THiveSharedSettings {
     bool GetStorageSafeMode() const {
         return CurrentConfig.GetStorageSafeMode();
     }
+
+    TDuration GetStoragePoolFreshPeriod() const {
+        return TDuration::MilliSeconds(CurrentConfig.GetStoragePoolFreshPeriod());
+    }
 };
 
 struct TDrainSettings {

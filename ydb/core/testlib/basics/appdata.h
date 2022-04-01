@@ -66,6 +66,7 @@ namespace NKikimr {
         void SetChangesQueueBytesLimit(ui64 value);
         void SetMinRequestSequenceSize(ui64 value);
         void SetRequestSequenceSize(ui64 value);
+        void SetHiveStoragePoolFreshPeriod(ui64 value);
         void AddSystemBackupSID(const TString& sid);
         void SetEnableProtoSourceIdInfo(std::optional<bool> value);
 

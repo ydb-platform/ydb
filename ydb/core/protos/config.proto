@@ -1341,6 +1341,7 @@ message THiveConfig {
     optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds
     optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
     optional bool CheckMoveExpediency = 46 [default = true];
+    optional uint64 StoragePoolFreshPeriod = 47 [default = 60000]; // milliseconds
 }
 
 message TDataShardConfig {

@@ -4996,6 +4996,9 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
 bool HasContextFuncs(const TExprNode& input) {
     bool needCtx = false;
     VisitExpr(input, [&needCtx](const TExprNode& node) {
+        if (needCtx || node.IsCallable("WithContext")) {
+            return false;
+        }
         if (node.IsCallable("PgResolvedCallCtx")) {
             needCtx = true;
             return false;

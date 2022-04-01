@@ -2294,8 +2294,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("WithContext", [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        auto input = MkqlBuildExpr(*node.Child(1), ctx);
-        return ctx.ProgramBuilder.WithContext(node.Child(0)->Content(), input);
+        auto input = MkqlBuildExpr(*node.Child(0), ctx);
+        return ctx.ProgramBuilder.WithContext(input, node.Child(1)->Content());
     });
 
     AddCallable("QueueCreate", [](const TExprNode& node, TMkqlBuildContext& ctx) {

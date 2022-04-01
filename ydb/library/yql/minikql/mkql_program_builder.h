@@ -629,7 +629,7 @@ public:
     TRuntimeNode PgCast(TRuntimeNode input, TType* returnType);
     TRuntimeNode FromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode ToPg(TRuntimeNode input, TType* returnType);
-    TRuntimeNode WithContext(const std::string_view& contextType, TRuntimeNode input);
+    TRuntimeNode WithContext(TRuntimeNode input, const std::string_view& contextType);
     TRuntimeNode PgInternal0(TType* returnType);
 
 protected:

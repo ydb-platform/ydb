@@ -3200,35 +3200,35 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(input->Head(), ctx.Expr)) {
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (input->Head().Content() != "Agg" && input->Head().Content() != "WinAgg") {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
-                "Unexpected context type: " << input->Head().Content()));
+        if (input->Tail().Content() != "Agg" && input->Tail().Content() != "WinAgg") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() <<
+                "Unexpected context type: " << input->Tail().Content()));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureComputable(input->Tail(), ctx.Expr)) {
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (input->Tail().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("FromFlow")
                     .Callable("WithContext")
-                        .Add(0, input->HeadPtr())
-                        .Callable(1, "ToFlow")
-                            .Add(0, input->TailPtr())
+                        .Callable(0, "ToFlow")
+                            .Add(0, input->HeadPtr())
                         .Seal()
+                        .Add(1, input->TailPtr())
                     .Seal()
                 .Seal()
                 .Build();
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        input->SetTypeAnn(input->Tail().GetTypeAnn());
+        input->SetTypeAnn(input->Head().GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
     }
 

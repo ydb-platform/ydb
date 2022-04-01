@@ -5093,7 +5093,7 @@ TRuntimeNode TProgramBuilder::ToPg(TRuntimeNode input, TType* returnType) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::WithContext(const std::string_view& contextType, TRuntimeNode input) {
+TRuntimeNode TProgramBuilder::WithContext(TRuntimeNode input, const std::string_view& contextType) {
     if constexpr (RuntimeVersion < 30U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }

@@ -40,8 +40,8 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Lambda()
                 .Param("stream")
                 .Callable("WithContext")
-                    .Atom(0, "Agg")
-                    .Arg(1, "stream")
+                    .Arg(0, "stream")
+                    .Atom(1, "Agg")
                 .Seal()
             .Seal()
             .Build() :

@@ -103,8 +103,8 @@ message TVolumeConfig {
     // Storage pool name (e.g. local:ssd), allowed only for nonreplicated volumes.
     optional string StoragePoolName = 42;
 
-    // List of nodes to allocate disk, allowed only for nonreplicated volumes.
-    repeated string StorageNodes = 43;
+    // List of agents to allocate disk, allowed only for nonreplicated volumes.
+    repeated string AgentIds = 43;
 }
 
 message TUpdateVolumeConfig {

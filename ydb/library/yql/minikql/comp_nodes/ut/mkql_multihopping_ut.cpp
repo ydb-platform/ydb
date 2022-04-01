@@ -117,7 +117,7 @@ namespace {
 
     private:
         TUnboxedValueVector Items;
-        ui32 Index;
+        ui32 Index = 0;
         std::function<void()> FetchCallback;
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
@@ -264,8 +264,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         }
 
         check();
-        // TODO: some problem with parallel run
-        //UNIT_ASSERT_EQUAL_C(curGroupId, expected.size(), "1: " << curGroupId << " 2: "  << expected.size());
+        UNIT_ASSERT_EQUAL_C(curGroupId, expected.size(), "1: " << curGroupId << " 2: "  << expected.size());
     }
 
     Y_UNIT_TEST(TestDataWatermarks) {

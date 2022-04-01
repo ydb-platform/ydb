@@ -83,3 +83,8 @@ channel_profile_config:
     profile_id: 0
 table_service_config:
   sql_version: 1
+grpc_config:
+  host: 127.0.0.1
+monitoring_config:
+  monitoring_address: localhost
+

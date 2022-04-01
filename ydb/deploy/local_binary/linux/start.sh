@@ -27,6 +27,10 @@ if [[ $? -eq 0 ]]; then
 fi
 echo Initializing storage ...
 `pwd`/ydbd/bin/ydbd -s grpc://localhost:2136 admin blobstorage config init --yaml-file config/$cfg > logs/init_storage.log 2>&1
+if [[ $? -ge 1 ]]; then
+  echo Errors found when initializing storage, cancelling start script, check logs/init_storage.log
+  exit
+fi
 echo Registering database ...
 `pwd`/ydbd/bin/ydbd -s grpc://localhost:2136 admin database /Root/test create ssd:1 > logs/db_reg.log 2>&1
 if [[ $? -ge 1 ]]; then

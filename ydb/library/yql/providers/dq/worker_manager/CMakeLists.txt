@@ -14,7 +14,6 @@ target_compile_options(providers-dq-worker_manager PRIVATE
 target_link_libraries(providers-dq-worker_manager PUBLIC
   contrib-libs-cxxsupp
   yutil
-  ydb-core-kqp
   yql-utils-failure_injector
   providers-common-config
   providers-common-gateway

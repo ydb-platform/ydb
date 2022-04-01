@@ -16,8 +16,6 @@ target_link_libraries(dq-actors-compute PUBLIC
   yutil
   cpp-actors-core
   ydb-core-base
-  core-kqp-common
-  core-kqp-runtime
   ydb-core-protos
   ydb-core-scheme
   ydb-core-tablet_flat

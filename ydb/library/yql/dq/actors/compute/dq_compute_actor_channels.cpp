@@ -1,6 +1,8 @@
 #include "dq_compute_actor_channels.h"
 
 #include <util/string/join.h>
+#include <ydb/core/protos/services.pb.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 
 #define LOG_D(s) \

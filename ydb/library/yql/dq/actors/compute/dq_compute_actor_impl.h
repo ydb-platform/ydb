@@ -10,6 +10,7 @@
 #include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/tablet_flat/util_basics.h> // TODO: IDestructable
+#include <ydb/core/protos/services.pb.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
@@ -17,6 +18,7 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 

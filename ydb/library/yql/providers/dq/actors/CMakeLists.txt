@@ -22,6 +22,7 @@ target_link_libraries(providers-dq-actors PUBLIC
   core-services-mounts
   yql-core-user_data
   yql-utils-actors
+  yql-utils-actor_log
   yql-utils-backtrace
   yql-utils-log
   api-protos

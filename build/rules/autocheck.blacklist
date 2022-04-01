@@ -232,3 +232,15 @@ search-interfaces/pic-bot
 mds/admin/packages/yandex-storage-yasm-system-stat
 search-interfaces/video-top
 taxi/github/frontend-monorepo
+mds/admin/packages/yandex-storage-yasm-mastermind-stat
+mds/admin/packages/yandex-storage-yasm-elliptics-stat
+classifieds/infra/yt-exporters
+search-interfaces/yandex-apps-api
+search-interfaces/fiji-deverrors-bot
+mds/admin/packages/yandex-storage-mds-autoadmin
+mds/admin/packages/yandex-storage-shelf-hw-watcher-conf
+mds/admin/packages/yandex-storage-sa-scripts
+afisha/infra/projects/gh_monitorings
+data-ui/forms
+velocity/error-booster/error-booster-monitoring-config
+velocity/error-booster/packages/st-client

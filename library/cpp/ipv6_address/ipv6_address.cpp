@@ -110,6 +110,11 @@ TIpv6Address TIpv6Address::FromString(TStringBuf str, bool& ok) noexcept {
     }
 }
 
+TIpv6Address TIpv6Address::FromString(TStringBuf str) noexcept {
+    bool ok = false;
+    return TIpv6Address::FromString(str, ok);
+}
+
 TString TIpv6Address::ToString(bool* ok) const noexcept {
     return ToString(true, ok);
 }

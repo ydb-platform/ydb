@@ -61,6 +61,7 @@ public:
     explicit TIpv6Address(const in_addr& addr);
 
     static TIpv6Address FromString(TStringBuf srcStr, bool& ok) noexcept;
+    static TIpv6Address FromString(TStringBuf str) noexcept;
 
     constexpr bool IsNull() const noexcept {
         return Ip == 0;

@@ -14,6 +14,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/client_session.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/data_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/request_migrator.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include <library/cpp/cache/cache.h>
 
@@ -1851,6 +1852,8 @@ public:
 
         auto createSessionPromise = NewPromise<TCreateSessionResult>();
         auto self = shared_from_this();
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
 
         auto createSessionExtractor = [createSessionPromise, self, standalone]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
@@ -1880,7 +1883,7 @@ public:
             &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings),
+            rpcSettings,
             settings.ClientTimeout_,
             TEndpointKey(preferedLocation, 0));
 

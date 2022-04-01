@@ -226,3 +226,9 @@ market/infra/market-clickhouse-formula
 contest/legacy/yandex_contest_invoker_build_script
 taxi/github/ikars/taxi-client
 market/infra/infra-dockers
+browser/resources/extensions-whitelist
+contest/legacy/yandex_contest_invoker_debian
+search-interfaces/pic-bot
+mds/admin/packages/yandex-storage-yasm-system-stat
+search-interfaces/video-top
+taxi/github/frontend-monorepo

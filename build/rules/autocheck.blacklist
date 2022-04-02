@@ -244,3 +244,16 @@ afisha/infra/projects/gh_monitorings
 data-ui/forms
 velocity/error-booster/error-booster-monitoring-config
 velocity/error-booster/packages/st-client
+data-ui/covid-board
+intranet/legacy/witchery
+intranet/staff-competentum
+intranet/login-linker
+intranet/staff-nginx
+intranet/staff-dataswamp
+intranet/staff-dwh
+intranet/staff-datamart
+intranet/legal-st-bot
+intranet/hr-tech-duty-robot
+intranet/procu
+maps/b2bgeo/analytics/analytics
+classifieds/kafka-push-server

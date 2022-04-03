@@ -19,7 +19,7 @@ bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
-    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl) {
+    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl) {
 
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
     readQueryBuilder.AddString("tenant", request->TenantName);
@@ -224,9 +224,10 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         } else {
             // update pending small
             writeQueryBuilder.AddTimestamp("now", request->ResignQuery ? TInstant::Zero() : TInstant::Now());
+            writeQueryBuilder.AddTimestamp("ttl", request->ResignQuery ? TInstant::Zero() : TInstant::Now() + taskLeaseTtl);
             const TString updateResignQueryFlag = request->ResignQuery ? ", `" IS_RESIGN_QUERY_COLUMN_NAME "` = true" : "";
             writeQueryBuilder.AddText(
-                "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now " + updateResignQueryFlag + "\n"
+                "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl" + updateResignQueryFlag + "\n"
                 "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
         }
@@ -277,7 +278,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructSoftPingTask(
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
-    const TString& tablePathPrefix) {
+    const TString& tablePathPrefix, const TDuration& taskLeaseTtl) {
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "SoftPingTask(read)");
     readQueryBuilder.AddString("tenant", request->TenantName);
     readQueryBuilder.AddString("scope", request->Scope);
@@ -320,6 +321,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "SoftPingTask(write)");
         writeQueryBuilder.AddTimestamp("now", request->ResignQuery ? TInstant::Zero() : TInstant::Now());
+        writeQueryBuilder.AddTimestamp("ttl", request->ResignQuery ? TInstant::Zero() : TInstant::Now() + taskLeaseTtl);
         writeQueryBuilder.AddString("tenant", request->TenantName);
         writeQueryBuilder.AddString("scope", request->Scope);
         writeQueryBuilder.AddString("query_id", request->QueryId);
@@ -327,7 +329,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
         const TString updateResignQueryFlag = request->ResignQuery ? ", `" IS_RESIGN_QUERY_COLUMN_NAME "` = true" : "";
         writeQueryBuilder.AddText(
-            "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now " + updateResignQueryFlag + "\n"
+            "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl " + updateResignQueryFlag + "\n"
             "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
 
@@ -369,8 +371,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     if (request->Status)
         Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(*request->Status);
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
-        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl) :
-        ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix);
+        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl) :
+        ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config.TaskLeaseTtl);
     auto readQuery = std::get<0>(pingTaskParams); // Use std::get for win compiler
     auto readParams = std::get<1>(pingTaskParams);
     auto prepareParams = std::get<2>(pingTaskParams);

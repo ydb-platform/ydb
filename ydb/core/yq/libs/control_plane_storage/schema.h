@@ -66,5 +66,6 @@ namespace NYq {
 #define HOST_NAME_COLUMN_NAME "hostname"
 #define OWNER_COLUMN_NAME "owner"
 #define LAST_SEEN_AT_COLUMN_NAME "last_seen_at"
+#define ASSIGNED_UNTIL_COLUMN_NAME "assigned_until"
 
 } // namespace NYq

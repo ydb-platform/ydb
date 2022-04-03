@@ -133,6 +133,7 @@ void TYdbControlPlaneStorageActor::CreatePendingSmallTable()
         .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(OWNER_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(ASSIGNED_UNTIL_COLUMN_NAME, EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 

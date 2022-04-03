@@ -257,3 +257,4 @@ intranet/hr-tech-duty-robot
 intranet/procu
 maps/b2bgeo/analytics/analytics
 classifieds/kafka-push-server
+classifieds/ydb-wrapper

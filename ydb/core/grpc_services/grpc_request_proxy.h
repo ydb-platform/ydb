@@ -50,9 +50,6 @@ public:
 protected:
     void Handle(TEvListEndpointsRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvGetShardLocationsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvKikhouseDescribeTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvS3ListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, const TActorContext& ctx);
@@ -76,9 +73,6 @@ protected:
     void Handle(TEvListRateLimiterResources::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAcquireRateLimiterResource::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvKikhouseCreateSnapshotRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvKikhouseRefreshSnapshotRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvKikhouseDiscardSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
 

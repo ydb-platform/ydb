@@ -1,6 +1,6 @@
-#include "grpc_request_proxy.h"
+#include "service_coordination.h"
+#include <ydb/core/grpc_services/base/base.h>
 
-#include "rpc_calls.h"
 #include "rpc_common.h"
 #include "rpc_kh_snapshots.h"
 #include "resolve_local_db_table.h"
@@ -22,6 +22,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
+using TEvReadColumnsRequest = TGrpcRequestOperationCall<Ydb::ClickhouseInternal::ScanRequest,
+    Ydb::ClickhouseInternal::ScanResponse>;
+
 class TReadColumnsRPC : public TActorBootstrapped<TReadColumnsRPC> {
     using TBase = TActorBootstrapped<TReadColumnsRPC>;
 
@@ -29,7 +32,7 @@ private:
 
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5*60;
 
-    TAutoPtr<TEvReadColumnsRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -73,9 +76,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TReadColumnsRPC(TAutoPtr<TEvReadColumnsRequest> request)
+    explicit TReadColumnsRPC(std::unique_ptr<IRequestOpCtx>&& request)
         : TBase()
-        , Request(request)
+        , Request(std::move(request))
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
         , Timeout(TDuration::Seconds(DEFAULT_TIMEOUT_SEC))
@@ -90,14 +93,19 @@ public:
         , SysViewRowsReceived(0)
     {}
 
+    const Ydb::ClickhouseInternal::ScanRequest* GetProtoRequest() {
+        return TEvReadColumnsRequest::GetProtoRequest(Request);
+    }
+
     void Bootstrap(const NActors::TActorContext& ctx) {
-        if (const auto& snapshotId = Request->GetProtoRequest()->snapshot_id()) {
+        auto proto = GetProtoRequest();
+        if (const auto& snapshotId = proto->snapshot_id()) {
             if (!SnapshotId.Parse(snapshotId)) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "Invalid snapshot id specified", ctx);
             }
         }
 
-        ResolveTable(Request->GetProtoRequest()->Gettable(), ctx);
+        ResolveTable(proto->Gettable(), ctx);
     }
 
     void Die(const NActors::TActorContext& ctx) override {
@@ -186,7 +194,7 @@ private:
         ResolveNamesResult = new NSchemeCache::TSchemeCacheNavigate();
         auto &record = ev->Get()->Record;
 
-        const TString table = Request->GetProtoRequest()->table();
+        const TString& table = GetProtoRequest()->table();
         auto path = ::NKikimr::SplitPath(table);
         FillLocalDbTableSchema(*ResolveNamesResult, record.GetFullScheme(), path.back());
         ResolveNamesResult->ResultSet.back().Path = path;
@@ -214,7 +222,7 @@ private:
              return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
         }
 
-        if (Request->GetProtoRequest()->columns().empty()) {
+        if (GetProtoRequest()->columns().empty()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                                   TStringBuilder() << "Empty column list",
                                   ctx);
@@ -237,10 +245,12 @@ private:
                     "Snapshots are ignored when scanning system views"));
         }
 
-        if (auto maxRows = Request->GetProtoRequest()->max_rows(); maxRows && maxRows <= 100)
+        const auto proto = GetProtoRequest();
+
+        if (auto maxRows = proto->max_rows(); maxRows && maxRows <= 100)
             SysViewMaxRows = maxRows;
 
-        if (auto maxBytes = Request->GetProtoRequest()->max_bytes(); maxBytes && maxBytes <= 10000)
+        if (auto maxBytes = proto->max_bytes(); maxBytes && maxBytes <= 10000)
             SysViewMaxBytes = maxBytes;
 
         // List of columns requested by user
@@ -264,7 +274,7 @@ private:
                 }
             }
 
-            for (TString col : Request->GetProtoRequest()->columns()) {
+            for (TString col : proto->columns()) {
                 auto id = columnsByName.find(col);
                 if (id == columnsByName.end()) {
                     return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
@@ -343,13 +353,14 @@ private:
         std::unique_ptr<TEvTablet::TEvLocalReadColumns> ev =
                 std::make_unique<TEvTablet::TEvLocalReadColumns>();
         ev->Record.SetTableName(tableName);
-        for (TString col : Request->GetProtoRequest()->columns()) {
+        auto proto = GetProtoRequest();
+        for (TString col : proto->columns()) {
             ev->Record.AddColumns(col);
         }
         ev->Record.SetFromKey(MinKey.GetBuffer());
         ev->Record.SetFromKeyInclusive(MinKeyInclusive);
-        ev->Record.SetMaxRows(Request->GetProtoRequest()->max_rows());
-        ev->Record.SetMaxBytes(Request->GetProtoRequest()->max_bytes());
+        ev->Record.SetMaxRows(proto->max_rows());
+        ev->Record.SetMaxBytes(proto->max_bytes());
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to tablet " << tabletId);
 
@@ -461,7 +472,7 @@ private:
                 TStringStream explanation;
                 explanation << "Access denied for " << userToken.GetUserSID()
                             << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table [" << Request->GetProtoRequest()->Gettable() << "]";
+                            << " to table [" << GetProtoRequest()->Gettable() << "]";
 
                 errorMessage = explanation.Str();
                 return false;
@@ -511,28 +522,29 @@ private:
     }
 
     bool ExtractAllKeys(TString& errorMessage) {
-        if (!Request->GetProtoRequest()->from_key().empty()) {
-            if (!TSerializedCellVec::TryParse(Request->GetProtoRequest()->from_key(), MinKey) ||
+        auto proto = GetProtoRequest();
+        if (!proto->from_key().empty()) {
+            if (!TSerializedCellVec::TryParse(proto->from_key(), MinKey) ||
                 !CheckCellSizes(MinKey.GetCells(), KeyColumnTypes))
             {
                 errorMessage = "Invalid from key";
                 return false;
             }
-            MinKeyInclusive = Request->GetProtoRequest()->from_key_inclusive();
+            MinKeyInclusive = proto->from_key_inclusive();
         } else {
             TVector<TCell> allNulls(KeyColumnTypes.size());
             MinKey.Parse(TSerializedCellVec::Serialize(allNulls));
             MinKeyInclusive = true;
         }
 
-        if (!Request->GetProtoRequest()->to_key().empty()) {
-            if (!TSerializedCellVec::TryParse(Request->GetProtoRequest()->to_key(), MaxKey) ||
+        if (!proto->to_key().empty()) {
+            if (!TSerializedCellVec::TryParse(proto->to_key(), MaxKey) ||
                 !CheckCellSizes(MaxKey.GetCells(), KeyColumnTypes))
             {
                 errorMessage = "Invalid to key";
                 return false;
             }
-            MaxKeyInclusive = Request->GetProtoRequest()->to_key_inclusive();
+            MaxKeyInclusive = proto->to_key_inclusive();
         } else {
             TVector<TCell> infinity;
             MaxKey.Parse(TSerializedCellVec::Serialize(infinity));
@@ -592,7 +604,7 @@ private:
         KeyRange = std::move(msg->Request->ResultSet[0].KeyDescription);
 
         if (msg->Request->ErrorCount > 0) {
-            return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Sprintf("Unknown table '%s'", Request->GetProtoRequest()->Gettable().data()), ctx);
+            return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Sprintf("Unknown table '%s'", GetProtoRequest()->Gettable().data()), ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {
@@ -612,18 +624,19 @@ private:
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
         Y_VERIFY(!KeyRange->Partitions.empty());
+        auto proto = GetProtoRequest();
 
         // Send request to the first shard
         std::unique_ptr<TEvDataShard::TEvReadColumnsRequest> ev =
                 std::make_unique<TEvDataShard::TEvReadColumnsRequest>();
         ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
-        for (TString col : Request->GetProtoRequest()->columns()) {
+        for (const TString& col : proto->columns()) {
             ev->Record.AddColumns(col);
         }
         ev->Record.SetFromKey(MinKey.GetBuffer());
         ev->Record.SetFromKeyInclusive(MinKeyInclusive);
-        ev->Record.SetMaxRows(Request->GetProtoRequest()->max_rows());
-        ev->Record.SetMaxBytes(Request->GetProtoRequest()->max_bytes());
+        ev->Record.SetMaxRows(proto->max_rows());
+        ev->Record.SetMaxBytes(proto->max_bytes());
         if (SnapshotId) {
             ev->Record.SetSnapshotStep(SnapshotId.Step);
             ev->Record.SetSnapshotTxId(SnapshotId.TxId);
@@ -774,8 +787,8 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TReadColumnsRPC(ev->Release().Release()));
+void DoReadColumnsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TReadColumnsRPC(std::move(p)));
 }
 
 } // namespace NKikimr

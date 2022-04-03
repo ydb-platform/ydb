@@ -19,6 +19,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
+using TEvGetShardLocationsRequest = TGrpcRequestOperationCall<Ydb::ClickhouseInternal::GetShardLocationsRequest,
+    Ydb::ClickhouseInternal::GetShardLocationsResponse>;
+
 class TGetShardLocationsRPC : public TActorBootstrapped<TGetShardLocationsRPC> {
     using TBase = TActorBootstrapped<TGetShardLocationsRPC>;
 
@@ -31,7 +34,7 @@ private:
         ui16 Port;
     };
 
-    TAutoPtr<TEvGetShardLocationsRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     Ydb::ClickhouseInternal::GetShardLocationsResult Result;
 
     THashMap<ui64, TActorId> ShardPipes;
@@ -43,9 +46,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TGetShardLocationsRPC(TAutoPtr<TEvGetShardLocationsRequest> request)
+    explicit TGetShardLocationsRPC(std::unique_ptr<IRequestOpCtx>&& request)
         : TBase()
-        , Request(request)
+        , Request(std::move(request))
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
@@ -55,8 +58,9 @@ public:
         }
 
         TDuration timeout = TDuration::MilliSeconds(DEFAULT_TIMEOUT_MSEC);
-        if (Request->GetProtoRequest()->operation_params().has_operation_timeout())
-            timeout = GetDuration(Request->GetProtoRequest()->operation_params().operation_timeout());
+        auto proto = TEvGetShardLocationsRequest::GetProtoRequest(Request);
+        if (proto->operation_params().has_operation_timeout())
+            timeout = GetDuration(proto->operation_params().operation_timeout());
         ctx.Schedule(timeout, new TEvents::TEvWakeup());
         ResolveShards(ctx);
     }
@@ -84,7 +88,8 @@ private:
 
     void ResolveShards(const NActors::TActorContext& ctx) {
         // Create pipes to all shards
-        for (ui64 ti : Request->GetProtoRequest()->tablet_ids()) {
+        auto proto = TEvGetShardLocationsRequest::GetProtoRequest(Request);
+        for (ui64 ti : proto->tablet_ids()) {
             if (ti == 0)
                 ti = INVALID_TABLET_ID;
 
@@ -185,8 +190,8 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvGetShardLocationsRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TGetShardLocationsRPC(ev->Release().Release()));
+void DoGetShardLocationsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TGetShardLocationsRPC(std::move(p)));
 }
 
 } // namespace NKikimr

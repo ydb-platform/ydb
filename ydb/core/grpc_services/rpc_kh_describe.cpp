@@ -1,5 +1,6 @@
-#include "grpc_request_proxy.h"
-#include "rpc_calls.h"
+#include "service_coordination.h"
+#include <ydb/core/grpc_services/base/base.h>
+
 #include "rpc_common.h"
 #include "resolve_local_db_table.h"
 
@@ -23,13 +24,16 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace Ydb;
 
+using TEvKikhouseDescribeTableRequest = TGrpcRequestOperationCall<Ydb::ClickhouseInternal::DescribeTableRequest,
+    Ydb::ClickhouseInternal::DescribeTableResponse>;
+
 class TKikhouseDescribeTableRPC : public TActorBootstrapped<TKikhouseDescribeTableRPC> {
     using TBase = TActorBootstrapped<TKikhouseDescribeTableRPC>;
 
 private:
     static constexpr ui32 DEFAULT_TIMEOUT_SEC = 5;
 
-    TAutoPtr<TEvKikhouseDescribeTableRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     Ydb::ClickhouseInternal::DescribeTableResult Result;
 
     TDuration Timeout;
@@ -47,9 +51,9 @@ public:
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    explicit TKikhouseDescribeTableRPC(TAutoPtr<TEvKikhouseDescribeTableRequest> request)
+    explicit TKikhouseDescribeTableRPC(std::unique_ptr<IRequestOpCtx>&& request)
         : TBase()
-        , Request(request)
+        , Request(std::move(request))
         , Timeout(TDuration::Seconds(DEFAULT_TIMEOUT_SEC))
         , WaitingResolveReply(false)
         , Finished(false)
@@ -84,7 +88,7 @@ private:
     }
 
     void ResolveTable(const NActors::TActorContext& ctx) {
-        const TString table = Request->GetProtoRequest()->path();
+        const TString table = TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path();
         auto path = ::NKikimr::SplitPath(table);
         TMaybe<ui64> tabletId = TryParseLocalDbPath(path);
         if (tabletId) {
@@ -146,7 +150,7 @@ private:
         ResolveNamesResult = new NSchemeCache::TSchemeCacheNavigate();
         auto &record = ev->Get()->Record;
 
-        const TString table = Request->GetProtoRequest()->path();
+        const TString table = TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path();
         auto path = ::NKikimr::SplitPath(table);
         FillLocalDbTableSchema(*ResolveNamesResult, record.GetFullScheme(), path.back());
         ResolveNamesResult->ResultSet.back().Path = path;
@@ -186,7 +190,7 @@ private:
             Result.add_primary_key(k);
         }
 
-        if (!Request->GetProtoRequest()->include_partitions_info()) {
+        if (!TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->include_partitions_info()) {
             return ReplySuccess(ctx);
         }
 
@@ -207,7 +211,7 @@ private:
                 TStringStream explanation;
                 explanation << "Access denied for " << userToken.GetUserSID()
                             << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table [" << Request->GetProtoRequest()->path() << "]";
+                            << " to table [" << TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path() << "]";
 
                 errorMessage = explanation.Str();
                 return false;
@@ -282,7 +286,7 @@ private:
 
         if (msg->Request->ErrorCount > 0) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, Sprintf("Failed to get partitions for table [%s]",
-                                                                        Request->GetProtoRequest()->path().c_str()), ctx);
+                TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path().c_str()), ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {
@@ -295,7 +299,8 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Table [" << Request->GetProtoRequest()->path()
+        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Table ["
+                    << TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path()
                     << "] shards: " << getShardsString(KeyRange->Partitions));
 
         for (const TKeyDesc::TPartitionInfo& partition : KeyRange->Partitions) {
@@ -336,8 +341,8 @@ private:
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvKikhouseDescribeTableRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TKikhouseDescribeTableRPC(ev->Release().Release()));
+void DoKikhouseDescribeTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TKikhouseDescribeTableRPC(std::move(p)));
 }
 
 } // namespace NKikimr

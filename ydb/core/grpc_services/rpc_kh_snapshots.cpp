@@ -1,7 +1,9 @@
+#include "service_coordination.h"
+#include <ydb/core/grpc_services/base/base.h>
+
 #include "rpc_kh_snapshots.h"
 #include "resolve_local_db_table.h"
 
-#include "rpc_calls.h"
 #include "rpc_common.h"
 #include "rpc_deferrable.h"
 
@@ -14,6 +16,13 @@
 
 namespace NKikimr {
 namespace NGRpcService {
+
+using TEvKikhouseCreateSnapshotRequest = TGrpcRequestOperationCall<Ydb::ClickhouseInternal::CreateSnapshotRequest,
+    Ydb::ClickhouseInternal::CreateSnapshotResponse>;
+using TEvKikhouseRefreshSnapshotRequest = TGrpcRequestOperationCall<Ydb::ClickhouseInternal::RefreshSnapshotRequest,
+    Ydb::ClickhouseInternal::RefreshSnapshotResponse>;
+using TEvKikhouseDiscardSnapshotRequest = TGrpcRequestOperationCall<Ydb::ClickhouseInternal::DiscardSnapshotRequest,
+    Ydb::ClickhouseInternal::DiscardSnapshotResponse>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -465,16 +474,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGRpcRequestProxy::Handle(TEvKikhouseCreateSnapshotRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TKikhouseCreateSnapshotRPC(ev->Release().Release()));
+void DoKikhouseCreateSnapshotRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TKikhouseCreateSnapshotRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvKikhouseRefreshSnapshotRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TKikhouseRefreshSnapshotRPC(ev->Release().Release()));
+void DoKikhouseRefreshSnapshotRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TKikhouseRefreshSnapshotRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvKikhouseDiscardSnapshotRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TKikhouseDiscardSnapshotRPC(ev->Release().Release()));
+void DoKikhouseDiscardSnapshotRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TKikhouseDiscardSnapshotRPC(p.release()));
 }
 
 } // namespace NKikimr

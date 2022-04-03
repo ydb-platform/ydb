@@ -568,9 +568,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TRefreshTokenImpl, PreHandle);
         HFunc(TEvLoginRequest, PreHandle);
         HFunc(TEvListEndpointsRequest, PreHandle);
-        HFunc(TEvReadColumnsRequest, PreHandle);
-        HFunc(TEvGetShardLocationsRequest, PreHandle);
-        HFunc(TEvKikhouseDescribeTableRequest, PreHandle);
         HFunc(TEvS3ListingRequest, PreHandle);
         HFunc(TEvBiStreamPingRequest, PreHandle);
         HFunc(TEvExperimentalStreamQueryRequest, PreHandle);
@@ -594,9 +591,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvListRateLimiterResources, PreHandle);
         HFunc(TEvDescribeRateLimiterResource, PreHandle);
         HFunc(TEvAcquireRateLimiterResource, PreHandle);
-        HFunc(TEvKikhouseCreateSnapshotRequest, PreHandle);
-        HFunc(TEvKikhouseRefreshSnapshotRequest, PreHandle);
-        HFunc(TEvKikhouseDiscardSnapshotRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
 
         HFunc(TEvProxyRuntimeEvent, PreHandle);

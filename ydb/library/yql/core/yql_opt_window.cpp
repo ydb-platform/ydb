@@ -2316,6 +2316,9 @@ void SplitFramesByType(const TExprNode::TPtr& frames, TExprNode::TPtr& rowFrames
 TExprNode::TPtr ProcessRowsFrames(TPositionHandle pos, const TExprNode::TPtr& input, const TStructExprType& rowType, const TExprNode::TPtr& dependsOn,
                                   const TExprNode::TPtr& frames, TExprContext& ctx)
 {
+    if (frames->ChildrenSize() == 0) {
+        return input;
+    }
     TExprNode::TPtr processed = input;
     TExprNode::TPtr dataQueue;
     TQueueParams queueParams;

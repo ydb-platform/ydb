@@ -265,11 +265,13 @@ struct TEvControlPlaneStorage {
                                        const YandexQuery::ListQueriesRequest& request,
                                        const TString& user,
                                        const TString& token,
+                                       const TString& cloudId,
                                        TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -279,13 +281,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ListQueriesRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -317,11 +321,13 @@ struct TEvControlPlaneStorage {
                                          const YandexQuery::DescribeQueryRequest& request,
                                          const TString& user,
                                          const TString& token,
+                                         const TString& cloudId,
                                          TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -331,13 +337,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::DescribeQueryRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -369,11 +377,13 @@ struct TEvControlPlaneStorage {
                                          const YandexQuery::GetQueryStatusRequest& request,
                                          const TString& user,
                                          const TString& token,
+                                         const TString& cloudId,
                                          TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -383,13 +393,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::GetQueryStatusRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -421,11 +433,13 @@ struct TEvControlPlaneStorage {
                                        const YandexQuery::ModifyQueryRequest& request,
                                        const TString& user,
                                        const TString& token,
+                                       const TString& cloudId,
                                        TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -435,13 +449,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ModifyQueryRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -477,11 +493,13 @@ struct TEvControlPlaneStorage {
                                        const YandexQuery::DeleteQueryRequest& request,
                                        const TString& user,
                                        const TString& token,
+                                       const TString& cloudId,
                                        TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -491,13 +509,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::DeleteQueryRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -533,11 +553,13 @@ struct TEvControlPlaneStorage {
                                         const YandexQuery::ControlQueryRequest& request,
                                         const TString& user,
                                         const TString& token,
+                                        const TString& cloudId,
                                         TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -547,13 +569,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ControlQueryRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -589,11 +613,13 @@ struct TEvControlPlaneStorage {
                                          const YandexQuery::GetResultDataRequest& request,
                                          const TString& user,
                                          const TString& token,
+                                         const TString& cloudId,
                                          TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -603,13 +629,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::GetResultDataRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -641,11 +669,13 @@ struct TEvControlPlaneStorage {
                                     const YandexQuery::ListJobsRequest& request,
                                     const TString& user,
                                     const TString& token,
+                                    const TString& cloudId,
                                     TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -655,13 +685,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ListJobsRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -693,11 +725,13 @@ struct TEvControlPlaneStorage {
                                            const YandexQuery::DescribeJobRequest& request,
                                            const TString& user,
                                            const TString& token,
+                                           const TString& cloudId,
                                            TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -707,13 +741,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::DescribeJobRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -805,11 +841,13 @@ struct TEvControlPlaneStorage {
                                            const YandexQuery::ListConnectionsRequest& request,
                                            const TString& user,
                                            const TString& token,
+                                           const TString& cloudId,
                                            TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -819,13 +857,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ListConnectionsRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -857,11 +897,13 @@ struct TEvControlPlaneStorage {
                                               const YandexQuery::DescribeConnectionRequest& request,
                                               const TString& user,
                                               const TString& token,
+                                              const TString& cloudId,
                                               TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -871,13 +913,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::DescribeConnectionRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -909,11 +953,13 @@ struct TEvControlPlaneStorage {
                                             const YandexQuery::ModifyConnectionRequest& request,
                                             const TString& user,
                                             const TString& token,
+                                            const TString& cloudId,
                                             TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -923,13 +969,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ModifyConnectionRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -965,11 +1013,13 @@ struct TEvControlPlaneStorage {
                                             const YandexQuery::DeleteConnectionRequest& request,
                                             const TString& user,
                                             const TString& token,
+                                            const TString& cloudId,
                                             TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -979,13 +1029,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::DeleteConnectionRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -1081,11 +1133,13 @@ struct TEvControlPlaneStorage {
                                         const YandexQuery::ListBindingsRequest& request,
                                         const TString& user,
                                         const TString& token,
+                                        const TString& cloudId,
                                         TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -1095,13 +1149,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ListBindingsRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -1133,11 +1189,13 @@ struct TEvControlPlaneStorage {
                                            const YandexQuery::DescribeBindingRequest& request,
                                            const TString& user,
                                            const TString& token,
+                                           const TString& cloudId,
                                            TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -1147,13 +1205,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::DescribeBindingRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -1185,11 +1245,13 @@ struct TEvControlPlaneStorage {
                                          const YandexQuery::ModifyBindingRequest& request,
                                          const TString& user,
                                          const TString& token,
+                                         const TString& cloudId,
                                          TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -1199,13 +1261,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::ModifyBindingRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -1241,11 +1305,13 @@ struct TEvControlPlaneStorage {
                                          const YandexQuery::DeleteBindingRequest& request,
                                          const TString& user,
                                          const TString& token,
+                                         const TString& cloudId,
                                          TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
+            , CloudId(cloudId)
             , Permissions(permissions)
         {
         }
@@ -1255,13 +1321,15 @@ struct TEvControlPlaneStorage {
                     + Scope.Size()
                     + Request.ByteSizeLong()
                     + User.Size()
-                    + Token.Size();
+                    + Token.Size()
+                    + CloudId.Size();
         }
 
         TString Scope;
         YandexQuery::DeleteBindingRequest Request;
         TString User;
         TString Token;
+        TString CloudId;
         TPermissions Permissions;
     };
 
@@ -1443,8 +1511,9 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
-        explicit TEvPingTaskRequest(const TString& tenantName, const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
+        explicit TEvPingTaskRequest(const TString& tenantName, const TString& cloudId, const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
             : TenantName(tenantName)
+            , CloudId(cloudId)
             , Scope(scope)
             , QueryId(queryId)
             , Owner(owner)
@@ -1456,6 +1525,7 @@ struct TEvControlPlaneStorage {
         size_t GetByteSize() const {
             return sizeof(*this)
                     + TenantName.Size()
+                    + CloudId.Size()
                     + Scope.Size()
                     + QueryId.Size()
                     + Owner.Size()
@@ -1505,6 +1575,7 @@ struct TEvControlPlaneStorage {
         }
 
         const TString TenantName;
+        const TString CloudId;
         const TString Scope;
         const TString QueryId;
         const TString Owner;

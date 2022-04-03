@@ -138,7 +138,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_TASK];
+    TRequestCountersPtr requestCounters = Counters.GetCommonCounters(RTC_GET_TASK);
     requestCounters->InFly->Inc();
 
     TEvControlPlaneStorage::TEvGetTaskRequest& request = *ev->Get();

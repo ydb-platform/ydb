@@ -341,12 +341,12 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_PING_TASK];
-    requestCounters->InFly->Inc();
-
     TEvControlPlaneStorage::TEvPingTaskRequest* request = ev->Get();
-    requestCounters->RequestBytes->Add(request->GetByteSize());
+    const TString cloudId = request->CloudId;
     const TString scope = request->Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_PING_TASK);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(request->GetByteSize());
     const TString queryId = request->QueryId;
     const TString owner = request->Owner;
     const TInstant deadline = request->Deadline;
@@ -367,7 +367,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     std::shared_ptr<YandexQuery::QueryAction> response = std::make_shared<YandexQuery::QueryAction>();
 
     if (request->Status)
-        FinalStatusCounters.IncByStatus(*request->Status);
+        Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(*request->Status);
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
         ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix);

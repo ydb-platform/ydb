@@ -77,6 +77,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::CreateQueryRequest Request;
         TString User;
         TString Token;
@@ -116,6 +117,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ListQueriesRequest Request;
         TString User;
         TString Token;
@@ -152,6 +154,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::DescribeQueryRequest Request;
         TString User;
         TString Token;
@@ -188,6 +191,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::GetQueryStatusRequest Request;
         TString User;
         TString Token;
@@ -224,6 +228,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ModifyQueryRequest Request;
         TString User;
         TString Token;
@@ -263,6 +268,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::DeleteQueryRequest Request;
         TString User;
         TString Token;
@@ -302,6 +308,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ControlQueryRequest Request;
         TString User;
         TString Token;
@@ -341,6 +348,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::GetResultDataRequest Request;
         TString User;
         TString Token;
@@ -377,6 +385,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ListJobsRequest Request;
         TString User;
         TString Token;
@@ -413,6 +422,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::DescribeJobRequest Request;
         TString User;
         TString Token;
@@ -449,6 +459,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::CreateConnectionRequest Request;
         TString User;
         TString Token;
@@ -488,6 +499,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ListConnectionsRequest Request;
         TString User;
         TString Token;
@@ -524,6 +536,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::DescribeConnectionRequest Request;
         TString User;
         TString Token;
@@ -560,6 +573,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ModifyConnectionRequest Request;
         TString User;
         TString Token;
@@ -599,6 +613,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::DeleteConnectionRequest Request;
         TString User;
         TString Token;
@@ -638,6 +653,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::TestConnectionRequest Request;
         TString User;
         TString Token;
@@ -674,6 +690,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::CreateBindingRequest Request;
         TString User;
         TString Token;
@@ -713,6 +730,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ListBindingsRequest Request;
         TString User;
         TString Token;
@@ -749,6 +767,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::DescribeBindingRequest Request;
         TString User;
         TString Token;
@@ -785,6 +804,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::ModifyBindingRequest Request;
         TString User;
         TString Token;
@@ -824,6 +844,7 @@ struct TEvControlPlaneProxy {
         }
 
         TString FolderId;
+        TString CloudId;
         YandexQuery::DeleteBindingRequest Request;
         TString User;
         TString Token;

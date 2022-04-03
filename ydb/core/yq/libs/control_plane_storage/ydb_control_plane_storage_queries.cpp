@@ -72,22 +72,21 @@ TString TYdbControlPlaneStorageActor::AssignTenantName(const TString& cloudId, c
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_CREATE_QUERY];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvCreateQueryRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::CreateQueryRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_QUERY);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    const TString cloudId = event.CloudId;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
                                 ? event.Permissions
                                 : TPermissions{TPermissions::QUERY_INVOKE | TPermissions::CONNECTIONS_USE | TPermissions::BINDINGS_USE | TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
+    const YandexQuery::CreateQueryRequest& request = event.Request;
     const size_t byteSize = request.ByteSizeLong();
     const TString queryId = GetEntityIdAsString(Config.IdsPrefix, EEntityType::QUERY);
 
@@ -327,13 +326,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueriesRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_QUERIES];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvListQueriesRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::ListQueriesRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_QUERIES);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
+
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -343,6 +342,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
         permissions.SetAll();
     }
 
+    const YandexQuery::ListQueriesRequest& request = event.Request;
     const TString pageToken = request.page_token();
     const int byteSize = request.ByteSize();
     const int64_t limit = request.limit();
@@ -499,13 +499,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_QUERY];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvDescribeQueryRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::DescribeQueryRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_QUERY);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -514,6 +513,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
+
+    const YandexQuery::DescribeQueryRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
     CPS_LOG_T(MakeLogPrefix(scope, user, queryId)
@@ -596,13 +597,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_QUERY_STATUS];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvGetQueryStatusRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::GetQueryStatusRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_GET_QUERY_STATUS);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -611,6 +611,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
+    const YandexQuery::GetQueryStatusRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
     CPS_LOG_T(MakeLogPrefix(scope, user, queryId)
@@ -687,13 +688,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_MODIFY_QUERY];
-    requestCounters->InFly->Inc();
-
     TEvControlPlaneStorage::TEvModifyQueryRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    YandexQuery::ModifyQueryRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_QUERY);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -702,6 +702,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
+    YandexQuery::ModifyQueryRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
     const int64_t previousRevision = request.previous_revision();
@@ -1072,13 +1073,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DELETE_QUERY];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvDeleteQueryRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::DeleteQueryRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_QUERY);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -1087,6 +1087,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
+    const YandexQuery::DeleteQueryRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
     const int64_t previousRevision = request.previous_revision();
@@ -1187,13 +1188,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQueryRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_CONTROL_QUERY];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvControlQueryRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CONTROL_QUERY);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ControlQueryRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString user = event.User;
     const TString queryId = request.query_id();
     const TString token = event.Token;
@@ -1417,13 +1418,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_GET_RESULT_DATA];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvGetResultDataRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_GET_RESULT_DATA);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::GetResultDataRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString user = event.User;
     const int32_t resultSetIndex = request.result_set_index();
     const int64_t offset = request.offset();
@@ -1557,13 +1558,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_JOBS_DATA];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvListJobsRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_JOBS_DATA);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ListJobsRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString user = event.User;
     TString queryId = request.query_id(); // TODO: remove it
     if (request.has_filter() && request.filter().query_id()) {
@@ -1696,15 +1697,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_JOB];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvDescribeJobRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_JOB);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DescribeJobRequest& request = event.Request;
-    const TString scope = event.Scope;
-    const TString user = event.User;
 
+    const TString user = event.User;
     auto splittedId = SplitId(request.job_id());
     const auto jobId = std::move(splittedId.first);
     const auto queryId = std::move(splittedId.second);

@@ -13,16 +13,15 @@ namespace NYq {
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_CREATE_CONNECTION];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvCreateConnectionRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_CONNECTION);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::CreateConnectionRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString user = event.User;
     const TString token = event.Token;
-    const TString cloudId = event.CloudId;
     const int byteSize = request.ByteSize();
     TPermissions permissions = Config.Proto.GetEnablePermissions()
                             ? event.Permissions
@@ -132,13 +131,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_CONNECTIONS];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvListConnectionsRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_CONNECTIONS);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ListConnectionsRequest& request = event.Request;
-    const TString scope = event.Scope;
+
     const TString user = event.User;
     const TString pageToken = request.page_token();
     const int byteSize = request.ByteSize();
@@ -259,13 +259,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_CONNECTION];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvDescribeConnectionRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_CONNECTION);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DescribeConnectionRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString user = event.User;
     const TString connectionId = request.connection_id();
     const TString token = event.Token;
@@ -355,13 +355,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_MODIFY_CONNECTION];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvModifyConnectionRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::ModifyConnectionRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_CONNECTION);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
@@ -370,6 +369,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
+    const YandexQuery::ModifyConnectionRequest& request = event.Request;
     const TString connectionId = request.connection_id();
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
@@ -532,13 +532,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DELETE_CONNECTION];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvDeleteConnectionRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_CONNECTION);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DeleteConnectionRequest& request = event.Request;
-    const TString scope = event.Scope;
+
     const TString user = event.User;
     const TString token = event.Token;
     TPermissions permissions = Config.Proto.GetEnablePermissions()

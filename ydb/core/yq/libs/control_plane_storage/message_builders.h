@@ -998,6 +998,7 @@ public:
 
 class TPingTaskBuilder {
     TString TenantName;
+    TString CloudId;
     TString Scope;
     TString QueryId;
     TString ResultId;
@@ -1027,6 +1028,12 @@ public:
     TPingTaskBuilder& SetTenantName(const TString& tenantName)
     {
         TenantName = tenantName;
+        return *this;
+    }
+
+    TPingTaskBuilder& SetCloudId(const TString& cloudId)
+    {
+        CloudId = cloudId;
         return *this;
     }
 
@@ -1140,7 +1147,7 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
-        auto request = std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(TenantName, Scope, QueryId, Owner, Deadline, ResultId);
+        auto request = std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(TenantName, CloudId, Scope, QueryId, Owner, Deadline, ResultId);
         request->Status = Status;
         request->Issues = Issues;
         request->TransientIssues = TransientIssues;

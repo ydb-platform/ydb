@@ -28,8 +28,10 @@ struct TEvTestConnection {
                                           const YandexQuery::TestConnectionRequest& request,
                                           const TString& user,
                                           const TString& token,
+                                          const TString& cloudId,
                                           const TPermissions& permissions)
-            : Scope(scope)
+            : CloudId(cloudId)
+            , Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
@@ -37,6 +39,7 @@ struct TEvTestConnection {
         {
         }
 
+        TString CloudId;
         TString Scope;
         YandexQuery::TestConnectionRequest Request;
         TString User;

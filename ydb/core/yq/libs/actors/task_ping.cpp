@@ -101,7 +101,7 @@ private:
     )
 
     std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
-        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(TenantName, Scope, OperationId, OwnerId, Deadline);
+        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(TenantName, CloudId, Scope, OperationId, OwnerId, Deadline);
         const auto& req = Ev->Record;
         ui64 issuesByteSize = 0;
         ui64 transientIssuesByteSize = 0;
@@ -226,6 +226,7 @@ private:
     TString OperationId;
     TString OwnerId;
     TString TenantName;
+    TString CloudId;
     TString Scope;
     TInstant Deadline;
     NYql::TIssues Issues;

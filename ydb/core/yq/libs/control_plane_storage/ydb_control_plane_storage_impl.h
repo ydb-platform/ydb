@@ -89,70 +89,131 @@ LWTRACE_USING(YQ_CONTROL_PLANE_STORAGE_PROVIDER);
 using TRequestCountersPtr = TIntrusivePtr<TRequestCounters>;
 
 class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor> {
-    enum ERequestType {
-        RT_CREATE_QUERY,
-        RT_LIST_QUERIES,
-        RT_DESCRIBE_QUERY,
-        RT_GET_QUERY_STATUS,
-        RT_MODIFY_QUERY,
-        RT_DELETE_QUERY,
-        RT_CONTROL_QUERY,
-        RT_GET_RESULT_DATA,
-        RT_LIST_JOBS_DATA,
-        RT_DESCRIBE_JOB,
-        RT_CREATE_CONNECTION,
-        RT_LIST_CONNECTIONS,
-        RT_DESCRIBE_CONNECTION,
-        RT_MODIFY_CONNECTION,
-        RT_DELETE_CONNECTION,
-        RT_CREATE_BINDING,
-        RT_LIST_BINDINGS,
-        RT_DESCRIBE_BINDING,
-        RT_MODIFY_BINDING,
-        RT_DELETE_BINDING,
-        RT_WRITE_RESULT_DATA,
-        RT_GET_TASK,
-        RT_PING_TASK,
-        RT_NODES_HEALTH_CHECK,
-        RT_MAX,
+    enum ERequestTypeScope {
+        RTS_CREATE_QUERY,
+        RTS_LIST_QUERIES,
+        RTS_DESCRIBE_QUERY,
+        RTS_GET_QUERY_STATUS,
+        RTS_MODIFY_QUERY,
+        RTS_DELETE_QUERY,
+        RTS_CONTROL_QUERY,
+        RTS_GET_RESULT_DATA,
+        RTS_LIST_JOBS_DATA,
+        RTS_DESCRIBE_JOB,
+        RTS_CREATE_CONNECTION,
+        RTS_LIST_CONNECTIONS,
+        RTS_DESCRIBE_CONNECTION,
+        RTS_MODIFY_CONNECTION,
+        RTS_DELETE_CONNECTION,
+        RTS_CREATE_BINDING,
+        RTS_LIST_BINDINGS,
+        RTS_DESCRIBE_BINDING,
+        RTS_MODIFY_BINDING,
+        RTS_DELETE_BINDING,
+        RTS_PING_TASK,
+        RTS_MAX,
     };
 
-    struct TCounters: public virtual TThrRefBase {
-        std::array<TRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TRequestCountersPtr>({
-            { MakeIntrusive<TRequestCounters>("CreateQuery") },
-            { MakeIntrusive<TRequestCounters>("ListQueries") },
-            { MakeIntrusive<TRequestCounters>("DescribeQuery") },
-            { MakeIntrusive<TRequestCounters>("GetQueryStatus") },
-            { MakeIntrusive<TRequestCounters>("ModifyQuery") },
-            { MakeIntrusive<TRequestCounters>("DeleteQuery") },
-            { MakeIntrusive<TRequestCounters>("ControlQuery") },
-            { MakeIntrusive<TRequestCounters>("GetResultData") },
-            { MakeIntrusive<TRequestCounters>("ListJobs") },
-            { MakeIntrusive<TRequestCounters>("DescribeJob") },
-            { MakeIntrusive<TRequestCounters>("CreateConnection") },
-            { MakeIntrusive<TRequestCounters>("ListConnections") },
-            { MakeIntrusive<TRequestCounters>("DescribeConnection") },
-            { MakeIntrusive<TRequestCounters>("ModifyConnection") },
-            { MakeIntrusive<TRequestCounters>("DeleteConnection") },
-            { MakeIntrusive<TRequestCounters>("CreateBinding") },
-            { MakeIntrusive<TRequestCounters>("ListBindings") },
-            { MakeIntrusive<TRequestCounters>("DescribeBinding") },
-            { MakeIntrusive<TRequestCounters>("ModifyBinding") },
-            { MakeIntrusive<TRequestCounters>("DeleteBinding") },
+    enum ERequestTypeCommon {
+        RTC_WRITE_RESULT_DATA,
+        RTC_GET_TASK,
+        RTC_NODES_HEALTH_CHECK,
+        RTC_MAX,
+    };
+
+    class TCounters: public virtual TThrRefBase {
+        struct TMetricsScope {
+            TString CloudId;
+            TString Scope;
+
+            bool operator<(const TMetricsScope& right) const {
+                return std::make_pair(CloudId, Scope) < std::make_pair(right.CloudId, right.Scope);
+            }
+        };
+
+        using TScopeCounters = std::array<TRequestCountersPtr, RTS_MAX>;
+        using TScopeCountersPtr = std::shared_ptr<TScopeCounters>;
+        using TFinalStatusCountersPtr = TIntrusivePtr<TFinalStatusCounters>;
+
+        std::array<TRequestCountersPtr, RTC_MAX> CommonRequests = CreateArray<RTC_MAX, TRequestCountersPtr>({
             { MakeIntrusive<TRequestCounters>("WriteResultData") },
             { MakeIntrusive<TRequestCounters>("GetTask") },
-            { MakeIntrusive<TRequestCounters>("PingTask") },
             { MakeIntrusive<TRequestCounters>("NodesHealthCheck") },
         });
 
+        TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
+        TMap<TMetricsScope, TFinalStatusCountersPtr> FinalStatusCounters;
         NMonitoring::TDynamicCounterPtr Counters;
 
+    public:
         explicit TCounters(const NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request: CommonRequests) {
                 request->Register(Counters);
             }
+        }
+
+        TRequestCountersPtr GetCommonCounters(ERequestTypeCommon type) {
+            return CommonRequests[type];
+        }
+
+        TFinalStatusCountersPtr GetFinalStatusCounters(const TString& cloudId, const TString& scope) {
+            TMetricsScope key{cloudId, scope};
+            auto it = FinalStatusCounters.find(key);
+            if (it != FinalStatusCounters.end()) {
+                return it->second;
+            }
+
+            auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)
+                                    ->GetSubgroup("scope", scope);
+
+            auto finalStatusCounters = MakeIntrusive<TFinalStatusCounters>(scopeCounters);
+
+            FinalStatusCounters[key] = finalStatusCounters;
+            return finalStatusCounters;
+        }
+
+        TRequestCountersPtr GetScopeCounters(const TString& cloudId, const TString& scope, ERequestTypeScope type) {
+            TMetricsScope key{cloudId, scope};
+            auto it = ScopeCounters.find(key);
+            if (it != ScopeCounters.end()) {
+                return (*it->second)[type];
+            }
+
+            auto scopeRequests = std::make_shared<TScopeCounters>(CreateArray<RTS_MAX, TRequestCountersPtr>({
+                { MakeIntrusive<TRequestCounters>("CreateQuery") },
+                { MakeIntrusive<TRequestCounters>("ListQueries") },
+                { MakeIntrusive<TRequestCounters>("DescribeQuery") },
+                { MakeIntrusive<TRequestCounters>("GetQueryStatus") },
+                { MakeIntrusive<TRequestCounters>("ModifyQuery") },
+                { MakeIntrusive<TRequestCounters>("DeleteQuery") },
+                { MakeIntrusive<TRequestCounters>("ControlQuery") },
+                { MakeIntrusive<TRequestCounters>("GetResultData") },
+                { MakeIntrusive<TRequestCounters>("ListJobs") },
+                { MakeIntrusive<TRequestCounters>("DescribeJob") },
+                { MakeIntrusive<TRequestCounters>("CreateConnection") },
+                { MakeIntrusive<TRequestCounters>("ListConnections") },
+                { MakeIntrusive<TRequestCounters>("DescribeConnection") },
+                { MakeIntrusive<TRequestCounters>("ModifyConnection") },
+                { MakeIntrusive<TRequestCounters>("DeleteConnection") },
+                { MakeIntrusive<TRequestCounters>("CreateBinding") },
+                { MakeIntrusive<TRequestCounters>("ListBindings") },
+                { MakeIntrusive<TRequestCounters>("DescribeBinding") },
+                { MakeIntrusive<TRequestCounters>("ModifyBinding") },
+                { MakeIntrusive<TRequestCounters>("DeleteBinding") },
+                { MakeIntrusive<TRequestCounters>("PingTask") },
+            }));
+
+            auto scopeCounters = (cloudId ? Counters->GetSubgroup("cloud_id", cloudId) : Counters)
+                                    ->GetSubgroup("scope", scope);
+
+            for (auto& request: *scopeRequests) {
+                request->Register(scopeCounters);
+            }
+
+            ScopeCounters[key] = scopeRequests;
+            return (*scopeRequests)[type];
         }
     };
 
@@ -172,7 +233,6 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     };
 
     TCounters Counters;
-    TFinalStatusCounters FinalStatusCounters;
 
     TConfig Config;
 
@@ -195,7 +255,6 @@ public:
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)
         : Counters(counters)
-        , FinalStatusCounters(counters)
         , Config(config, common)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)

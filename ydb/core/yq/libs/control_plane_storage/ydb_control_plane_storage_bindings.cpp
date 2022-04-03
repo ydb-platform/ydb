@@ -11,22 +11,21 @@ namespace NYq {
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_CREATE_BINDING];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvCreateBindingRequest& event = *ev->Get();
-    requestCounters->RequestBytes->Add(event.GetByteSize());
-    const YandexQuery::CreateBindingRequest& request = event.Request;
+    const TString cloudId = event.CloudId;
     const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_BINDING);
+    requestCounters->InFly->Inc();
+    requestCounters->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    const TString cloudId = event.CloudId;
     TPermissions permissions = Config.Proto.GetEnablePermissions()
                         ? event.Permissions
                         : TPermissions{TPermissions::MANAGE_PUBLIC};
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
+    const YandexQuery::CreateBindingRequest& request = event.Request;
     const TString bindingId = GetEntityIdAsString(Config.IdsPrefix, EEntityType::BINDING);
     int byteSize = request.ByteSize();
     const TString connectionId = request.content().connection_id();
@@ -140,13 +139,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_LIST_BINDINGS];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvListBindingsRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_LIST_BINDINGS);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ListBindingsRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString user = event.User;
     const TString pageToken = request.page_token();
     const int byteSize = event.Request.ByteSize();
@@ -279,13 +278,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DESCRIBE_BINDING];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvDescribeBindingRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DESCRIBE_BINDING);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DescribeBindingRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString bindingId = request.binding_id();
     const TString user = event.User;
     const TString token = event.Token;
@@ -366,13 +365,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_MODIFY_BINDING];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvModifyBindingRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_MODIFY_BINDING);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::ModifyBindingRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString bindingId = request.binding_id();
     const TString user = event.User;
     const TString token = event.Token;
@@ -542,13 +541,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_DELETE_BINDING];
-    requestCounters->InFly->Inc();
-
     const TEvControlPlaneStorage::TEvDeleteBindingRequest& event = *ev->Get();
+    const TString cloudId = event.CloudId;
+    const TString scope = event.Scope;
+    TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_DELETE_BINDING);
+    requestCounters->InFly->Inc();
     requestCounters->RequestBytes->Add(event.GetByteSize());
     const YandexQuery::DeleteBindingRequest& request = event.Request;
-    const TString scope = event.Scope;
     const TString user = event.User;
     const TString token = event.Token;
     const TString bindingId = request.binding_id();

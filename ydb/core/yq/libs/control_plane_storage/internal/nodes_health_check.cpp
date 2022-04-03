@@ -7,7 +7,7 @@ namespace NYq {
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_NODES_HEALTH_CHECK];
+    TRequestCountersPtr requestCounters = Counters.GetCommonCounters(RTC_NODES_HEALTH_CHECK);
     requestCounters->InFly->Inc();
 
     const TEvControlPlaneStorage::TEvNodesHealthCheckRequest& event = *ev->Get();

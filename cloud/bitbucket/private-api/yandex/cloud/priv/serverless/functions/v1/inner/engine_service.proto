@@ -255,6 +255,8 @@ message EngineState {
     map<string, Artifact> artifacts = 3; // Key: ID (unique) = contracts.StorageReference.String()
     bool is_full_state = 4;
 
+    bool in_scalable_group = 23;
+
     reserved 10; // removed
     reserved 11; // removed
     Resources resources = 19;

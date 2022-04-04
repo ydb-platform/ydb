@@ -155,7 +155,7 @@ services:
   cloudsearch:
     name: YC.CloudSearch
     description: Сервис поиска по облакам
-  cloud-beaver:
+  cloudbeaver:
     name: CloudBeaver
     description: Управление базами данных через web-интерфейс
   smart-captcha:
@@ -167,7 +167,20 @@ services:
     name: DoubleCloud Network Service
     description: Управление сетями в DoubleCloud
 
-#Backoffice
+#Internal services
   backoffice:
     name: YC.Backoffice
     description: Внутренняя админка
+
+  maintenance:
+    name: Maintenance Service
+    description: Обслуживание облачных сервисов
+
+#Collaboration services
+  tracker:
+    name: Yandex Tracker
+    description: Яндекс Трекер, сервис для совместной работы и организации процессов в компании
+
+  wiki:
+    name: Yandex Wiki
+    description: Яндекс Вики, сервис для ведения базы знаний

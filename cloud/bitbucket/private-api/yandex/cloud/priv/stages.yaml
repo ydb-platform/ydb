@@ -102,6 +102,8 @@ stages:
   - DATA_TRANSFER_YC_FROM_LOGBROKER #https://st.yandex-team.ru/TM-2563
   - DATA_TRANSFER_YC_TO_LOGBROKER #https://st.yandex-team.ru/TM-2563
   - DATA_TRANSFER_AIRBYTE #https://st.yandex-team.ru/TM-2899
+  - DATA_TRANSFER_GREENPLUM # https://st.yandex-team.ru/TM-3280
+  - DATA_TRANSFER_DEBEZIUM # https://st.yandex-team.ru/TM-3218
   - DATASPHERE_GENERAL_NIRVANA_GRAPHS # https://st.yandex-team.ru/CLOUD-62288
   - DATASPHERE_CELL_DEPLOYMENT
   - IAM_FOLDER_SAML_FEDERATIONS # iam SAML-federations in folder https://st.yandex-team.ru/CLOUD-69157

@@ -28,6 +28,7 @@ roles:
       - cic.partnerViewer
       - cic.secretViewer
       - cic.viewer
+      - cloudbeaver.viewer
       - compute.instanceGroups.viewer
       - compute.viewer
       - container-registry.viewer
@@ -92,6 +93,7 @@ roles:
       - cic.editor
       - cic.partnerEditor
       - cic.secretEditor
+      - cloudbeaver.editor
       - compute.editor
       - compute.instanceGroups.editor
       - compute.osLogin
@@ -155,6 +157,7 @@ roles:
       - billing.accounts.admin
       - cdn.admin
       - certificate-manager.admin
+      - cloudbeaver.admin
       - compute.admin
       - compute.osAdminLogin
       - container-registry.admin
@@ -253,6 +256,7 @@ roles:
       - certificate-manager.support
       - cic.support
       - cloudai.support
+      - cloudbeaver.support
       - cloudsearch.cloudsIndex.support
       - compute.instanceGroups.support
       - compute.support
@@ -298,6 +302,7 @@ roles:
       - certificate-manager.supportAdmin
       - cic.supportAdmin
       - cloudai.supportAdmin
+      - cloudbeaver.supportAdmin
       - compute.instanceGroups.supportAdmin
       - compute.supportAdmin
       - container-registry.supportAdmin

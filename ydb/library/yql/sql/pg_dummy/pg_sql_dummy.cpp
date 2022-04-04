@@ -92,7 +92,8 @@ void PgReleaseThreadContext(void* ctx) {
     Y_UNUSED(ctx);
 }
 
-void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+   Y_UNUSED(stable);
    Y_UNUSED(type);
    Y_UNUSED(value);
    Y_UNUSED(buf);

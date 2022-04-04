@@ -97,7 +97,7 @@ T GetRawData(TStringBuf& buf) {
 
 } // NDetails
 
-void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf);
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf);
 NUdf::TUnboxedValue PGUnpackImpl(const TPgType* type, TStringBuf& buf);
 
 }

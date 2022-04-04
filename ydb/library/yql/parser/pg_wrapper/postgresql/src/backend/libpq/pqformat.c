@@ -78,6 +78,8 @@
 #include "mb/pg_wchar.h"
 #include "port/pg_bswap.h"
 
+extern void yql_canonize_float4(float4*);
+extern void yql_canonize_float8(float8*);
 
 /* --------------------------------
  *		pq_beginmessage		- initialize for sending a message
@@ -260,6 +262,7 @@ pq_sendfloat4(StringInfo buf, float4 f)
 	}			swap;
 
 	swap.f = f;
+	yql_canonize_float4(&swap.f);
 	pq_sendint32(buf, swap.i);
 }
 
@@ -284,6 +287,7 @@ pq_sendfloat8(StringInfo buf, float8 f)
 	}			swap;
 
 	swap.f = f;
+	yql_canonize_float8(&swap.f);
 	pq_sendint64(buf, swap.i);
 }
 

@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/core/yql_pg_utils.h>
+#include <ydb/library/yql/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
 
 #define TypeName PG_TypeName
@@ -50,6 +51,8 @@ extern "C" {
 namespace NYql {
 
 using namespace NKikimr::NMiniKQL;
+
+static __thread bool NeedCanonizeFp = false;
 
 struct TMainContext {
     MemoryContextData Data;
@@ -975,10 +978,12 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value):
             PointerDatumFromPod(value), false };
+        NeedCanonizeFp = true;
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER {
             pfree(x);
+            NeedCanonizeFp = false;
         };
 
         auto s = GetVarBuf(x);
@@ -1339,10 +1344,12 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
             PointerDatumFromPod(value), false };
+        NeedCanonizeFp = true;
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER {
             pfree(x);
+            NeedCanonizeFp = false;
         };
 
         auto s = GetVarBuf(x);
@@ -1415,7 +1422,7 @@ namespace NMiniKQL {
 
 using namespace NYql;
 
-void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
+void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf) {
     switch (type->GetTypeId()) {
     case BOOLOID: {
         const auto x = DatumGetBool(ScalarDatumFromPod(value)) != 0;
@@ -1438,12 +1445,20 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         break;
     }
     case FLOAT4OID: {
-        const auto x = DatumGetFloat4(ScalarDatumFromPod(value));
+        auto x = DatumGetFloat4(ScalarDatumFromPod(value));
+        if (stable) {
+            NYql::CanonizeFpBits<float>(&x);
+        }
+
         NDetails::PutRawData(x, buf);
         break;
     }
     case FLOAT8OID: {
-        const auto x = DatumGetFloat8(ScalarDatumFromPod(value));
+        auto x = DatumGetFloat8(ScalarDatumFromPod(value));
+        if (stable) {
+            NYql::CanonizeFpBits<double>(&x);
+        }
+
         NDetails::PutRawData(x, buf);
         break;
     }
@@ -1482,10 +1497,12 @@ void PGPackImpl(const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffe
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
             PointerDatumFromPod(value), false };
+        NeedCanonizeFp = stable;
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER{
             pfree(x);
+            NeedCanonizeFp = false;
         };
 
         auto s = GetVarBuf(x);
@@ -1638,10 +1655,12 @@ void EncodePresortPGValue(TPgType* type, const NUdf::TUnboxedValue& value, TVect
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
             PointerDatumFromPod(value), false };
+        NeedCanonizeFp = true;
         auto x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_DEFER {
             pfree(x);
+            NeedCanonizeFp = false;
         };
 
         auto s = GetVarBuf(x);
@@ -1988,4 +2007,21 @@ void PgReleaseThreadContext(void* ctx) {
 
 } // namespace NMiniKQL
 } // namespace NKikimr
+
+extern "C" {
+
+void yql_canonize_float4(float4* x) {
+    if (NYql::NeedCanonizeFp) {
+        NYql::CanonizeFpBits<float>(x);
+    }
+}
+
+extern void yql_canonize_float8(float8* x) {
+    if (NYql::NeedCanonizeFp) {
+        NYql::CanonizeFpBits<double>(x);
+    }
+}
+
+}
+
 

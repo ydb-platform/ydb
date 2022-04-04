@@ -689,7 +689,7 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
         auto pgType = static_cast<const TPgType*>(type);
         OptionalUsageMask.SetNextEmptyOptional(!value);
         if (value) {
-            PGPackImpl(pgType, value, Buffer);
+            PGPackImpl(Stable, pgType, value, Buffer);
         }
         break;
     }

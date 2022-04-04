@@ -43,9 +43,9 @@ If any authentication parameter is not specified in the command line and the YDB
 
 ### {{ yandex-cloud }}
 
-Follow the instructions below to get [{{ yandex-cloud }} Object Storage](https://cloud.yandex.ru/docs/storage/) access keys using the {{ yandex-cloud }} CLI.
+Follow the instructions below to get [{{ yandex-cloud }} Object Storage](https://cloud.yandex.com/en-ru/docs/storage/) access keys using the {{ yandex-cloud }} CLI.
 
-1. [Install and configure the](https://cloud.yandex.ru/docs/cli/quickstart) {{ yandex-cloud }} CLI.
+1. [Install and configure the](https://cloud.yandex.com/en-ru/docs/cli/quickstart) {{ yandex-cloud }} CLI.
 
 2. Run the following command to get the ID of your folder in the cloud (you'll need to specify it in the commands below):
 
@@ -59,7 +59,7 @@ Follow the instructions below to get [{{ yandex-cloud }} Object Storage](https:/
    folder-id: b2ge70qdcff4bo9q6t19
    ```
 
-3. [Run the following command to create a service account](https://cloud.yandex.ru/docs/iam/operations/sa/create):
+3. [Run the following command to create a service account](https://cloud.yandex.com/en-ru/docs/iam/operations/sa/create):
 
    ```bash
    yc iam service-account create --name s3account
@@ -67,7 +67,7 @@ Follow the instructions below to get [{{ yandex-cloud }} Object Storage](https:/
 
    You can specify any account name except `s3account` or use an existing one. In this case, you'll also need to replace it when copying commands below via the clipboard.
 
-3. [Run the following command to assign roles for the service account](https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa) according to the required S3 access level:
+3. [Run the following command to assign roles for the service account](https://cloud.yandex.com/en-ru/docs/iam/operations/sa/assign-role-for-sa) according to the required S3 access level:
 
    {% list tabs %}
 
@@ -89,9 +89,9 @@ Follow the instructions below to get [{{ yandex-cloud }} Object Storage](https:/
 
    where `<folder-id>` is the cloud folder ID obtained in step 2.
 
-   You can also view a [full list](https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage) of {{ yandex-cloud }} roles.
+   You can also view a [full list](https://cloud.yandex.com/en-ru/docs/iam/concepts/access-control/roles#object-storage) of {{ yandex-cloud }} roles.
 
-4. Run the following command to get [static access keys](https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key):
+4. Run the following command to get [static access keys](https://cloud.yandex.com/en-ru/docs/iam/operations/sa/create-access-key):
 
    ```bash
    yc iam access-key create --service-account-name s3account

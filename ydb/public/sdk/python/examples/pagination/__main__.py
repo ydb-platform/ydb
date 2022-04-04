@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 import argparse
 import os
-
-from . import pagination
+import pagination
 
 
 if __name__ == "__main__":

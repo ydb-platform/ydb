@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
-from . import basic_example
+import basic_example
 import logging
 
 

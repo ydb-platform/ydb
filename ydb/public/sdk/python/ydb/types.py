@@ -7,6 +7,7 @@ from . import _utilities, _apis
 from datetime import date, datetime
 import uuid
 import struct
+from google.protobuf import struct_pb2
 
 
 if six.PY3:
@@ -212,6 +213,20 @@ class DecimalType(AbstractTypeBuilder):
         :return: A string representation
         """
         return "Decimal(%d,%d)" % (self._precision, self._scale)
+
+
+class NullType(AbstractTypeBuilder):
+    __slots__ = ("_repr", "_proto")
+
+    def __init__(self):
+        self._proto = _apis.ydb_value.Type(null_type=struct_pb2.NULL_VALUE)
+
+    @property
+    def proto(self):
+        return self._proto
+
+    def __str__(self):
+        return "NullType"
 
 
 class OptionalType(AbstractTypeBuilder):

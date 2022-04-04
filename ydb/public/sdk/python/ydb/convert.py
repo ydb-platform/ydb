@@ -256,10 +256,15 @@ def _primitive_type_to_native(type_pb):
     return _primitive_type_by_id.get(type_pb.type_id)
 
 
+def _null_type_factory(type_pb):
+    return types.NullType()
+
+
 _type_to_native_map = {
     "optional_type": _optional_type_to_native,
     "type_id": _primitive_type_to_native,
     "decimal_type": _decimal_type_to_native,
+    "null_type": _null_type_factory,
 }
 
 

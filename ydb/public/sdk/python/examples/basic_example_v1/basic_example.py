@@ -2,7 +2,7 @@
 import os
 
 import ydb
-from . import basic_example_data
+import basic_example_data
 
 FillDataQuery = """PRAGMA TablePathPrefix("{}");
 

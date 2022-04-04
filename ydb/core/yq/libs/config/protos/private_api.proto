@@ -11,4 +11,6 @@ message TPrivateApiConfig {
     string TaskServiceEndpoint = 2;
     string TaskServiceDatabase = 3;
     bool SecureTaskService = 4;
+    string SaKeyFile = 5;
+    string IamEndpoint = 6;
 }

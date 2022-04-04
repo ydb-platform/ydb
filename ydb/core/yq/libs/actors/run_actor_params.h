@@ -21,6 +21,7 @@ namespace NYq {
 struct TRunActorParams { // TODO2 : Change name
     TRunActorParams(
         TYqSharedResources::TPtr yqSharedResources,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYql::IHTTPGateway::TPtr s3Gateway,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -68,6 +69,7 @@ struct TRunActorParams { // TODO2 : Change name
     TRunActorParams(TRunActorParams&& params) = default;
 
     TYqSharedResources::TPtr YqSharedResources;
+    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NYql::IHTTPGateway::TPtr S3Gateway;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;

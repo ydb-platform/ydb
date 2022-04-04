@@ -28,6 +28,7 @@ IActor* CreateYqlNodesManager(
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort,
     const TString& tenant = "",
     ui64 mkqlInitialMemoryLimit = 0,

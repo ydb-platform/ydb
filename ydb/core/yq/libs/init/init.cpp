@@ -178,6 +178,7 @@ void Init(
             serviceCounters,
             protoConfig.GetPrivateApi(),
             yqSharedResources,
+            credentialsProviderFactory,
             icPort,
             tenant,
             mkqlInitialMemoryLimit,
@@ -192,6 +193,7 @@ void Init(
     if (protoConfig.GetPendingFetcher().GetEnabled()) {
         auto fetcher = CreatePendingFetcher(
             yqSharedResources,
+            credentialsProviderFactory,
             protoConfig.GetCommon(),
             protoConfig.GetCheckpointCoordinator(),
             protoConfig.GetPrivateApi(),
@@ -214,6 +216,7 @@ void Init(
 
     if (protoConfig.GetPrivateProxy().GetEnabled()) {
         auto proxyPrivate = CreateYqlAnalyticsPrivateProxy(
+            protoConfig.GetPrivateProxy(),
             TAppData::TimeProvider,
             TAppData::RandomProvider,
             serviceCounters.Counters,

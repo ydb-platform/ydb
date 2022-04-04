@@ -54,6 +54,7 @@ public:
 
     TYqlNodesManagerActor(
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NDqs::TWorkerManagerCounters& workerManagerCounters,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -76,6 +77,7 @@ public:
             YqSharedResources->CoreYdbDriver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
+                .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = PrivateApiConfig.GetSaKeyFile(), .IamEndpoint = PrivateApiConfig.GetIamEndpoint()}))
                 .EnableSsl(PrivateApiConfig.GetSecureTaskService())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             clientCounters)
@@ -296,11 +298,12 @@ IActor* CreateYqlNodesManager(
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort,
     const TString& tenant,
     ui64 mkqlInitialMemoryLimit,
     const NMonitoring::TDynamicCounterPtr& clientCounters) {
-    return new TYqlNodesManagerActor(yqSharedResources, workerManagerCounters,
+    return new TYqlNodesManagerActor(yqSharedResources, credentialsProviderFactory, workerManagerCounters,
         timeProvider, randomProvider,
         serviceCounters, privateApiConfig, icPort, tenant, mkqlInitialMemoryLimit, clientCounters);
 }

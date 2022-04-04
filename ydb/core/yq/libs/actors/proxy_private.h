@@ -23,6 +23,7 @@ namespace NYq {
 NActors::TActorId MakeYqPrivateProxyId();
 
 NActors::IActor* CreateYqlAnalyticsPrivateProxy(
+    const NConfig::TPrivateProxyConfig& privateProxyConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NMonitoring::TDynamicCounterPtr counters,

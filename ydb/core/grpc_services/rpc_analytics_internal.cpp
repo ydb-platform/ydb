@@ -52,7 +52,16 @@ public:
         auto ev = MakeHolder<EvRequestType>();
         auto request = dynamic_cast<RpcRequestType*>(this->Request_.get());
         Y_VERIFY(request);
+        auto proxyCtx = dynamic_cast<IRequestProxyCtx*>(request);
+        Y_VERIFY(proxyCtx);
+        TString user;
+        const TString& internalToken = proxyCtx->GetInternalToken();
+        if (internalToken) {
+            NACLib::TUserToken userToken(internalToken);
+            user = userToken.GetUserSID();
+        }
         ev->Record = *req;
+        ev->User = user;
         this->Send(NYq::MakeYqPrivateProxyId(), ev.Release());
         this->Become(&TYqPrivateRequestRPC<RpcRequestType, EvRequestType, EvResponseType>::StateFunc);
     }

@@ -40,6 +40,7 @@ public:
         const NYdb::TDriver& driver,
         const NActors::TActorId& executerId,
         const TString& resultType,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const TResultId& resultId,
         const TVector<TString>& columns,
@@ -55,6 +56,7 @@ public:
             driver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(privateApiConfig.GetTaskServiceEndpoint())
+                .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = privateApiConfig.GetSaKeyFile(), .IamEndpoint = privateApiConfig.GetIamEndpoint()}))
                 .EnableSsl(privateApiConfig.GetSecureTaskService())
                 .Database(privateApiConfig.GetTaskServiceDatabase() ? privateApiConfig.GetTaskServiceDatabase(): TMaybe<TString>()),
             clientCounters)
@@ -359,6 +361,7 @@ NActors::IActor* CreateResultWriter(
     const NYdb::TDriver& driver,
     const NActors::TActorId& executerId,
     const TString& resultType,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,
     const TVector<TString>& columns,
@@ -366,7 +369,7 @@ NActors::IActor* CreateResultWriter(
     const TInstant& deadline,
     const NMonitoring::TDynamicCounterPtr& clientCounters)
 {
-    return new TResultWriter(driver, executerId, resultType, privateApiConfig, resultId, columns, traceId, deadline, clientCounters);
+    return new TResultWriter(driver, executerId, resultType, credentialsProviderFactory, privateApiConfig, resultId, columns, traceId, deadline, clientCounters);
 }
 
 } // namespace NYq

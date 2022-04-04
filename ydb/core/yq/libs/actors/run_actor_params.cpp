@@ -6,6 +6,7 @@ using namespace NActors;
 
 TRunActorParams::TRunActorParams(
     TYqSharedResources::TPtr yqSharedResources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYql::IHTTPGateway::TPtr s3Gateway,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -49,6 +50,7 @@ TRunActorParams::TRunActorParams(
     const TString& tenantName
     )
     : YqSharedResources(yqSharedResources)
+    , CredentialsProviderFactory(credentialsProviderFactory)
     , S3Gateway(s3Gateway)
     , FunctionRegistry(functionRegistry)
     , RandomProvider(randomProvider)

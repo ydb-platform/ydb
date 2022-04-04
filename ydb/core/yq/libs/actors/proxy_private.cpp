@@ -8,6 +8,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/core/protos/services.pb.h>
+#include <ydb/core/yq/libs/config/yq_issue.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -30,11 +31,13 @@ using namespace NMonitoring;
 class TYqlAnalyticsPrivateProxy : public NActors::TActorBootstrapped<TYqlAnalyticsPrivateProxy> {
 public:
     TYqlAnalyticsPrivateProxy(
+        const NConfig::TPrivateProxyConfig& privateProxyConfig,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         NMonitoring::TDynamicCounterPtr counters,
         const NConfig::TTokenAccessorConfig& tokenAccessorConfig)
-        : TokenAccessorConfig(tokenAccessorConfig)
+        : PrivateProxyConfig(privateProxyConfig)
+        , TokenAccessorConfig(tokenAccessorConfig)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
         , Counters(counters->GetSubgroup("subsystem", "private_api"))
@@ -52,8 +55,32 @@ public:
     }
 
 private:
+    template<typename T>
+    NYql::TIssues ValidatePermissions(T& ev) {
+        NYql::TIssues issues;
+        if (!PrivateProxyConfig.GetEnablePermissions()) {
+            return issues;
+        }
+
+        TString user = ev->Get()->User;
+        auto it = Find(PrivateProxyConfig.GetGrantedUsers(), user);
+        if (it == PrivateProxyConfig.GetGrantedUsers().end()) {
+            issues.AddIssue(MakeErrorIssue(NYq::TIssuesIds::UNAUTHORIZED, "Authentication error for the user " + user));
+        }
+        return issues;
+    }
+
     void Handle(TEvents::TEvPingTaskRequest::TPtr& ev, const TActorContext& ctx) {
         Counters->GetCounter("EvPingTaskRequest", true)->Inc();
+
+        NYql::TIssues issues = ValidatePermissions(ev);
+        if (issues) {
+            auto response = std::make_unique<TEvents::TEvPingTaskResponse>();
+            response->Issues = issues;
+            response->Status = Ydb::StatusIds::UNAUTHORIZED;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
 
         Register(
             CreatePingTaskRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
@@ -62,6 +89,16 @@ private:
 
     void Handle(TEvents::TEvGetTaskRequest::TPtr& ev, const TActorContext& ctx) {
         Counters->GetCounter("EvGetTaskRequest", true)->Inc();
+
+        NYql::TIssues issues = ValidatePermissions(ev);
+        if (issues) {
+            auto response = std::make_unique<TEvents::TEvGetTaskResponse>();
+            response->Issues = issues;
+            response->Status = Ydb::StatusIds::UNAUTHORIZED;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
+
         Register(
             CreateGetTaskRequestActor(ev->Sender, TokenAccessorConfig, TimeProvider, ev->Release(), Counters),
             NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
@@ -70,6 +107,15 @@ private:
     void Handle(TEvents::TEvWriteTaskResultRequest::TPtr& ev, const TActorContext& ctx) {
         Counters->GetCounter("EvWriteTaskResultRequest", true)->Inc();
 
+        NYql::TIssues issues = ValidatePermissions(ev);
+        if (issues) {
+            auto response = std::make_unique<TEvents::TEvWriteTaskResultResponse>();
+            response->Issues = issues;
+            response->Status = Ydb::StatusIds::UNAUTHORIZED;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
+
         Register(
             CreateWriteTaskResultRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
             NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
@@ -77,6 +123,15 @@ private:
 
     void Handle(TEvents::TEvNodesHealthCheckRequest::TPtr& ev, const TActorContext& ctx) {
         Counters->GetCounter("EvNodesHealthCheckRequest", true)->Inc();
+
+        NYql::TIssues issues = ValidatePermissions(ev);
+        if (issues) {
+            auto response = std::make_unique<TEvents::TEvNodesHealthCheckResponse>();
+            response->Issues = issues;
+            response->Status = Ydb::StatusIds::UNAUTHORIZED;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
 
         Register(
             CreateNodesHealthCheckActor(ev->Sender, TimeProvider, ev->Release(), Counters),
@@ -98,6 +153,7 @@ private:
     }
 
 private:
+    const NConfig::TPrivateProxyConfig PrivateProxyConfig;
     const NConfig::TTokenAccessorConfig TokenAccessorConfig;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -110,11 +166,12 @@ TActorId MakeYqPrivateProxyId() {
 }
 
 IActor* CreateYqlAnalyticsPrivateProxy(
+    const NConfig::TPrivateProxyConfig& privateProxyConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NMonitoring::TDynamicCounterPtr counters,
     const NConfig::TTokenAccessorConfig& tokenAccessorConfig) {
-    return new TYqlAnalyticsPrivateProxy(timeProvider, randomProvider, counters, tokenAccessorConfig);
+    return new TYqlAnalyticsPrivateProxy(privateProxyConfig, timeProvider, randomProvider, counters, tokenAccessorConfig);
 }
 
 } // namespace NYq

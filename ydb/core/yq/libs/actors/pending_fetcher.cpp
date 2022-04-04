@@ -127,6 +127,7 @@ class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
 public:
     TPendingFetcher(
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const ::NYq::NConfig::TCommonConfig& commonConfig,
         const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
         const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
@@ -144,6 +145,7 @@ public:
         const TString& tenantName
         )
         : YqSharedResources(yqSharedResources)
+        , CredentialsProviderFactory(credentialsProviderFactory)
         , CommonConfig(commonConfig)
         , CheckpointCoordinatorConfig(checkpointCoordinatorConfig)
         , PrivateApiConfig(privateApiConfig)
@@ -163,6 +165,7 @@ public:
             YqSharedResources->CoreYdbDriver,
             NYdb::TCommonClientSettings()
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
+                .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = PrivateApiConfig.GetSaKeyFile(), .IamEndpoint = PrivateApiConfig.GetIamEndpoint()}))
                 .EnableSsl(PrivateApiConfig.GetSecureTaskService())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             ClientCounters)
@@ -341,7 +344,7 @@ private:
         const auto createdAt = TInstant::Now();
 
         TRunActorParams params(
-            YqSharedResources, S3Gateway,
+            YqSharedResources, CredentialsProviderFactory, S3Gateway,
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
             DqCompFactory, PqCmConnections,
@@ -389,6 +392,7 @@ private:
     );
 
     NYq::TYqSharedResources::TPtr YqSharedResources;
+    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NYq::NConfig::TCommonConfig CommonConfig;
     NYq::NConfig::TCheckpointCoordinatorConfig CheckpointCoordinatorConfig;
     NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
@@ -433,6 +437,7 @@ private:
 
 NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NYq::NConfig::TCommonConfig& commonConfig,
     const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
@@ -451,6 +456,7 @@ NActors::IActor* CreatePendingFetcher(
 {
     return new TPendingFetcher(
         yqSharedResources,
+        credentialsProviderFactory,
         commonConfig,
         checkpointCoordinatorConfig,
         privateApiConfig,

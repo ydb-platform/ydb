@@ -16,5 +16,6 @@ message TIssuesIds {
         BAD_REQUEST = 1003;
         EXPIRED = 1004;
         UNSUPPORTED = 1005;
+        UNAUTHORIZED = 1006;
     }
 }

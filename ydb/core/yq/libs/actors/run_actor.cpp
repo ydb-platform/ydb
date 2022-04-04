@@ -116,8 +116,8 @@ public:
                     Params.YqSharedResources->CoreYdbDriver,
                     NYdb::TCommonClientSettings()
                     .DiscoveryEndpoint(Params.PrivateApiConfig.GetTaskServiceEndpoint())
+                    .CredentialsProviderFactory(Params.CredentialsProviderFactory({.SaKeyFile = Params.PrivateApiConfig.GetSaKeyFile(), .IamEndpoint = Params.PrivateApiConfig.GetIamEndpoint()}))
                     .EnableSsl(Params.PrivateApiConfig.GetSecureTaskService())
-                    .AuthToken(Params.AuthToken)
                     .Database(Params.PrivateApiConfig.GetTaskServiceDatabase() ? Params.PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
                     Params.ClientCounters),
                 SelfId(),
@@ -832,7 +832,7 @@ private:
             }
             resultId = NActors::TActivationContext::Register(
                     CreateResultWriter(
-                        Params.YqSharedResources->UserSpaceYdbDriver, ExecuterId, dqGraphParams.GetResultType(), Params.PrivateApiConfig,
+                        Params.YqSharedResources->UserSpaceYdbDriver, ExecuterId, dqGraphParams.GetResultType(), Params.CredentialsProviderFactory, Params.PrivateApiConfig,
                         writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ClientCounters));
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");

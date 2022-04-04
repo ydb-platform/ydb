@@ -8,4 +8,7 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TPrivateProxyConfig {
     bool Enabled = 1;
+    bool EnablePermissions = 2;
+    repeated string GrantedUsers = 3;
+
 }

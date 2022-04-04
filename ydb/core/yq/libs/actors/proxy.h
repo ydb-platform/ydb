@@ -35,6 +35,7 @@ NActors::TActorId MakePendingFetcherId(ui32 nodeId);
 
 NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ::NYq::NConfig::TCommonConfig& commonConfig,
     const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
@@ -69,6 +70,7 @@ NActors::IActor* CreateResultWriter(
     const NYdb::TDriver& driver,
     const NActors::TActorId& executerId,
     const TString& resultType,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,
     const TVector<TString>& columns,

@@ -946,19 +946,21 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         NProtoBuf::TextFormat::PrintToString(stats, &statsStr);
         Cerr << statsStr << Endl;
 
+        uint64_t totalCpuTimeUs = 0;
+
         UNIT_ASSERT(stats.process_cpu_time_us() > 0);
         UNIT_ASSERT(stats.total_cpu_time_us() > 0);
         UNIT_ASSERT(stats.total_duration_us() > 0);
+        totalCpuTimeUs += stats.process_cpu_time_us();
 
         UNIT_ASSERT(stats.has_compilation());
         auto& compile = stats.compilation();
         UNIT_ASSERT_VALUES_EQUAL(compile.from_cache(), false);
         UNIT_ASSERT(compile.duration_us() > 0);
         UNIT_ASSERT(compile.cpu_time_us() > 0);
+        totalCpuTimeUs += compile.cpu_time_us();
 
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-
-        uint64_t totalCpuTimeUs = 0;
 
         auto& phase0 = stats.query_phases(0);
         UNIT_ASSERT(phase0.duration_us() > 0);

@@ -167,12 +167,14 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT(result.GetStats());
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
+        uint64_t totalCpuTimeUs = 0;
+
         UNIT_ASSERT(stats.process_cpu_time_us() > 0);
         UNIT_ASSERT(stats.total_duration_us() > 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
         ui32 phaseNo = 0;
 
-        uint64_t totalCpuTimeUs = 0;
+        totalCpuTimeUs += stats.process_cpu_time_us();
 
         for (auto& phase : stats.query_phases()) {
             if (phaseNo++ == 3) {

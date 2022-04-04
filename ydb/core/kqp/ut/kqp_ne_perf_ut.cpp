@@ -523,6 +523,50 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 5 : 4);
     }
+
+    Y_UNIT_TEST_TWIN(ComputeLength, UseNewEngine) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT COUNT(*) FROM EightShard;
+        )"), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[24u]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    }
+
+    Y_UNIT_TEST_TWIN(AggregateToScalar, UseNewEngine) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = TParamsBuilder()
+            .AddParam("$group").Uint32(1).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $group AS Uint32;
+
+            SELECT MIN(Name) AS MinName, SUM(Amount) AS TotalAmount
+            FROM Test
+            WHERE Group = $group;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(R"([[["Anna"];[3800u]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+    }
 }
 
 } // namespace NKikimr::NKqp

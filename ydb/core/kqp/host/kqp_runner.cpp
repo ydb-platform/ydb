@@ -202,7 +202,7 @@ public:
             .AddCommonOptimization()
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "PhysicalOptimize")
-            .Add(CreateKqpFinalizingOptTransformer(), "FinalizingOptimize")
+            .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")

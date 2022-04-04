@@ -96,13 +96,10 @@
                                 "Operators": [
                                     {
                                         "Name": "Limit",
-                                        "Limit": "1"
-                                    },
-                                    {
-                                        "Name": "Aggregate"
+                                        "Limit": "1001"
                                     }
                                 ],
-                                "Node Type": "Limit-Aggregate"
+                                "Node Type": "Limit"
                             }
                         ],
                         "Node Type": "Precompute_0_0",
@@ -121,15 +118,12 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "Iterator": "Take",
+                                                        "Iterator": "%kqp%tx_result_binding_0_0",
                                                         "Name": "Iterator"
-                                                    },
-                                                    {
-                                                        "Name": "Limit",
-                                                        "Limit": "1001"
                                                     }
                                                 ],
-                                                "Node Type": "ConstantExpr-Limit"
+                                                "Node Type": "ConstantExpr",
+                                                "CTE Name": "tx_result_binding_1_0"
                                             }
                                         ],
                                         "Node Type": "UnionAll",
@@ -217,13 +211,10 @@
                                 "Operators": [
                                     {
                                         "Name": "Limit",
-                                        "Limit": "1"
-                                    },
-                                    {
-                                        "Name": "Aggregate"
+                                        "Limit": "1001"
                                     }
                                 ],
-                                "Node Type": "Limit-Aggregate"
+                                "Node Type": "Limit"
                             }
                         ],
                         "Node Type": "Precompute_0_0",
@@ -242,15 +233,12 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "Iterator": "Take",
+                                                        "Iterator": "%kqp%tx_result_binding_0_0",
                                                         "Name": "Iterator"
-                                                    },
-                                                    {
-                                                        "Name": "Limit",
-                                                        "Limit": "1001"
                                                     }
                                                 ],
-                                                "Node Type": "ConstantExpr-Limit"
+                                                "Node Type": "ConstantExpr",
+                                                "CTE Name": "tx_result_binding_1_0"
                                             }
                                         ],
                                         "Node Type": "UnionAll",

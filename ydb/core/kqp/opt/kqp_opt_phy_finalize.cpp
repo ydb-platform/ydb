@@ -14,18 +14,56 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
+{
     TExprBase inputExpr(input);
     auto query = inputExpr.Cast<TKqlQuery>();
-    TNodeOnNodeOwnedMap replaces;
 
+    auto hasPrecomputes = [](TExprBase node) {
+        auto precompute = FindNode(node.Ptr(), [](const NYql::TExprNode::TPtr& node) {
+            return TMaybeNode<TDqPhyPrecompute>(node).IsValid();
+        });
+
+        return precompute != nullptr;
+    };
+
+    // Currently we compute all query results in the last physical transaction, so we cannot
+    // precompute them early if no explicit DqPhyPrecompute is specified.
+    // Removing precompute in queries with multiple physical tx can lead to additional computations.
+    // More proper way to fix this is to allow partial result computation in early physical
+    // transactions.
+    bool omitResultPrecomputes = true;
+    for (const auto& result: query.Results()) {
+        if (result.Value().Maybe<TDqPhyPrecompute>()) {
+            continue;
+        }
+
+        if (!hasPrecomputes(result.Value())) {
+            omitResultPrecomputes = false;
+            break;
+        }
+    }
+    for (const auto& effect: query.Effects()) {
+        if (!hasPrecomputes(effect)) {
+            omitResultPrecomputes = false;
+            break;
+        }
+    }
+
+    TNodeOnNodeOwnedMap replaces;
     for (const auto& queryResult: query.Results()) {
         TExprBase node(queryResult.Value());
 
-        auto result = DqBuildPureExprStage(node, ctx);
-        if (result.Raw() != node.Raw()) {
-            YQL_CLOG(DEBUG, ProviderKqp) << "Building stage out of pure query #" << node.Raw()->UniqueId();
-            replaces[node.Raw()] = result.Ptr();
+        // TODO: Missing support for DqCnValue results in scan queries
+        if (node.Maybe<TDqPhyPrecompute>() && omitResultPrecomputes && !kqpCtx.IsScanQuery()) {
+            replaces[node.Raw()] = node.Cast<TDqPhyPrecompute>().Connection().Ptr();
+        } else {
+            auto result = DqBuildPureExprStage(node, ctx);
+            if (result.Raw() != node.Raw()) {
+                YQL_CLOG(DEBUG, ProviderKqp) << "Building stage out of pure query #" << node.Raw()->UniqueId();
+                replaces[node.Raw()] = result.Ptr();
+            }
         }
     }
     output = ctx.ReplaceNodes(TExprNode::TPtr(input), replaces);
@@ -174,9 +212,9 @@ NYql::IGraphTransformer::TStatus PerformGlobalRule(const TString& ruleName, cons
         if (status != IGraphTransformer::TStatus::Ok) { return status; } \
     } while (0)
 
-TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer() {
+TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
     return CreateFunctorTransformer(
-        [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+        [kqpCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
             PERFORM_GLOBAL_RULE("ReplicateMultiUsedConnection", input, output, ctx,
                 [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                     YQL_ENSURE(TKqlQuery::Match(input.Get()));
@@ -184,8 +222,8 @@ TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer() {
                 });
 
             PERFORM_GLOBAL_RULE("BuildPureExprStages", input, output, ctx,
-                [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                    return KqpBuildPureExprStagesResult(input, output, ctx);
+                [kqpCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                    return KqpBuildPureExprStagesResult(input, output, ctx, *kqpCtx);
                 });
 
             PERFORM_GLOBAL_RULE("BuildUnion", input, output, ctx,

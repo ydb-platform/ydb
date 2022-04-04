@@ -1087,6 +1087,10 @@ DENY .* -> vendor/github.com/anatol/luks.go;test
 DENY .* -> vendor/github.com/anatol/vmtest;test
 DENY .* -> vendor/github.com/anatol/devmapper.go;test
 
+# CONTRIB-2497
+ALLOW .* -> vendor/github.com/chzyer/readline
+DENY .* -> vendor/github.com/chzyer/readline;test
+
 # CONTRIB-2498
 ALLOW .* -> vendor/github.com/fatih/color
 

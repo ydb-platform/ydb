@@ -310,7 +310,6 @@ data-ui/yfm-custom-plugins
 mole
 taxi/github/lavka-analytics
 intranet/staff-api
-afisha/infra/projects/saaspush
 market/erp_axapta/libs/SimpleS3Wrapper
 portal/frontend/safari-ntp
 market/ir/lib/title-maker
@@ -365,3 +364,16 @@ taxi/frontend/packages/yandex-taxi-front-build-env
 taxi/lavka/platform/pricing-rules
 mds/admin/packages/config-monrun-elliptics-check
 portal/wboxdb
+mds/admin/packages/config-mds-mastermind
+portal/export-puller
+taxi/github/helpnearby_misc
+drive/frontend/services/ya-drive-admin
+portal/archive/gitrelease
+mds/admin/packages/yandex-elliptics-storage-setup
+mds/admin/packages/config-elliptics-node
+taxi/github/rfc
+mds/admin/packages/yandex-elliptics-cache-scripts
+taxi/github/loveka-robotics/libraries/common/math
+search-interfaces/turbo-services/turboext/ugc
+search-interfaces/turbo-services/turboext/css
+taxi/github/infra-tests-ui

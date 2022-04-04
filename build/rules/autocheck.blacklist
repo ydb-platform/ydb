@@ -262,3 +262,15 @@ classifieds/mobile-autoru-tests-mediator-ios
 geoadv/analytics/statistics
 geoadv/analytics/dynamic_prices
 geoadv/analytics/arbitrate
+intranet/moebius
+market/sovetnik/e2e
+market/sovetnik/landings
+market/sovetnik/mobile-settings
+market/sovetnik/settings
+market/sovetnik/domains
+market/sovetnik/mobile-app
+fintech/invest-frontend/porto-layers
+fintech/invest-frontend/nginx-static
+fintech/invest-frontend/icons
+travel/orders/admin
+partner/perl/partner2-juggler-checks-dev

@@ -276,7 +276,15 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     return alterData;
 }
 
-TVector<ui32> TTableInfo::FillDescription(TPathElement::TPtr pathInfo) {
+void TTableInfo::ResetDescriptionCache() {
+    TableDescription.ClearId_Deprecated();
+    TableDescription.ClearPathId();
+    TableDescription.ClearName();
+    TableDescription.ClearColumns();
+    TableDescription.ClearKeyColumnIds();
+}
+
+TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
     Y_VERIFY(pathInfo && pathInfo->IsTable());
 
     TVector<ui32> keyColumnIds;
@@ -1197,11 +1205,7 @@ void TTableInfo::FinishAlter() {
     }
 
     // Force FillDescription to regenerate TableDescription
-    TableDescription.ClearId_Deprecated();
-    TableDescription.ClearPathId();
-    TableDescription.ClearName();
-    TableDescription.ClearColumns();
-    TableDescription.ClearKeyColumnIds();
+    ResetDescriptionCache();
 
     AlterData.Reset();
 }

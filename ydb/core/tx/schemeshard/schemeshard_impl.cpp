@@ -5650,7 +5650,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
     const TTableInfo::TPtr tinfo = Tables.at(tableId);
     TPathElement::TPtr pinfo = *PathsById.FindPtr(tableId);
 
-    TVector<ui32> keyColumnIds = tinfo->FillDescription(pinfo);
+    TVector<ui32> keyColumnIds = tinfo->FillDescriptionCache(pinfo);
     if (!tinfo->TableDescription.HasPath()) {
         tinfo->TableDescription.SetPath(PathToString(pinfo));
     }

@@ -29,6 +29,7 @@ const THashSet<TStringBuf> UNSUPPORTED_CALLABLE = { TCoForwardList::CallableName
 
 namespace NDq {
     bool CheckJoinColumns(const TExprBase& node);
+    bool CheckJoinLinkSettings(const TExprBase& node);
 } // namespace NDq
 
 class TDqsRecaptureTransformer : public TSyncTransformerBase {
@@ -171,6 +172,9 @@ private:
             }
         } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(expr)) {
             AddInfo(ctx, TStringBuilder() << "unsupported join column");
+            good = false;
+        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinLinkSettings(expr)) {
+            AddInfo(ctx, TStringBuilder() << "unsupported join any");
             good = false;
         } else if (node.ChildrenSize() > 1 && TCoDataSource::Match(node.Child(1))) {
             auto dataSourceName = node.Child(1)->Child(0)->Content();

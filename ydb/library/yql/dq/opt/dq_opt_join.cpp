@@ -277,6 +277,37 @@ bool CheckJoinColumns(const TExprBase& node) {
     }
 }
 
+bool CheckJoinTupleLinkSettings(const TCoEquiJoinTuple& joinTuple) {
+    auto options = joinTuple.Options();
+    auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) {
+        return false;
+    }
+
+    bool result = true;
+    if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
+        result &= CheckJoinTupleLinkSettings(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>());
+    }
+    if (!result) {
+        return result;
+    }
+
+    if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
+        result &= CheckJoinTupleLinkSettings(joinTuple.RightScope().Cast<TCoEquiJoinTuple>());
+    }
+    return result;
+}
+
+bool CheckJoinLinkSettings(const TExprBase& node) {
+    if (!node.Maybe<TCoEquiJoin>()) {
+        return true;
+    }
+    auto equiJoin = node.Cast<TCoEquiJoin>();
+    YQL_ENSURE(equiJoin.ArgCount() >= 4);
+    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+    return CheckJoinTupleLinkSettings(joinTuple);
+}
+
 /**
  * Rewrite `EquiJoin` to a number of `DqJoin` callables. This is done to simplify next step of building
  * physical stages with join operators.

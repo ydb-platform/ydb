@@ -60,6 +60,12 @@ def create_tables(session, path):
     )
 ```
 
+В параметр path передаётся абсолютный путь от корня:
+
+```python
+full_path = os.path.join(database, path)
+```
+
 С помощью метода `session.describe_table()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
 
 ```python

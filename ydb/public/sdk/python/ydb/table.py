@@ -1602,12 +1602,18 @@ class BaseSession(ISession):
     def create(self, settings=None):
         if self._state.session_id is not None:
             return self
+        create_settings = settings_impl.BaseRequestSettings()
+        if settings is not None:
+            create_settings = settings.make_copy()
+        create_settings = create_settings.with_header(
+            "x-ydb-client-capabilities", "session-balancer"
+        )
         return self._driver(
             _apis.ydb_table.CreateSessionRequest(),
             _apis.TableService.Stub,
             _apis.TableService.CreateSession,
             _session_impl.initialize_session,
-            settings,
+            create_settings,
             (self._state, self),
             self._state.endpoint,
         )
@@ -1860,12 +1866,18 @@ class Session(BaseSession):
     def async_create(self, settings=None):
         if self._state.session_id is not None:
             return _utilities.wrap_result_in_future(self)
+        create_settings = settings_impl.BaseRequestSettings()
+        if settings is not None:
+            create_settings = settings.make_copy()
+        create_settings = create_settings.with_header(
+            "x-ydb-client-capabilities", "session-balancer"
+        )
         return self._driver.future(
             _apis.ydb_table.CreateSessionRequest(),
             _apis.TableService.Stub,
             _apis.TableService.CreateSession,
             _session_impl.initialize_session,
-            settings,
+            create_settings,
             (self._state, self),
             self._state.endpoint,
         )

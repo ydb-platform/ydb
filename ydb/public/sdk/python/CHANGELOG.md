@@ -2,6 +2,7 @@
 
 * allow to refer endpoints by node id
 * support null type in queries
+* support session balancer feature
 
 ## 2.1.0 ##
 

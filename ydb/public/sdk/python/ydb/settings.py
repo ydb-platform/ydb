@@ -10,6 +10,7 @@ class BaseRequestSettings(object):
         "operation_timeout",
         "tracer",
         "compression",
+        "headers",
     )
 
     def __init__(self):
@@ -22,9 +23,36 @@ class BaseRequestSettings(object):
         self.cancel_after = None
         self.operation_timeout = None
         self.compression = None
+        self.headers = []
+
+    def make_copy(self):
+        return (
+            BaseRequestSettings()
+            .with_trace_id(self.trace_id)
+            .with_request_type(self.request_type)
+            .with_timeout(self.timeout)
+            .with_cancel_after(self.cancel_after)
+            .with_operation_timeout(self.operation_timeout)
+            .with_compression(self.compression)
+        )
 
     def with_compression(self, compression):
+        """
+        Enables compression for the specific RPC
+        :param compression: An RPCCompression enum value.
+        :return The self instance.
+        """
         self.compression = compression
+        return self
+
+    def with_header(self, key, value):
+        """
+        Adds a key-value pair to the request headers.
+        :param key: A string with a header key.
+        :param value: A string with a header value.
+        :return The self instance.
+        """
+        self.headers.append((key, value))
         return self
 
     def with_trace_id(self, trace_id):

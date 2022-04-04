@@ -274,3 +274,9 @@ fintech/invest-frontend/nginx-static
 fintech/invest-frontend/icons
 travel/orders/admin
 partner/perl/partner2-juggler-checks-dev
+yabs/stat/saltstages
+market/front/libs/generator-market
+velocity/error-booster/error-counter
+partner/infra/partner_ansible
+billing/apikeys-frontend-admin
+billing/apikeys-frontend-user

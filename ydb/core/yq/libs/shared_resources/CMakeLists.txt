@@ -19,6 +19,7 @@ target_link_libraries(yq-libs-shared_resources PUBLIC
   ydb-core-protos
   yq-libs-events
   libs-shared_resources-interface
+  ydb-library-logger
   ydb-library-security
   cpp-client-ydb_driver
   cpp-client-ydb_table

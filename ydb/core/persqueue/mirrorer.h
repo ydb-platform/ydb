@@ -174,6 +174,7 @@ private:
     TInstant WriteRequestTimestamp;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProvider;
     std::shared_ptr<NYdb::NPersQueue::IReadSession> ReadSession;
+    ui64 ReaderGeneration = 0;
     NYdb::NPersQueue::TPartitionStream::TPtr PartitionStream;
     THolder<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamStatusEvent> StreamStatus;
     TInstant LastInitStageTimestamp;

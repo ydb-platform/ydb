@@ -386,7 +386,17 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     Y_VERIFY(factory);
 
-    ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT);
+    TLog log(MakeHolder<TDeferredActorLogBackend>(
+        factory->GetSharedActorSystem(),
+        NKikimrServices::PQ_MIRRORER
+    ));
+    
+    TString logPrefix = TStringBuilder() << MirrorerDescription() << "[reader " << ++ReaderGeneration << "] ";
+    log.SetFormatter([logPrefix](ELogPriority, TStringBuf message) -> TString {
+        return logPrefix + message;
+    });
+
+    ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
 
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << " read session created: " << ReadSession->GetSessionId());

@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-persqueue PUBLIC
   core-persqueue-partition_key_range
   core-persqueue-writer
   ydb-core-protos
+  ydb-library-logger
   library-persqueue-counter_time_keeper
   library-persqueue-topic_parser
   public-lib-base

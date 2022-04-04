@@ -57,7 +57,7 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
              TDbDriverStatePtr dbDriverState)
     : Settings(settings)
     , SessionId(CreateGuidAsString())
-    , Log(dbDriverState->Log)
+    , Log(settings.Log_.GetOrElse(dbDriverState->Log))
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
@@ -68,7 +68,7 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
 
     MakeCountersIfNeeded();
 
-    {
+    if (!Settings.Log_) {
         TStringBuilder logPrefix;
         logPrefix << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] ";
         Log.SetFormatter(GetPrefixLogFormatter(logPrefix));
@@ -203,10 +203,12 @@ void TReadSession::CreateClusterSessionsImpl() {
             AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
             return;
         }
-        TStringBuilder logPrefix;
-        logPrefix << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] [" << clusterName << "] ";
         TLog log = Log;
-        log.SetFormatter(GetPrefixLogFormatter(logPrefix));
+        if (!Settings.Log_) {
+            TStringBuilder logPrefix;
+            logPrefix << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] [" << clusterName << "] ";
+            log.SetFormatter(GetPrefixLogFormatter(logPrefix));
+        }
         clusterSessionInfo.Session =
             std::make_shared<TSingleClusterReadSessionImpl>(
                 sessionSettings,

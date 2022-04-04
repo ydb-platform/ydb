@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
 
         auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
-        fabric->Initialize(settings);
+        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
         for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
             server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
         }

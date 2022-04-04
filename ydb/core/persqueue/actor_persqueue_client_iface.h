@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/library/logger/actor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
@@ -14,7 +15,21 @@ namespace NKikimr::NPQ {
 
 class IPersQueueMirrorReaderFactory {
 public:
-    virtual void Initialize(const NKikimrPQ::TPQConfig::TPQLibSettings& settings) const = 0;
+    IPersQueueMirrorReaderFactory()
+        : ActorSystemPtr(std::make_shared<TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr))
+    {}
+
+    virtual void Initialize(
+        NActors::TActorSystem* actorSystem,
+        const NKikimrPQ::TPQConfig::TPQLibSettings& settings
+    ) const {
+        Y_VERIFY(!ActorSystemPtr->load(std::memory_order_relaxed), "Double init");
+        ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
+
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetNetworkThreadsNum(settings.GetThreadsCount());
+        Driver = std::make_shared<NYdb::TDriver>(driverConfig);
+    }
 
     virtual std::shared_ptr<NYdb::ICredentialsProviderFactory> GetCredentialsProvider(
         const NKikimrPQ::TMirrorPartitionConfig::TCredentials& cred
@@ -24,20 +39,23 @@ public:
         const NKikimrPQ::TMirrorPartitionConfig& config,
         ui32 partition,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        ui64 maxMemoryUsageBytes
+        ui64 maxMemoryUsageBytes,
+        TMaybe<TLog> logger = Nothing()
     ) const = 0;
 
     virtual ~IPersQueueMirrorReaderFactory() = default;
+
+    TDeferredActorLogBackend::TSharedAtomicActorSystemPtr GetSharedActorSystem() const {
+        return ActorSystemPtr;
+    }
+
+protected:
+    mutable TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
+    mutable std::shared_ptr<NYdb::TDriver> Driver;
 };
 
 class TPersQueueMirrorReaderFactory : public IPersQueueMirrorReaderFactory {
 public:
-    void Initialize(const NKikimrPQ::TPQConfig::TPQLibSettings& settings) const override {
-        auto driverConfig = NYdb::TDriverConfig()
-            .SetNetworkThreadsNum(settings.GetThreadsCount());
-        Driver = std::make_shared<NYdb::TDriver>(driverConfig);
-    }
-
     std::shared_ptr<NYdb::ICredentialsProviderFactory> GetCredentialsProvider(
         const NKikimrPQ::TMirrorPartitionConfig::TCredentials& cred
     ) const override {
@@ -55,7 +73,8 @@ public:
         const NKikimrPQ::TMirrorPartitionConfig& config,
         ui32 partition,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        ui64 maxMemoryUsageBytes
+        ui64 maxMemoryUsageBytes,
+        TMaybe<TLog> logger = Nothing()
     ) const override {
         NYdb::NPersQueue::TPersQueueClientSettings clientSettings = NYdb::NPersQueue::TPersQueueClientSettings()
             .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
@@ -72,6 +91,9 @@ public:
             .DisableClusterDiscovery(true)
             .ReadOnlyOriginal(true)
             .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
+        if (logger) {
+            settings.Log(logger.GetRef());
+        }
         if (config.HasReadFromTimestampsMs()) {
             settings.StartingMessageTimestamp(TInstant::MilliSeconds(config.GetReadFromTimestampsMs()));
         }
@@ -82,9 +104,6 @@ public:
         NYdb::NPersQueue::TPersQueueClient persQueueClient(*Driver, clientSettings);
         return persQueueClient.CreateReadSession(settings);
     }
-
-private:
-    mutable std::shared_ptr<NYdb::TDriver> Driver;
 };
 
 } // namespace NKikimr::NSQS

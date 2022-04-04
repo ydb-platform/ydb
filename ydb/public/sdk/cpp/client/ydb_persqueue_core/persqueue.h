@@ -1299,6 +1299,9 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
 
     //! Experimental option
     FLUENT_SETTING_OPTIONAL(bool, RangesMode);
+
+    //! Log.
+    FLUENT_SETTING_OPTIONAL(TLog, Log);
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.

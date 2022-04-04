@@ -8,5 +8,5 @@ namespace NYql {
     struct TDqState;
     using TDqStatePtr = TIntrusivePtr<TDqState>;
 
-    IGraphTransformer* CreateInMemoryExecTransformer(const TDqStatePtr& state);
+    IGraphTransformer* CreateDqExecTransformer(const TDqStatePtr& state);
 } // namespace NYql

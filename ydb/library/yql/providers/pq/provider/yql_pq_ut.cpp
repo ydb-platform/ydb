@@ -113,7 +113,7 @@ bool RunPqProgram(
     auto dqGateway = CreateLocalDqGateway(driver, functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {});
 
     auto storage = NYql::CreateFileStorage({});
-    dataProvidersInit.push_back(NYql::GetDqDataProviderInitializer(&CreateInMemoryExecTransformer, dqGateway, dqCompFactory, {}, storage));
+    dataProvidersInit.push_back(NYql::GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
 
     TExprContext moduleCtx;
     IModuleResolver::TPtr moduleResolver;

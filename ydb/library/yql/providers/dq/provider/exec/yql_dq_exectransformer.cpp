@@ -218,16 +218,16 @@ private:
     void AfterOptimize(TTransformationPipeline*) const final {}
 };
 
-class TInMemoryExecTransformer: public TExecTransformerBase, TCounters
+class TDqExecTransformer: public TExecTransformerBase, TCounters
 {
 public:
-    TInMemoryExecTransformer(const TDqStatePtr& state)
+    TDqExecTransformer(const TDqStatePtr& state)
         : State(state)
         , DqTypeAnnotationTransformer(
             CreateTypeAnnotationTransformer(NDq::CreateDqTypeAnnotationTransformer(*State->TypeCtx), *State->TypeCtx))
     {
-        AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandleResult));
-        AddHandler({TStringBuf("Pull")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandlePull));
+        AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TDqExecTransformer::HandleResult));
+        AddHandler({TStringBuf("Pull")}, RequireNone(), Hndl(&TDqExecTransformer::HandlePull));
         AddHandler({TDqCnResult::CallableName()}, RequireNone(), Pass());
         AddHandler({TDqQuery::CallableName()}, RequireFirst(), Pass());
     }
@@ -1262,8 +1262,8 @@ private:
 
 }
 
-IGraphTransformer* CreateInMemoryExecTransformer(const TDqStatePtr& state) {
-    return new TInMemoryExecTransformer(state);
+IGraphTransformer* CreateDqExecTransformer(const TDqStatePtr& state) {
+    return new TDqExecTransformer(state);
 }
 
 } // namespace NYql

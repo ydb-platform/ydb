@@ -1092,7 +1092,7 @@ private:
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
             QueryStateUpdateRequest.mutable_query_id()->set_value(Params.QueryId);
             QueryStateUpdateRequest.set_owner_id(Params.Owner);
-            dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateInMemoryExecTransformer, NYq::CreateEmptyGateway(SelfId()), Params.DqCompFactory, {}, nullptr));
+            dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateDqExecTransformer, NYq::CreateEmptyGateway(SelfId()), Params.DqCompFactory, {}, nullptr));
         }
 
         {

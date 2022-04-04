@@ -413,3 +413,4 @@ taxi/frontend/packages/taxi-localization
 classifieds/infra/packer
 taxi/frontend/packages/b_-loader
 classifieds/infra/admin-dockerfiles
+data-ui/cloud-statusboard

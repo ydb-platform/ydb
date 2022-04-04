@@ -1,4 +1,3 @@
-# common internal + external "Getting started" items
 items:
 - name: Создание базы данных
   href: create_db.md
@@ -15,10 +14,3 @@ items:
   include: { mode: link, path: self_hosted/toc_p.yaml }
 - name: Полезные ссылки
   href: useful_links.md
-#- name: Deprecated ydb_docker.md
-#  href: ydb_docker.md
-#  hidden: true
-#- name: Deprecated ydb_local.md
-#  href: ydb_local.md
-#  hidden: true
-

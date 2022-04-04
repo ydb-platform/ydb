@@ -6,7 +6,6 @@ items:
   include: { mode: link, path: getting_started/toc_p.yaml }
 
 # Main
-# - { name: Сценарии использования,                  include: { mode: link, path: solutions/toc_i.yaml },       when: audience == "external" }
 - { name: Концепции,                               include: { mode: link, path: concepts/toc_p.yaml } }
 - { name: Пошаговые инструкции,                    include: { mode: link, path: operations/toc_p.yaml } }
 

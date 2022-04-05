@@ -414,3 +414,6 @@ classifieds/infra/packer
 taxi/frontend/packages/b_-loader
 classifieds/infra/admin-dockerfiles
 data-ui/cloud-statusboard
+travel/frontend
+classifieds/infra/prometheus-juggler-generator
+classifieds/infra/prometheus-config

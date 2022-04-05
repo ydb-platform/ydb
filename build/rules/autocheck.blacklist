@@ -417,3 +417,4 @@ data-ui/cloud-statusboard
 travel/frontend
 classifieds/infra/prometheus-juggler-generator
 classifieds/infra/prometheus-config
+classifieds/infra/ansible-juggler-configs

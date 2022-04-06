@@ -547,3 +547,9 @@ trust/dynamic-cfg-cli
 trust/qyp-tc-agents
 taxi/dmp/spark/pyspark-stubs
 maps/b2bgeo/frontend
+taxi/github/js-integration-api
+commerce/adv-admin
+commerce/adv-cm
+commerce/adv-source
+commerce/proctoring-no-cookie
+commerce/expert-cron

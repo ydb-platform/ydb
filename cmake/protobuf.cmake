@@ -1,6 +1,6 @@
 function(target_proto_plugin Tgt Name PluginTarget)
   set_property(TARGET ${Tgt} APPEND PROPERTY
-    PROTOC_OPTS --${Name}_out=${CMAKE_BINARY_DIR} --plugin=protoc-gen-${Name}=$<TARGET_FILE:${PluginTarget}>
+    PROTOC_OPTS --${Name}_out=${CMAKE_BINARY_DIR}/$<TARGET_PROPERTY:${Tgt},PROTO_NAMESPACE> --plugin=protoc-gen-${Name}=$<TARGET_FILE:${PluginTarget}>
   )
   set_property(TARGET ${Tgt} APPEND PROPERTY
     PROTOC_DEPS ${PluginTarget}

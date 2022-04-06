@@ -173,9 +173,6 @@ private:
         } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(expr)) {
             AddInfo(ctx, TStringBuilder() << "unsupported join column");
             good = false;
-        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinLinkSettings(expr)) {
-            AddInfo(ctx, TStringBuilder() << "unsupported join any");
-            good = false;
         } else if (node.ChildrenSize() > 1 && TCoDataSource::Match(node.Child(1))) {
             auto dataSourceName = node.Child(1)->Child(0)->Content();
             if (dataSourceName != DqProviderName && !node.IsCallable(ConfigureName)) {

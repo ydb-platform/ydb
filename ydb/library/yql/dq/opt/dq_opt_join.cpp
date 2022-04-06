@@ -56,14 +56,71 @@ TExprBase BuildSkipNullKeys(TExprContext& ctx, TPositionHandle pos,
         .Done();
 };
 
+TExprBase BuildDqJoinInput(TExprContext& ctx, TPositionHandle pos, const TExprBase& input, const TVector<TCoAtom>& keys, bool any) {
+    if (!any) {
+        return input;
+    }
+
+    auto keyExtractor = ctx.Builder(pos)
+        .Lambda()
+            .Param("item")
+            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                auto listBuilder = parent.List();
+                int pos = 0;
+                for (const auto& key : keys) {
+                    listBuilder
+                        .Callable(pos++, "Member")
+                            .Arg(0, "item")
+                            .Add(1, key.Ptr())
+                        .Seal();
+                }
+
+                return listBuilder.Seal();
+            })
+        .Seal()
+        .Build();
+
+    auto condense = Build<TCoLambda>(ctx, pos)
+        .Args({"list"})
+        .Body<TCoCondense1>()
+            .Input("list")
+            .InitHandler(BuildIdentityLambda(pos, ctx))
+            .SwitchHandler()
+                .Args({"item", "state"})
+                .Body<TCoAggrNotEqual>()
+                    .Left<TExprApplier>().Apply(TCoLambda(keyExtractor)).With(0, "item")
+                        .Build()
+                    .Right<TExprApplier>().Apply(TCoLambda(keyExtractor)).With(0, "state")
+                        .Build()
+                    .Build()
+                .Build()
+            .UpdateHandler()
+                .Args({"item", "state"})
+                .Body("state")
+            .Build()
+        .Build()
+        .Done();
+
+    auto partition = Build<TCoPartitionsByKeys>(ctx, pos)
+        .Input(input)
+        .KeySelectorLambda(keyExtractor)
+        .SortDirections<TCoVoid>()
+            .Build()
+        .SortKeySelectorLambda<TCoVoid>()
+            .Build()
+        .ListHandlerLambda(condense)
+        .Done();
+
+    return partition;
+}
+
 TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     const THashMap<TStringBuf, TJoinInputDesc>& inputs, TExprContext& ctx)
 {
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
-    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) {
-        return {};
-    }
+    bool leftAny = linkSettings.LeftHints.contains("any");
+    bool rightAny = linkSettings.RightHints.contains("any");
 
     TMaybe<TJoinInputDesc> left;
     if (joinTuple.LeftScope().Maybe<TCoAtom>()) {
@@ -141,9 +198,9 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     }
 
     auto dqJoin = Build<TDqJoin>(ctx, joinTuple.Pos())
-        .LeftInput(left->Input)
+        .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, leftAny))
         .LeftLabel(leftTableLabel)
-        .RightInput(right->Input)
+        .RightInput(BuildDqJoinInput(ctx, joinTuple.Pos(), right->Input, rightJoinKeys, rightAny))
         .RightLabel(rightTableLabel)
         .JoinType(joinTuple.Type())
         .JoinKeys(joinKeysBuilder.Done())
@@ -263,37 +320,6 @@ bool CheckJoinColumns(const TExprBase& node) {
     } catch (...) {
         return false;
     }
-}
-
-bool CheckJoinTupleLinkSettings(const TCoEquiJoinTuple& joinTuple) {
-    auto options = joinTuple.Options();
-    auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
-    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) {
-        return false;
-    }
-
-    bool result = true;
-    if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
-        result &= CheckJoinTupleLinkSettings(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>());
-    }
-    if (!result) {
-        return result;
-    }
-
-    if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
-        result &= CheckJoinTupleLinkSettings(joinTuple.RightScope().Cast<TCoEquiJoinTuple>());
-    }
-    return result;
-}
-
-bool CheckJoinLinkSettings(const TExprBase& node) {
-    if (!node.Maybe<TCoEquiJoin>()) {
-        return true;
-    }
-    auto equiJoin = node.Cast<TCoEquiJoin>();
-    YQL_ENSURE(equiJoin.ArgCount() >= 4);
-    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
-    return CheckJoinTupleLinkSettings(joinTuple);
 }
 
 /**

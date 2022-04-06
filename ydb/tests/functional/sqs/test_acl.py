@@ -97,7 +97,7 @@ class SqsACLTest(KikimrSqsTestBase):
             alkonavt_sid + ':' + ','.join([create_queue_permission, send_message_permission])
         )
         description = self._list_permissions(self._username)
-        assert self._extract_permissions_for(alkonavt_sid, description) == [create_queue_permission, send_message_permission]
+        assert sorted(self._extract_permissions_for(alkonavt_sid, description)) == [create_queue_permission, send_message_permission]
 
         # single permission expected
         self._modify_permissions(self._username, 'revoke', alkonavt_sid + ':' + create_queue_permission)

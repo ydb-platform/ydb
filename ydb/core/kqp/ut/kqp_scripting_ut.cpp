@@ -208,6 +208,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
 
         result = client.ExecuteYqlScript(R"(
+            PRAGMA Kikimr.UseNewEngine = 'false';
             SELECT * FROM `/Root/.sys/partition_stats`;
             SELECT * FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();

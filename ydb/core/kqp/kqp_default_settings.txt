@@ -132,3 +132,9 @@ DefaultSettings {
     Name: "_KqpDisableLlvmForUdfStages"
     Value: "false"
 }
+
+DefaultSettings {
+    Name: "_KqpForceNewEngine"
+    Value: "true"
+}
+

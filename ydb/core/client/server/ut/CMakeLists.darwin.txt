@@ -26,6 +26,14 @@ target_link_libraries(ydb-core-client-server-ut PUBLIC
   ydb-core-testlib
   core-testlib-actors
 )
+target_link_options(ydb-core-client-server-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-client-server-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/pq_metacache_v2_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metarequest_ut.cpp
@@ -40,16 +48,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-client-server-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-client-server-ut)

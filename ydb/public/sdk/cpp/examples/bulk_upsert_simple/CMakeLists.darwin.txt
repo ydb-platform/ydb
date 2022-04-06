@@ -15,16 +15,15 @@ target_link_libraries(bulk_upsert_simple PUBLIC
   library-cpp-getopt
   cpp-client-ydb_table
 )
-target_sources(bulk_upsert_simple PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/bulk_upsert_simple/main.cpp
-)
-target_link_flags(bulk_upsert_simple
-  PUBLIC
+target_link_options(bulk_upsert_simple PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(bulk_upsert_simple PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/bulk_upsert_simple/main.cpp
 )
 vcs_info(bulk_upsert_simple)

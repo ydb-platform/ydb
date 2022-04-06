@@ -14,11 +14,7 @@ target_link_libraries(gencrc PUBLIC
   library-cpp-lfalloc
   library-cpp-cpuid_check
 )
-target_sources(gencrc PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/gencrc/main.cpp
-)
-target_link_flags(gencrc
-  PUBLIC
+target_link_options(gencrc PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -27,5 +23,8 @@ target_link_flags(gencrc
   -lpthread
   -lrt
   -ldl
+)
+target_sources(gencrc PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/gencrc/main.cpp
 )
 vcs_info(gencrc)

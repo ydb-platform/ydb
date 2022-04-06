@@ -38,6 +38,14 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_user_attributes PUBLIC
   ydb-core-util
   yql-public-issue
 )
+target_link_options(ydb-core-tx-schemeshard-ut_user_attributes PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-tx-schemeshard-ut_user_attributes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_user_attributes.cpp
 )
@@ -51,16 +59,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-tx-schemeshard-ut_user_attributes
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-tx-schemeshard-ut_user_attributes)

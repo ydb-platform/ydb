@@ -23,6 +23,14 @@ target_link_libraries(ydb-core-tx-scheme_board-ut_replica PUBLIC
   cpp-testing-unittest
   core-testlib-basics
 )
+target_link_options(ydb-core-tx-scheme_board-ut_replica PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-tx-scheme_board-ut_replica PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/replica_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/scheme_board/ut_helpers.cpp
@@ -37,16 +45,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-tx-scheme_board-ut_replica
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-tx-scheme_board-ut_replica)

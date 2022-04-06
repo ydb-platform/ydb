@@ -21,6 +21,14 @@ target_link_libraries(ydb-public-lib-json_value-ut PUBLIC
   cpp-testing-unittest
   cpp-client-ydb_proto
 )
+target_link_options(ydb-public-lib-json_value-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-public-lib-json_value-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/json_value/ydb_json_value_ut.cpp
 )
@@ -34,14 +42,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-public-lib-json_value-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-public-lib-json_value-ut)

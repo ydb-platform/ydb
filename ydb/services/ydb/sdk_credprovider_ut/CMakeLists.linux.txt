@@ -26,6 +26,16 @@ target_link_libraries(ydb-services-ydb-sdk_credprovider_ut PUBLIC
   cpp-client-ydb_scheme
   cpp-client-ydb_table
 )
+target_link_options(ydb-services-ydb-sdk_credprovider_ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-services-ydb-sdk_credprovider_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/sdk_credprovider_ut/dummy_provider_ut.cpp
 )
@@ -39,16 +49,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-services-ydb-sdk_credprovider_ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-services-ydb-sdk_credprovider_ut)

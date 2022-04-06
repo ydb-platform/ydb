@@ -14,16 +14,15 @@ target_link_libraries(ydb PUBLIC
   library-cpp-cpuid_check
   commands
 )
-target_sources(ydb PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/main.cpp
-)
-target_link_flags(ydb
-  PUBLIC
+target_link_options(ydb PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(ydb PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydb/main.cpp
 )
 vcs_info(ydb)

@@ -18,6 +18,14 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_result-ut PUBLIC
   cpp-testing-unittest_main
   cpp-client-ydb_result
 )
+target_link_options(ydb-public-sdk-cpp-client-ydb_result-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-public-sdk-cpp-client-ydb_result-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_result/result_ut.cpp
 )
@@ -31,14 +39,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-public-sdk-cpp-client-ydb_result-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-public-sdk-cpp-client-ydb_result-ut)

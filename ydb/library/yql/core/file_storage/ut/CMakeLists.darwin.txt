@@ -21,6 +21,12 @@ target_link_libraries(ydb-library-yql-core-file_storage-ut PUBLIC
   cpp-threading-future
   core-file_storage-http_download
 )
+target_link_options(ydb-library-yql-core-file_storage-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+)
 target_sources(ydb-library-yql-core-file_storage-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/file_storage_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/sized_cache_ut.cpp
@@ -37,12 +43,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-yql-core-file_storage-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
 )
 vcs_info(ydb-library-yql-core-file_storage-ut)

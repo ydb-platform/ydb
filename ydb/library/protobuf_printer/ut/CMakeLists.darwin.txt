@@ -19,6 +19,14 @@ target_link_libraries(ydb-library-protobuf_printer-ut PUBLIC
   ydb-library-protobuf_printer
   contrib-libs-protobuf
 )
+target_link_options(ydb-library-protobuf_printer-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_proto_messages(ydb-library-protobuf_printer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/protobuf_printer/ut/test_proto.proto
 )
@@ -36,15 +44,6 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-protobuf_printer-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
 )
 target_proto_addincls(ydb-library-protobuf_printer-ut
   ./

@@ -18,6 +18,12 @@ target_link_libraries(ydb-core-blobstorage-crypto-ut PUBLIC
   cpp-testing-unittest_main
   core-blobstorage-crypto
 )
+target_link_options(ydb-core-blobstorage-crypto-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+)
 target_sources(ydb-core-blobstorage-crypto-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec_ut.cpp
@@ -36,12 +42,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-blobstorage-crypto-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
 )
 vcs_info(ydb-core-blobstorage-crypto-ut)

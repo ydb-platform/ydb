@@ -25,6 +25,14 @@ target_link_libraries(ydb-core-tx-columnshard-engines-ut PUBLIC
   ydb-core-tablet
   ydb-core-tablet_flat
 )
+target_link_options(ydb-core-tx-columnshard-engines-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-tx-columnshard-engines-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_insert_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/ut_logs_engine.cpp
@@ -39,16 +47,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-tx-columnshard-engines-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-tx-columnshard-engines-ut)

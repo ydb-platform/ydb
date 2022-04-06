@@ -30,6 +30,16 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PUBLIC
   ydb_persqueue_core-ut-ut_utils
   client-ydb_persqueue_public-codecs
 )
+target_link_options(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/common_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/read_session_ut.cpp
@@ -49,16 +59,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut)

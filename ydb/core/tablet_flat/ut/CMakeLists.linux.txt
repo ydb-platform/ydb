@@ -25,6 +25,16 @@ target_link_libraries(ydb-core-tablet_flat-ut PUBLIC
   ydb-core-testlib
   udf-service-exception_policy
 )
+target_link_options(ydb-core-tablet_flat-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/datetime_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/decimal_ut.cpp
@@ -84,16 +94,5 @@ resources(ydb-core-tablet_flat-ut
   KEYS
   abi/002_full_part.pages
   abi/008_basics_db.redo
-)
-target_link_flags(ydb-core-tablet_flat-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-tablet_flat-ut)

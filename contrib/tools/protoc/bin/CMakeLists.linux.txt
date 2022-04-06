@@ -15,11 +15,7 @@ target_link_libraries(protoc PUBLIC
   library-cpp-cpuid_check
   contrib-libs-protoc
 )
-target_sources(protoc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/protoc/src/google/protobuf/compiler/main.cc
-)
-target_link_flags(protoc
-  PUBLIC
+target_link_options(protoc PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -28,5 +24,8 @@ target_link_flags(protoc
   -lpthread
   -lrt
   -ldl
+)
+target_sources(protoc PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protoc/src/google/protobuf/compiler/main.cc
 )
 vcs_info(protoc)

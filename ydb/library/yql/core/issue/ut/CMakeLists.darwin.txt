@@ -18,6 +18,12 @@ target_link_libraries(ydb-library-yql-core-issue-ut PUBLIC
   cpp-testing-unittest_main
   yql-core-issue
 )
+target_link_options(ydb-library-yql-core-issue-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+)
 target_sources(ydb-library-yql-core-issue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/issue/yql_issue_ut.cpp
 )
@@ -31,12 +37,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-yql-core-issue-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
 )
 vcs_info(ydb-library-yql-core-issue-ut)

@@ -20,6 +20,16 @@ target_link_libraries(ydb-library-yql-dq-actors-compute-ut PUBLIC
   dq-actors-compute
   cpp-testing-unittest
 )
+target_link_options(ydb-library-yql-dq-actors-compute-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-library-yql-dq-actors-compute-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_compute_issues_buffer_ut.cpp
 )
@@ -33,16 +43,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-yql-dq-actors-compute-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-library-yql-dq-actors-compute-ut)

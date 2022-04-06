@@ -16,16 +16,15 @@ target_link_libraries(sqs PUBLIC
   ymq-client-cpp
   core-ymq-proto
 )
-target_sources(sqs PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
-)
-target_link_flags(sqs
-  PUBLIC
+target_link_options(sqs PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
   -framework
   CoreFoundation
+)
+target_sources(sqs PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/client/bin/main.cpp
 )
 vcs_info(sqs)

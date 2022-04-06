@@ -15,11 +15,7 @@ target_link_libraries(cpp_styleguide PUBLIC
   library-cpp-cpuid_check
   contrib-libs-protoc
 )
-target_sources(cpp_styleguide PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide.cpp
-)
-target_link_flags(cpp_styleguide
-  PUBLIC
+target_link_options(cpp_styleguide PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -28,5 +24,8 @@ target_link_flags(cpp_styleguide
   -lpthread
   -lrt
   -ldl
+)
+target_sources(cpp_styleguide PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/tools/protoc/plugins/cpp_styleguide/cpp_styleguide.cpp
 )
 vcs_info(cpp_styleguide)

@@ -23,6 +23,14 @@ target_link_libraries(ydb-core-sys_view-query_stats-ut PUBLIC
   cpp-testing-unittest
   ydb-core-testlib
 )
+target_link_options(ydb-core-sys_view-query_stats-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-sys_view-query_stats-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/query_stats/query_stats_ut.cpp
 )
@@ -36,16 +44,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-sys_view-query_stats-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-sys_view-query_stats-ut)

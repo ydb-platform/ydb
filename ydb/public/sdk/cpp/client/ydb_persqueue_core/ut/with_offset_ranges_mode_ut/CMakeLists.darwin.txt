@@ -22,6 +22,14 @@ target_link_libraries(with_offset_ranges_mode_ut PUBLIC
   cpp-client-ydb_driver
   ydb_persqueue_core-ut-ut_utils
 )
+target_link_options(with_offset_ranges_mode_ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(with_offset_ranges_mode_ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/common_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/read_session_ut.cpp
@@ -40,16 +48,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(with_offset_ranges_mode_ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(with_offset_ranges_mode_ut)

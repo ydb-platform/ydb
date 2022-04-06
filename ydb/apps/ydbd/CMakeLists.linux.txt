@@ -50,13 +50,7 @@ target_link_libraries(ydbd PUBLIC
   yson2_udf
   dsv_udf
 )
-target_sources(ydbd PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/sqs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/main.cpp
-)
-target_link_flags(ydbd
-  PUBLIC
+target_link_options(ydbd PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -65,5 +59,10 @@ target_link_flags(ydbd
   -lpthread
   -lrt
   -ldl
+)
+target_sources(ydbd PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/export.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/sqs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/apps/ydbd/main.cpp
 )
 vcs_info(ydbd)

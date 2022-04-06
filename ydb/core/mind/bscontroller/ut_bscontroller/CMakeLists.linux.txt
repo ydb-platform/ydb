@@ -26,6 +26,16 @@ target_link_libraries(ydb-core-mind-bscontroller-ut_bscontroller PUBLIC
   ydb-core-testlib
   core-testlib-basics
 )
+target_link_options(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-mind-bscontroller-ut_bscontroller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/ut_bscontroller/main.cpp
 )
@@ -39,16 +49,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-mind-bscontroller-ut_bscontroller
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-mind-bscontroller-ut_bscontroller)

@@ -22,6 +22,14 @@ target_link_libraries(ydb-core-kqp-proxy-ut PUBLIC
   core-kqp-proxy
   kqp-ut-common
 )
+target_link_options(ydb-core-kqp-proxy-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-kqp-proxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/proxy/kqp_proxy_ut.cpp
 )
@@ -35,16 +43,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-kqp-proxy-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-kqp-proxy-ut)

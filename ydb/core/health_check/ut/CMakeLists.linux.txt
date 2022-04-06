@@ -23,6 +23,16 @@ target_link_libraries(ydb-core-health_check-ut PUBLIC
   ydb-core-health_check
   ydb-core-testlib
 )
+target_link_options(ydb-core-health_check-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-health_check-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/health_check/health_check_ut.cpp
 )
@@ -36,16 +46,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-health_check-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-health_check-ut)

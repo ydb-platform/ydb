@@ -24,12 +24,7 @@ target_link_libraries(quoter_performance_test PUBLIC
   core-kesus-tablet
   ydb-core-testlib
 )
-target_sources(quoter_performance_test PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_performance_test/main.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/ut_helpers.cpp
-)
-target_link_flags(quoter_performance_test
-  PUBLIC
+target_link_options(quoter_performance_test PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -38,5 +33,9 @@ target_link_flags(quoter_performance_test
   -lpthread
   -lrt
   -ldl
+)
+target_sources(quoter_performance_test PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_performance_test/main.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kesus/tablet/ut_helpers.cpp
 )
 vcs_info(quoter_performance_test)

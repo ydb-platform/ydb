@@ -14,14 +14,13 @@ target_link_libraries(rescompiler PUBLIC
   library-cpp-cpuid_check
   library-cpp-resource
 )
-target_sources(rescompiler PRIVATE
-  ${CMAKE_SOURCE_DIR}/tools/rescompiler/main.cpp
-)
-target_link_flags(rescompiler
-  PUBLIC
+target_link_options(rescompiler PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
+)
+target_sources(rescompiler PRIVATE
+  ${CMAKE_SOURCE_DIR}/tools/rescompiler/main.cpp
 )
 vcs_info(rescompiler)

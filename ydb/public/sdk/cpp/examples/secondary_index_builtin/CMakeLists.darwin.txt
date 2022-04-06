@@ -15,6 +15,14 @@ target_link_libraries(secondary_index_builtin PUBLIC
   library-cpp-getopt
   cpp-client-ydb_table
 )
+target_link_options(secondary_index_builtin PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(secondary_index_builtin PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index.cpp
@@ -23,14 +31,5 @@ target_sources(secondary_index_builtin PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_drop.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index_builtin/secondary_index_select_join.cpp
-)
-target_link_flags(secondary_index_builtin
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
 )
 vcs_info(secondary_index_builtin)

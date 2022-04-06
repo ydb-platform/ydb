@@ -13,14 +13,13 @@ target_link_libraries(gencrc PUBLIC
   yutil
   library-cpp-cpuid_check
 )
-target_sources(gencrc PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/gencrc/main.cpp
-)
-target_link_flags(gencrc
-  PUBLIC
+target_link_options(gencrc PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
+)
+target_sources(gencrc PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/digest/old_crc/gencrc/main.cpp
 )
 vcs_info(gencrc)

@@ -23,6 +23,14 @@ target_link_libraries(ydb-core-blobstorage-vdisk-hulldb-base-ut PUBLIC
   blobstorage-vdisk-common
   blobstorage-vdisk-hulldb
 )
+target_link_options(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-blobstorage-vdisk-hulldb-base-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank_ut.cpp
@@ -40,16 +48,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-blobstorage-vdisk-hulldb-base-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-blobstorage-vdisk-hulldb-base-ut)

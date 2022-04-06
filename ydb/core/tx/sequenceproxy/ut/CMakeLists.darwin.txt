@@ -22,6 +22,14 @@ target_link_libraries(ydb-core-tx-sequenceproxy-ut PUBLIC
   core-tx-sequenceproxy
   ydb-core-testlib
 )
+target_link_options(ydb-core-tx-sequenceproxy-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-tx-sequenceproxy-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceproxy/sequenceproxy_ut.cpp
 )
@@ -35,16 +43,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-tx-sequenceproxy-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-tx-sequenceproxy-ut)

@@ -27,6 +27,16 @@ target_link_libraries(ydb-core-sys_view-ut_kqp PUBLIC
   ydb-core-testlib
   cpp-client-draft
 )
+target_link_options(ydb-core-sys_view-ut_kqp PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-sys_view-ut_kqp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_kqp.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/ut_common.cpp
@@ -42,16 +52,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-sys_view-ut_kqp
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-sys_view-ut_kqp)

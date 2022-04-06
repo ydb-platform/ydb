@@ -23,6 +23,16 @@ target_link_libraries(ydb-core-viewer-ut PUBLIC
   ydb-core-viewer
   ydb-core-testlib
 )
+target_link_options(ydb-core-viewer-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-viewer-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer_ut.cpp
 )
@@ -36,16 +46,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-viewer-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-viewer-ut)

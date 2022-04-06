@@ -21,6 +21,14 @@ target_link_libraries(ydb-core-tx-sequenceshard-public-ut PUBLIC
   cpp-testing-unittest_main
   tx-sequenceshard-public
 )
+target_link_options(ydb-core-tx-sequenceshard-public-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 add_test(
   NAME
   ydb-core-tx-sequenceshard-public-ut
@@ -31,16 +39,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-tx-sequenceshard-public-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-tx-sequenceshard-public-ut)

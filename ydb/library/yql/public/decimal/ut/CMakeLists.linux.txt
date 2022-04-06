@@ -19,6 +19,16 @@ target_link_libraries(ydb-library-yql-public-decimal-ut PUBLIC
   cpp-testing-unittest_main
   yql-public-decimal
 )
+target_link_options(ydb-library-yql-public-decimal-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-library-yql-public-decimal-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_decimal_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/decimal/ut/yql_wide_int_ut.cpp
@@ -33,16 +43,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-yql-public-decimal-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-library-yql-public-decimal-ut)

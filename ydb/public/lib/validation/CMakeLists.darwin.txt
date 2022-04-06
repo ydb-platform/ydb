@@ -15,15 +15,14 @@ target_link_libraries(validation PUBLIC
   contrib-libs-protoc
   api-protos-annotations
 )
-target_sources(validation PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/helpers.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/main.cpp
-)
-target_link_flags(validation
-  PUBLIC
+target_link_options(validation PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
+)
+target_sources(validation PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/main.cpp
 )
 vcs_info(validation)

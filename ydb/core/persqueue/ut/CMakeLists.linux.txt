@@ -27,6 +27,16 @@ target_link_libraries(ydb-core-persqueue-ut PUBLIC
   ydb-core-testlib
   ydb_persqueue_core-ut-ut_utils
 )
+target_link_options(ydb-core-persqueue-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-persqueue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/internals_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer_ut.cpp
@@ -45,16 +55,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-persqueue-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-persqueue-ut)

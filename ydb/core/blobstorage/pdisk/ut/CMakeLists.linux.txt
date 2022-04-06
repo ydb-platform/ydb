@@ -23,6 +23,16 @@ target_link_libraries(ydb-core-blobstorage-pdisk-ut PUBLIC
   core-blobstorage-lwtrace_probes
   core-testlib-actors
 )
+target_link_options(ydb-core-blobstorage-pdisk-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-blobstorage-pdisk-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_crypto_ut.cpp
@@ -43,16 +53,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-blobstorage-pdisk-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-blobstorage-pdisk-ut)

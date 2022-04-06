@@ -27,6 +27,14 @@ target_link_libraries(ydb-core-actorlib_impl-ut PUBLIC
   core-testlib-actors
   core-testlib-basics
 )
+target_link_options(ydb-core-actorlib_impl-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-actorlib_impl-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_activity_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/actorlib_impl/actor_bootstrapped_ut.cpp
@@ -44,16 +52,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-actorlib_impl-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-actorlib_impl-ut)

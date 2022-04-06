@@ -21,6 +21,16 @@ target_link_libraries(ydb-library-persqueue-topic_parser-ut PUBLIC
   library-cpp-getopt
   library-cpp-svnversion
 )
+target_link_options(ydb-library-persqueue-topic_parser-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-library-persqueue-topic_parser-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/ut/topic_names_converter_ut.cpp
 )
@@ -34,16 +44,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-persqueue-topic_parser-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-library-persqueue-topic_parser-ut)

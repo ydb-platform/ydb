@@ -23,6 +23,16 @@ target_link_libraries(ydb-core-tx-sequenceshard-ut PUBLIC
   core-tx-sequenceshard
   ydb-core-testlib
 )
+target_link_options(ydb-core-tx-sequenceshard-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-tx-sequenceshard-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/ut_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/sequenceshard/ut_sequenceshard.cpp
@@ -37,16 +47,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-tx-sequenceshard-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-tx-sequenceshard-ut)

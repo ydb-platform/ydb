@@ -32,6 +32,16 @@ target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   cpp-client-ydb_persqueue_public
   cpp-client-ydb_table
 )
+target_link_options(ydb-services-persqueue_v1-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-services-persqueue_v1-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_common_ut.cpp
@@ -47,16 +57,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-services-persqueue_v1-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-services-persqueue_v1-ut)

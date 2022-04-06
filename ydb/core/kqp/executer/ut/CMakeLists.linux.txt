@@ -26,6 +26,16 @@ target_link_libraries(ydb-core-kqp-executer-ut PUBLIC
   kqp-ut-common
   cpp-client-ydb_proto
 )
+target_link_options(ydb-core-kqp-executer-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 add_test(
   NAME
   ydb-core-kqp-executer-ut
@@ -36,16 +46,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-kqp-executer-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-kqp-executer-ut)

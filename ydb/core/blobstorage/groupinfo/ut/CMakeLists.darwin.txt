@@ -23,6 +23,14 @@ target_link_libraries(ydb-core-blobstorage-groupinfo-ut PUBLIC
   core-blobstorage-base
   ydb-core-erasure
 )
+target_link_options(ydb-core-blobstorage-groupinfo-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-blobstorage-groupinfo-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp
@@ -39,16 +47,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-blobstorage-groupinfo-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-blobstorage-groupinfo-ut)

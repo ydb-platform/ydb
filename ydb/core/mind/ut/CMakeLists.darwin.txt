@@ -25,6 +25,14 @@ target_link_libraries(ydb-core-mind-ut PUBLIC
   library-cpp-svnversion
   ydb-core-testlib
 )
+target_link_options(ydb-core-mind-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(ydb-core-mind-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/node_broker_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/tenant_ut_broker.cpp
@@ -42,16 +50,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-mind-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
-  -framework
-  CoreFoundation
 )
 vcs_info(ydb-core-mind-ut)

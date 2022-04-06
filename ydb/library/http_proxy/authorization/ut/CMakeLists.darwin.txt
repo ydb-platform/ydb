@@ -19,6 +19,12 @@ target_link_libraries(ydb-library-http_proxy-authorization-ut PUBLIC
   library-http_proxy-authorization
   library-http_proxy-error
 )
+target_link_options(ydb-library-http_proxy-authorization-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+)
 target_sources(ydb-library-http_proxy-authorization-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/auth_helpers_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/http_proxy/authorization/ut/signature_ut.cpp
@@ -33,12 +39,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-http_proxy-authorization-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
 )
 vcs_info(ydb-library-http_proxy-authorization-ut)

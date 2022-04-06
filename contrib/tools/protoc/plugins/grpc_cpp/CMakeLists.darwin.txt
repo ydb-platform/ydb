@@ -21,14 +21,13 @@ target_link_libraries(grpc_cpp PUBLIC
   library-cpp-cpuid_check
   src-compiler-grpc_plugin_support
 )
-target_sources(grpc_cpp PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_plugin.cc
-)
-target_link_flags(grpc_cpp
-  PUBLIC
+target_link_options(grpc_cpp PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
+)
+target_sources(grpc_cpp PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_plugin.cc
 )
 vcs_info(grpc_cpp)

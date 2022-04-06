@@ -21,6 +21,16 @@ target_link_libraries(ydb-core-blobstorage-ut_blobstorage PUBLIC
   blobstorage-vdisk-common
   blobstorage-vdisk-scrub
 )
+target_link_options(ydb-core-blobstorage-ut_blobstorage PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/block_race.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/counting_events.cpp
@@ -52,16 +62,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-core-blobstorage-ut_blobstorage
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-core-blobstorage-ut_blobstorage)

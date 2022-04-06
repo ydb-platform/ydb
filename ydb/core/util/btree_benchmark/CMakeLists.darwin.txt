@@ -17,18 +17,15 @@ target_link_libraries(btree_benchmark PUBLIC
   cpp-threading-skip_list
   ydb-core-util
 )
-target_sources(btree_benchmark PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
-)
-target_link_flags(btree_benchmark
-  PUBLIC
+target_link_options(btree_benchmark PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
   -fPIC
   -framework
   CoreFoundation
-  -framework
-  CoreFoundation
+)
+target_sources(btree_benchmark PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/btree_benchmark/main.cpp
 )
 vcs_info(btree_benchmark)

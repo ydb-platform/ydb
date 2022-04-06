@@ -15,6 +15,12 @@ target_link_libraries(ydb-library-schlab-ut PUBLIC
   cpp-testing-unittest_main
   library-schlab-schoot
 )
+target_link_options(ydb-library-schlab-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+)
 target_sources(ydb-library-schlab-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/schlab/ut/schlab_ut.cpp
 )
@@ -28,12 +34,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-library-schlab-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
 )
 vcs_info(ydb-library-schlab-ut)

@@ -16,6 +16,16 @@ target_link_libraries(secondary_index PUBLIC
   library-cpp-getopt
   cpp-client-ydb_table
 )
+target_link_options(secondary_index PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(secondary_index PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index/main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index/secondary_index.cpp
@@ -25,16 +35,5 @@ target_sources(secondary_index PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index/secondary_index_generate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index/secondary_index_list.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/examples/secondary_index/secondary_index_update.cpp
-)
-target_link_flags(secondary_index
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(secondary_index)

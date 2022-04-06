@@ -16,11 +16,7 @@ target_link_libraries(enum_parser PUBLIC
   cpp-getopt-small
   tools-enum_parser-parse_enum
 )
-target_sources(enum_parser PRIVATE
-  ${CMAKE_SOURCE_DIR}/tools/enum_parser/enum_parser/main.cpp
-)
-target_link_flags(enum_parser
-  PUBLIC
+target_link_options(enum_parser PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -29,5 +25,8 @@ target_link_flags(enum_parser
   -lpthread
   -lrt
   -ldl
+)
+target_sources(enum_parser PRIVATE
+  ${CMAKE_SOURCE_DIR}/tools/enum_parser/enum_parser/main.cpp
 )
 vcs_info(enum_parser)

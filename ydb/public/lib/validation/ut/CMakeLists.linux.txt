@@ -20,6 +20,16 @@ target_link_libraries(ydb-public-lib-validation-ut PUBLIC
   cpp-testing-unittest
   validation-ut-protos
 )
+target_link_options(ydb-public-lib-validation-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(ydb-public-lib-validation-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/ut.cpp
 )
@@ -33,16 +43,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(ydb-public-lib-validation-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(ydb-public-lib-validation-ut)

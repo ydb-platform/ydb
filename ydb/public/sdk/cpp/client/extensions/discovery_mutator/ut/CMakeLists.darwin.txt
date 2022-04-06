@@ -19,6 +19,14 @@ target_link_libraries(client-extensions-discovery_mutator-ut PUBLIC
   client-extensions-discovery_mutator
   cpp-client-ydb_table
 )
+target_link_options(client-extensions-discovery_mutator-ut PRIVATE
+  -Wl,-no_deduplicate
+  -Wl,-sdk_version,10.15
+  -fPIC
+  -fPIC
+  -framework
+  CoreFoundation
+)
 target_sources(client-extensions-discovery_mutator-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/discovery_mutator/discovery_mutator_ut.cpp
 )
@@ -32,14 +40,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(client-extensions-discovery_mutator-ut
-  PUBLIC
-  -Wl,-no_deduplicate
-  -Wl,-sdk_version,10.15
-  -fPIC
-  -fPIC
-  -framework
-  CoreFoundation
 )
 vcs_info(client-extensions-discovery_mutator-ut)

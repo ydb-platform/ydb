@@ -28,6 +28,16 @@ target_link_libraries(cloud_function-actors-ut PUBLIC
   providers-common-http_gateway
   common-http_gateway-mock
 )
+target_link_options(cloud_function-actors-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
 target_sources(cloud_function-actors-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/external_function/cloud_function/actors/cloud_function_transform_ut.cpp
 )
@@ -41,16 +51,5 @@ add_test(
   --fork-tests
   --print-times
   --show-fails
-)
-target_link_flags(cloud_function-actors-ut
-  PUBLIC
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
 )
 vcs_info(cloud_function-actors-ut)

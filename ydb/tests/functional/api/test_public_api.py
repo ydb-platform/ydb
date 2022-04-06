@@ -907,7 +907,8 @@ actions {
         )
 
         response = self.driver.scheme_client.describe_path(directory_name)
-        assert_that(response.effective_permissions[0].subject, equal_to('gvit@staff'))
+        subjects = set([permission.subject for permission in response.effective_permissions])
+        assert "gvit@staff" in subjects
 
     def test_too_many_pending_transactions(self):
         driver = ydb.Driver(self.connection_params)

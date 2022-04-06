@@ -34,7 +34,7 @@ Basic YDB features:
 
 YDB could be deployed in three availability zones. Cluster remains available for both reads and writes during complete outage of a single zone.
 
-Availability zones and regions are covered in more detail [in documentation](docs/en/core/concepts/databases.md#regions-az).
+Availability zones and regions are covered in more detail [in documentation](https://ydb.tech/en/docs/concepts/databases#regions-az).
 
 ### Horizontal scalability
 
@@ -60,21 +60,21 @@ For development purposes we test that YDB could be built and run under latest ve
 
 ## Getting started in 5 minutes
 
-1. Install YDB using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md), [build it from source](BUILD.md) or [use Docker container](ydb/docs/en/core/getting_started/ydb_docker.md).
-1. Install [command line interace](docs/en/core/reference/ydb-cli/index.m) tool to work with scheme and run queries.
-1. Start [local cluster](ydb/docs/ru/core/getting_started/ydb_local.md) or container and run [YQL query](ydb/docs/en/core/yql/reference/index.md) via [YDB CLI](docs/en/core/reference/ydb-cli/index.md).
-1. Access [Embedded UI](ydb/docs/en/core/maintenance/embedded_monitoring/ydb_monitoring.md) via browser for schema navigation, query execution and other database development related tasks.
-1. Run available [example application](ydb/docs/en/core/reference/ydb-sdk/example/example-go.md).
-1. Develop an application using [YDB SDK](ydb/docs/en/core/reference/ydb-sdk)
+1. Install YDB using [pre-built executables](https://ydb.tech/en/docs/getting_started/self_hosted/ydb_local), [build it from source](BUILD.md) or [use Docker container](https://ydb.tech/en/docs/getting_started/self_hosted/ydb_docker).
+1. Install [command line interace](https://ydb.tech/en/docs/getting_started/cli) tool to work with scheme and run queries.
+1. Start [local cluster](https://ydb.tech/en/docs/getting_started/self_hosted/ydb_local) or container and run [YQL query](https://ydb.tech/en/docs/yql/reference/) via [YDB CLI](https://ydb.tech/en/docs/getting_started/cli).
+1. Access [Embedded UI](https://ydb.tech/en/docs/maintenance/embedded_monitoring/) via browser for schema navigation, query execution and other database development related tasks.
+1. Run available [example application](https://ydb.tech/en/docs/reference/ydb-sdk/example/go/).
+1. Develop an application using [YDB SDK](https://ydb.tech/en/docs/reference/ydb-sdk/)
 
 
 ## How to build
-* Build ydb and ydbd binary [from source](BUILD.md).
+* Build ydb and ydbd binaries [from source](BUILD.md).
 
 ## How to deploy
 
-* Deploy a cluster [using Kubernetes](ydb/docs/en/core/deploy/orchestrated/concepts.md).
-* Deploy a cluster using [pre-built executables](ydb/docs/ru/core/getting_started/ydb_local.md).
+* Deploy a cluster [using Kubernetes](https://ydb.tech/en/docs/deploy/orchestrated/concepts).
+* Deploy a cluster using [pre-built executables](https://ydb.tech/en/docs/getting_started/self_hosted/ydb_local).
 
 ## How to contribute
 

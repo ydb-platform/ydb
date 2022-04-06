@@ -319,12 +319,16 @@ public:
 
 private:
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) override {
-        NUdf::TUnboxedValue item;
-        if (State != EPreserveState::Feed) {
-            Buffer.PopFront();
-            --Outpace;
+        switch (State) {
+            case EPreserveState::Done:
+                return NUdf::EFetchStatus::Finish;
+            case EPreserveState::Feed:
+                break;
+            default:
+                Buffer.PopFront();
+                --Outpace;
         }
-        while (State != EPreserveState::Emit && Outpace <= OutpaceGoal) {
+        for (NUdf::TUnboxedValue item; State != EPreserveState::Emit && Outpace <= OutpaceGoal;) {
             switch (Stream.Fetch(item)) {
             case NUdf::EFetchStatus::Yield:
                 return NUdf::EFetchStatus::Yield;
@@ -344,6 +348,7 @@ private:
         }
         if (!Outpace) {
             Buffer.Clean();
+            State = EPreserveState::Done;
             return NUdf::EFetchStatus::Finish;
         }
         value = Buffer.Get(FrontIndex);
@@ -354,6 +359,7 @@ private:
         Feed,
         GoOn,
         Emit,
+        Done
     };
     const NUdf::TUnboxedValue Stream;
     const NUdf::TUnboxedValue Queue;

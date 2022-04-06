@@ -1,7 +1,10 @@
+#include "service_import.h"
 #include "grpc_request_proxy.h"
 #include "rpc_import_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
+
+#include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
@@ -17,6 +20,9 @@ using namespace NActors;
 using namespace NSchemeShard;
 using namespace NKikimrIssues;
 using namespace Ydb;
+
+using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFromS3Request,
+    Ydb::Import::ImportFromS3Response>;
 
 template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
@@ -81,8 +87,8 @@ public:
     using TImportRPC::TImportRPC;
 };
 
-void TGRpcRequestProxy::Handle(TEvImportFromS3Request::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TImportFromS3RPC(ev->Release().Release()));
+void DoImportFromS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TImportFromS3RPC(p.release()));
 }
 
 } // namespace NGRpcService

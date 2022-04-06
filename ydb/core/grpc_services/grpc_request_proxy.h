@@ -62,10 +62,6 @@ protected:
     void Handle(TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvExportToYtRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvExportToS3Request::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvImportFromS3Request::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx);

@@ -1,8 +1,8 @@
 #include "ydb_import.h"
 
+#include <ydb/core/grpc_services/service_import.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/base/base.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -37,20 +37,19 @@ void TGRpcYdbImportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
+#define ADD_REQUEST(NAME, IN, OUT, CB) \
     MakeIntrusive<TGRpcRequest<Ydb::Import::IN, Ydb::Import::OUT, TGRpcYdbImportService>>(this, &Service_, CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
+            ActorSystem_->Send(GRpcRequestProxyId_, \
+                new NGRpcService::TGrpcRequestOperationCall<Ydb::Import::IN, Ydb::Import::OUT> \
+                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
         }, &Ydb::Import::V1::ImportService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("import", #NAME))->Run();
 
-    ADD_REQUEST(ImportFromS3, ImportFromS3Request, ImportFromS3Response, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvImportFromS3Request(ctx));
-    })
-    ADD_REQUEST(ImportData, ImportDataRequest, ImportDataResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvImportDataRequest(ctx));
-    })
+    ADD_REQUEST(ImportFromS3, ImportFromS3Request, ImportFromS3Response, DoImportFromS3Request);
+    ADD_REQUEST(ImportData, ImportDataRequest, ImportDataResponse, DoImportDataRequest);
+
 #undef ADD_REQUEST
 }
 

@@ -1,8 +1,10 @@
+#include "service_export.h"
 #include "grpc_request_proxy.h"
 #include "rpc_export_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
 
+#include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 
 #include <library/cpp/actors/core/hfunc.h>
@@ -17,6 +19,11 @@ using namespace NActors;
 using namespace NSchemeShard;
 using namespace NKikimrIssues;
 using namespace Ydb;
+
+using TEvExportToYtRequest = TGrpcRequestOperationCall<Ydb::Export::ExportToYtRequest,
+    Ydb::Export::ExportToYtResponse>;
+using TEvExportToS3Request = TGrpcRequestOperationCall<Ydb::Export::ExportToS3Request,
+    Ydb::Export::ExportToS3Response>;
 
 template <typename TDerived, typename TEvRequest>
 class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TExportConv {
@@ -210,12 +217,12 @@ public:
     using TExportRPC::TExportRPC;
 };
 
-void TGRpcRequestProxy::Handle(TEvExportToYtRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TExportToYtRPC(ev->Release().Release()));
+void DoExportToYtRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TExportToYtRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvExportToS3Request::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TExportToS3RPC(ev->Release().Release()));
+void DoExportToS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TExportToS3RPC(p.release()));
 }
 
 } // namespace NGRpcService

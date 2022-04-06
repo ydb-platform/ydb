@@ -1,8 +1,8 @@
 #include "ydb_export.h"
 
+#include <ydb/core/grpc_services/service_export.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/base/base.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -37,20 +37,18 @@ void TGRpcYdbExportService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
+#define ADD_REQUEST(NAME, IN, OUT, CB) \
     MakeIntrusive<TGRpcRequest<Ydb::Export::IN, Ydb::Export::OUT, TGRpcYdbExportService>>(this, &Service_, CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
+            ActorSystem_->Send(GRpcRequestProxyId_, \
+                new NGRpcService::TGrpcRequestOperationCall<Ydb::Export::IN, Ydb::Export::OUT> \
+                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr})); \
         }, &Ydb::Export::V1::ExportService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("export", #NAME))->Run();
 
-    ADD_REQUEST(ExportToYt, ExportToYtRequest, ExportToYtResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvExportToYtRequest(ctx));
-    })
-    ADD_REQUEST(ExportToS3, ExportToS3Request, ExportToS3Response, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvExportToS3Request(ctx));
-    })
+    ADD_REQUEST(ExportToYt, ExportToYtRequest, ExportToYtResponse, DoExportToYtRequest);
+    ADD_REQUEST(ExportToS3, ExportToS3Request, ExportToS3Response, DoExportToS3Request);
 #undef ADD_REQUEST
 }
 

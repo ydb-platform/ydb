@@ -3,6 +3,8 @@
 #include "rpc_common.h"
 #include "rpc_request_base.h"
 
+#include <ydb/public/api/protos/ydb_import.pb.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -28,6 +30,9 @@ namespace NGRpcService {
 using namespace NActors;
 using namespace NKikimrIssues;
 using namespace Ydb;
+
+using TEvImportDataRequest = TGrpcRequestOperationCall<Ydb::Import::ImportDataRequest,
+    Ydb::Import::ImportDataResponse>;
 
 class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataRequest, true> {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -431,8 +436,8 @@ private:
 
 }; // TImportDataRPC
 
-void TGRpcRequestProxy::Handle(TEvImportDataRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TImportDataRPC(ev->Release().Release()));
+void DoImportDataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TImportDataRPC(p.release()));
 }
 
 } // namespace NGRpcService

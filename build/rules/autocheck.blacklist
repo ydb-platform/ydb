@@ -567,3 +567,7 @@ data-ui/ui-telegram-api
 portal/archive/wdgt-www
 taxi/github/infra-secrets-templates
 trust/admin
+delivery/logistics-platform-analytics
+intranet/staff
+data-ui/chat-components
+data-ui/chats-api

@@ -553,3 +553,17 @@ commerce/adv-cm
 commerce/adv-source
 commerce/proctoring-no-cookie
 commerce/expert-cron
+data-ui/cloud-backoffice
+health/frontend/frontends
+trust/lib/unified-agent-client-python
+maps/b2bgeo/analytics/ymaps-proto
+maps/b2bgeo/analytics/pygeoplot
+data-ui/crawler
+trust/paysys-callback-router
+data-ui/ydb-www
+data-ui/tracker
+data-ui/image-resizer
+data-ui/ui-telegram-api
+portal/archive/wdgt-www
+taxi/github/infra-secrets-templates
+trust/admin

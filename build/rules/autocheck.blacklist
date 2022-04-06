@@ -494,3 +494,8 @@ market/front/libs/geobase-fallback
 taxi/github/surge-analytics
 data-ui/cloud-deploy-template
 portal/archive/widgets-www
+taxi/dmp/gpdb/gpdb6-libhyperic-sigar-java-dev
+taxi/dmp/gpdb/gpdb-cgroup
+data-ui/cloud-search-api
+taxi/dmp/gpdb/gpdb-postgis
+market/erp_axapta/libs/STAX.Client

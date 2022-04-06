@@ -538,3 +538,12 @@ market/front/misc/partner-cookbook
 trust/simplebrother-elastic
 taxi/github/taxi_freeswitch
 taxi/dmp/spark/spark-over-yt
+crowdsourcing/frontend
+trust/lib/yb-python-blackbox
+trust/lib/yb-python-zsi
+trust/lib/yb-python-yutil
+trust/lib/yb-python-ycorba
+trust/dynamic-cfg-cli
+trust/qyp-tc-agents
+taxi/dmp/spark/pyspark-stubs
+maps/b2bgeo/frontend

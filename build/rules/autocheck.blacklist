@@ -462,3 +462,10 @@ classifieds/infra/vertis-packages
 market/front/libs/fingerprintjs
 data-ui/image-generator
 portal/archive/specialprojects
+data-ui/backoffice-components
+portal/archive/widgetsapi
+data-ui/serverless-images-compressor
+data-ui/cloud-partners
+portal/archive/ether-monitoring-config
+market/front/libs/tsconfig
+data-ui/protocol-buffers-parser

@@ -997,7 +997,7 @@ size_t TWriteSession::WriteBatchImpl() {
 }
 
 size_t GetMaxGrpcMessageSize() {
-    return 120 * 1024 * 1024;
+    return 120_MB;
 }
 
 bool TWriteSession::IsReadyToSendNextImpl() const {

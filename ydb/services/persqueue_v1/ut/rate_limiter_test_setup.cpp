@@ -120,7 +120,7 @@ void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
     settings.PQConfig.MutableQuotingConfig()->SetEnableReadQuoting(enableReadQuoting);
     settings.PQConfig.MutableQuotingConfig()->SetTopicWriteQuotaEntityToLimit(LimitedEntity);
 
-    Server->GrpcServerOptions.SetMaxMessageSize(130 * 1024 * 1024);
+    Server->GrpcServerOptions.SetMaxMessageSize(130_MB);
     Server->StartServer();
     Server->EnableLogs(
         {

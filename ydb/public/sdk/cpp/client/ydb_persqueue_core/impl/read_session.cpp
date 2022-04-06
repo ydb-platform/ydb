@@ -115,7 +115,7 @@ bool TReadSession::ValidateSettings() {
         issues.AddIssue("No consumer specified.");
     }
 
-    if (Settings.MaxMemoryUsageBytes_ < 1024 * 1024) {
+    if (Settings.MaxMemoryUsageBytes_ < 1_MB) {
         issues.AddIssue("Too small max memory usage. Valid values start from 1 megabyte.");
     }
 

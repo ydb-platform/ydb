@@ -38,13 +38,13 @@ Y_UNIT_TEST(TestWriteVeryBigMessage) {
         tc.Runtime->SetScheduledLimit(200);
         activeZone = false;
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //always delete
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //always delete
 
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, TString{10, 'b'}});
         CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 40000);
         data.clear();
-        const ui32 size  = PlainOrSoSlow(40*1024*1024, 1*1024*1024);
+        const ui32 size  = PlainOrSoSlow(40_MB, 1_MB);
         const ui32 so = PlainOrSoSlow(1, 0);
         data.push_back({2, TString{size, 'a'}});
         CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 80000);
@@ -66,7 +66,7 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6*1024*1024, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc, 2, 6_MB, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now
 
         TVector<TString> writtenSourceIds;
 

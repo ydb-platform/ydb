@@ -148,7 +148,7 @@ Y_UNIT_TEST(TestUserInfoCompatibility) {
         TString client = "test";
         tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{client, false}}, tc, 4, 6*1024*1024, true, 0, 0, 1);
+        PQTabletPrepare(20000000, 100_MB, 0, {{client, false}}, tc, 4, 6_MB, true, 0, 0, 1);
 
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, "s"});
@@ -194,7 +194,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
         activeZone = false;
         TString client = "test";
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{client, false}, {"another-user", false}}, tc, 3);
+        PQTabletPrepare(20000000, 100_MB, 0, {{client, false}, {"another-user", false}}, tc, 3);
 
         tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
 
@@ -247,7 +247,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
             UNIT_ASSERT(result->Record.GetReadRangeResult(0).GetPair().size() == 7);
         }
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 3);
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc, 3);
 
         CmdGetOffset(0, client, 0, tc);
         CmdGetOffset(1, client, 0, tc);
@@ -519,7 +519,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(600);
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc);
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc);
 
         {
             TDispatchOptions options;
@@ -529,7 +529,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
 
         CheckLabeledCountersResponse(8, tc); //only topic counters
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}}, tc);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"user", true}}, tc);
 
         {
             TDispatchOptions options;
@@ -539,7 +539,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
 
         CheckLabeledCountersResponse(8, tc, {"user/1/topic"}); //topic counters + important
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc);
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc);
 
         {
             TDispatchOptions options;
@@ -555,7 +555,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
 
         CheckLabeledCountersResponse(8, tc, {"user/0/topic"}); //topic counters + not important
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}, {"user2", true}}, tc);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"user", true}, {"user2", true}}, tc);
 
         {
             TDispatchOptions options;
@@ -571,7 +571,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
 
         CheckLabeledCountersResponse(11, tc, {"user/1/topic", "user2/1/topic"}); //topic counters + not important
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}, {"user2", false}}, tc);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"user", true}, {"user2", false}}, tc);
 
         {
             TDispatchOptions options;
@@ -588,7 +588,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
         CheckLabeledCountersResponse(12, tc, {"user/1/topic", "user2/0/topic"});
 
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}}, tc);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"user", true}}, tc);
 
         {
             TDispatchOptions options;
@@ -619,7 +619,7 @@ Y_UNIT_TEST(TestSeveralOwners) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -651,7 +651,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -747,7 +747,7 @@ Y_UNIT_TEST(TestReserveBytes) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -808,7 +808,7 @@ Y_UNIT_TEST(TestMessageNo) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -860,9 +860,9 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 200 * 1024 * 1024, 0, {{"user1", true}}, tc); //one important client, never delete
+        PQTabletPrepare(20000000, 200_MB, 0, {{"user1", true}}, tc); //one important client, never delete
 
-        TString ss{50*1024*1024, '_'};
+        TString ss{50_MB, '_'};
         char k = 0;
         TString s = "";
         s += k;
@@ -874,7 +874,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
         data.push_back({1, s});
 
         TVector<TString> parts;
-        ui32 size = 400*1024;
+        ui32 size = 400_KB;
         ui32 diff = 50;
         for (ui32 pos = 0; pos < s.size();) {
             parts.push_back(s.substr(pos, size - diff));
@@ -886,7 +886,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
         {
             TString cookie = CmdSetOwner(0, tc).first;
 
-            WritePartDataWithBigMsg(0, "sourceid0", 1, 1, 5, s.size(), parts[1], tc, cookie, 0, 12*1024*1024);
+            WritePartDataWithBigMsg(0, "sourceid0", 1, 1, 5, s.size(), parts[1], tc, cookie, 0, 12_MB);
             TAutoPtr<IEventHandle> handle;
             TEvPersQueue::TEvResponse *result;
 
@@ -938,11 +938,11 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
             PQGetPartInfo(0, i + 2, tc);
             toWrite = parts.size();
         }
-        data.back().second.resize(64*1024);
+        data.back().second.resize(64_KB);
         CmdWrite(0, "sourceid3", data, tc);
         CmdWrite(0, "sourceid5", data, tc);
         activeZone = true;
-        data.back().second.resize(8*1024*1024);
+        data.back().second.resize(8_MB);
         CmdWrite(0, "sourceid7", data, tc);
         activeZone = false;
         {
@@ -998,7 +998,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
             //check very big msg
             cookie = CmdSetOwner(0, tc).first;
-            WritePartData(0, "sourceidY", 13, 1, 0, 5, s.size(), TString{10*1024*1024, 'a'}, tc, cookie, 0);
+            WritePartData(0, "sourceidY", 13, 1, 0, 5, s.size(), TString{10_MB, 'a'}, tc, cookie, 0);
 
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
@@ -1020,7 +1020,7 @@ Y_UNIT_TEST(TestAlreadyWritten) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
         activeZone = true;
         TVector<std::pair<ui64, TString>> data;
 
@@ -1047,7 +1047,7 @@ Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
         TVector<std::pair<ui64, TString>> data;
         activeZone = true;
 
@@ -1072,14 +1072,14 @@ Y_UNIT_TEST(TestWritePQCompact) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 8 * 1024 * 1024 - 512 * 1024);
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc, 2, 8_MB - 512_KB);
                 //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 
-        TString ss{1024*1024 - 100, '_'};
-        TString s1{131072, 'a'};
-        TString s2{2048, 'b'};
+        TString ss{1_MB - 100, '_'};
+        TString s1{128_KB, 'a'};
+        TString s2{2_KB, 'b'};
         TString s3{32, 'c'};
         ui32 pp = 4 + 8 + 2 + 9;
         for (ui32 i = 0; i < 8; ++i) {
@@ -1088,7 +1088,7 @@ Y_UNIT_TEST(TestWritePQCompact) {
         CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
         PQGetPartInfo(0, 8, tc);
         data.clear();
-        for (ui32 i = 0; i + s1.size() < 7*1024*1024 + 4 * s1.size(); i += s1.size()) {
+        for (ui32 i = 0; i + s1.size() < 7_MB + 4 * s1.size(); i += s1.size()) {
             data.push_back({i + 1, s1.substr(pp)});
         }
         CmdWrite(0, "sourceid1", data, tc);
@@ -1129,13 +1129,13 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 1000 * 1024 * 1024, 0, {{"user1", true}}, tc, 2, 8 * 1024 * 1024 - 512 * 1024); //nothing dropped
+        PQTabletPrepare(20000000, 1000_MB, 0, {{"user1", true}}, tc, 2, 8_MB - 512_KB); //nothing dropped
                 //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 
-        TString ss{50*1024*1024 - 100 - 2, '_'};
-        TString s1{400*1024 - 2, 'a'};
+        TString ss{50_MB - 100 - 2, '_'};
+        TString s1{400_KB - 2, 'a'};
         ui32 pp = 4 + 8 + 2 + 9;
         char k = 0;
         TString s = "";
@@ -1181,18 +1181,18 @@ Y_UNIT_TEST(TestWritePQ) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(100);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}}, tc); //important client, lifetimeseconds=0 - never delete
+        PQTabletPrepare(20000000, 100_MB, 0, {{"user", true}}, tc); //important client, lifetimeseconds=0 - never delete
 
         TVector<std::pair<ui64, TString>> data, data1, data2;
         activeZone = PlainOrSoSlow(true, false);
 
-        TString ss{1024*1024, '_'};
-        TString s1{131072, 'a'};
-        TString s2{2048, 'b'};
+        TString ss{1_MB, '_'};
+        TString s1{128_KB, 'a'};
+        TString s2{2_KB, 'b'};
         TString s3{32, 'c'};
         ui32 pp = 4 + 8 + 2 + 9;
 
-        TString sb{15*1024*1024 + 512*1024, '_'};
+        TString sb{15_MB + 512_KB, '_'};
         data.push_back({1, sb.substr(pp)});
         CmdWrite(0,"sourceid0", data, tc, false, {}, true, "", -1, 100);
         activeZone = false;
@@ -1212,8 +1212,8 @@ Y_UNIT_TEST(TestWritePQ) {
         data.push_back({2, ss.substr(pp)});
         CmdWrite(0,"sourceid4", data, tc);
 
-        TString a1{8*1024*1024 - 1024, '_'};
-        TString a2{2*1024, '_'};
+        TString a1{8_MB - 1_KB, '_'};
+        TString a2{2_KB, '_'};
         data.clear();
         data.push_back({1, a1.substr(pp)});
         data1.clear();
@@ -1272,7 +1272,7 @@ Y_UNIT_TEST(TestSourceIdDropByUserWrites) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important client, lifetimeseconds=0 - delete right now
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc); //no important client, lifetimeseconds=0 - delete right now
 
         TVector<std::pair<ui64, TString>> data;
         activeZone = true;
@@ -1309,7 +1309,7 @@ Y_UNIT_TEST(TestSourceIdDropBySourceIdCount) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6*1024*1024, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc, 2, 6_MB, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now
 
         TVector<std::pair<ui64, TString>> data;
         activeZone = true;
@@ -1352,19 +1352,19 @@ Y_UNIT_TEST(TestWriteOffsetWithBigMessage) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{{"user", true}}}, tc, 3); //important client, lifetimeseconds=0 - never delete
+        PQTabletPrepare(20000000, 100_MB, 0, {{{"user", true}}}, tc, 3); //important client, lifetimeseconds=0 - never delete
 
         activeZone = false;
 
         TVector<std::pair<ui64, TString>> data;
 
-        data.push_back({1, TString{10*1024*1024, 'a'}});
+        data.push_back({1, TString{10_MB, 'a'}});
         CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 80000);
         data.front().first = 2;
         CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 160000);
 
         data.clear();
-        data.push_back({1, TString{100*1024, 'a'}});
+        data.push_back({1, TString{100_KB, 'a'}});
         for (ui32 i = 0; i < 100; ++i) {
             data.push_back(data.front());
             data.back().first = i + 2;
@@ -1388,8 +1388,8 @@ Y_UNIT_TEST(TestWriteSplit) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user1", true}}, tc); //never delete
-        const ui32 size  = PlainOrSoSlow(2*1024*1024, 1*1024*1024);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"user1", true}}, tc); //never delete
+        const ui32 size  = PlainOrSoSlow(2_MB, 1_MB);
 
         TVector<std::pair<ui64, TString>> data;
         data.push_back({1, TString{size, 'b'}});
@@ -1412,24 +1412,24 @@ Y_UNIT_TEST(TestLowWatermark) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 2 * 1024 * 1024); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc, 2, 2_MB); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
         TVector<std::pair<ui64, TString>> data;
 
         ui32 pp = 4 + 8 + 2 + 9;
 
-        TString ss{1024*1024, '_'};
+        TString ss{1_MB, '_'};
         data.push_back({1, ss.substr(pp)});
         data.push_back({2, ss.substr(pp)});
         data.push_back({3, ss.substr(pp)});
         CmdWrite(0,"sourceid0", data, tc, false, {}, true);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6 * 1024 * 1024); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc, 2, 6_MB); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
         CmdWrite(0,"sourceid1", data, tc, false, {}, false); //first are compacted
         PQGetPartInfo(0, 6, tc);
         CmdWrite(0,"sourceid2", data, tc, false, {}, false); //3 and 6 are compacted
         PQGetPartInfo(3, 9, tc);
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 3 * 1024 * 1024); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare(20000000, 100_MB, 0, {}, tc, 2, 3_MB); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
         CmdWrite(0,"sourceid3", data, tc, false, {}, false); //3, 6 and 3 are compacted
         data.resize(1);
         CmdWrite(0,"sourceid4", data, tc, false, {}, false); //3, 6 and 3 are compacted
@@ -1450,7 +1450,7 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
 
         tc.Runtime->SetScheduledLimit(100);
 
-        PQTabletPrepare(11, 100 * 1024 * 1024, 0, {}, tc);
+        PQTabletPrepare(11, 100_MB, 0, {}, tc);
 
         TVector<std::pair<ui64, TString>> data;
         activeZone = PlainOrSoSlow(true, false);
@@ -1461,11 +1461,11 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
             data.push_back({i + 1, s.substr(pp)});
         }
         CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
-        PQTabletPrepare(10, 100 * 1024 * 1024, 0, {}, tc);
+        PQTabletPrepare(10, 100_MB, 0, {}, tc);
         PQGetPartInfo(0, 10, tc);
         data.resize(1);
         CmdWrite(0, "sourceid1", data, tc, true);
-        PQTabletPrepare(12, 100 * 1024 * 1024, 0, {}, tc);
+        PQTabletPrepare(12, 100_MB, 0, {}, tc);
         CmdWrite(0, "sourceid1", data, tc);
         PQTabletPrepare(12, 100, 0, {}, tc);
         CmdWrite(0, "sourceid1", data, tc, true);
@@ -1484,13 +1484,13 @@ Y_UNIT_TEST(TestPQPartialRead) {
 
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
 
         ui32 pp =  4 + 8 + 2 + 9 + 100 + 40; //pp is for size of meta
-        TString tmp{1024*1024 - pp - 2, '-'};
+        TString tmp{1_MB - pp - 2, '-'};
         char k = 0;
         TString ss = "";
         ss += k;
@@ -1517,15 +1517,15 @@ Y_UNIT_TEST(TestPQRead) {
 
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
 
         ui32 pp =  4 + 8 + 2 + 9 + 100 + 40; //pp is for size of meta
-        TString tmp{1024*1024 - pp - 2, '-'};
+        TString tmp{1_MB - pp - 2, '-'};
         char k = 0;
-        for (ui32 i = 0; i < 26 * 1024 * 1024;) { //3 full blobs and 2 in head
+        for (ui32 i = 0; i < 26_MB;) { //3 full blobs and 2 in head
             TString ss = "";
             ss += k;
             ss += tmp;
@@ -1540,21 +1540,21 @@ Y_UNIT_TEST(TestPQRead) {
         CmdRead(0, 26, Max<i32>(), Max<i32>(), 0, true, tc);
 
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 25, false, tc);
-        CmdRead(0, 0, 10, 1024*102400, 10, false, tc);
-        CmdRead(0, 9, 1, 1024*102400, 1, false, tc);
-        CmdRead(0, 23, 3, 1024*102400, 3, false, tc);
+        CmdRead(0, 0, 10, 100_MB, 10, false, tc);
+        CmdRead(0, 9, 1, 100_MB, 1, false, tc);
+        CmdRead(0, 23, 3, 100_MB, 3, false, tc);
 
-        CmdRead(0, 3, 1000, 511*1024, 1, false, tc);
-        CmdRead(0, 3, 1000, 1024, 1, false, tc); //at least one message will be readed always
-        CmdRead(0, 25, 1000, 1024, 1, false, tc); //at least one message will be readed always, from head
+        CmdRead(0, 3, 1000, 511_KB, 1, false, tc);
+        CmdRead(0, 3, 1000, 1_KB, 1, false, tc); //at least one message will be readed always
+        CmdRead(0, 25, 1000, 1_KB, 1, false, tc); //at least one message will be readed always, from head
 
         activeZone = true;
-        CmdRead(0, 9, 1000, 3*1024*1024, 3, false, tc);
-        CmdRead(0, 9, 1000, 3*1024*1024-10240, 3, false, tc);
-        CmdRead(0, 25, 1000, 512*1024, 1, false, tc); //from head
-        CmdRead(0, 24, 1000, 512*1024, 1, false, tc); //from head
+        CmdRead(0, 9, 1000, 3_MB, 3, false, tc);
+        CmdRead(0, 9, 1000, 3_MB - 10_KB, 3, false, tc);
+        CmdRead(0, 25, 1000, 512_KB, 1, false, tc); //from head
+        CmdRead(0, 24, 1000, 512_KB, 1, false, tc); //from head
 
-        CmdRead(0, 23, 1000, 102400000, 3, false, tc);
+        CmdRead(0, 23, 1000, 98_MB, 3, false, tc);
     });
 }
 
@@ -1569,7 +1569,7 @@ Y_UNIT_TEST(TestPQSmallRead) {
 
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
         TVector<std::pair<ui64, TString>> data;
@@ -1595,8 +1595,8 @@ Y_UNIT_TEST(TestPQSmallRead) {
 
         CmdRead(0, 5, Max<i32>(), Max<i32>(), 0, true, tc);
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 5, false, tc);
-        CmdRead(0, 0, 3, 1024*102400, 3, false, tc);
-        CmdRead(0, 3, 1000, 1024, 2, false, tc);
+        CmdRead(0, 0, 3, 100_MB, 3, false, tc);
+        CmdRead(0, 3, 1000, 1_KB, 2, false, tc);
     });
 }
 
@@ -1611,12 +1611,12 @@ Y_UNIT_TEST(TestPQReadAhead) {
 
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc); //important client - never delete
 
         TVector<std::pair<ui64, TString>> data;
 
         ui32 pp = 8 + 4 + 2 + 9;
-        TString tmp{1024*1024 - pp - 2, '-'};
+        TString tmp{1_MB - pp - 2, '-'};
         TString tmp0{32 - pp - 2, '-'};
         char k = 0;
         for (ui32 i = 0; i < 5; ++i) {
@@ -1627,7 +1627,7 @@ Y_UNIT_TEST(TestPQReadAhead) {
             ++k;
             data.push_back({i + 1, ss});
         }
-        for (ui32 i = 0; i < 17 * 1024 * 1024;) { //3 full blobs and 2 in head
+        for (ui32 i = 0; i < 17_MB;) { //3 full blobs and 2 in head
             TString ss = "";
             ss += k;
             ss += tmp;
@@ -1639,11 +1639,11 @@ Y_UNIT_TEST(TestPQReadAhead) {
         CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
         PQGetPartInfo(0, 22, tc);
         activeZone = true;
-        CmdRead(0, 0, 1, 1024*102400, 1, false, tc);
-        CmdRead(0, 1, 1, 1024*102400, 1, false, tc);
-        CmdRead(0, 2, 1, 1024*102400, 1, false, tc);
-        CmdRead(0, 3, 1, 1024*102400, 1, false, tc);
-        CmdRead(0, 4, 10, 1024*102400, 10, false, tc);
+        CmdRead(0, 0, 1, 100_MB, 1, false, tc);
+        CmdRead(0, 1, 1, 100_MB, 1, false, tc);
+        CmdRead(0, 2, 1, 100_MB, 1, false, tc);
+        CmdRead(0, 3, 1, 100_MB, 1, false, tc);
+        CmdRead(0, 4, 10, 100_MB, 10, false, tc);
     });
 }
 
@@ -1657,7 +1657,7 @@ Y_UNIT_TEST(TestOwnership) {
 
         tc.Runtime->SetScheduledLimit(50);
 
-        PQTabletPrepare(10, 100 * 1024 * 1024, 0, {}, tc);
+        PQTabletPrepare(10, 100_MB, 0, {}, tc);
 
         TString cookie, cookie2;
         cookie = CmdSetOwner(0, tc).first;
@@ -1677,7 +1677,7 @@ Y_UNIT_TEST(TestSetClientOffset) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(50);
 
-        PQTabletPrepare(10, 100 * 1024 * 1024, 0, {{"user1", false}}, tc);
+        PQTabletPrepare(10, 100_MB, 0, {{"user1", false}}, tc);
 
         activeZone = true;
 
@@ -1707,7 +1707,7 @@ Y_UNIT_TEST(TestReadSessions) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(50);
 
-        PQTabletPrepare(10, 100 * 1024 * 1024, 0, {{"user1", false}}, tc);
+        PQTabletPrepare(10, 100_MB, 0, {{"user1", false}}, tc);
 
         activeZone = true;
 
@@ -1749,13 +1749,13 @@ Y_UNIT_TEST(TestGetTimestamps) {
         tc.Runtime->UpdateCurrentTime(TInstant::Zero() + TDuration::Days(2));
         activeZone = false;
 
-        PQTabletPrepare(10, 100 * 1024 * 1024, 0, {{"user1", false}}, tc);
+        PQTabletPrepare(10, 100_MB, 0, {{"user1", false}}, tc);
 
         TVector<std::pair<ui64, TString>> data;
-        data.push_back({1, TString(1024, 'a')});
-        data.push_back({2, TString(1024, 'a')});
-        data.push_back({3, TString(1024, 'a')});
-        data.push_back({4, TString(1024, 'a')});
+        data.push_back({1, TString(1_KB, 'a')});
+        data.push_back({2, TString(1_KB, 'a')});
+        data.push_back({3, TString(1_KB, 'a')});
+        data.push_back({4, TString(1_KB, 'a')});
 
         CmdWrite(0, "sourceid0", data, tc, false, {}, true, "", -1, 1);
         CmdGetOffset(0, "user1", 0, tc, -1);
@@ -1815,9 +1815,9 @@ Y_UNIT_TEST(TestChangeConfig) {
             data.push_back({i + 1, ss});
         }
 
-        PQTabletPrepare(100, 100 * 1024 * 1024, 86400 * 2, {{"aaa", true}}, tc, 5);
+        PQTabletPrepare(100, 100_MB, 86400 * 2, {{"aaa", true}}, tc, 5);
         CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
-        PQTabletPrepare(5, 1024 * 1024, 86400, {{"bbb", true}, {"ccc", true}}, tc, 10);
+        PQTabletPrepare(5, 1_MB, 86400, {{"bbb", true}, {"ccc", true}}, tc, 10);
         data.pop_back(); //to be sure that after write partition will no be full
         CmdWrite(0, "sourceid1", data, tc, true); //partition is full
         CmdWrite(1, "sourceid2", data, tc);
@@ -1850,7 +1850,7 @@ Y_UNIT_TEST(TestReadSubscription) {
             data.push_back({i + 1, ss});
         }
 
-        PQTabletPrepare(100, 100 * 1024 * 1024, 86400 * 2, {{"user1", true}}, tc, 5);
+        PQTabletPrepare(100, 100_MB, 86400 * 2, {{"user1", true}}, tc, 5);
         CmdWrite(0, "sourceid0", data, tc, false, {}, true);
 
         TAutoPtr<IEventHandle> handle;
@@ -1934,14 +1934,14 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
         tc.Runtime->SetScheduledLimit(200);
 
         activeZone = false;
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc); //important client - never delete
 
         TVector<std::pair<ui64, TString>> data;
 
         ui32 pp =  4 + 8 + 2 + 9 + 100;
-        TString tmp{1024*1024 - pp - 2, '-'};
+        TString tmp{1_MB - pp - 2, '-'};
         char k = 0;
-        for (ui32 i = 0; i < 26 * 1024 * 1024;) {
+        for (ui32 i = 0; i < 26_MB;) {
             TString ss = "";
             ss += k;
             ss += tmp;
@@ -1955,7 +1955,7 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
 
         TAutoPtr<IEventHandle> handle;
         for (ui32 i = 0; i < 10; ++i) {
-            CmdRead(0, 0, 1, 1024*102400, 1, false, tc);
+            CmdRead(0, 0, 1, 100_MB, 1, false, tc);
             RestartTablet(tc);
         }
     });
@@ -1992,14 +1992,14 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
 
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc);
         activeZone = false;
 
 
         for (int i = 0; i < 5; i++) {
             TVector<std::pair<ui64, TString>> data;
             for (int j = 0; j < 7; j++) {
-                data.push_back({7 * i + j + 1, TString(1 * 1024 * 1024, 'a')});
+                data.push_back({7 * i + j + 1, TString(1_MB, 'a')});
             }
             CmdWrite(0, "sourceid0", data, tc, false, {}, i == 0);
             tc.Runtime->UpdateCurrentTime(tc.Runtime->GetCurrentTime() + TDuration::Minutes(1));
@@ -2014,7 +2014,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
         CmdRead(0, 22, 1, Max<i32>(), 1, false, tc, {22}, 0, ts.MilliSeconds() - 3 * 60 * 1000);
         CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {34}, 0, ts.MilliSeconds() - 1000);
 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc, 2, 6*1024*1024, true, ts.MilliSeconds() - 1000);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc, 2, 6_MB, true, ts.MilliSeconds() - 1000);
         CmdRead(0, 0, 1, Max<i32>(), 1, false, tc, {34});
 
     });
@@ -2030,7 +2030,7 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
     tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
     tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
 
-    PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc);
+    PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc);
 
     tc.Runtime->UpdateCurrentTime(TInstant::MilliSeconds(1000000));
 
@@ -2039,7 +2039,7 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
 
     CmdGetOffset(0, "user1", 0, tc, -1, 1000000);
 
-    PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc, 2, 6 * 1024 * 1024, false);
+    PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc, 2, 6_MB, false);
 
     RestartTablet(tc);
 
@@ -2093,7 +2093,7 @@ Y_UNIT_TEST(TestTabletRestoreEventsOrder) {
 
     // Scenario 2: expect EvTabletActive only after partitions init complete
     CheckEventSequence(tc, /*scenario=*/[&tc]() {
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc, /*partitions=*/2);
+        PQTabletPrepare(20000000, 100_MB, 0, {{"aaa", true}}, tc, /*partitions=*/2);
         ForwardToTablet(*tc.Runtime, tc.TabletId, tc.Edge, new TEvents::TEvPoisonPill());
     }, /*expectedEvents=*/{
         TEvTablet::TEvRestored::EventType,

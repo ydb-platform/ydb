@@ -51,7 +51,7 @@ namespace NKikimr::NPersQueueTests {
                 Server->ServerSettings.PQConfig.SetSourceIdTablePath("some unused path");
             }
             Cerr << "Init PQ - start server on port " << Server->GrpcPort << Endl;
-            Server->GrpcServerOptions.SetMaxMessageSize(130 * 1024 * 1024);
+            Server->GrpcServerOptions.SetMaxMessageSize(130_MB);
             EnablePQLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::FLAT_TX_SCHEMESHARD});
             EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_INFO);
 

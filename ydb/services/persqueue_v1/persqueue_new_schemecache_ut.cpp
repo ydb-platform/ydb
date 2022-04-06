@@ -285,7 +285,7 @@ namespace NKikimr::NPersQueueTests {
         Y_UNIT_TEST(TestReadAtTimestamp) {
             auto generate1 = [](ui32 messageId) {
                 Y_UNUSED(messageId);
-                TString message = "Hello___" + CreateGuidAsString() + TString(1024*1024, 'a');
+                TString message = "Hello___" + CreateGuidAsString() + TString(1_MB, 'a');
                 return message;
             };
 
@@ -293,7 +293,7 @@ namespace NKikimr::NPersQueueTests {
 
             auto generate2 = [](ui32 messageId) {
                 Y_UNUSED(messageId);
-                TString message = "Hello___" + CreateGuidAsString() + TString(1024*10240, 'a');
+                TString message = "Hello___" + CreateGuidAsString() + TString(1_MB, 'a');
                 return message;
             };
 

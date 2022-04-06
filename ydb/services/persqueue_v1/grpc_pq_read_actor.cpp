@@ -46,7 +46,7 @@ static const NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {
     .DoFirstRetryInstantly = true
 };
 
-static const ui64 MAX_INFLY_BYTES = 25 * 1024 * 1024;
+static const ui64 MAX_INFLY_BYTES = 25_MB;
 static const ui32 MAX_INFLY_READS = 10;
 
 static const TDuration READ_TIMEOUT_DURATION = TDuration::Seconds(1);

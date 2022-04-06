@@ -85,7 +85,7 @@ namespace NPQ {
         /// @note We should return blobs of size ~25 Mb. It's about 3 well-filled blobs.
         THolder<TEvPQ::TEvBlobResponse> MakePQResponse(const TActorContext& ctx, TErrorInfo error = TErrorInfo())
         {
-            static const ui64 MAX_RESPONSE_SIZE = 24 * 1024 * 1024;
+            static const ui64 MAX_RESPONSE_SIZE = 24_MB;
 
             ui64 size = 0;
             ui32 cropped = 0;

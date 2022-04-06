@@ -78,8 +78,8 @@ public:
     }
 
     TPersQueueCacheL2(const TCacheL2Parameters& params, TIntrusivePtr<NMonitoring::TDynamicCounters> countersGroup)
-        : Cache(SizeInBytes(1024*1024)/MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
-        , MaxSize(SizeInBytes(params.MaxSizeMB))
+        : Cache(ClampMinSize(1_MB)/MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
+        , MaxSize(ClampMinSize(params.MaxSizeMB * 1_MB))
         , CurrentSize(0)
         , KeepTime(params.KeepTime)
         , RetentionTime(TDuration::Zero())
@@ -118,11 +118,9 @@ private:
     void TouchBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs, bool isHit = true);
     void RegretBlobs(const TActorContext& ctx, TString topic, const TVector<TCacheBlobL2>& blobs);
 
-    static ui64 SizeInBytes(ui64 maxSizeMB) {
-        static const ui64 MIN_SIZE = 32;
-        if (maxSizeMB < MIN_SIZE)
-            maxSizeMB = MIN_SIZE;
-        return maxSizeMB*1024*1024;
+    static ui64 ClampMinSize(ui64 maxSize) {
+        static const ui64 MIN_SIZE = 32_MB;
+        return std::clamp(maxSize, MIN_SIZE, std::numeric_limits<ui64>::max());
     }
 
 private:

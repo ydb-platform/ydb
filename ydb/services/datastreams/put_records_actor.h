@@ -193,8 +193,8 @@ namespace NKikimr::NDataStreams::V1 {
                 if (record.partition_key().empty()) {
                     return "Empty partition key";
                 }
-                if (record.data().size() > 1048576) {
-                    return TStringBuilder() << "Data of size of " << record.data().size() << " bytes exceed limit of " << 1048576 << " bytes";
+                if (record.data().size() > 1_MB) {
+                    return TStringBuilder() << "Data of size of " << record.data().size() << " bytes exceed limit of " << 1_MB << " bytes";
                 }
                 if (record.partition_key().size() > 256) {
                     return TStringBuilder() << "Partition key is too long: " << record.partition_key();
@@ -203,8 +203,8 @@ namespace NKikimr::NDataStreams::V1 {
                     return TStringBuilder() << record.explicit_hash_key() << " is not a valid 128 bit decimal";
                 }
             }
-            if (totalSize > 5 * 1024 * 1024) {
-                return TStringBuilder() << "Total size of PutRecords request of " << totalSize << " bytes exceed limit of " << (5*1024*1024) << " bytes";
+            if (totalSize > 5_MB) {
+                return TStringBuilder() << "Total size of PutRecords request of " << totalSize << " bytes exceed limit of " << 5_MB << " bytes";
 
             }
             return "";

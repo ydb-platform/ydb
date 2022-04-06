@@ -23,10 +23,10 @@ namespace NKikimr {
 namespace NPQ {
 
 const TString TMP_REQUEST_MARKER = "__TMP__REQUEST__MARKER__";
-const ui32 CACHE_SIZE = 100 << 20; //100mb per tablet by default
-const ui32 MAX_BYTES = 25 * 1024 * 1024;
+const ui32 CACHE_SIZE = 100_MB;
+const ui32 MAX_BYTES = 25_MB;
 const TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
-static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10240;
+static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10_KB;
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,

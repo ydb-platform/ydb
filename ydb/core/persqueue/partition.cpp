@@ -28,9 +28,9 @@
 namespace NKikimr {
 namespace NPQ {
 
-static const ui32 BATCH_UNPACK_SIZE_BORDER = 500 * 1024; //500kb
+static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB; //500kb
 
-static const ui32 MAX_WRITE_CYCLE_SIZE = 16 << 20; //16MB
+static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB; //16MB
 
 static const ui32 MAX_USER_ACTS = 1000;
 
@@ -801,10 +801,10 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
     MessageSize = THolder<NKikimr::NPQ::TPercentileCounter>(new NKikimr::NPQ::TPercentileCounter(
         subGroup, labels, {{"sensor", "MessageSize" + suffix}}, "Size",
         TVector<std::pair<ui64, TString>>{
-            {1024, "1kb"}, {5120, "5kb"}, {10240, "10kb"},
-            {20'480, "20kb"}, {51'200, "50kb"}, {102'400, "100kb"}, {204'800, "200kb"},
-            {524'288, "512kb"},{1'048'576, "1024kb"}, {2'097'152,"2048kb"}, {5'242'880, "5120kb"},
-            {10'485'760, "10240kb"}, {67'108'864, "65536kb"}, {999'999'999, "99999999kb"}}, true));
+            {1_KB, "1kb"}, {5_KB, "5kb"}, {10_KB, "10kb"},
+            {20_KB, "20kb"}, {50_KB, "50kb"}, {100_KB, "100kb"}, {200_KB, "200kb"},
+            {512_KB, "512kb"},{1024_KB, "1024kb"}, {2048_KB,"2048kb"}, {5120_KB, "5120kb"},
+            {10240_KB, "10240kb"}, {65536_KB, "65536kb"}, {999'999'999, "99999999kb"}}, true));
 
     subGroup = GetServiceCounters(counters, "pqproxy|writeSession");
     BytesWritten = NKikimr::NPQ::TMultiCounter(subGroup, labels, {}, {"BytesWritten" + suffix}, true);

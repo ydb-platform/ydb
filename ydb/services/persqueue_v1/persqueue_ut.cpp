@@ -379,7 +379,7 @@ namespace {
         ui64 SOURCEID_COUNT_DELETE_BATCH_SIZE = 100;
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::PQ_WRITE_PROXY });
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "", 200000000, {}, {}, {}, X, 86400);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400, 20000000, "", 200000000, {}, {}, {}, X, 86400);
 
         auto driver = server.AnnoyingClient->GetDriver();
 
@@ -651,7 +651,7 @@ namespace {
     Y_UNIT_TEST(WriteExistingBigValue) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2, 8*1024*1024, 86400, 100000);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2, 8_MB, 86400, 100000);
 
 
         TInstant now(Now());
@@ -769,11 +769,11 @@ namespace {
 
     Y_UNIT_TEST(BigRead) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "user", 2000000);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400, 20000000, "user", 2000000);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
-        TString value(1024*1024, 'x');
+        TString value(1_MB, 'x');
         for (ui32 i = 0; i < 32; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
@@ -795,11 +795,11 @@ namespace {
     // expects that L2 size is 32Mb
     Y_UNIT_TEST(Cache) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
-        TString value(1024*1024, 'x');
+        TString value(1_MB, 'x');
         for (ui32 i = 0; i < 32; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, value);
 
@@ -826,14 +826,14 @@ namespace {
 
     Y_UNIT_TEST(CacheHead) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6_MB, 86400);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
         ui64 seqNo = 0;
         for (ui32 blobSizeKB = 256; blobSizeKB < 4096; blobSizeKB *= 2) {
-            static const ui32 maxEventKB = 24*1024;
-            ui32 blobSize = blobSizeKB * 1024;
+            static const ui32 maxEventKB = 24_KB;
+            ui32 blobSize = blobSizeKB * 1_KB;
             ui32 count = maxEventKB / blobSizeKB;
             count -= count%2;
             ui32 half = count/2;
@@ -855,9 +855,9 @@ namespace {
 
     Y_UNIT_TEST(SameOffset) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400);
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6_MB, 86400);
         TString secondTopic = DEFAULT_TOPIC_NAME + "2";
-        server.AnnoyingClient->CreateTopic(secondTopic, 1, 6*1024*1024, 86400);
+        server.AnnoyingClient->CreateTopic(secondTopic, 1, 6_MB, 86400);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
@@ -868,7 +868,7 @@ namespace {
         server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", 0}, value2);
 
         // avoid reading from head
-        TString mb(1024*1024, 'x');
+        TString mb(1_MB, 'x');
         for (ui32 i = 1; i < 16; ++i) {
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", i}, mb);
             server.AnnoyingClient->WriteToPQ({secondTopic, 0, "source1", i}, mb);
@@ -1143,7 +1143,7 @@ namespace {
         TString shortTopic2Name = "topic12";
         PrepareForGrpc(server);
 
-        server.AnnoyingClient->CreateTopic(topic2, 1, 8*1024*1024, 86400, 20000000, "", 200000000, {"user1", "user2"});
+        server.AnnoyingClient->CreateTopic(topic2, 1, 8_MB, 86400, 20000000, "", 200000000, {"user1", "user2"});
         server.WaitInit(shortTopic2Name);
         server.AnnoyingClient->CreateConsumer("user1");
         server.AnnoyingClient->CreateConsumer("user2");
@@ -1729,7 +1729,7 @@ namespace {
         auto ev = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TReadyToAcceptEvent>(&*msg);
         UNIT_ASSERT(ev);
 
-        writer->Write(std::move(ev->ContinuationToken), TString((1 << 20) * 60, 'a')); //TODO: Increase GRPC_ARG_MAX_SEND_MESSAGE_LENGTH
+        writer->Write(std::move(ev->ContinuationToken), TString(60_MB, 'a')); //TODO: Increase GRPC_ARG_MAX_SEND_MESSAGE_LENGTH
         {
             msg = writer->GetEvent(true);
             UNIT_ASSERT(msg); // ReadyToAcceptEvent
@@ -1827,7 +1827,7 @@ namespace {
 
     Y_UNIT_TEST(TestLockAfterDrop) {
         NPersQueue::TTestServer server{false};
-        server.GrpcServerOptions.SetMaxMessageSize(130*1024*1024);
+        server.GrpcServerOptions.SetMaxMessageSize(130_MB);
         server.StartServer();
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
         server.WaitInit(SHORT_TOPIC_NAME);
@@ -1835,7 +1835,7 @@ namespace {
         auto pqLib = TPQLib::WithCerrLogger();
 
         auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, "123");
-        auto f = producer->Write(1,  TString(1024, 'a'));
+        auto f = producer->Write(1,  TString(1_KB, 'a'));
         f.Wait();
 
         ui32 maxCount = 1;
@@ -2282,7 +2282,7 @@ namespace {
         auto* writeRequest = clientMessage.mutable_write_request();
         auto sequenceNumber = 1;
         auto messageCount = 0;
-        const auto message = NUnitTest::RandomString(250 * 1024, std::rand());
+        const auto message = NUnitTest::RandomString(250_KB, std::rand());
         auto compress = [](TString data, i32 codecID) {
             Y_UNUSED(codecID);
             return TString(data);
@@ -2321,7 +2321,7 @@ namespace {
         auto log = setup.GetLog();
         StreamingWriteClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
-        const auto message = NUnitTest::RandomString(250 * 1024, std::rand());
+        const auto message = NUnitTest::RandomString(250_KB, std::rand());
         const auto codecID = 3;
         writeRequest->add_sequence_numbers(1);
         writeRequest->add_message_sizes(message.size());

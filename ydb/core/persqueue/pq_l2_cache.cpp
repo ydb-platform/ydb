@@ -203,7 +203,7 @@ void TPersQueueCacheL2::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext&
         TString strParam = params.Get("newCacheLimit");
         if (strParam.size()) {
             ui32 valueMb = atoll(strParam.data());
-            MaxSize = SizeInBytes(valueMb); // will be applyed at next AddBlobs
+            MaxSize = ClampMinSize(valueMb * 1_MB); // will be applyed at next AddBlobs
         }
     }
 
@@ -218,8 +218,8 @@ TString TPersQueueCacheL2::HttpForm() const
         FORM_CLASS("form-horizontal") {
             DIV_CLASS("row") {
                 PRE() {
-                        str << "CacheLimit (MB): " << (MaxSize>>20) << Endl;
-                        str << "CacheSize (MB): " << (CurrentSize>>20) << Endl;
+                        str << "CacheLimit (MB): " << (MaxSize >> 20) << Endl;
+                        str << "CacheSize (MB): " << (CurrentSize >> 20) << Endl;
                         str << "Count of blobs: " << Cache.Size() << Endl;
                         str << "Min RetentionTime: " << KeepTime << Endl;
                         str << "RetentionTime: " << RetentionTime << Endl;

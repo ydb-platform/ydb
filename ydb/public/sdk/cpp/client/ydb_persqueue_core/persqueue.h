@@ -10,6 +10,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
+#include <util/generic/size_literals.h>
 #include <util/string/builder.h>
 #include <util/thread/pool.h>
 
@@ -233,8 +234,8 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_DEFAULT(TVector<ECodec>, SupportedCodecs, GetDefaultCodecs());
 
     FLUENT_SETTING_DEFAULT(ui64, MaxPartitionStorageSize, 0);
-    FLUENT_SETTING_DEFAULT(ui64, MaxPartitionWriteSpeed, 2 * 1024 * 1024);
-    FLUENT_SETTING_DEFAULT(ui64, MaxPartitionWriteBurst, 2 * 1024 * 1024);
+    FLUENT_SETTING_DEFAULT(ui64, MaxPartitionWriteSpeed, 2_MB);
+    FLUENT_SETTING_DEFAULT(ui64, MaxPartitionWriteBurst, 2_MB);
 
     FLUENT_SETTING_DEFAULT(bool, ClientWriteDisabled, false);
     FLUENT_SETTING_DEFAULT(bool, AllowUnauthenticatedWrite, false);
@@ -1040,7 +1041,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     //! Writer will not accept new messages if memory usage exceeds this limit.
     //! Memory usage consists of raw data pending compression and compressed messages being sent.
-    FLUENT_SETTING_DEFAULT(ui64, MaxMemoryUsage, 20 * 1024 * 1024);
+    FLUENT_SETTING_DEFAULT(ui64, MaxMemoryUsage, 20_MB);
 
     //! Maximum messages accepted by writer but not written (with confirmation from server).
     //! Writer will not accept new messages after reaching the limit.
@@ -1250,7 +1251,7 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
     FLUENT_SETTING_DEFAULT(bool, DisableClusterDiscovery, false);
 
     //! Maximum memory usage for read session.
-    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100 * 1024 * 1024);
+    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
 
     //! Max message time lag. All messages older that now - MaxTimeLag will be ignored.
     FLUENT_SETTING_OPTIONAL(TDuration, MaxTimeLag);

@@ -1,5 +1,6 @@
 #include "blob.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -16,7 +17,7 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     THead head;
     THead newHead;
 
-    TPartitionedBlob blob(0, 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8 << 20);
+    TPartitionedBlob blob(0, 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8_MB);
     TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
     UNIT_ASSERT(blob.IsInited());
     TString error;
@@ -34,7 +35,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
 
     THead head;
     head.Offset = 100;
-    TString value(102400, 'a');
+    TString value(100_KB, 'a');
     head.Batches.push_back(TBatch(head.Offset, 0, TVector<TClientBlob>()));
     for (ui32 i = 0; i < 50; ++i) {
         head.Batches.back().AddBlob(TClientBlob(
@@ -91,8 +92,8 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     for (ui32 i = 0; i < formed.size(); ++i) {
         UNIT_ASSERT(formed[i].first == blob.GetFormedBlobs()[i].first);
         UNIT_ASSERT(formed[i].second.size() == blob.GetFormedBlobs()[i].second);
-        UNIT_ASSERT(formed[i].second.size() <= 8 * 1024 * 1024);
-        UNIT_ASSERT(formed[i].second.size() > 6 * 1024 * 1024);
+        UNIT_ASSERT(formed[i].second.size() <= 8_MB);
+        UNIT_ASSERT(formed[i].second.size() > 6_MB);
     }
     TVector<TClientBlob> real;
     ui32 nextOffset = headCompacted ? newHead.Offset : head.Offset;
@@ -159,12 +160,12 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
 
 Y_UNIT_TEST(TestPartitionedBigTest) {
 
-    Test(true, 100, 400*1024, 3);
-    Test(false, 100, 512*1024 - 9 - sizeof(ui64) - sizeof(ui16) - 100, 16); //serialized size of client blob is 512*1024 - 100
-    Test(false, 101, 512*1024 - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512*1024 - 100
-    Test(false, 1, 512*1024 - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512*1024 - 100
-    Test(true, 1, 512*1024 - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512*1024 - 100
-    Test(true, 101, 512*1024 - 9 - sizeof(ui64) - sizeof(ui16) - 100, 7); //serialized size of client blob is 512*1024 - 100
+    Test(true, 100, 400_KB, 3);
+    Test(false, 100, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 16); //serialized size of client blob is 512_KB - 100
+    Test(false, 101, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512_KB - 100
+    Test(false, 1, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512_KB - 100
+    Test(true, 1, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 1); //serialized size of client blob is 512_KB - 100
+    Test(true, 101, 512_KB - 9 - sizeof(ui64) - sizeof(ui16) - 100, 7); //serialized size of client blob is 512_KB - 100
 }
 
 Y_UNIT_TEST(TestBatchPacking) {
@@ -190,8 +191,8 @@ Y_UNIT_TEST(TestBatchPacking) {
 
     TBatch batch3;
     batch3.AddBlob(TClientBlob(
-        "sourceId", 999999999999999ll, "abacaba", TPartData{33,66,4000000000u},
-        TInstant::MilliSeconds(999999999999ll), TInstant::MilliSeconds(1000), 0, "", ""
+        "sourceId", 999'999'999'999'999ll, "abacaba", TPartData{33, 66, 4'000'000'000u},
+        TInstant::MilliSeconds(999'999'999'999ll), TInstant::MilliSeconds(1000), 0, "", ""
     ));
     batch3.Pack();
     UNIT_ASSERT(batch3.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);

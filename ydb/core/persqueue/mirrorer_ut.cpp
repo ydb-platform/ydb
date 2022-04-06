@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         server.AnnoyingClient->CreateTopic(
             dstTopicFullName,
             partitionsCount,
-            /*ui32 lowWatermark =*/ 8*1024*1024,
+            /*ui32 lowWatermark =*/ 8_MB,
             /*ui64 lifetimeS =*/ 86400,
             /*ui64 writeSpeed =*/ 20000000,
             /*TString user =*/ "",

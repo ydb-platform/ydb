@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_name(), streamName);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1024);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1_KB);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24);
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards().size(), 3);
@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         // Test for too long data
         TString longData = TString(1048577, '1');
-        TString shortEnoughData = TString(1048576, '1');
+        TString shortEnoughData = TString(1_MB, '1');
 
         result = client.PutRecords(streamName,
                                    {{longData,        shortEnoughKey, ""},
@@ -744,7 +744,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         {
             std::vector<NYDS_V1::TDataRecord> records;
-            TString data = TString(1024*1024, 'a');
+            TString data = TString(1_MB, 'a');
             records.push_back({data, "key", ""});
             records.push_back({data, "key", ""});
             records.push_back({data, "key", ""});
@@ -1381,7 +1381,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
 
         std::string data;
-        data.resize(1 << 10);
+        data.resize(1_KB);
         std::iota(data.begin(), data.end(), 1);
         TString id{"0000"};
         {
@@ -1455,7 +1455,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         const ui32 recordsCount = 10;
         {
             std::string data;
-            data.resize(1 << 15);
+            data.resize(32_KB);
             std::iota(data.begin(), data.end(), 1);
             std::random_device rd;
             std::mt19937 generator{rd()};
@@ -1513,8 +1513,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         std::vector<ui64> timestamps;
         {
             std::string data;
-            // data.resize((1 << 21) + 2);
-            data.resize(1 << 15);
+            data.resize(32_KB);
             std::iota(data.begin(), data.end(), 1);
             std::random_device rd;
             std::mt19937 generator{rd()};

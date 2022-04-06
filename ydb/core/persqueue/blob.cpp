@@ -814,7 +814,7 @@ std::pair<TKey, TString> TPartitionedBlob::Add(TClientBlob&& blob)
             valueD += batch.Serialize();
         }
         res.second = valueD;
-        Y_VERIFY(res.second.size() <= MaxBlobSize && (res.second.size() + size + 1024 * 1024 > MaxBlobSize
+        Y_VERIFY(res.second.size() <= MaxBlobSize && (res.second.size() + size + 1_MB > MaxBlobSize
                     || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
         HeadSize = 0;
         BlobsSize = 0;

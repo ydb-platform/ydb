@@ -81,7 +81,7 @@ using namespace Ydb::PersQueue::V1;
 
 static const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
-static const ui32 MAX_BYTES_INFLIGHT = 1 << 20; //1mb
+static const ui32 MAX_BYTES_INFLIGHT = 1_MB;
 static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 
 //TODO: add here tracking of bytes in/out

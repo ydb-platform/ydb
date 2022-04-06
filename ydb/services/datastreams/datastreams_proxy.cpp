@@ -34,7 +34,7 @@ namespace NKikimr::NDataStreams::V1 {
     namespace {
 
         ui32 PartitionWriteSpeedInBytesPerSec(ui32 speedInKbPerSec) {
-            return speedInKbPerSec == 0 ? 1024 * 1024 : speedInKbPerSec * 1024;
+            return speedInKbPerSec == 0 ? 1_MB : speedInKbPerSec * 1_KB;
         }
 
         TDuration RetentionPeriod(ui32 retentionPeriodInHours) {
@@ -88,7 +88,7 @@ namespace NKikimr::NDataStreams::V1 {
             THashSet<ui32> validLimits {0};
             if (AppData(ctx)->PQConfig.ValidWriteSpeedLimitsKbPerSecSize() == 0) {
                 validLimits.insert(128);
-                validLimits.insert(1024);
+                validLimits.insert(1_KB);
             } else {
                 const auto& limits = AppData(ctx)->PQConfig.GetValidWriteSpeedLimitsKbPerSec();
                 validLimits.insert(limits.begin(), limits.end());
@@ -378,8 +378,8 @@ namespace NKikimr::NDataStreams::V1 {
         if (!ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
         }
-        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL);
-        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetBurstSize(GetProtoRequest()->write_quota_kb_per_sec() * 1024LL);
+        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(GetProtoRequest()->write_quota_kb_per_sec() * 1_KB);
+        groupConfig.MutablePQTabletConfig()->MutablePartitionConfig()->SetBurstSize(GetProtoRequest()->write_quota_kb_per_sec() * 1_KB);
     }
 
     //-----------------------------------------------------------------------------------------------------------
@@ -540,7 +540,7 @@ namespace NKikimr::NDataStreams::V1 {
         Ydb::DataStreams::V1::DescribeStreamResult result;
 
         auto& pqConfig = PQGroup.GetPQTabletConfig();
-        ui32 writeSpeed = pqConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() / 1024;
+        ui32 writeSpeed = pqConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() / 1_KB;
         auto& description = *result.mutable_stream_description();
         description.set_stream_name(GetProtoRequest()->stream_name());
         ui32 retentionPeriodHours = TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours();

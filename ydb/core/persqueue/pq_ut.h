@@ -209,7 +209,7 @@ struct TFinalizer {
 // SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::pair<TString, bool>>& users, TTestContext& tc, int partitions = 2, ui32 lw = 6*1024*1024, bool localDC = true, ui64 ts = 0, ui64 sidMaxCount = 0, ui32 specVersion = 0) {
+void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::pair<TString, bool>>& users, TTestContext& tc, int partitions = 2, ui32 lw = 6_MB, bool localDC = true, ui64 ts = 0, ui64 sidMaxCount = 0, ui32 specVersion = 0) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     if (specVersion) {
@@ -225,7 +225,7 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::p
             for (i32 i = 0; i < partitions; ++i) {
                 request->Record.MutableTabletConfig()->AddPartitionIds(i);
             }
-            request->Record.MutableTabletConfig()->SetCacheSize(10*1024*1024);
+            request->Record.MutableTabletConfig()->SetCacheSize(10_MB);
             request->Record.SetTxId(12345);
             auto tabletConfig = request->Record.MutableTabletConfig();
             tabletConfig->SetTopicName("topic");

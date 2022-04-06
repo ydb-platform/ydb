@@ -125,7 +125,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT_VALUES_EQUAL(previousOffset + 1, committedOffset);
         UNIT_ASSERT_VALUES_EQUAL(readMessageCount, messageCount);
-        log.Write(TLOG_INFO, Sprintf("Time took to write and read %u messages, %u [MiB] in total is %lu [s]", messageCount, (totalSize / 1024 / 1024), (TInstant::Now() - start).Seconds()));
+        log.Write(TLOG_INFO, Sprintf("Time took to write and read %u messages, %lu [MiB] in total is %lu [s]",
+                                     messageCount, (totalSize / 1_MB), (TInstant::Now() - start).Seconds()));
     }
 
 

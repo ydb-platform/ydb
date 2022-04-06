@@ -431,3 +431,7 @@ market/ir/models-clusterizer
 noc/traffic/l3lb/ipvs-sync
 billing/tools/branch_tools
 noc/traffic/l3lb/setup-init
+market/global/front
+noc/traffic/junk/dnsmanager/backend
+noc/traffic/junk/dnsmanager/frontend
+diehard/legacy/backend

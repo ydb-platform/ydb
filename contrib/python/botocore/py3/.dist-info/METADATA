@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: botocore
-Version: 1.24.32
+Version: 1.24.33
 Summary: Low-level, data-driven core of boto 3.
 Home-page: https://github.com/boto/botocore
 Author: Amazon Web Services
@@ -25,7 +25,7 @@ Requires-Dist: python-dateutil (<3.0.0,>=2.1)
 Requires-Dist: urllib3 (<1.27,>=1.25.4)
 Requires-Dist: jmespath (<2.0.0,>=0.7.1)
 Provides-Extra: crt
-Requires-Dist: awscrt (==0.13.5) ; extra == 'crt'
+Requires-Dist: awscrt (==0.13.8) ; extra == 'crt'
 
 botocore
 ========

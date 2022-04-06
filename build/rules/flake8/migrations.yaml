@@ -3102,7 +3102,6 @@ migrations:
     - library/cpp/deprecated/solartrie/test/tests
     - library/cpp/file_checker/test/tests
     - library/cpp/pybind/example/ut
-    - library/python/cyson/ut
     - library/python/vault_client/ut/tests
     - logbroker/push-client/ft
     - logfeller/lib/table_allocator/functional_tests/dyn_allocator_tests

@@ -85,10 +85,14 @@ void TWriteSession::Start(const TDuration& delay) {
 TWriteSession::THandleResult TWriteSession::RestartImpl(const TPlainStatus& status) {
     THandleResult result;
     if (AtomicGet(Aborting)) {
-        DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session is aborting and will not restart";
+        DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session is aborting and will not restart");
         return result;
     }
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Got error. Status: " << status.Status << ". Description: " << IssuesSingleLineString(status.Issues);
+    DbDriverState->Log.Write(
+        TLOG_INFO,
+        LogPrefix() << "Got error. Status: " << status.Status 
+            << ". Description: " << IssuesSingleLineString(status.Issues)
+    );
     SessionEstablished = false;
     TMaybe<TDuration> nextDelay = TDuration::Zero();
     if (!RetryState) {
@@ -99,11 +103,14 @@ TWriteSession::THandleResult TWriteSession::RestartImpl(const TPlainStatus& stat
     if (nextDelay) {
         result.StartDelay = *nextDelay;
         result.DoRestart = true;
-        DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session will restart in " << result.StartDelay.MilliSeconds() << " ms";
+        DbDriverState->Log.Write(
+            TLOG_DEBUG,
+            LogPrefix() << "Write session will restart in " << result.StartDelay.MilliSeconds() << " ms"
+        );
         ResetForRetryImpl();
 
     } else {
-        DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session will not restart after a fatal error";
+        DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Write session will not restart after a fatal error");
         result.DoStop = true;
         CheckHandleResultImpl(result);
     }
@@ -116,7 +123,7 @@ bool IsFederation(const TString& endpoint) {
 }
 
 void TWriteSession::DoCdsRequest(TDuration delay) {
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session: Do CDS request";
+    DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Write session: Do CDS request");
     auto weakThis = weak_from_this();
 
     if (
@@ -149,10 +156,10 @@ void TWriteSession::DoCdsRequest(TDuration delay) {
         params->set_preferred_cluster_name(*Settings.PreferredCluster_);
 
     auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections);
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Do schedule cds request after " << delay.MilliSeconds() << " ms\n";
+    DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Do schedule cds request after " << delay.MilliSeconds() << " ms\n");
     auto cdsRequestCall = [req_=std::move(req), extr=std::move(extractor), weakConnections, dbState=DbDriverState, settings=Settings]() mutable {
         if (auto connections = weakConnections.lock()) {
-            dbState->Log << TLOG_INFO << "MessageGroupId [" << settings.MessageGroupId_ << "] Running cds request ms\n";
+            dbState->Log.Write(TLOG_INFO, TStringBuilder() << "MessageGroupId [" << settings.MessageGroupId_ << "] Running cds request ms\n");
             connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
                 Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
                 Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResponse>(
@@ -171,7 +178,7 @@ void TWriteSession::DoCdsRequest(TDuration delay) {
 void TWriteSession::OnCdsResponse(
         TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result
 ) {
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Got CDS response: \n" << result.ShortDebugString();
+    DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Got CDS response: \n" << result.ShortDebugString());
     TString endpoint, name;
     THandleResult handleResult;
     if (!status.IsSuccess()) {
@@ -266,7 +273,7 @@ void TWriteSession::InitWriter() { // No Lock, very initial start - no race yet 
 NThreading::TFuture<ui64> TWriteSession::GetInitSeqNo() {
     if (Settings.ValidateSeqNo_) {
         if (AutoSeqNoMode.Defined() && *AutoSeqNoMode) {
-            DbDriverState->Log << TLOG_ERR << LogPrefix() << "Cannot call GetInitSeqNo in Auto SeqNo mode";
+            DbDriverState->Log.Write(TLOG_ERR, LogPrefix() << "Cannot call GetInitSeqNo in Auto SeqNo mode");
             ThrowFatalError("Cannot call GetInitSeqNo in Auto SeqNo mode");
         }
         else
@@ -302,17 +309,23 @@ ui64 TWriteSession::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
     }
     if (seqNo.Defined()) {
         if (*AutoSeqNoMode) {
-            DbDriverState->Log << TLOG_ERR << LogPrefix() << "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode";
+            DbDriverState->Log.Write(
+                TLOG_ERR,
+                LogPrefix() << "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode"
+            );
             ThrowFatalError(
-                    "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode"
+                "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode"
             );
         } else {
             seqNoValue = *seqNo;
         }
     } else if (!(*AutoSeqNoMode)) {
-        DbDriverState->Log << TLOG_ERR << LogPrefix() << "Cannot call write() without defined SeqNo on WriteSession running in manual-seqNo mode";
+        DbDriverState->Log.Write(
+            TLOG_ERR,
+            LogPrefix() << "Cannot call write() without defined SeqNo on WriteSession running in manual-seqNo mode"
+        );
         ThrowFatalError(
-                "Cannot call write() without defined SeqNo on WriteSession running in manual-seqNo mode"
+            "Cannot call write() without defined SeqNo on WriteSession running in manual-seqNo mode"
         );
     }
     LastSeqNo = seqNoValue;
@@ -378,7 +391,7 @@ TWriteSession::THandleResult TWriteSession::OnErrorImpl(NYdb::TPlainStatus&& sta
 
 // No lock
 void TWriteSession::DoConnect(const TDuration& delay, const TString& endpoint) {
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Start write session. Will connect to endpoint: " << endpoint;
+    DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Start write session. Will connect to endpoint: " << endpoint);
 
     NGrpc::IQueueClientContextPtr prevConnectContext;
     NGrpc::IQueueClientContextPtr prevConnectTimeoutContext;
@@ -457,7 +470,7 @@ void TWriteSession::DoConnect(const TDuration& delay, const TString& endpoint) {
 
 // RPC callback.
 void TWriteSession::OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext) {
-    DbDriverState->Log << TLOG_ERR << LogPrefix() << "Write session: connect timeout";
+    DbDriverState->Log.Write(TLOG_ERR, LogPrefix() << "Write session: connect timeout");
     THandleResult handleResult;
     with_lock (Lock) {
         if (ConnectTimeoutContext == connectTimeoutContext) {
@@ -536,7 +549,7 @@ void TWriteSession::InitImpl() {
     for (const auto& attr : Settings.Meta_.Fields) {
         (*init->mutable_session_meta())[attr.first] = attr.second;
     }
-    DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session: send init request: "<< req.ShortDebugString();
+    DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: send init request: "<< req.ShortDebugString());
     WriteToProcessorImpl(std::move(req));
 }
 
@@ -635,7 +648,7 @@ void TWriteSession::OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectio
     ProcessHandleResult(processResult.HandleResult);
 }
 
-TString TWriteSession::LogPrefix() const {
+TStringBuilder TWriteSession::LogPrefix() const {
     return TStringBuilder() << "MessageGroupId [" << Settings.MessageGroupId_ << "] SessionId [" << SessionId << "] ";
 }
 
@@ -676,7 +689,7 @@ TWriteSession::TProcessSrvMessageResult TWriteSession::ProcessServerMessageImpl(
         }
         case TServerMessage::kInitResponse: {
             const auto& initResponse = ServerMessage->init_response();
-            DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session established. Init response: " << initResponse.ShortDebugString();
+            DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Write session established. Init response: " << initResponse.ShortDebugString());
             SessionId = initResponse.session_id();
             PartitionId = initResponse.partition_id();
             ui64 newLastSeqNo = initResponse.last_sequence_number();
@@ -702,7 +715,10 @@ TWriteSession::TProcessSrvMessageResult TWriteSession::ProcessServerMessageImpl(
         case TServerMessage::kBatchWriteResponse: {
             TWriteSessionEvent::TAcksEvent acksEvent;
             const auto& batchWriteResponse = ServerMessage->batch_write_response();
-            DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session got write response: " << batchWriteResponse.ShortDebugString();
+            DbDriverState->Log.Write(
+                TLOG_DEBUG,
+                LogPrefix() << "Write session got write response: " << batchWriteResponse.ShortDebugString()
+            );
             TWriteStat::TPtr writeStat = new TWriteStat{};
             const auto& stat = batchWriteResponse.write_statistics();
             writeStat->WriteTime = TDuration::MilliSeconds(stat.persist_duration_ms());
@@ -735,7 +751,7 @@ TWriteSession::TProcessSrvMessageResult TWriteSession::ProcessServerMessageImpl(
         }
         case TServerMessage::kUpdateTokenResponse: {
             UpdateTokenInProgress = false;
-            DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session: token updated successfully";
+            DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: token updated successfully");
             UpdateTokenIfNeededImpl();
             break;
         }
@@ -745,7 +761,7 @@ TWriteSession::TProcessSrvMessageResult TWriteSession::ProcessServerMessageImpl(
 
 bool TWriteSession::CleanupOnAcknowledged(ui64 sequenceNumber) {
     bool result = false;
-    DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session: acknoledged message " << sequenceNumber;
+    DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: acknoledged message " << sequenceNumber);
     UpdateTimedCountersImpl();
     const auto& sentFront = SentOriginalMessages.front();
     ui64 size = 0;
@@ -797,10 +813,17 @@ TMemoryUsageChange TWriteSession::OnMemoryUsageChangedImpl(i64 diff) {
     bool nowOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     if (wasOk != nowOk) {
         if (wasOk) {
-            DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Estimated memory usage " << MemoryUsage << "[B] reached maximum (" << Settings.MaxMemoryUsage_ << "[B])";
+            DbDriverState->Log.Write(
+                TLOG_DEBUG,
+                LogPrefix() << "Estimated memory usage " << MemoryUsage 
+                    << "[B] reached maximum (" << Settings.MaxMemoryUsage_ << "[B])"
+            );
         }
         else {
-            DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Estimated memory usage got back to normal " << MemoryUsage << "[B]";
+            DbDriverState->Log.Write(
+                TLOG_DEBUG,
+                LogPrefix() << "Estimated memory usage got back to normal " << MemoryUsage << "[B]"
+            );
         }
     }
     return {wasOk, nowOk};
@@ -918,8 +941,11 @@ void TWriteSession::FlushWriteIfRequiredImpl() {
 
 // Involves compression, but still called under lock.
 size_t TWriteSession::WriteBatchImpl() {
-    DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "write " << CurrentBatch.Messages.size() << " messages with seqNo from "
-                      << CurrentBatch.Messages.begin()->SeqNo << " to " << CurrentBatch.Messages.back().SeqNo;
+    DbDriverState->Log.Write(
+        TLOG_DEBUG,
+        LogPrefix() << "write " << CurrentBatch.Messages.size() << " messages with seqNo from "
+            << CurrentBatch.Messages.begin()->SeqNo << " to " << CurrentBatch.Messages.back().SeqNo
+    );
 
     Y_VERIFY(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
 
@@ -991,7 +1017,7 @@ bool TWriteSession::IsReadyToSendNextImpl() const {
 
 
 void TWriteSession::UpdateTokenIfNeededImpl() {
-    DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session: try to update token";
+    DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
     if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress)
         return;
@@ -1004,7 +1030,7 @@ void TWriteSession::UpdateTokenIfNeededImpl() {
     updateRequest->set_token(token);
     PrevToken = token;
 
-    DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session: updating token";
+    DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
     Processor->Write(std::move(clientMessage));
 }
@@ -1053,9 +1079,12 @@ void TWriteSession::SendImpl() {
             PackedMessagesToSend.pop();
         }
         UpdateTokenIfNeededImpl();
-        DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Send " << writeRequest->sequence_numbers_size() << " message(s) ("
-                                        << OriginalMessagesToSend.size() << " left), first sequence number is "
-                                        << writeRequest->sequence_numbers(0);
+        DbDriverState->Log.Write(
+            TLOG_DEBUG,
+            LogPrefix() << "Send " << writeRequest->sequence_numbers_size() << " message(s) ("
+                << OriginalMessagesToSend.size() << " left), first sequence number is "
+                << writeRequest->sequence_numbers(0)
+        );
         Processor->Write(std::move(clientMessage));
     }
 }
@@ -1064,7 +1093,10 @@ void TWriteSession::SendImpl() {
 bool TWriteSession::Close(TDuration closeTimeout) {
     if (AtomicGet(Aborting))
         return false;
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session: close. Timeout = " << closeTimeout.MilliSeconds() << " ms";
+    DbDriverState->Log.Write(
+        TLOG_INFO,
+        LogPrefix() << "Write session: close. Timeout = " << closeTimeout.MilliSeconds() << " ms"
+    );
     auto startTime = TInstant::Now();
     auto remaining = closeTimeout;
     bool ready = false;
@@ -1094,9 +1126,13 @@ bool TWriteSession::Close(TDuration closeTimeout) {
         InitSeqNoPromise.SetException("session closed");
     }
     if (ready) {
-        DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session: gracefully shut down, all writes complete";
+        DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Write session: gracefully shut down, all writes complete");
     } else {
-        DbDriverState->Log << TLOG_WARNING << LogPrefix() << "Write session: could not confirm all writes in time or session aborted, perform hard shutdown";
+        DbDriverState->Log.Write(
+            TLOG_WARNING,
+            LogPrefix() << "Write session: could not confirm all writes in time"
+                << " or session aborted, perform hard shutdown"
+        );
     }
     return ready;
 }
@@ -1153,18 +1189,19 @@ void TWriteSession::UpdateTimedCountersImpl() {
     << Counters->counter->Val()                                        \
         /**/
 
-        DbDriverState->Log << TLOG_INFO << LogPrefix()
+        DbDriverState->Log.Write(TLOG_INFO, LogPrefix()
             << "Counters: {"
-        LOG_COUNTER(Errors)
-        LOG_COUNTER(CurrentSessionLifetimeMs)
-        LOG_COUNTER(BytesWritten)
-        LOG_COUNTER(MessagesWritten)
-        LOG_COUNTER(BytesWrittenCompressed)
-        LOG_COUNTER(BytesInflightUncompressed)
-        LOG_COUNTER(BytesInflightCompressed)
-        LOG_COUNTER(BytesInflightTotal)
-        LOG_COUNTER(MessagesInflight)
-                << " }";
+            LOG_COUNTER(Errors)
+            LOG_COUNTER(CurrentSessionLifetimeMs)
+            LOG_COUNTER(BytesWritten)
+            LOG_COUNTER(MessagesWritten)
+            LOG_COUNTER(BytesWrittenCompressed)
+            LOG_COUNTER(BytesInflightUncompressed)
+            LOG_COUNTER(BytesInflightCompressed)
+            LOG_COUNTER(BytesInflightTotal)
+            LOG_COUNTER(MessagesInflight)
+            << " }"
+        );
 
 #undef LOG_COUNTER
     }
@@ -1172,7 +1209,7 @@ void TWriteSession::UpdateTimedCountersImpl() {
 
 void TWriteSession::AbortImpl() {
     if (!AtomicGet(Aborting)) {
-        DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session: aborting";
+        DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: aborting");
         AtomicSet(Aborting, 1);
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
@@ -1184,7 +1221,7 @@ void TWriteSession::AbortImpl() {
 }
 
 void TWriteSession::CloseImpl(EStatus statusCode, NYql::TIssues&& issues) {
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session will now close";
+    DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Write session will now close");
     EventsQueue->Close(TSessionClosedEvent(statusCode, std::move(issues)));
     AbortImpl();
 }
@@ -1196,13 +1233,13 @@ void TWriteSession::CloseImpl(EStatus statusCode, const TString& message) {
 }
 
 void TWriteSession::CloseImpl(TPlainStatus&& status) {
-    DbDriverState->Log << TLOG_INFO << LogPrefix() << "Write session will now close";
+    DbDriverState->Log.Write(TLOG_INFO, LogPrefix() << "Write session will now close");
     EventsQueue->Close(TSessionClosedEvent(std::move(status)));
     AbortImpl();
 }
 
 TWriteSession::~TWriteSession() {
-    DbDriverState->Log << TLOG_DEBUG << LogPrefix() << "Write session: destroy";
+    DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: destroy");
     bool needClose = false;
     with_lock(Lock) {
         if (!AtomicGet(Aborting)) {

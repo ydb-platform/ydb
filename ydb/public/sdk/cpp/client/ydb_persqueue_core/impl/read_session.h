@@ -759,6 +759,8 @@ public:
 
     TSingleClusterReadSessionImpl(
         const TReadSessionSettings& settings,
+        const TString& database,
+        const TString& sessionId,
         const TString& clusterName,
         const TLog& log,
         std::shared_ptr<IReadSessionConnectionProcessorFactory> connectionFactory,
@@ -768,6 +770,8 @@ public:
         ui64 partitionStreamIdStart, ui64 partitionStreamIdStep
     )
         : Settings(settings)
+        , Database(database)
+        , SessionId(sessionId)
         , ClusterName(clusterName)
         , Log(log)
         , NextPartitionStreamId(partitionStreamIdStart)
@@ -807,6 +811,8 @@ public:
 
     void DumpStatisticsToLog(TLogElement& log);
     void UpdateMemoryUsageStatistics();
+
+    TStringBuilder GetLogPrefix() const;
 
     const TLog& GetLog() const {
         return Log;
@@ -958,6 +964,8 @@ private:
 
 private:
     const TReadSessionSettings Settings;
+    const TString Database;
+    const TString SessionId;
     const TString ClusterName;
     TLog Log;
     ui64 NextPartitionStreamId;
@@ -1066,6 +1074,8 @@ public:
     void ClearAllEvents();
 
 private:
+    TStringBuilder GetLogPrefix() const;
+
     // Start
     bool ValidateSettings();
 

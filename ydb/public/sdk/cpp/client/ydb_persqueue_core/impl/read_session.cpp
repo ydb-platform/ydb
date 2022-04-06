@@ -51,6 +51,10 @@ private:
     std::weak_ptr<TReadSession> Session;
 };
 
+TStringBuilder TReadSession::GetLogPrefix() const {
+     return TStringBuilder() << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] ";
+}
+
 TReadSession::TReadSession(const TReadSessionSettings& settings,
              std::shared_ptr<TPersQueueClient::TImpl> client,
              std::shared_ptr<TGRpcConnectionsImpl> connections,
@@ -67,12 +71,6 @@ TReadSession::TReadSession(const TReadSessionSettings& settings,
     }
 
     MakeCountersIfNeeded();
-
-    if (!Settings.Log_) {
-        TStringBuilder logPrefix;
-        logPrefix << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] ";
-        Log.SetFormatter(GetPrefixLogFormatter(logPrefix));
-    }
 }
 
 TReadSession::~TReadSession() {
@@ -99,7 +97,7 @@ void TReadSession::Start() {
         return;
     }
 
-    Log << TLOG_INFO << "Starting read session";
+    Log.Write(TLOG_INFO, GetLogPrefix() << "Starting read session");
     if (Settings.DisableClusterDiscovery_) {
         ProceedWithoutClusterDiscovery();
     } else {
@@ -135,7 +133,7 @@ void TReadSession::StartClusterDiscovery() {
             return;
         }
 
-        Log << TLOG_DEBUG << "Starting cluster discovery";
+        Log.Write(TLOG_DEBUG, GetLogPrefix() << "Starting cluster discovery");
         ClusterDiscoveryDelayContext = nullptr;
     }
 
@@ -196,24 +194,24 @@ void TReadSession::CreateClusterSessionsImpl() {
         if (sessionSettings.MaxMemoryUsageBytes_ > clusterSessionsCount && sessionSettings.MaxMemoryUsageBytes_ != std::numeric_limits<size_t>::max()) {
             sessionSettings.MaxMemoryUsageBytes_ /= clusterSessionsCount;
         }
-        Log << TLOG_DEBUG << "Starting session to cluster " << clusterName << " (" << clusterSessionInfo.ClusterEndpoint << ")";
+        Log.Write(
+            TLOG_DEBUG,
+            GetLogPrefix() << "Starting session to cluster " << clusterName
+                << " (" << clusterSessionInfo.ClusterEndpoint << ")"
+        );
         auto subclient = Client->GetClientForEndpoint(clusterSessionInfo.ClusterEndpoint);
         auto context = subclient->CreateContext();
         if (!context) {
             AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
             return;
         }
-        TLog log = Log;
-        if (!Settings.Log_) {
-            TStringBuilder logPrefix;
-            logPrefix << GetDatabaseLogPrefix(DbDriverState->Database) << "[" << SessionId << "] [" << clusterName << "] ";
-            log.SetFormatter(GetPrefixLogFormatter(logPrefix));
-        }
         clusterSessionInfo.Session =
             std::make_shared<TSingleClusterReadSessionImpl>(
                 sessionSettings,
+                DbDriverState->Database,
+                SessionId,
                 clusterName,
-                log,
+                Log,
                 subclient->CreateReadSessionConnectionProcessorFactory(),
                 EventsQueue,
                 ErrorHandler,
@@ -237,8 +235,11 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             }
             TMaybe<TDuration> retryDelay = ClusterDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
             if (retryDelay) {
-                Log << TLOG_INFO << "Cluster discovery request failed. Status: " << status.GetStatus()
-                                   << ". Issues: \"" << IssuesSingleLineString(status.GetIssues()) << "\"";
+                Log.Write(
+                    TLOG_INFO,
+                    GetLogPrefix() << "Cluster discovery request failed. Status: " << status.GetStatus()
+                        << ". Issues: \"" << IssuesSingleLineString(status.GetIssues()) << "\""
+                );
                 RestartClusterDiscoveryImpl(*retryDelay, deferred);
             } else {
                 AbortImpl(status.GetStatus(), MakeIssueWithSubIssues("Failed to discover clusters", status.GetIssues()), deferred);
@@ -246,7 +247,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             return;
         }
 
-        Log << TLOG_DEBUG << "Cluster discovery request succeeded";
+        Log.Write(TLOG_DEBUG, GetLogPrefix() << "Cluster discovery request succeeded");
         ClusterDiscoveryRetryState = nullptr;
 
         // Init ClusterSessions.
@@ -321,7 +322,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
 }
 
 void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions& deferred) {
-    Log << TLOG_DEBUG << "Restart cluster discovery in " << delay;
+    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Restart cluster discovery in " << delay);
     auto startCallback = [self = weak_from_this()](bool ok) {
         if (ok) {
             if (auto sharedSelf = self.lock()) {
@@ -341,7 +342,7 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
 }
 
 bool TReadSession::Close(TDuration timeout) {
-    Log << TLOG_INFO << "Closing read session. Close timeout: " << timeout;
+    Log.Write(TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
     with_lock (Lock) {
         Cancel(ClusterDiscoveryDelayContext);
         Cancel(DumpCountersContext);
@@ -426,7 +427,7 @@ bool TReadSession::Close(TDuration timeout) {
 void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions& deferred) {
     if (!Aborting) {
         Aborting = true;
-        Log << TLOG_NOTICE << "Aborting read session. Description: " << closeEvent.DebugString();
+        Log.Write(TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
         Cancel(ClusterDiscoveryDelayContext);
         Cancel(DumpCountersContext);
         for (auto& [cluster, sessionInfo] : ClusterSessions) {
@@ -490,7 +491,7 @@ TMaybe<TReadSessionEvent::TEvent> TReadSession::GetEvent(bool block, size_t maxB
 }
 
 void TReadSession::StopReadingData() {
-    Log << TLOG_INFO << "Stop reading data";
+    Log.Write(TLOG_INFO, GetLogPrefix() << "Stop reading data");
     with_lock (Lock) {
         if (!DataReadingSuspended) {
             DataReadingSuspended = true;
@@ -505,7 +506,7 @@ void TReadSession::StopReadingData() {
 }
 
 void TReadSession::ResumeReadingData() {
-    Log << TLOG_INFO << "Resume reading data";
+    Log.Write(TLOG_INFO, GetLogPrefix() << "Resume reading data");
     with_lock (Lock) {
         if (DataReadingSuspended) {
             DataReadingSuspended = false;
@@ -532,7 +533,7 @@ static ELogPriority GetEventLogPriority(const TReadSessionEvent::TEvent& event) 
 }
 
 void TReadSession::OnUserRetrievedEvent(const TReadSessionEvent::TEvent& event) {
-    Log << GetEventLogPriority(event) << "Read session event " << DebugString(event);
+    Log.Write(GetEventLogPriority(event), GetLogPrefix() << "Read session event " << DebugString(event));
 }
 
 void TReadSession::MakeCountersIfNeeded() {
@@ -585,8 +586,8 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
         /**/
 
     if (logCounters) {
-        Log << TLOG_INFO
-            << "Counters: {"
+        Log.Write(TLOG_INFO,
+            GetLogPrefix() << "Counters: {"
             C(Errors)
             C(CurrentSessionLifetimeMs)
             C(BytesRead)
@@ -596,7 +597,8 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
             C(BytesInflightCompressed)
             C(BytesInflightTotal)
             C(MessagesInflight)
-            << " }";
+            << " }"
+        );
     }
 
 #undef C
@@ -688,6 +690,10 @@ void TPartitionStreamImpl::SignalReadyEvents(TReadSessionEventsQueue* queue, TDe
     }
 }
 
+TStringBuilder TSingleClusterReadSessionImpl::GetLogPrefix() const {
+    return TStringBuilder() << GetDatabaseLogPrefix(Database) << "[" << SessionId << "] [" << ClusterName << "] ";
+}
+
 void TSingleClusterReadSessionImpl::Start() {
     Settings.DecompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
@@ -711,7 +717,11 @@ bool TSingleClusterReadSessionImpl::Reconnect(const TPlainStatus& status) {
     NGrpc::IQueueClientContextPtr prevConnectDelayContext;
 
     if (!status.Ok()) {
-        Log << TLOG_INFO << "Got error. Status: " << status.Status << ". Description: " << IssuesSingleLineString(status.Issues);
+        Log.Write(
+            TLOG_INFO,
+            GetLogPrefix() << "Got error. Status: " << status.Status
+                << ". Description: " << IssuesSingleLineString(status.Issues)
+        );
     }
 
     TDeferredActions deferred;
@@ -733,7 +743,10 @@ bool TSingleClusterReadSessionImpl::Reconnect(const TPlainStatus& status) {
                 if (!delayContext) {
                     return false;
                 }
-                Log << TLOG_DEBUG << "Reconnecting session to cluster " << ClusterName << " in "<< delay;
+                Log.Write(
+                    TLOG_DEBUG,
+                    GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in "<< delay
+                );
             } else {
                 return false;
             }
@@ -790,7 +803,11 @@ bool TSingleClusterReadSessionImpl::Reconnect(const TPlainStatus& status) {
 }
 
 void TSingleClusterReadSessionImpl::BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions& deferred) {
-    Log << TLOG_INFO << "Break connection due to unexpected message from server. Status: " << status.Status << ", Issues: \"" << IssuesSingleLineString(status.Issues) << "\"";
+    Log.Write(
+        TLOG_INFO,
+        GetLogPrefix() << "Break connection due to unexpected message from server. Status: " << status.Status
+            << ", Issues: \"" << IssuesSingleLineString(status.Issues) << "\""
+    );
 
     Processor->Cancel();
     Processor = nullptr;
@@ -863,7 +880,7 @@ void TSingleClusterReadSessionImpl::OnConnect(TPlainStatus&& st, typename IProce
 }
 
 void TSingleClusterReadSessionImpl::InitImpl(TDeferredActions& deferred) { // Assumes that we're under lock.
-    Log << TLOG_DEBUG << "Successfully connected. Initializing session";
+    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Successfully connected. Initializing session");
     Ydb::PersQueue::V1::MigrationStreamingReadClientMessage req;
     auto& init = *req.mutable_init_request();
     init.set_ranges_mode(GetRangesMode());
@@ -919,14 +936,21 @@ void TSingleClusterReadSessionImpl::ConfirmPartitionStreamCreate(const TPartitio
     if (commitOffset) {
         commitOffsetLogStr << ". Commit offset: " << *commitOffset;
     }
-    Log << TLOG_INFO << "Confirm partition stream create. Partition stream id: " << partitionStream->GetPartitionStreamId()
-        << ". Cluster: \"" << partitionStream->GetCluster() << "\". Topic: \"" << partitionStream->GetTopicPath()
-        << "\". Partition: " << partitionStream->GetPartitionId()
-        << ". Read offset: " << readOffset << commitOffsetLogStr;
+    Log.Write(
+        TLOG_INFO,
+        GetLogPrefix() << "Confirm partition stream create. Partition stream id: " << partitionStream->GetPartitionStreamId()
+            << ". Cluster: \"" << partitionStream->GetCluster() << "\". Topic: \"" << partitionStream->GetTopicPath()
+            << "\". Partition: " << partitionStream->GetPartitionId()
+            << ". Read offset: " << readOffset << commitOffsetLogStr
+    );
 
     with_lock (Lock) {
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
-            Log << TLOG_DEBUG << "Skip partition stream create confirm. Partition stream id: " << partitionStream->GetPartitionStreamId();
+            Log.Write(
+                TLOG_DEBUG,
+                GetLogPrefix() << "Skip partition stream create confirm. Partition stream id: "
+                    << partitionStream->GetPartitionStreamId()
+            );
             return;
         }
 
@@ -948,14 +972,22 @@ void TSingleClusterReadSessionImpl::ConfirmPartitionStreamCreate(const TPartitio
 }
 
 void TSingleClusterReadSessionImpl::ConfirmPartitionStreamDestroy(TPartitionStreamImpl* partitionStream) {
-    Log << TLOG_INFO << "Confirm partition stream destroy. Partition stream id: " << partitionStream->GetPartitionStreamId()
-        << ". Cluster: \"" << partitionStream->GetCluster() << "\". Topic: \"" << partitionStream->GetTopicPath()
-        << "\". Partition: " << partitionStream->GetPartitionId();
+    Log.Write(
+        TLOG_INFO,
+        GetLogPrefix() << "Confirm partition stream destroy. Partition stream id: "
+            << partitionStream->GetPartitionStreamId()
+            << ". Cluster: \"" << partitionStream->GetCluster() << "\". Topic: \"" << partitionStream->GetTopicPath()
+            << "\". Partition: " << partitionStream->GetPartitionId()
+    );
 
     TDeferredActions deferred;
     with_lock (Lock) {
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
-            Log << TLOG_DEBUG << "Skip partition stream destroy confirm. Partition stream id: " << partitionStream->GetPartitionStreamId();
+            Log.Write(
+                TLOG_DEBUG,
+                GetLogPrefix() << "Skip partition stream destroy confirm. Partition stream id: "
+                    << partitionStream->GetPartitionStreamId()
+            );
             return;
         }
 
@@ -975,7 +1007,11 @@ void TSingleClusterReadSessionImpl::ConfirmPartitionStreamDestroy(TPartitionStre
 }
 
 void TSingleClusterReadSessionImpl::Commit(const TPartitionStreamImpl* partitionStream, ui64 startOffset, ui64 endOffset) {
-    Log << TLOG_DEBUG << "Commit offsets [" << startOffset << ", " << endOffset << "). Partition stream id: " << partitionStream->GetPartitionStreamId();
+    Log.Write(
+        TLOG_DEBUG,
+        GetLogPrefix() << "Commit offsets [" << startOffset << ", " << endOffset
+            << "). Partition stream id: " << partitionStream->GetPartitionStreamId()
+    );
     with_lock (Lock) {
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
             return;
@@ -1006,7 +1042,10 @@ void TSingleClusterReadSessionImpl::Commit(const TPartitionStreamImpl* partition
 }
 
 void TSingleClusterReadSessionImpl::RequestPartitionStreamStatus(const TPartitionStreamImpl* partitionStream) {
-    Log << TLOG_DEBUG << "Requesting status for partition stream id: " << partitionStream->GetPartitionStreamId();
+    Log.Write(
+        TLOG_DEBUG,
+        GetLogPrefix() << "Requesting status for partition stream id: " << partitionStream->GetPartitionStreamId()
+    );
     with_lock (Lock) {
         if (Aborting || Closing || !IsActualPartitionStreamImpl(partitionStream)) { // Got previous incarnation.
             return;
@@ -1024,7 +1063,7 @@ void TSingleClusterReadSessionImpl::RequestPartitionStreamStatus(const TPartitio
 }
 
 void TSingleClusterReadSessionImpl::OnUserRetrievedEvent(const TReadSessionEvent::TEvent& event) {
-    Log << TLOG_DEBUG << "Read session event " << DebugString(event);
+    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Read session event " << DebugString(event));
     const i64 bytesCount = static_cast<i64>(CalcDataSize(event));
     Y_ASSERT(bytesCount >= 0);
 
@@ -1144,7 +1183,7 @@ void TSingleClusterReadSessionImpl::OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, 
 void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::InitResponse&& msg, TDeferredActions& deferred) { // Assumes that we're under lock.
     Y_UNUSED(deferred);
 
-    Log << TLOG_INFO << "Server session id: " << msg.session_id();
+    Log.Write(TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
 
     // Successful init. Do nothing.
     ContinueReadingDataImpl();
@@ -1268,7 +1307,7 @@ void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::Migration
 
 void TSingleClusterReadSessionImpl::OnReadDoneImpl(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::Committed&& msg, TDeferredActions& deferred) { // Assumes that we're under lock.
 
-    Log << TLOG_DEBUG << "Committed response: " << msg;
+    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
 
     TMap<ui64, TIntrusivePtr<TPartitionStreamImpl>> partitionStreams;
     for (const Ydb::PersQueue::V1::CommitCookie& cookieProto : msg.cookies()) {
@@ -1369,7 +1408,7 @@ void TSingleClusterReadSessionImpl::OnDataDecompressed(i64 sourceSize, i64 estim
 }
 
 void TSingleClusterReadSessionImpl::Abort() {
-    Log << TLOG_DEBUG << "Abort session to cluster";
+    Log.Write(TLOG_DEBUG, GetLogPrefix() << "Abort session to cluster");
 
     with_lock (Lock) {
         if (!Aborting) {
@@ -2103,10 +2142,10 @@ bool TDataDecompressionInfo::TakeData(const TIntrusivePtr<TPartitionStreamImpl>&
             } while (CurrentReadingMessage.first < static_cast<size_t>(msg.batches_size()) && msg.batches(CurrentReadingMessage.first).message_data_size() == 0);
         }
     }
-    partitionStream->GetLog() << TLOG_DEBUG << "Take Data. Partition " << partitionStream->GetPartitionId()
+    partitionStream->GetLog().Write(TLOG_DEBUG, TStringBuilder() << "Take Data. Partition " << partitionStream->GetPartitionId()
                               << ". Read: {" << prevReadingMessage.first << ", " << prevReadingMessage.second << "} -> {"
                               << CurrentReadingMessage.first << ", " << CurrentReadingMessage.second << "} ("
-                              << minOffset << "-" << maxOffset << ")";
+                              << minOffset << "-" << maxOffset << ")");
     return CurrentReadingMessage <= *readyThreshold;
 }
 
@@ -2181,7 +2220,10 @@ void TDataDecompressionInfo::TDecompressionTask::operator()() {
         }
     }
     if (auto session = Parent->Session.lock()) {
-        session->GetLog() << TLOG_DEBUG << "Decompression task done. Partition: " << partition << " (" << minOffset << "-" << maxOffset << ")";
+        session->GetLog().Write(
+            TLOG_DEBUG,
+            TStringBuilder() << "Decompression task done. Partition: " << partition << " (" << minOffset << "-" << maxOffset << ")"
+        );
     }
     Y_ASSERT(dataProcessed == SourceDataSize);
     std::shared_ptr<TSingleClusterReadSessionImpl> session = Parent->Session.lock();

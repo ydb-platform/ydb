@@ -451,3 +451,9 @@ portal/frontend/fakestat
 taxi/dmp/ssas-http
 data-ui/cloud-deploy
 market/front/libs/jest-allure-report
+taxi/dmp/external/pgjdbc
+market/front/libs/toloka_projects
+data-ui/cloud-docfarm
+market/front/libs/gauge/gauge
+market/front/libs/List
+market/front/libs/greed

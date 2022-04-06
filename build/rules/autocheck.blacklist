@@ -429,3 +429,5 @@ noc/traffic/l3lb/anc-server
 taxi/lavka/platform/packages/lagg
 market/ir/models-clusterizer
 noc/traffic/l3lb/ipvs-sync
+billing/tools/branch_tools
+noc/traffic/l3lb/setup-init

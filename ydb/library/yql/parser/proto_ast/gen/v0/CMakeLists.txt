@@ -19,7 +19,6 @@ target_proto_messages(proto_ast-gen-v0 PRIVATE
 target_sources(proto_ast-gen-v0 PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLLexer.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.pb.cc
 )
 run_antlr(
   OUTPUT

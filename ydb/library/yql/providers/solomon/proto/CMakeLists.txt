@@ -16,9 +16,6 @@ target_link_libraries(providers-solomon-proto PUBLIC
 target_proto_messages(providers-solomon-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/solomon/proto/dq_solomon_shard.proto
 )
-target_sources(providers-solomon-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.cc
-)
 target_proto_addincls(providers-solomon-proto
   ./
   ${CMAKE_SOURCE_DIR}/

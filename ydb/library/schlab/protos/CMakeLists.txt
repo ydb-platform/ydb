@@ -16,9 +16,6 @@ target_link_libraries(library-schlab-protos PUBLIC
 target_proto_messages(library-schlab-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/schlab/protos/schlab.proto
 )
-target_sources(library-schlab-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/schlab/protos/schlab.pb.cc
-)
 target_proto_addincls(library-schlab-protos
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -16,9 +16,6 @@ target_link_libraries(histogram-adaptive-protos PUBLIC
 target_proto_messages(histogram-adaptive-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/histogram/adaptive/protos/histo.proto
 )
-target_sources(histogram-adaptive-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/histogram/adaptive/protos/histo.pb.cc
-)
 target_proto_addincls(histogram-adaptive-protos
   ./
   ${CMAKE_SOURCE_DIR}/

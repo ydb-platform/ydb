@@ -47,38 +47,6 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_s3_internal.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/yq.proto
 )
-target_sources(api-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/datastreams.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/ydb_long_tx.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/ydb_logstore.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_auth.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_cluster_discovery.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_clickhouse_internal.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_cms.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_common.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_coordination.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_discovery.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_experimental.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_export.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_formats.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_import.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_issue_message.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_monitoring.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_operation.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_query_stats.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_rate_limiter.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_scheme.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_scripting.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_status_codes.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_table.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_value.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_s3_internal.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/yq.pb.cc
-)
 generate_enum_serilization(api-protos
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
   INCLUDE_HEADERS

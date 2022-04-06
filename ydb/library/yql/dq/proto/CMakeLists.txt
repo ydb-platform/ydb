@@ -20,12 +20,6 @@ target_proto_messages(yql-dq-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/proto/dq_tasks.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/proto/dq_transport.proto
 )
-target_sources(yql-dq-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/proto/dq_checkpoint.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/proto/dq_state_load_plan.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/proto/dq_tasks.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/dq/proto/dq_transport.pb.cc
-)
 target_proto_addincls(yql-dq-proto
   ./
   ${CMAKE_SOURCE_DIR}/

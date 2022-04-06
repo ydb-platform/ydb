@@ -19,12 +19,6 @@ target_proto_messages(cpp-actors-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/services_common.proto
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/protos/unittests.proto
 )
-target_sources(cpp-actors-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/actors/protos/actors.pb.cc
-  ${CMAKE_BINARY_DIR}/library/cpp/actors/protos/interconnect.pb.cc
-  ${CMAKE_BINARY_DIR}/library/cpp/actors/protos/services_common.pb.cc
-  ${CMAKE_BINARY_DIR}/library/cpp/actors/protos/unittests.pb.cc
-)
 target_proto_addincls(cpp-actors-protos
   ./
   ${CMAKE_SOURCE_DIR}/

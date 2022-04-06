@@ -16,9 +16,6 @@ target_link_libraries(core-file_storage-proto PUBLIC
 target_proto_messages(core-file_storage-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/file_storage/proto/file_storage.proto
 )
-target_sources(core-file_storage-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/core/file_storage/proto/file_storage.pb.cc
-)
 target_proto_addincls(core-file_storage-proto
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -59,7 +59,6 @@ target_sources(libs-apache-orc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/Writer.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/InputStream.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src/io/OutputStream.cc
-  ${CMAKE_BINARY_DIR}/contrib/libs/apache/orc/proto/orc_proto.pb.cc
 )
 target_proto_addincls(libs-apache-orc
   ./

@@ -11,6 +11,9 @@ add_library(yandex-cloud-priv)
 set_property(TARGET yandex-cloud-priv PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
+set_property(TARGET yandex-cloud-priv PROPERTY
+  PROTO_NAMESPACE cloud/bitbucket/private-api
+)
 target_include_directories(yandex-cloud-priv PUBLIC
   ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api
 )
@@ -27,10 +30,6 @@ target_link_libraries(yandex-cloud-priv PUBLIC
 target_proto_messages(yandex-cloud-priv PRIVATE
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/sensitive.proto
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/validation.proto
-)
-target_sources(yandex-cloud-priv PRIVATE
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/sensitive.pb.cc
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/validation.pb.cc
 )
 target_proto_addincls(yandex-cloud-priv
   ./cloud/bitbucket/private-api

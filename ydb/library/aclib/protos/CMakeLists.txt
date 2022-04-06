@@ -16,9 +16,6 @@ target_link_libraries(library-aclib-protos PUBLIC
 target_proto_messages(library-aclib-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/aclib/protos/aclib.proto
 )
-target_sources(library-aclib-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/aclib/protos/aclib.pb.cc
-)
 target_proto_addincls(library-aclib-protos
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -19,7 +19,6 @@ target_proto_messages(proto_ast-gen-jsonpath PRIVATE
 target_sources(proto_ast-gen-jsonpath PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.cc
 )
 run_antlr(
   OUTPUT

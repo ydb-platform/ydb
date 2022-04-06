@@ -33,21 +33,6 @@ target_proto_messages(api-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/ydb_table_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/yq_v1.proto
 )
-target_sources(api-grpc PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_auth_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_coordination_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_discovery_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_export_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_import_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_monitoring_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_operation_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_cms_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_rate_limiter_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_scheme_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_scripting_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/ydb_table_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/yq_v1.pb.cc
-)
 target_proto_addincls(api-grpc
   ./
   ${CMAKE_SOURCE_DIR}/

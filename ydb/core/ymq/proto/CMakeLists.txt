@@ -17,9 +17,6 @@ target_link_libraries(core-ymq-proto PUBLIC
 target_proto_messages(core-ymq-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/proto/records.proto
 )
-target_sources(core-ymq-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/ymq/proto/records.pb.cc
-)
 target_proto_addincls(core-ymq-proto
   ./
   ${CMAKE_SOURCE_DIR}/

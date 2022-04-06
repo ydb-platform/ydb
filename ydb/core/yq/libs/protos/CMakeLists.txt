@@ -18,9 +18,6 @@ target_link_libraries(yq-libs-protos PUBLIC
 target_proto_messages(yq-libs-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/protos/yq_private.proto
 )
-target_sources(yq-libs-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/protos/yq_private.pb.cc
-)
 target_proto_addincls(yq-libs-protos
   ./
   ${CMAKE_SOURCE_DIR}/

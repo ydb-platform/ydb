@@ -11,6 +11,9 @@ add_library(cloud-priv-quota)
 set_property(TARGET cloud-priv-quota PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
+set_property(TARGET cloud-priv-quota PROPERTY
+  PROTO_NAMESPACE cloud/bitbucket/private-api
+)
 target_include_directories(cloud-priv-quota PUBLIC
   ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api
 )
@@ -27,9 +30,6 @@ target_link_libraries(cloud-priv-quota PUBLIC
 )
 target_proto_messages(cloud-priv-quota PRIVATE
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/quota/quota.proto
-)
-target_sources(cloud-priv-quota PRIVATE
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/quota/quota.pb.cc
 )
 target_proto_addincls(cloud-priv-quota
   ./cloud/bitbucket/private-api

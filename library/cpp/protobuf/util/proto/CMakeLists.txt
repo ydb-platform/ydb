@@ -16,9 +16,6 @@ target_link_libraries(protobuf-util-proto PUBLIC
 target_proto_messages(protobuf-util-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/protobuf/util/proto/merge.proto
 )
-target_sources(protobuf-util-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/protobuf/util/proto/merge.pb.cc
-)
 target_proto_addincls(protobuf-util-proto
   ./
   ${CMAKE_SOURCE_DIR}/

@@ -17,9 +17,6 @@ target_link_libraries(validation-ut-protos PUBLIC
 target_proto_messages(validation-ut-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/validation/ut/protos/validation_test.proto
 )
-target_sources(validation-ut-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/lib/validation/ut/protos/validation_test.pb.cc
-)
 target_proto_addincls(validation-ut-protos
   ./
   ${CMAKE_SOURCE_DIR}/

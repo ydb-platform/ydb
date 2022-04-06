@@ -11,6 +11,9 @@ add_library(cloud-api-tools)
 set_property(TARGET cloud-api-tools PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
+set_property(TARGET cloud-api-tools PROPERTY
+  PROTO_NAMESPACE cloud/bitbucket/common-api
+)
 target_include_directories(cloud-api-tools PUBLIC
   ${CMAKE_BINARY_DIR}/cloud/bitbucket/common-api
 )
@@ -26,9 +29,6 @@ target_link_libraries(cloud-api-tools PUBLIC
 )
 target_proto_messages(cloud-api-tools PRIVATE
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/common-api/yandex/cloud/api/tools/options.proto
-)
-target_sources(cloud-api-tools PRIVATE
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/common-api/yandex/cloud/api/tools/options.pb.cc
 )
 target_proto_addincls(cloud-api-tools
   ./cloud/bitbucket/common-api

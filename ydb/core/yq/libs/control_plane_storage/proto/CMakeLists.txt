@@ -20,9 +20,6 @@ target_link_libraries(libs-control_plane_storage-proto PUBLIC
 target_proto_messages(libs-control_plane_storage-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/proto/yq_internal.proto
 )
-target_sources(libs-control_plane_storage-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.cc
-)
 target_proto_addincls(libs-control_plane_storage-proto
   ./
   ${CMAKE_SOURCE_DIR}/

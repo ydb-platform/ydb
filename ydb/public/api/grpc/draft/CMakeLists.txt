@@ -30,17 +30,6 @@ target_proto_messages(api-grpc-draft PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/yql_db_v1.proto
 )
-target_sources(api-grpc-draft PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/dummy.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_datastreams_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_experimental_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_s3_internal_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/grpc/draft/yql_db_v1.pb.cc
-)
 target_proto_addincls(api-grpc-draft
   ./
   ${CMAKE_SOURCE_DIR}/

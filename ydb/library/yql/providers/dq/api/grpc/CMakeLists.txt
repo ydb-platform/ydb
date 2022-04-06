@@ -21,9 +21,6 @@ target_link_libraries(dq-api-grpc PUBLIC
 target_proto_messages(dq-api-grpc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/api/grpc/api.proto
 )
-target_sources(dq-api-grpc PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/dq/api/grpc/api.pb.cc
-)
 target_proto_addincls(dq-api-grpc
   ./
   ${CMAKE_SOURCE_DIR}/

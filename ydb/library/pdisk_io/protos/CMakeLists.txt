@@ -16,9 +16,6 @@ target_link_libraries(library-pdisk_io-protos PUBLIC
 target_proto_messages(library-pdisk_io-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/protos/sector_map.proto
 )
-target_sources(library-pdisk_io-protos PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/pdisk_io/protos/sector_map.pb.cc
-)
 target_proto_addincls(library-pdisk_io-protos
   ./
   ${CMAKE_SOURCE_DIR}/

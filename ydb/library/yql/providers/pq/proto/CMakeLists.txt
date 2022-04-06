@@ -18,11 +18,6 @@ target_proto_messages(providers-pq-proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/proto/dq_io_state.proto
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/proto/dq_task_params.proto
 )
-target_sources(providers-pq-proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/pq/proto/dq_io.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/pq/proto/dq_io_state.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/pq/proto/dq_task_params.pb.cc
-)
 target_proto_addincls(providers-pq-proto
   ./
   ${CMAKE_SOURCE_DIR}/

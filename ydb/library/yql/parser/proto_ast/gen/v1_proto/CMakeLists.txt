@@ -16,9 +16,6 @@ target_link_libraries(proto_ast-gen-v1_proto PUBLIC
 target_proto_messages(proto_ast-gen-v1_proto PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.proto
 )
-target_sources(proto_ast-gen-v1_proto PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.cc
-)
 run_antlr(
   OUTPUT
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.proto

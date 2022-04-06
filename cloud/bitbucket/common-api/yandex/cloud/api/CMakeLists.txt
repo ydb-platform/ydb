@@ -11,6 +11,9 @@ add_library(yandex-cloud-api)
 set_property(TARGET yandex-cloud-api PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
+set_property(TARGET yandex-cloud-api PROPERTY
+  PROTO_NAMESPACE cloud/bitbucket/common-api
+)
 target_include_directories(yandex-cloud-api PUBLIC
   ${CMAKE_BINARY_DIR}/cloud/bitbucket/common-api
 )
@@ -27,9 +30,6 @@ target_link_libraries(yandex-cloud-api PUBLIC
 )
 target_proto_messages(yandex-cloud-api PRIVATE
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/common-api/yandex/cloud/api/operation.proto
-)
-target_sources(yandex-cloud-api PRIVATE
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/common-api/yandex/cloud/api/operation.pb.cc
 )
 target_proto_addincls(yandex-cloud-api
   ./cloud/bitbucket/common-api

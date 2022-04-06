@@ -11,6 +11,9 @@ add_library(serverless-functions-v1)
 set_property(TARGET serverless-functions-v1 PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
+set_property(TARGET serverless-functions-v1 PROPERTY
+  PROTO_NAMESPACE cloud/bitbucket/private-api
+)
 target_include_directories(serverless-functions-v1 PUBLIC
   ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api
 )
@@ -37,14 +40,6 @@ target_proto_messages(serverless-functions-v1 PRIVATE
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/quota_service.proto
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/session.proto
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/session_service.proto
-)
-target_sources(serverless-functions-v1 PRIVATE
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/function.pb.cc
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/function_service.pb.cc
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/operation_service.pb.cc
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/quota_service.pb.cc
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/session.pb.cc
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/session_service.pb.cc
 )
 target_proto_addincls(serverless-functions-v1
   ./cloud/bitbucket/private-api

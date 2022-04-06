@@ -11,6 +11,9 @@ add_library(cloud-priv-operation)
 set_property(TARGET cloud-priv-operation PROPERTY
   PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
 )
+set_property(TARGET cloud-priv-operation PROPERTY
+  PROTO_NAMESPACE cloud/bitbucket/private-api
+)
 target_include_directories(cloud-priv-operation PUBLIC
   ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api
 )
@@ -26,9 +29,6 @@ target_link_libraries(cloud-priv-operation PUBLIC
 )
 target_proto_messages(cloud-priv-operation PRIVATE
   ${CMAKE_SOURCE_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/operation/operation.proto
-)
-target_sources(cloud-priv-operation PRIVATE
-  ${CMAKE_BINARY_DIR}/cloud/bitbucket/private-api/yandex/cloud/priv/operation/operation.pb.cc
 )
 target_proto_addincls(cloud-priv-operation
   ./cloud/bitbucket/private-api

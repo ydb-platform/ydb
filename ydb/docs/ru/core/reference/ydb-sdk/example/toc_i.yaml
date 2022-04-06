@@ -8,7 +8,7 @@ items:
 - name: Go
   href: go/index.md
 - name: Java
-  href: example-java.md
+  href: java/index.md
 - name: Node.js
   href: example-nodejs.md
 - name: PHP

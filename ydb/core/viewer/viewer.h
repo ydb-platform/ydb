@@ -113,7 +113,7 @@ public:
         NKikimrViewer::EObjectType objectType,
         const TContentHandler& handler) = 0;
 
-    virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request) = 0;
+    virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}   ) = 0;
     virtual TString GetHTTPGATEWAYTIMEOUT() = 0;
 };
 

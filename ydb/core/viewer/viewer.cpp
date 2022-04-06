@@ -215,7 +215,7 @@ public:
         return KikimrRunConfig;
     }
 
-    TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request) override;
+    TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) override;
     TString GetHTTPGATEWAYTIMEOUT() override;
 
     void RegisterVirtualHandler(
@@ -513,37 +513,31 @@ IActor* CreateViewer(
     return new TViewer(kikimrRunConfig);
 }
 
-TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request) {
+TString TViewer::GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response) {
+    TStringBuilder res;
+    TString origin;
+    res << "HTTP/1.1 200 Ok\r\n"
+        << "Content-Type: application/json; charset=utf-8\r\n"
+        << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n";
     if (AllowOrigin) {
-        return TStringBuilder()
-                << "HTTP/1.1 200 Ok\r\n"
-                << "Access-Control-Allow-Origin: " << AllowOrigin << "\r\n"
-                << "Access-Control-Allow-Credentials: true\r\n"
-                << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-                << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
-                << "Content-Type: application/json; charset=utf-8\r\n"
-                << "Connection: Close\r\n"
-                << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n"
-                << "\r\n";
+        origin = AllowOrigin;
     } else if (request && request->Request.GetHeaders().HasHeader("Origin")) {
-        return TStringBuilder()
-                << "HTTP/1.1 200 Ok\r\n"
-                << "Access-Control-Allow-Origin: " << request->Request.GetHeader("Origin") << "\r\n"
-                << "Access-Control-Allow-Credentials: true\r\n"
-                << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-                << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
-                << "Content-Type: application/json; charset=utf-8\r\n"
-                << "Connection: Close\r\n"
-                << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n"
-                << "\r\n";
-    } else {
-        return TStringBuilder()
-                << "HTTP/1.1 200 Ok\r\n"
-                << "Content-Type: application/json; charset=utf-8\r\n"
-                << "Connection: Close\r\n"
-                << "X-Worker-Name: " << FQDNHostName() << ":" << CurrentMonitoringPort << "\r\n"
-                << "\r\n";
+        origin = request->Request.GetHeader("Origin");
     }
+    if (origin) {
+        res << "Access-Control-Allow-Origin: " << origin << "\r\n"
+            << "Access-Control-Allow-Credentials: true\r\n"
+            << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
+            << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+    }
+    if (response) {
+        res << "Content-Length: " << response.size() << "\r\n";
+    }
+    res << "\r\n";
+    if (response) {
+        res << response;
+    }
+    return res;
 }
 
 TString TViewer::GetHTTPGATEWAYTIMEOUT() {

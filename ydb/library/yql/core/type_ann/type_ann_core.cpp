@@ -11214,18 +11214,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(
+                    auto& data = option->ChildRef(1);
+                    if (data->GetTypeAnn() && data->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
+                        // nothing to do
+                    } else if (data->GetTypeAnn() && data->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+                        auto name = data->GetTypeAnn()->Cast<TPgExprType>()->GetName();
+                        if (name != "int4" && name != "int8") {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data->Pos()), TStringBuilder() <<
+                                "Expected int4/int8 type, but got: " << name));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else {
+                        const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TOptionalExprType>(
                         ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64));
-                    auto convertStatus = TryConvertTo(option->ChildRef(1), *expectedType, ctx.Expr);
-                    if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Child(1)->Pos()), "Mismatch argument types"));
-                        return IGraphTransformer::TStatus::Error;
-                    }
+                        auto convertStatus = TryConvertTo(data, *expectedType, ctx.Expr);
+                        if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data->Pos()), "Mismatch argument types"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
 
-                    if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
-                        auto newSettings = ReplaceSetting(options, {}, TString(optionName), option->ChildPtr(1), ctx.Expr);
-                        output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
-                        return IGraphTransformer::TStatus::Repeat;
+                        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+                            auto newSettings = ReplaceSetting(options, {}, TString(optionName), option->ChildPtr(1), ctx.Expr);
+                            output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
+                            return IGraphTransformer::TStatus::Repeat;
+                        }
                     }
                 } else if (optionName == "sort") {
                     if (pass != 1) {

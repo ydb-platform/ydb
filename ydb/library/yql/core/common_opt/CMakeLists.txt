@@ -24,6 +24,7 @@ target_sources(yql-core-common_opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_flow1.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_flow2.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_last.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_pgselect.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_simple1.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_simple2.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_transformer.cpp

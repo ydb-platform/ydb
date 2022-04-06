@@ -618,8 +618,10 @@ struct TEvPQ {
     };
 
     struct TEvReaderEventArrived : public TEventLocal<TEvReaderEventArrived, EvReaderEventArrived> {
-        TEvReaderEventArrived()
+        TEvReaderEventArrived(ui64 id) : Id(id)
         {}
+
+        ui64 Id;
     };
 };
 

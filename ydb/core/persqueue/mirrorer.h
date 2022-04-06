@@ -19,6 +19,7 @@ namespace NPQ {
 
 class TMirrorer : public TActorBootstrapped<TMirrorer> {
 private:
+    const ui64 MAX_READ_FUTURES_STORE = 25;
     const ui64 MAX_BYTES_IN_FLIGHT = 8 * 1024 * 1024;
     const TDuration WRITE_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
     const TDuration WRITE_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
@@ -43,18 +44,6 @@ private:
     enum EEventCookie : ui64 {
         WRITE_REQUEST_COOKIE = 1,
         UPDATE_WRITE_TIMESTAMP = 2
-    };
-
-    struct TMessageInfo {
-        ui64 Offset;
-        ui64 Size;
-        TInstant WriteTime;
-
-        TMessageInfo(ui64 offset, ui64 size, TInstant writeTime)
-            : Offset(offset)
-            , Size(size)
-            , WriteTime(writeTime)
-        {}
     };
 
 private:
@@ -167,7 +156,7 @@ private:
     NKikimrPQ::TMirrorPartitionConfig Config;
 
     TDeque<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
-    TDeque<TMessageInfo> WriteInFlight;
+    TDeque<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     TDuration WriteRetryTimeout = WRITE_RETRY_TIMEOUT_START;
@@ -194,6 +183,10 @@ private:
     TMultiCounter InitTimeoutCounter;
     TMultiCounter WriteTimeoutCounter;
     THolder<TPercentileCounter> MirrorerTimeLags;
+
+    TMap<ui64, std::pair<TInstant, NThreading::TFuture<void>>> ReadFeatures;
+    ui64 ReadFeatureId = 0;
+    ui64 ReadFuturesInFlight = 0;
 };
 
 }// NPQ

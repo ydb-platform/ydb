@@ -516,3 +516,11 @@ taxi/frontend/services/ui-constructor
 portal/archive/mtune-www
 partner/infra/yandex-partner-rsync
 partner/infra/yandex-partner-clickhouse-conf
+portal/archive/matrixnet-traffic-forecast
+haas/emergency
+strm/admins/golovan-panel
+noc/traffic/l3lb/kmod-i40e
+taxi/garage-parks-front
+data-ui/infra-sockets
+portal/archive/postcards
+trust/simplebrother

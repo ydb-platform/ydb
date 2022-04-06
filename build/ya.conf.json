@@ -7351,9 +7351,7 @@
         },
         "infractl": {
             "formula": {
-                "sandbox_id": [
-                    1263369171
-                ],
+                "sandbox_id": 1267774860,
                 "match": "infractl"
             },
             "executable": {

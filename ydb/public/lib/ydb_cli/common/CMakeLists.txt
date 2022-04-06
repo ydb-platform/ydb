@@ -39,6 +39,7 @@ target_sources(common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/query_stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_list.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/root.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/scheme_printers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/tabbed_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/ydb_updater.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/yt.cpp

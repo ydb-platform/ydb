@@ -64,5 +64,30 @@ TString FormatTime(TInstant time) {
     }
 };
 
+TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
+    switch (entry) {
+    case NScheme::ESchemeEntryType::Directory:
+        return "dir";
+    case NScheme::ESchemeEntryType::Table:
+        return "table";
+    case NScheme::ESchemeEntryType::ColumnTable:
+        return "column-table";
+    case NScheme::ESchemeEntryType::PqGroup:
+        return "pq-group";
+    case NScheme::ESchemeEntryType::SubDomain:
+        return "sub-domain";
+    case NScheme::ESchemeEntryType::RtmrVolume:
+        return "rtmr-volume";
+    case NScheme::ESchemeEntryType::BlockStoreVolume:
+        return "block-store-volume";
+    case NScheme::ESchemeEntryType::CoordinationNode:
+        return "coordination-node";
+    case NScheme::ESchemeEntryType::Unknown:
+    case NScheme::ESchemeEntryType::Sequence:
+    case NScheme::ESchemeEntryType::Replication:
+        return "unknown";
+    }
+}
+
 }
 }

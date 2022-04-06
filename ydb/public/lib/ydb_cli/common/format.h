@@ -26,7 +26,7 @@ protected:
     void ParseFormats();
 
     // Deprecated
-    void AddJsonOption(TClientCommand::TConfig& config,
+    void AddDeprecatedJsonOption(TClientCommand::TConfig& config,
         const TString& description = "(Deprecated, will be removed soon. Use --format option instead)"
         " Output in json format");
 

@@ -9,6 +9,7 @@ namespace NConsoleClient {
 void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NColorizer::TColors colors);
 TString FormatTime(TInstant time);
 TString PrettySize(size_t size);
+TString EntryTypeToString(NScheme::ESchemeEntryType entry);
 
 }
 }

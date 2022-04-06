@@ -19,6 +19,7 @@ namespace {
 
     THashMap<EOutputFormat, TString> FormatDescriptions = {
         { EOutputFormat::Pretty, "Human readable output" },
+        { EOutputFormat::Json, "Output in json format" },
         { EOutputFormat::JsonUnicode, "Output in json format, binary strings are encoded with unicode characters. "
                                       "Every row is a separate json on a separate line." },
         { EOutputFormat::JsonUnicodeArray, "Output in json format, binary strings are encoded with unicode characters. "
@@ -58,9 +59,10 @@ void TCommandWithResponseHeaders::PrintResponseHeaderPretty(const TStatus& statu
 const TString TCommandWithResponseHeaders::ResponseHeadersHelp = "Show response metadata for ydb call";
 
 // Deprecated
-void TCommandWithFormat::AddJsonOption(TClientCommand::TConfig& config, const TString& description) {
+void TCommandWithFormat::AddDeprecatedJsonOption(TClientCommand::TConfig& config, const TString& description) {
     config.Opts->AddLongOption("json", description).NoArgument()
-        .StoreValue(&OutputFormat, EOutputFormat::Json).StoreValue(&DeprecatedOptionUsed, true);
+        .StoreValue(&OutputFormat, EOutputFormat::Json).StoreValue(&DeprecatedOptionUsed, true)
+        .Hidden();
 }
 
 void TCommandWithFormat::AddInputFormats(TClientCommand::TConfig& config, const TVector<EOutputFormat>& allowedFormats) {

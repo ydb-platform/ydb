@@ -3,12 +3,9 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-#include <library/cpp/json/json_prettifier.h>
-#include <library/cpp/json/writer/json_value.h>
-#include <library/cpp/json/json_writer.h>
 
 
 namespace NYdb {
@@ -79,31 +76,6 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
 }
 
 namespace {
-    TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
-        switch (entry) {
-        case  NScheme::ESchemeEntryType::Directory:
-            return "dir";
-        case  NScheme::ESchemeEntryType::Table:
-            return "table";
-        case  NScheme::ESchemeEntryType::ColumnTable:
-            return "column-table";
-        case  NScheme::ESchemeEntryType::PqGroup:
-            return "pq-group";
-        case  NScheme::ESchemeEntryType::SubDomain:
-            return "sub-domain";
-        case  NScheme::ESchemeEntryType::RtmrVolume:
-            return "rtmr-volume";
-        case  NScheme::ESchemeEntryType::BlockStoreVolume:
-            return "block-store-volume";
-        case  NScheme::ESchemeEntryType::CoordinationNode:
-            return "coordination-node";
-        case  NScheme::ESchemeEntryType::Unknown:
-        case  NScheme::ESchemeEntryType::Sequence:
-        case  NScheme::ESchemeEntryType::Replication:
-            return "unknown";
-        }
-    }
-
     void PrintPermissions(const TVector<NScheme::TPermissions>& permissions) {
         if (permissions.size()) {
             for (const NScheme::TPermissions& permission : permissions) {
@@ -156,7 +128,7 @@ void TCommandDescribe::Config(TConfig& config) {
     config.Opts->AddLongOption("stats", "[Table] Show table statistics").StoreTrue(&ShowTableStats);
     config.Opts->AddLongOption("partition-stats", "[Table] Show partition statistics").StoreTrue(&ShowPartitionStats);
 
-    AddJsonOption(config, "(Deprecated, will be removed soon. Use --format option instead) [Table] Output in json format");
+    AddDeprecatedJsonOption(config, "(Deprecated, will be removed soon. Use --format option instead) [Table] Output in json format");
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 
@@ -335,15 +307,6 @@ namespace {
         }
 
         Cout << table;
-    }
-
-    // Temporary hack until KIKIMR-8635 goes to prod
-    TInstant CorrectTime(const TInstant& time) {
-        ui64 timeUs = time.MicroSeconds();
-        if (timeUs < 2000000000000) {
-            timeUs *= 1000;
-        }
-        return TInstant::MicroSeconds(timeUs);
     }
 
     void PrintIndexes(const NTable::TTableDescription& tableDescription) {
@@ -537,7 +500,7 @@ namespace {
         Cout << "Approximate number of rows: " << tableDescription.GetTableRows() << Endl;
         Cout << "Approximate size of table: " << PrettySize(tableDescription.GetTableSize()) << Endl;
         Cout << "Last modified: " << FormatTime(tableDescription.GetModificationTime()) << Endl;
-        Cout << "Created: " << FormatTime(CorrectTime(tableDescription.GetCreationTime())) << Endl;
+        Cout << "Created: " << FormatTime(tableDescription.GetCreationTime()) << Endl;
     }
 
     void PrintPartitionInfo(const NTable::TTableDescription& tableDescription, bool showBoundaries, bool showStats) {
@@ -738,7 +701,7 @@ void TCommandList::Config(TConfig& config) {
         .StoreTrue(&AdvancedMode);
     config.Opts->AddCharOption('R', "List subdirectories recursively")
         .StoreTrue(&Recursive);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::JsonUnicode });
+    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::Json });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
 }
@@ -750,280 +713,33 @@ void TCommandList::Parse(TConfig& config) {
 
 int TCommandList::Run(TConfig& config) {
     TDriver driver = CreateDriver(config);
-    NScheme::TSchemeClient client(driver);
-    NScheme::TListDirectoryResult result = client.ListDirectory(
+    ISchemePrinter::TSettings settings = {
         Path,
-        FillSettings(NScheme::TListDirectorySettings())
-    ).GetValueSync();
-    ThrowOnError(result);
-    if (AdvancedMode) {
-        PrintResponseAdvanced(result, Path, driver);
-    } else {
-        PrintResponse(result, Path, driver);
+        Recursive,
+        FillSettings(NScheme::TListDirectorySettings()),
+        FillSettings(NTable::TDescribeTableSettings().WithTableStatistics(true))
+    };
+    std::unique_ptr<ISchemePrinter> printer;
+
+    switch (OutputFormat) {
+    case EOutputFormat::Default:
+    case EOutputFormat::Pretty:
+        if (AdvancedMode) {
+            printer = std::make_unique<TTableSchemePrinter>(driver, std::move(settings));
+        } else {
+            printer = std::make_unique<TDefaultSchemePrinter>(driver, std::move(settings));
+        }
+        break;
+    case EOutputFormat::Json:
+    {
+        printer = std::make_unique<TJsonSchemePrinter>(driver, std::move(settings), AdvancedMode);
+        break;
     }
-    Y_UNUSED(Recursive);
+    default:
+        throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
+    }
+    printer->Print();
     return EXIT_SUCCESS;
-}
-
-namespace {
-    NJson::TJsonMap ConvertEntryToJson(
-            const NScheme::TSchemeEntry& entry,
-            const TString& path) {
-        NJson::TJsonMap res;
-        res["path"] = path;
-        res["type"] = EntryTypeToString(entry.Type);
-        res["owner"] = entry.Owner;
-        return res;
-    }
-
-    NJson::TJsonMap ConvertEntryToJson(
-            const NScheme::TSchemeEntry& entry,
-            const TString& path,
-            const NTable::TTableDescription& tableDescription) {
-        NJson::TJsonMap res = ConvertEntryToJson(entry, path);
-
-        res["path"] = path;
-        res["created"] = CorrectTime(tableDescription.GetCreationTime()).MilliSeconds();
-        res["modified"] = CorrectTime(tableDescription.GetModificationTime()).MilliSeconds();
-        return res;
-    }
-}
-
-NJson::TJsonValue TCommandList::CollectJsonResponse(
-        NScheme::TListDirectoryResult& result,
-        const TString& path,
-        NTable::TTableClient& tableClient,
-        NScheme::TSchemeClient& schemeClient,
-        bool advanced = false
-) {
-    NJson::TJsonValue response = {NJson::EJsonValueType::JSON_ARRAY};
-    TVector<NScheme::TSchemeEntry> children = result.GetChildren();
-    if (children.size() && Recursive) {
-        for (const auto& child : children) {
-            TString childPath = path + '/' + child.Name;
-            if (child.Type == NScheme::ESchemeEntryType::Directory) {
-                NScheme::TListDirectoryResult child_result = schemeClient.ListDirectory(
-                        childPath,
-                        FillSettings(NScheme::TListDirectorySettings())
-                ).GetValueSync();
-                ThrowOnError(child_result);
-
-                NJson::TJsonValue entry;
-                entry = ConvertEntryToJson(child, childPath);
-                response.AppendValue(entry);
-                NJson::TJsonValue children = CollectJsonResponse(
-                        child_result,
-                        childPath,
-                        tableClient,
-                        schemeClient,
-                        advanced);
-                for (const NJson::TJsonValue& childNode : children.GetArray()) {
-                    response.AppendValue(childNode);
-                }
-            } else {
-                NJson::TJsonMap entry;
-                if (advanced) {
-                    NTable::TCreateSessionResult sessionResult = tableClient.GetSession(
-                            NTable::TCreateSessionSettings()
-                    ).GetValueSync();
-                    ThrowOnError(sessionResult);
-
-                    NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(
-                            childPath,
-                            FillSettings(
-                                    NTable::TDescribeTableSettings().WithTableStatistics(true)
-                            )
-                    ).GetValueSync();
-                    ThrowOnError(tableResult);
-                    NTable::TTableDescription tableDescription = tableResult.GetTableDescription();
-                    entry = ConvertEntryToJson(child, childPath, tableDescription);
-                } else {
-                    entry = ConvertEntryToJson(child, childPath);
-                }
-                response.AppendValue(entry);
-            }
-        }
-    } else {
-        response.AppendValue(NJson::TJsonMap{{"path", path + "/" + result.GetEntry().Name}});
-    }
-    return response;
-}
-
-void TCommandList::PrintResponse(
-        NScheme::TListDirectoryResult& result,
-        const TString& path,
-        TDriver& driver
-) {
-    switch (OutputFormat) {
-        case EOutputFormat::JsonUnicode: {
-            NTable::TTableClient tableClient(driver);
-            NScheme::TSchemeClient schemeClient(driver);
-            NJson::TJsonValue response = CollectJsonResponse(result, path, tableClient, schemeClient);
-            NJson::TJsonWriter writer(&Cout, true);
-            writer.Write(response);
-            writer.Flush();
-            Cout << Endl;
-            return;
-        }
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty:
-            PrintDefaultResponse(result, path, driver);
-            return;
-        default:
-            throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
-    }
-
-}
-
-void TCommandList::PrintDefaultResponse(
-    NScheme::TListDirectoryResult& result,
-    const TString& path,
-    TDriver& driver
-) {
-    NScheme::TSchemeClient client{driver};
-    TVector<NScheme::TSchemeEntry> children = result.GetChildren();
-    if (children.size()) {
-        if (Recursive) {
-            Cout << path << ":" << Endl;
-        }
-        TAdaptiveTabbedTable table(children);
-        Cout << table;
-        if (Recursive) {
-            for (const auto& child : children) {
-                TString childPath = path + '/' + child.Name;
-                if (child.Type == NScheme::ESchemeEntryType::Directory) {
-                    NScheme::TListDirectoryResult child_result = client.ListDirectory(
-                        childPath,
-                        FillSettings(NScheme::TListDirectorySettings())
-                    ).GetValueSync();
-                    ThrowOnError(child_result);
-                    Cout << Endl;
-                    PrintDefaultResponse(child_result, childPath, driver);
-                }
-            }
-        }
-    } else {
-        NScheme::TSchemeEntry entry = result.GetEntry();
-        if (Recursive) {
-            Cout << path << ":" << Endl;
-        }
-        if (entry.Type != NScheme::ESchemeEntryType::Directory) {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-            PrintSchemeEntry(Cout, entry, colors);
-            Cout << Endl;
-        }
-    }
-}
-
-void TCommandList::PrintResponseAdvanced(
-        NScheme::TListDirectoryResult& result,
-        const TString& path,
-        TDriver& driver
-) {
-    NTable::TTableClient tableClient(driver);
-    NScheme::TSchemeClient schemeClient(driver);
-    switch (OutputFormat) {
-        case EOutputFormat::JsonUnicode: {
-            NJson::TJsonValue response = CollectJsonResponse(result, path, tableClient, schemeClient, true);
-            NJson::TJsonWriter writer(&Cout, true);
-            writer.Write(response);
-            writer.Flush();
-            Cout << Endl;
-            return;
-        }
-        case EOutputFormat::Default: {
-            TVector<NScheme::TSchemeEntry> entries = result.GetChildren();
-            bool oneExactEntry = false;
-            if (!entries.size()) {
-                if (result.GetEntry().Type != NScheme::ESchemeEntryType::Directory) {
-                    entries.push_back(result.GetEntry());
-                    oneExactEntry = true;
-                } else {
-                    return;
-                }
-            }
-            TPrettyTable table(
-                    { "Type", "Owner", "Size", "Created", "Modified", "Name" },
-                    TPrettyTableConfig().WithoutRowDelimiters()
-            );
-
-            AddEntriesRecursive(TString(), entries, 0, table, oneExactEntry, tableClient, schemeClient);
-
-            Cout << table;
-            return;
-        } default:
-            throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
-    }
-}
-
-void TCommandList::AddEntriesRecursive(
-    const TString& path,
-    const TVector<NScheme::TSchemeEntry> entries,
-    size_t depth,
-    TPrettyTable& table,
-    bool oneExactEntry,
-    NTable::TTableClient& tableClient,
-    NScheme::TSchemeClient& schemeClient
-) {
-    for (const auto& entry : entries) {
-        TString type = EntryTypeToString(entry.Type);
-        TString childRalativePath = path;
-        if (!oneExactEntry) {
-            childRalativePath += (childRalativePath ? "/" : "") + entry.Name;
-        }
-        TString childFullPath = Path + (childRalativePath ? "/" + childRalativePath : "");
-        if (oneExactEntry) {
-            childRalativePath = entry.Name;
-        }
-        switch (entry.Type) {
-        case NScheme::ESchemeEntryType::Table:
-        {
-            NTable::TCreateSessionResult sessionResult = tableClient.GetSession(
-                NTable::TCreateSessionSettings()
-            ).GetValueSync();
-            ThrowOnError(sessionResult);
-
-            NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(
-                childFullPath,
-                FillSettings(
-                    NTable::TDescribeTableSettings().WithTableStatistics(true)
-                )
-            ).GetValueSync();
-            ThrowOnError(tableResult);
-            NTable::TTableDescription tableDescription = tableResult.GetTableDescription();
-
-            table.AddRow()
-                .Column(0, EntryTypeToString(entry.Type))
-                .Column(1, entry.Owner)
-                .Column(2, PrettySize(tableDescription.GetTableSize()))
-                .Column(3, FormatTime(CorrectTime(tableDescription.GetCreationTime())))
-                .Column(4, FormatTime(tableDescription.GetModificationTime()))
-                .Column(5, childRalativePath);
-            break;
-        }
-        default:
-        {
-            table.AddRow()
-                .Column(0, EntryTypeToString(entry.Type))
-                .Column(1, entry.Owner)
-                .Column(2, "")
-                .Column(3, "")
-                .Column(4, "")
-                .Column(5, childRalativePath);
-
-            if (Recursive && entry.Type == NScheme::ESchemeEntryType::Directory) {
-                NScheme::TListDirectoryResult child_result = schemeClient.ListDirectory(
-                    childFullPath,
-                    FillSettings(NScheme::TListDirectorySettings())
-                ).GetValueSync();
-                ThrowOnError(child_result);
-                AddEntriesRecursive(childRalativePath, child_result.GetChildren(), depth + 1, table, false,
-                    tableClient, schemeClient);
-            }
-            break;
-        } // default block
-        } // switch
-    } // for
 }
 
 TCommandPermissions::TCommandPermissions()

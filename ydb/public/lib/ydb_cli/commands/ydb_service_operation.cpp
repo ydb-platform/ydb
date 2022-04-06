@@ -72,7 +72,7 @@ TCommandGetOperation::TCommandGetOperation()
 
 void TCommandGetOperation::Config(TConfig& config) {
     TCommandWithOperationId::Config(config);
-    AddJsonOption(config);
+    AddDeprecatedJsonOption(config);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
@@ -170,7 +170,7 @@ void TCommandListOperations::Config(TConfig& config) {
         .RequiredArgument("NUM").StoreResult(&PageSize);
     config.Opts->AddLongOption('t', "page-token", "Page token")
         .RequiredArgument("STRING").StoreResult(&PageToken);
-    AddJsonOption(config);
+    AddDeprecatedJsonOption(config);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 

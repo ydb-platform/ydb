@@ -131,7 +131,7 @@ void TCommandExportToYt::Config(TConfig& config) {
     config.Opts->AddLongOption("use-type-v3", "Use YT's type_v3")
         .NoArgument().StoreTrue(&UseTypeV3);
 
-    AddJsonOption(config);
+    AddDeprecatedJsonOption(config);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
@@ -262,7 +262,7 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
-    AddJsonOption(config);
+    AddDeprecatedJsonOption(config);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }

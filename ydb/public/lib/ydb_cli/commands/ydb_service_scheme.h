@@ -69,27 +69,6 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    void PrintResponse(NScheme::TListDirectoryResult& result, const TString& path, TDriver& driver);
-    NJson::TJsonValue CollectJsonResponse(
-            NScheme::TListDirectoryResult &result,
-            const TString &path, NTable::TTableClient& tableClient,
-            NScheme::TSchemeClient& schemeClient,
-            bool advanced);
-
-    void PrintDefaultResponse(NScheme::TListDirectoryResult &result,
-                              const TString &path,
-                              TDriver& driver);
-    void PrintResponseAdvanced(NScheme::TListDirectoryResult& result, const TString& path, TDriver& driver);
-    void AddEntriesRecursive(
-        const TString& path,
-        TVector<NScheme::TSchemeEntry> entries,
-        size_t depth,
-        TPrettyTable& table,
-        bool oneExactEntry,
-        NTable::TTableClient& tableClient,
-        NScheme::TSchemeClient& schemeClient
-    );
-
     bool AdvancedMode = false;
     bool Recursive = false;
 };

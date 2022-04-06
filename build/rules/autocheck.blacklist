@@ -524,3 +524,17 @@ taxi/garage-parks-front
 data-ui/infra-sockets
 portal/archive/postcards
 trust/simplebrother
+taxi/dmp/spark/spark
+browser/analytics/stat-scripts
+data-ui/rtmr
+portal/tune
+intranet/ok
+taxi/garage-drivers-front
+market/erp_axapta/libs/AX-XDoc-WebAPI
+market/erp_axapta/libs/REST.Client.Base
+taxi/garage-admin-front
+trust/simplebrother-mongo
+market/front/misc/partner-cookbook
+trust/simplebrother-elastic
+taxi/github/taxi_freeswitch
+taxi/dmp/spark/spark-over-yt

@@ -208,14 +208,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
 
         result = client.ExecuteYqlScript(R"(
-            PRAGMA Kikimr.UseNewEngine = 'false';
-            SELECT * FROM `/Root/.sys/partition_stats`;
-            SELECT * FROM `/Root/.sys/partition_stats`;
-        )").GetValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-
-        result = client.ExecuteYqlScript(R"(
             SELECT *
             FROM `/Root/TwoShard` AS ts
             JOIN `/Root/.sys/partition_stats`AS ps

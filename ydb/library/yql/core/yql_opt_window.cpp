@@ -143,7 +143,6 @@ struct TRawTrait {
     TWindowFrameSettings FrameSettings;
 };
 
-
 struct TCalcOverWindowTraits {
     TMap<TStringBuf, TRawTrait> RawTraits;
     ui64 MaxDataOutpace = 0;
@@ -151,7 +150,6 @@ struct TCalcOverWindowTraits {
     ui64 MaxUnboundedPrecedingLag = 0;
     const TTypeAnnotationNode* LagQueueItemType = nullptr;
 };
-
 
 TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames, TExprContext& ctx) {
     TCalcOverWindowTraits result;
@@ -446,8 +444,6 @@ TExprNode::TPtr BuildUpdateLambdaForChain1Map(TPositionHandle pos, const TExprNo
         .Build();
 }
 
-
-
 class TChain1MapTraits : public TThrRefBase, public TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<TChain1MapTraits>;
@@ -551,7 +547,6 @@ private:
     const TMaybe<ui64> QueueOffset;
     const TExprNode::TPtr LeadLagLambda;
 };
-
 
 class TChain1MapTraitsRowNumber : public TChain1MapTraits {
 public:
@@ -897,7 +892,6 @@ private:
     const TExprNode::TPtr DefaultValue;
 };
 
-
 class TChain1MapTraitsCurrentOrLagging : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsCurrentOrLagging(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> lagQueueIndex)
@@ -1032,7 +1026,6 @@ private:
     const ui64 QueueEnd;
 };
 
-
 class TChain1MapTraitsFull : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsFull(TStringBuf name, const TRawTrait& raw, ui64 currentRowIndex)
@@ -1093,7 +1086,6 @@ public:
 private:
     const ui64 QueueBegin;
 };
-
 
 class TChain1MapTraitsGeneric : public TChain1MapTraitsStateBase {
 public:
@@ -1512,7 +1504,6 @@ TExprNode::TPtr HandleLaggingItems(TPositionHandle pos, const TExprNode::TPtr& r
         .Build();
 }
 
-
 TExprNode::TPtr BuildChain1MapInitLambda(TPositionHandle pos, const TVector<TChain1MapTraits::TPtr>& traits,
     const TExprNode::TPtr& dataQueue, ui64 lagQueueSize, const TTypeAnnotationNode* lagQueueItemType, TExprContext& ctx)
 {
@@ -1842,7 +1833,6 @@ TExprNode::TPtr BuildFold1Lambda(TPositionHandle pos, const TExprNode::TPtr& fra
     }
     return ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(args)), ctx.NewCallable(pos, "AsStruct", std::move(structItems)));
 }
-
 
 TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode::TPtr& inputList,
     const TExprNode::TPtr& originalKeyColumns, const TExprNode::TPtr& sortTraits, const TExprNode::TPtr& frames,
@@ -2226,7 +2216,6 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
         .Seal()
         .Build();
 }
-
 
 TExprNode::TPtr TryExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode::TPtr& inputList, const TExprNode::TPtr& keyColumns,
     const TExprNode::TPtr& sortTraits, const TExprNode::TPtr& frames, const TExprNode::TPtr& sessionTraits,
@@ -2686,7 +2675,6 @@ TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& 
     calcs.erase(calcs.begin());
     return RebuildCalcOverWindowGroup(node->Pos(), input, calcs, ctx);
 }
-
 
 TExprNodeList ExtractCalcsOverWindow(const TExprNodePtr& node, TExprContext& ctx) {
     TExprNodeList result;

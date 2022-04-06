@@ -1840,7 +1840,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UseSnapshot,
     };
 
-    void TestReadTableMultiShard(EReadTableMultiShardMode mode) {
+    void TestReadTableMultiShard(EReadTableMultiShardMode mode, bool wholeTable) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -1860,21 +1860,22 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         auto tableBuilder = client.GetTableBuilder();
         tableBuilder
             .AddNullableColumn("Key", EPrimitiveType::Uint32)
-            .AddNullableColumn("Key2", EPrimitiveType::Uint32)
+            .AddNullableColumn("Fk", EPrimitiveType::Uint64)
             .AddNullableColumn("Value", EPrimitiveType::String);
-        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "Key2"});
+        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "Fk"});
 
         TCreateTableSettings createTableSettings =
             TCreateTableSettings()
-                .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(100));
+                .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(16));
 
         auto result = session.CreateTable("Root/Test", tableBuilder.Build(), createTableSettings).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"___(
-            UPSERT INTO [Root/Test] (Key, Key2, Value) VALUES
-            (1u, 2u, "One"),
-            (1000000000u, 2000000000u, "Two");
+            UPSERT INTO [Root/Test] (Key, Fk, Value) VALUES
+            (1u, 1u, "One"),
+            (1000000000u, 2u, "Two"),
+            (4294967295u, 4u, "Last");
         )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -1889,10 +1890,11 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             .AddElement()
                 .OptionalUint32(1000000000u)
             .AddElement()
-                .OptionalUint32(2000000000u)
+                .OptionalUint64(2000000000u)
             .EndTuple();
 
         TReadTableSettings readTableSettings =
+            wholeTable ? TReadTableSettings().Ordered() :
             TReadTableSettings()
                 .Ordered()
                 .From(TKeyBound::Inclusive(valueFrom.Build()))
@@ -1910,12 +1912,15 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         struct TRows {
             ui32 Key;
-            ui32 Key2;
+            ui64 Fk;
             TString Value;
         };
         TVector<TRows> expected;
-        expected.push_back({1, 2, "One"});
-        expected.push_back({1000000000u, 2000000000u, "Two"});
+        expected.push_back({1u, 1u, "One"});
+        expected.push_back({1000000000u, 2u, "Two"});
+        if (wholeTable) {
+            expected.push_back({4294967295u, 4u, "Last"});
+        }
         int row = 0;
         while (true) {
             TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
@@ -1935,26 +1940,34 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 UNIT_ASSERT_VALUES_EQUAL(key, exp.Key);
 
                 rsParser.ColumnParser(1).OpenOptional();
-                auto key2 = rsParser.ColumnParser(1).GetUint32();
-                UNIT_ASSERT_VALUES_EQUAL(key2, exp.Key2);
+                auto key2 = rsParser.ColumnParser(1).GetUint64();
+                UNIT_ASSERT_VALUES_EQUAL(key2, exp.Fk);
 
                 rsParser.ColumnParser(2).OpenOptional();
                 auto val = rsParser.ColumnParser(2).GetString();
                 UNIT_ASSERT_VALUES_EQUAL(val, exp.Value);
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(row, 2);
+        UNIT_ASSERT_VALUES_EQUAL(row, wholeTable ? 3 : 2);
 
         // Attempt to call ReadNext on finished iterator causes ContractViolation
         UNIT_ASSERT_EXCEPTION(it.ReadNext().GetValueSync().EOS(), NYdb::TContractViolation);
     }
 
     Y_UNIT_TEST(TestReadTableMultiShard) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::Normal);
+        TestReadTableMultiShard(EReadTableMultiShardMode::Normal, false);
     }
 
     Y_UNIT_TEST(TestReadTableMultiShardUseSnapshot) {
-        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot);
+        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot, false);
+    }
+
+    Y_UNIT_TEST(TestReadTableMultiShardWholeTable) {
+        TestReadTableMultiShard(EReadTableMultiShardMode::Normal, true);
+    }
+
+    Y_UNIT_TEST(TestReadTableMultiShardWholeTableUseSnapshot) {
+        TestReadTableMultiShard(EReadTableMultiShardMode::UseSnapshot, true);
     }
 
     void TestReadTableMultiShardWithDescribe(bool rowLimit) {

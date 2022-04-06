@@ -1340,6 +1340,120 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
     return precompute;
 }
 
+// TODO: Remove once precomputes are supported in YQ
+TExprBase DqRewriteLengthOfStageOutputLegacy(TExprBase node, TExprContext& ctx, IOptimizationContext&) {
+    if (!node.Maybe<TCoLength>().List().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto dqUnion = node.Cast<TCoLength>().List().Cast<TDqCnUnionAll>();
+
+    auto zero = Build<TCoUint64>(ctx, node.Pos())
+                    .Literal().Build("0")
+                    .Done();
+
+    auto field = BuildAtom("_dq_agg_cnt", node.Pos(), ctx);
+
+    auto combine = Build<TCoCombineByKey>(ctx, node.Pos())
+            .Input(dqUnion)
+            .PreMapLambda()
+                .Args({"item"})
+                .Body<TCoJust>()
+                    .Input("item")
+                    .Build()
+                .Build()
+            .KeySelectorLambda()
+                .Args({"item"})
+                .Body(zero)
+                .Build()
+            .InitHandlerLambda()
+                .Args({"key", "item"})
+                .Body<TCoUint64>()
+                    .Literal().Build("1")
+                    .Build()
+                .Build()
+            .UpdateHandlerLambda()
+                .Args({"key", "item", "state"})
+                .Body<TCoInc>()
+                    .Value("state")
+                    .Build()
+                .Build()
+            .FinishHandlerLambda()
+                .Args({"key", "state"})
+                .Body<TCoJust>()
+                    .Input<TCoAsStruct>()
+                        .Add<TCoNameValueTuple>()
+                            .Name(field)
+                            .Value("state")
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+
+    const auto stub = MakeBool<false>(node.Pos(), ctx);
+
+    auto partition = Build<TCoPartitionsByKeys>(ctx, node.Pos())
+            .Input(combine)
+            .KeySelectorLambda()
+                .Args({"item"})
+                .Body(stub)
+                .Build()
+            .SortDirections<TCoVoid>()
+                .Build()
+            .SortKeySelectorLambda<TCoVoid>()
+                .Build()
+            .ListHandlerLambda()
+                .Args({"list"})
+                .Body<TCoCondense1>()
+                    .Input("list")
+                    .InitHandler(BuildIdentityLambda(node.Pos(), ctx)) // take struct from CombineByKey result
+                    .SwitchHandler()
+                        .Args({"item", "state"})
+                        .Body(stub)
+                        .Build()
+                    .UpdateHandler()
+                        .Args({"item", "state"})
+                        .Body<TCoAsStruct>()
+                            .Add<TCoNameValueTuple>()
+                                .Name(field)
+                                .Value<TCoAggrAdd>()
+                                    .Left<TCoMember>()
+                                        .Struct("state")
+                                        .Name(field)
+                                        .Build()
+                                    .Right<TCoMember>()
+                                        .Struct("item")
+                                        .Name(field)
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+
+    auto toOptional = Build<TCoToOptional>(ctx, node.Pos())
+            .List(partition)
+            .Done();
+
+    auto coalesce = Build<TCoCoalesce>(ctx, node.Pos())
+            .Predicate(toOptional)
+            .Value<TCoAsStruct>()
+                .Add<TCoNameValueTuple>()
+                    .Name(field)
+                    .Value(zero)
+                    .Build()
+                .Build()
+            .Done();
+
+    return Build<TCoMember>(ctx, node.Pos())
+        .Struct(coalesce)
+        .Name(field)
+        .Done();
+}
+
 TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
     if (!IsDqPureExpr(node)) {
         return node;

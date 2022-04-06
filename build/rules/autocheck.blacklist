@@ -418,3 +418,7 @@ travel/frontend
 classifieds/infra/prometheus-juggler-generator
 classifieds/infra/prometheus-config
 classifieds/infra/ansible-juggler-configs
+pythia/libs/js_utils
+pythia/libs/db_wrapper
+pythia/apps/lbch
+pythia/libs/frontend

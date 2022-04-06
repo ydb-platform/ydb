@@ -1,6 +1,7 @@
 #include "change_record.h"
 #include "export_common.h"
 
+#include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
@@ -142,7 +143,7 @@ static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& valu
     }
 }
 
-void TChangeRecord::SerializeTo(NJson::TJsonValue& key, NJson::TJsonValue& value) const {
+void TChangeRecord::SerializeTo(NJson::TJsonValue& json) const {
     switch (Kind) {
         case EKind::CdcDataChange: {
             Y_VERIFY(Schema);
@@ -150,32 +151,32 @@ void TChangeRecord::SerializeTo(NJson::TJsonValue& key, NJson::TJsonValue& value
             NKikimrChangeExchange::TChangeRecord::TDataChange body;
             Y_VERIFY(body.ParseFromArray(Body.data(), Body.size()));
 
-            SerializeJsonKey(Schema, key, body.GetKey());
+            SerializeJsonKey(Schema, json["key"], body.GetKey());
 
             if (body.HasOldImage()) {
-                SerializeJsonValue(Schema, value["oldImage"], body.GetOldImage());
+                SerializeJsonValue(Schema, json["oldImage"], body.GetOldImage());
             }
 
             if (body.HasNewImage()) {
-                SerializeJsonValue(Schema, value["newImage"], body.GetNewImage());
+                SerializeJsonValue(Schema, json["newImage"], body.GetNewImage());
             }
 
             const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
             switch (body.GetRowOperationCase()) {
                 case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
-                    value["update"].SetType(NJson::EJsonValueType::JSON_MAP);
+                    json["update"].SetType(NJson::EJsonValueType::JSON_MAP);
                     if (!hasAnyImage) {
-                        SerializeJsonValue(Schema, value["update"], body.GetUpsert());
+                        SerializeJsonValue(Schema, json["update"], body.GetUpsert());
                     }
                     break;
                 case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
-                    value["reset"].SetType(NJson::EJsonValueType::JSON_MAP);
+                    json["reset"].SetType(NJson::EJsonValueType::JSON_MAP);
                     if (!hasAnyImage) {
-                        SerializeJsonValue(Schema, value["reset"], body.GetReset());
+                        SerializeJsonValue(Schema, json["reset"], body.GetReset());
                     }
                     break;
                 case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
-                    value["erase"].SetType(NJson::EJsonValueType::JSON_MAP);
+                    json["erase"].SetType(NJson::EJsonValueType::JSON_MAP);
                     break;
                 default:
                     Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
@@ -233,7 +234,7 @@ TString TChangeRecord::GetPartitionKey() const {
             NJson::TJsonValue key;
             SerializeJsonKey(Schema, key, body.GetKey());
 
-            PartitionKey.ConstructInPlace(WriteJson(key, false));
+            PartitionKey.ConstructInPlace(MD5::Calc(WriteJson(key, false)));
             break;
         }
 

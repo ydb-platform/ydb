@@ -1,9 +1,14 @@
 #include "datashard_ut_common.h"
 
+#include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/json/json_reader.h>
+
 #include <ydb/core/base/path.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
+#include <util/generic/size_literals.h>
+#include <util/string/printf.h>
 #include <util/string/strip.h>
 
 namespace NKikimr {
@@ -699,9 +704,20 @@ Y_UNIT_TEST_SUITE(Cdc) {
         };
     }
 
+    TString CalcPartitionKey(const TString& data) {
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(data, &json));
+
+        NJson::TJsonValue::TMapType root;
+        UNIT_ASSERT(json.GetMap(&root));
+
+        UNIT_ASSERT(root.contains("key"));
+        return MD5::Calc(root.at("key").GetStringRobust());
+    }
+
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<std::pair<TString, TString>>& records)
+                const TVector<TString>& queries, const TVector<TString>& records)
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
@@ -733,8 +749,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 if (auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        UNIT_ASSERT_VALUES_EQUAL(record.first, item.GetPartitionKey());
-                        UNIT_ASSERT_VALUES_EQUAL(record.second, item.GetData());
+                        UNIT_ASSERT_VALUES_EQUAL(record, item.GetData());
+                        UNIT_ASSERT_VALUES_EQUAL(CalcPartitionKey(record), item.GetPartitionKey());
                     }
                 } else if (auto* create = std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
                     create->Confirm();
@@ -778,7 +794,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<std::pair<TString, TString>>& records)
+                const TVector<TString>& queries, const TVector<TString>& records)
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
@@ -829,8 +845,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 for (ui32 i = 0; i < records.size(); ++i) {
                     const auto& actual = res.GetResult().records().at(i);
                     const auto& expected = records.at(i);
-                    UNIT_ASSERT_VALUES_EQUAL(actual.partition_key(), expected.first);
-                    UNIT_ASSERT_VALUES_EQUAL(actual.data(), expected.second);
+                    UNIT_ASSERT_VALUES_EQUAL(actual.data(), expected);
+                    UNIT_ASSERT_VALUES_EQUAL(actual.partition_key(), CalcPartitionKey(expected));
                 }
             }
 
@@ -877,10 +893,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
         )"}, { 
-            {"[1]", R"({"update":{}})"},
-            {"[2]", R"({"update":{}})"},
-            {"[3]", R"({"update":{}})"},
-            {"[1]", R"({"erase":{}})"},
+            R"({"update":{},"key":[1]})",
+            R"({"update":{},"key":[2]})",
+            R"({"update":{},"key":[3]})",
+            R"({"erase":{},"key":[1]})",
         });
     }
 
@@ -893,10 +909,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
         )"}, { 
-            {"[1]", R"({"update":{"value":10}})"},
-            {"[2]", R"({"update":{"value":20}})"},
-            {"[3]", R"({"update":{"value":30}})"},
-            {"[1]", R"({"erase":{}})"},
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"erase":{},"key":[1]})",
         });
     }
 
@@ -914,13 +930,32 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
         )"}, { 
-            {"[1]", R"({"update":{},"newImage":{"value":10}})"},
-            {"[2]", R"({"update":{},"newImage":{"value":20}})"},
-            {"[3]", R"({"update":{},"newImage":{"value":30}})"},
-            {"[1]", R"({"update":{},"newImage":{"value":100},"oldImage":{"value":10}})"},
-            {"[2]", R"({"update":{},"newImage":{"value":200},"oldImage":{"value":20}})"},
-            {"[3]", R"({"update":{},"newImage":{"value":300},"oldImage":{"value":30}})"},
-            {"[1]", R"({"erase":{},"oldImage":{"value":100}})"},
+            R"({"update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"erase":{},"key":[1],"oldImage":{"value":100}})",
+        });
+    }
+
+    TShardedTableOptions Utf8Table() {
+        return TShardedTableOptions()
+            .Columns({
+                {"key", "Utf8", true, false},
+                {"value", "Uint32", false, false},
+            });
+    }
+
+    Y_UNIT_TEST_TWIN(HugeKey, PqRunner, YdsRunner) {
+        const auto key = TString(512_KB, 'A');
+
+        TRunner::Read(Utf8Table(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {Sprintf(R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            ("%s", 1);
+        )", key.c_str())}, {
+            Sprintf(R"({"update":{},"key":["%s"]})", key.c_str()),
         });
     }
 

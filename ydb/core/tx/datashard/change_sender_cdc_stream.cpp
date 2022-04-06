@@ -5,7 +5,6 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_writer.h>
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -20,8 +19,6 @@ namespace NDataShard {
 using namespace NPQ;
 
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
-    static constexpr auto CodecRaw = 0;
-
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -92,33 +89,27 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 ? TInstant::FromValue(record.GetGroup())
                 : TInstant::MilliSeconds(record.GetStep());
 
-            NKikimrPQClient::TDataChunk data;
-            data.SetSeqNo(record.GetSeqNo());
-            data.SetCreateTime(createdAt.MilliSeconds());
-            data.SetCodec(CodecRaw);
-            // TODO: meta?
-
             auto& cmd = *request.MutablePartitionRequest()->AddCmdWrite();
             cmd.SetSeqNo(record.GetSeqNo());
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
             cmd.SetCreateTimeMS(createdAt.MilliSeconds());
+
+            NKikimrPQClient::TDataChunk data;
+            data.SetCodec(0 /* CODEC_RAW */);
 
             switch (Format) {
                 case NKikimrSchemeOp::ECdcStreamFormatProto: {
                     NKikimrChangeExchange::TChangeRecord protoRecord;
                     record.SerializeTo(protoRecord);
                     data.SetData(protoRecord.SerializeAsString());
-                    cmd.SetData(data.SerializeAsString());
                     break;
                 }
 
                 case NKikimrSchemeOp::ECdcStreamFormatJson: {
-                    NJson::TJsonValue key;
-                    NJson::TJsonValue value;
-                    record.SerializeTo(key, value);
-                    data.SetData(WriteJson(value, false));
-                    cmd.SetData(data.SerializeAsString());
-                    cmd.SetPartitionKey(WriteJson(key, false));
+                    NJson::TJsonValue json;
+                    record.SerializeTo(json);
+                    data.SetData(WriteJson(json, false));
+                    cmd.SetPartitionKey(record.GetPartitionKey());
                     break;
                 }
 
@@ -129,6 +120,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 }
             }
 
+            cmd.SetData(data.SerializeAsString());
             Pending.push_back(record.GetSeqNo());
         }
 
@@ -646,7 +638,7 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
 
             case NKikimrSchemeOp::ECdcStreamFormatJson: {
                 using namespace NKikimr::NDataStreams::V1;
-                const auto hashKey = HexBytesToDecimal(MD5::Calc(record.GetPartitionKey()));
+                const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
                 return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());
             }
 

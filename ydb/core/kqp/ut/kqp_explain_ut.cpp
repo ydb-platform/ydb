@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter-Aggregate-Sort");
+        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter-Aggregate");
         UNIT_ASSERT(join1.IsDefined());
         auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join2.IsDefined());

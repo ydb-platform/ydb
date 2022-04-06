@@ -19,4 +19,5 @@ $agg = (
 SELECT a.Group, a.Count, t.Value
 FROM $agg AS a
 LEFT JOIN Temp AS t
-ON a.Group = t.Group;
+ON a.Group = t.Group
+ORDER BY a.Group, a.Count, t.Value

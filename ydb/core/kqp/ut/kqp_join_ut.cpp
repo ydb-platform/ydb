@@ -796,7 +796,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 ON t1.Fk21 == t2.Key1
                 LEFT JOIN `/Root/Join1_3` AS t3
                 ON t2.Fk3 = t3.Key
-                GROUP BY t1.Value;
+                GROUP BY t1.Value
+                ORDER BY t1.Value;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -812,7 +813,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 ON t1.Fk21 == t2.Key1
                 LEFT JOIN `/Root/Join1_3` AS t3
                 ON t2.Fk3 = t3.Key
-                GROUP BY t1.Value LIMIT 3;
+                GROUP BY t1.Value
+                ORDER BY t1.Value LIMIT 3;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

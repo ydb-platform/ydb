@@ -1598,29 +1598,41 @@ void TDataShard::CheckMediatorStateRestored() {
     // When some coordinators are still pending we use CoordinatorPrevReadStepMax
     // as a worst case read step in the future, hoping to make a tighter
     // prediction while we wait for that.
-    const ui64 step = CoordinatorSubscriptionsPending == 0
+    // Note we always need to wait for CoordinatorPrevReadStepMax because
+    // previous generation may have observed it and may have replied to
+    // immediate writes at that step.
+    const ui64 waitStep = CoordinatorPrevReadStepMax;
+    const ui64 readStep = CoordinatorSubscriptionsPending == 0
         ? Min(CoordinatorPrevReadStepMax, CoordinatorPrevReadStepMin)
         : CoordinatorPrevReadStepMax;
+
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored: waitStep# " << waitStep << " readStep# " << readStep);
 
     // WARNING: we must perform this check BEFORE we update unprotected read edge
     // We may enter this code path multiple times, and we expect that the above
     // read step may be refined while we wait based on pessimistic backup step.
-    if (GetMaxObservedStep() < step) {
+    if (GetMaxObservedStep() < waitStep) {
         // We need to wait until we observe mediator step that is at least
         // as large as the step we found.
-        if (MediatorTimeCastWaitingSteps.insert(step).second) {
-            Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
+        if (MediatorTimeCastWaitingSteps.insert(waitStep).second) {
+            Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), waitStep));
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << waitStep << " from mediator time cast");
         }
         return;
     }
 
     // Using the inferred last read step we restore the pessimistic unprotected
     // read edge. Note we only need to do so if there have actually been any
-    // unprotected reads in this datashard history.
-    const TRowVersion lastReadEdge(step, Max<ui64>());
+    // unprotected reads in this datashard history. We also need to make sure
+    // this edge is at least one smaller than ImmediateWriteEdge when we know
+    // we started unconfirmed immediate writes in the last generation.
     if (SnapshotManager.GetPerformedUnprotectedReads()) {
-        SnapshotManager.PromoteUnprotectedReadEdge(lastReadEdge);
+        const TRowVersion lastReadEdge(readStep, Max<ui64>());
+        const TRowVersion preImmediateWriteEdge =
+            SnapshotManager.GetImmediateWriteEdge().Step > SnapshotManager.GetCompleteEdge().Step
+            ? SnapshotManager.GetImmediateWriteEdge().Prev()
+            : TRowVersion::Min();
+        SnapshotManager.PromoteUnprotectedReadEdge(Max(lastReadEdge, preImmediateWriteEdge));
     }
 
     // Promote the replied immediate write edge up to the currently observed step

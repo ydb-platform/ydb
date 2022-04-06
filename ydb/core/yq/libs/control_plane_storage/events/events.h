@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/interconnect/events_local.h>
 
-#include <ydb/public/api/protos/draft/yq_private.pb.h>
+#include <ydb/core/yq/libs/protos/yq_private.pb.h>
 #include <ydb/public/api/protos/yq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 

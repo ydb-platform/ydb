@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/public/api/protos/draft/yq_private.pb.h>
+#include <ydb/core/yq/libs/protos/yq_private.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 

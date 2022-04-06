@@ -16,6 +16,7 @@ target_link_libraries(api-grpc-draft PUBLIC
   yutil
   contrib-libs-grpc
   api-protos
+  yq-libs-protos
   contrib-libs-protobuf
 )
 target_proto_messages(api-grpc-draft PRIVATE

@@ -7,7 +7,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
-#include <ydb/public/api/protos/draft/yq_private.pb.h>
+#include <ydb/core/yq/libs/protos/yq_private.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yq/scope.h>
 

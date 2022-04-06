@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/public/api/protos/draft/yq_private.pb.h>
+#include <ydb/core/yq/libs/protos/yq_private.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {

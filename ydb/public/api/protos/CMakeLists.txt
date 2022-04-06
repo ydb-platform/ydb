@@ -21,7 +21,6 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_long_tx.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/draft/yq_private.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_auth.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_persqueue_v1.proto
@@ -54,7 +53,6 @@ target_sources(api-protos PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/ydb_long_tx.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/ydb_logstore.pb.cc
-  ${CMAKE_BINARY_DIR}/ydb/public/api/protos/draft/yq_private.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/persqueue_error_codes_v1.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_auth.pb.cc
   ${CMAKE_BINARY_DIR}/ydb/public/api/protos/ydb_persqueue_v1.pb.cc

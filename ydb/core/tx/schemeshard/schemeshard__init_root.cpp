@@ -107,7 +107,6 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         newPath->PathType = TPathElement::EPathType::EPathTypeDir;
         newPath->DirAlterVersion = 1;
         newPath->UserAttrs->AlterVersion = 1;
-        newPath->CachedEffectiveACL.Init(newPath->ACL);
         Self->PathsById[Self->RootPathId()] = newPath;
         Self->NextLocalPathId = Self->RootPathId().LocalPathId + 1;
         Self->NextLocalShardIdx = 1;
@@ -125,6 +124,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             diffAcl.AddAccess(ace);
         }
         newPath->ApplyACL(diffAcl.SerializeAsString());
+        newPath->CachedEffectiveACL.Init(newPath->ACL);
         newDomain->UpdateSecurityState(Self->LoginProvider.GetSecurityState());
 
         Self->PersistUserAttributes(db, Self->RootPathId(), nullptr, newPath->UserAttrs);

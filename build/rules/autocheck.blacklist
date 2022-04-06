@@ -457,3 +457,8 @@ data-ui/cloud-docfarm
 market/front/libs/gauge/gauge
 market/front/libs/List
 market/front/libs/greed
+classifieds/infra/ydb-backups
+classifieds/infra/vertis-packages
+market/front/libs/fingerprintjs
+data-ui/image-generator
+portal/archive/specialprojects

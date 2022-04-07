@@ -1,2 +1,2 @@
 items:
-- include: { path: yql/docs_yfm/docs/ru/yql-core/toc_m.yaml }
+- include: { mode: merge, path: ../../../yql/docs_yfm/docs/ru/yql-core/toc_m.yaml }

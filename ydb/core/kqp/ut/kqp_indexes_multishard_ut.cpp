@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -15,10 +16,24 @@ using namespace NYdb::NScripting;
 
 namespace {
 
-NYdb::NTable::TDataQueryResult ExecuteDataQuery(NYdb::NTable::TSession& session, const TString& query) {
+TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table) {
+    TReadTableSettings settings;
+    settings.Ordered(true);
+    auto it = session.ReadTable(table, settings).GetValueSync();
+    UNIT_ASSERT(it.IsSuccess());
+    return StreamResultToYson(it);
+}
+
+NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query) {
     const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
     return session.ExecuteDataQuery(query, txSettings).ExtractValueSync();
 }
+
+NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query, TParams& params) {
+    const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+    return session.ExecuteDataQuery(query, txSettings, params).ExtractValueSync();
+}
+
 
 void CreateTableWithMultishardIndex(Tests::TClient& client) {
     const TString scheme =  R"(Name: "MultiShardIndexed"
@@ -33,6 +48,65 @@ void CreateTableWithMultishardIndex(Tests::TClient& client) {
 
     auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"});
     UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+}
+
+void CreateTableWithMultishardIndexAndDataColumn(Tests::TClient& client) {
+    const TString scheme =  R"(Name: "MultiShardIndexedWithDataColumn"
+        Columns { Name: "key"    Type: "Uint64" }
+        Columns { Name: "fk"    Type: "Uint32" }
+        Columns { Name: "value"  Type: "Utf8" }
+        Columns { Name: "ext_value"  Type: "Utf8" }
+        KeyColumnNames: ["key"])";
+
+    NKikimrSchemeOp::TTableDescription desc;
+    bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &desc);
+    UNIT_ASSERT(parseOk);
+
+    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"}, {"value"});
+    UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+}
+
+void FillTableWithDataColumn(NYdb::NTable::TTableClient& db) {
+    auto param = db.GetParamsBuilder()
+        .AddParam("$rows")
+            .BeginList()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Uint64(1)
+                    .AddMember("fk").Uint32(1000000000u)
+                    .AddMember("value").Utf8("v1")
+                .EndStruct()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Uint64(2)
+                    .AddMember("fk").Uint32(2000000000u)
+                    .AddMember("value").Utf8("v2")
+                .EndStruct()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Uint64(3)
+                    .AddMember("fk").Uint32(3000000000u)
+                    .AddMember("value").Utf8("v3")
+                .EndStruct()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Uint64(4)
+                    .AddMember("fk").Uint32(4294967295u)
+                    .AddMember("value").Utf8("v4")
+                .EndStruct()
+            .EndList()
+            .Build()
+        .Build();
+
+    const TString query(R"(
+        DECLARE $rows AS 'List < Struct<key: Uint64, fk: Uint32, value: Utf8 > >';
+        UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, value)
+        SELECT key, fk, value FROM AS_TABLE($rows);
+    )");
+
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    auto result = ExecuteDataQuery(session, query, param);
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
 template<bool UseNewEngine>
@@ -315,6 +389,688 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+    }
+
+    Y_UNIT_TEST_QUAD(DataColumnUpsertMixedSemantic, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTableWithMultishardIndexAndDataColumn(kikimr.GetTestClient());
+        FillTableWithDataColumn(db);
+
+        // Just check table prepared
+        {
+            const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Upsert using pk and some other column. Index will be read from table value from user input.
+        // For the first row - insert semantic, the pk absent in the table
+        // for the second row - update semantic, the pk found
+        // This test checks the implementation has correct handle not exact semantic for table lookup
+        // (the lenth of lookup result is not equal to the lengh of the user input)
+        {
+            const TString query1(Q1_(R"(
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, value, ext_value) VALUES
+                (0u, "v0_", "Something"),
+                (1u, "v1_", "Something");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[0u];["v0_"]];[[1000000000u];[1u];["v1_"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DataColumnWriteNull, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTableWithMultishardIndexAndDataColumn(kikimr.GetTestClient());
+        FillTableWithDataColumn(db);
+
+        // Just check table prepared
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Upsert using pk and some other column. Index will be read from table value from user input.
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, value, ext_value) VALUES
+                (1u, NULL, "Something");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];#];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+        // Upsert using pk and some other column. But pass null as input.
+
+        {
+            auto param = db.GetParamsBuilder()
+                .AddParam("$rows")
+                    .EmptyList(
+                        TTypeBuilder()
+                            .BeginStruct()
+                                .AddMember("key").BeginOptional().Primitive(EPrimitiveType::Uint64).EndOptional()
+                                .AddMember("value").BeginOptional().Primitive(EPrimitiveType::Utf8).EndOptional()
+                                .AddMember("ext_value").BeginOptional().Primitive(EPrimitiveType::Utf8).EndOptional()
+                            .EndStruct()
+                        .Build()
+                    )
+                    .Build()
+                .Build();
+
+            const TString query1(Q1_(R"(
+                DECLARE $rows AS List<Struct<
+                    key : Uint64?,
+                    value : Utf8?,
+                    ext_value : Utf8?
+                >>;
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn`
+                SELECT * FROM AS_TABLE($rows);
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), param)
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];#];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DataColumnWrite, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTableWithMultishardIndexAndDataColumn(kikimr.GetTestClient());
+        FillTableWithDataColumn(db);
+
+        // Upsert using previous inserved pk and fk, check data column realy updated
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, value) VALUES
+                (4u, 4294967295u, "v4_1");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4_1"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Upsert using previous inserved pk but without fk, check data column still realy updated
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, value) VALUES
+                (4u, "v4_2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Upsert using new pk without fk
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, value) VALUES
+                (4000000000u, "vvvv");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[4000000000u];["vvvv"]];[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Upsert using pk, fk, and some other column. Data column in index must have old value
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, ext_value) VALUES
+                (3u, 3000000000u, "Something");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[4000000000u];["vvvv"]];[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Replace row
+        {
+            const TString query1(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, value) VALUES
+                (3u, 3000000000u, "v3_3");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[4000000000u];["vvvv"]];[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3_3"]];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Replace row but no specify data column
+        {
+            const TString query1(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk) VALUES
+                (3u, 3000000000u);
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[4000000000u];["vvvv"]];[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];#];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Replace row specify data column but no index column
+        {
+            const TString query1(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexedWithDataColumn` (key, value) VALUES
+                (2u, "v2_3");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["v2_3"]];[#;[4000000000u];["vvvv"]];[[1000000000u];[1u];["v1"]];[[3000000000u];[3u];#];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Replace just by pk
+        {
+            const TString query1(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexedWithDataColumn` (key) VALUES
+                (2u);
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];#];[#;[4000000000u];["vvvv"]];[[1000000000u];[1u];["v1"]];[[3000000000u];[3u];#];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Delete
+        {
+            const TString query1(Q_(R"(
+                DELETE FROM `/Root/MultiShardIndexedWithDataColumn` ON (key) VALUES
+                (4000000000u), (1u);
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];#];[[3000000000u];[3u];#];[[4294967295u];[4u];["v4_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Delete all
+        {
+            const TString query1(Q_(R"(
+                DELETE FROM `/Root/MultiShardIndexedWithDataColumn`;
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = "[]";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Insert new row in empty table
+        {
+            const TString query1(Q_(R"(
+                INSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, value) VALUES
+                (1u, 1000000000u, "Value1");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];["Value1"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Insert row with same pk
+        {
+            const TString query1(R"(
+                INSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, value) VALUES
+                (1u, 1000000000u, "Value1_1");
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+        }
+
+        // Index table has not been changed
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[1000000000u];[1u];["Value1"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Insert new row but no specify index column
+        {
+            const TString query1(Q_(R"(
+                INSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, value) VALUES
+                (2u, "Value2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["Value2"]];[[1000000000u];[1u];["Value1"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Update on
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/MultiShardIndexedWithDataColumn` ON (key, fk, value) VALUES
+                (0u, 0u, "Value0_0"),
+                (1u, 1000000000u, "Value1_1");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["Value2"]];[[1000000000u];[1u];["Value1_1"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        {
+
+            const TString query1(Q_(R"(
+                UPDATE `/Root/MultiShardIndexedWithDataColumn` ON (key, value) VALUES
+                (1u, "Value1_2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["Value2"]];[[1000000000u];[1u];["Value1_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/MultiShardIndexedWithDataColumn` ON (key, fk, ext_value) VALUES
+                (1u, 11u, "Something");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["Value2"]];[[11u];[1u];["Value1_2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Update where - update data column
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/MultiShardIndexedWithDataColumn` SET value = "Value1_3"
+                WHERE key = 1u;
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["Value2"]];[[11u];[1u];["Value1_3"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Update were - do not touch index
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/MultiShardIndexedWithDataColumn` SET ext_value = "Something2"
+                WHERE key = 1u;
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["Value2"]];[[11u];[1u];["Value1_3"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+        // Update where - update index column
+        {
+            const TString query1(Q_(R"(
+                UPDATE `/Root/MultiShardIndexedWithDataColumn` SET fk = 111111111u
+                WHERE key = 1u;
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[#;[2u];["Value2"]];[[111111111u];[1u];["Value1_3"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DataColumnSelect, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
+                ("p2", "s2", "2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                (1, 111, "Secondary1");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/SecondaryWithDataColumns` VIEW Index WHERE Index2 = 'Secondary1';
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                     query,
+                                     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                                     execSettings)
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value1\"]]]");
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+
+        }
+
+        {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+            const TString query = Q1_(R"(
+                SELECT Value FROM `/Root/SecondaryWithDataColumns` VIEW Index WHERE Index2 IN ('Secondary1');
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                                     query,
+                                     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                                     execSettings)
+                              .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value1\"]]]");
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+        }
+
+        {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            const TString query = Q1_(R"(
+                SELECT t2.Value FROM `/Root/SecondaryKeys` as t1
+                    INNER JOIN `/Root/SecondaryWithDataColumns` VIEW Index as t2 ON t2.Index2 = t1.Value;
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                    query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                    execSettings)
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                "[[[\"Value1\"]]]");
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            int phaseCount = 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
+            if (WithMvcc && !UseNewEngine) {
+                phaseCount--;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), phaseCount);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryKeys");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
+
+            int idx = UseNewEngine ? 2 : 1;
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(idx).table_access().size(), 1, stats.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+        }
+
+        {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            const TString query = Q1_(R"(
+                SELECT t2.Value FROM `/Root/SecondaryWithDataColumns` VIEW Index as t1
+                    INNER JOIN `/Root/KeyValue2` as t2 ON t2.Key = t1.Value WHERE t1.Index2 = "s2";
+            )");
+
+            auto result = session.ExecuteDataQuery(
+                    query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                    execSettings)
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                "[[[\"Two\"]]]");
+
+            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            int phaseCount = 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
+            if (WithMvcc && !UseNewEngine) {
+                phaseCount--;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), phaseCount);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+
+            int idx = phaseCount - 1;
+            if (!WithMvcc && !UseNewEngine) {
+                idx--;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(idx).table_access().size(), 1, stats.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/KeyValue2");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+        }
     }
 }
 

@@ -600,6 +600,31 @@ TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it) {
     return StreamResultToYsonImpl(it, nullptr);
 }
 
+TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it) {
+    TStringStream out;
+    NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+    writer.OnBeginList();
+
+    ui32 profileIndex = 0;
+
+    for (;;) {
+        auto streamPart = it.ReadNext().GetValueSync();
+        if (!streamPart.IsSuccess()) {
+            UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+            break;
+        }
+
+        auto resultSet = streamPart.ExtractPart();
+        PrintResultSet(resultSet, writer);
+
+        profileIndex++;
+    }
+
+    writer.OnEndList();
+
+    return out.Str();
+}
+
 TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it) {
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
@@ -693,7 +718,9 @@ TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator&
 }
 
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table) {
-    auto it = session.ReadTable(table).GetValueSync();
+    TReadTableSettings settings;
+    settings.Ordered(true);
+    auto it = session.ReadTable(table, settings).GetValueSync();
     UNIT_ASSERT(it.IsSuccess());
 
     TReadTableResultPart streamPart = it.ReadNext().GetValueSync();

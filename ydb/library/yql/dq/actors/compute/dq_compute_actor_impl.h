@@ -110,7 +110,7 @@ public:
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const std::exception& e) {
-            InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
+            InternalError(TIssuesIds::UNEXPECTED, e.what());
         }
 
         ReportEventElapsedTime();

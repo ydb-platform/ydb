@@ -101,7 +101,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
 
             if (proc.Kind == NPg::EProcKind::Aggregate) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Aggregate function " << name << " cannot be called directly "));
+                    TStringBuilder() << "Aggregate function " << name << " cannot be called directly"));
                 return IGraphTransformer::TStatus::Error;
             }
 

@@ -95,7 +95,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
 
             if (proc.Kind == NPg::EProcKind::Window) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Window function " << name << " cannot be called directly with window specification"));
+                    TStringBuilder() << "Window function " << name << " cannot be called directly"));
                 return IGraphTransformer::TStatus::Error;
             }
 

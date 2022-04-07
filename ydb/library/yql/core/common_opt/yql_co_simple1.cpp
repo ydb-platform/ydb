@@ -4125,6 +4125,42 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Chopper"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+        if (const auto extractor = node->Child(1); !extractor->Tail().GetDependencyScope()->first) {
+            if (IsDepended(node->Tail().Tail(), node->Tail().Head().Head()) || IsDepended(node->Child(2)->Tail(), node->Child(2)->Head().Head())) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " by constant key.";
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Add(0, node->HeadPtr())
+                        .Add(1, node->ChildPtr(1))
+                        .Lambda(2)
+                            .Param("stub")
+                            .Param("item")
+                            .Apply(*node->Child(2))
+                                .With(0, extractor->TailPtr())
+                                .With(1, "item")
+                            .Seal()
+                        .Seal()
+                        .Lambda(3)
+                            .Param("stub")
+                            .Param("flow")
+                            .Apply(node->Tail())
+                                .With(0, extractor->TailPtr())
+                                .With(1, "flow")
+                            .Seal()
+                        .Seal()
+                    .Seal().Build();
+            }
+
+            if (node->Child(2)->Tail().IsCallable("Bool") && !FromString<bool>(node->Child(2)->Tail().Head().Content())) {
+                YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " by constant key.";
+                return ctx.Builder(node->Pos())
+                    .Apply(node->Tail())
+                        .With(0, extractor->TailPtr())
+                        .With(1, node->HeadPtr())
+                    .Seal().Build();
+            }
+        }
+
         if (!IsDepended(node->Tail().Tail(), node->Tail().Head().Tail())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " where handler isn't depended on group stream";
             return ctx.Builder(node->Pos())

@@ -41,7 +41,7 @@
 1. Install dependencies
 
     ```
-    sudo apt-get -y install git cmake python python3-pip ninja-build antlr3 m4 clang-12 lld-12 libaio1 libaio-dev
+    sudo apt-get -y install git cmake python python3-pip ninja-build antlr3 m4 clang-12 lld-12 libidn11-dev libaio1 libaio-dev
     sudo pip3 install conan
      ```
 

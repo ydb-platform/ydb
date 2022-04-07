@@ -9,7 +9,12 @@ from urllib3 import PoolManager, Timeout, proxy_from_url
 from urllib3.exceptions import (
     ConnectTimeoutError as URLLib3ConnectTimeoutError,
 )
-from urllib3.exceptions import NewConnectionError, ProtocolError, ProxyError
+from urllib3.exceptions import (
+    LocationParseError,
+    NewConnectionError,
+    ProtocolError,
+    ProxyError,
+)
 from urllib3.exceptions import ReadTimeoutError as URLLib3ReadTimeoutError
 from urllib3.exceptions import SSLError as URLLib3SSLError
 from urllib3.util.retry import Retry
@@ -19,8 +24,10 @@ from urllib3.util.ssl_ import (
     PROTOCOL_TLS,
     OP_NO_SSLv2,
     OP_NO_SSLv3,
+    is_ipaddress,
     ssl,
 )
+from urllib3.util.url import parse_url
 
 try:
     from urllib3.util.ssl_ import OP_NO_TICKET, PROTOCOL_TLS_CLIENT
@@ -36,7 +43,12 @@ except ImportError:
     from urllib3.util.ssl_ import SSLContext
 
 import botocore.awsrequest
-from botocore.compat import ensure_bytes, filter_ssl_warnings, urlparse
+from botocore.compat import (
+    IPV6_ADDRZ_RE,
+    ensure_bytes,
+    filter_ssl_warnings,
+    urlparse,
+)
 from botocore.exceptions import (
     ConnectionClosedError,
     ConnectTimeoutError,
@@ -177,6 +189,11 @@ def mask_proxy_url(proxy_url):
     return proxy_url
 
 
+def _is_ipaddress(host):
+    """Wrap urllib3's is_ipaddress to support bracketed IPv6 addresses."""
+    return is_ipaddress(host) or bool(IPV6_ADDRZ_RE.match(host))
+
+
 class ProxyConfiguration(object):
     """Represents a proxy configuration dictionary and additional settings.
 
@@ -285,14 +302,13 @@ class URLLib3Session(object):
         self._manager = PoolManager(**self._get_pool_manager_kwargs())
         self._manager.pool_classes_by_scheme = self._pool_classes_by_scheme
 
-    @property
-    def _proxies_kwargs(self):
+    def _proxies_kwargs(self, **kwargs):
         proxies_settings = self._proxy_config.settings
-        proxy_ssl_context = self._setup_proxy_ssl_context(proxies_settings)
         proxies_kwargs = {
-            'proxy_ssl_context': proxy_ssl_context,
             'use_forwarding_for_https': proxies_settings.get(
-                'proxy_use_forwarding_for_https'),
+                'proxy_use_forwarding_for_https'
+            ),
+            **kwargs
         }
         return {k: v for k, v in proxies_kwargs.items() if v is not None}
 
@@ -315,9 +331,13 @@ class URLLib3Session(object):
     def _get_proxy_manager(self, proxy_url):
         if proxy_url not in self._proxy_managers:
             proxy_headers = self._proxy_config.proxy_headers_for(proxy_url)
+            proxy_ssl_context = self._setup_proxy_ssl_context(proxy_url)
             proxy_manager_kwargs = self._get_pool_manager_kwargs(
-                proxy_headers=proxy_headers)
-            proxy_manager_kwargs.update(**self._proxies_kwargs)
+                proxy_headers=proxy_headers
+            )
+            proxy_manager_kwargs.update(
+                self._proxies_kwargs(proxy_ssl_context=proxy_ssl_context)
+            )
             proxy_manager = proxy_from_url(proxy_url, **proxy_manager_kwargs)
             proxy_manager.pool_classes_by_scheme = self._pool_classes_by_scheme
             self._proxy_managers[proxy_url] = proxy_manager
@@ -341,7 +361,8 @@ class URLLib3Session(object):
             conn.cert_reqs = 'CERT_NONE'
             conn.ca_certs = None
 
-    def _setup_proxy_ssl_context(self, proxies_settings):
+    def _setup_proxy_ssl_context(self, proxy_url):
+        proxies_settings = self._proxy_config.settings
         proxy_ca_bundle = proxies_settings.get('proxy_ca_bundle')
         proxy_cert = proxies_settings.get('proxy_client_cert')
         if proxy_ca_bundle is None and proxy_cert is None:
@@ -349,9 +370,11 @@ class URLLib3Session(object):
 
         context = self._get_ssl_context()
         try:
-            # urllib3 disables this by default but we need
-            # it for proper proxy tls negotiation.
-            context.check_hostname = True
+            url = parse_url(proxy_url)
+            # urllib3 disables this by default but we need it for proper
+            # proxy tls negotiation when proxy_url is not an IP Address
+            if not _is_ipaddress(url.host):
+                context.check_hostname = True
             if proxy_ca_bundle is not None:
                 context.load_verify_locations(cafile=proxy_ca_bundle)
 
@@ -361,7 +384,7 @@ class URLLib3Session(object):
                 context.load_cert_chain(proxy_cert)
 
             return context
-        except (IOError, URLLib3SSLError) as e:
+        except (IOError, URLLib3SSLError, LocationParseError) as e:
             raise InvalidProxiesConfigError(error=e)
 
     def _get_connection_manager(self, url, proxy_url=None):
@@ -383,7 +406,7 @@ class URLLib3Session(object):
         proxy_scheme = urlparse(proxy_url).scheme
         using_https_forwarding_proxy = (
             proxy_scheme == 'https' and
-            self._proxies_kwargs.get('use_forwarding_for_https', False)
+            self._proxies_kwargs().get('use_forwarding_for_https', False)
         )
 
         if using_https_forwarding_proxy or url.startswith('http:'):

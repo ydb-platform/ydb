@@ -70,6 +70,7 @@ struct TMetricsToSend {
 struct TMetricsInflight {
     TActorId HttpSenderId;
     ui64 MetricsCount = 0;
+    ui64 BodySize = 0;
 };
 
 } // namespace
@@ -223,7 +224,7 @@ private:
             return;
         }
 
-        HandleSuccessSolomonResponse(*res->HttpIncomingResponse->Get());
+        HandleSuccessSolomonResponse(*res->HttpIncomingResponse->Get(), ev->Cookie);
 
         while (TryToSendNextBatch()) {}
     }
@@ -340,12 +341,13 @@ private:
             const auto metricsToSend = std::get<TMetricsToSend>(variant);
             const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(metricsToSend.Data);
 
+            const auto bodySize = httpRequest->Body.Size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId));
-            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
             SINK_LOG_D("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;
-            InflightBuffer.emplace(httpRequest, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount });
+            InflightBuffer.emplace(Cookie++, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount, bodySize });
             return true;
         }
 
@@ -361,7 +363,7 @@ private:
         Y_ENSURE(false, "Bad type");
     }
 
-    void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response) {
+    void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
         SINK_LOG_D("Solomon response: " << response.Response->GetObfuscatedData());
         NJson::TJsonParser parser;
         switch (WriteParams.Shard.GetClusterType()) {
@@ -384,7 +386,7 @@ private:
         }
         Y_VERIFY(res.size() == 2);
 
-        auto ptr = InflightBuffer.find(response.Request);
+        auto ptr = InflightBuffer.find(cookie);
         Y_VERIFY(ptr != InflightBuffer.end());
 
         const ui64 writtenMetricsCount = std::stoul(res[0]);
@@ -397,7 +399,7 @@ private:
             SINK_LOG_W("Some metrics were not written. MetricsCount=" << ptr->second.MetricsCount << " writtenMetricsCount=" << writtenMetricsCount << " Solomon response: " << response.Response->GetObfuscatedData());
         }
 
-        FreeSpace += ptr->first->Body.Size();
+        FreeSpace += ptr->second.BodySize;
         if (ShouldNotifyNewFreeSpace) {
             Callbacks->ResumeExecution();
             ShouldNotifyNewFreeSpace = false;
@@ -427,10 +429,11 @@ private:
     bool ShouldNotifyNewFreeSpace = false;
     std::optional<NDqProto::TCheckpoint> CheckpointInProgress = std::nullopt;
     std::queue<std::variant<TMetricsToSend, NDqProto::TCheckpoint>> SendingBuffer;
-    THashMap<NHttp::THttpOutgoingRequestPtr, TMetricsInflight> InflightBuffer;
+    THashMap<ui64, TMetricsInflight> InflightBuffer;
 
     TMetricsEncoder UserMetricsEncoder;
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
+    ui64 Cookie = 0;
 };
 
 std::pair<NYql::NDq::IDqSinkActor*, NActors::IActor*> CreateDqSolomonWriteActor(

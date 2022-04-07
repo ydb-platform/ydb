@@ -37,7 +37,9 @@ private:
     )
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& ev) {
-        Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(ev->Get()->Request));
+        Request = ev->Get()->Request;
+        Cookie = ev->Cookie;
+        Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate()));
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
@@ -45,14 +47,14 @@ private:
         const TString& error = res->GetError();
 
         const bool isTerminal = error.empty() || MaxRetries && RetryCount >= MaxRetries;
-        Send(SenderId, new TEvHttpBase::TEvSendResult(ev, RetryCount++, isTerminal));
+        Send(SenderId, new TEvHttpBase::TEvSendResult(ev, RetryCount++, isTerminal), /*flags=*/0, Cookie);
 
         if (isTerminal) {
             PassAway();
             return;
         }
 
-        Schedule(GetRetryDelay(), new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(res->Request->Duplicate()));
+        Schedule(GetRetryDelay(), new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate()));
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
@@ -72,6 +74,8 @@ private:
 
     ui32 RetryCount = 0;
     TDuration CurrentDelay = BaseRetryDelay;
+    NHttp::THttpOutgoingRequestPtr Request;
+    ui64 Cookie = 0;
 };
 
 NActors::IActor* CreateHttpSenderActor(TActorId senderId, TActorId httpProxyId) {

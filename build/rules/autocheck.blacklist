@@ -748,3 +748,15 @@ portal/archive/mysql-meta
 portal/static-main
 market/mbo/scripts/nanny-ssh
 portal/archive/static-nginx
+taxi/infranaim/infranaim
+data-ui/infrastructure
+portal/frontend/bundle-analyzer
+investors/ir/templates
+investors/ir/nginx
+pr/company/emailer
+pr/company/nginx
+pr/company/components
+portal/powerdns
+portal/archive/ether-demo
+portal/rss-widget-db
+mail/qa/mail-ui-tests

@@ -691,3 +691,6 @@ market/front/libs/validator
 market/front/libs/hermione-page-object
 market/mbo/archive/strict-web
 market/front/libs/provision
+portal/archive/xscript-admin
+market/front/libs/geobase-native-driver
+trust/billing-autotesting-venv

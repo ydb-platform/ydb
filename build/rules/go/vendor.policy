@@ -904,7 +904,7 @@ ALLOW .* -> vendor/github.com/google/brotli/go/cbrotli
 ALLOW .* -> vendor/github.com/zeebo/bencode
 
 # CONTRIB-2516
-ALLOW .* -> github.com/gocql/gocql
+ALLOW .* -> vendor/github.com/gocql/gocql
 
 #
 # Tools

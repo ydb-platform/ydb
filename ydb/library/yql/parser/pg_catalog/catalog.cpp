@@ -259,6 +259,16 @@ public:
             LastProc.ProcId = FromString<ui32>(value);
         } else if (key == "provariadic") {
             IsSupported = false;
+        } else if (key == "prokind") {
+            if (value == "f") {
+                LastProc.Kind = EProcKind::Function;
+            } else if (value == "a") {
+                LastProc.Kind = EProcKind::Aggregate;
+            } else if (value == "w") {
+                LastProc.Kind = EProcKind::Window;
+            } else {
+                IsSupported = false;
+            }
         } else if (key == "prorettype") {
             auto idPtr = TypeByName.FindPtr(value);
             Y_ENSURE(idPtr);

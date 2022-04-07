@@ -21,6 +21,12 @@ struct TOperDesc {
     ui32 ProcId = 0;
 };
 
+enum EProcKind {
+    Function,
+    Aggregate,
+    Window
+};
+
 struct TProcDesc {
     ui32 ProcId = 0;
     TString Name;
@@ -28,6 +34,7 @@ struct TProcDesc {
     TVector<ui32> ArgTypes;
     ui32 ResultType = 0;
     bool IsStrict = true;
+    EProcKind Kind = EProcKind::Function;
 };
 
 struct TTypeDesc {

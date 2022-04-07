@@ -65,6 +65,7 @@ Y_UNIT_TEST_SUITE(TFunctionsTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("int4").TypeId);
         UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[1], LookupType("int4").TypeId);
         UNIT_ASSERT_VALUES_EQUAL(ret.Src, "int4pl");
+        UNIT_ASSERT(ret.Kind == EProcKind::Function);
 
         ret = LookupProcByStrArgTypes("substring", {"text", "int4", "int4"});
         UNIT_ASSERT_VALUES_EQUAL(ret.ResultType, LookupType("text").TypeId);
@@ -80,6 +81,12 @@ Y_UNIT_TEST_SUITE(TFunctionsTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[0], LookupType("text").TypeId);
         UNIT_ASSERT_VALUES_EQUAL(ret.ArgTypes[1], LookupType("int4").TypeId);
         UNIT_ASSERT_VALUES_EQUAL(ret.Src, "text_substr_no_len");
+
+        ret = LookupProcByStrArgTypes("sum", {"int4"});
+        UNIT_ASSERT(ret.Kind == EProcKind::Aggregate);
+
+        ret = LookupProcByStrArgTypes("row_number", {});
+        UNIT_ASSERT(ret.Kind == EProcKind::Window);
     }
 }
 

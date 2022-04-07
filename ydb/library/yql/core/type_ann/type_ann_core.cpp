@@ -3216,7 +3216,7 @@ namespace NTypeAnnImpl {
         if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
             output = ctx.Expr.Builder(input->Pos())
                 .Callable("FromFlow")
-                    .Callable("WithContext")
+                    .Callable(0, "WithContext")
                         .Callable(0, "ToFlow")
                             .Add(0, input->HeadPtr())
                         .Seal()
@@ -11256,6 +11256,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgType"] = &PgTypeWrapper;
         Functions["PgCast"] = &PgCastWrapper;
         Functions["PgAggregationTraits"] = &PgAggregationTraitsWrapper;
+        Functions["PgWindowTraits"] = &PgAggregationTraitsWrapper;
         Functions["PgInternal0"] = &PgInternal0Wrapper;
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;

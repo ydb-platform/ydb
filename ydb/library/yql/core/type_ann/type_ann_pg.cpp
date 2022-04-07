@@ -964,6 +964,7 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
 }
 
 IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    const bool onWindow = input->IsCallable("PgWindowTraits");
     if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -1248,18 +1249,36 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
     }
 
     auto typeNode = ExpandType(input->Pos(), *itemType, ctx.Expr);
-    output = ctx.Expr.Builder(input->Pos())
-        .Callable("AggregationTraits")
-            .Add(0, typeNode)
-            .Add(1, initLambda)
-            .Add(2, updateLambda)
-            .Add(3, saveLambda)
-            .Add(4, loadLambda)
-            .Add(5, mergeLambda)
-            .Add(6, finishLambda)
-            .Add(7, defaultValue)
-        .Seal()
-        .Build();
+    if (onWindow) {
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("WindowTraits")
+                .Add(0, typeNode)
+                .Add(1, initLambda)
+                .Add(2, updateLambda)
+                .Lambda(3)
+                    .Param("value")
+                    .Param("state")
+                    .Callable("Void")
+                    .Seal()
+                .Seal()
+                .Add(4, finishLambda)
+                .Add(5, defaultValue)
+            .Seal()
+            .Build();
+    } else {
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("AggregationTraits")
+                .Add(0, typeNode)
+                .Add(1, initLambda)
+                .Add(2, updateLambda)
+                .Add(3, saveLambda)
+                .Add(4, loadLambda)
+                .Add(5, mergeLambda)
+                .Add(6, finishLambda)
+                .Add(7, defaultValue)
+            .Seal()
+            .Build();
+    }
 
     return IGraphTransformer::TStatus::Repeat;
 }

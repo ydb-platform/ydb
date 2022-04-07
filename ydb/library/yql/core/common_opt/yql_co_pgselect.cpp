@@ -476,6 +476,30 @@ std::tuple<TAggs, TNodeMap<ui32>> GatherAggregations(const TExprNode::TPtr& proj
     return { aggs, aggId };
 }
 
+TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow,
+    const std::pair<TExprNode::TPtr, TExprNode::TPtr>& agg,
+    const TExprNode::TPtr& listTypeNode, TExprContext& ctx) {
+    auto arg = ctx.NewArgument(pos, "row");
+    auto arguments = ctx.NewArguments(pos, { arg });
+    auto func = agg.first->Head().Content();
+    TExprNode::TListType aggFuncArgs;
+    for (ui32 j = onWindow ? 2 : 1; j < agg.first->ChildrenSize(); ++j) {
+        aggFuncArgs.push_back(ctx.ReplaceNode(agg.first->ChildPtr(j), *agg.second, arg));
+    }
+
+    auto extractor = ctx.NewLambda(pos, std::move(arguments), std::move(aggFuncArgs));
+
+    return ctx.Builder(pos)
+        .Callable(onWindow ? "PgWindowTraits" : "PgAggregationTraits")
+            .Atom(0, func)
+            .Callable(1, "ListItemType")
+                .Add(0, listTypeNode)
+            .Seal()
+            .Add(2, extractor)
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr BuildGroupByAndHaving(TPositionHandle pos, const TExprNode::TPtr& list, const TAggs& aggs, const TNodeMap<ui32>& aggId,
     const TExprNode::TPtr& groupBy, const TExprNode::TPtr& having, TExprNode::TPtr& projectionLambda, TExprContext& ctx, TOptimizeContext& optCtx) {
     auto listTypeNode = ctx.Builder(pos)
@@ -490,28 +514,11 @@ TExprNode::TPtr BuildGroupByAndHaving(TPositionHandle pos, const TExprNode::TPtr
     TNodeOnNodeOwnedMap deepClones;
     TExprNode::TListType payloadItems;
     for (ui32 i = 0; i < aggs.size(); ++i) {
-        auto func = aggs[i].first->Head().Content();
         TExprNode::TPtr traits;
         if (optCtx.Types->PgTypes) {
-            auto arg = ctx.NewArgument(pos, "row");
-            auto arguments = ctx.NewArguments(pos, { arg });
-            TExprNode::TListType aggFuncArgs;
-            for (ui32 j = 1; j < aggs[i].first->ChildrenSize(); ++j) {
-                aggFuncArgs.push_back(ctx.ReplaceNode(aggs[i].first->ChildPtr(j), *aggs[i].second, arg));
-            }
-
-            auto extractor = ctx.NewLambda(pos, std::move(arguments), std::move(aggFuncArgs));
-
-            traits = ctx.Builder(pos)
-                .Callable("PgAggregationTraits")
-                    .Atom(0, func)
-                    .Callable(1, "ListItemType")
-                        .Add(0, listTypeNode)
-                    .Seal()
-                    .Add(2, extractor)
-                .Seal()
-                .Build();
+            traits = BuildAggregationTraits(pos, false, aggs[i], listTypeNode, ctx);
         } else {
+            auto func = aggs[i].first->Head().Content();
             const auto& exports = exportsPtr->Symbols();
             if (func == "count" && aggs[i].first->ChildrenSize() == 1) {
                 func = "count_all";
@@ -806,32 +813,36 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                 bool isAgg = p.first->IsCallable("PgAggWindowCall");
                 TExprNode::TPtr value;
                 if (isAgg) {
-                    const auto& exports = exportsPtr->Symbols();
-                    if (name == "count" && p.first->ChildrenSize() == 2) {
-                        name = "count_all";
+                    if (optCtx.Types->PgTypes) {
+                        value = BuildAggregationTraits(pos, true, p, listTypeNode, ctx);
+                    } else {
+                        const auto& exports = exportsPtr->Symbols();
+                        if (name == "count" && p.first->ChildrenSize() == 2) {
+                            name = "count_all";
+                        }
+
+                        TString factory = TString(name) + "_traits_factory";
+                        const auto ex = exports.find(factory);
+                        YQL_ENSURE(exports.cend() != ex);
+                        auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+                        auto arg = ctx.NewArgument(pos, "row");
+                        auto arguments = ctx.NewArguments(pos, { arg });
+                        auto extractor = ctx.NewLambda(pos, std::move(arguments),
+                            ctx.ReplaceNode(p.first->TailPtr(), *p.second, arg));
+
+                        auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
+                            {lambda->Head().Child(0), listTypeNode},
+                            {lambda->Head().Child(1), extractor}
+                            });
+
+                        ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+                        auto status = ExpandApply(traits, traits, ctx);
+                        if (status == IGraphTransformer::TStatus::Error) {
+                            return {};
+                        }
+
+                        value = traits;
                     }
-
-                    TString factory = TString(name) + "_traits_factory";
-                    const auto ex = exports.find(factory);
-                    YQL_ENSURE(exports.cend() != ex);
-                    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
-                    auto arg = ctx.NewArgument(pos, "row");
-                    auto arguments = ctx.NewArguments(pos, { arg });
-                    auto extractor = ctx.NewLambda(pos, std::move(arguments),
-                        ctx.ReplaceNode(p.first->TailPtr(), *p.second, arg));
-
-                    auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
-                        {lambda->Head().Child(0), listTypeNode},
-                        {lambda->Head().Child(1), extractor}
-                        });
-
-                    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApply(traits, traits, ctx);
-                    if (status == IGraphTransformer::TStatus::Error) {
-                        return {};
-                    }
-
-                    value = traits;
                 } else {
                     if (name == "row_number") {
                         value = ctx.Builder(pos)

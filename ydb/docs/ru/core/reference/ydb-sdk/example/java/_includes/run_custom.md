@@ -5,7 +5,7 @@
 Выполните команду по следующему образцу:
 
 ``` bash
-<auth_mode_var>="<auth_mode_value>" java -jar examples/simple_project/target/ydb-simple-project.jar <endpoint>?database=<database>
+<auth_mode_var>="<auth_mode_value>" java -jar examples/basic_example/target/ydb-basic-example.jar <endpoint>?database=<database>
 ```
 
 , где
@@ -17,7 +17,7 @@
 
 Например:
 ``` bash
-YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." java -jar examples/simple_project/target/ydb-simple-project.jar grpcs://ydb.example.com:2135?database=/somepath/somelocation
+YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." java -jar examples/basic_example/target/ydb-basic-example.jar grpcs://ydb.example.com:2135?database=/somepath/somelocation
 ```
 
 {% include [../../_includes/pars_from_profile_hint.md](../../_includes/pars_from_profile_hint.md) %}

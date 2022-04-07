@@ -1,6 +1,6 @@
 # Приложение на Java
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/simple_project), доступного в составе [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk) {{ ydb-short-name }}.
+На этой странице подробно разбирается код [тестового приложения](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/basic_example), доступного в составе [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk) {{ ydb-short-name }}.
 
 ## Скачивание SDK и запуск примера {#download}
 

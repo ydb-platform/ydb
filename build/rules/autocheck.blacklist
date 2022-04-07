@@ -694,3 +694,7 @@ market/front/libs/provision
 portal/archive/xscript-admin
 market/front/libs/geobase-native-driver
 trust/billing-autotesting-venv
+trust/billing-ci-env
+market/front/libs/route-converter
+market/front/libs/testpalm-cli
+trust/billing-orchestra

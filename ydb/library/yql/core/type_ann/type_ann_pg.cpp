@@ -93,6 +93,18 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                 return IGraphTransformer::TStatus::Error;
             }
 
+            if (proc.Kind == NPg::EProcKind::Window) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Window function " << name << " cannot be called directly with window specification"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (proc.Kind == NPg::EProcKind::Aggregate) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Aggregate function " << name << " cannot be called directly "));
+                return IGraphTransformer::TStatus::Error;
+            }
+
             auto result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
             input->SetTypeAnn(result);
             return IGraphTransformer::TStatus::Ok;
@@ -345,7 +357,7 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
     }
 }
 
-IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -370,9 +382,9 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         }
 
         auto arg = input->Child(2)->GetTypeAnn();
-        if (arg->GetKind() == ETypeAnnotationKind::Null) {
-            input->SetTypeAnn(arg);
-        } else if (arg->GetKind() == ETypeAnnotationKind::Optional) {
+        if (arg->GetKind() == ETypeAnnotationKind::Null ||
+            arg->GetKind() == ETypeAnnotationKind::Optional ||
+            arg->GetKind() == ETypeAnnotationKind::Pg) {
             input->SetTypeAnn(arg);
         } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
@@ -384,8 +396,11 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto result = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64));
-        input->SetTypeAnn(result);
+        if (ctx.Types.PgTypes) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int8").TypeId));
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64)));
+        }
     } else {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Unsupported function: " << name));

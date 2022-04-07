@@ -217,7 +217,7 @@ public:
 
     bool IsOptionalOrNull() const {
         auto kind = GetKind();
-        return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null;
+        return kind == ETypeAnnotationKind::Optional || kind == ETypeAnnotationKind::Null || kind == ETypeAnnotationKind::Pg;
     }
 
     bool IsSingleton() const {

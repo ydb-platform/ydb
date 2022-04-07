@@ -3220,6 +3220,14 @@ bool EnsureNewSeqType(TPositionHandle position, const TTypeAnnotationNode& type,
                 return true;
             }
             break;
+        case ETypeAnnotationKind::Pg:
+            if constexpr (WithOptional) {
+                if (itemType) {
+                    *itemType = &type;
+                }
+                return true;
+            }
+            break;
         default: break;
     }
     ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() <<
@@ -3339,6 +3347,7 @@ bool EnsureCodeResourceType(const TExprNode& node, TExprContext& ctx) {
 const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, const TTypeAnnotationNode& itemType, TExprContext& ctx) {
     switch (sequenceKind) {
         case ETypeAnnotationKind::Optional: return ctx.MakeType<TOptionalExprType>(&itemType);
+        case ETypeAnnotationKind::Pg:       return &itemType;
         case ETypeAnnotationKind::Flow:     return ctx.MakeType<TFlowExprType>(&itemType);
         case ETypeAnnotationKind::List:     return ctx.MakeType<TListExprType>(&itemType);
         case ETypeAnnotationKind::Stream:   return ctx.MakeType<TStreamExprType>(&itemType);

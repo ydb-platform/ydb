@@ -74,6 +74,11 @@ TType* UnpackOptional(TRuntimeNode data, bool& isOptional) {
 }
 
 TType* UnpackOptional(TType* type, bool& isOptional) {
+    if (type->IsPg()) {
+        isOptional = true;
+        return type;
+    }
+
     isOptional = type->IsOptional();
     if (!isOptional)
         return type;

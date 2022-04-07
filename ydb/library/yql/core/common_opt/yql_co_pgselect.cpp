@@ -921,11 +921,19 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                     .Seal()
                     .Build();
 
-                if (!optCtx.Types->PgTypes && (node->Head().Content() == "row_number" || node->Head().Content() == "count")) {
+                if (!optCtx.Types->PgTypes && node->Head().Content() == "count" || node->Head().Content() == "row_number") {
                     ret = ctx.Builder(node->Pos())
                         .Callable("SafeCast")
                             .Add(0, ret)
                             .Atom(1, "Int64")
+                        .Seal()
+                        .Build();
+                }
+
+                if (optCtx.Types->PgTypes && node->Head().Content() == "row_number") {
+                    ret = ctx.Builder(node->Pos())
+                        .Callable("ToPg")
+                            .Add(0, ret)
                         .Seal()
                         .Build();
                 }

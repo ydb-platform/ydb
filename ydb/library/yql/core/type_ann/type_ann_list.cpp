@@ -1092,6 +1092,13 @@ namespace {
 
                 lambdaItemType = lambda->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
                 break;
+            case ETypeAnnotationKind::Pg:
+                if (input->Content().EndsWith("Warn")) {
+                    warn = true;
+                }
+
+                lambdaItemType = lambda->GetTypeAnn();
+                break;
             case ETypeAnnotationKind::Null: {
                 if (input->Content().EndsWith("Warn")) {
                     warn = true;

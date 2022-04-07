@@ -2884,7 +2884,7 @@ const TString& TPgExprType::GetName() const {
 
 ui32 TPgExprType::GetFlags(ui32 typeId) {
     const auto& desc = NPg::LookupType(typeId);
-    ui32 ret = TypeHasManyValues;
+    ui32 ret = TypeHasManyValues | TypeHasOptional;
     if (!desc.SendFuncId || !desc.ReceiveFuncId) {
         ret |= TypeNonPersistable;
     }

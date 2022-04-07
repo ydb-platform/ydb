@@ -11243,7 +11243,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlProjectItem"] = &SqlProjectItemWrapper;
         Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
         Functions["PgStar"] = &PgStarWrapper;
-        Functions["PgWindowCall"] = &PgWindowCallWrapper;
         Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
         Functions["PgColumnRef"] = &PgColumnRefWrapper;
         Functions["PgResultItem"] = &PgResultItemWrapper;
@@ -11395,6 +11394,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["PgAggWindowCall"] = &PgAggWrapper;
         ExtFunctions["PgCall"] = &PgCallWrapper;
         ExtFunctions["PgResolvedCall"] = &PgCallWrapper;
+        ExtFunctions["PgWindowCall"] = &PgWindowCallWrapper;
         ExtFunctions["PgResolvedCallCtx"] = &PgCallWrapper;
         ExtFunctions["PgOp"] = &PgOpWrapper;
         ExtFunctions["PgResolvedOp"] = &PgOpWrapper;

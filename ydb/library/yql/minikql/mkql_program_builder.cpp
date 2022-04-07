@@ -2063,6 +2063,10 @@ TType* TProgramBuilder::NewDecimalType(ui8 precision, ui8 scale) {
 }
 
 TType* TProgramBuilder::NewOptionalType(TType* itemType) {
+    if (itemType->IsPg()) {
+        return itemType;
+    }
+
     return TOptionalType::Create(itemType, Env);
 }
 
@@ -2614,7 +2618,7 @@ TRuntimeNode TProgramBuilder::IfPresent(TRuntimeNode optional, const TUnaryLambd
 
     MKQL_ENSURE(thenUnpacked->IsSameType(*elseUnpacked), "Different return types in branches.");
 
-    TCallableBuilder callableBuilder(Env, __func__, thenOpt || elseOpt ? NewOptionalType(thenUnpacked) : thenUnpacked);
+    TCallableBuilder callableBuilder(Env, __func__, (thenOpt || elseOpt) ? NewOptionalType(thenUnpacked) : thenUnpacked);
     callableBuilder.Add(optional);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(then);
@@ -3240,10 +3244,20 @@ TRuntimeNode TProgramBuilder::BuildFlatMap(const std::string_view& callableName,
         const auto itemArg = Arg(AS_TYPE(TOptionalType, listType)->GetItemType());
         const auto newList = handler(itemArg);
         const auto type = newList.GetStaticType();
-        MKQL_ENSURE(type->IsList() || type->IsOptional() || type->IsStream() || type->IsFlow(), "Expected flow, list, stream or optional");
+        MKQL_ENSURE(type->IsList() || type->IsPg() || type->IsOptional() || type->IsStream() || type->IsFlow(), "Expected flow, list, stream or optional");
         return IfPresent(list, [&](TRuntimeNode item) {
             return handler(item);
-        }, type->IsOptional() ? NewEmptyOptional(type) : type->IsList() ? NewEmptyList(AS_TYPE(TListType, type)->GetItemType()) : EmptyIterator(type));
+        }, (type->IsOptional() || type->IsPg()) ? NewEmptyOptional(type) : type->IsList() ? NewEmptyList(AS_TYPE(TListType, type)->GetItemType()) : EmptyIterator(type));
+    }
+
+    if (listType->IsPg()) {
+        const auto itemArg = Arg(listType);
+        const auto newList = handler(itemArg);
+        const auto type = newList.GetStaticType();
+        MKQL_ENSURE(type->IsList() || type->IsPg() || type->IsOptional() || type->IsStream() || type->IsFlow(), "Expected flow, list, stream or optional");
+        return IfPresent(list, [&](TRuntimeNode item) {
+            return handler(item);
+        }, (type->IsOptional() || type->IsPg()) ? NewEmptyOptional(type) : type->IsList() ? NewEmptyList(AS_TYPE(TListType, type)->GetItemType()) : EmptyIterator(type));
     }
 
     const auto itemType = listType->IsFlow() ?

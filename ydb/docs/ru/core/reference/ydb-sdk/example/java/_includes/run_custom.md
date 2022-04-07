@@ -5,7 +5,8 @@
 Выполните команду по следующему образцу:
 
 ``` bash
-<auth_mode_var>="<auth_mode_value>" java -jar examples/basic_example/target/ydb-basic-example.jar <endpoint>?database=<database>
+( cd ydb-java-sdk/examples/basic_example/target && \
+<auth_mode_var>="<auth_mode_value>" java -jar ydb-basic-example.jar <endpoint>?database=<database>)
 ```
 
 , где

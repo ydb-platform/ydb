@@ -2,7 +2,7 @@
 
 На этой странице подробно разбирается код [тестового приложения](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/basic_example), доступного в составе [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk) {{ ydb-short-name }}.
 
-## Скачивание SDK и запуск примера {#download}
+## Скачивание SDK Examples и запуск примера {#download}
 
 Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Maven](https://maven.apache.org/download.html). 
 
@@ -12,10 +12,10 @@
 git clone https://github.com/yandex-cloud/ydb-java-sdk
 ```
 
-Далее выполните сборку SDK и входящих в него примеров
+Далее выполните сборку SDK Examples
 
 ``` bash
-cd ydb-java-sdk && mvn clean package
+( cd ydb-java-sdk/examples && mvn package )
 ```
 
 Далее из этой же рабочей директории выполните команду запуска тестового приложения, которая будет отличаться в зависимости от того, к какой базе данных необходимо подключиться.

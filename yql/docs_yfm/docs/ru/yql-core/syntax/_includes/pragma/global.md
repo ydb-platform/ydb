@@ -123,6 +123,18 @@ StrictJoinKeyTypes является [scoped](#pragmascope) настройкой.
 * null-ы в ключах считаются равными друг другу (текущая реализация возвращает NULL).
 Явным образом выбрать старое поведению можно указав прагму `DisableAnsiRankForNullableKeys`. Если никакой прагмы не задано, то выдается предупреждение и работает старый вариант.
 
+### AnsiCurrentRow
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Флаг | false |
+
+Приводит неявное задание рамки окна при наличии ORDER BY в соответствие со стандартом.
+Если AnsiCurrentRow не установлен, то окно `(ORDER BY key)` эквивлентно `(ORDER BY key ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
+Стандарт же требует, чтобы такое окно вело себя как `(ORDER BY key RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
+Разница состоит в трактовке `CURRENT ROW`. В режиме `ROWS` `CURRENT ROW` трактуется буквально – текущая строка в партиции.
+А в режиме `RANGE` конец рамки `CURRENT ROW` означает "последния строка в партиции с ключем сортировки равным текущей строке". 
+
 ### AnsiOrderByLimitInUnionAll
 
 | Тип значения | По умолчанию |

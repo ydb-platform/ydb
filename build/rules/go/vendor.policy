@@ -1097,6 +1097,9 @@ DENY .* -> vendor/github.com/chzyer/readline;test
 # CONTRIB-2498
 ALLOW .* -> vendor/github.com/fatih/color
 
+# CONTRIB-2519
+ALLOW .* -> vendor/github.com/nathan-osman/go-sunrise
+
 #
 # This section is for EXCEPTIONS. Add new rule above, not here.
 #

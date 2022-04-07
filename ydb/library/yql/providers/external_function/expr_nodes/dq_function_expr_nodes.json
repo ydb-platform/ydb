@@ -1,0 +1,21 @@
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+          "Name": "TFunctionDataSource",
+          "Base": "TCallable",
+          "Definition": "Custom",
+          "Match": {"Type": "Callable", "Name": "DataSource"},
+          "Children": [
+              {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+              {"Index": 1, "Name": "Type", "Type": "TCoAtom"},
+              {"Index": 2, "Name": "FunctionName", "Type": "TCoAtom"},
+              {"Index": 3, "Name": "Connection", "Type": "TCoAtom"}
+          ]
+        }
+    ]
+}

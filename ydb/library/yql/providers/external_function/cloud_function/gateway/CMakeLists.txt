@@ -15,6 +15,7 @@ target_link_libraries(external_function-cloud_function-gateway PUBLIC
   contrib-libs-cxxsupp
   yutil
   common-token_accessor-client
+  providers-external_function-gateway
   client-ydb_types-credentials
   cpp-string_utils-quote
   cpp-threading-future

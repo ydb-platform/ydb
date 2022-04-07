@@ -1,0 +1,163 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(tools-python3-src)
+target_compile_options(tools-python3-src PRIVATE
+  -DPy_BUILD_CORE
+)
+target_include_directories(tools-python3-src PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Include
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Include/internal
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_decimal/libmpdec
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/PC
+)
+target_link_libraries(tools-python3-src PUBLIC
+  contrib-libs-cxxsupp
+  python3-src-Modules
+)
+target_link_options(tools-python3-src INTERFACE
+  -framework
+  CoreFoundation
+  -framework
+  SystemConfiguration
+)
+target_sources(tools-python3-src PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_functoolsmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/_iomodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/bufferedio.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/bytesio.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/fileio.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/iobase.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/stringio.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/textio.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_io/winconsoleio.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/_threadmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/config.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/gcmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/main.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/mmapmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/posixmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/signalmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/timemodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/abstract.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/accu.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/boolobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/bytearrayobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/bytes_methods.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/bytesobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/call.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/capsule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/cellobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/classobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/codeobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/complexobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/descrobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/dictobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/enumobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/exceptions.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/fileobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/floatobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/frameobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/funcobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/genericaliasobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/genobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/interpreteridobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/iterobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/listobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/longobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/memoryobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/methodobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/moduleobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/namespaceobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/object.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/obmalloc.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/odictobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/picklebufobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/rangeobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/setobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/sliceobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/structseq.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/tupleobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/typeobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/unicodectype.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/unicodeobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Objects/weakrefobject.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/acceler.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/grammar1.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/listnode.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/myreadline.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/node.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/parser.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/parsetok.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/pegen/parse.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/pegen/parse_string.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/pegen/peg_api.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/pegen/pegen.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/token.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Parser/tokenizer.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/Python-ast.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/_warnings.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/asdl.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/ast.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/ast_opt.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/ast_unparse.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/bltinmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/bootstrap_hash.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/ceval.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/codecs.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/compile.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/context.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/dtoa.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/dynamic_annotations.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/errors.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/fileutils.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/formatter_unicode.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/frozen.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/frozenmain.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/future.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/getargs.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/getcompiler.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/getcopyright.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/getopt.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/getplatform.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/getversion.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/graminit.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/hamt.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/hashtable.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/import.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/importdl.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/initconfig.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/marshal.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/modsupport.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/mysnprintf.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/mystrtoul.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pathconfig.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/peephole.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/preconfig.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pyarena.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pyctype.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pyfpe.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pyhash.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pylifecycle.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pymath.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pystate.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pystrcmp.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pystrhex.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pystrtod.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pythonrun.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/pytime.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/structmember.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/symtable.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/sysmodule.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/thread.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/traceback.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Modules/getpath.c
+  ${CMAKE_SOURCE_DIR}/contrib/tools/python3/src/Python/dynload_shlib.c
+)

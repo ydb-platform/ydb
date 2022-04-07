@@ -17,11 +17,12 @@ constexpr TStringBuf ClickHouseProviderName = "clickhouse";
 constexpr TStringBuf YdbProviderName = "ydb";
 constexpr TStringBuf PqProviderName = "pq";
 constexpr TStringBuf S3ProviderName = "s3";
+constexpr TStringBuf FunctionProviderName = "function";
 
-constexpr std::array<const TStringBuf, 11> Providers = {
+constexpr std::array<const TStringBuf, 12> Providers = {
     {ConfigProviderName, YtProviderName, KikimrProviderName, RtmrProviderName, S3ProviderName,
      StatProviderName, SolomonProviderName, DqProviderName, ClickHouseProviderName, YdbProviderName,
-     PqProviderName}
+     PqProviderName, FunctionProviderName}
 };
 
 } // namespace NYql

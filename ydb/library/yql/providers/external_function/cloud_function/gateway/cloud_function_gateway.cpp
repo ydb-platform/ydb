@@ -9,6 +9,7 @@
 #include <cloud/bitbucket/private-api/yandex/cloud/priv/serverless/functions/v1/function.pb.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
+#include <google/protobuf/text_format.h>
 #include <exception>
 #include <fmt/format.h>
 
@@ -17,7 +18,7 @@ namespace NCloudFunction {
 
 using namespace yandex::cloud::priv::serverless::functions::v1;
 
-class TCloudFunctionGateway : public ICloudFunctionGateway {
+class TCloudFunctionGateway : public IDqFunctionGateway {
 public:
     using TPtr = std::shared_ptr<TCloudFunctionGateway>;
 
@@ -27,8 +28,8 @@ private:
     class TImpl : public std::enable_shared_from_this<TImpl> {
     public:
         TImpl(const TString& apiEndpoint, const TString& sslCaCert, NYdb::TCredentialsProviderPtr credentialsProvider)
-        : Client(std::make_unique<NGrpc::TGRpcClientLow>())
-        , CredentialsProvider(std::move(credentialsProvider))
+            : Client(std::make_unique<NGrpc::TGRpcClientLow>())
+            , CredentialsProvider(std::move(credentialsProvider))
         {
             NGrpc::TGRpcClientConfig grpcConf;
             grpcConf.Locator = apiEndpoint;
@@ -74,20 +75,37 @@ private:
     };
 
 public:
-    TCloudFunctionGateway(const TString& apiEndpoint, const TString& sslCaCert, NYdb::TCredentialsProviderPtr credentialsProvider)
-    : Impl(std::make_shared<TImpl>(apiEndpoint, sslCaCert, credentialsProvider))
+    TCloudFunctionGateway(const TString& apiEndpoint, const TString& sslCaCert,
+                          NYdb::TCredentialsProviderPtr credentialsProvider,
+                          const TString& connectionName)
+        : Impl(std::make_shared<TImpl>(apiEndpoint, sslCaCert, credentialsProvider))
+        , ConnectionName(connectionName)
     {
     }
 
-    NThreading::TFuture<Function> ResolveFunction(const TString& folderId, const TString& functionName) {
+    NThreading::TFuture<NDqFunction::TDqFunctionDescription> ResolveFunction(const TString& folderId, const TString& functionName) {
         auto listResponse = Impl->List(folderId, functionName);
-        return listResponse.Apply([folderId, functionName](const NThreading::TFuture<ListFunctionsResponse>& future) -> Function {
-            auto functions = future.GetValue().Getfunctions();
-            if (!functions.empty()) {
-                return functions.at(0);
+        auto connectionName = ConnectionName;
+        return listResponse.Apply([folderId, functionName, connectionName]
+            (const NThreading::TFuture<ListFunctionsResponse>& future) -> NDqFunction::TDqFunctionDescription
+            {
+                auto functions = future.GetValue().Getfunctions();
+                if (!functions.empty()) {
+                    auto protoFunction = functions.at(0);
+                    const google::protobuf::EnumDescriptor* descriptor = Function::Status_descriptor();
+                    TString status = descriptor->FindValueByNumber(protoFunction.Getstatus())->name();
+
+                    return NDqFunction::TDqFunctionDescription{
+                        .Type = TDqFunctionType{CloudFunctionProviderName},
+                        .FunctionName = protoFunction.Getname(),
+                        .Connection = connectionName,
+                        .InvokeUrl = protoFunction.Gethttp_invoke_url(),
+                        .Status = status
+                    };
+                }
+                throw yexception() << fmt::format("Failed to find cloud function '{}' at folder '{}'", functionName, folderId);
             }
-            throw yexception() << fmt::format("Failed to find cloud function '{}' at folder '{}'", functionName, folderId);
-        });
+        );
     }
 
     ~TCloudFunctionGateway() {
@@ -96,9 +114,10 @@ public:
 
 private:
     std::shared_ptr<TImpl> Impl;
+    const TString ConnectionName;
 };
 
-ICloudFunctionGateway::TPtr CreateCloudFunctionGateway(
+IDqFunctionGateway::TPtr CreateCloudFunctionGateway(
         const TString& apiEndpoint, const TString& sslCaCert,
         const THashMap<TString, TString>& secureParams, const TString& connectionName,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
@@ -108,7 +127,7 @@ ICloudFunctionGateway::TPtr CreateCloudFunctionGateway(
         throw yexception() << fmt::format("Can't find token by connection name '{}'", connectionName);
     }
     auto credProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token->second, true)->CreateProvider();
-    return std::make_shared<TCloudFunctionGateway>(apiEndpoint, sslCaCert, credProviderFactory);
+    return std::make_shared<TCloudFunctionGateway>(apiEndpoint, sslCaCert, credProviderFactory, connectionName);
 }
 
 } // namespace NCloudFunction

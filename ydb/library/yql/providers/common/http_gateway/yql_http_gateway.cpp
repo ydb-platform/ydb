@@ -18,8 +18,8 @@ public:
     using TPtr = std::shared_ptr<TEasyCurl>;
     using TWeakPtr = std::weak_ptr<TEasyCurl>;
 
-    TEasyCurl(TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, bool withData)
-        : ExpectedSize(expectedSize), Handle(curl_easy_init())
+    TEasyCurl(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, bool withData)
+        : ExpectedSize(expectedSize), Handle(curl_easy_init()), Counter(counter)
     {
         curl_easy_setopt(Handle, CURLOPT_URL, url.c_str());
         curl_easy_setopt(Handle, CURLOPT_POST, withData ?  1L : 0L);
@@ -38,9 +38,11 @@ public:
             curl_easy_setopt(Handle, CURLOPT_READFUNCTION, &ReadMemoryCallback);
             curl_easy_setopt(Handle, CURLOPT_READDATA, static_cast<void*>(this));
         }
+        Counter->Inc();
     }
 
     virtual ~TEasyCurl() {
+        Counter->Dec();
         curl_easy_cleanup(Handle);
         if (Headers) {
             curl_slist_free_all(Headers);
@@ -77,19 +79,20 @@ private:
     const std::size_t ExpectedSize;
     CURL *const Handle;
     curl_slist* Headers = nullptr;
+    const NMonitoring::TDynamicCounters::TCounterPtr Counter;
 };
 
 class TEasyCurlBuffer : public TEasyCurl {
 public:
-    TEasyCurlBuffer(TString url, TString data, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnResult callback)
-        : TEasyCurl(url, headers, expectedSize, !data.empty()), Data(std::move(data)), Input(Data), Output(Buffer)
+    TEasyCurlBuffer(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, TString data, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnResult callback)
+        : TEasyCurl(counter, url, headers, expectedSize, !data.empty()), Data(std::move(data)), Input(Data), Output(Buffer)
     {
         Output.Reserve(expectedSize);
         Callbacks.emplace(std::move(callback));
     }
 
-    static TPtr Make(TString url, TString data, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnResult callback) {
-        return std::make_shared<TEasyCurlBuffer>(std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
+    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, TString data, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnResult callback) {
+        return std::make_shared<TEasyCurlBuffer>(counter, std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
     }
 private:
     bool AddCallback(IHTTPGateway::TOnResult callback) final {
@@ -147,13 +150,13 @@ private:
 
 class TEasyCurlStream : public TEasyCurl {
 public:
-    TEasyCurlStream(TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish)
-        : TEasyCurl(url, headers, expectedSize, false), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish))
+    TEasyCurlStream(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish)
+        : TEasyCurl(counter, url, headers, expectedSize, false), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish))
     {
     }
 
-    static TPtr Make(TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish) {
-        return std::make_shared<TEasyCurlStream>(std::move(url), std::move(headers), expectedSize, std::move(onNewData), std::move(onFinish));
+    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish) {
+        return std::make_shared<TEasyCurlStream>(counter, std::move(url), std::move(headers), expectedSize, std::move(onNewData), std::move(onFinish));
     }
 private:
     bool AddCallback(IHTTPGateway::TOnResult) final { return false; }
@@ -372,8 +375,7 @@ private:
             if (easy->AddCallback(callback))
                 return;
 
-        InFlight->Inc();
-        auto easy = TEasyCurlBuffer::Make(std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
+        auto easy = TEasyCurlBuffer::Make(InFlight, std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
         entry = easy;
         Easy2RetryState.emplace(easy, std::move(retryPolicy->CreateRetryState()));
         Await.emplace(std::move(easy));
@@ -387,7 +389,7 @@ private:
         TOnNewDataPart onNewData,
         TOnDowloadFinsh onFinish) final
     {
-        auto easy = TEasyCurlStream::Make(std::move(url), std::move(headers), expectedSize, std::move(onNewData), std::move(onFinish));
+        auto easy = TEasyCurlStream::Make(InFlight, std::move(url), std::move(headers), expectedSize, std::move(onNewData), std::move(onFinish));
         const std::unique_lock lock(Sync);
         Await.emplace(std::move(easy));
         Wakeup(expectedSize);
@@ -460,67 +462,6 @@ std::atomic_size_t THTTPMultiGateway::OutputSize = 0ULL;
 std::mutex THTTPMultiGateway::CreateSync;
 THTTPMultiGateway::TWeakPtr THTTPMultiGateway::Singleton;
 
-// Class that is not used in production (for testing only).
-class THTTPEasyGateway : public IHTTPGateway, private std::enable_shared_from_this<THTTPEasyGateway> {
-friend class IHTTPGateway;
-public:
-    using TPtr = std::shared_ptr<THTTPEasyGateway>;
-    using TWeakPtr = std::weak_ptr<THTTPEasyGateway>;
-
-    THTTPEasyGateway() {
-        curl_global_init(CURL_GLOBAL_ALL);
-    }
-
-    ~THTTPEasyGateway() {
-        for (auto& item : Requests)
-            item.second.second.join();
-        Requests.clear();
-        curl_global_cleanup();
-    }
-private:
-    static void Perform(const TWeakPtr& weak, const TEasyCurl::TPtr& easy) {
-        const auto result = curl_easy_perform(easy->GetHandle());
-        if (const auto& self = weak.lock())
-            self->Done(easy, result);
-        else
-            easy->Done(result);
-    }
-
-    void Download(
-        TString url,
-        THeaders headers,
-        std::size_t expectedSize,
-        TOnResult callback,
-        TString data,
-        IRetryPolicy<long>::TPtr retryPolicy) final
-    {
-        const std::unique_lock lock(Sync);
-        auto& entry = Requests[TKeyType(url, headers, data, std::move(retryPolicy))];
-        if (const auto& easy = entry.first.lock())
-            if (easy->AddCallback(std::move(callback)))
-                return;
-        auto easy = TEasyCurlBuffer::Make(std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
-        entry = std::make_pair(TEasyCurl::TWeakPtr(easy), std::thread(&THTTPEasyGateway::Perform, weak_from_this(), easy));
-    }
-
-    virtual void Download(
-        TString ,
-        THeaders ,
-        std::size_t ,
-        TOnNewDataPart ,
-        TOnDowloadFinsh ) {
-
-    }
-
-    void Done(const TEasyCurl::TPtr& easy, CURLcode result) {
-        const std::unique_lock lock(Sync);
-        easy->Done(result);
-    }
-
-    std::unordered_map<TKeyType, std::pair<TEasyCurl::TWeakPtr, std::thread>, TKeyHash> Requests;
-    std::mutex Sync;
-};
-
 }
 
 IHTTPGateway::TContent::TContent(TString&& data, long httpResponseCode)
@@ -563,9 +504,8 @@ IHTTPGateway::TContent::~TContent()
     }
 }
 
-template<>
 IHTTPGateway::TPtr
-IHTTPGateway::Make<true>(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring::TDynamicCounterPtr counters) {
+IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring::TDynamicCounterPtr counters) {
     const std::unique_lock lock(THTTPMultiGateway::CreateSync);
     if (const auto g = THTTPMultiGateway::Singleton.lock())
         return g;
@@ -576,10 +516,5 @@ IHTTPGateway::Make<true>(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring:
     return gateway;
 }
 
-template<>
-IHTTPGateway::TPtr
-IHTTPGateway::Make<false>(const THttpGatewayConfig*, NMonitoring::TDynamicCounterPtr) {
-    return std::make_shared<THTTPEasyGateway>();
-}
 
 }

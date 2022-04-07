@@ -20,7 +20,6 @@ public:
 
     virtual ~IHTTPGateway() = default;
 
-    template<bool SingleThread = true>
     static TPtr Make(
         const THttpGatewayConfig* httpGatewaysCfg = nullptr,
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());

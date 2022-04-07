@@ -789,3 +789,13 @@ marketing/research-cron
 mds/avatars/resizer
 portal/frontend/icecube
 market/front/tools/codestats-builders
+taxi/github/infra-ansible-external
+mds/rbtorrent
+mds/cocaine/isolate-daemon
+portal/static-uploader
+portal/archive/stories-utils
+market/front/libs/testament
+portal/frontend/islands-blocks-import
+strm/salt-configs/github
+portal/morda-xs
+intranet/ad_system

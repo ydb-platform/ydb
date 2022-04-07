@@ -12,7 +12,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-static const ui32 MAX_BLOB_SIZE = 8 << 20; //8mb
+static const ui32 MAX_BLOB_SIZE = 8_MB;
 
 struct TL2Counters {
     NMonitoring::TDynamicCounters::TCounterPtr TotalSize;
@@ -78,7 +78,7 @@ public:
     }
 
     TPersQueueCacheL2(const TCacheL2Parameters& params, TIntrusivePtr<NMonitoring::TDynamicCounters> countersGroup)
-        : Cache(ClampMinSize(1_MB)/MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
+        : Cache(1_TB / MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
         , MaxSize(ClampMinSize(params.MaxSizeMB * 1_MB))
         , CurrentSize(0)
         , KeepTime(params.KeepTime)

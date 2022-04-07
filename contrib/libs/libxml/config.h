@@ -10,6 +10,6 @@
 #   include "config-armv7a.h"
 #endif
 
-#if defined(__aarch64__)
+#if defined(__aarch64__) || defined(_M_ARM64)
 #   include "config-armv8a.h"
 #endif

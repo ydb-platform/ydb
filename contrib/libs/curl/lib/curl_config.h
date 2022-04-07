@@ -26,7 +26,7 @@
 #   include "curl_config-x32.h"
 #endif
 
-#if defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || defined(__powerpc64__)
+#if defined(__x86_64__) || defined(_M_X64) || defined(__aarch64__) || defined(_M_ARM64) || defined(__powerpc64__)
 #   include "curl_config-x64.h"
 #endif
 

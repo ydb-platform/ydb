@@ -568,6 +568,11 @@ ui64 AsyncAlterAddIndex(
         const TString& tablePath,
         const TShardedTableOptions::TIndex& indexDesc);
 
+void CancelAddIndex(
+        Tests::TServer::TPtr server,
+        const TString& dbName,
+        ui64 buildIndexId);
+
 ui64 AsyncAlterDropIndex(
         Tests::TServer::TPtr server,
         const TString& workingDir,

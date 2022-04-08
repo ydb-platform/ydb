@@ -72,10 +72,11 @@ public:
 
             op->SetSnapshotTxId(ui64(snapshotTxId));
             op->SetSnapshotStep(ui64(snapshotStepid));
-
             op->SetTableSchemaVersion(table->AlterVersion+1);
-
             op->SetBuildIndexId(ui64(txState->BuildIndexId));
+            if (txState->BuildIndexOutcome) {
+                op->MutableOutcome()->CopyFrom(*txState->BuildIndexOutcome);
+            }
 
             context.SS->FillSeqNo(tx, seqNo);
 
@@ -413,6 +414,11 @@ public:
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxFinalizeBuildIndex, tablePathId);
         txState.BuildIndexId = TTxId(finalizeMainTable.GetBuildIndexId());
+
+        if (finalizeMainTable.HasOutcome()) {
+            txState.BuildIndexOutcome = std::make_shared<NKikimrSchemeOp::TBuildIndexOutcome>();
+            txState.BuildIndexOutcome->CopyFrom(finalizeMainTable.GetOutcome());
+        }
 
         context.SS->PersistTxState(db, OperationId);
 

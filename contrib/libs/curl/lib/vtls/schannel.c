@@ -496,6 +496,7 @@ schannel_connect_step1(struct Curl_easy *data, struct connectdata *conn,
   if(SSL_SET_OPTION(primary.sessionid)) {
     Curl_ssl_sessionid_lock(data);
     if(!Curl_ssl_getsessionid(data, conn,
+                              SSL_IS_PROXY() ? TRUE : FALSE,
                               (void **)&old_cred, NULL, sockindex)) {
       BACKEND->cred = old_cred;
       DEBUGF(infof(data, "schannel: re-using existing credential handle\n"));
@@ -522,14 +523,14 @@ schannel_connect_step1(struct Curl_easy *data, struct connectdata *conn,
 #endif
         schannel_cred.dwFlags = SCH_CRED_AUTO_CRED_VALIDATION;
 
-      if(data->set.ssl.no_revoke) {
+      if(SSL_SET_OPTION(no_revoke)) {
         schannel_cred.dwFlags |= SCH_CRED_IGNORE_NO_REVOCATION_CHECK |
           SCH_CRED_IGNORE_REVOCATION_OFFLINE;
 
         DEBUGF(infof(data, "schannel: disabled server certificate revocation "
                      "checks\n"));
       }
-      else if(data->set.ssl.revoke_best_effort) {
+      else if(SSL_SET_OPTION(revoke_best_effort)) {
         schannel_cred.dwFlags |= SCH_CRED_IGNORE_NO_REVOCATION_CHECK |
           SCH_CRED_IGNORE_REVOCATION_OFFLINE | SCH_CRED_REVOCATION_CHECK_CHAIN;
 
@@ -861,7 +862,7 @@ schannel_connect_step1(struct Curl_easy *data, struct connectdata *conn,
     list_start_index = cur;
 
 #ifdef USE_NGHTTP2
-    if(data->set.httpversion >= CURL_HTTP_VERSION_2) {
+    if(data->state.httpwant >= CURL_HTTP_VERSION_2) {
       memcpy(&alpn_buffer[cur], NGHTTP2_PROTO_ALPN, NGHTTP2_PROTO_ALPN_LEN);
       cur += NGHTTP2_PROTO_ALPN_LEN;
       infof(data, "schannel: ALPN, offering %s\n", NGHTTP2_PROTO_VERSION_ID);
@@ -1252,7 +1253,7 @@ schannel_connect_step2(struct Curl_easy *data, struct connectdata *conn,
 
   pubkey_ptr = SSL_IS_PROXY() ?
     data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY] :
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG];
+    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
   if(pubkey_ptr) {
     result = pkp_pin_peer_pubkey(data, conn, sockindex, pubkey_ptr);
     if(result) {
@@ -1337,8 +1338,9 @@ schannel_connect_step3(struct Curl_easy *data, struct connectdata *conn,
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   SECURITY_STATUS sspi_status = SEC_E_OK;
   CERT_CONTEXT *ccert_context = NULL;
+  bool isproxy = SSL_IS_PROXY();
 #ifdef DEBUGBUILD
-  const char * const hostname = SSL_IS_PROXY() ? conn->http_proxy.host.name :
+  const char * const hostname = isproxy ? conn->http_proxy.host.name :
     conn->host.name;
 #endif
 #ifdef HAS_ALPN
@@ -1414,8 +1416,8 @@ schannel_connect_step3(struct Curl_easy *data, struct connectdata *conn,
     struct Curl_schannel_cred *old_cred = NULL;
 
     Curl_ssl_sessionid_lock(data);
-    incache = !(Curl_ssl_getsessionid(data, conn, (void **)&old_cred, NULL,
-                                      sockindex));
+    incache = !(Curl_ssl_getsessionid(data, conn, isproxy, (void **)&old_cred,
+                                      NULL, sockindex));
     if(incache) {
       if(old_cred != BACKEND->cred) {
         DEBUGF(infof(data,
@@ -1426,7 +1428,7 @@ schannel_connect_step3(struct Curl_easy *data, struct connectdata *conn,
       }
     }
     if(!incache) {
-      result = Curl_ssl_addsessionid(data, conn, (void *)BACKEND->cred,
+      result = Curl_ssl_addsessionid(data, conn, isproxy, BACKEND->cred,
                                      sizeof(struct Curl_schannel_cred),
                                      sockindex);
       if(result) {
@@ -2418,6 +2420,7 @@ const struct Curl_ssl Curl_ssl_schannel = {
   Curl_none_cert_status_request,     /* cert_status_request */
   schannel_connect,                  /* connect */
   schannel_connect_nonblocking,      /* connect_nonblocking */
+  Curl_ssl_getsock,                  /* getsock */
   schannel_get_internals,            /* get_internals */
   schannel_close,                    /* close_one */
   Curl_none_close_all,               /* close_all */

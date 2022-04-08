@@ -153,6 +153,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/cram.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/digest.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/digest_sspi.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/gsasl.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/krb5_gssapi.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/krb5_sspi.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/ntlm.c
@@ -173,6 +174,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/keylog.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/mbedtls_threadlock.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/openssl.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/rustls.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/sectransp.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/vtls.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/wolfssl.c

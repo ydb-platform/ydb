@@ -1224,7 +1224,7 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
         }
       }
 
-      if(data->set.ftp_append)
+      if(data->set.remote_append)
         /* Try to open for append, but create if nonexisting */
         flags = O_WRONLY|O_CREAT|O_APPEND;
       else if(data->state.resume_from > 0)
@@ -1413,7 +1413,7 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
         sshc->readdir_longentry = sshc->readdir_attrs->longname;
         sshc->readdir_len = strlen(sshc->readdir_filename);
 
-        if(data->set.ftp_list_only) {
+        if(data->set.list_only) {
           char *tmpLine;
 
           tmpLine = aprintf("%s\n", sshc->readdir_filename);
@@ -1453,15 +1453,14 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
           if((sshc->readdir_attrs->flags & SSH_FILEXFER_ATTR_PERMISSIONS) &&
              ((sshc->readdir_attrs->permissions & S_IFMT) ==
               S_IFLNK)) {
-            sshc->readdir_linkPath = malloc(PATH_MAX + 1);
+            sshc->readdir_linkPath = aprintf("%s%s", protop->path,
+                                             sshc->readdir_filename);
+
             if(sshc->readdir_linkPath == NULL) {
               state(data, SSH_SFTP_CLOSE);
               sshc->actualcode = CURLE_OUT_OF_MEMORY;
               break;
             }
-
-            msnprintf(sshc->readdir_linkPath, PATH_MAX, "%s%s", protop->path,
-                      sshc->readdir_filename);
 
             state(data, SSH_SFTP_READDIR_LINK);
             break;

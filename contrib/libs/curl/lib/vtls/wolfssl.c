@@ -475,7 +475,7 @@ wolfssl_connect_step1(struct Curl_easy *data, struct connectdata *conn,
        protocols in descending order of preference, eg: "h2,http/1.1" */
 
 #ifdef USE_NGHTTP2
-    if(data->set.httpversion >= CURL_HTTP_VERSION_2) {
+    if(data->state.httpwant >= CURL_HTTP_VERSION_2) {
       strcpy(protocols + strlen(protocols), NGHTTP2_PROTO_VERSION_ID ",");
       infof(data, "ALPN, offering %s\n", NGHTTP2_PROTO_VERSION_ID);
     }
@@ -516,7 +516,9 @@ wolfssl_connect_step1(struct Curl_easy *data, struct connectdata *conn,
     void *ssl_sessionid = NULL;
 
     Curl_ssl_sessionid_lock(data);
-    if(!Curl_ssl_getsessionid(data, conn, &ssl_sessionid, NULL, sockindex)) {
+    if(!Curl_ssl_getsessionid(data, conn,
+                              SSL_IS_PROXY() ? TRUE : FALSE,
+                              &ssl_sessionid, NULL, sockindex)) {
       /* we got a session id, use it! */
       if(!SSL_set_session(backend->handle, ssl_sessionid)) {
         char error_buffer[WOLFSSL_MAX_ERROR_SZ];
@@ -557,12 +559,12 @@ wolfssl_connect_step2(struct Curl_easy *data, struct connectdata *conn,
     conn->http_proxy.host.dispname : conn->host.dispname;
   const char * const pinnedpubkey = SSL_IS_PROXY() ?
     data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY] :
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG];
+    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
 #else
   const char * const hostname = conn->host.name;
   const char * const dispname = conn->host.dispname;
   const char * const pinnedpubkey =
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG];
+    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
 #endif
 
   conn->recv[sockindex] = wolfssl_recv;
@@ -724,7 +726,7 @@ wolfssl_connect_step2(struct Curl_easy *data, struct connectdata *conn,
          !memcmp(protocol, ALPN_HTTP_1_1, ALPN_HTTP_1_1_LENGTH))
         conn->negnpn = CURL_HTTP_VERSION_1_1;
 #ifdef USE_NGHTTP2
-      else if(data->set.httpversion >= CURL_HTTP_VERSION_2 &&
+      else if(data->state.httpwant >= CURL_HTTP_VERSION_2 &&
               protocol_len == NGHTTP2_PROTO_VERSION_ID_LEN &&
               !memcmp(protocol, NGHTTP2_PROTO_VERSION_ID,
                       NGHTTP2_PROTO_VERSION_ID_LEN))
@@ -770,32 +772,33 @@ wolfssl_connect_step3(struct Curl_easy *data, struct connectdata *conn,
 
   if(SSL_SET_OPTION(primary.sessionid)) {
     bool incache;
-    SSL_SESSION *our_ssl_sessionid;
     void *old_ssl_sessionid = NULL;
+    SSL_SESSION *our_ssl_sessionid = SSL_get_session(backend->handle);
+    bool isproxy = SSL_IS_PROXY() ? TRUE : FALSE;
 
-    our_ssl_sessionid = SSL_get_session(backend->handle);
-
-    Curl_ssl_sessionid_lock(data);
-    incache = !(Curl_ssl_getsessionid(data, conn, &old_ssl_sessionid, NULL,
-                                      sockindex));
-    if(incache) {
-      if(old_ssl_sessionid != our_ssl_sessionid) {
-        infof(data, "old SSL session ID is stale, removing\n");
-        Curl_ssl_delsessionid(data, old_ssl_sessionid);
-        incache = FALSE;
+    if(our_ssl_sessionid) {
+      Curl_ssl_sessionid_lock(data);
+      incache = !(Curl_ssl_getsessionid(data, conn, isproxy,
+                                        &old_ssl_sessionid, NULL, sockindex));
+      if(incache) {
+        if(old_ssl_sessionid != our_ssl_sessionid) {
+          infof(data, "old SSL session ID is stale, removing\n");
+          Curl_ssl_delsessionid(data, old_ssl_sessionid);
+          incache = FALSE;
+        }
       }
-    }
 
-    if(!incache) {
-      result = Curl_ssl_addsessionid(data, conn, our_ssl_sessionid,
-                                     0 /* unknown size */, sockindex);
-      if(result) {
-        Curl_ssl_sessionid_unlock(data);
-        failf(data, "failed to store ssl session");
-        return result;
+      if(!incache) {
+        result = Curl_ssl_addsessionid(data, conn, isproxy, our_ssl_sessionid,
+                                       0, sockindex);
+        if(result) {
+          Curl_ssl_sessionid_unlock(data);
+          failf(data, "failed to store ssl session");
+          return result;
+        }
       }
+      Curl_ssl_sessionid_unlock(data);
     }
-    Curl_ssl_sessionid_unlock(data);
   }
 
   connssl->connecting_state = ssl_connect_done;
@@ -1152,6 +1155,7 @@ const struct Curl_ssl Curl_ssl_wolfssl = {
   Curl_none_cert_status_request,   /* cert_status_request */
   wolfssl_connect,                 /* connect */
   wolfssl_connect_nonblocking,     /* connect_nonblocking */
+  Curl_ssl_getsock,                /* getsock */
   wolfssl_get_internals,           /* get_internals */
   wolfssl_close,                   /* close_one */
   Curl_none_close_all,             /* close_all */

@@ -51,6 +51,7 @@
 #include "transfer.h"
 #include "multiif.h"
 #include "progress.h"
+#include "content_encoding.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
@@ -175,7 +176,11 @@ static int hyper_body_chunk(void *userdata, const hyper_buf *chunk)
   if(k->ignorebody)
     return HYPER_ITER_CONTINUE;
   Curl_debug(data, CURLINFO_DATA_IN, buf, len);
-  result = Curl_client_write(data, CLIENTWRITE_BODY, buf, len);
+  if(!data->set.http_ce_skip && k->writer_stack)
+    /* content-encoded data */
+    result = Curl_unencode_write(data, k->writer_stack, buf, len);
+  else
+    result = Curl_client_write(data, CLIENTWRITE_BODY, buf, len);
 
   if(result) {
     data->state.hresult = result;
@@ -464,8 +469,6 @@ CURLcode Curl_hyper_header(struct Curl_easy *data, hyper_headers *headers,
     else
       linelen = 2; /* CRLF ending */
     linelen += (p - n);
-    if(!n)
-      return CURLE_BAD_FUNCTION_ARGUMENT;
     vlen = p - v;
 
     if(HYPERE_OK != hyper_headers_add(headers, (uint8_t *)n, nlen,
@@ -741,7 +744,7 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     goto error;
   }
 
-  if(data->set.httpversion == CURL_HTTP_VERSION_1_0) {
+  if(data->state.httpwant == CURL_HTTP_VERSION_1_0) {
     if(HYPERE_OK != hyper_request_set_version(req,
                                               HYPER_HTTP_VERSION_1_0)) {
       failf(data, "error setting HTTP version");
@@ -807,13 +810,26 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
 #endif
 
   Curl_safefree(data->state.aptr.ref);
-  if(data->change.referer && !Curl_checkheaders(data, "Referer")) {
-    data->state.aptr.ref = aprintf("Referer: %s\r\n", data->change.referer);
+  if(data->state.referer && !Curl_checkheaders(data, "Referer")) {
+    data->state.aptr.ref = aprintf("Referer: %s\r\n", data->state.referer);
     if(!data->state.aptr.ref)
       return CURLE_OUT_OF_MEMORY;
     if(Curl_hyper_header(data, headers, data->state.aptr.ref))
       goto error;
   }
+
+  if(!Curl_checkheaders(data, "Accept-Encoding") &&
+     data->set.str[STRING_ENCODING]) {
+    Curl_safefree(data->state.aptr.accept_encoding);
+    data->state.aptr.accept_encoding =
+      aprintf("Accept-Encoding: %s\r\n", data->set.str[STRING_ENCODING]);
+    if(!data->state.aptr.accept_encoding)
+      return CURLE_OUT_OF_MEMORY;
+    if(Curl_hyper_header(data, headers, data->state.aptr.accept_encoding))
+      goto error;
+  }
+  else
+    Curl_safefree(data->state.aptr.accept_encoding);
 
   result = cookies(data, conn, headers);
   if(result)

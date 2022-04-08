@@ -180,7 +180,7 @@ CURLcode Curl_quic_connect(struct Curl_easy *data,
   struct quicsocket *qs = &conn->hequic[sockindex];
   char *keylog_file = NULL;
   char ipbuf[40];
-  long port;
+  int port;
 
 #ifdef DEBUG_QUICHE
   /* initialize debug log callback only once */
@@ -359,6 +359,8 @@ static CURLcode process_ingress(struct Curl_easy *data, int sockfd,
   ssize_t recvd;
   uint8_t *buf = (uint8_t *)data->state.buffer;
   size_t bufsize = data->set.buffer_size;
+
+  DEBUGASSERT(qs->conn);
 
   /* in case the timeout expired */
   quiche_conn_on_timeout(qs->conn);

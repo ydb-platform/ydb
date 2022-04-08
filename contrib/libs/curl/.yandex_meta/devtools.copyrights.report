@@ -90,7 +90,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/dynbuf.c [8:8]
-        lib/dynbuf.h [10:10]
         lib/hsts.h [10:10]
         lib/rename.c [8:8]
         lib/rename.h [10:10]
@@ -105,6 +104,8 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/curl/curl.h [10:10]
+        include/curl/curlver.h [10:10]
+        include/curl/typecheck-gcc.h [10:10]
         lib/asyn-ares.c [8:8]
         lib/asyn-thread.c [8:8]
         lib/asyn.h [10:10]
@@ -114,14 +115,23 @@ BELONGS ya.make
         lib/connect.h [10:10]
         lib/content_encoding.c [8:8]
         lib/content_encoding.h [10:10]
+        lib/cookie.c [8:8]
         lib/cookie.h [10:10]
         lib/curl_addrinfo.c [8:8]
+        lib/curl_endian.c [8:8]
+        lib/curl_endian.h [10:10]
         lib/curl_krb5.h [10:10]
+        lib/curl_multibyte.c [8:8]
+        lib/curl_multibyte.h [10:10]
+        lib/curl_ntlm_core.c [8:8]
+        lib/curl_ntlm_core.h [10:10]
         lib/curl_ntlm_wb.c [8:8]
         lib/curl_ntlm_wb.h [10:10]
         lib/curl_path.c [8:8]
         lib/curl_range.c [8:8]
         lib/curl_range.h [10:10]
+        lib/curl_setup.h [10:10]
+        lib/curl_setup_once.h [10:10]
         lib/dict.c [8:8]
         lib/easy.c [8:8]
         lib/file.c [8:8]
@@ -129,6 +139,7 @@ BELONGS ya.make
         lib/ftp.c [8:8]
         lib/ftp.h [10:10]
         lib/ftplistparser.c [8:8]
+        lib/getinfo.c [8:8]
         lib/gopher.c [8:8]
         lib/hostasyn.c [8:8]
         lib/hostip.c [8:8]
@@ -153,11 +164,15 @@ BELONGS ya.make
         lib/http_proxy.h [10:10]
         lib/imap.c [8:8]
         lib/ldap.c [8:8]
+        lib/md4.c [8:8]
+        lib/md5.c [8:8]
+        lib/memdebug.c [8:8]
         lib/mime.c [8:8]
         lib/mime.h [10:10]
         lib/multi.c [8:8]
         lib/multihandle.h [10:10]
         lib/multiif.h [10:10]
+        lib/nonblock.c [8:8]
         lib/pingpong.c [8:8]
         lib/pingpong.h [10:10]
         lib/pop3.c [8:8]
@@ -183,6 +198,8 @@ BELONGS ya.make
         lib/url.c [8:8]
         lib/url.h [10:10]
         lib/urldata.h [10:10]
+        lib/vauth/ntlm.c [8:8]
+        lib/version.c [8:8]
         lib/vquic/ngtcp2.c [8:8]
         lib/vquic/quiche.c [8:8]
         lib/vssh/libssh2.c [8:8]
@@ -223,6 +240,19 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYING [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2963ab20f331f08f092c8490148587b0
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2020 - 2021, Jacob Hoffman-Andrews,
+         * <github@hoffman-andrews.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/rustls.c [8:9]
+        lib/vtls/rustls.h [8:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2a3c88ee2029a89e6dd5688e436297d4
 BELONGS ya.make
@@ -361,7 +391,6 @@ BELONGS ya.make
     Files with this license:
         lib/vauth/krb5_sspi.c [8:8]
         lib/vauth/vauth.c [8:8]
-        lib/vauth/vauth.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 487047a176f57677c51faf4394df4c7d
 BELONGS ya.make
@@ -436,8 +465,6 @@ BELONGS ya.make
         include/curl/options.h [10:10]
         include/curl/urlapi.h [10:10]
         lib/curl_sha256.h [10:11]
-        lib/sha256.c [8:9]
-        lib/smb.h [10:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 520dfafb050652350468b32c3d62b5cd
 BELONGS ya.make
@@ -484,6 +511,17 @@ BELONGS ya.make
     Files with this license:
         lib/pop3.h [10:10]
         lib/smtp.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6feef5fca9290bd2166cd3c8cc470230
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2020 - 2021, Simon Josefsson, <simon@josefsson.org>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vauth/gsasl.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 76a14b8bb4e715fa4b3e1efe01097c43
 BELONGS ya.make
@@ -532,7 +570,6 @@ BELONGS ya.make
         lib/altsvc.c [8:8]
         lib/altsvc.h [10:10]
         lib/socketpair.c [8:8]
-        lib/socketpair.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 84500f86b97af8062c8463ad37fdf711
 BELONGS ya.make
@@ -554,24 +591,19 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/curl/curlver.h [10:10]
         include/curl/easy.h [10:10]
         include/curl/mprintf.h [10:10]
         include/curl/multi.h [10:10]
         include/curl/stdcheaders.h [10:10]
         include/curl/system.h [10:10]
-        include/curl/typecheck-gcc.h [10:10]
         lib/amigaos.c [8:8]
         lib/amigaos.h [10:10]
         lib/arpa_telnet.h [10:10]
         lib/base64.c [8:8]
-        lib/cookie.c [8:8]
         lib/curl_addrinfo.h [10:10]
         lib/curl_base64.h [10:10]
         lib/curl_ctype.c [8:8]
         lib/curl_ctype.h [10:10]
-        lib/curl_endian.c [8:8]
-        lib/curl_endian.h [10:10]
         lib/curl_fnmatch.c [8:8]
         lib/curl_fnmatch.h [10:10]
         lib/curl_get_line.c [8:8]
@@ -585,13 +617,7 @@ BELONGS ya.make
         lib/curl_memory.h [10:10]
         lib/curl_memrchr.c [8:8]
         lib/curl_memrchr.h [10:10]
-        lib/curl_multibyte.c [8:8]
-        lib/curl_multibyte.h [10:10]
-        lib/curl_ntlm_core.c [8:8]
-        lib/curl_ntlm_core.h [10:10]
         lib/curl_printf.h [10:10]
-        lib/curl_setup.h [10:10]
-        lib/curl_setup_once.h [10:10]
         lib/curl_sspi.c [8:8]
         lib/curl_sspi.h [10:10]
         lib/curl_threads.c [8:8]
@@ -608,7 +634,6 @@ BELONGS ya.make
         lib/formdata.c [8:8]
         lib/ftplistparser.h [10:10]
         lib/getenv.c [8:8]
-        lib/getinfo.c [8:8]
         lib/getinfo.h [10:10]
         lib/gopher.h [10:10]
         lib/hash.c [8:8]
@@ -624,15 +649,11 @@ BELONGS ya.make
         lib/inet_pton.h [10:10]
         lib/llist.c [8:8]
         lib/llist.h [10:10]
-        lib/md4.c [8:8]
-        lib/md5.c [8:8]
-        lib/memdebug.c [8:8]
         lib/memdebug.h [11:11]
         lib/netrc.c [8:8]
         lib/netrc.h [10:10]
         lib/non-ascii.c [8:8]
         lib/non-ascii.h [10:10]
-        lib/nonblock.c [8:8]
         lib/nonblock.h [10:10]
         lib/parsedate.c [8:8]
         lib/parsedate.h [10:10]
@@ -667,13 +688,11 @@ BELONGS ya.make
         lib/vauth/cram.c [8:8]
         lib/vauth/digest.c [8:8]
         lib/vauth/digest.h [10:10]
-        lib/vauth/ntlm.c [8:8]
         lib/vauth/ntlm.h [10:10]
         lib/vauth/ntlm_sspi.c [8:8]
         lib/vauth/oauth2.c [8:8]
         lib/vauth/spnego_gssapi.c [8:8]
         lib/vauth/spnego_sspi.c [8:8]
-        lib/version.c [8:8]
         lib/vquic/vquic.c [8:8]
         lib/vtls/gskit.h [10:10]
         lib/vtls/gtls.h [10:10]
@@ -706,6 +725,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        lib/socketpair.h [10:10]
         lib/vssh/wolfssh.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 90ce0ec9551a9d561300240060256dff
@@ -780,6 +800,17 @@ BELONGS ya.make
         lib/system_win32.h [10:10]
         lib/version_win32.c [8:8]
         lib/version_win32.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a708a3265e6d737aa48aa8db4c364178
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2014 - 2021, Steve Holme, <steve_holme@hotmail.com>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vauth/vauth.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL aa5c639ebb1d16024e37af0e0fff3962
 BELONGS ya.make
@@ -947,6 +978,17 @@ BELONGS ya.make
     Files with this license:
         lib/vtls/schannel.h [10:11]
 
+KEEP     COPYRIGHT_SERVICE_LABEL f2084860a7ea915868d1e25feb89d837
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2020, 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/dynbuf.h [10:10]
+
 KEEP     COPYRIGHT_SERVICE_LABEL f38404a02e69976b94505df0c691bed0
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -955,8 +997,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/md4.c [240:245]
-        lib/md5.c [231:236]
+        lib/md4.c [213:218]
+        lib/md5.c [204:209]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f57f87b3877adb749c37808e1cc2057b
 BELONGS ya.make
@@ -969,3 +1011,5 @@ BELONGS ya.make
     Files with this license:
         lib/doh.c [8:8]
         lib/doh.h [10:10]
+        lib/sha256.c [8:9]
+        lib/smb.h [10:11]

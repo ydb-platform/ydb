@@ -358,7 +358,8 @@ static CURLcode CONNECT(struct Curl_easy *data,
           break;
         }
         else if(gotbytes <= 0) {
-          if(data->set.proxyauth && data->state.authproxy.avail) {
+          if(data->set.proxyauth && data->state.authproxy.avail &&
+             data->state.aptr.proxyuserpwd) {
             /* proxy auth was requested and there was proxy auth available,
                then deem this as "mere" proxy disconnect */
             conn->bits.proxy_connect_closed = TRUE;
@@ -759,7 +760,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
       if((conn->http_proxy.proxytype == CURLPROXY_HTTP_1_0) &&
          (HYPERE_OK != hyper_request_set_version(req,
                                                  HYPER_HTTP_VERSION_1_0))) {
-        failf(data, "error settting HTTP version");
+        failf(data, "error setting HTTP version");
         goto error;
       }
 

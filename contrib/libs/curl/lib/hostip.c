@@ -269,7 +269,7 @@ static struct Curl_dns_entry *fetch_addr(struct Curl_easy *data,
   dns = Curl_hash_pick(data->dns.hostcache, entry_id, entry_len + 1);
 
   /* No entry found in cache, check if we might have a wildcard entry */
-  if(!dns && data->change.wildcard_resolve) {
+  if(!dns && data->state.wildcard_resolve) {
     create_hostcache_id("*", port, entry_id, sizeof(entry_id));
     entry_len = strlen(entry_id);
 
@@ -520,8 +520,14 @@ enum resolve_t Curl_resolv(struct Curl_easy *data,
     if(data->set.resolver_start) {
       int st;
       Curl_set_in_callback(data, true);
-      st = data->set.resolver_start(data->state.async.resolver, NULL,
-                                    data->set.resolver_start_client);
+      st = data->set.resolver_start(
+#ifdef USE_CURL_ASYNC
+        data->state.async.resolver,
+#else
+        NULL,
+#endif
+        NULL,
+        data->set.resolver_start_client);
       Curl_set_in_callback(data, false);
       if(st)
         return CURLRESOLV_ERROR;
@@ -625,7 +631,7 @@ enum resolve_t Curl_resolv(struct Curl_easy *data,
  * within a signal handler which is nonportable and could lead to problems.
  */
 static
-RETSIGTYPE alarmfunc(int sig)
+void alarmfunc(int sig)
 {
   /* this is for "-ansi -Wall -pedantic" to stop complaining!   (rabe) */
   (void)sig;
@@ -872,9 +878,9 @@ CURLcode Curl_loadhostpairs(struct Curl_easy *data)
   int port = 0;
 
   /* Default is no wildcard found */
-  data->change.wildcard_resolve = false;
+  data->state.wildcard_resolve = false;
 
-  for(hostp = data->change.resolve; hostp; hostp = hostp->next) {
+  for(hostp = data->state.resolve; hostp; hostp = hostp->next) {
     char entry_id[MAX_HOSTCACHE_LEN];
     if(!hostp->data)
       continue;
@@ -1055,11 +1061,11 @@ CURLcode Curl_loadhostpairs(struct Curl_easy *data)
       if(hostname[0] == '*' && hostname[1] == '\0') {
         infof(data, "RESOLVE %s:%d is wildcard, enabling wildcard checks\n",
               hostname, port);
-        data->change.wildcard_resolve = true;
+        data->state.wildcard_resolve = true;
       }
     }
   }
-  data->change.resolve = NULL; /* dealt with now */
+  data->state.resolve = NULL; /* dealt with now */
 
   return CURLE_OK;
 }
@@ -1102,10 +1108,12 @@ CURLcode Curl_once_resolved(struct Curl_easy *data, bool *protocol_done)
   CURLcode result;
   struct connectdata *conn = data->conn;
 
+#ifdef USE_CURL_ASYNC
   if(data->state.async.dns) {
     conn->dns_entry = data->state.async.dns;
     data->state.async.dns = NULL;
   }
+#endif
 
   result = Curl_setup_conn(data, protocol_done);
 
@@ -1116,3 +1124,34 @@ CURLcode Curl_once_resolved(struct Curl_easy *data, bool *protocol_done)
   }
   return result;
 }
+
+/*
+ * Curl_resolver_error() calls failf() with the appropriate message after a
+ * resolve error
+ */
+
+#ifdef USE_CURL_ASYNC
+CURLcode Curl_resolver_error(struct Curl_easy *data)
+{
+  const char *host_or_proxy;
+  CURLcode result;
+
+#ifndef CURL_DISABLE_PROXY
+  struct connectdata *conn = data->conn;
+  if(conn->bits.httpproxy) {
+    host_or_proxy = "proxy";
+    result = CURLE_COULDNT_RESOLVE_PROXY;
+  }
+  else
+#endif
+  {
+    host_or_proxy = "host";
+    result = CURLE_COULDNT_RESOLVE_HOST;
+  }
+
+  failf(data, "Could not resolve %s: %s", host_or_proxy,
+        data->state.async.hostname);
+
+  return result;
+}
+#endif /* USE_CURL_ASYNC */

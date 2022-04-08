@@ -79,6 +79,7 @@
 #include "strcase.h"
 #include "urlapi-int.h"
 #include "hsts.h"
+#include "setopt.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
@@ -286,7 +287,7 @@ CURLcode Curl_fillreadbuffer(struct Curl_easy *data, size_t bytes,
      *        <DATA> CRLF
      */
     /* On non-ASCII platforms the <DATA> may or may not be
-       translated based on set.prefer_ascii while the protocol
+       translated based on state.prefer_ascii while the protocol
        portion must always be translated to the network encoding.
        To further complicate matters, line end conversion might be
        done later on, so we need to prevent CRLFs from becoming
@@ -301,7 +302,7 @@ CURLcode Curl_fillreadbuffer(struct Curl_easy *data, size_t bytes,
 
     if(
 #ifdef CURL_DO_LINEEND_CONV
-       (data->set.prefer_ascii) ||
+       (data->state.prefer_ascii) ||
 #endif
        (data->set.crlf)) {
       /* \n will become \r\n later on */
@@ -348,7 +349,7 @@ CURLcode Curl_fillreadbuffer(struct Curl_easy *data, size_t bytes,
     {
       CURLcode result;
       size_t length;
-      if(data->set.prefer_ascii)
+      if(data->state.prefer_ascii)
         /* translate the protocol and data */
         length = nread;
       else
@@ -389,7 +390,7 @@ CURLcode Curl_fillreadbuffer(struct Curl_easy *data, size_t bytes,
       nread += strlen(endofline_network); /* for the added end of line */
   }
 #ifdef CURL_DOES_CONVERSIONS
-  else if((data->set.prefer_ascii) && (!sending_http_headers)) {
+  else if((data->state.prefer_ascii) && (!sending_http_headers)) {
     CURLcode result;
     result = Curl_convert_to_network(data, data->req.upload_fromhere, nread);
     /* Curl_convert_to_network calls failf if unsuccessful */
@@ -1028,7 +1029,7 @@ static CURLcode readwrite_upload(struct Curl_easy *data,
       if((!sending_http_headers) && (
 #ifdef CURL_DO_LINEEND_CONV
          /* always convert if we're FTPing in ASCII mode */
-         (data->set.prefer_ascii) ||
+         (data->state.prefer_ascii) ||
 #endif
          (data->set.crlf))) {
         /* Do we need to allocate a scratch buffer? */
@@ -1391,20 +1392,20 @@ CURLcode Curl_pretransfer(struct Curl_easy *data)
 {
   CURLcode result;
 
-  if(!data->change.url && !data->set.uh) {
+  if(!data->state.url && !data->set.uh) {
     /* we can't do anything without URL */
     failf(data, "No URL set!");
     return CURLE_URL_MALFORMAT;
   }
 
   /* since the URL may have been redirected in a previous use of this handle */
-  if(data->change.url_alloc) {
+  if(data->state.url_alloc) {
     /* the already set URL is allocated, free it first! */
-    Curl_safefree(data->change.url);
-    data->change.url_alloc = FALSE;
+    Curl_safefree(data->state.url);
+    data->state.url_alloc = FALSE;
   }
 
-  if(!data->change.url && data->set.uh) {
+  if(!data->state.url && data->set.uh) {
     CURLUcode uc;
     free(data->set.str[STRING_SET_URL]);
     uc = curl_url_get(data->set.uh,
@@ -1415,8 +1416,10 @@ CURLcode Curl_pretransfer(struct Curl_easy *data)
     }
   }
 
+  data->state.prefer_ascii = data->set.prefer_ascii;
+  data->state.list_only = data->set.list_only;
   data->state.httpreq = data->set.method;
-  data->change.url = data->set.str[STRING_SET_URL];
+  data->state.url = data->set.str[STRING_SET_URL];
 
   /* Init the SSL session ID cache here. We do it here since we want to do it
      after the *_setopt() calls (that could specify the size of the cache) but
@@ -1426,11 +1429,11 @@ CURLcode Curl_pretransfer(struct Curl_easy *data)
     return result;
 
   data->state.wildcardmatch = data->set.wildcard_enabled;
-  data->set.followlocation = 0; /* reset the location-follow counter */
+  data->state.followlocation = 0; /* reset the location-follow counter */
   data->state.this_is_a_follow = FALSE; /* reset this */
   data->state.errorbuf = FALSE; /* no error has occurred */
-  data->state.httpversion = 0; /* don't assume any particular server version */
-
+  data->state.httpwant = data->set.httpwant;
+  data->state.httpversion = 0;
   data->state.authproblem = FALSE;
   data->state.authhost.want = data->set.httpauth;
   data->state.authproxy.want = data->set.proxyauth;
@@ -1448,11 +1451,11 @@ CURLcode Curl_pretransfer(struct Curl_easy *data)
     data->state.infilesize = 0;
 
   /* If there is a list of cookie files to read, do it now! */
-  if(data->change.cookielist)
+  if(data->state.cookielist)
     Curl_cookie_loadfiles(data);
 
   /* If there is a list of host pairs to deal with */
-  if(data->change.resolve)
+  if(data->state.resolve)
     result = Curl_loadhostpairs(data);
 
   if(!result) {
@@ -1506,6 +1509,19 @@ CURLcode Curl_pretransfer(struct Curl_easy *data)
       return CURLE_OUT_OF_MEMORY;
   }
 
+  if(!result)
+    result = Curl_setstropt(&data->state.aptr.user,
+                            data->set.str[STRING_USERNAME]);
+  if(!result)
+    result = Curl_setstropt(&data->state.aptr.passwd,
+                            data->set.str[STRING_PASSWORD]);
+  if(!result)
+    result = Curl_setstropt(&data->state.aptr.proxyuser,
+                            data->set.str[STRING_PROXYUSERNAME]);
+  if(!result)
+    result = Curl_setstropt(&data->state.aptr.proxypasswd,
+                            data->set.str[STRING_PROXYPASSWORD]);
+
   data->req.headerbytecount = 0;
   return result;
 }
@@ -1553,7 +1569,7 @@ CURLcode Curl_follow(struct Curl_easy *data,
 
   if(type == FOLLOW_REDIR) {
     if((data->set.maxredirs != -1) &&
-       (data->set.followlocation >= data->set.maxredirs)) {
+       (data->state.followlocation >= data->set.maxredirs)) {
       reachedmax = TRUE;
       type = FOLLOW_FAKE; /* switch to fake to store the would-be-redirected
                              to URL */
@@ -1562,22 +1578,43 @@ CURLcode Curl_follow(struct Curl_easy *data,
       /* mark the next request as a followed location: */
       data->state.this_is_a_follow = TRUE;
 
-      data->set.followlocation++; /* count location-followers */
+      data->state.followlocation++; /* count location-followers */
 
       if(data->set.http_auto_referer) {
+        CURLU *u;
+        char *referer = NULL;
+
         /* We are asked to automatically set the previous URL as the referer
            when we get the next URL. We pick the ->url field, which may or may
            not be 100% correct */
 
-        if(data->change.referer_alloc) {
-          Curl_safefree(data->change.referer);
-          data->change.referer_alloc = FALSE;
+        if(data->state.referer_alloc) {
+          Curl_safefree(data->state.referer);
+          data->state.referer_alloc = FALSE;
         }
 
-        data->change.referer = strdup(data->change.url);
-        if(!data->change.referer)
+        /* Make a copy of the URL without crenditals and fragment */
+        u = curl_url();
+        if(!u)
           return CURLE_OUT_OF_MEMORY;
-        data->change.referer_alloc = TRUE; /* yes, free this later */
+
+        uc = curl_url_set(u, CURLUPART_URL, data->state.url, 0);
+        if(!uc)
+          uc = curl_url_set(u, CURLUPART_FRAGMENT, NULL, 0);
+        if(!uc)
+          uc = curl_url_set(u, CURLUPART_USER, NULL, 0);
+        if(!uc)
+          uc = curl_url_set(u, CURLUPART_PASSWORD, NULL, 0);
+        if(!uc)
+          uc = curl_url_get(u, CURLUPART_URL, &referer, 0);
+
+        curl_url_cleanup(u);
+
+        if(uc || !referer)
+          return CURLE_OUT_OF_MEMORY;
+
+        data->state.referer = referer;
+        data->state.referer_alloc = TRUE; /* yes, free this later */
       }
     }
   }
@@ -1625,13 +1662,13 @@ CURLcode Curl_follow(struct Curl_easy *data,
   if(disallowport)
     data->state.allow_port = FALSE;
 
-  if(data->change.url_alloc)
-    Curl_safefree(data->change.url);
+  if(data->state.url_alloc)
+    Curl_safefree(data->state.url);
 
-  data->change.url = newurl;
-  data->change.url_alloc = TRUE;
+  data->state.url = newurl;
+  data->state.url_alloc = TRUE;
 
-  infof(data, "Issue another request to this URL: '%s'\n", data->change.url);
+  infof(data, "Issue another request to this URL: '%s'\n", data->state.url);
 
   /*
    * We get here when the HTTP code is 300-399 (and 401). We need to perform
@@ -1792,7 +1829,7 @@ CURLcode Curl_retry_request(struct Curl_easy *data, char **url)
     }
     infof(data, "Connection died, retrying a fresh connect\
 (retry count: %d)\n", data->state.retrycount);
-    *url = strdup(data->change.url);
+    *url = strdup(data->state.url);
     if(!*url)
       return CURLE_OUT_OF_MEMORY;
 

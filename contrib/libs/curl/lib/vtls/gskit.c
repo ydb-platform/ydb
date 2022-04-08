@@ -610,7 +610,7 @@ static void close_one(struct ssl_connect_data *connssl, struct Curl_easy *data,
 }
 
 
-static ssize_t gskit_send(struct connectdata *conn, int sockindex,
+static ssize_t gskit_send(struct Curl_easy *data, int sockindex,
                           const void *mem, size_t len, CURLcode *curlcode)
 {
   struct connectdata *conn = data->conn;
@@ -700,7 +700,6 @@ static CURLcode gskit_connect_step1(struct Curl_easy *data,
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   gsk_handle envir;
   CURLcode result;
-  int rc;
   const char * const keyringfile = SSL_CONN_CONFIG(CAfile);
   const char * const keyringpwd = SSL_SET_OPTION(key_passwd);
   const char * const keyringlabel = SSL_SET_OPTION(primary.clientcert);
@@ -1037,7 +1036,7 @@ static CURLcode gskit_connect_step3(struct Curl_easy *data,
 
   /* Check pinned public key. */
   ptr = SSL_IS_PROXY() ? data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY] :
-                         data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG];
+    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
   if(!result && ptr) {
     curl_X509certificate x509;
     curl_asn1Element *p;

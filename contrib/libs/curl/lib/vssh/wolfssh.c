@@ -585,7 +585,7 @@ static CURLcode wssh_statemach_act(struct Curl_easy *data, bool *block)
         }
       }
 
-      if(data->set.ftp_append)
+      if(data->set.remote_append)
         /* Try to open for append, but create if nonexisting */
         flags = WOLFSSH_FXF_WRITE|WOLFSSH_FXF_CREAT|WOLFSSH_FXF_APPEND;
       else if(data->state.resume_from > 0)
@@ -859,7 +859,7 @@ static CURLcode wssh_statemach_act(struct Curl_easy *data, bool *block)
         result = CURLE_OK;
         while(name) {
           char *line = aprintf("%s\n",
-                               data->set.ftp_list_only ?
+                               data->set.list_only ?
                                name->fName : name->lName);
           if(line == NULL) {
             state(data, SSH_SFTP_CLOSE);

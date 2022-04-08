@@ -35,14 +35,8 @@
 #include <gnutls/abstract.h>
 #include <gnutls/gnutls.h>
 #include <gnutls/x509.h>
-
-#ifdef USE_GNUTLS_NETTLE
 #include <gnutls/crypto.h>
-#include <nettle/md5.h>
 #include <nettle/sha2.h>
-#else
-#include <gcrypt.h>
-#endif
 
 #include "urldata.h"
 #include "sendf.h"
@@ -618,7 +612,7 @@ gtls_connect_step1(struct Curl_easy *data,
     gnutls_datum_t protocols[2];
 
 #ifdef USE_NGHTTP2
-    if(data->set.httpversion >= CURL_HTTP_VERSION_2
+    if(data->state.httpwant >= CURL_HTTP_VERSION_2
 #ifndef CURL_DISABLE_PROXY
        && (!SSL_IS_PROXY() || !conn->bits.tunnel_proxy)
 #endif
@@ -733,6 +727,7 @@ gtls_connect_step1(struct Curl_easy *data,
 
     Curl_ssl_sessionid_lock(data);
     if(!Curl_ssl_getsessionid(data, conn,
+                              SSL_IS_PROXY() ? TRUE : FALSE,
                               &ssl_sessionid, &ssl_idsize, sockindex)) {
       /* we got a session id, use it! */
       gnutls_session_set_data(session, ssl_sessionid, ssl_idsize);
@@ -1184,7 +1179,7 @@ gtls_connect_step3(struct Curl_easy *data,
   }
 
   ptr = SSL_IS_PROXY() ? data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY] :
-        data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG];
+    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
   if(ptr) {
     result = pkp_pin_peer_pubkey(data, x509_cert, ptr);
     if(result != CURLE_OK) {
@@ -1292,8 +1287,9 @@ gtls_connect_step3(struct Curl_easy *data,
       gnutls_session_get_data(session, connect_sessionid, &connect_idsize);
 
       Curl_ssl_sessionid_lock(data);
-      incache = !(Curl_ssl_getsessionid(data, conn, &ssl_sessionid, NULL,
-                                        sockindex));
+      incache = !(Curl_ssl_getsessionid(data, conn,
+                                        SSL_IS_PROXY() ? TRUE : FALSE,
+                                        &ssl_sessionid, NULL, sockindex));
       if(incache) {
         /* there was one before in the cache, so instead of risking that the
            previous one was rejected, we just kill that and store the new */
@@ -1301,8 +1297,10 @@ gtls_connect_step3(struct Curl_easy *data,
       }
 
       /* store this session id */
-      result = Curl_ssl_addsessionid(data, conn, connect_sessionid,
-                                     connect_idsize, sockindex);
+      result = Curl_ssl_addsessionid(data, conn,
+                                     SSL_IS_PROXY() ? TRUE : FALSE,
+                                     connect_sessionid, connect_idsize,
+                                     sockindex);
       Curl_ssl_sessionid_unlock(data);
       if(result) {
         free(connect_sessionid);
@@ -1583,39 +1581,14 @@ static size_t gtls_version(char *buffer, size_t size)
   return msnprintf(buffer, size, "GnuTLS/%s", gnutls_check_version(NULL));
 }
 
-#ifndef USE_GNUTLS_NETTLE
-static int gtls_seed(struct Curl_easy *data)
-{
-  /* we have the "SSL is seeded" boolean static to prevent multiple
-     time-consuming seedings in vain */
-  static bool ssl_seeded = FALSE;
-
-  /* Quickly add a bit of entropy */
-  gcry_fast_random_poll();
-
-  if(!ssl_seeded || data->set.str[STRING_SSL_RANDOM_FILE] ||
-     data->set.str[STRING_SSL_EGDSOCKET]) {
-    ssl_seeded = TRUE;
-  }
-  return 0;
-}
-#endif
-
 /* data might be NULL! */
 static CURLcode gtls_random(struct Curl_easy *data,
                             unsigned char *entropy, size_t length)
 {
-#if defined(USE_GNUTLS_NETTLE)
   int rc;
   (void)data;
   rc = gnutls_rnd(GNUTLS_RND_RANDOM, entropy, length);
   return rc?CURLE_FAILED_INIT:CURLE_OK;
-#elif defined(USE_GNUTLS)
-  if(data)
-    gtls_seed(data); /* Initiate the seed if not already done */
-  gcry_randomize(entropy, length, GCRY_STRONG_RANDOM);
-#endif
-  return CURLE_OK;
 }
 
 static CURLcode gtls_sha256sum(const unsigned char *tmp, /* input */
@@ -1623,18 +1596,10 @@ static CURLcode gtls_sha256sum(const unsigned char *tmp, /* input */
                                unsigned char *sha256sum, /* output */
                                size_t sha256len)
 {
-#if defined(USE_GNUTLS_NETTLE)
   struct sha256_ctx SHA256pw;
   sha256_init(&SHA256pw);
   sha256_update(&SHA256pw, (unsigned int)tmplen, tmp);
   sha256_digest(&SHA256pw, (unsigned int)sha256len, sha256sum);
-#elif defined(USE_GNUTLS)
-  gcry_md_hd_t SHA256pw;
-  gcry_md_open(&SHA256pw, GCRY_MD_SHA256, 0);
-  gcry_md_write(SHA256pw, tmp, tmplen);
-  memcpy(sha256sum, gcry_md_read(SHA256pw, 0), sha256len);
-  gcry_md_close(SHA256pw);
-#endif
   return CURLE_OK;
 }
 
@@ -1671,6 +1636,7 @@ const struct Curl_ssl Curl_ssl_gnutls = {
   gtls_cert_status_request,      /* cert_status_request */
   gtls_connect,                  /* connect */
   gtls_connect_nonblocking,      /* connect_nonblocking */
+  Curl_ssl_getsock,              /* getsock */
   gtls_get_internals,            /* get_internals */
   gtls_close,                    /* close_one */
   Curl_none_close_all,           /* close_all */

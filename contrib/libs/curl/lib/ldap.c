@@ -296,10 +296,10 @@ static CURLcode ldap_do(struct Curl_easy *data, bool *done)
   *done = TRUE; /* unconditionally */
   infof(data, "LDAP local: LDAP Vendor = %s ; LDAP Version = %d\n",
           LDAP_VENDOR_NAME, LDAP_VENDOR_VERSION);
-  infof(data, "LDAP local: %s\n", data->change.url);
+  infof(data, "LDAP local: %s\n", data->state.url);
 
 #ifdef HAVE_LDAP_URL_PARSE
-  rc = ldap_url_parse(data->change.url, &ludp);
+  rc = ldap_url_parse(data->state.url, &ludp);
 #else
   rc = _ldap_url_parse(data, conn, &ludp);
 #endif
@@ -875,7 +875,7 @@ static int _ldap_url_parse2(struct Curl_easy *data,
     ludp->lud_dn = curlx_convert_UTF8_to_tchar(unescaped);
 
     /* Free the unescaped string as we are done with it */
-    curlx_unicodefree(unescaped);
+    free(unescaped);
 
     if(!ludp->lud_dn) {
       rc = LDAP_NO_MEMORY;
@@ -943,7 +943,7 @@ static int _ldap_url_parse2(struct Curl_easy *data,
       ludp->lud_attrs[i] = curlx_convert_UTF8_to_tchar(unescaped);
 
       /* Free the unescaped string as we are done with it */
-      curlx_unicodefree(unescaped);
+      free(unescaped);
 
       if(!ludp->lud_attrs[i]) {
         free(attributes);
@@ -1010,7 +1010,7 @@ static int _ldap_url_parse2(struct Curl_easy *data,
     ludp->lud_filter = curlx_convert_UTF8_to_tchar(unescaped);
 
     /* Free the unescaped string as we are done with it */
-    curlx_unicodefree(unescaped);
+    free(unescaped);
 
     if(!ludp->lud_filter) {
       rc = LDAP_NO_MEMORY;

@@ -375,7 +375,8 @@ static CURLcode bearssl_connect_step1(struct Curl_easy *data,
     void *session;
 
     Curl_ssl_sessionid_lock(data);
-    if(!Curl_ssl_getsessionid(data, conn, &session, NULL, sockindex)) {
+    if(!Curl_ssl_getsessionid(data, conn, SSL_IS_PROXY() ? TRUE : FALSE,
+                              &session, NULL, sockindex)) {
       br_ssl_engine_set_session_parameters(&backend->ctx.eng, session);
       infof(data, "BearSSL: re-using session ID\n");
     }
@@ -390,7 +391,7 @@ static CURLcode bearssl_connect_step1(struct Curl_easy *data,
      */
 
 #ifdef USE_NGHTTP2
-    if(data->set.httpversion >= CURL_HTTP_VERSION_2
+    if(data->state.httpwant >= CURL_HTTP_VERSION_2
 #ifndef CURL_DISABLE_PROXY
       && (!SSL_IS_PROXY() || !conn->bits.tunnel_proxy)
 #endif
@@ -571,10 +572,13 @@ static CURLcode bearssl_connect_step3(struct Curl_easy *data,
     br_ssl_engine_get_session_parameters(&backend->ctx.eng, session);
     Curl_ssl_sessionid_lock(data);
     incache = !(Curl_ssl_getsessionid(data, conn,
+                                      SSL_IS_PROXY() ? TRUE : FALSE,
                                       &oldsession, NULL, sockindex));
     if(incache)
       Curl_ssl_delsessionid(data, oldsession);
-    ret = Curl_ssl_addsessionid(data, conn, session, 0, sockindex);
+    ret = Curl_ssl_addsessionid(data, conn,
+                                SSL_IS_PROXY() ? TRUE : FALSE,
+                                session, 0, sockindex);
     Curl_ssl_sessionid_unlock(data);
     if(ret) {
       free(session);
@@ -855,6 +859,7 @@ const struct Curl_ssl Curl_ssl_bearssl = {
   Curl_none_cert_status_request,
   bearssl_connect,
   bearssl_connect_nonblocking,
+  Curl_ssl_getsock,
   bearssl_get_internals,
   bearssl_close,
   Curl_none_close_all,

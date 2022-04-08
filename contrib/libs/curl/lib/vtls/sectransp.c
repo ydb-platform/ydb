@@ -1400,10 +1400,12 @@ static CURLcode sectransp_connect_step1(struct Curl_easy *data,
   char * const ssl_cert = SSL_SET_OPTION(primary.clientcert);
   const struct curl_blob *ssl_cert_blob = SSL_SET_OPTION(primary.cert_blob);
 #ifndef CURL_DISABLE_PROXY
-  const char * const hostname = SSL_IS_PROXY() ? conn->http_proxy.host.name :
+  bool isproxy = SSL_IS_PROXY();
+  const char * const hostname = isproxy ? conn->http_proxy.host.name :
     conn->host.name;
   const long int port = SSL_IS_PROXY() ? conn->port : conn->remote_port;
 #else
+  const isproxy = FALSE;
   const char * const hostname = conn->host.name;
   const long int port = conn->remote_port;
 #endif
@@ -1611,9 +1613,9 @@ static CURLcode sectransp_connect_step1(struct Curl_easy *data,
                                                        &kCFTypeArrayCallBacks);
 
 #ifdef USE_NGHTTP2
-      if(data->set.httpversion >= CURL_HTTP_VERSION_2
+      if(data->state.httpwant >= CURL_HTTP_VERSION_2
 #ifndef CURL_DISABLE_PROXY
-         && (!SSL_IS_PROXY() || !conn->bits.tunnel_proxy)
+         && (!isproxy || !conn->bits.tunnel_proxy)
 #endif
         ) {
         CFArrayAppendValue(alpnArr, CFSTR(NGHTTP2_PROTO_VERSION_ID));
@@ -1941,7 +1943,7 @@ static CURLcode sectransp_connect_step1(struct Curl_easy *data,
      specifically doesn't want us doing that: */
   if(SSLSetSessionOption != NULL) {
     SSLSetSessionOption(backend->ssl_ctx, kSSLSessionOptionSendOneByteRecord,
-                      !data->set.ssl.enable_beast);
+                        !SSL_SET_OPTION(enable_beast));
     SSLSetSessionOption(backend->ssl_ctx, kSSLSessionOptionFalseStart,
                       data->set.ssl.falsestart); /* false start support */
   }
@@ -1953,7 +1955,7 @@ static CURLcode sectransp_connect_step1(struct Curl_easy *data,
     size_t ssl_sessionid_len;
 
     Curl_ssl_sessionid_lock(data);
-    if(!Curl_ssl_getsessionid(data, conn, (void **)&ssl_sessionid,
+    if(!Curl_ssl_getsessionid(data, conn, isproxy, (void **)&ssl_sessionid,
                               &ssl_sessionid_len, sockindex)) {
       /* we got a session id, use it! */
       err = SSLSetPeerID(backend->ssl_ctx, ssl_sessionid, ssl_sessionid_len);
@@ -1981,7 +1983,7 @@ static CURLcode sectransp_connect_step1(struct Curl_easy *data,
         return CURLE_SSL_CONNECT_ERROR;
       }
 
-      result = Curl_ssl_addsessionid(data, conn, ssl_sessionid,
+      result = Curl_ssl_addsessionid(data, conn, isproxy, ssl_sessionid,
                                      ssl_sessionid_len, sockindex);
       Curl_ssl_sessionid_unlock(data);
       if(result) {
@@ -2621,9 +2623,10 @@ sectransp_connect_step2(struct Curl_easy *data, struct connectdata *conn,
     connssl->connecting_state = ssl_connect_3;
 
 #ifdef SECTRANSP_PINNEDPUBKEY
-    if(data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG]) {
-      CURLcode result = pkp_pin_peer_pubkey(data, backend->ssl_ctx,
-                            data->set.str[STRING_SSL_PINNEDPUBLICKEY_ORIG]);
+    if(data->set.str[STRING_SSL_PINNEDPUBLICKEY]) {
+      CURLcode result =
+        pkp_pin_peer_pubkey(data, backend->ssl_ctx,
+                            data->set.str[STRING_SSL_PINNEDPUBLICKEY]);
       if(result) {
         failf(data, "SSL: public key does not match pinned public key!");
         return result;
@@ -3301,6 +3304,7 @@ const struct Curl_ssl Curl_ssl_sectransp = {
   Curl_none_cert_status_request,      /* cert_status_request */
   sectransp_connect,                  /* connect */
   sectransp_connect_nonblocking,      /* connect_nonblocking */
+  Curl_ssl_getsock,                   /* getsock */
   sectransp_get_internals,            /* get_internals */
   sectransp_close,                    /* close_one */
   Curl_none_close_all,                /* close_all */

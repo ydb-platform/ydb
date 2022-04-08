@@ -159,6 +159,10 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (C) 2014 - 2021, Steve Holme, <steve_holme@hotmail.com>.
+
+
+====================COPYRIGHT====================
  * Copyright (C) 2015 - 2020, Steve Holme, <steve_holme@hotmail.com>.
 
 
@@ -225,6 +229,19 @@
 ====================COPYRIGHT====================
  * Copyright (C) 2020 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2019, Björn Stenberg, <bjorn@haxx.se>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020 - 2021, Jacob Hoffman-Andrews,
+ * <github@hoffman-andrews.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020 - 2021, Simon Josefsson, <simon@josefsson.org>, et al.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020, 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================

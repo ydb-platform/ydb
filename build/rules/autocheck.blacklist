@@ -812,3 +812,4 @@ taxi/backend-cpp
 classifieds/passport
 billing/tools/docker
 portal/archive/divts
+taxi/dmp/settings

@@ -2,7 +2,7 @@
 
 Проверяет условие `IF(condition_expression, then_expression, else_expression)`.
 
-Является упрощеннай альтернативой для [CASE WHEN ... THEN ... ELSE ... END](../../../syntax/expressions.md#case).
+Является упрощенной альтернативой для [CASE WHEN ... THEN ... ELSE ... END](../../../syntax/expressions.md#case).
 
 Аргумент `else_expression` можно не указывать. В этом случае, если условие ложно (`condition_expression` вернул `false`), будет возвращено пустое значение с типом, соответствующим `then_expression` и допускающим значение `NULL`. Таким образом, у результата получится [optional тип данных](../../../types/optional.md).
 

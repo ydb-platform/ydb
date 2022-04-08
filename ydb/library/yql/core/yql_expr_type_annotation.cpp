@@ -1299,6 +1299,15 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
     return nullptr;
 }
 
+const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const TPgExprType* two, TExprContext& ctx) {
+    if (one->GetId() == two->GetId()) {
+        return one;
+    }
+
+    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << one->GetName() << " and " << two->GetName()));
+    return nullptr;
+}
+
 const TDataExprType* CommonType(TPositionHandle pos, const TResourceExprType* resource, const TDataExprType* data, TExprContext& ctx) {
     const auto slot = data->GetSlot();
     const auto& tag = resource->GetTag();
@@ -1641,12 +1650,20 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
                 return CommonType<Strict>(pos, one->Cast<TVariantExprType>(), two->Cast<TVariantExprType>(), ctx);
             case ETypeAnnotationKind::Tagged:
                 return CommonType<Strict>(pos, one->Cast<TTaggedExprType>(), two->Cast<TTaggedExprType>(), ctx);
+            case ETypeAnnotationKind::Pg:
+                return CommonType(pos, one->Cast<TPgExprType>(), two->Cast<TPgExprType>(), ctx);
             default:
                 break;
         }
     } else {
         if constexpr (!Strict) {
-            if (ETypeAnnotationKind::Optional == kindOne) {
+            if (ETypeAnnotationKind::Pg == kindOne) {
+                if (ETypeAnnotationKind::Null == kindTwo)
+                    return one;
+            } else if (ETypeAnnotationKind::Pg == kindTwo) {
+                if (ETypeAnnotationKind::Null == kindOne)
+                    return two;
+            } else if (ETypeAnnotationKind::Optional == kindOne) {
                 if (ETypeAnnotationKind::Null  == kindTwo)
                     return one;
                 else if (const auto itemType = CommonType<Strict>(pos, one->Cast<TOptionalExprType>()->GetItemType(), two, ctx))

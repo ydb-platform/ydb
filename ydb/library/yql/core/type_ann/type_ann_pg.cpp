@@ -1146,6 +1146,22 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
             .Seal()
             .Build();
 
+        if (lambdaResult->GetKind() == ETypeAnnotationKind::Null) {
+            initLambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Param("row")
+                    .Callable("PgCast")
+                        .Apply(0, initLambda)
+                            .With(0, "row")
+                        .Seal()
+                        .Callable(1, "PgType")
+                            .Atom(0, NPg::LookupType(aggDesc.TransTypeId).Name)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
         updateLambda = ctx.Expr.Builder(input->Pos())
             .Lambda()
                 .Param("row")

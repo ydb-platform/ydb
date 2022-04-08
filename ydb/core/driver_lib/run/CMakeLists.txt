@@ -55,6 +55,7 @@ target_link_libraries(run PUBLIC
   ydb-core-formats
   ydb-core-grpc_services
   ydb-core-health_check
+  ydb-core-http_proxy
   core-kesus-proxy
   core-kesus-tablet
   ydb-core-keyvalue

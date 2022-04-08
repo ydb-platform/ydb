@@ -8,6 +8,7 @@
 #include <ydb/core/base/grpc_service_factory.h>
 
 #include <ydb/core/ymq/actor/auth_factory.h>
+#include <ydb/core/http_proxy/auth_factory.h>
 
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
@@ -56,6 +57,8 @@ struct TModuleFactories {
 
     std::function<NActors::TMon* (NActors::TMon::TConfig)> MonitoringFactory;
     std::shared_ptr<NSQS::IAuthFactory> SqsAuthFactory;
+
+    std::shared_ptr<NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
 
     ~TModuleFactories();
 };

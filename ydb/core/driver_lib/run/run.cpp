@@ -868,6 +868,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         ? ModuleFactories->SqsAuthFactory.get()
         : nullptr;
 
+    AppData->DataStreamsAuthFactory = ModuleFactories
+        ? ModuleFactories->DataStreamsAuthFactory.get()
+        : nullptr;
+
     AppData->FolderServiceFactory = ModuleFactories
         ? ModuleFactories->FolderServiceFactory
         : nullptr;
@@ -1304,6 +1308,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableSqs) {
         sil->AddServiceInitializer(new TSqsServiceInitializer(runConfig, ModuleFactories));
+    }
+
+    if (serviceMask.EnableHttpProxy) {
+        sil->AddServiceInitializer(new THttpProxyServiceInitializer(runConfig, ModuleFactories));
     }
 
     if (serviceMask.EnableConfigsDispatcher) {

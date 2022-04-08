@@ -124,6 +124,8 @@ public:
         ConfigFiles["KeyConfig"] = "key.txt";
         ConfigFiles["PDiskKeyConfig"] = "pdisk_key.txt";
         ConfigFiles["ClusterYamlConfig"] = "cluster.yaml";
+        ConfigFiles["HttpProxy"] = "http_proxy.txt";
+
     }
 
     void Write(const TString &outDir,

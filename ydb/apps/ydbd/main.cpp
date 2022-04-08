@@ -7,6 +7,8 @@
 #include <ydb/core/yq/libs/audit/mock/yq_mock_audit_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/pdisk_io/aio.h>
+#include <ydb/core/http_proxy/auth_factory.h>
+
 
 int main(int argc, char **argv) {
     SetupTerminateHandler();
@@ -19,6 +21,7 @@ int main(int argc, char **argv) {
     factories->YdbCredentialProviderFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     factories->IoContextFactory = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
     factories->SqsAuthFactory = std::make_shared<NKikimr::NSQS::TAuthFactory>();
+    factories->DataStreamsAuthFactory = std::make_shared<NKikimr::NHttpProxy::TAuthFactory>();
 
     return ParameterizedMain(argc, argv, std::move(factories));
 }

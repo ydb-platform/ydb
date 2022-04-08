@@ -136,7 +136,7 @@ namespace NActors {
 
         void SendRequest(const TActorContext &ctx, const TString& serializedToken = TString()) {
             if (Authorizer) {
-                LOG_WARN_S(ctx, NKikimrServices::HTTP,
+                LOG_WARN_S(ctx, NActorsServices::HTTP,
                            Request.GetRemoteAddr()
                            << " " << GetUser()
                            << " " << GetMethod(Request.GetMethod())

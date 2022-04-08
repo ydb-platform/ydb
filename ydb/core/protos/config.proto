@@ -697,6 +697,23 @@ message TFeatureFlags {
     optional bool AllowVDiskDefrag = 63 [default = true];
 }
 
+
+message THttpProxyConfig {
+    optional bool Enabled = 1;
+    optional uint32 Port = 2;
+    optional bool Secure = 3;
+    optional string CA = 4;
+    optional string Cert = 5;
+    optional string Key = 6;
+
+    repeated string YandexCloudServiceRegion = 7;
+    optional string IamTokenServiceEndpoint = 8;
+    optional string AccessServiceEndpoint = 9;
+
+    optional string JwtFile = 10;
+}
+
+
 message TSqsConfig {
     optional bool EnableSqs = 5;
     optional string Root = 1 [default = "/Root/SQS"];
@@ -871,7 +888,6 @@ message TSqsConfig {
         optional uint64 ReindexIntervalSeconds = 4 [default = 14400];
         optional bool TenantMode = 5 [default = false];
     }
-
     message TOauthTokenConfig {
         required string TokenFile = 1;
     }
@@ -1481,6 +1497,7 @@ message TAppConfig {
     optional TDataShardConfig DataShardConfig = 49;
     optional NYq.NConfig.TConfig YandexQueryConfig = 50;
     optional TCompactionConfig CompactionConfig = 52;
+    optional THttpProxyConfig HttpProxyConfig = 53;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

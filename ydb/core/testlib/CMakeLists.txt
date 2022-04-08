@@ -85,6 +85,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   ydb-services-rate_limiter
   ydb-services-ydb
   ydb-services-yq
+  ydb-core-http_proxy
 )
 target_sources(ydb-core-testlib PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/testlib/actor_helpers.cpp

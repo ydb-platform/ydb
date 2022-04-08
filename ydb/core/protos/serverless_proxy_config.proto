@@ -1,33 +1,19 @@
-import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/config.proto";
+
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TServerlessProxyConfig {
-    message TDatabaseEndpoints {
-        optional string Database = 1;
-        optional string DiscoveryEndpoint = 2;
-    }
+    optional THttpProxyConfig HttpConfig = 1;
 
-    optional THttpServerConfig HttpServerConfig = 1;
+    optional TGRpcConfig GRpcConfig = 2;
+    optional string CaCert = 3;
 
-    optional TGRpcConfig GRpcConfig = 9;
+    optional string DatabaseServiceEndpoint = 4;
+    optional uint32 DatabaseListRefreshPeriodSeconds = 5 [default = 10];
 
-    repeated string YandexCloudServiceRegion = 2;
+    optional bool TestMode = 6;
 
-    repeated TDatabaseEndpoints KnownEndpoints = 3;
-
-    optional string CaCert = 4;
-
-    optional string IamTokenServiceEndpoint = 5;
-    optional string AccessServiceEndpoint = 6;
-
-    optional string DatabaseServiceEndpoint = 7;
-
-    optional bool TestMode = 8;
-    optional uint32 DatabaseListRefreshPeriodSeconds = 10 [default = 10];
-
-    optional TLogConfig LogConfig = 11;
-
+    optional TLogConfig LogConfig = 7;
 }
 

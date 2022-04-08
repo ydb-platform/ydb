@@ -145,6 +145,7 @@ struct TKikimrEvents : TEvents {
         ES_PQ_PARTITION_WRITER,
         ES_YDB_PROXY,
         ES_REPLICATION_CONTROLLER,
+        ES_HTTP_PROXY
     };
 };
 

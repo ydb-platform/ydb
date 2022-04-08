@@ -25,6 +25,7 @@
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/base/grpc_service_factory.h>
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
+#include <ydb/core/http_proxy/auth_factory.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -123,6 +124,7 @@ namespace Tests {
         TMap<ui32, TString> NodeKeys;
         ui64 DomainPlanResolution = 0;
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
+        std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
 
         bool EnableMetering = false;
         TString MeteringFilePath;
@@ -168,6 +170,13 @@ namespace Tests {
             PersQueueGetReadSessionsInfoWorkerFactory = factory;
             return *this;
         }
+        TServerSettings& SetDataStreamsAuthFactory(
+            std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> factory
+        ) {
+            DataStreamsAuthFactory = factory;
+            return *this;
+        }
+
 
         // Add additional grpc services
         template <typename TService>

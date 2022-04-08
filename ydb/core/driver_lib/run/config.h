@@ -64,6 +64,7 @@ union TBasicKikimrServicesMask {
         bool EnableHealthCheckService:1;
         bool EnableYandexQuery:1;
         bool EnableSequenceProxyService:1;
+        bool EnableHttpProxy:1;
     };
 
     ui64 Raw;

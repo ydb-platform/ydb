@@ -1,8 +1,4 @@
 ====================BSD-3-Clause====================
-  others the right to apply the CMake BSD license instead).
-
-
-====================BSD-3-Clause====================
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -52,11 +48,19 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel.se>, et al.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+
+
+====================COPYRIGHT====================
  * Copyright (C) 1999 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2004 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2004 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -64,8 +68,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2010 - 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2009 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -77,12 +80,12 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2010, Howard Chu, <hyc@openldap.org>
- * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2011 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2011 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2011 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2010, Howard Chu, <hyc@openldap.org>
 
 
 ====================COPYRIGHT====================
@@ -92,28 +95,7 @@
 
 ====================COPYRIGHT====================
  * Copyright (C) 2012 - 2016, Linus Nielsen Feltzing, <linus@haxx.se>
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2016, Marc Hoersken, <info@marc-hoersken.de>
- * Copyright (C) 2012, Mark Salisbury, <mark.salisbury@hp.com>
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2017, Nick Zitzmann, <nickzman@gmail.com>.
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2009, 2011, Markus Moeller, <markus_moeller@compuserve.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2009, Markus Moeller, <markus_moeller@compuserve.com>
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -122,13 +104,39 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2009, 2011, Markus Moeller, <markus_moeller@compuserve.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2009, Markus Moeller, <markus_moeller@compuserve.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2010 - 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2010, Howard Chu, <hyc@highlandsun.com>
 
 
 ====================COPYRIGHT====================
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2016, Marc Hoersken, <info@marc-hoersken.de>
+ * Copyright (C) 2012, Mark Salisbury, <mark.salisbury@hp.com>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2017, Nick Zitzmann, <nickzman@gmail.com>.
+
+
+====================COPYRIGHT====================
  * Copyright (C) 2012, Marc Hoersken, <info@marc-hoersken.de>, et al.
- * Copyright (C) 2012 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -151,17 +159,12 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2014, Bill Nagel <wnagel@tycoint.com>, Exacq Technologies
- * Copyright (C) 2016-2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2015 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
-
-
-====================COPYRIGHT====================
  * Copyright (C) 2015 - 2020, Steve Holme, <steve_holme@hotmail.com>.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2015 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
 
 
 ====================COPYRIGHT====================
@@ -169,12 +172,17 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2017 - 2018, Yiming Jing, <jingyiming@baidu.com>
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2016 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2014, Bill Nagel <wnagel@tycoint.com>, Exacq Technologies
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2017 - 2020 Red Hat, Inc.
+ * Copyright (C) 2017 - 2018, Yiming Jing, <jingyiming@baidu.com>
+ * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2017 - 2021 Red Hat, Inc.
 
 
 ====================COPYRIGHT====================
@@ -184,6 +192,10 @@
 
 ====================COPYRIGHT====================
  * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2018 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -199,18 +211,30 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2019 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2019 - 2021, Michael Forney, <mforney@mforney.org>
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2020 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2019, Björn Stenberg, <bjorn@haxx.se>
 
 
 ====================COPYRIGHT====================
  * Copyright (C) 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2019, Björn Stenberg, <bjorn@haxx.se>
 
 
 ====================COPYRIGHT====================
  * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan
  * (Royal Institute of Technology, Stockholm, Sweden).
- * Copyright (c) 2004 - 2020 Daniel Stenberg
+ * Copyright (c) 2004 - 2021 Daniel Stenberg
  * All rights reserved.
 
 
@@ -232,14 +256,14 @@
 
 
 ====================COPYRIGHT====================
-Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many
+Copyright (c) 1996 - 2021, Daniel Stenberg, <daniel@haxx.se>, and many
 contributors, see the THANKS file.
 
 
 ====================File: COPYING====================
 COPYRIGHT AND PERMISSION NOTICE
 
-Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many
+Copyright (c) 1996 - 2021, Daniel Stenberg, <daniel@haxx.se>, and many
 contributors, see the THANKS file.
 
 All rights reserved.
@@ -355,6 +379,19 @@ in this Software without prior written authorization of the copyright holder.
 ====================curl====================
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
+ * are also available at https://curl.haxx.se/docs/copyright.html.
+ *
+ * You may opt to use, copy, modify, merge, publish, distribute and/or sell
+ * copies of the Software, and permit persons to whom the Software is
+ * furnished to do so, under the terms of the COPYING file.
+ *
+ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
+ * KIND, either express or implied.
+
+
+====================curl====================
+ * This software is licensed as described in the file COPYING, which
+ * you should have received as part of this distribution. The terms
  * are also available at https://curl.se/docs/copyright.html.
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
@@ -368,7 +405,7 @@ in this Software without prior written authorization of the copyright holder.
 ====================curl====================
 COPYRIGHT AND PERMISSION NOTICE
 
-Copyright (c) 1996 - 2020, Daniel Stenberg, <daniel@haxx.se>, and many
+Copyright (c) 1996 - 2021, Daniel Stenberg, <daniel@haxx.se>, and many
 contributors, see the THANKS file.
 
 All rights reserved.

@@ -40,6 +40,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/asyn-ares.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/asyn-thread.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/base64.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/c-hyper.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/conncache.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/connect.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/content_encoding.c
@@ -89,6 +90,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hsts.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http2.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_aws_sigv4.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_chunks.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_digest.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/http_negotiate.c

@@ -65,7 +65,7 @@ BELONGS ya.make
     Files with this license:
         lib/md4.c [235:252]
 
-KEEP     curl                 5f5af69e2da0ebbefa721e417cecf2d9
+KEEP     curl                 22ab1475a8e38f13b0b81e2e769b5d69
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -75,18 +75,6 @@ BELONGS ya.make
         Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
     Files with this license:
         COPYING [1:22]
-
-KEEP     BSD-3-Clause         a31075c33542eca5366ff9b16910f903
-BELONGS ya.make
-    License text:
-          others the right to apply the CMake BSD license instead).
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 99.00
-        Match type      : REFERENCE
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        CHANGES [5783:5783]
 
 KEEP     ISC                  a320c8c85dbcdf0a6f3f24f0dc7abbbb
 BELONGS ya.make
@@ -417,6 +405,21 @@ BELONGS ya.make
     Files with this license:
         lib/krb5.c [8:33]
 
+KEEP     curl                 c608ecbd1721037a900ee5342d8fe6b4
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: lib/c-hyper.c at line 10, lib/c-hyper.c at line 16, lib/c-hyper.h at line 12, lib/c-hyper.h at line 18, lib/http_aws_sigv4.c at line 10, lib/http_aws_sigv4.c at line 16, lib/http_aws_sigv4.h at line 12, lib/http_aws_sigv4.h at line 18
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: curl
+        Score           : 98.85
+        Match type      : NOTICE
+        Links           : http://curl.haxx.se/, http://curl.haxx.se/docs/copyright.html, https://spdx.org/licenses/curl
+    Files with this license:
+        lib/c-hyper.c [10:19]
+        lib/c-hyper.h [12:21]
+        lib/http_aws_sigv4.c [10:19]
+        lib/http_aws_sigv4.h [12:21]
+
 KEEP     Public-Domain        e1407be30f6023cfd2ef48b215bac4c2
 BELONGS ya.make
     License text:
@@ -428,7 +431,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        lib/sha256.c [243:244]
+        lib/sha256.c [244:245]
 
 KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
 BELONGS ya.make
@@ -439,4 +442,4 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
     Files with this license:
-        lib/curl_path.c [103:113]
+        lib/curl_path.c [102:112]

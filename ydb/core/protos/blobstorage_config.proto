@@ -434,6 +434,7 @@ message TUpdateSettings {
     repeated uint32 GroupReservePartPPM = 7;
     repeated uint32 MaxScrubbedDisksAtOnce = 8;
     repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
+    repeated bool EnableGroupLayoutSanitizer = 10;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

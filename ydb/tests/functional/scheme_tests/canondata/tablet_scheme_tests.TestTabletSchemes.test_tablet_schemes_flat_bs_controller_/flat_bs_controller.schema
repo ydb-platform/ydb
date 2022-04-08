@@ -12,6 +12,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "GroupLayoutSanitizer",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -92,6 +97,7 @@
             "0": {
                 "Columns": [
                     17,
+                    18,
                     1,
                     2,
                     4,

@@ -37,6 +37,7 @@ target_sources(core-mind-bscontroller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/drop_donor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/get_group.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/grouper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_layout_checker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_mapper.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/group_reconfigure_wipe.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/init_scheme.cpp

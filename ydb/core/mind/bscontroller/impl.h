@@ -78,6 +78,7 @@ public:
     class TConfigState;
     class TGroupSelector;
     class TGroupFitter;
+    class TSelfHealActor;
 
     using TVSlotReadyTimestampQ = std::list<std::pair<TInstant, TVSlotInfo*>>;
 
@@ -422,8 +423,7 @@ public:
         }
 
         bool AcceptsNewSlots() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
-                && DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE;
+            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE;
         }
 
         bool Decommitted() const {
@@ -1344,6 +1344,7 @@ private:
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
+    bool GroupLayoutSanitizer = false;
     NKikimrBlobStorage::TSerialManagementStage::E SerialManagementStage
             = NKikimrBlobStorage::TSerialManagementStage::DISCOVER_SERIAL;
 
@@ -1569,6 +1570,16 @@ private:
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void HandleHostRecordsTimeToLiveExceeded();
 
+public:
+    // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
+    // should not render group unusable, also it should not exceed its fail model. It also takes into account replication
+    // broker features such as only one vslot over PDisk is being replicated at a moment.
+    //
+    // It interacts with BS_CONTROLLER and group observer (which provides information about group state on a per-vdisk
+    // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
+    IActor *CreateSelfHealActor();
+
+private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state
     void Handle(TEvBlobStorage::TEvControllerRegisterNode::TPtr &ev);

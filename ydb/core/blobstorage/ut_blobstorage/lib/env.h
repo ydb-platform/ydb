@@ -30,6 +30,7 @@ struct TEnvironmentSetup {
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
         const ui32 NumDataCenters = 0;
+        const std::function<TNodeLocation(ui32)> LocationGenerator;
     };
 
     const TSettings Settings;
@@ -108,7 +109,11 @@ struct TEnvironmentSetup {
         Runtime->Start();
         auto *appData = Runtime->GetAppData();
         appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", DomainId).Release());
-        Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId);
+        if (Settings.LocationGenerator) {
+            Runtime->SetupTabletRuntime(Settings.LocationGenerator, Settings.ControllerNodeId);
+        } else {
+            Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId);
+        }
         SetupStaticStorage();
         SetupTablet();
         SetupStorage();
@@ -120,7 +125,11 @@ struct TEnvironmentSetup {
 
     void StartNode(ui32 nodeId) {
         Runtime->StartNode(nodeId);
-        Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId, nodeId);
+        if (Settings.LocationGenerator) {
+            Runtime->SetupTabletRuntime(Settings.LocationGenerator, Settings.ControllerNodeId, nodeId);
+        } else {
+            Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId, nodeId);
+        }
         if (nodeId == Settings.ControllerNodeId) {
             SetupStaticStorage();
             SetupTablet();
@@ -553,12 +562,13 @@ struct TEnvironmentSetup {
         }
     }
 
-    void UpdateSettings(bool selfHeal, bool donorMode) {
+    void UpdateSettings(bool selfHeal, bool donorMode, bool groupLayoutSanitizer = false) {
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand();
         auto *us = cmd->MutableUpdateSettings();
         us->AddEnableSelfHeal(selfHeal);
         us->AddEnableDonorMode(donorMode);
+        us->AddEnableGroupLayoutSanitizer(groupLayoutSanitizer);
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }

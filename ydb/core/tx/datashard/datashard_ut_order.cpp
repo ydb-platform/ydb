@@ -4181,6 +4181,9 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
     auto &runtime = *server->GetRuntime();
     auto sender = runtime.AllocateEdgeActor();
 
+    // runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NLog::PRI_TRACE);
+    // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
     InitRoot(server, sender);
 
     CreateShardedTable(server, sender, "/Root", "table-1", 1);
@@ -4202,15 +4205,18 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
     SimulateSleep(server, TDuration::Seconds(1));
 
     auto waitFor = [&](const auto& condition, const TString& description) {
-        if (!condition()) {
+        for (int i = 0; i < 5; ++i) {
+            if (condition()) {
+                return;
+            }
             Cerr << "... waiting for " << description << Endl;
             TDispatchOptions options;
             options.CustomFinalCondition = [&]() {
                 return condition();
             };
             runtime.DispatchEvents(options);
-            UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
         }
+        UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
     };
 
     TVector<THolder<IEventHandle>> blockedCommits;
@@ -4280,6 +4286,12 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId2 = response.GetResponse().GetTxMeta().id();
     }
+
+    // Perform a couple of immediate reads to make sure shards are ready to respond to read-only requests
+    // This may be needed when leases are enabled, otherwise paused leases would block the snapshot read reply
+    ExecSQL(server, sender, Q_("SELECT * FROM `/Root/table-1` WHERE key = 1"));
+    ExecSQL(server, sender, Q_("SELECT * FROM `/Root/table-2` WHERE key = 2"));
+    Cerr << "... shards are ready for read-only immediate transactions" << Endl;
 
     // Start blocking commits again and try performing new writes
     prevObserver = runtime.SetObserverFunc(blockCommits);

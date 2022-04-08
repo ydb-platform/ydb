@@ -6,49 +6,19 @@
 # original buildsystem will not be accepted.
 
 
+find_package(Python3 REQUIRED)
 
 add_library(providers-function-expr_nodes)
 target_link_libraries(providers-function-expr_nodes PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-core-expr_nodes
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  tools-python3-src
-  contrib-libs-cxxsupp
-  yutil
-  python-symbols-libc
-  python-symbols-python
-  tools-python3-lib
-  contrib-libs-cxxsupp
-  yutil
-  tools-python3-src
-  library-cpp-resource
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-cxxsupp
-  yutil
-  cpp-malloc-jemalloc
-  library-cpp-cpuid_check
-  src-Modules-_sqlite
 )
 target_sources(providers-function-expr_nodes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.gen.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.decl.inl.h
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.defs.inl.h
-  ${CMAKE_SOURCE_DIR}/library/python/symbols/module/module.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/python/MarkupSafe/py3/markupsafe/_speedups.c
 )
 add_custom_command(
   OUTPUT
@@ -58,9 +28,10 @@ add_custom_command(
   DEPENDS
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.json
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/gen
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
   COMMAND
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/gen
+  Python3::Interpreter
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.json
   ${CMAKE_BINARY_DIR}/ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.gen.h

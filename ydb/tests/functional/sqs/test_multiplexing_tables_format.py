@@ -19,7 +19,7 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
         )
 
     def create_queue(self, is_fifo):
-        if is_fifo:
+        if is_fifo and not self.queue_name.endswith('.fifo'):
             self.queue_name = self.queue_name + '.fifo'
         return self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
 
@@ -77,6 +77,19 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
             visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids([message_id, ])
         )
+
+    def do_test_double_create(self, is_fifo, tables_format):
+        self._set_new_format_settings(tables_format=tables_format)
+        self.create_queue(is_fifo)
+        self.create_queue(is_fifo)
+
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    def test_double_create(self, is_fifo):
+        self.do_test_double_create(is_fifo, tables_format='1')
+
+    @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    def test_double_create_old(self, is_fifo):
+        self.do_test_double_create(is_fifo, tables_format='0')
 
 
 class TestMultiplexingTablesFormatWithTenant(get_test_with_sqs_tenant_installation(MultiplexingTablesFormatTest)):

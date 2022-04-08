@@ -6,6 +6,7 @@
 #include "serviceid.h"
 
 #include <ydb/core/ymq/base/limits.h>
+#include <ydb/core/ymq/queues/common/db_queries_maker.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 #include <ydb/core/ymq/queues/fifo/schema.h>
 #include <ydb/core/ymq/queues/std/schema.h>
@@ -170,7 +171,7 @@ static const char* const ReadQueueParamsQueryCloud = R"__(
             '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
         (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId) '()) 'List))
+            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId 'TablesFormat) '()) 'List))
         (let overLimit
             (LessOrEqual maxQueuesCountSetting (Length queues)))
 
@@ -189,6 +190,10 @@ static const char* const ReadQueueParamsQueryCloud = R"__(
             (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'Version)
             (Uint64 '0)
         ))
+        (let currentTablesFormat (Coalesce
+            (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'TablesFormat)
+            (Uint32 '0)
+        ))
         (let existingResourceId (Coalesce
             (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'QueueName)
             (Utf8String '"")
@@ -198,7 +203,8 @@ static const char* const ReadQueueParamsQueryCloud = R"__(
             (SetResult 'exists queueExists)
             (SetResult 'resourceId existingResourceId)
             (SetResult 'overLimit overLimit)
-            (SetResult 'version currentVersion)))
+            (SetResult 'version currentVersion)
+            (SetResult 'tablesFormat currentTablesFormat)))
     )
 )__";
 
@@ -232,7 +238,8 @@ static const char* const ReadQueueParamsQueryYandex = R"__(
             '('QueueName name)))
         (let queuesSelect '(
             'QueueState
-            'Version))
+            'Version
+            'TablesFormat))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let queueExists
@@ -249,11 +256,18 @@ static const char* const ReadQueueParamsQueryYandex = R"__(
                 (Uint64 '0)
             )
         )
+        (let currentTablesFormat
+            (Coalesce
+                (Member queuesRead 'TablesFormat)
+                (Uint32 '0)
+            )
+        )
 
         (return (AsList
             (SetResult 'exists queueExists)
             (SetResult 'overLimit overLimit)
-            (SetResult 'version currentVersion)))
+            (SetResult 'version currentVersion)
+            (SetResult 'tablesFormat currentTablesFormat)))
     )
 )__";
 
@@ -321,7 +335,8 @@ void TCreateQueueSchemaActorV2::OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr&
                 ExistingQueueResourceId_ = TString(val["resourceId"]);
             }
             const ui64 currentVersion = ui64(val["version"]);
-            MatchQueueAttributes(currentVersion);
+            const ui32 currentTablesFormat = ui32(val["tablesFormat"]);
+            MatchQueueAttributes(currentVersion, currentTablesFormat);
             return;
         } else {
             if (bool(val["overLimit"])) {
@@ -756,7 +771,7 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
         (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId 'QueueState) '()) 'List))
+            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId 'QueueState 'TablesFormat) '()) 'List))
         (let overLimit
             (LessOrEqual maxQueuesCountSetting (Length queues)))
 
@@ -775,7 +790,8 @@ static const char* const CommitQueueParamsQuery = R"__(
             'FifoQueue
             'Shards
             'Partitions
-            'Version))
+            'Version
+            'TablesFormat))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let existingQueuesWithSameNameAndFolderId
@@ -812,6 +828,14 @@ static const char* const CommitQueueParamsQuery = R"__(
                 (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'Version)
                 (Member queuesRead 'Version)
                 (Uint64 '0)
+            )
+        )
+
+        (let currentTablesFormat
+            (Coalesce
+                (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'TablesFormat)
+                (Member queuesRead 'TablesFormat)
+                tablesFormat
             )
         )
 
@@ -872,6 +896,7 @@ static const char* const CommitQueueParamsQuery = R"__(
                 (SetResult 'exists queueExists)
                 (SetResult 'overLimit overLimit)
                 (SetResult 'version currentVersion)
+                (SetResult 'tablesFormat currentTablesFormat)
                 (SetResult 'resourceId existingResourceId)
                 (SetResult 'commited willCommit))
 
@@ -1019,7 +1044,8 @@ void TCreateQueueSchemaActorV2::OnCommit(TSqsEvents::TEvExecuted::TPtr& ev) {
                     ExistingQueueResourceId_ = TString(val["resourceId"]);
                 }
                 const ui64 currentVersion = ui64(val["version"]);
-                MatchQueueAttributes(currentVersion);
+                const ui32 currentTablesFormat = ui32(val["tablesFormat"]);
+                MatchQueueAttributes(currentVersion, currentTablesFormat);
                 return;
              } else {
                 Y_VERIFY(false); // unreachable
@@ -1033,127 +1059,34 @@ void TCreateQueueSchemaActorV2::OnCommit(TSqsEvents::TEvExecuted::TPtr& ev) {
     PassAway();
 }
 
-static const char* const MatchQueueAttributesQuery = R"__(
-    (
-        (let name            (Parameter 'NAME              (DataType 'Utf8String)))
-        (let fifo            (Parameter 'FIFO              (DataType 'Bool)))
-        (let shards          (Parameter 'SHARDS            (DataType 'Uint64)))
-        (let partitions      (Parameter 'PARTITIONS        (DataType 'Uint64)))
-        (let expectedVersion (Parameter 'EXPECTED_VERSION  (DataType 'Uint64)))
-        (let maxSize         (Parameter 'MAX_SIZE          (DataType 'Uint64)))
-        (let delay           (Parameter 'DELAY             (DataType 'Uint64)))
-        (let visibility      (Parameter 'VISIBILITY        (DataType 'Uint64)))
-        (let retention       (Parameter 'RETENTION         (DataType 'Uint64)))
-        (let dlqName         (Parameter 'DLQ_TARGET_NAME   (DataType 'Utf8String)))
-        (let maxReceiveCount (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
-        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String)))
-
-        (let attrsTable '%1$s/%2$s/Attributes)
-        (let queuesTable '%3$s/.Queues)
-
-        (let queuesRange '(
-            '('Account userName userName)
-            '('QueueName (Utf8String '"") (Void))))
-        (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueState) '()) 'List))
-
-        (let queuesRow '(
-            '('Account userName)
-            '('QueueName name)))
-        (let queuesSelect '(
-            'QueueState
-            'QueueId
-            'FifoQueue
-            'Shards
-            'Partitions
-            'DlqName
-            'Version))
-        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
-
-        (let queueExists
-            (Coalesce
-                (Or
-                    (Equal (Uint64 '1) (Member queuesRead 'QueueState))
-                    (Equal (Uint64 '3) (Member queuesRead 'QueueState))
-                )
-                (Bool 'false)))
-
-        (let currentVersion
-            (Coalesce
-                (Member queuesRead 'Version)
-                (Uint64 '0)
-            )
-        )
-
-        (let sameParams
-            (Coalesce
-                (And
-                    (And
-                        (And (Equal (Member queuesRead 'Shards) shards)
-                            (Equal (Member queuesRead 'Partitions) partitions))
-                        (Equal (Member queuesRead 'FifoQueue) fifo))
-                    (Equal  (Coalesce (Member queuesRead 'DlqName) (Utf8String '"")) dlqName))
-                (Bool 'true)))
-
-        (let attrRow '(
-            '('State (Uint64 '0))))
-        (let attrSelect '(
-            'DelaySeconds
-            'MaximumMessageSize
-            'MessageRetentionPeriod
-            'MaxReceiveCount
-            'VisibilityTimeout))
-        (let attrRead (SelectRow attrsTable attrRow attrSelect))
-
-        (let sameAttributes
-            (Coalesce
-                (And
-                    (And
-                        (And (Equal (Member attrRead 'DelaySeconds) delay)
-                            (And (Equal (Member attrRead 'MaximumMessageSize) maxSize)
-                                (Equal (Member attrRead 'MessageRetentionPeriod) retention)))
-                        (Equal (Member attrRead 'VisibilityTimeout) visibility))
-                    (Equal (Coalesce (Member attrRead 'MaxReceiveCount) (Uint64 '0)) maxReceiveCount))
-                (Bool 'true)))
-
-        (let sameVersion
-            (Equal currentVersion expectedVersion))
-
-        (let isSame
-            (And
-                queueExists
-                (And
-                    sameVersion
-                    (And
-                        sameAttributes
-                        sameParams))))
-
-        (let existingQueueId
-            (Coalesce
-                (Member queuesRead 'QueueId)
-                (String '"")))
-
-        (return (AsList
-            (SetResult 'exists queueExists)
-            (SetResult 'sameVersion sameVersion)
-            (SetResult 'id existingQueueId)
-            (SetResult 'isSame isSame)))
-    )
-)__";
-
-void TCreateQueueSchemaActorV2::MatchQueueAttributes(const ui64 currentVersion) {
+void TCreateQueueSchemaActorV2::MatchQueueAttributes(
+    const ui64 currentVersion,
+    const ui32 currentTablesFormat
+) {
     Become(&TCreateQueueSchemaActorV2::MatchAttributes);
 
-    TString versionedQueuePath = IsCloudMode_ ? ExistingQueueResourceId_ : QueuePath_.QueueName;
-    if (currentVersion != 0) {
-        // modern-way constructed queue requires version suffix
-        versionedQueuePath = TString::Join(versionedQueuePath, "/v", ToString(currentVersion));
-    }
-    auto ev = MakeExecuteEvent(Sprintf(
-        MatchQueueAttributesQuery, QueuePath_.GetUserPath().c_str(), versionedQueuePath.c_str(), Cfg().GetRoot().c_str()
-    ));
+    Y_VERIFY(currentVersion != 0);
+
+    TDbQueriesMaker queryMaker(
+        Cfg().GetRoot(),
+        QueuePath_.UserName,
+        QueuePath_.QueueName,
+        currentVersion,
+        IsFifo_,
+        0,
+        currentTablesFormat,
+        "", // dlqName
+        0, // dlqShard
+        0, // dlqVersion
+        0 // dlqTablesFormat
+    );
+    auto query = queryMaker.GetMatchQueueAttributesQuery();
+
+    auto ev = MakeExecuteEvent(query);
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     TParameters(trans->MutableParams()->MutableProto())
+        .Uint64("QUEUE_ID_NUMBER", currentVersion)
+        .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(currentVersion))
         .Utf8("NAME", IsCloudMode_ ? ExistingQueueResourceId_ : QueuePath_.QueueName)
         .Bool("FIFO", IsFifo_)
         .Uint64("SHARDS", RequiredShardsCount_)
@@ -1203,7 +1136,7 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                 resp->ErrorClass = &NErrors::VALIDATION_ERROR;
             }
 
-            if (CurrentCreationStep_ == ECreateComponentsStep::DiscoverLeaderTabletId) {
+            if (TablesFormat_ == 0 && CurrentCreationStep_ == ECreateComponentsStep::DiscoverLeaderTabletId) {
                 // call the special version of cleanup actor
                 RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " <<
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);

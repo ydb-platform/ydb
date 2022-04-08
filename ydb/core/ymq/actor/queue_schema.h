@@ -74,7 +74,7 @@ public:
 
     void OnCommit(TSqsEvents::TEvExecuted::TPtr& ev);
 
-    void MatchQueueAttributes(const ui64 currentVersion);
+    void MatchQueueAttributes(const ui64 currentVersion, const ui32 currentTablesFormat);
 
     STATEFN(MatchAttributes);
 

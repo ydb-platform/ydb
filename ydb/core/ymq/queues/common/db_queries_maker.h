@@ -77,35 +77,10 @@ public:
         );
     }
 
-    TString operator() (EQueryId id) {
-        TString result = Sprintf(
-            GetQueryById(id),
-            Root_.c_str(),                          // 1
-            QueueTablesFolderPerShard_.c_str(),     // 2
-            QueueTablesFolder_.c_str(),             // 3
+    TString operator() (EQueryId id) const;
+    TString GetMatchQueueAttributesQuery() const;
 
-            QueueName_.c_str(),                     // 4
-            GetIdKeys(),                            // 5
-            GetIdKeysRange(),                       // 6
-            GetIdAndShardKeys(),                    // 7
-            GetIdAndShardKeysRange(),               // 8
-            GetShardColumnType(TablesFormat_),      // 9
-            GetShardColumnName(),                   // 10
-            GetStateKeys(),                         // 11
-            GetAttrKeys(),                          // 12
-            GetAllShardsRange(),                    // 13
-
-            DlqTablesFolder_.c_str(),               // 14
-            DlqTablesFolderPerShard_.c_str(),       // 15
-
-            GetDlqIdKeys(),                         // 16
-            GetDlqIdAndShardKeys(),                 // 17
-            GetShardColumnType(DlqTablesFormat_),   // 18
-            GetDlqStateKeys()                       // 19
-        );
-        return result;
-    }
-
+private:
     const char* GetStateKeys() const {
         if (TablesFormat_ == 0) {
             return IsFifo_ ? "'('State (Uint64 '0))" : "'('State shard)";
@@ -162,7 +137,7 @@ public:
         ui64 shard,
         TString& tablesFolder,
         TString& tablesFolderPerShard
-    ) {
+    ) const {
         if (tablesFormat == 1) {
             tablesFolder = tablesFolderPerShard = TStringBuilder() << Root_ << "/" << (IsFifo_ ? ".FIFO" : ".STD");
         } else {
@@ -172,12 +147,13 @@ public:
         }
     }
 
-private:
-    const char* GetQueryById(EQueryId id) {
+    const char* GetQueryById(EQueryId id) const {
         const char* query = IsFifo_ ? GetFifoQueryById(id) : GetStdQueryById(id);
         Y_VERIFY(query);
         return query;
     }
+
+    TString FillQuery(const char* query) const;
 
 private:
     TString Root_;

@@ -370,7 +370,6 @@ const char* const DeleteMessageQuery = R"__(
                 '('Offset (DataType 'Uint64))
                 '('LockTimestamp (DataType 'Uint64))))))
         (let now (Parameter 'NOW (DataType 'Uint64)))
-        (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
 
         (let dataTable  ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/MessageData)
         (let inflyTable ')__" QUEUE_TABLES_FOLDER_PER_SHARD_PARAM R"__(/Infly)
@@ -380,7 +379,9 @@ const char* const DeleteMessageQuery = R"__(
         (let records
             (MapParameter keys (lambda '(item) (block '(
                 (let row '(
-                    '('Offset (Member item 'Offset))))
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
+                    '('Offset (Member item 'Offset))
+                ))
                 (let fields '(
                     'Offset
                     'RandomId
@@ -424,23 +425,29 @@ const char* const DeleteMessageQuery = R"__(
             (If deleteCond
                 (Map existed (lambda '(item) (block '(
                     (let row '(
-                        '('Offset (Member item 'Offset))))
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
+                        '('Offset (Member item 'Offset))
+                    ))
                     (return (EraseRow inflyTable row))))))
                 (AsList (Void)))
 
             (If deleteCond
                 (Map existed (lambda '(item) (block '(
                     (let row '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('RandomId (Member item 'RandomId))
-                        '('Offset   (Member item 'Offset))))
+                        '('Offset   (Member item 'Offset))
+                     ))
                     (return (EraseRow dataTable row))))))
                 (AsList (Void)))
 
             (If deleteCond
                 (Map existed (lambda '(item) (block '(
                     (let row '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('SentTimestamp (Member item 'SentTimestamp))
-                        '('Offset        (Member item 'Offset))))
+                        '('Offset        (Member item 'Offset))
+                    ))
                     (return (EraseRow sentTsIdx row))))))
                 (AsList (Void)))
         ))

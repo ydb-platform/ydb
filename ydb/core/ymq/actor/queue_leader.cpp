@@ -2519,6 +2519,9 @@ void TQueueLeader::TDeleteBatch::Execute(TQueueLeader* leader) {
         .RetryOnTimeout()
         .OnExecuted([leader, shard = Shard, batchId = BatchId](const TSqsEvents::TEvExecuted::TRecord& ev) { leader->OnDeleteBatchExecuted(shard, batchId, ev); })
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", leader->QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(leader->QueueVersion_))
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(leader->QueueVersion_, Shard))
             .Uint64("NOW", TActivationContext::Now().MilliSeconds())
             .AddWithType("SHARD", Shard, leader->TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("GROUPS_READ_ATTEMPT_IDS_PERIOD", Cfg().GetGroupsReadAttemptIdsPeriodMs());

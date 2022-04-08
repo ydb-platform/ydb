@@ -1398,7 +1398,9 @@ void TSingleClusterReadSessionImpl::OnDataDecompressed(i64 sourceSize, i64 estim
         CompressedDataSize -= sourceSize;
         DecompressedDataSize += decompressedSize - estimatedDecompressedSize;
         constexpr double weight = 0.6;
-        AverageCompressionRatio = weight * static_cast<double>(decompressedSize) / static_cast<double>(sourceSize) + (1 - weight) * AverageCompressionRatio;
+        if (sourceSize > 0) {
+            AverageCompressionRatio = weight * static_cast<double>(decompressedSize) / static_cast<double>(sourceSize) + (1 - weight) * AverageCompressionRatio;
+        }
         if (Aborting) {
             return;
         }
@@ -2055,6 +2057,9 @@ i64 TDataDecompressionInfo::StartDecompressionTasks(const IExecutor::TPtr& execu
             const i64 size = static_cast<i64>(messageData.data().size());
             const i64 estimatedDecompressedSize =
                 messageData.uncompressed_size() ? static_cast<i64>(messageData.uncompressed_size()) : static_cast<i64>(size * averageCompressionRatio);
+
+            Y_VERIFY(estimatedDecompressedSize >= 0);
+
             task.Add(CurrentDecompressingMessage.first, CurrentDecompressingMessage.second, size, estimatedDecompressedSize);
             used += estimatedDecompressedSize;
             availableMemory -= estimatedDecompressedSize;

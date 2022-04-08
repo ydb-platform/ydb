@@ -57,7 +57,6 @@ classifieds/mobile-antirobot-ios
 disk/workspace/workspace-properties
 academy/lyceum/backend
 hypercube/hardware/YhubModbusBootloader
-cloud/mdb/pgsync
 portal/frontend/webpack-stub
 portal/frontend/teamcity-build-statistics
 cmnt/frontend/cmnt-monitoring
@@ -864,3 +863,7 @@ data-ui/datalens
 portal/archive/python-utils
 player/opaque-types
 intranet/crt/www
+portal/archive/vh-validation
+player/run-videoplayer-regress
+portal/archive/rapido-lang
+portal/archive/javascript-v8

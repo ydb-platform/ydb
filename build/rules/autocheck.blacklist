@@ -858,3 +858,9 @@ portal/archive/devrtc
 education/schoolbook/frontend
 mds/cocaine/ubic-service-cocaine-runtime
 practicum/issues-parser
+taxi/dmp/external/pytest-parallel
+player/mocks
+data-ui/datalens
+portal/archive/python-utils
+player/opaque-types
+intranet/crt/www

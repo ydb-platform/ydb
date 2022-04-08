@@ -831,3 +831,13 @@ portal/www-curl
 noc/heatmap/dashboards
 portal/archive/postcards2
 infra/cauth/server
+trust/frontend/legacy/trust-frontend-disk
+trust/frontend/legacy/trust-frontend-invest
+trust/frontend/legacy/trust-frontend-kinopoisk-plus--smarttv
+trust/frontend/legacy/trust-frontend-medicine
+billing/tools/balance_tnsnames
+trust/frontend/legacy/mautilus
+trust/frontend/legacy/yb-trust-web-form
+education/services/get-time
+kinopoisk/php/mobile-api/source
+taxi/github/taximeter/android-calc-utils

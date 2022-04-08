@@ -46,37 +46,36 @@ namespace NKikimr::NHttpProxy {
     TString StatusToErrorType(NYdb::EStatus status) {
         switch(status) {
         case NYdb::EStatus::BAD_REQUEST:
-            return "InvalidParameterValue"; //TODO: bring here issues and parse from them
+            return "InvalidParameterValueException"; //TODO: bring here issues and parse from them
         case NYdb::EStatus::UNAUTHORIZED:
-            return "AccessDenied";
+            return "AccessDeniedException";
         case NYdb::EStatus::INTERNAL_ERROR:
-            return "InternalError";
+            return "InternalFailureException";
         case NYdb::EStatus::ABORTED:
-            return "RequestExpired"; //TODO: find better code
+            return "RequestExpiredException"; //TODO: find better code
         case NYdb::EStatus::UNAVAILABLE:
-            return "ServiceUnavailable";
+            return "ServiceUnavailableException";
         case NYdb::EStatus::OVERLOADED:
             return "ThrottlingException";
         case NYdb::EStatus::SCHEME_ERROR:
-            return "ResourceNotFound";
+            return "ResourceNotFoundException";
         case NYdb::EStatus::GENERIC_ERROR:
-            return "InternalFailure"; //TODO: find better code
+            return "InternalFailureException"; //TODO: find better code
         case NYdb::EStatus::TIMEOUT:
-            return "RequestTimeout";
+            return "RequestTimeoutException";
         case NYdb::EStatus::BAD_SESSION:
-            return "AccessDenied";
+            return "AccessDeniedException";
         case NYdb::EStatus::PRECONDITION_FAILED:
-            return "ValidationError"; //TODO: find better code
         case NYdb::EStatus::ALREADY_EXISTS:
-            return "ValidationError"; //TODO: find better code
+            return "ValidationErrorException"; //TODO: find better code
         case NYdb::EStatus::NOT_FOUND:
-            return "ResourceNotFound";
+            return "ResourceNotFoundException";
         case NYdb::EStatus::SESSION_EXPIRED:
-            return "AccessDenied";
+            return "AccessDeniedException";
         case NYdb::EStatus::UNSUPPORTED:
-            return "InvalidAction";
+            return "InvalidActionException";
         default:
-            return "InternalError";
+            return "InternalFailureException";
         }
 
     }

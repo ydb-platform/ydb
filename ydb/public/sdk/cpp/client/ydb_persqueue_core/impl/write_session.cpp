@@ -90,7 +90,7 @@ TWriteSession::THandleResult TWriteSession::RestartImpl(const TPlainStatus& stat
     }
     DbDriverState->Log.Write(
         TLOG_INFO,
-        LogPrefix() << "Got error. Status: " << status.Status 
+        LogPrefix() << "Got error. Status: " << status.Status
             << ". Description: " << IssuesSingleLineString(status.Issues)
     );
     SessionEstablished = false;
@@ -815,7 +815,7 @@ TMemoryUsageChange TWriteSession::OnMemoryUsageChangedImpl(i64 diff) {
         if (wasOk) {
             DbDriverState->Log.Write(
                 TLOG_DEBUG,
-                LogPrefix() << "Estimated memory usage " << MemoryUsage 
+                LogPrefix() << "Estimated memory usage " << MemoryUsage
                     << "[B] reached maximum (" << Settings.MaxMemoryUsage_ << "[B])"
             );
         }
@@ -1019,7 +1019,7 @@ bool TWriteSession::IsReadyToSendNextImpl() const {
 void TWriteSession::UpdateTokenIfNeededImpl() {
     DbDriverState->Log.Write(TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress)
+    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
         return;
     TClientMessage clientMessage;
     auto* updateRequest = clientMessage.mutable_update_token_request();

@@ -30,7 +30,7 @@ public:
 
         const auto& params = schemeTx.GetInitiateBuildIndex();
 
-        auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
+        const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();

@@ -30,10 +30,10 @@ public:
         const auto& params = schemeTx.GetAlterCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
 
-        const auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
+        const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        const auto streamPathId = TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId());
+        const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
         Y_VERIFY(streamPathId.OwnerId == DataShard.GetPathOwnerId());
 
         Y_VERIFY_S(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateDisabled, "Unexpected alter cdc stream"

@@ -15,7 +15,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
 
-        TPathId pathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalId());
+        const auto pathId = PathIdFromPathId(record.GetPathId());
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
             "TEvCompactBorrowed request from " << Ev->Sender
             << " for table " << pathId

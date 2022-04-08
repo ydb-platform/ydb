@@ -286,7 +286,7 @@ bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, co
 
 template <typename T>
 TPathId TCheckSchemeTxUnit::GetPathId(const T &op) const {
-    auto pathId = TPathId(op.GetPathId().GetOwnerId(), op.GetPathId().GetLocalId());
+    auto pathId = PathIdFromPathId(op.GetPathId());
     Y_VERIFY(DataShard.GetPathOwnerId() == pathId.OwnerId);
     return pathId;
 }

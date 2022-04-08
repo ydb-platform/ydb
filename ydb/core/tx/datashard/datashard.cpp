@@ -972,8 +972,8 @@ TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
 THashMap<TPathId, TPathId> TDataShard::GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move) {
     THashMap<TPathId, TPathId> remap;
     for (const auto& item: move.GetReMapIndexes()) {
-        auto prevId = TPathId(item.GetPathId().GetOwnerId(), item.GetPathId().GetLocalId());
-        auto newId = TPathId(item.GetDstPathId().GetOwnerId(), item.GetDstPathId().GetLocalId());
+        const auto prevId = PathIdFromPathId(item.GetPathId());
+        const auto newId = PathIdFromPathId(item.GetDstPathId());
         remap[prevId] = newId;
     }
     return remap;
@@ -982,8 +982,8 @@ THashMap<TPathId, TPathId> TDataShard::GetRemapIndexes(const NKikimrTxDataShard:
 TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxDataShard::TMoveTable& move,
     const TActorContext& ctx, TTransactionContext& txc)
 {
-    auto prevId = TPathId(move.GetPathId().GetOwnerId(), move.GetPathId().GetLocalId());
-    auto newId = TPathId(move.GetDstPathId().GetOwnerId(), move.GetDstPathId().GetLocalId());
+    const auto prevId = PathIdFromPathId(move.GetPathId());
+    const auto newId = PathIdFromPathId(move.GetDstPathId());
 
     Y_VERIFY(GetPathOwnerId() == prevId.OwnerId);
     Y_VERIFY(TableInfos.contains(prevId.LocalPathId));

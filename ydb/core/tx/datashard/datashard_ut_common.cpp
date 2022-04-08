@@ -180,7 +180,7 @@ void TTester::RegisterTableInResolver(const TString& schemeText)
     table.Table.TableName = tdesc.GetName();
     table.TableId.Reset(new TTableId(FAKE_SCHEMESHARD_TABLET_ID, tdesc.GetId_Deprecated()));
     if (tdesc.HasPathId()) {
-        table.TableId.Reset(new TTableId( tdesc.GetPathId().GetOwnerId(), tdesc.GetPathId().GetLocalId()));
+        table.TableId.Reset(new TTableId(PathIdFromPathId(tdesc.GetPathId())));
     }
     table.KeyColumnCount = tdesc.KeyColumnIdsSize();
     for (size_t i = 0; i < tdesc.ColumnsSize(); i++) {

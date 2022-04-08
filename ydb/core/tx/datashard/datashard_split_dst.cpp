@@ -38,8 +38,7 @@ public:
             TPathId tableId(Self->GetPathOwnerId(), createTable.GetId_Deprecated());
             if (createTable.HasPathId()) {
                 Y_VERIFY(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID);
-                tableId.OwnerId = createTable.GetPathId().GetOwnerId();
-                tableId.LocalPathId = createTable.GetPathId().GetLocalId();
+                tableId = PathIdFromPathId(createTable.GetPathId());
             } else if (tableId.OwnerId == INVALID_TABLET_ID) {
                 // Legacy schemeshard before migrations, shouldn't be possible
                 tableId.OwnerId = Ev->Get()->Record.GetSchemeshardTabletId();

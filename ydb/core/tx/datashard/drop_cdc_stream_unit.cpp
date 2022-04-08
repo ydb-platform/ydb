@@ -31,10 +31,10 @@ public:
 
         const auto& params = schemeTx.GetDropCdcStreamNotice();
 
-        const auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
+        const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        const auto streamPathId = TPathId(params.GetStreamPathId().GetOwnerId(), params.GetStreamPathId().GetLocalId());
+        const auto streamPathId = PathIdFromPathId(params.GetStreamPathId());
         Y_VERIFY(streamPathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();

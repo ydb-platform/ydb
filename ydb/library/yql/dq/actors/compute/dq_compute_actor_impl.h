@@ -119,7 +119,7 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
         IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, bool passExceptions = false)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(std::move(task))
@@ -131,6 +131,7 @@ protected:
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , Running(!Task.GetCreateSuspended())
+        , PassExceptions(passExceptions)
     {
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
@@ -214,6 +215,9 @@ protected:
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const std::exception& e) {
+            if (PassExceptions) {
+                throw;
+            }
             InternalError(TIssuesIds::UNEXPECTED, e.what());
         }
 
@@ -833,7 +837,9 @@ protected:
             YQL_ENSURE(inputChannel || outputChannel, "Unknown channelId: " << channelUpdate.GetId() << ", task: " << Task.GetId());
         }
 
-        DoExecute();
+        if (Running) {  // waiting for TEvRun to start
+            DoExecute();
+        }
     }
 
     void HandleExecuteBase(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -1514,6 +1520,7 @@ protected:
 private:
     bool Running = true;
     TInstant LastSendStatsTime;
+    bool PassExceptions = false;
 };
 
 } // namespace NYql

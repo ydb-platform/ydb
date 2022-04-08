@@ -433,8 +433,6 @@ public:
                 DqBuildInputValue(inputDesc, ProgramParsed.InputItemTypes[i], std::move(inputs), holderFactory));
         }
 
-        ResultStream = ProgramParsed.CompGraph->GetValue();
-
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
             auto& outputDesc = task.GetOutputs(i);
@@ -513,6 +511,10 @@ public:
 
     ERunStatus Run() final {
         LOG(TStringBuilder() << "Run task: " << TaskId);
+        if (!ResultStream) {
+            TBindTerminator term(ProgramParsed.CompGraph->GetTerminator());
+            ResultStream = ProgramParsed.CompGraph->GetValue();
+        }
 
         RunComputeTime = TDuration::Zero();
 
@@ -625,6 +627,7 @@ public:
     }
 
     void Load(TStringBuf in) override {
+        Y_VERIFY(!ResultStream);
         ProgramParsed.CompGraph->LoadGraphState(in);
     }
 

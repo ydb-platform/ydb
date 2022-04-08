@@ -3,9 +3,15 @@
 browser/frontend
 data-ui/abc
 data-ui/arcanum
+data-ui/devtools-components
+data-ui/changelog-generator
+data-ui/redux-unity-router
+data-ui/highlighter
+data-ui/ci
 data-ui/idm
 data-ui/sandbox
 data-ui/unity
+data-ui/covid-board
 direct/frontend/services
 direct/frontend/packages
 drive/pyback
@@ -842,3 +848,4 @@ education/services/get-time
 kinopoisk/php/mobile-api/source
 taxi/github/taximeter/android-calc-utils
 education/services/file-archiver
+statbox/jam/actions/mstat/market_analyst_yt_actions

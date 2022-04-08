@@ -1166,7 +1166,7 @@ public:
                 return nullptr;
             }
 
-            return L(A("And"), lhs, rhs);
+            return L(A(Settings.PgTypes ? "PgAnd" : "And"), lhs, rhs);
         }
         case OR_EXPR: {
             if (ListLength(value->args) != 2) {
@@ -1180,7 +1180,7 @@ public:
                 return nullptr;
             }
 
-            return L(A("Or"), lhs, rhs);
+            return L(A(Settings.PgTypes ? "PgOr" : "Or"), lhs, rhs);
         }
         case NOT_EXPR: {
             if (ListLength(value->args) != 1) {
@@ -1193,7 +1193,7 @@ public:
                 return nullptr;
             }
 
-            return L(A("Not"), arg);
+            return L(A(Settings.PgTypes ? "PgNot" : "Not"), arg);
         }
         default:
             AddError(TStringBuilder() << "BoolExprType unsupported value: " << (int)value->boolop);

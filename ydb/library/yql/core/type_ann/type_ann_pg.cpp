@@ -2601,5 +2601,48 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     return ctx.Types.SetColumnOrder(*input, resultColumnOrder, ctx.Expr);
 }
 
+IGraphTransformer::TStatus PgBoolOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    const bool isNot = input->Content() == "PgNot";
+    if (!EnsureArgsCount(*input, isNot ? 1 : 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<ui32> argTypes;
+    bool needRetype = false;
+    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+        auto type = input->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+            needRetype = true;
+        }
+
+        argTypes.push_back(argType);
+    }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto boolId = NPg::LookupType("bool").TypeId;
+    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+        if (!NPg::IsCompatibleTo(argTypes[i], boolId)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(i)->Pos()),
+                TStringBuilder() << "Expected pg bool type, but got: " << NPg::LookupType(argTypes[i]).Name));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(boolId);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace NTypeAnnImpl
 }

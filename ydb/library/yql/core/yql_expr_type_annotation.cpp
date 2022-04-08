@@ -4986,6 +4986,11 @@ bool IsCallableTypeHasStreams(const TCallableExprType* callableType) {
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx) {
     pgType = 0;
     convertToPg = false;
+    if (!type) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), "Expected PG type, but got lambda"));
+        return false;
+    }
+
     if (type->GetKind() == ETypeAnnotationKind::Null) {
         return true;
     }

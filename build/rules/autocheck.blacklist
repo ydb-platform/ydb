@@ -868,3 +868,8 @@ player/run-videoplayer-regress
 portal/archive/rapido-lang
 portal/archive/javascript-v8
 portal/frontend/statpost
+player/is-yandex-player-supported
+trust/frontend/legacy/yb-express-graphite
+passport/frontend/autofill
+taxi/lavka/platform/wms-front
+portal/archive/achievement-api

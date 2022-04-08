@@ -206,7 +206,7 @@ protected:
                 hFunc(IDqSourceActor::TEvSourceError, OnSourceError);
                 default: {
                     CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
-                    InternalError(TIssuesIds::DEFAULT_ERROR, "Unexpected event");
+                    InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 }
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {

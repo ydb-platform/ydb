@@ -3175,10 +3175,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool deserializeRes = ParseFromStringNoSizeLimit(*txState.SplitDescription, extraData);
                     Y_VERIFY(deserializeRes);
                     splitOpIds.push_back(operationId);
-
-                    Y_VERIFY(Self->Tables.contains(txState.TargetPathId));
-                    TTableInfo::TPtr tableInfo = Self->Tables.at(txState.TargetPathId);
-                    tableInfo->RegisterSplitMegreOp(operationId, txState);
                 } else if (txState.TxType == TTxState::TxAlterTable) {
                     if (txState.State <= TTxState::Propose) {
                         // If state is >=Propose then alter has already been applied to the table
@@ -3358,11 +3354,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         // After all shard operations are loaded we can fill range ends for shards participating in split operations
+        // and register shrads as busy
         for (TOperationId opId : splitOpIds) {
             THashMap<TShardIdx, TString> shardIdxToRangeEnd;
             TTxState* txState = Self->FindTx(opId);
             Y_VERIFY_S(txState, "No txState for split/merge opId, txId: " << opId.GetTxId());
             Y_VERIFY(txState->SplitDescription);
+
+            Y_VERIFY(Self->Tables.contains(txState->TargetPathId));
+            TTableInfo::TPtr tableInfo = Self->Tables.at(txState->TargetPathId);
+            tableInfo->RegisterSplitMegreOp(opId, *txState);
+
             for (ui32 i = 0; i < txState->SplitDescription->DestinationRangesSize(); ++i) {
                 const auto& dst = txState->SplitDescription->GetDestinationRanges(i);
                 auto localShardIdx = TLocalShardIdx(dst.GetShardIdx());

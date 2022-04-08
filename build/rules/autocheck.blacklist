@@ -873,3 +873,4 @@ trust/frontend/legacy/yb-express-graphite
 passport/frontend/autofill
 taxi/lavka/platform/wms-front
 portal/archive/achievement-api
+portal/archive/morda-exports

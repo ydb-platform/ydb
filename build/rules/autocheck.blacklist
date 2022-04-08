@@ -828,3 +828,6 @@ portal/wimg
 education/english/services/bell
 portal/archive/export-pusher
 portal/www-curl
+noc/heatmap/dashboards
+portal/archive/postcards2
+infra/cauth/server

@@ -1248,6 +1248,13 @@ protected:
                     << ". Buffer free space: " << freeSpace
                     << ", read from source: " << space << " bytes, "
                     << batch.size() << " rows, finished: " << finished);
+
+                if (!batch.empty()) {
+                    // If we have read some data, we must run such reading again
+                    // to process the case when source actor notified us about new data
+                    // but we haven't read all of it.
+                    ContinueExecute();
+                }
                 SourcePush(std::move(batch), source, space, finished);
             }
         }

@@ -99,6 +99,8 @@ char *Curl_checkheaders(const struct Curl_easy *data,
 {
   struct curl_slist *head;
   size_t thislen = strlen(thisheader);
+  DEBUGASSERT(thislen);
+  DEBUGASSERT(thisheader[thislen-1] != ':');
 
   for(head = data->set.headers; head; head = head->next) {
     if(strncasecompare(head->data, thisheader, thislen) &&
@@ -495,11 +497,13 @@ static int data_pending(const struct Curl_easy *data)
     return Curl_quic_data_pending(data);
 #endif
 
+  if(conn->handler->protocol&PROTO_FAMILY_FTP)
+    return Curl_ssl_data_pending(conn, SECONDARYSOCKET);
+
   /* in the case of libssh2, we can never be really sure that we have emptied
      its internal buffers so we MUST always try until we get EAGAIN back */
   return conn->handler->protocol&(CURLPROTO_SCP|CURLPROTO_SFTP) ||
 #if defined(USE_NGHTTP2)
-    Curl_ssl_data_pending(conn, FIRSTSOCKET) ||
     /* For HTTP/2, we may read up everything including response body
        with header fields in Curl_http_readwrite_headers. If no
        content-length is provided, curl waits for the connection
@@ -507,10 +511,9 @@ static int data_pending(const struct Curl_easy *data)
        TRUE. The thing is if we read everything, then http2_recv won't
        be called and we cannot signal the HTTP/2 stream has closed. As
        a workaround, we return nonzero here to call http2_recv. */
-    ((conn->handler->protocol&PROTO_FAMILY_HTTP) && conn->httpversion >= 20);
-#else
-    Curl_ssl_data_pending(conn, FIRSTSOCKET);
+    ((conn->handler->protocol&PROTO_FAMILY_HTTP) && conn->httpversion >= 20) ||
 #endif
+    Curl_ssl_data_pending(conn, FIRSTSOCKET);
 }
 
 /*
@@ -830,7 +833,7 @@ static CURLcode readwrite_data(struct Curl_easy *data,
              Make sure that ALL_CONTENT_ENCODINGS contains all the
              encodings handled here. */
           if(data->set.http_ce_skip || !k->writer_stack) {
-            if(!k->ignorebody) {
+            if(!k->ignorebody && nread) {
 #ifndef CURL_DISABLE_POP3
               if(conn->handler->protocol & PROTO_FAMILY_POP3)
                 result = Curl_pop3_write(data, k->str, nread);
@@ -840,7 +843,7 @@ static CURLcode readwrite_data(struct Curl_easy *data,
                                            nread);
             }
           }
-          else if(!k->ignorebody)
+          else if(!k->ignorebody && nread)
             result = Curl_unencode_write(data, k->writer_stack, k->str, nread);
         }
         k->badheader = HEADER_NORMAL; /* taken care of now */

@@ -47,16 +47,6 @@
 #endif
 #endif
 
-/* WOLFSSL_ALLOW_SSLV3 is wolfSSL's build time symbol for enabling SSLv3 in
-   options.h, but is only seen in >= 3.6.6 since that's when they started
-   disabling SSLv3 by default. */
-#ifndef WOLFSSL_ALLOW_SSLV3
-#if (LIBWOLFSSL_VERSION_HEX < 0x03006006) || \
-  defined(HAVE_WOLFSSLV3_CLIENT_METHOD)
-#define WOLFSSL_ALLOW_SSLV3
-#endif
-#endif
-
 #include <limits.h>
 
 #include "urldata.h"
@@ -285,18 +275,6 @@ wolfssl_connect_step1(struct Curl_easy *data, struct connectdata *conn,
     failf(data, "wolfSSL: TLS 1.3 is not yet supported");
     return CURLE_SSL_CONNECT_ERROR;
 #endif
-  case CURL_SSLVERSION_SSLv3:
-#ifdef WOLFSSL_ALLOW_SSLV3
-    req_method = SSLv3_client_method();
-    use_sni(FALSE);
-#else
-    failf(data, "wolfSSL does not support SSLv3");
-    return CURLE_NOT_BUILT_IN;
-#endif
-    break;
-  case CURL_SSLVERSION_SSLv2:
-    failf(data, "wolfSSL does not support SSLv2");
-    return CURLE_SSL_CONNECT_ERROR;
   default:
     failf(data, "Unrecognized parameter passed via CURLOPT_SSLVERSION");
     return CURLE_SSL_CONNECT_ERROR;
@@ -418,12 +396,7 @@ wolfssl_connect_step1(struct Curl_easy *data, struct connectdata *conn,
 #ifdef ENABLE_IPV6
     struct in6_addr addr6;
 #endif
-#ifndef CURL_DISABLE_PROXY
-    const char * const hostname = SSL_IS_PROXY() ? conn->http_proxy.host.name :
-      conn->host.name;
-#else
-    const char * const hostname = conn->host.name;
-#endif
+    const char * const hostname = SSL_HOST_NAME();
     size_t hostname_len = strlen(hostname);
     if((hostname_len < USHRT_MAX) &&
        (0 == Curl_inet_pton(AF_INET, hostname, &addr4)) &&
@@ -474,10 +447,10 @@ wolfssl_connect_step1(struct Curl_easy *data, struct connectdata *conn,
     /* wolfSSL's ALPN protocol name list format is a comma separated string of
        protocols in descending order of preference, eg: "h2,http/1.1" */
 
-#ifdef USE_NGHTTP2
+#ifdef USE_HTTP2
     if(data->state.httpwant >= CURL_HTTP_VERSION_2) {
-      strcpy(protocols + strlen(protocols), NGHTTP2_PROTO_VERSION_ID ",");
-      infof(data, "ALPN, offering %s\n", NGHTTP2_PROTO_VERSION_ID);
+      strcpy(protocols + strlen(protocols), ALPN_H2 ",");
+      infof(data, "ALPN, offering %s\n", ALPN_H2);
     }
 #endif
 
@@ -552,20 +525,9 @@ wolfssl_connect_step2(struct Curl_easy *data, struct connectdata *conn,
   int ret = -1;
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   struct ssl_backend_data *backend = connssl->backend;
-#ifndef CURL_DISABLE_PROXY
-  const char * const hostname = SSL_IS_PROXY() ? conn->http_proxy.host.name :
-    conn->host.name;
-  const char * const dispname = SSL_IS_PROXY() ?
-    conn->http_proxy.host.dispname : conn->host.dispname;
-  const char * const pinnedpubkey = SSL_IS_PROXY() ?
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY] :
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
-#else
-  const char * const hostname = conn->host.name;
-  const char * const dispname = conn->host.dispname;
-  const char * const pinnedpubkey =
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
-#endif
+  const char * const hostname = SSL_HOST_NAME();
+  const char * const dispname = SSL_HOST_DISPNAME();
+  const char * const pinnedpubkey = SSL_PINNED_PUB_KEY();
 
   conn->recv[sockindex] = wolfssl_recv;
   conn->send[sockindex] = wolfssl_send;
@@ -725,11 +687,10 @@ wolfssl_connect_step2(struct Curl_easy *data, struct connectdata *conn,
       if(protocol_len == ALPN_HTTP_1_1_LENGTH &&
          !memcmp(protocol, ALPN_HTTP_1_1, ALPN_HTTP_1_1_LENGTH))
         conn->negnpn = CURL_HTTP_VERSION_1_1;
-#ifdef USE_NGHTTP2
+#ifdef USE_HTTP2
       else if(data->state.httpwant >= CURL_HTTP_VERSION_2 &&
-              protocol_len == NGHTTP2_PROTO_VERSION_ID_LEN &&
-              !memcmp(protocol, NGHTTP2_PROTO_VERSION_ID,
-                      NGHTTP2_PROTO_VERSION_ID_LEN))
+              protocol_len == ALPN_H2_LENGTH &&
+              !memcmp(protocol, ALPN_H2, ALPN_H2_LENGTH))
         conn->negnpn = CURL_HTTP_VERSION_2;
 #endif
       else
@@ -820,7 +781,7 @@ static ssize_t wolfssl_send(struct Curl_easy *data,
   int memlen = (len > (size_t)INT_MAX) ? INT_MAX : (int)len;
   int rc = SSL_write(backend->handle, mem, memlen);
 
-  if(rc < 0) {
+  if(rc <= 0) {
     int err = SSL_get_error(backend->handle, rc);
 
     switch(err) {
@@ -1164,7 +1125,9 @@ const struct Curl_ssl Curl_ssl_wolfssl = {
   Curl_none_set_engine_default,    /* set_engine_default */
   Curl_none_engines_list,          /* engines_list */
   Curl_none_false_start,           /* false_start */
-  wolfssl_sha256sum                /* sha256sum */
+  wolfssl_sha256sum,               /* sha256sum */
+  NULL,                            /* associate_connection */
+  NULL                             /* disassociate_connection */
 };
 
 #endif

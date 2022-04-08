@@ -1,3 +1,5 @@
+#ifndef HEADER_CURL_BUFREF_H
+#define HEADER_CURL_BUFREF_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -5,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -20,41 +22,25 @@
  *
  ***************************************************************************/
 
-#include "curl_setup.h"
-
-#if !defined(CURL_DISABLE_COOKIES) || !defined(CURL_DISABLE_ALTSVC) ||  \
-  !defined(CURL_DISABLE_HSTS)
-
-#include "curl_get_line.h"
-#include "curl_memory.h"
-/* The last #include file should be: */
-#include "memdebug.h"
-
 /*
- * get_line() makes sure to only return complete whole lines that fit in 'len'
- * bytes and end with a newline.
+ * Generic buffer reference.
  */
-char *Curl_get_line(char *buf, int len, FILE *input)
-{
-  bool partial = FALSE;
-  while(1) {
-    char *b = fgets(buf, len, input);
-    if(b) {
-      size_t rlen = strlen(b);
-      if(rlen && (b[rlen-1] == '\n')) {
-        if(partial) {
-          partial = FALSE;
-          continue;
-        }
-        return b;
-      }
-      /* read a partial, discard the next piece that ends with newline */
-      partial = TRUE;
-    }
-    else
-      break;
-  }
-  return NULL;
-}
+struct bufref {
+  void (*dtor)(void *);         /* Associated destructor. */
+  const unsigned char *ptr;     /* Referenced data buffer. */
+  size_t len;                   /* The data size in bytes. */
+#ifdef DEBUGBUILD
+  int signature;                /* Detect API use mistakes. */
+#endif
+};
 
-#endif /* if not disabled */
+
+void Curl_bufref_init(struct bufref *br);
+void Curl_bufref_set(struct bufref *br, const void *ptr, size_t len,
+                     void (*dtor)(void *));
+const unsigned char *Curl_bufref_ptr(const struct bufref *br);
+size_t Curl_bufref_len(const struct bufref *br);
+CURLcode Curl_bufref_memdup(struct bufref *br, const void *ptr, size_t len);
+void Curl_bufref_free(struct bufref *br);
+
+#endif

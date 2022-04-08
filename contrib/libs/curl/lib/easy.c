@@ -789,7 +789,6 @@ static CURLcode dupset(struct Curl_easy *dst, struct Curl_easy *src)
   /* duplicate all blobs */
   for(j = (enum dupblob)0; j < BLOB_LAST; j++) {
     result = Curl_setblobopt(&dst->set.blobs[j], src->set.blobs[j]);
-    /* Curl_setstropt return CURLE_BAD_FUNCTION_ARGUMENT with blob */
     if(result)
       return result;
   }
@@ -895,7 +894,7 @@ struct Curl_easy *curl_easy_duphandle(struct Curl_easy *data)
       (void)Curl_altsvc_load(outcurl->asi, outcurl->set.str[STRING_ALTSVC]);
   }
 #endif
-#ifdef USE_HSTS
+#ifndef CURL_DISABLE_HSTS
   if(data->hsts) {
     outcurl->hsts = Curl_hsts_init();
     if(!outcurl->hsts)
@@ -1105,7 +1104,7 @@ static CURLcode easy_connection(struct Curl_easy *data,
                                 curl_socket_t *sfd,
                                 struct connectdata **connp)
 {
-  if(data == NULL)
+  if(!data)
     return CURLE_BAD_FUNCTION_ARGUMENT;
 
   /* only allow these to be called on handles with CURLOPT_CONNECT_ONLY */
@@ -1171,6 +1170,7 @@ CURLcode curl_easy_send(struct Curl_easy *data, const void *buffer,
   CURLcode result;
   ssize_t n1;
   struct connectdata *c = NULL;
+  SIGPIPE_VARIABLE(pipe_st);
 
   if(Curl_is_in_callback(data))
     return CURLE_RECURSIVE_API_CALL;
@@ -1185,7 +1185,9 @@ CURLcode curl_easy_send(struct Curl_easy *data, const void *buffer,
     Curl_attach_connnection(data, c);
 
   *n = 0;
+  sigpipe_ignore(data, &pipe_st);
   result = Curl_write(data, sfd, buffer, buflen, &n1);
+  sigpipe_restore(&pipe_st);
 
   if(n1 == -1)
     return CURLE_SEND_ERROR;

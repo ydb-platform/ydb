@@ -68,6 +68,10 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
+#if defined(ENABLE_IPV6) && defined(CURL_OSX_CALL_COPYPROXIES)
+#include <SystemConfiguration/SCDynamicStoreCopySpecific.h>
+#endif
+
 #if defined(CURLRES_SYNCH) && \
     defined(HAVE_ALARM) && defined(SIGALRM) && defined(HAVE_SIGSETJMP)
 /* alarm-based timeouts can only be used with all the dependencies satisfied */
@@ -466,10 +470,6 @@ Curl_cache_addr(struct Curl_easy *data,
  * function is used. You MUST call Curl_resolv_unlock() later (when you're
  * done using this struct) to decrease the counter again.
  *
- * In debug mode, we specifically test for an interface name "LocalHost"
- * and resolve "localhost" instead as a means to permit test cases
- * to connect to a local test server with any host name.
- *
  * Return codes:
  *
  * CURLRESOLV_ERROR   (-1) = error, no pointer
@@ -533,6 +533,19 @@ enum resolve_t Curl_resolv(struct Curl_easy *data,
         return CURLRESOLV_ERROR;
     }
 
+#if defined(ENABLE_IPV6) && defined(CURL_OSX_CALL_COPYPROXIES)
+    /*
+     * The automagic conversion from IPv4 literals to IPv6 literals only works
+     * if the SCDynamicStoreCopyProxies system function gets called first. As
+     * Curl currently doesn't support system-wide HTTP proxies, we therefore
+     * don't use any value this function might return.
+     *
+     * This function is only available on a macOS and is not needed for
+     * IPv4-only builds, hence the conditions above.
+     */
+    SCDynamicStoreCopyProxies(NULL);
+#endif
+
 #ifndef USE_RESOLVE_ON_IPS
     /* First check if this is an IPv4 address string */
     if(Curl_inet_pton(AF_INET, hostname, &in) > 0)
@@ -578,13 +591,7 @@ enum resolve_t Curl_resolv(struct Curl_easy *data,
         /* If Curl_getaddrinfo() returns NULL, 'respwait' might be set to a
            non-zero value indicating that we need to wait for the response to
            the resolve call */
-        addr = Curl_getaddrinfo(data,
-#ifdef DEBUGBUILD
-                                (data->set.str[STRING_DEVICE]
-                                 && !strcmp(data->set.str[STRING_DEVICE],
-                                            "LocalHost"))?"localhost":
-#endif
-                                hostname, port, &respwait);
+        addr = Curl_getaddrinfo(data, hostname, port, &respwait);
       }
     }
     if(!addr) {

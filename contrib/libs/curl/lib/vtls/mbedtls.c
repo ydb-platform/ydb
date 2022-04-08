@@ -251,22 +251,16 @@ mbed_connect_step1(struct Curl_easy *data, struct connectdata *conn,
   const char * const ssl_capath = SSL_CONN_CONFIG(CApath);
   char * const ssl_cert = SSL_SET_OPTION(primary.clientcert);
   const char * const ssl_crlfile = SSL_SET_OPTION(CRLfile);
-#ifndef CURL_DISABLE_PROXY
-  const char * const hostname = SSL_IS_PROXY() ? conn->http_proxy.host.name :
-    conn->host.name;
-  const long int port = SSL_IS_PROXY() ? conn->port : conn->remote_port;
-#else
-  const char * const hostname = conn->host.name;
-  const long int port = conn->remote_port;
-#endif
+  const char * const hostname = SSL_HOST_NAME();
+  const long int port = SSL_HOST_PORT();
   int ret = -1;
   char errorbuf[128];
   errorbuf[0] = 0;
 
-  /* mbedTLS only supports SSLv3 and TLSv1 */
-  if(SSL_CONN_CONFIG(version) == CURL_SSLVERSION_SSLv2) {
-    failf(data, "mbedTLS does not support SSLv2");
-    return CURLE_SSL_CONNECT_ERROR;
+  if((SSL_CONN_CONFIG(version) == CURL_SSLVERSION_SSLv2) ||
+     (SSL_CONN_CONFIG(version) == CURL_SSLVERSION_SSLv3)) {
+    failf(data, "Not supported SSL version");
+    return CURLE_NOT_BUILT_IN;
   }
 
 #ifdef THREADING_SUPPORT
@@ -414,13 +408,6 @@ mbed_connect_step1(struct Curl_easy *data, struct connectdata *conn,
                                  MBEDTLS_SSL_MINOR_VERSION_1);
     infof(data, "mbedTLS: Set min SSL version to TLS 1.0\n");
     break;
-  case CURL_SSLVERSION_SSLv3:
-    mbedtls_ssl_conf_min_version(&backend->config, MBEDTLS_SSL_MAJOR_VERSION_3,
-                                 MBEDTLS_SSL_MINOR_VERSION_0);
-    mbedtls_ssl_conf_max_version(&backend->config, MBEDTLS_SSL_MAJOR_VERSION_3,
-                                 MBEDTLS_SSL_MINOR_VERSION_0);
-    infof(data, "mbedTLS: Set SSL version to SSLv3\n");
-    break;
   case CURL_SSLVERSION_TLSv1_0:
   case CURL_SSLVERSION_TLSv1_1:
   case CURL_SSLVERSION_TLSv1_2:
@@ -549,14 +536,7 @@ mbed_connect_step2(struct Curl_easy *data, struct connectdata *conn,
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   struct ssl_backend_data *backend = connssl->backend;
   const mbedtls_x509_crt *peercert;
-#ifndef CURL_DISABLE_PROXY
-  const char * const pinnedpubkey = SSL_IS_PROXY() ?
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY_PROXY] :
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
-#else
-  const char * const pinnedpubkey =
-    data->set.str[STRING_SSL_PINNEDPUBLICKEY];
-#endif
+  const char * const pinnedpubkey = SSL_PINNED_PUB_KEY();
 
   conn->recv[sockindex] = mbed_recv;
   conn->send[sockindex] = mbed_send;
@@ -1113,7 +1093,9 @@ const struct Curl_ssl Curl_ssl_mbedtls = {
   Curl_none_set_engine_default,     /* set_engine_default */
   Curl_none_engines_list,           /* engines_list */
   Curl_none_false_start,            /* false_start */
-  mbedtls_sha256sum                 /* sha256sum */
+  mbedtls_sha256sum,                /* sha256sum */
+  NULL,                             /* associate_connection */
+  NULL                              /* disassociate_connection */
 };
 
 #endif /* USE_MBEDTLS */

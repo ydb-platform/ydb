@@ -98,8 +98,7 @@ mesalink_connect_step1(struct Curl_easy *data,
 #ifdef ENABLE_IPV6
   struct in6_addr addr6;
 #endif
-  const char *const hostname =
-    SSL_IS_PROXY() ? conn->http_proxy.host.name : conn->host.name;
+  const char * const hostname = SSL_HOST_NAME();
   size_t hostname_len = strlen(hostname);
 
   SSL_METHOD *req_method = NULL;
@@ -667,7 +666,9 @@ const struct Curl_ssl Curl_ssl_mesalink = {
   Curl_none_set_engine_default,  /* set_engine_default */
   Curl_none_engines_list,        /* engines_list */
   Curl_none_false_start,         /* false_start */
-  NULL                           /* sha256sum */
+  NULL,                          /* sha256sum */
+  NULL,                          /* associate_connection */
+  NULL                           /* disassociate_connection */
 };
 
 #endif

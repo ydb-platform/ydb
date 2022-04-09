@@ -25,7 +25,10 @@ void TSchemePrinterBase::PrintDirectoryRecursive(const TString& fullPath, const 
     ).GetValueSync();
     ThrowOnError(result);
 
-    if (relativePath || result.GetEntry().Type == NScheme::ESchemeEntryType::Directory) {
+    if (relativePath
+        || result.GetEntry().Type == NScheme::ESchemeEntryType::Directory
+        || result.GetEntry().Type == NScheme::ESchemeEntryType::SubDomain)
+    {
         PrintDirectory(relativePath, result);
     } else {
         PrintEntry(relativePath, result.GetEntry());

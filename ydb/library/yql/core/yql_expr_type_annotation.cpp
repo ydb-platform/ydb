@@ -3363,7 +3363,7 @@ bool EnsureCodeResourceType(const TExprNode& node, TExprContext& ctx) {
 
 const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, const TTypeAnnotationNode& itemType, TExprContext& ctx) {
     switch (sequenceKind) {
-        case ETypeAnnotationKind::Optional: return ctx.MakeType<TOptionalExprType>(&itemType);
+        case ETypeAnnotationKind::Optional: return itemType.GetKind() == ETypeAnnotationKind::Pg ? &itemType : ctx.MakeType<TOptionalExprType>(&itemType);
         case ETypeAnnotationKind::Pg:       return &itemType;
         case ETypeAnnotationKind::Flow:     return ctx.MakeType<TFlowExprType>(&itemType);
         case ETypeAnnotationKind::List:     return ctx.MakeType<TListExprType>(&itemType);

@@ -555,7 +555,7 @@ namespace {
                 if (calcSpec->IsCallable("WindowTraits")) {
                     auto finishType = calcSpec->Child(4)->GetTypeAnn();
                     if (frameCanBeEmpty) {
-                        bool isOptional = finishType->GetKind() == ETypeAnnotationKind::Optional;
+                        bool isOptional = finishType->IsOptionalOrNull();
 
                         auto defVal = calcSpec->Child(5);
                         if (defVal->IsCallable("Null") && !isOptional) {
@@ -576,7 +576,6 @@ namespace {
 
         return IGraphTransformer::TStatus::Ok;
     }
-
 
     IGraphTransformer::TStatus ValidateTraitsDefaultValue(const TExprNode::TPtr& input, ui32 defaultValueIndex,
         const TTypeAnnotationNode& finishType, TStringBuf finishName, TExprNode::TPtr& output, TContext& ctx)
@@ -2359,7 +2358,7 @@ namespace {
                 YQL_ENSURE(it != members.end());
                 memberType = it->second.first;
                 if (it->second.first->GetKind() != ETypeAnnotationKind::Error && it->second.second < inputsCount) {
-                    if (memberType->GetKind() != ETypeAnnotationKind::Optional) {
+                    if (!memberType->IsOptionalOrNull()) {
                         memberType = ctx.Expr.MakeType<TOptionalExprType>(memberType);
                     }
                 }
@@ -3400,7 +3399,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const auto optAnn = ctx.Expr.MakeType<TOptionalExprType>(stateType);
+        const auto optAnn = (stateType->GetKind() == ETypeAnnotationKind::Pg) ? stateType : ctx.Expr.MakeType<TOptionalExprType>(stateType);
         input->SetTypeAnn(optAnn);
         return IGraphTransformer::TStatus::Ok;
     }

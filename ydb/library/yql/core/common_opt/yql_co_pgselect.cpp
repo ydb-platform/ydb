@@ -5,6 +5,27 @@
 
 namespace NYql {
 
+TExprNode::TPtr BuildFilter(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& filter, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("Filter")
+            .Add(0, list)
+            .Lambda(1)
+                .Param("row")
+                .Callable("Coalesce")
+                    .Callable(0, "FromPg")
+                        .Apply(0, filter->Tail().TailPtr())
+                            .With(0, "row")
+                        .Seal()
+                    .Seal()
+                    .Callable(1, "Bool")
+                        .Atom(0, "0")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TColumnOrder>& columnOrders,
     TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx) {
     auto targetColumnOrder = optCtx.Types->LookupColumnOrder(node);
@@ -163,7 +184,7 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
     TExprNode::TListType cleanedInputs;
     for (ui32 i = 0; i < from->Tail().ChildrenSize(); ++i) {
         auto cleaned = ctx.Builder(pos)
-            .Callable("OrderedMap")
+            .Callable("Map")
                 .Add(0, from->Tail().Child(i)->HeadPtr())
                 .Lambda(1)
                     .Param("row")
@@ -219,7 +240,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
             auto cartesian = ctx.Builder(pos)
-                    .Callable("OrderedFlatMap")
+                    .Callable("FlatMap")
                         .Add(0, current)
                         .Lambda(1)
                             .Param("x")
@@ -245,36 +266,40 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
             auto buildMinus = [&](auto left, auto right) {
                 return ctx.Builder(pos)
-                    .Callable("OrderedFlatMap")
+                    .Callable("Filter")
                         .Add(0, left)
                         .Lambda(1)
                             .Param("x")
-                            .Callable("OptionalIf")
-                                .Callable(0, "Not")
-                                    .Callable(0, "HasItems")
-                                        .Callable(0, "Filter")
-                                            .Add(0, right)
-                                            .Lambda(1)
-                                                .Param("y")
-                                                .Apply(join->Tail().TailPtr())
-                                                    .With(0)
-                                                        .Callable("FlattenMembers")
-                                                            .List(0)
-                                                                .Atom(0, "")
-                                                                .Arg(1,"x")
+                            .Callable(0, "Not")
+                                .Callable(0, "HasItems")
+                                    .Callable(0, "Filter")
+                                        .Add(0, right)
+                                        .Lambda(1)
+                                            .Param("y")
+                                            .Callable("Coalesce")
+                                                .Callable(0, "FromPg")
+                                                    .Apply(0, join->Tail().TailPtr())
+                                                        .With(0)
+                                                            .Callable("FlattenMembers")
+                                                                .List(0)
+                                                                    .Atom(0, "")
+                                                                    .Arg(1,"x")
+                                                                .Seal()
+                                                                .List(1)
+                                                                    .Atom(0, "")
+                                                                    .Arg(1, "y")
+                                                                .Seal()
                                                             .Seal()
-                                                            .List(1)
-                                                                .Atom(0, "")
-                                                                .Arg(1, "y")
-                                                            .Seal()
-                                                        .Seal()
-                                                    .Done()
+                                                        .Done()
+                                                    .Seal()
+                                                .Seal()
+                                                .Callable(1, "Bool")
+                                                    .Atom(0, "0")
                                                 .Seal()
                                             .Seal()
                                         .Seal()
                                     .Seal()
                                 .Seal()
-                                .Arg(1, "x")
                             .Seal()
                         .Seal()
                     .Seal()
@@ -283,17 +308,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
             TExprNode::TPtr filteredCartesian;
             if (joinType != "cross") {
-                filteredCartesian = ctx.Builder(pos)
-                    .Callable("OrderedFilter")
-                        .Add(0, cartesian)
-                        .Lambda(1)
-                            .Param("row")
-                            .Apply(join->Tail().TailPtr())
-                                .With(0, "row")
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
+                filteredCartesian = BuildFilter(pos, cartesian, join, ctx);
             }
 
             if (joinType == "cross") {
@@ -420,27 +435,6 @@ TExprNode::TPtr BuildProjectionLambda(TPositionHandle pos, const TExprNode::TPtr
 
                 return parent;
             })
-            .Seal()
-        .Seal()
-        .Build();
-}
-
-TExprNode::TPtr BuildFilter(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& filter, TExprContext& ctx) {
-    return ctx.Builder(pos)
-        .Callable("Filter")
-            .Add(0, list)
-            .Lambda(1)
-                .Param("row")
-                .Callable("Coalesce")
-                    .Callable(0, "FromPg")
-                        .Apply(0, filter->Tail().TailPtr())
-                            .With(0, "row")
-                        .Seal()
-                    .Seal()
-                    .Callable(1, "Bool")
-                        .Atom(0, "0")
-                    .Seal()
-                .Seal()
             .Seal()
         .Seal()
         .Build();

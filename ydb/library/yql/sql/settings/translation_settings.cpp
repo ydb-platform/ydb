@@ -106,9 +106,6 @@ namespace NSQLTranslation {
                 settings.AnsiLexer = true;
             } else if (value == "syntax_pg") {
                 settings.PgParser = true;
-                settings.PgTypes = false;
-            } else if (value == "syntax_pg_types") {
-                settings.PgParser = true;
             } else {
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL translation setting: " << value));

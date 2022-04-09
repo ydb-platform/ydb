@@ -1635,8 +1635,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
 void MakeOptionalColumns(const TStructExprType*& structType, TExprContext& ctx) {
     bool needRebuild = false;
     for (const auto& item : structType->GetItems()) {
-        if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Optional
-            && item->GetItemType()->GetKind() != ETypeAnnotationKind::Null) {
+        if (!item->GetItemType()->IsOptionalOrNull()) {
             needRebuild = true;
             break;
         }
@@ -1648,8 +1647,7 @@ void MakeOptionalColumns(const TStructExprType*& structType, TExprContext& ctx) 
 
     auto newItems = structType->GetItems();
     for (auto& item : newItems) {
-        if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Optional
-            && item->GetItemType()->GetKind() != ETypeAnnotationKind::Null) {
+        if (!item->GetItemType()->IsOptionalOrNull()) {
             item = ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TOptionalExprType>(item->GetItemType()));
         }
     }
@@ -2230,16 +2228,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     return IGraphTransformer::TStatus::Error;
                                 }
 
-                                auto predicate = ctx.Expr.Builder(quals.Pos())
-                                    .Callable("Coalesce")
-                                        .Add(0, newRoot)
-                                        .Callable(1, "Bool")
-                                            .Atom(0, "0")
-                                        .Seal()
-                                    .Seal()
-                                    .Build();
-
-                                auto newLambda = ctx.Expr.NewLambda(quals.Pos(), std::move(arguments), std::move(predicate));
+                                auto newLambda = ctx.Expr.NewLambda(quals.Pos(), std::move(arguments), std::move(newRoot));
 
                                 auto newChildren = quals.ChildrenList();
                                 newChildren[0] = typeNode;

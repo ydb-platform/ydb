@@ -1938,6 +1938,10 @@ TRuntimeNode TProgramBuilder::NewDecimalLiteral(NYql::NDecimal::TInt128 data, ui
 }
 
 TRuntimeNode TProgramBuilder::NewOptional(TRuntimeNode data) {
+    if (data.GetStaticType()->IsPg()) {
+        return data;
+    }
+
     auto type = TOptionalType::Create(data.GetStaticType(), Env);
     return TRuntimeNode(TOptionalLiteral::Create(data, type, Env), true);
 }

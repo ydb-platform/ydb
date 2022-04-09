@@ -5699,6 +5699,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Repeat;
             }
 
+            if (arg->GetTypeAnn() && arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+                types.emplace_back(arg->GetTypeAnn());
+                continue;
+            }
+
             if (!EnsureOptionalType(*arg, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }

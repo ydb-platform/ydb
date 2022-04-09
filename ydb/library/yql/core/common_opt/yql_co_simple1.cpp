@@ -1271,6 +1271,10 @@ template <typename TMapType, typename TFlatMapType>
 TExprNode::TPtr ConvertMapToFlatmap(TMapType map, TExprContext& ctx) {
     auto list = map.Input();
     auto lambda = map.Lambda();
+    if (list.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg ||
+        lambda.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        return map.Ptr();
+    }
 
     auto ret = Build<TFlatMapType>(ctx, map.Pos())
             .Input(list)
@@ -1292,6 +1296,10 @@ template <typename TFilterType, typename TFlatMapType>
 TExprNode::TPtr ConvertFilterToFlatmap(TFilterType filter, TExprContext& ctx, TOptimizeContext& optCtx) {
     const auto& list = filter.Input();
     const auto& lambda = filter.Lambda();
+    if (list.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg ||
+        lambda.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
+        return filter.Ptr();
+    }
 
     if (const auto& limit = filter.Limit()) {
         const auto ret = Build<TCoTake>(ctx, filter.Pos())

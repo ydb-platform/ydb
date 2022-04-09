@@ -135,6 +135,7 @@ BELONGS ya.make
         lib/dict.c [8:8]
         lib/easy.c [8:8]
         lib/file.c [8:8]
+        lib/formdata.c [8:8]
         lib/formdata.h [10:10]
         lib/ftp.c [8:8]
         lib/ftp.h [10:10]
@@ -175,6 +176,7 @@ BELONGS ya.make
         lib/multi.c [8:8]
         lib/multihandle.h [10:10]
         lib/multiif.h [10:10]
+        lib/netrc.c [8:8]
         lib/non-ascii.c [8:8]
         lib/nonblock.c [8:8]
         lib/pingpong.c [8:8]
@@ -183,6 +185,7 @@ BELONGS ya.make
         lib/progress.c [8:8]
         lib/progress.h [10:10]
         lib/quic.h [10:10]
+        lib/rand.c [8:8]
         lib/rtsp.c [8:8]
         lib/rtsp.h [10:10]
         lib/select.c [8:8]
@@ -211,6 +214,8 @@ BELONGS ya.make
         lib/vauth/ntlm.c [8:8]
         lib/vauth/ntlm_sspi.c [8:8]
         lib/vauth/oauth2.c [8:8]
+        lib/vauth/spnego_gssapi.c [8:8]
+        lib/vauth/spnego_sspi.c [8:8]
         lib/version.c [8:8]
         lib/vquic/ngtcp2.c [8:8]
         lib/vquic/quiche.c [8:8]
@@ -453,7 +458,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/curl/options.h [10:10]
-        include/curl/urlapi.h [10:10]
         lib/curl_sha256.h [10:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 520dfafb050652350468b32c3d62b5cd
@@ -558,9 +562,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/altsvc.c [8:8]
         lib/altsvc.h [10:10]
-        lib/socketpair.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 84500f86b97af8062c8463ad37fdf711
 BELONGS ya.make
@@ -620,7 +622,6 @@ BELONGS ya.make
         lib/escape.c [8:8]
         lib/escape.h [10:10]
         lib/file.h [10:10]
-        lib/formdata.c [8:8]
         lib/ftplistparser.h [10:10]
         lib/getenv.c [8:8]
         lib/getinfo.h [10:10]
@@ -636,7 +637,6 @@ BELONGS ya.make
         lib/inet_pton.h [10:10]
         lib/llist.h [10:10]
         lib/memdebug.h [11:11]
-        lib/netrc.c [8:8]
         lib/netrc.h [10:10]
         lib/non-ascii.h [10:10]
         lib/nonblock.h [10:10]
@@ -644,7 +644,6 @@ BELONGS ya.make
         lib/parsedate.h [10:10]
         lib/psl.c [8:8]
         lib/psl.h [10:10]
-        lib/rand.c [8:8]
         lib/rand.h [10:10]
         lib/setopt.h [10:10]
         lib/setup-win32.h [10:10]
@@ -668,8 +667,6 @@ BELONGS ya.make
         lib/urlapi-int.h [10:10]
         lib/vauth/digest.h [10:10]
         lib/vauth/ntlm.h [10:10]
-        lib/vauth/spnego_gssapi.c [8:8]
-        lib/vauth/spnego_sspi.c [8:8]
         lib/vquic/vquic.c [8:8]
         lib/vtls/gskit.h [10:10]
         lib/vtls/gtls.h [10:10]
@@ -702,6 +699,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        lib/altsvc.c [8:8]
+        lib/socketpair.c [8:8]
         lib/socketpair.h [10:10]
         lib/vssh/wolfssh.c [8:8]
 
@@ -1020,6 +1019,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/curl/urlapi.h [10:10]
         lib/doh.c [8:8]
         lib/doh.h [10:10]
         lib/sha256.c [8:9]

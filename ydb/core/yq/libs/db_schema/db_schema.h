@@ -51,6 +51,10 @@ public:
         return AddValue(name, NYdb::TValueBuilder().Bool(value).Build());
     }
 
+    TSqlQueryBuilder& AddDouble(const TString& name, double value) {
+        return AddValue(name, NYdb::TValueBuilder().Double(value).Build());
+    }
+
     TSqlQueryBuilder& AddValue(const TString& name, const NYdb::TValue& value, const TString& pred);
 
     TSqlQueryBuilder& AddValue(const TString& name, const TString& value, const TString& pred) {

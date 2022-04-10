@@ -36,8 +36,12 @@
 #endif /* USE_OPENSSL */
 
 #ifdef USE_MBEDTLS
-#error #include <mbedtls/config.h>
 #error #include <mbedtls/version.h>
+#if MBEDTLS_VERSION_NUMBER >= 0x03000000
+#error #include <mbedtls/mbedtls_config.h>
+#else
+#error #include <mbedtls/config.h>
+#endif
 
 #if(MBEDTLS_VERSION_NUMBER >= 0x02070000)
   #define HAS_MBEDTLS_RESULT_CODE_BASED_FUNCTIONS

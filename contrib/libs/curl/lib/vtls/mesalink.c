@@ -49,7 +49,7 @@
 #include "connect.h" /* for the connect timeout */
 #include "select.h"
 #include "strcase.h"
-#error #include "x509asn1.h"
+#include "x509asn1.h"
 #include "curl_printf.h"
 
 #include "mesalink.h"

@@ -68,7 +68,7 @@
 
 #include "strcase.h"
 #include "warnless.h"
-#error #include "x509asn1.h"
+#include "x509asn1.h"
 
 /* The last #include files should be: */
 #include "curl_memory.h"

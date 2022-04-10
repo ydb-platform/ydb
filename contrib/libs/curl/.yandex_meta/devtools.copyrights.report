@@ -42,6 +42,18 @@ BELONGS ya.make
         lib/curl_sha256.h [10:11]
         lib/sha256.c [8:9]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 07b936b4d91754a9e3594aa53e39e425
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2013 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) 2010, 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/mbedtls_threadlock.c [8:9]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 0adcfdb2f3aabeff35065b0b55f45563
 BELONGS ya.make
     License text:
@@ -59,7 +71,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 0bd7e5cd48a574907e3f8e5d5cfa308f
 BELONGS ya.make
     License text:
-         * Copyright (C) 2013 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) 2013 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
          * Copyright (C) 2010, 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -149,6 +161,7 @@ BELONGS ya.make
         lib/hostip.h [10:10]
         lib/hostip4.c [8:8]
         lib/hostip6.c [8:8]
+        lib/hostsyn.c [8:8]
         lib/http.c [8:8]
         lib/http.h [10:10]
         lib/http2.c [8:8]
@@ -199,6 +212,8 @@ BELONGS ya.make
         lib/smtp.c [8:8]
         lib/socks.c [8:8]
         lib/socks.h [10:10]
+        lib/strdup.c [8:8]
+        lib/strdup.h [10:10]
         lib/telnet.c [8:8]
         lib/tftp.c [8:8]
         lib/timeval.c [8:8]
@@ -232,6 +247,7 @@ BELONGS ya.make
         lib/warnless.c [8:8]
         lib/warnless.h [10:10]
         lib/x509asn1.c [8:8]
+        lib/x509asn1.h [11:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1b9e8d9d7c9588e9a9cbcbd17572b2e4
 BELONGS ya.make
@@ -541,18 +557,6 @@ BELONGS ya.make
     Files with this license:
         lib/socks_gssapi.c [8:9]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 7e4a48765cad1793cccd7bb998bec514
-BELONGS ya.make
-    License text:
-         * Copyright (C) 2013 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-         * Copyright (C) 2010, 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/vtls/mbedtls_threadlock.c [8:9]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 83b79d1f310aaae5890091cddeacd1f9
 BELONGS ya.make
     License text:
@@ -629,7 +633,6 @@ BELONGS ya.make
         lib/hash.h [10:10]
         lib/hmac.c [8:8]
         lib/hostcheck.h [10:10]
-        lib/hostsyn.c [8:8]
         lib/idn_win32.c [8:8]
         lib/if2ip.c [8:8]
         lib/if2ip.h [10:10]
@@ -654,8 +657,6 @@ BELONGS ya.make
         lib/speedcheck.h [10:10]
         lib/strcase.c [8:8]
         lib/strcase.h [10:10]
-        lib/strdup.c [8:8]
-        lib/strdup.h [10:10]
         lib/strerror.h [10:10]
         lib/strtok.c [8:8]
         lib/strtok.h [10:10]
@@ -996,8 +997,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/md4.c [213:218]
-        lib/md5.c [204:209]
+        lib/md4.c [217:222]
+        lib/md5.c [205:210]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f5681c9f9526985592061799304792ee
 BELONGS ya.make

@@ -144,7 +144,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2013 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2013 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2010, 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
 
 

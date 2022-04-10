@@ -48,7 +48,7 @@
 #include "select.h"
 #include "strcase.h"
 #include "warnless.h"
-#error #include "x509asn1.h"
+#include "x509asn1.h"
 #include "multiif.h"
 #include "curl_printf.h"
 #include "curl_memory.h"

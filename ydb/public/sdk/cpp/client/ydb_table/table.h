@@ -858,7 +858,7 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     // as it doesn't require client-server synchronization and can recompile
     // query on demand without client interaction.
     // The recommended value is False.
-    FLUENT_SETTING_DEFAULT(bool, UseQueryCache, true);
+    FLUENT_SETTING_DEFAULT(bool, UseQueryCache, false);
     FLUENT_SETTING_DEFAULT(ui32, QueryCacheSize, 1000);
     FLUENT_SETTING_DEFAULT(bool, KeepDataQueryText, true);
 

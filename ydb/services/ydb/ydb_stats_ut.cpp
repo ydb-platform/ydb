@@ -228,7 +228,8 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
         NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(endpoint));
         TCountersExtractor extractor;
         driver.AddExtension<TCountersExtractExtension>(TCountersExtractExtension::TParams().SetExtractor(&extractor));
-        NYdb::NTable::TTableClient client(driver);
+        auto clSettings = NYdb::NTable::TClientSettings().UseQueryCache(true);
+        NYdb::NTable::TTableClient client(driver, clSettings);
 
         auto createSessionResult = client.GetSession(TCreateSessionSettings().ClientTimeout(OPERATION_TIMEOUT)).GetValueSync();
         UNIT_ASSERT(createSessionResult.IsSuccess());

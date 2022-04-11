@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 3 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 3 : kikimr.IsUsingSnapshotReads() ? 2 : 3);
     }
 
     Y_UNIT_TEST_TWIN(IdxLookupJoinThreeWay, UseNewEngine) {
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 5 : 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 5 : kikimr.IsUsingSnapshotReads() ? 3 : 4);
     }
 
     Y_UNIT_TEST_TWIN(ComputeLength, UseNewEngine) {

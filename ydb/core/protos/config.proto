@@ -676,7 +676,7 @@ message TFeatureFlags {
     optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true
     optional bool EnableOlapSchemaOperations = 44 [default = false];
     optional bool EnableVPatch = 45 [default = false];
-    optional bool EnableMvccSnapshotReads = 46 [default = false];
+    optional bool EnableMvccSnapshotReads = 46 [default = true];
     optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
@@ -1201,18 +1201,18 @@ message TImmediateControlsConfig {
             Description: "Enables prioritized mvcc snapshot reads over immediate writes",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 UnprotectedMvccSnapshotReads = 9 [(ControlOptions) = {
             Description: "Enables unprotected (fully readonly) mvcc snapshot reads",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
 
         optional uint64 EnableLeaderLeases = 10 [(ControlOptions) = {
             Description: "Enables leader leases for processing read-only queries",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 MinLeaderLeaseDurationUs = 11 [(ControlOptions) = {
             Description: "The minimum leader lease duration in microseconds",
             MinValue: 1000,
@@ -1248,7 +1248,7 @@ message TImmediateControlsConfig {
             Description: "Enables leader leases for processing read-only queries",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 MinLeaderLeaseDurationUs = 2 [(ControlOptions) = {
             Description: "The minimum leader lease duration in microseconds",
             MinValue: 1000,

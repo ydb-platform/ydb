@@ -351,12 +351,12 @@ public:
         YQL_CLOG(INFO, ProviderS3) << "Read " << count << " objects with total size is " <<  readSize;
 
         if (count > State_->Configuration->MaxFilesPerQuery) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " <<  count));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " <<  count << ", but limit is " << State_->Configuration->MaxFilesPerQuery));
             return TStatus::Error;
         }
 
         if (readSize > State_->Configuration->MaxReadSizePerQuery) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too large objects to read: " <<  readSize));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too large objects to read: " <<  readSize << ", but limit is " << State_->Configuration->MaxReadSizePerQuery));
             return TStatus::Error;
         }
 

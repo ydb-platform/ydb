@@ -6,6 +6,7 @@
 #include "dq_compute_actor_sinks.h"
 #include "dq_compute_actor_sources.h"
 #include "dq_compute_issues_buffer.h"
+#include "dq_compute_memory_quota.h"
 
 #include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId
 #include <ydb/core/base/kikimr_issue.h>
@@ -50,11 +51,6 @@
 
 namespace NYql {
 namespace NDq {
-
-enum : ui64 {
-    ComputeActorNonProtobufStateVersion = 1,
-    ComputeActorCurrentStateVersion = 2,
-};
 
 constexpr ui32 IssuesBufferSize = 16;
 
@@ -106,7 +102,7 @@ public:
             static_cast<TDerived*>(this)->DoBootstrap();
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
+                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const std::exception& e) {
@@ -119,7 +115,7 @@ public:
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
         IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, bool passExceptions = false)
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, bool ownMemoryQuota = true, bool passExceptions = false)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(std::move(task))
@@ -130,14 +126,12 @@ protected:
         , SinkActorFactory(std::move(sinkActorFactory))
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
+        , MemoryQuota(ownMemoryQuota ? InitMemoryQuota() : nullptr)
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
     {
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
-        }
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE) {
-            ProfileStats = std::make_unique<TProfileStats>();
         }
         InitializeTask();
     }
@@ -154,13 +148,11 @@ protected:
         , SourceActorFactory(std::move(sourceActorFactory))
         , SinkActorFactory(std::move(sinkActorFactory))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
+        , MemoryQuota(InitMemoryQuota())
         , Running(!Task.GetCreateSuspended())
     {
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
-        }
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE) {
-            ProfileStats = std::make_unique<TProfileStats>();
         }
         InitializeTask();
     }
@@ -211,7 +203,7 @@ protected:
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
+                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const std::exception& e) {
@@ -227,38 +219,38 @@ protected:
     }
 
 protected:
+    THolder<TDqMemoryQuota> InitMemoryQuota() {
+        return MakeHolder<TDqMemoryQuota>(
+            CalcMkqlMemoryLimit(),
+            MemoryLimits,
+            TxId,
+            Task.GetId(),
+            RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE,
+            CanAllocateExtraMemory);
+    }
+
+    virtual ui64 GetMkqlMemoryLimit() const {
+        Y_VERIFY(MemoryQuota);
+        return MemoryQuota->GetMkqlMemoryLimit();
+    }
+
     void DoExecute() {
         auto guard = BindAllocator();
         auto* alloc = guard.GetMutex();
 
         if (State == NDqProto::COMPUTE_STATE_FINISHED) {
-            DoHandleChannelsAfterFinishImpl();
+            if (!DoHandleChannelsAfterFinishImpl()) {
+                return;
+            }
         } else {
             DoExecuteImpl();
         }
 
-        if (alloc->GetAllocated() - alloc->GetUsed() > MemoryLimits.MinMemFreeSize) {
-            alloc->ReleaseFreePages();
-            if (MemoryLimits.FreeMemoryFn) {
-                auto newLimit = std::max(alloc->GetAllocated(), CalcMkqlMemoryLimit());
-                if (MkqlMemoryLimit > newLimit) {
-                    auto freedSize = MkqlMemoryLimit - newLimit;
-                    MkqlMemoryLimit = newLimit;
-                    alloc->SetLimit(newLimit);
-                    MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), freedSize);
-                    CA_LOG_I("[Mem] memory shrinked, new limit: " << MkqlMemoryLimit);
-                }
-            }
+        if (MemoryQuota) {
+            MemoryQuota->TryShrinkMemory(alloc);
         }
 
-        auto now = TInstant::Now();
-
-        if (Y_UNLIKELY(ProfileStats)) {
-            ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated());
-            CA_LOG_D("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
-        }
-
-        ReportStats(now);
+        ReportStats(TInstant::Now());
     }
 
     virtual void DoExecuteImpl() {
@@ -280,7 +272,7 @@ protected:
         ProcessOutputsImpl(status);
     }
 
-    void DoHandleChannelsAfterFinishImpl() {
+    virtual bool DoHandleChannelsAfterFinishImpl() {
         Y_VERIFY(Checkpoints);
 
         if (Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
@@ -289,6 +281,7 @@ protected:
 
         // Send checkpoints to output channels.
         ProcessOutputsImpl(ERunStatus::Finished);
+        return true;  // returns true, when channels were handled syncronously 
     }
 
     void ProcessOutputsImpl(ERunStatus status) {
@@ -395,9 +388,8 @@ protected:
 
 protected:
     void Terminate(bool success, const TIssues& issues) {
-        if (MkqlMemoryLimit && MemoryLimits.FreeMemoryFn) {
-            MemoryLimits.FreeMemoryFn(TxId, Task.GetId(), MkqlMemoryLimit);
-            MkqlMemoryLimit = 0;
+        if (MemoryQuota) {
+            MemoryQuota->TryReleaseQuota();
         }
 
         if (Channels) {
@@ -506,6 +498,12 @@ protected:
         ReportStateAndMaybeDie(std::move(issue));
     }
 
+    void InternalError(TIssue issue) {
+        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
+        State = NDqProto::COMPUTE_STATE_FAILURE;
+        ReportStateAndMaybeDie(std::move(issue));
+    }
+
     void ContinueExecute() {
         if (!ResumeEventScheduled && Running) {
             ResumeEventScheduled = true;
@@ -603,7 +601,7 @@ protected:
         NDqProto::TMiniKqlProgramState& mkqlProgramState = *state.MutableMiniKqlProgram();
         mkqlProgramState.SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
         NDqProto::TStateData::TData& data = *mkqlProgramState.MutableData()->MutableStateData();
-        data.SetVersion(ComputeActorCurrentStateVersion);
+        data.SetVersion(TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion);
         data.SetBlob(TaskRunner->Save());
 
         for (auto& [inputIndex, source] : SourcesMap) {
@@ -638,13 +636,27 @@ protected:
         }
     }
 
-    void LoadState(const NDqProto::TComputeActorState& state) override {
+    virtual void DoLoadRunnerState(TString&& blob) {
+        TMaybe<TString> error = Nothing();
+        try {
+            TaskRunner->Load(blob);
+        } catch (const std::exception& e) {
+            error = e.what();
+        }
+        Checkpoints->AfterStateLoading(error);
+    }
+
+    void LoadState(NDqProto::TComputeActorState&& state) override {
         CA_LOG_D("Load state");
-        auto guard = BindAllocator();
+        TMaybe<TString> error = Nothing();
         const NDqProto::TMiniKqlProgramState& mkqlProgramState = state.GetMiniKqlProgram();
-        const ui64 version = mkqlProgramState.GetData().GetStateData().GetVersion();
-        YQL_ENSURE(version && version <= ComputeActorCurrentStateVersion && version != ComputeActorNonProtobufStateVersion, "Unsupported state version: " << version);
-        if (version == ComputeActorCurrentStateVersion) {
+        auto guard = BindAllocator();
+        try {
+            const ui64 version = mkqlProgramState.GetData().GetStateData().GetVersion();
+            YQL_ENSURE(version && version <= TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion && version != TDqComputeActorCheckpoints::ComputeActorNonProtobufStateVersion, "Unsupported state version: " << version);
+            if (version != TDqComputeActorCheckpoints::ComputeActorCurrentStateVersion) {
+                ythrow yexception() << "Invalid state version " << version;
+            }
             for (const NDqProto::TSourceState& sourceState : state.GetSources()) {
                 TSourceInfo* source = SourcesMap.FindPtr(sourceState.GetInputIndex());
                 YQL_ENSURE(source, "Failed to load state. Source with input index " << sourceState.GetInputIndex() << " was not found");
@@ -657,12 +669,16 @@ protected:
                 YQL_ENSURE(sink->SinkActor, "Sink[" << sinkState.GetOutputIndex() << "] is not created");
                 sink->SinkActor->LoadState(sinkState);
             }
-            if (const TString& blob = mkqlProgramState.GetData().GetStateData().GetBlob()) {
-                TaskRunner->Load(blob);
-            }
-            return;
+        } catch (const std::exception& e) {
+            error = e.what();
         }
-        ythrow yexception() << "Invalid state version " << version;
+        TString& blob = *state.MutableMiniKqlProgram()->MutableData()->MutableStateData()->MutableBlob();
+        if (blob && !error.Defined()) {
+            CA_LOG_D("State size: " << blob.size());
+            DoLoadRunnerState(std::move(blob));
+        } else {
+            Checkpoints->AfterStateLoading(error);
+        }
     }
 
     void Start() override {
@@ -699,12 +715,16 @@ protected:
             YQL_ENSURE(!IsPaused());
             YQL_ENSURE(CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             PendingCheckpoint = checkpoint;
-            Channel->Pause();
+            if (Channel) {  // async actor doesn't hold channels, so channel is paused in task runner actor
+                Channel->Pause();
+            }
         }
 
         void Resume() {
             PendingCheckpoint.reset();
-            Channel->Resume();
+            if (Channel) {  // async actor doesn't hold channels, so channel is resumed in task runner actor
+                Channel->Resume();
+            }
         }
     };
 
@@ -922,6 +942,11 @@ protected:
     }
 
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
+        if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
+            Y_VERIFY(ev->Get()->GetIssues().Size() == 1);
+            InternalError(*ev->Get()->GetIssues().begin());
+            return;
+        }
         TIssues issues = ev->Get()->GetIssues();
         CA_LOG_E("Handle abort execution event from: " << ev->Sender
             << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode())
@@ -959,6 +984,10 @@ protected:
     }
 
 private:
+    virtual const TDqMemoryQuota::TProfileStats* GetProfileStats() const {
+        Y_VERIFY(MemoryQuota);
+        return MemoryQuota->GetProfileStats();
+    }
 
     virtual void DrainOutputChannel(TOutputChannelInfo& outputChannel, const TDqComputeActorChannels::TPeerState& peerState) {
         YQL_ENSURE(!outputChannel.Finished || Checkpoints);
@@ -1147,14 +1176,10 @@ protected:
     void PrepareTaskRunner(const IDqTaskRunnerExecutionContext& execCtx = TDqTaskRunnerExecutionContext()) {
         YQL_ENSURE(TaskRunner);
 
-        auto guard = TaskRunner->BindAllocator(MkqlMemoryLimit);
+        auto guard = TaskRunner->BindAllocator(MemoryQuota->GetMkqlMemoryLimit());
         auto* alloc = guard.GetMutex();
 
-        if (CanAllocateExtraMemory) {
-            alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc](ui64 limit, ui64 required) {
-                RequestExtraMemory(required - limit, alloc);
-            });
-        }
+        MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
 
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
@@ -1227,6 +1252,7 @@ protected:
     void PollSourceActors() { // TODO: rename to PollSources()
         // Don't produce any input from sources if we're about to save checkpoint.
         if (!Running || (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
+            CA_LOG_D("Skip polling sources because of pending checkpoint");
             return;
         }
 
@@ -1331,35 +1357,6 @@ private:
                 }
             }
         }
-
-        MkqlMemoryLimit = CalcMkqlMemoryLimit();
-    }
-
-    static ui64 AlignMemorySizeToMbBoundary(ui64 memory) {
-        // allocate memory in 1_MB (2^20B) chunks, so requested value is rounded up to MB boundary
-        constexpr ui64 alignMask = 1_MB - 1;
-        return (memory + alignMask) & ~alignMask;
-    }
-
-    void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
-        memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
-
-        CA_LOG_I("not enough memory, request +" << memory);
-
-        if (MemoryLimits.AllocateMemoryFn(TxId, Task.GetId(), memory)) {
-            MkqlMemoryLimit += memory;
-            CA_LOG_I("[Mem] memory granted, new limit: " << MkqlMemoryLimit);
-            alloc->SetLimit(MkqlMemoryLimit);
-        } else {
-            CA_LOG_W("[Mem] memory not granted");
-//            throw yexception() << "Can not allocate extra memory, limit: " << MkqlMemoryLimit
-//                << ", requested: " << memory << ", host: " << HostName();
-        }
-
-        if (Y_UNLIKELY(ProfileStats)) {
-            ProfileStats->MkqlExtraMemoryBytes += memory;
-            ProfileStats->MkqlExtraMemoryRequests++;
-        }
     }
 
     virtual const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() {
@@ -1370,6 +1367,12 @@ private:
         return TaskRunner->GetStats();
     }
 
+    virtual const TDqSinkStats* GetSinkStats(ui64 outputIdx, const TSinkInfo& sinkInfo) const {
+        Y_UNUSED(outputIdx);
+        return sinkInfo.Sink ? sinkInfo.Sink->GetStats() : nullptr;
+    }
+
+public:
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (!BasicStats) {
             return;
@@ -1381,22 +1384,22 @@ private:
 
         dst->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds());
 
-        if (ProfileStats) {
-            dst->SetMkqlMaxMemoryUsage(ProfileStats->MkqlMaxUsedMemory);
-            dst->SetMkqlExtraMemoryBytes(ProfileStats->MkqlExtraMemoryBytes);
-            dst->SetMkqlExtraMemoryRequests(ProfileStats->MkqlExtraMemoryRequests);
+        if (GetProfileStats()) {
+            dst->SetMkqlMaxMemoryUsage(GetProfileStats()->MkqlMaxUsedMemory);
+            dst->SetMkqlExtraMemoryBytes(GetProfileStats()->MkqlExtraMemoryBytes);
+            dst->SetMkqlExtraMemoryRequests(GetProfileStats()->MkqlExtraMemoryRequests);
         }
 
         if (auto* taskStats = GetTaskRunnerStats()) {
             auto* protoTask = dst->AddTasks();
-            FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) ProfileStats);
+            FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats());
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
-                if (auto* sinkStats = sinkInfo.Sink ? sinkInfo.Sink->GetStats() : nullptr) {
+                if (auto* sinkStats = GetSinkStats(outputIndex, sinkInfo)) {
                     protoTask->SetOutputRows(protoTask->GetOutputRows() + sinkStats->RowsIn);
                     protoTask->SetOutputBytes(protoTask->GetOutputBytes() + sinkStats->Bytes);
 
-                    if (ProfileStats) {
+                    if (GetProfileStats()) {
                         auto* protoSink = protoTask->AddSinks();
                         protoSink->SetOutputIndex(outputIndex);
 
@@ -1411,7 +1414,7 @@ private:
                 }
             }
 
-            if (ProfileStats) {
+            if (GetProfileStats()) {
                 for (auto& protoSource : *protoTask->MutableSources()) {
                     if (auto* sourceInfo = SourcesMap.FindPtr(protoSource.GetInputIndex())) {
                         protoSource.SetErrorsCount(sourceInfo->IssuesBuffer.GetAllAddedIssuesCount());
@@ -1445,10 +1448,13 @@ private:
 
         if (last) {
             BasicStats.reset();
-            ProfileStats.reset();
+        }
+        if (last && MemoryQuota) {
+            MemoryQuota->ResetProfileStats();
         }
     }
 
+protected:
     void ReportStats(TInstant now) {
         if (!RuntimeSettings.ReportStatsSettings) {
             return;
@@ -1499,20 +1505,13 @@ protected:
     THashMap<ui64, TSourceInfo> SourcesMap; // Input index -> Source info
     THashMap<ui64, TOutputChannelInfo> OutputChannelsMap; // Channel id -> Channel info
     THashMap<ui64, TSinkInfo> SinksMap; // Output index -> Sink info
-    ui64 MkqlMemoryLimit = 0;
     bool ResumeEventScheduled = false;
     NDqProto::EComputeState State;
 
     struct TBasicStats {
         TDuration CpuTime;
     };
-    struct TProfileStats {
-        ui64 MkqlMaxUsedMemory = 0;
-        ui64 MkqlExtraMemoryBytes = 0;
-        ui32 MkqlExtraMemoryRequests = 0;
-    };
     std::unique_ptr<TBasicStats> BasicStats;
-    std::unique_ptr<TProfileStats> ProfileStats;
 
     struct TProcessOutputsState {
         int Inflight = 0;
@@ -1524,6 +1523,7 @@ protected:
     };
     TProcessOutputsState ProcessOutputsState;
 
+    THolder<TDqMemoryQuota> MemoryQuota;
 private:
     bool Running = true;
     TInstant LastSendStatsTime;

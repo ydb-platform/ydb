@@ -35,7 +35,7 @@ public:
     TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
         IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
-        : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory), settings, memoryLimits, /* passExceptions = */ true)
+        : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory), settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true)
         , ComputeCtx(settings.StatsMode)
     {
         if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
@@ -156,7 +156,7 @@ public:
             }
         } catch (const TMemoryLimitExceededException& e) {
             InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
+                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const NMiniKQL::TKqpEnsureFail& e) {
@@ -215,7 +215,7 @@ private:
             if (TaskRunner->IsAllocatorAttached()) {
                 ComputeCtx.Clear();
             } else {
-                auto guard = TaskRunner->BindAllocator(MkqlMemoryLimit);
+                auto guard = TaskRunner->BindAllocator(GetMkqlMemoryLimit());
                 ComputeCtx.Clear();
             }
         }

@@ -3,6 +3,7 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_memory_quota.h>
 #include <ydb/library/yql/dq/actors/task_runner/events.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
@@ -42,7 +43,9 @@ struct ITaskRunnerActorFactory {
 
     virtual std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
-        const TString& traceId) = 0;
+        const TString& traceId,
+        THashSet<ui32>&& inputChannelsWithDisabledCheckpoints = {},
+        THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota = {}) = 0;
 };
 
 ITaskRunnerActorFactory::TPtr CreateLocalTaskRunnerActorFactory(const TTaskRunnerFactory& factory);

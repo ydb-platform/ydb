@@ -208,6 +208,7 @@ private:
         auto data = ev->Get()->Data;
         Invoker->Invoke([hasData, selfId, cookie, askFreeSpace, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
             try {
+                // todo:(whcrc) finish output channel?
                 ui64 freeSpace = 0;
                 if (hasData) {
                     // auto guard = taskRunner->BindAllocator(); // only for local mode
@@ -342,6 +343,7 @@ private:
                         new TEvChannelPopFinished(
                             channelId,
                             std::move(chunks),
+                            Nothing(),
                             isFinished,
                             changed,
                             GetSensors(response),
@@ -569,7 +571,9 @@ public:
 
     std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
-        const TString& traceId) override
+        const TString& traceId,
+        THashSet<ui32>&&,
+        THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
         auto* actor = new TTaskRunnerActor(parent, ProxyFactory, InvokerFactory->Create(), traceId);
         return std::make_tuple(

@@ -164,7 +164,7 @@ public:
             }
         } catch (const TMemoryLimitExceededException& e) {
             InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << MkqlMemoryLimit
+                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
                 << ", host: " << HostName() << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const yexception& e) {
             InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
@@ -1020,7 +1020,7 @@ private:
             if (TaskRunner->IsAllocatorAttached()) {
                 ComputeCtx.Clear();
             } else {
-                auto guard = TaskRunner->BindAllocator(MkqlMemoryLimit);
+                auto guard = TaskRunner->BindAllocator(GetMkqlMemoryLimit());
                 ComputeCtx.Clear();
             }
         }

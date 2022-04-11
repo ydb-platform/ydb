@@ -78,9 +78,15 @@ public:
         virtual void Stop() = 0;
         virtual void ResumeExecution() = 0;
 
-        virtual void LoadState(const NDqProto::TComputeActorState& state) = 0;
+        virtual void LoadState(NDqProto::TComputeActorState&& state) = 0;
 
         virtual ~ICallbacks() = default;
+    };
+
+    enum : ui64
+    {
+        ComputeActorNonProtobufStateVersion = 1,
+        ComputeActorCurrentStateVersion = 2,
     };
 
     TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, NDqProto::TDqTask task, ICallbacks* computeActor);
@@ -90,12 +96,15 @@ public:
     bool ComputeActorStateSaved() const;
     void DoCheckpoint();
     bool SaveState();
+    NDqProto::TCheckpoint GetPendingCheckpoint() const;
     void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId);
 
     // Sink actor support.
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
 
     void TryToSavePendingCheckpoint();
+
+    void AfterStateLoading(const TMaybe<TString>& error);
 
 private:
     STATEFN(StateFunc);
@@ -135,6 +144,8 @@ private:
 
     // Restore
     NYql::NDqProto::NDqStateLoadPlan::TTaskPlan TaskLoadPlan;
+    NDqProto::TCheckpoint RestoringTaskRunnerForCheckpoint;
+    ui64 RestoringTaskRunnerForEvent;
 };
 
 } // namespace NYql::NDq

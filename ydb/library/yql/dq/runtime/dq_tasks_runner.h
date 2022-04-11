@@ -195,8 +195,18 @@ public:
         , IsDefined(true) {
     }
 
+    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const TDqSinkStats*>&& sinkStats)
+        : StatsInplace()
+        , StatsPtr(stats)
+        , IsInplace(false)
+        , IsDefined(true)
+        , SinkStats(std::move(sinkStats)) {
+    }
+
     const TTaskRunnerStatsBase* Get() {
-        Y_VERIFY(IsDefined);
+        if (!IsDefined) {
+            return nullptr;
+        }
         return IsInplace ? static_cast<const TTaskRunnerStatsBase*>(&StatsInplace) : StatsPtr;
     }
 
@@ -204,11 +214,16 @@ public:
         return IsDefined;
     }
 
+    const TDqSinkStats* GetSinkStats(ui32 sinkId) const {
+        return SinkStats.at(sinkId);
+    }
+
 private:
     TDqTaskRunnerStatsInplace StatsInplace;
     const TDqTaskRunnerStats* StatsPtr;
     bool IsInplace;
     bool IsDefined;
+    THashMap<ui32, const TDqSinkStats*> SinkStats;
 };
 
 struct TDqTaskRunnerContext {

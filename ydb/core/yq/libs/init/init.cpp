@@ -163,6 +163,10 @@ void Init(
         lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit;
         lwmOptions.MkqlTotalMemoryLimit = mkqlTotalMemoryLimit;
         lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
+        lwmOptions.TaskRunnerActorFactory = NYql::NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
+            [=](const NYql::NDqProto::TDqTask& task, const NYql::NDq::TLogFunc&) {
+                return lwmOptions.Factory->Get(task);
+            });
         auto resman = NYql::NDqs::CreateLocalWorkerManager(lwmOptions);
 
         actorRegistrator(NYql::NDqs::MakeWorkerManagerActorID(nodeId), resman);

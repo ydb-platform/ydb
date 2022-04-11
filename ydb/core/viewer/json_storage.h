@@ -47,7 +47,7 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     TString FilterTenant;
     THashSet<TString> FilterStoragePools;
     TVector<TString> FilterGroupIds;
-    TVector<ui32> FilterNodeIds;
+    std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<TNodeId> NodeIds;
     bool NeedGroups = true;
     bool NeedDisks = true;
@@ -101,17 +101,21 @@ public:
         } else {
             RequestSchemeCacheNavigate(FilterTenant);
         }
-        std::replace(FilterNodeIds.begin(), FilterNodeIds.end(), (ui32)0, TlsActivationContext->ExecutorThread.ActorSystem->NodeId);
+        auto itZero = FilterNodeIds.find(0);
+        if (itZero != FilterNodeIds.end()) {
+            FilterNodeIds.erase(itZero);
+            FilterNodeIds.insert(TlsActivationContext->ActorSystem()->NodeId);
+        }
         if (FilterNodeIds.empty()) {
             SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         } else {
             for (ui32 nodeId : FilterNodeIds) {
                 SendNodeRequests(nodeId);
             }
-            if (Requests == 0) {
-                ReplyAndPassAway();
-                return;
-            }
+        }
+        if (Requests == 0) {
+            ReplyAndPassAway();
+            return;
         }
 
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
@@ -158,6 +162,26 @@ public:
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
                 BaseConfig = ev->Release();
+                if (!FilterNodeIds.empty()) {
+                    std::vector<TNodeId> additionalNodeIds;
+                    const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
+                    const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
+                    const NKikimrBlobStorage::TBaseConfig& pbConfig(pbStatus.GetBaseConfig());
+                    for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
+                        for (const NKikimrBlobStorage::TVSlotId& vslot : group.GetVSlotId()) {
+                            if (FilterNodeIds.count(vslot.GetNodeId()) != 0) {
+                                for (const NKikimrBlobStorage::TVSlotId& vslot : group.GetVSlotId()) {
+                                    additionalNodeIds.push_back(vslot.GetNodeId());
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    for (TNodeId nodeId : additionalNodeIds) {
+                        FilterNodeIds.insert(nodeId);
+                        SendNodeRequests(nodeId);
+                    }
+                }
             }
         }
         RequestDone();
@@ -483,7 +507,7 @@ public:
         ui64 foundGroups = 0;
         ui64 totalGroups = 0;
         for (const auto& [poolName, poolInfo] : StoragePoolInfo) {
-            if (!FilterStoragePools.empty() && FilterStoragePools.count(poolName) == 0) {
+            if ((!FilterTenant.empty() || !FilterStoragePools.empty()) && FilterStoragePools.count(poolName) == 0) {
                 continue;
             }
             NKikimrViewer::TStoragePoolInfo* pool = StorageInfo.AddStoragePools();

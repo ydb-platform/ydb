@@ -917,3 +917,5 @@ data-ui/notify-bot
 player/infra
 quality/ab_testing/scripts/adminka/frontend/calculations_front
 data-ui/united-storage
+sprav/legacy/callcenter
+data-ui/charts-console

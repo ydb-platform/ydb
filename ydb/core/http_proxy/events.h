@@ -2,8 +2,6 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <kikimr/yndx/ycloud/api/events.h>
-
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
 #include <ydb/core/base/events.h>

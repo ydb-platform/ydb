@@ -14,8 +14,6 @@ void TConfigsConfig::Clear()
 {
     AllowedNodeIdScopeKinds.clear();
     AllowedHostScopeKinds.clear();
-    AllowedTenantScopeKinds.clear();
-    AllowedNodeTypeScopeKinds.clear();
     DisallowedDomainScopeKinds.clear();
 }
 
@@ -27,10 +25,6 @@ void TConfigsConfig::Parse(const NKikimrConsole::TConfigsConfig &config)
         AllowedNodeIdScopeKinds.insert(kind);
     for (auto &kind : config.GetUsageScopeRestrictions().GetAllowedHostUsageScopeKinds())
         AllowedHostScopeKinds.insert(kind);
-    for (auto &kind : config.GetUsageScopeRestrictions().GetAllowedTenantUsageScopeKinds())
-        AllowedTenantScopeKinds.insert(kind);
-    for (auto &kind : config.GetUsageScopeRestrictions().GetAllowedNodeTypeUsageScopeKinds())
-        AllowedNodeTypeScopeKinds.insert(kind);
     for (auto &kind : config.GetUsageScopeRestrictions().GetDisallowedDomainUsageScopeKinds())
         DisallowedDomainScopeKinds.insert(kind);
 

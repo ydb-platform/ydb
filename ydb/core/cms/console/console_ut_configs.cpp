@@ -2020,10 +2020,6 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
             ->AddAllowedHostUsageScopeKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
-            ->AddAllowedTenantUsageScopeKinds(NKikimrConsole::TConfigItem::LogConfigItem);
-        config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
-            ->AddAllowedNodeTypeUsageScopeKinds(NKikimrConsole::TConfigItem::LogConfigItem);
-        config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
             ->ClearDisallowedDomainUsageScopeKinds();
         CheckSetConfig(runtime, config, Ydb::StatusIds::SUCCESS);
 
@@ -2044,16 +2040,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         CheckSetConfig(runtime, config, Ydb::StatusIds::BAD_REQUEST);
         config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
             ->AddAllowedHostUsageScopeKinds(NKikimrConsole::TConfigItem::LogConfigItem);
-        config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
-            ->ClearAllowedTenantUsageScopeKinds();
-        CheckSetConfig(runtime, config, Ydb::StatusIds::BAD_REQUEST);
-        config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
-            ->AddAllowedTenantUsageScopeKinds(NKikimrConsole::TConfigItem::LogConfigItem);
-        config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
-            ->ClearAllowedNodeTypeUsageScopeKinds();
-        CheckSetConfig(runtime, config, Ydb::StatusIds::BAD_REQUEST);
-        config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
-            ->AddAllowedNodeTypeUsageScopeKinds(NKikimrConsole::TConfigItem::LogConfigItem);
+        CheckSetConfig(runtime, config, Ydb::StatusIds::SUCCESS);
         config.MutableConfigsConfig()->MutableUsageScopeRestrictions()
             ->AddDisallowedDomainUsageScopeKinds(NKikimrConsole::TConfigItem::LogConfigItem);
         CheckSetConfig(runtime, config, Ydb::StatusIds::BAD_REQUEST);

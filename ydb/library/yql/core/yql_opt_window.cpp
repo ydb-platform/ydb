@@ -207,6 +207,7 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
             rawTraits.FrameSettings = frameSettings;
             rawTraits.Pos = traits->Pos();
 
+            YQL_ENSURE(traits->IsCallable("WindowTraits") || ft == EFrameType::FrameByRows, "Non-canonical frame for window functions");
             if (traits->IsCallable("WindowTraits")) {
                 maxDataOutpace = Max(maxDataOutpace, frameOutpace);
                 maxDataLag = Max(maxDataLag, frameLag);
@@ -244,7 +245,6 @@ TCalcOverWindowTraits ExtractCalcOverWindowTraits(const TExprNode::TPtr& frames,
                     }
                 }
             } else if (traits->IsCallable({"Lead", "Lag"})) {
-                YQL_ENSURE(ft == EFrameType::FrameByRows);
                 i64 lead = 1;
                 if (traits->ChildrenSize() == 3) {
                     YQL_ENSURE(traits->Child(2)->IsCallable("Int64"));

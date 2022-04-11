@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
@@ -2934,6 +2935,101 @@ TExprNode::TPtr BuildCalcOverWindowGroup(TCoCalcOverWindowGroup node, TExprNodeL
         .Input(node.Input())
         .Calcs(ctx.NewList(node.Pos(), std::move(calcs)))
         .Done().Ptr();
+}
+
+TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& ctx) {
+    TExprNodeList normalized;
+    bool changed = false;
+    TExprNode::TPtr unboundedCurrentNode;
+
+    for (auto& winOn : frames->ChildrenList()) {
+        TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
+        if (frameSettings.GetFrameType() == EFrameType::FrameByRows) {
+            // TODO: maybe we need to rewrite non-trivial ROWS frames also
+            normalized.push_back(winOn);
+            continue;
+        }
+
+        auto winOnChildren = winOn->ChildrenList();
+        TExprNodeList winOnChildrenNormalized;
+        TExprNodeList winOnChildrenRest(1, winOnChildren.front());
+        for (ui32 i = 1; i < winOnChildren.size(); ++i) {
+            auto item = winOn->Child(i)->Child(1);
+            // all non-aggregating window functions except first_value/last_value/nth_value work on partition, not frame,
+            // so we rewrite their frames to most basic one - ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            // (first_value/last_value/nth_value are handled by WindowTraits)
+            if (item->IsCallable("WindowTraits")) {
+                winOnChildrenRest.push_back(winOn->ChildPtr(i));
+                continue;
+            }
+
+            if (!unboundedCurrentNode) {
+                unboundedCurrentNode = ctx.Builder(frames->Pos())
+                    .List()
+                        .List(0)
+                            .Atom(0, "begin", TNodeFlags::Default)
+                            .Callable(1, "Void")
+                            .Seal()
+                        .Seal()
+                        .List(1)
+                            .Atom(0, "end", TNodeFlags::Default)
+                            .Callable(1, "Int32")
+                                .Atom(0, "0", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+
+            if (winOnChildrenNormalized.empty()) {
+                winOnChildrenNormalized.push_back(unboundedCurrentNode);
+            }
+
+            winOnChildrenNormalized.push_back(winOn->ChildPtr(i));
+        }
+
+        if (!winOnChildrenNormalized.empty()) {
+            changed = true;
+            normalized.push_back(ctx.RenameNode(*ctx.ChangeChildren(*winOn, std::move(winOnChildrenNormalized)), "WinOnRows"));
+            normalized.push_back(ctx.ChangeChildren(*winOn, std::move(winOnChildrenRest)));
+        } else {
+            normalized.push_back(winOn);
+        }
+    }
+
+    if (changed) {
+        return ctx.ChangeChildren(*frames, std::move(normalized));
+    }
+
+    return frames;
+}
+
+TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowBase node, TExprContext& ctx) {
+    auto origFrames = node.Frames().Ptr();
+    auto normalizedFrames = DoNormalizeFrames(origFrames, ctx);
+    if (normalizedFrames != origFrames) {
+        return ctx.ChangeChild(node.Ref(), TCoCalcOverWindowBase::idx_Frames, std::move(normalizedFrames));
+    }
+    return node.Ptr();
+}
+TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowGroup node, TExprContext& ctx) {
+    TExprNodeList normalizedCalcs;
+    bool changed = false;
+    for (auto calc : node.Calcs()) {
+        auto origFrames = calc.Frames().Ptr();
+        auto normalizedFrames = DoNormalizeFrames(origFrames, ctx);
+        if (normalizedFrames != origFrames) {
+            changed = true;
+            normalizedCalcs.emplace_back(ctx.ChangeChild(calc.Ref(), TCoCalcOverWindowTuple::idx_Frames, std::move(normalizedFrames)));
+        } else {
+            normalizedCalcs.emplace_back(calc.Ptr());
+        }
+    }
+
+    if (changed) {
+        return BuildCalcOverWindowGroup(node, std::move(normalizedCalcs), ctx);
+    }
+    return node.Ptr();
 }
 
 bool HasPayload(const TCoAggregate& node) {
@@ -5940,6 +6036,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["CalcOverWindow"] = map["CalcOverSessionWindow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         TCoCalcOverWindowBase self(node);
+        if (auto normalized = NormalizeFrames(self, ctx); normalized != node) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << ": convert window function frames to ROWS BETWEEN UP AND CR";
+            return normalized;
+        }
         auto frames = self.Frames();
         size_t sessionColumnsSize = 0;
         if (auto maybeSession = TMaybeNode<TCoCalcOverSessionWindow>(node)) {
@@ -5961,6 +6061,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["CalcOverWindowGroup"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         TCoCalcOverWindowGroup self(node);
+        if (auto normalized = NormalizeFrames(self, ctx); normalized != node) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << ": convert window function frames to ROWS BETWEEN UP AND CR";
+            return normalized;
+        }
 
         auto dedupCalcs = DedupCalcOverWindowsOnSamePartitioning(self.Calcs().Ref().ChildrenList(), ctx);
         YQL_ENSURE(dedupCalcs.size() <= self.Calcs().Size());

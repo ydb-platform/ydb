@@ -18,7 +18,7 @@ To use [{{ k8s }}](https://kubernetes.io/) to create a cluster [{{ ydb-short-nam
 
     {% endnote %}
 
-    {% cut "How to create a {{ k8s }} cluster" %}
+    {% cut "How to create {{ k8s }} cluster" %}
 
     {% list tabs %}
 

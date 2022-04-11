@@ -20,8 +20,8 @@ In addition, there is a separate table that shows statistics on the use of the n
 | Path | String |  | Path to the block device inside the machine. |
 | Guid | Uint64 |  | A unique ID that is generated randomly when adding a disk to the system and is designed to prevent data loss in the event of disk swapping. |
 | BoxId | Uint64 |  | ID of the Box that this PDisk belongs to. |
-| SharedWithOs | Bool |  | A Boolean attribute that is used to filter disks when creating new groups. |
-| ReadCentric | Bool |  | A Boolean attribute that is used to filter disks when creating new groups. |
+| SharedWithOs | Bool |  | Flag indicating if the "SharedWithOs" label is available. Set manually when creating a PDisk. You can use it to filter disks when creating new groups. |
+| ReadCentric | Bool |  | Flag indicating if the "ReadCentric" label is available. Set manually when creating a PDisk. You can use it to filter disks when creating new groups. |
 | AvailableSize | Uint64 |  | The number of bytes that can be allocated on the PDisk. |
 | TotalSize | Uint64 |  | The total number of bytes on the PDisk. |
 | Status | String |  | PDisk operation mode that affects its participation in the allocation of groups (ACTIVE, INACTIVE, BROKEN, FAULT, and TO_BE_REMOVED). |

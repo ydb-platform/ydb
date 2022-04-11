@@ -10,7 +10,7 @@ Make sure you have SSH access to all servers. This is necessary to install artif
 Your network configuration must allow TCP connections on the following ports (by default):
 
 * 2135, 2136: GRPC for client-cluster interaction.
-* 19001, 19002 - Interconnect  for intra-cluster node interaction.
+* 19001, 19002 - Interconnect for intra-cluster node interaction.
 * 8765, 8766: The HTTP interface for cluster monitoring.
 
 <!--Check out the [Production checklist](../production_checklist.md) and the recommended cluster topology;-->
@@ -160,7 +160,7 @@ Prepare the configuration files:
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml  \
+  /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml \
   --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
   ```
 
@@ -209,7 +209,7 @@ Prepare the configuration files:
 On one of the cluster nodes, run the command:
 
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml ; echo $?
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file /opt/ydb/cfg/config.yaml ; echo $?
 ```
 
 The command execution code should be null.

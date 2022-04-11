@@ -16,5 +16,9 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   {% include [go.md](_includes/go.md) %}
 
+- Java
+
+  {% include [java.md](_includes/java.md) %}
+
 {% endlist %}
 

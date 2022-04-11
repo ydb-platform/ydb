@@ -65,7 +65,7 @@ This conversion can be convenient in the following cases:
 
 `FLATTEN BY` interprets [optional data types](../../../types/optional.md) as lists of length 0 or 1. The table rows with `NULL` are skipped, and the column type changes to a similar non-optional type.
 
-`FLATTEN BY` makes only one conversion at a time, so use `FLATTEN LIST BY` or `FLATTEN OPTIONAL BY` makes only one conversion at a time, so use `Optional<List<String>>`.
+`FLATTEN BY` makes only one conversion at a time, so use `FLATTEN LIST BY` or `FLATTEN OPTIONAL BY` on optional containers, for example, `Optional<List<String>>`.
 
 {% endnote %}
 

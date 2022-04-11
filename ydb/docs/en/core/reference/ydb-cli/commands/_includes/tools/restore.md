@@ -25,7 +25,7 @@ Parameter name | Parameter description
 `-o`<br/>`--output` | Required parameter.<br/>The path on the local file system where the dump objects will be placed. The dump folder must not exist or must be empty.
 `--scheme-only` | Make a dump of the DB schema only. Possible values:<br/><ul><li>`0`: No.</li><li>`1`: Yes.</li>Default value is `0`.
 `--avoid-copy` | Avoid copying. Possible values:<br/><ul><li>`0`: No.</li><li>`1`: Yes.</li>Default value is `0`.
-`--save-partial-result` | Save the results of an incomplete dump.  Possible values:<br/><ul><li>`0`: No.</li><li>`1`: Yes.</li>Default value is `0`.
+`--save-partial-result` | Save the results of an incomplete dump. Possible values:<br/><ul><li>`0`: No.</li><li>`1`: Yes.</li>Default value is `0`.
 `--consistency-level` | Consistency level. Possible values:<br/><ul><li>`database`: Consistency at the DB level.</li><li>`table`: Consistency at the table level.</li>Default value is `database`.
 
 `-p <value>`<br/>`--path <value>` | Required parameter.<br/>The path in the DB by which the folder or table is restored.

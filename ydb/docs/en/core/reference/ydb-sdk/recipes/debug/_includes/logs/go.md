@@ -39,7 +39,7 @@ There are several ways to enable logs in an application that uses `ydb-go-sdk`:
     ```
 
     {% endcut %}
-* {% cut "Connect a third-party logger `github.com/rs/zerolog`" %}
+* {% cut "Connect a third-party logger `go.uber.org/zap`" %}
 
     ```go
     package main

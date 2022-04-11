@@ -10,5 +10,9 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
 
   {% include [go.md](logs/go.md) %}
 
+- Java
+
+  {% include [java.md](logs/java.md) %}
+
 {% endlist %}
 

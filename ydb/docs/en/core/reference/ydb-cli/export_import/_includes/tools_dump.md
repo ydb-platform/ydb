@@ -1,4 +1,4 @@
-# Dumping data to the file system
+# Exporting data to the file system
 
 The `tools dump` command dumps data and information about data schema objects to the client file system in the format described in the [File structure](../file_structure.md) article:
 

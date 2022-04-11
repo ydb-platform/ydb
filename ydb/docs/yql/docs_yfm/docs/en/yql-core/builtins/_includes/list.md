@@ -2,7 +2,7 @@
 
 ## ListCreate {#list-create}
 
-Construct an empty list. The only argument specifies a string describing the data type of the list cell or the type itself obtained using [relevant functions](../types.md). YQL doesn't support lists with an unknown cell type.
+Construct an empty list. The only argument specifies a string describing the data type of the list cell, or the type itself obtained using [relevant functions](../types.md). YQL doesn't support lists with an unknown cell type.
 
 [Documentation for the type definition format](../../types/type_string.md).
 
@@ -65,7 +65,7 @@ SELECT ListCollect(list_column) FROM my_table;
 
 {% endif %}
 
-## ListSort, ListSortAsc and ListSortDesc {#listsort}
+## ListSort, ListSortAsc, and ListSortDesc {#listsort}
 
 Sort the list. By default, the ascending sorting order is applied (`ListSort` is an alias for `ListSortAsc`).
 
@@ -233,7 +233,7 @@ FROM my_table;
 
 {% endif %}
 
-## ListMap, ListFilter and ListFlatMap {#listmap}
+## ListMap, ListFilter, and ListFlatMap {#listmap}
 
 Apply the function specified as the second argument to each list element. The functions differ in their returned result:
 

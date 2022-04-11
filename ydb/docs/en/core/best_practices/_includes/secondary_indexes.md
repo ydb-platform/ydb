@@ -8,7 +8,7 @@ To use similar features for any table fields or combinations thereof, additional
 
 Transactional systems use indexes to avoid performance degradation and an increase in the query execution cost if the amount of stored data grows.
 
-This article describes the basic operations with secondary indexes and provides links to detailed materials for each operation. For information about different types of secondary indexes and their specifics, see the [Secondary indexes](../../concepts/secondary_indexes.md) article in the "Concepts" section.
+This article describes the basic operations with secondary indexes and provides links to detailed information on each operation. For information about different types of secondary indexes and their specifics, see the [Secondary indexes](../../concepts/secondary_indexes.md) article in the "Concepts" section.
 
 ## Creating secondary indexes {#create}
 

@@ -19,5 +19,9 @@ Below are examples of the code for authentication using environment variables in
 
   {% include [go.md](env/go.md) %}
 
+- Java
+
+  {% include [java.md](env/java.md) %}
+
 {% endlist %}
 

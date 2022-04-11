@@ -3,7 +3,7 @@ In the {{ ydb-short-name }} Go SDK, correct error handling is implemented by sev
 * The basic logic of error handling is implemented by the helper `retry.Retry` function.
   The details of making request retries are hidden as much as possible.
   The user can affect the logic of executing the `retry.Retry` function in two ways:
-   * Via the context (where you can set the deadline and cancel)
+   * Via the context (where you can set the deadline and cancel).
    * Via the operation's idempotency flag `retry.WithIdempotent()`. By default, the operation is considered non-idempotent.
 
   The user passes a custom function to `retry.Retry` that returns an error by its signature.

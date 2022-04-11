@@ -3967,16 +3967,18 @@ namespace NTypeAnnImpl {
         const auto options = CastResult<Strong>(sourceType, targetType);
         if (!(options & NKikimr::NUdf::ECastOptions::Impossible)) {
             auto type = targetType;
-            if (targetType->GetKind() != ETypeAnnotationKind::Optional && (options & NKikimr::NUdf::ECastOptions::MayFail)) {
+            if (ETypeAnnotationKind::Null == type->GetKind()) {
+                output = ctx.Expr.NewCallable(input->Tail().Pos(), "Null", {});
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            if (targetType->GetKind() != ETypeAnnotationKind::Optional &&
+                targetType->GetKind() != ETypeAnnotationKind::Pg &&
+                (options & NKikimr::NUdf::ECastOptions::MayFail)) {
                 if (!EnsurePersistableType(input->Tail().Pos(), *targetType, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
                 type = ctx.Expr.MakeType<TOptionalExprType>(targetType);
-            }
-
-            if (ETypeAnnotationKind::Null == type->GetKind()) {
-                output = ctx.Expr.NewCallable(input->Tail().Pos(), "Null", {});
-                return IGraphTransformer::TStatus::Repeat;
             }
 
             if (IsNull(input->Head())) {
@@ -5699,11 +5701,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            if (arg->GetTypeAnn() && arg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
-                types.emplace_back(arg->GetTypeAnn());
-                continue;
-            }
-
             if (!EnsureOptionalType(*arg, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -5726,7 +5723,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         const auto thenType = lambda->GetTypeAnn();
         const auto elseType = input->Tail().GetTypeAnn();
-        if (!IsSameAnnotation(*thenType, *elseType)) {
+        if (input->Tail().IsCallable("Null") && (thenType->GetKind() == ETypeAnnotationKind::Optional ||
+            thenType->GetKind() == ETypeAnnotationKind::Pg)) {
+            output = ctx.Expr.ChangeChild(*input, input->ChildrenSize() - 1,
+                ctx.Expr.NewCallable(input->Tail().Pos(), "Nothing", { ExpandType(input->Tail().Pos(), *thenType, ctx.Expr) }));
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (!IsSameAnnotation(*thenType, *elseType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "mismatch of then/else types, then type: "
                 << *thenType << ", else type: " << *elseType));
             return IGraphTransformer::TStatus::Error;

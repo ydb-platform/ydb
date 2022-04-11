@@ -1203,7 +1203,7 @@ TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx
         }
 
         if constexpr (Cannonize) {
-            if (node->Tail().IsCallable("Nothing")) {
+            if (node->Tail().IsCallable("Nothing") && node->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with else " << node->Tail().Content();
                 return ctx.NewCallable(node->Pos(), "FlatMap", { node->HeadPtr(), node->ChildPtr(1) });
             }

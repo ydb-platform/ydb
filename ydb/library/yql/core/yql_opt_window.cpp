@@ -357,11 +357,13 @@ TExprNode::TPtr CoalesceQueueOutput(TPositionHandle pos, const TExprNode::TPtr& 
         }
 
         return ctx.Builder(pos)
-            .Callable("FlatMap")
+            .Callable("IfPresent")
                 .Add(0, output)
                 .Lambda(1)
                     .Param("item")
                     .Arg("item")
+                .Seal()
+                .Callable(2, "Null")
                 .Seal()
             .Seal()
             .Build();
@@ -537,9 +539,11 @@ private:
         auto rowArg = ctx.NewArgument(GetPos(), "row");
 
         auto body = ctx.Builder(GetPos())
-            .Callable("FlatMap")
+            .Callable("IfPresent")
                 .Add(0, BuildQueuePeek(GetPos(), dataQueue, *QueueOffset, rowArg, ctx))
                 .Add(1, AddOptionalIfNotAlreadyOptionalOrNull(LeadLagLambda, ctx))
+                .Callable(2, "Null")
+                .Seal()
             .Seal()
             .Build();
 
@@ -899,7 +903,7 @@ public:
     TChain1MapTraitsCurrentOrLagging(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> lagQueueIndex)
         : TChain1MapTraitsStateBase(name, raw)
         , LaggingQueueIndex(lagQueueIndex)
-        , OutputIsOptional(raw.OutputType->GetKind() == ETypeAnnotationKind::Optional)
+        , OutputIsOptional(raw.OutputType->IsOptionalOrNull())
     {
     }
 
@@ -1096,7 +1100,7 @@ public:
         , QueueBegin(queueBegin)
         , QueueEnd(queueEnd)
         , FrameNeverEmpty(raw.FrameSettings.IsNonEmpty())
-        , OutputIsOptional(raw.OutputType->GetKind() == ETypeAnnotationKind::Optional)
+        , OutputIsOptional(raw.OutputType->IsOptionalOrNull())
     {
     }
 

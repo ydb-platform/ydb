@@ -3399,7 +3399,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const auto optAnn = (stateType->GetKind() == ETypeAnnotationKind::Pg) ? stateType : ctx.Expr.MakeType<TOptionalExprType>(stateType);
+        const auto optAnn = ctx.Expr.MakeType<TOptionalExprType>(stateType);
         input->SetTypeAnn(optAnn);
         return IGraphTransformer::TStatus::Ok;
     }

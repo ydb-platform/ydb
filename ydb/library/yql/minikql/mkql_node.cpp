@@ -1064,7 +1064,6 @@ TOptionalType::TOptionalType(TType* itemType, const TTypeEnvironment& env, bool 
 }
 
 TOptionalType* TOptionalType::Create(TType* itemType, const TTypeEnvironment& env) {
-    MKQL_ENSURE(!itemType->IsPg(), "PG type can't be wrapped into optional type");
     return ::new(env.Allocate<TOptionalType>()) TOptionalType(itemType, env);
 }
 

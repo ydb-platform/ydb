@@ -1,0 +1,9 @@
+title: YQL over {{ backend_name }}
+# href: index.md
+items:
+- name: Типы данных
+  include: { mode: link, path: types/toc_i.yaml }
+- name: Синтаксис
+  include: { mode: link, path: syntax/toc_i.yaml }
+- name: Встроенные функции
+  include: { mode: link, path: builtins/toc_i.yaml }

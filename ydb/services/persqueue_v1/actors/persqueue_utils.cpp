@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/path.h>
 
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 TAclWrapper::TAclWrapper(THolder<NACLib::TSecurityObject> acl)
@@ -169,6 +171,19 @@ Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const NPersQueue
         default:
             return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     }
+}
+
+Ydb::PersQueue::ErrorCode::ErrorCode ConvertOldCode(const NPersQueue::NErrorCode::EErrorCode code)
+{
+    if (code == NPersQueue::NErrorCode::OK)
+        return Ydb::PersQueue::ErrorCode::OK;
+    return Ydb::PersQueue::ErrorCode::ErrorCode(code + 500000);
+}
+
+void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason) {
+    issue->set_message(errorReason);
+    issue->set_severity(NYql::TSeverityIds::S_ERROR);
+    issue->set_issue_code(errorCode);
 }
 
 } // namespace NKikimr::NGRpcProxy::V1

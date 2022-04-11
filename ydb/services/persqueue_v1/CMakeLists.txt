@@ -30,14 +30,11 @@ target_link_libraries(ydb-services-persqueue_v1 PUBLIC
   api-protos
   services-lib-actors
   services-lib-sharding
+  services-persqueue_v1-actors
 )
 target_sources(ydb-services-persqueue_v1 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_codecs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_read.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_schema.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_write_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue_utils.cpp
 )

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "grpc_pq_actor.h"
-#include "persqueue.h"
+#include "actors/events.h"
 
 #include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actorsystem.h>
 
 #include <util/generic/hash.h>

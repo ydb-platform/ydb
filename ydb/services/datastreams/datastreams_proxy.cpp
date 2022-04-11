@@ -12,7 +12,7 @@
 
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
-#include <ydb/services/persqueue_v1/persqueue_utils.h>
+#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <util/folder/path.h>
 

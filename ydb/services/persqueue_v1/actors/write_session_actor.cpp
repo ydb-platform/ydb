@@ -1,6 +1,6 @@
-#include "grpc_pq_actor.h"
-#include "grpc_pq_write.h"
-#include "grpc_pq_codecs.h"
+#include "write_session_actor.h"
+
+#include "codecs.h"
 
 #include <ydb/core/persqueue/pq_database.h>
 #include <ydb/core/persqueue/write_meta.h>

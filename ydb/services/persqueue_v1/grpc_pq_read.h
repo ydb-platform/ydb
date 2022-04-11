@@ -1,7 +1,6 @@
 #pragma once
 
-#include "grpc_pq_actor.h"
-#include "persqueue.h"
+#include "actors/read_session_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -18,10 +17,6 @@ namespace NGRpcProxy {
 namespace V1 {
 
 
-
-inline TActorId GetPQReadServiceActorID() {
-    return TActorId(0, "PQReadSvc");
-}
 
 IActor* CreatePQReadService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);

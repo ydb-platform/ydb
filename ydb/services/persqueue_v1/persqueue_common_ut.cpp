@@ -1,4 +1,4 @@
-#include "grpc_pq_actor.h"
+#include "actors/read_session_actor.h"
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/api_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>

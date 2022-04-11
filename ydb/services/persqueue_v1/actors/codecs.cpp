@@ -1,4 +1,5 @@
-#include "grpc_pq_codecs.h"
+#include "codecs.h"
+
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 

@@ -1,5 +1,6 @@
 #include "grpc_pq_read.h"
-#include "grpc_pq_actor.h"
+
+#include "actors/read_info_actor.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>

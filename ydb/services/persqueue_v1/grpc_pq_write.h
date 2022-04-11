@@ -1,7 +1,6 @@
 #pragma once
 
-#include "grpc_pq_actor.h"
-#include "persqueue.h"
+#include "actors/write_session_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
@@ -16,10 +15,6 @@
 namespace NKikimr {
 namespace NGRpcProxy {
 namespace V1 {
-
-inline TActorId GetPQWriteServiceActorID() {
-    return TActorId(0, "PQWriteSvc");
-}
 
 IActor* CreatePQWriteService(const NActors::TActorId& schemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);

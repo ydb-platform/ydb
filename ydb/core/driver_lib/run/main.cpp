@@ -65,7 +65,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         TRunCommandConfigParser configParser(runConfig);
 
         TOpts opts = TOpts::Default();
-        opts.SetTitle("KiKiMR client/server binary");
+        opts.SetTitle("YDB client/server binary");
 
         configParser.SetupGlobalOpts(opts);
         NMsgBusProxy::TMsgBusClientConfig mbusConfig;

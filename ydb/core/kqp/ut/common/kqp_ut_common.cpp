@@ -70,7 +70,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
-    Cerr << "Trying to start KiKiMR, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
+    Cerr << "Trying to start YDB, gRPC: " << grpcPort << ", MsgBus: " << mbusPort << Endl;
 
     TVector<NKikimrKqp::TKqpSetting> effectiveKqpSettings;
     {

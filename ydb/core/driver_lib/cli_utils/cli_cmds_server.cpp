@@ -1165,7 +1165,7 @@ public:
 class TClientCommandServer : public TClientCommandServerBase {
 public:
     TClientCommandServer(std::shared_ptr<TModuleFactories> factories)
-        : TClientCommandServerBase("server", "Execute KiKiMR server")
+        : TClientCommandServerBase("server", "Execute YDB server")
         , Factories(std::move(factories))
     {}
 

@@ -1449,7 +1449,7 @@ public:
 };
 
 TClientCommandDb::TClientCommandDb()
-    : TClientCommandTree("db", {}, "KiKiMR DB operations")
+    : TClientCommandTree("db", {}, "YDB DB operations")
 {
     AddCommand(std::make_unique<TClientCommandSchema>());
     AddCommand(std::make_unique<TClientCommandDbExec>());

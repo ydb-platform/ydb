@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NDriverClient {
 
 TClientCommandAdmin::TClientCommandAdmin()
-    : TClientCommandTree("admin", {}, "KiKiMR management and administration")
+    : TClientCommandTree("admin", {}, "YDB management and administration")
 {
     AddCommand(std::make_unique<TClientCommandTablet>());
     AddCommand(std::make_unique<TClientCommandNode>());

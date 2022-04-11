@@ -285,6 +285,7 @@ private:
         // If target status was successful, change it to failed because we are in internal error handler.
         if (QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::COMPLETED || QueryStateUpdateRequest.status() == YandexQuery::QueryMeta::PAUSED) {
             QueryStateUpdateRequest.set_status(YandexQuery::QueryMeta::FAILED);
+            QueryStateUpdateRequest.set_status_code(NYql::NDqProto::StatusIds::INTERNAL_ERROR);
         }
 
         SendPingAndPassAway();
@@ -402,7 +403,7 @@ private:
     void Handle(TEvents::TEvForwardPingResponse::TPtr& ev) {
         LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
         if (!ev->Get()->Success) { // Failed setting new status or lease was lost
-            ResignQuery();
+            ResignQuery(NYql::NDqProto::StatusIds::UNAVAILABLE);
             return;
         }
 
@@ -681,11 +682,19 @@ private:
         SaveQueryResponse(ev);
 
         const bool failure = Issues.Size() > 0;
+        {
+            auto statusCode = ev->Get()->Record.GetStatusCode();
+            if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED
+                || (failure != (ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS))
+            ) {
+                QueryCounters.Counters->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(statusCode), false)->Inc();
+            }
+        }
         const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size());
         if (finalize) {
 
             if (RetryNeeded) {
-                ResignQuery();
+                ResignQuery(ev->Get()->Record.GetStatusCode());
                 return;
             }
 
@@ -795,16 +804,6 @@ private:
             Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateQueryInfoCookie);
         }
 
-/*
-        {   // Failure test -- keep it until integrational tests work
-            Yq::Private::PingTaskRequest request;
-            request.set_status(YandexQuery::QueryMeta::RUNNING);
-            request.set_resign_query(true);
-            Send(Pinger, new TEvents::TEvForwardPingRequest(request, true), 0, UpdateQueryInfoCookie);
-            PassAway();
-            return;
-        }
-*/
         RunNextDqGraph();
     }
 
@@ -998,6 +997,7 @@ private:
         RetryNeeded = false;
         FinalQueryStatus = status;
         QueryStateUpdateRequest.set_status(FinalQueryStatus); // Can be changed later.
+        QueryStateUpdateRequest.set_status_code(NYql::NDqProto::StatusIds::SUCCESS);
         *QueryStateUpdateRequest.mutable_finished_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
         Become(&TRunActor::StateFuncWrapper<&TRunActor::FinishStateFunc>);
 
@@ -1020,8 +1020,9 @@ private:
         SendPingAndPassAway();
     }
 
-    void ResignQuery() {
+    void ResignQuery(NYql::NDqProto::StatusIds::StatusCode statusCode) {
         QueryStateUpdateRequest.set_resign_query(true);
+        QueryStateUpdateRequest.set_status_code(statusCode);
         SendPingAndPassAway();
     }
 

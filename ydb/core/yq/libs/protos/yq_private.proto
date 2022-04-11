@@ -84,7 +84,7 @@ message PingTaskRequest {
     SignedIdentity job_id = 3;
     SignedIdentity result_id = 4;
     YandexQuery.QueryMeta.ComputeStatus status = 5;
-    NYql.NDqProto.StatusIds.StatusCode StatusCode = 21;
+    NYql.NDqProto.StatusIds.StatusCode status_code = 21;
     repeated Ydb.Issue.IssueMessage issues = 6;
     repeated Ydb.Issue.IssueMessage transient_issues = 16;
     uint32 result_set_count = 7;

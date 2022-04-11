@@ -392,7 +392,7 @@ private:
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) {
         Gateway->Download(Url + Path,
-            Headers, ExpectedSize,
+            Headers, 0ULL, ExpectedSize,
             std::bind(&TS3ReadCoroActor::OnNewData, TActivationContext::ActorSystem(),  self, std::placeholders::_1),
             std::bind(&TS3ReadCoroActor::OnDownloadFinished, TActivationContext::ActorSystem(),  self, std::placeholders::_1));
 

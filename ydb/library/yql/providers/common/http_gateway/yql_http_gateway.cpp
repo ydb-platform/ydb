@@ -18,8 +18,8 @@ public:
     using TPtr = std::shared_ptr<TEasyCurl>;
     using TWeakPtr = std::weak_ptr<TEasyCurl>;
 
-    TEasyCurl(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, bool withData)
-        : ExpectedSize(expectedSize), Handle(curl_easy_init()), Counter(counter)
+    TEasyCurl(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, bool withData)
+        : Offset(offset), ExpectedSize(expectedSize), Handle(curl_easy_init()), Counter(counter)
     {
         curl_easy_setopt(Handle, CURLOPT_URL, url.c_str());
         curl_easy_setopt(Handle, CURLOPT_POST, withData ?  1L : 0L);
@@ -32,6 +32,10 @@ public:
             Headers = std::accumulate(headers.cbegin(), headers.cend(), Headers,
                 std::bind(&curl_slist_append, std::placeholders::_1, std::bind(&TString::c_str, std::placeholders::_2)));
             curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, Headers);
+        }
+
+        if (Offset) {
+            curl_easy_setopt(Handle, CURLOPT_RANGE,  (ToString(Offset) += '-').c_str());
         }
 
         if (withData) {
@@ -76,6 +80,7 @@ private:
         return static_cast<TEasyCurl*>(userp)->Read(buffer, size, nmemb);
     };
 
+    const std::size_t Offset;
     const std::size_t ExpectedSize;
     CURL *const Handle;
     curl_slist* Headers = nullptr;
@@ -84,15 +89,15 @@ private:
 
 class TEasyCurlBuffer : public TEasyCurl {
 public:
-    TEasyCurlBuffer(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, TString data, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnResult callback)
-        : TEasyCurl(counter, url, headers, expectedSize, !data.empty()), Data(std::move(data)), Input(Data), Output(Buffer)
+    TEasyCurlBuffer(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, TString data, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnResult callback)
+        : TEasyCurl(counter, url, headers, offset, expectedSize, !data.empty()), Data(std::move(data)), Input(Data), Output(Buffer)
     {
         Output.Reserve(expectedSize);
         Callbacks.emplace(std::move(callback));
     }
 
-    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, TString data, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnResult callback) {
-        return std::make_shared<TEasyCurlBuffer>(counter, std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
+    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, TString data, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnResult callback) {
+        return std::make_shared<TEasyCurlBuffer>(counter, std::move(url), std::move(data), std::move(headers), offset, expectedSize, std::move(callback));
     }
 private:
     bool AddCallback(IHTTPGateway::TOnResult callback) final {
@@ -150,13 +155,13 @@ private:
 
 class TEasyCurlStream : public TEasyCurl {
 public:
-    TEasyCurlStream(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish)
-        : TEasyCurl(counter, url, headers, expectedSize, false), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish))
+    TEasyCurlStream(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish)
+        : TEasyCurl(counter, url, headers, offset, expectedSize, false), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish))
     {
     }
 
-    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish) {
-        return std::make_shared<TEasyCurlStream>(counter, std::move(url), std::move(headers), expectedSize, std::move(onNewData), std::move(onFinish));
+    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish) {
+        return std::make_shared<TEasyCurlStream>(counter, std::move(url), std::move(headers), offset, expectedSize, std::move(onNewData), std::move(onFinish));
     }
 private:
     bool AddCallback(IHTTPGateway::TOnResult) final { return false; }
@@ -184,16 +189,16 @@ private:
     const IHTTPGateway::TOnDowloadFinsh OnFinish;
 };
 
-using TKeyType = std::tuple<TString, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;
+using TKeyType = std::tuple<TString, std::size_t, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;
 
 class TKeyHash {
 public:
     TKeyHash() : Hash(), HashPtr() {}
 
     size_t operator()(const TKeyType& key) const {
-        const auto& headers = std::get<1U>(key);
-        auto initHash = CombineHashes(Hash(std::get<0U>(key)), Hash(std::get<2U>(key)));
-        initHash = CombineHashes(HashPtr(std::get<3U>(key)), initHash);
+        const auto& headers = std::get<2U>(key);
+        auto initHash = CombineHashes(CombineHashes(Hash(std::get<0U>(key)), std::get<1U>(key)), Hash(std::get<3U>(key)));
+        initHash = CombineHashes(HashPtr(std::get<4U>(key)), initHash);
         return std::accumulate(headers.cbegin(), headers.cend(), initHash,
             [this](size_t hash, const TString& item) { return CombineHashes(hash, Hash(item)); });
     }
@@ -369,13 +374,13 @@ private:
         Rps->Inc();
 
         const std::unique_lock lock(Sync);
-        auto& entry = Requests[TKeyType(url, headers, data, retryPolicy)];
+        auto& entry = Requests[TKeyType(url, 0U, headers, data, retryPolicy)];
         StraightInFlight->Set(Requests.size());
         if (const auto& easy = entry.lock())
             if (easy->AddCallback(callback))
                 return;
 
-        auto easy = TEasyCurlBuffer::Make(InFlight, std::move(url), std::move(data), std::move(headers), expectedSize, std::move(callback));
+        auto easy = TEasyCurlBuffer::Make(InFlight, std::move(url), std::move(data), std::move(headers), 0U, expectedSize, std::move(callback));
         entry = easy;
         Easy2RetryState.emplace(easy, std::move(retryPolicy->CreateRetryState()));
         Await.emplace(std::move(easy));
@@ -385,11 +390,12 @@ private:
     void Download(
         TString url,
         THeaders headers,
+        std::size_t offset,
         std::size_t expectedSize,
         TOnNewDataPart onNewData,
         TOnDowloadFinsh onFinish) final
     {
-        auto easy = TEasyCurlStream::Make(InFlight, std::move(url), std::move(headers), expectedSize, std::move(onNewData), std::move(onFinish));
+        auto easy = TEasyCurlStream::Make(InFlight, std::move(url), std::move(headers), offset, expectedSize, std::move(onNewData), std::move(onFinish));
         const std::unique_lock lock(Sync);
         Await.emplace(std::move(easy));
         Wakeup(expectedSize);

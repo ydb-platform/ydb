@@ -4,5 +4,6 @@ items:
 - include: { mode: link, path: configuration/toc_p.yaml }
 - name: Kubernetes
   include: { mode: link, path: ../deploy/orchestrated/toc_p.yaml }
-- name: Production checklist
-  href: production_checklist.md
+# - name: Production checklist
+# href: production_checklist.md
+

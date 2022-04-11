@@ -50,7 +50,7 @@ The first step of the interactive scenario is different in the `init` and `profi
 Next, you'll be prompted to sequentially perform the following actions with each connection parameter that can be saved in the profile:
 
 - Don't save
-- Set a new value or Use <value>
+- Set a new value or Use - Set a new value or Use <value>
 - Use current value (this option is available when updating an existing profile)
 
 ## Example
@@ -85,10 +85,10 @@ Creating a new `mydb1` profile:
 
     ```text
     Pick desired action to configure authentication method:
-     [1] Use IAM token (iam-token) cloud.yandex.com/docs/iam/concepts/authorization/iam-token
-     [2] Use OAuth token of a Yandex Passport user (yc-token) cloud.yandex.com/docs/iam/concepts/authorization/oauth-token
-     [3] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.com/docs/compute/operations/vm-connect/auth-inside-vm
-     [4] Use security account key file (sa-key-file) cloud.yandex.com/docs/iam/operations/iam-token/create-for-sa
+     [1] Use IAM token (iam-token) cloud.yandex.ru/docs/iam/concepts/authorization/iam-token
+     [2] Use OAuth token of a Yandex Passport user (yc-token) cloud.yandex.ru/docs/iam/concepts/authorization/oauth-token
+     [3] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm
+     [4] Use security account key file (sa-key-file) cloud.yandex.ru/docs/iam/operations/iam-token/create-for-sa
      [5] Don't save authentication data for profile "mydb1"
     Please enter your numeric choice:
     ```

@@ -7,7 +7,7 @@ When using this method, the authentication mode and its parameters are defined b
 By setting one of the following environment variables, you can control the authentication method:
 
 * `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path/to/sa_key_file>`: Use a service account file in Yandex.Cloud.
-* `YDB_ANONYMOUS_CREDENTIALS="1"`: Use anonymous authentication. Relevant for testing against a Docker container with {{ ydb-short-name }}.
+* `YDB_ANONYMOUS_CREDENTIALS="1"`: Use anonymous authentication. Relevant for testing against a Docker container with {{ ydb-short-name }}
 * `YDB_METADATA_CREDENTIALS="1"`: Use the metadata service inside Yandex.Cloud (a Yandex function or a VM).
 * `YDB_ACCESS_TOKEN_CREDENTIALS=<access_token>`: Use token-based authentication.
 
@@ -18,10 +18,6 @@ Below are examples of the code for authentication using environment variables in
 - Go
 
   {% include [go.md](env/go.md) %}
-
-- Java
-
-  {% include [java.md](env/java.md) %}
 
 {% endlist %}
 

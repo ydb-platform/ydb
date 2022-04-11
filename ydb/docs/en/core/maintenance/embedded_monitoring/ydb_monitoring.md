@@ -16,9 +16,9 @@ An example of the page layout is shown in the screenshot below.
 
 In the upper-right corner of the page, you can see details about the node that created the current page:
 
-* host
-* node uptime
-* ydb version run by the node
+* host.
+* node uptime.
+* ydb version run by the node.
 
 Below is the cluster summary:
 

@@ -20,7 +20,7 @@ Profile activation is performed by running the command
 {{ ydb-cli }} config profile activate [profile_name]
 ```
 
-, where `[profile_name]` is an optional profile name.
+where `[profile_name]` is an optional profile name.
 
 If the profile name is specified, it is activated. If a profile with the specified name does not exist, an error is returned prompting you to view the list of available profiles:
 

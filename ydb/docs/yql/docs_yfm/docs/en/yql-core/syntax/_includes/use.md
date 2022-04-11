@@ -8,7 +8,7 @@ Usually the cluster name is specified explicitly, but you can use an expression 
 In this case, `USE` must have the notation ```USE yt:$cluster_name```, where `$cluster_name` is the [named expression](../expressions.md#named-nodes) of the `String` type.
 Alternatively, you can specify the cluster right at the beginning of the table path in the format ``` yt:$cluster_name.`path/to/table` ```.
 
-As far as `USE` is concerned, you can add it inside [actions](../action.md){% if feature_subquery %} or [subquery templates](../subquery.md){% endif %}. The value of the current cluster is inherited by declarations of nested actions{% if feature_subquery %} or subqueries{% endif %}. The scope of `USE` is terminated at the end of the action{% if feature_subquery %}  or {% endif %} subquery template where it has been declared.
+As far as `USE` is concerned, you can add it inside [actions](../action.md){% if feature_subquery %} or [subquery templates](../subquery.md){% endif %}. The value of the current cluster is inherited by declarations of nested actions{% if feature_subquery %} or subqueries{% endif %}. The scope of `USE` is terminated at the end of the action{% if feature_subquery %} or {% endif %} subquery template where it has been declared.
 
 **Examples:**
 

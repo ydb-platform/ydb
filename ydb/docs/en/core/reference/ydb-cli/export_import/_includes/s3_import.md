@@ -135,7 +135,7 @@ ydb -p db1 import s3 \
 
 ### Getting operation IDs {#example-list-oneline}
 
-To get a list of export operation IDs in a format that is convenient for processing in bash scripts, use [jq](https://stedolan.github.io/jq/download/):
+To get a list of import operation IDs in a format that is convenient for processing in bash scripts, use [jq](https://stedolan.github.io/jq/download/):
 
 ```bash
 {{ ydb-cli }} -p db1 operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id"

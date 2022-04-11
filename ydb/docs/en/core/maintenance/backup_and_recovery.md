@@ -4,8 +4,8 @@ Backup protects against data loss and lets you restore data from a backup copy i
 
 YDB provides multiple solutions for backup and recovery:
 
-- Backing up data to files and restoring it with a command run by an admin in the YDB CLI
-- Backing up data to S3-compatible storage with a command run by an admin in the YDB CLI
+* Backing up data to files and restoring it with a command run by an admin in the YDB CLI.
+* Backing up data to S3-compatible storage with a command run by an admin in the YDB CLI.
 
 {% include [_includes/backup_and_recovery/options_overlay.md](_includes/backup_and_recovery/options_overlay.md) %}
 

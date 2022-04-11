@@ -82,3 +82,4 @@ Names of objects issued in [YQL](../../../../yql/reference/index.md) queries may
 ## Implicit creation of directories during import {#import}
 
 The data import command creates a directory tree mirroring the original imported catalog.
+

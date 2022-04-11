@@ -49,7 +49,7 @@ Data is deleted by the *Background Removal Operation* (*BRO*), consisting of two
   * `Uint32`
   * `Uint64`
   * `DyNumber`
-* The value in the TTL column with a numeric type (`Uint32`, `Uint64`, `DyNumber`) is interpreted as a [Unix-time]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время ){% endif %} value specified in:
+* The value in the TTL column with a numeric type (`Uint32`, `Uint64`, `DyNumber`) is interpreted as a [Unix-time]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %} value specified in:
   * Seconds
   * Milliseconds
   * Microseconds
@@ -63,7 +63,7 @@ Currently, you can manage TTL settings using:
 
 * [YQL](../../yql/reference/index.md).
 * [{{ ydb-short-name }} console client](../../reference/ydb-cli/index.md).
-* {{ ydb-short-name }} {% if oss %}C++ and{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md).
+* {{ ydb-short-name }} {% if oss %}C++ and{% endif %} Python [SDK](../../reference/ydb-sdk/index.md).
 
 {% note info %}
 

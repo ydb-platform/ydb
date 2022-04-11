@@ -233,7 +233,7 @@ FROM my_table;
 
 {% endif %}
 
-## ListMap, ListFilter, and ListFlatMap {#listmap}
+## ListMap, ListFilter and ListFlatMap {#listmap}
 
 Apply the function specified as the second argument to each list element. The functions differ in their returned result:
 
@@ -252,7 +252,7 @@ Arguments:
 1. Source list.
 2. Functions for processing list elements, such as:
     * [Lambda function](../../syntax/expressions.md#lambda).
-    * `Module::Function` - C++ UDF;
+    * `Module::Function` - C++ UDF.
 {% if feature_udf_noncpp %}
     * [Python UDF](../../udf/python.md), [JavaScript UDF](../../udf/javascript.md) or any other called value.
 

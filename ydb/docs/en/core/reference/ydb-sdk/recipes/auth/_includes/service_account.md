@@ -10,9 +10,5 @@ Below are examples of the code for authentication using a service account file i
 
   {% include [go.md](service_account/go.md) %}
 
-- Java
-
-  {% include [java.md](service_account/java.md) %}
-
 {% endlist %}
 

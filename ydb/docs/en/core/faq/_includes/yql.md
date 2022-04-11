@@ -37,22 +37,6 @@ WHERE Key LIKE "some_prefix%";
 
 1000 rows is the response size limit per YQL query. If a response is shortened, it is flagged as `Truncated`. To output more table rows, you can use [paginated output](../../best_practices/paging.md) or the `ReadTable` operation.
 
-#### What do I do if I get the Datashard: Reply size limit exceeded error in response to a query? {#reply-size-exceeded}
-
-This error means that, as a query was running, one of the participating data shards attempted to return over 50 MB of data, which exceeds the allowed limit.
-
-Recommendations:
-
-* A general recommendation is to reduce the amount of data processed in a transaction.
-* If a query involves a `Join`, it is a good idea to make sure that the method used is [Index lookup Join](#index-lookup-join).
-* If a simple selection is performed, make sure that it is done by keys, or add `LIMIT` in the query.
-
-#### What do I do is I get the "Datashard program size limit exceeded" in response to a query? {#program-size-exceeded}
-
-This error means that the size of a program (including parameter values) exceeded the 50-MB limit for one of the data shards. In most cases, this indicates an attempt to write over 50 MB of data to database tables in a single transaction. All modifying operations in a transaction such as `UPSERT`, `REPLACE`, `INSERT`, or `UPDATE` count as records.
-
-You need to reduce the total size of records in one transaction. Normally, we don't recommend combining queries that logically don't require transactionality in a single transaction. When adding/updating data in batches, we recommend reducing the size of one batch to values not exceeding a few megabytes.
-
 #### How do I update only those values whose keys are not in the table? {#update-non-existent}
 
 You can use the `LEFT JOIN` operator to identify the keys a table is missing and update their values:
@@ -105,7 +89,7 @@ ON t.Key1 = d.Key1 AND t.Key2 = d.Key2;
 
 There is no explicit limit on the number of entries in the constant table, but mind the standard limit on the total size of query parameters (50 MB).
 
-#### What is the best way to implement a query like (key1, key2) IN ((v1, v2), (v3, v4), ...)? {#key-pairs-in}
+#### What's the best way to implement a query like (key1, key2) IN ((v1, v2), (v3, v4), ...)? {#key-pairs-in}
 
 It's better to write it using a JOIN with a constant table:
 

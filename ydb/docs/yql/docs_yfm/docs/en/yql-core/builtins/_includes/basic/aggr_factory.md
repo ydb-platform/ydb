@@ -7,8 +7,7 @@ Arguments:
 1. A string in double quotes with the name of an aggregate function, for example ["MIN"](../../aggregation.md#min).
 2. Optional parameters of the aggregate function that are data-independent. For example, the percentile value in [PERCENTILE](../../aggregation.md#percentile).
 
-The resulting factory can be used as the second parameter of the function [AGGREGATE_BY](..
-/../aggregation.md#aggregateby).
+The resulting factory can be used as the second parameter of the function [AGGREGATE_BY](../../aggregation.md#aggregateby).
 If the aggregate function is applied to two columns instead of one, as, for example, [MIN_BY](../../aggregation.md#minby), then in [AGGREGATE_BY](../../aggregation.md#aggregateby), the first argument passes a `Tuple` of two values. See more details in the description of the applicable aggregate function.
 
 **Examples:**

@@ -2,7 +2,7 @@ There are several ways to enable logs in an application that uses `ydb-go-sdk`:
 
 * Set the environment variable `YDB_LOG_SEVERITY_LEVEL=info` (possible values: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `quiet`, defaults to `quiet`).
   This environment variable enables the built-in `ydb-go-sdk` logger (synchronous, non-block) with output to the standard output stream.
-* {% cut "Connect side logger `go.uber.org/zap`" %}
+* {% cut "Connect a third-party logger `go.uber.org/zap`" %}
 
     ```go
     package main
@@ -39,7 +39,7 @@ There are several ways to enable logs in an application that uses `ydb-go-sdk`:
     ```
 
     {% endcut %}
-* {% cut "Connect side logger `github.com/rs/zerolog`" %}
+* {% cut "Connect a third-party logger `github.com/rs/zerolog`" %}
 
     ```go
     package main
@@ -77,7 +77,7 @@ There are several ways to enable logs in an application that uses `ydb-go-sdk`:
     ```
 
     {% endcut %}
-* {% cut "Connect own logger implementation `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+* {% cut "Connect your own logger implementation `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 
     ```go
     package main

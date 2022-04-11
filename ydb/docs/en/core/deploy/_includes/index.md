@@ -6,7 +6,7 @@ Step-by-step tutorials for self-deployment of local DBs intended for application
 
 Information on cluster deployment and configuration is intended for administrators.
 
-{% note warning %}
+{% note warning "Warning" %}
 
 The section is under development.
 

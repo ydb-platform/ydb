@@ -10,9 +10,5 @@ Below are examples of the code for anonymous authentication in different {{ ydb-
 
   {% include [go.md](anonymous/go.md) %}
 
-- Java
-
-  {% include [java.md](anonymous/java.md) %}
-
 {% endlist %}
 

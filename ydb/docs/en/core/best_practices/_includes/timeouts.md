@@ -1,6 +1,7 @@
 ---
 title: Using timeouts in Yandex Database (YDB)
 description: 'The operation_timeout value determines the time during which the query result is interesting to the user. If the operation has not been performed during this time, the server returns an error with the Timeout code and tries to terminate the execution of the request, but the cancellation of the request is not guaranteed. It is always recommended to set both the operation timeout and the transport timeout.'
+
 ---
 # Using timeouts
 
@@ -39,7 +40,7 @@ Timeout usage example:
 
   ```python
   from kikimr.public.sdk.python import client as ydb
-
+  
   def execute_in_tx(session, query):
     settings = ydb.BaseRequestSettings()
     settings = settings.with_timeout(0.5)  # transport timeout
@@ -63,7 +64,7 @@ Timeout usage example:
   
   using namespace NYdb;
   using namespace NYdb::NTable;
-
+  
   TAsyncStatus ExecuteInTx(TSession& session, TString query, TParams params) {
     return session.ExecuteDataQuery(
         query
@@ -81,19 +82,18 @@ Timeout usage example:
 
   ```go
   import (
-    "context"
-
-    ydb "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+      "context"
+      "a.yandex-team.ru/kikimr/public/sdk/go/ydb"
+      "a.yandex-team.ru/kikimr/public/sdk/go/ydb/table"
   )
-
-  func executeInTx(ctx context.Context, s table.Session, query string) {
-	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*300) // client and by default operation timeout
-	defer cancel()
-	ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout override
-	ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*300) // cancel after timeout
-	tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
-	_, res, err := s.Execute(ctx, tx, query, table.NewQueryParameters())
+  
+  func executeInTx(ctx context.Context, s *table.Session, query string) {
+      newCtx, close := context.WithTimeout(ctx, time.Millisecond*300)         // client and by default operation timeout
+      newCtx2 := ydb.WithOperationTimeout(newCtx, time.Millisecond*400)       // operation timeout override
+      newCtx3 := ydb.WithOperationCancelAfter(newCtx2, time.Millisecond*300)  // cancel after timeout
+      defer close()
+      tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
+      _, res, err := session.Execute(newCtx3, tx, query)
   }
   ```
 

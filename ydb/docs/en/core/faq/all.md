@@ -1,6 +1,7 @@
 {% include [all.md](_includes/all.md) %}
 
-## Serverless {#serverless}
+{% if audience != "external" %}
 
-{% include notitle [serverless.md](serverless.md) %}
+<!-- common_yndx is to be here, but currently breaks the build with contributors -->
 
+{% endif %}

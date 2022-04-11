@@ -37,7 +37,7 @@ items:
 #    items:
     # - name: Copy tables
     #   href: commands/tools/copy.md
-    # - name: Dump backup
+    # - name: Backup
     #   href: commands/tools/dump.md
     # - name: Restore backup
     #   href: commands/tools/restore.md

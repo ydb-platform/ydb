@@ -2,7 +2,7 @@
 
 Checking whether a value is inside of a set of values. It's logically equivalent to a chain of equality comparisons using `OR` but implemented more efficiently.
 
-{% note warning %}
+{% note warning "Warning" %}
 
 Unlike a similar keyword in Python, in YQL `IN ` **DOES NOT** searches for a substring inside a string. To search for a substring, use the function [String::Contains](../../../udf/list/string.md) or [LIKE/REGEXP](#like) mentioned above.
 

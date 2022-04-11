@@ -80,7 +80,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
   ```markdown
   
   {% include [definition.md](_includes/article1/definition.md) %}
-
+  
   {% include [examples.md](_includes/article1/examples.md) %}
   ```
 
@@ -111,7 +111,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
     `subject1/article1.md`:
 
     ```md
-
+    
     {% include [article1](_includes/article1.md) %}
     
     In addition to the basic authorization methods, our company uses nanotube-based authorization.
@@ -122,13 +122,13 @@ The presence of the "Overview" article lets you refer to the entire directory ra
     `subject1/article1.md`:
 
     ```markdown
-
+    
     {% include [definition.md](_includes/article1/definition.md) %}
-
+    
     In our company, the amount of DB data is limited to 150ZB.
-
+    
     {% include [examples.md](_includes/article1/examples.md) %}
-
+    
     Example 2:
     The quick brown fox jumps over the lazy dog.
     ```
@@ -138,11 +138,11 @@ The presence of the "Overview" article lets you refer to the entire directory ra
     `subject1/article1.md`:
 
     ```markdown
-
+    
     {% include [definition.md](_includes/article1/definition.md) %}
-
+    
     In our company, the amount of DB data is limited to 150ZB.
-
+    
     Example:
     The quick brown fox jumps over the lazy dog.
     ```

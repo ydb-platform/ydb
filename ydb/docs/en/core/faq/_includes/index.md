@@ -4,6 +4,7 @@
 {% if oss %}
 * [SDK](../sdk.md)
 {% endif %}
-* [YQL](../yql.md)
 * [Errors](../errors.md)
+* [YQL](../yql.md)
+* [Serverless](../serverless.md)
 

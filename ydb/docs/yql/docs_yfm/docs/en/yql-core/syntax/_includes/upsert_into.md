@@ -16,7 +16,7 @@ Column mapping when using `UPSERT INTO ... SELECT` is done by names. Use `AS` to
 
 ```yql
 UPSERT INTO my_table
-SELECT pk_column, data_column1, col24 as data_column3 FROM other_table
+SELECT pk_column, data_column1, col24 as data_column3 FROM other_table  
 ```
 
 ```yql

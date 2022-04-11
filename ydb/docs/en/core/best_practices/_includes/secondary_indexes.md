@@ -44,7 +44,7 @@ FROM   orders as o view idx_customer
 WHERE  o.id_customer = $customer_id
 ```
 
-, where`idx_customer` is the name of a secondary index on the `orders` table with the `id_customer` field specified first.
+where`idx_customer` is the name of a secondary index on the `orders` table with the `id_customer` field specified first.
 
 If the `view` section is omitted, a full scan of the `orders` table is performed for making this query.
 

@@ -87,7 +87,7 @@ Follow the instructions below to get [{{ yandex-cloud }} Object Storage](https:/
 
    {% endlist %}
 
-   where `<folder-id>` is the cloud folder ID obtained in step 2.
+   , where `<folder-id>` is the cloud folder ID obtained in step 2.
 
    You can also view a [full list](https://cloud.yandex.com/en-ru/docs/iam/concepts/access-control/roles#object-storage) of {{ yandex-cloud }} roles.
 

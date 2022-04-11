@@ -4,7 +4,7 @@ Performing an action without declaring it (anonymous action).
 
 **Syntax**
 
-1. `BEGIN`;
+1. `BEGIN`.
 1. List of top-level expressions.
 1. `END DO`.
 

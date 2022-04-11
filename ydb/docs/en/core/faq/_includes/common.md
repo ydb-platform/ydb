@@ -22,7 +22,7 @@ To read data, {{ ydb-short-name }} uses a model of strict data consistency.
 
 To design a primary key properly, follow the rules below.
 
-* Avoid situations where the main load falls on a single partition of a table. With even load distribution, it's easier to achieve high overall performance.
+* Avoid situations where the main load falls on a single [partition](../../concepts/datamodel.md#partitioning) of a table. With even load distribution, it's easier to achieve high overall performance.
 
   This rule implies that you shouldn't use a monotonically increasing sequence, such as timestamp, as a table's primary key.
 
@@ -59,7 +59,7 @@ For more information about limits, see [Database limits](../../concepts/limits-y
 
 Secondary indexes in {{ ydb-short-name }} are global and can be non-unique.
 
-Read more in the [documentation](../../concepts/secondary_indexes.md).
+For more information, see [Secondary indexes](../../concepts/secondary_indexes.md).
 
 #### How is paginated output performed? {#paging}
 
@@ -67,7 +67,7 @@ To organize paginated output, we recommend selecting data sorted by primary key 
 
 For more information, see [Paginated output](../../best_practices/paging.md).
 
-#### How do I effectively upload large amounts of data to {{ ydb-short-name }}? {#batch_upload}
+#### How do I efficiently upload large amounts of data to {{ ydb-short-name }}? {#batch_upload}
 
 To increase upload speed for large amounts of data, follow the recommendations below:
 

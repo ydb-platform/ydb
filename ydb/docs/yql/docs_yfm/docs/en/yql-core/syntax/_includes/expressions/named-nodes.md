@@ -21,7 +21,7 @@ In this case, the number of expressions must match the tuple size.
 Each named expression has a scope. It starts immediately after the definition of a named expression and ends at the end of the nearest enclosed namescope (for example, at the end of the query or at the end of the body of the [lambda function](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, or the cycle [EVALUATE FOR](../../action.md#evaluate-for){% endif %}).
 Redefining a named expression with the same name hides the previous expression from the current scope.
 
-If the named expression has never been used, a warning is issued. To avoid such a warning, use the underscore as the first character in the ID (for example, `$_foo`).
+If the named expression has never been used, a warning is issued. To avoid such a warning, use the underscore as the first character in the ID (for example `$_foo`).
 The named expression `$_` is called an anonymous named expression and is processed in a special way: it works as if `$_` would be automatically replaced by `$_<some_uniq_name>`.
 Anonymous named expressions are convenient when you don't need the expression value. For example, to fetch the second element from a tuple of three elements, you can write:
 
@@ -38,13 +38,15 @@ select $_; --- error: Unable to reference anonymous name $_
 export $_; --- An error: Can not export anonymous name $_
 ```
 
-{% if feature_mapreduce %}Moreover, you can't import a named expression with an anonymous alias:
+{% if feature_mapreduce %}
+Moreover, you can't import a named expression with an anonymous alias:
 
 ```yql
 import utils symbols $sqrt as $_; --- error: Can not import anonymous name $_
 ```
 
-{% endif %}Anonymous argument names are also supported for [lambda functions](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, and in [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
+{% endif %}
+Anonymous argument names are also supported for [lambda functions](#lambda), [ACTION](../../action.md#define-action){% if feature_subquery %}, [SUBQUERY](../../subquery.md#define-subquery){% endif %}{% if feature_mapreduce %}, and in [EVALUATE FOR](../../action.md#evaluate-for){% endif %}.
 
 {% note info %}
 

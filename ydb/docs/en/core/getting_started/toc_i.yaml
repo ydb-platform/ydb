@@ -1,3 +1,4 @@
+# common internal + external "Getting started" items
 items:
 - name: Creating a database
   href: create_db.md

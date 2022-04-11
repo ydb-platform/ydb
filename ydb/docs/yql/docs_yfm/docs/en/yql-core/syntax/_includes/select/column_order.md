@@ -11,7 +11,8 @@ The column order is ignored in YQL by default:
 If you enable `PRAGMA OrderedColumns;`, the order of columns is preserved in the query results and is derived from the order of columns in the input tables using the following rules:
 
 * `SELECT`: an explicit column enumeration dictates the result order.
-* `SELECT` with an asterisk (`SELECT * FROM ...`) inherits the order from its input. {% if feature_join %}* The order of columns after [JOIN](../../join.md): First output the left-hand columns, then the right-hand ones. If the column order in any of the sides in the `JOIN` output is undefined, the column order in the result is also undefined.{% endif %}
+* `SELECT` with an asterisk (`SELECT * FROM ...`) inherits the order from its input.
+{% if feature_join %}* The order of columns after [JOIN](../../join.md): First output the left-hand columns, then the right-hand ones. If the column order in any of the sides in the `JOIN` output is undefined, the column order in the result is also undefined.{% endif %}
 * The order in `UNION ALL` depends on the [UNION ALL](#unionall) execution mode.
 * The column order for [AS_TABLE](#as_table) is undefined.
 

@@ -569,7 +569,7 @@ Where `<expression>` is the JsonPath expression to be checked. Parentheses aroun
 
 **Execution**
 
-1. The passed JsonPath expression is executed.
+1. The passed JsonPath expression is executed
 2. If an error occurs, the predicate returns `null`
 3. If an empty sequence is obtained as a result of the execution, the predicate returns `false`
 4. Otherwise, the predicate returns `true`
@@ -814,7 +814,7 @@ All elements in the input sequence must be objects.
 For each element of the input sequence:
 
 1. Each key-value pair in the element is analyzed.
-2. For each key-value pair, an object is generated with the keys `name` and `value`
+2. For each key-value pair, an object is generated with the keys `name` and `value`.
 3. `name` stores a string with the name of the key from the pair.
 4. `value` stores the value from the pair.
 5. All objects for this element are added to the output sequence.
@@ -956,10 +956,10 @@ $json = CAST(@@{
 SELECT
     JSON_EXISTS($json, "$.title"), -- True
     JSON_EXISTS($json, "$.crew[*]"), -- True
-    JSON_EXISTS($json, "$.nonexistent"); -- False, as JsonPath returns an empty result.
+    JSON_EXISTS($json, "$.nonexistent"); -- False, as JsonPath returns an empty result
 
 SELECT
-    -- JsonPath error, False is returned because the default section used is FALSE ON ERROR.
+    -- JsonPath error, False is returned because the default section used is FALSE ON ERROR
     JSON_EXISTS($json, "strict $.nonexistent");
 
 SELECT

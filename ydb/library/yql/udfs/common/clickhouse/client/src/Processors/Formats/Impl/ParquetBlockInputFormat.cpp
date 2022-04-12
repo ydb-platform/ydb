@@ -124,16 +124,20 @@ void ParquetBlockInputFormat::prepareReader()
 
 void registerInputFormatProcessorParquet(FormatFactory &factory)
 {
-    factory.registerInputFormatProcessor(
-            "Parquet",
-            [](ReadBuffer &buf,
-                const Block &sample,
-                const RowInputFormatParams &,
-                const FormatSettings & settings)
-            {
-                return std::make_shared<ParquetBlockInputFormat>(buf, sample, settings);
-            });
-    factory.markFormatAsColumnOriented("Parquet");
+    for (const auto& name : {"Parquet", "parquet"})
+    {
+        factory.registerInputFormatProcessor(
+                name,
+                [](ReadBuffer &buf,
+                   const Block &sample,
+                   const RowInputFormatParams &,
+                   const FormatSettings & settings)
+                {
+                    return std::make_shared<ParquetBlockInputFormat>(buf, sample, settings);
+                });
+        factory.markFormatAsColumnOriented(name);
+    }
+
 }
 
 }

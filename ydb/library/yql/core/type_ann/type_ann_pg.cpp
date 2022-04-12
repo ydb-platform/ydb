@@ -61,124 +61,59 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         }
     }
 
-    if (ctx.Types.PgTypes || isResolved) {
-        TVector<ui32> argTypes;
-        bool needRetype = false;
-        for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
-            auto type = input->Child(i)->GetTypeAnn();
-            ui32 argType;
-            bool convertToPg;
-            if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (convertToPg) {
-                input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
-                needRetype = true;
-            }
-
-            argTypes.push_back(argType);
-        }
-
-        if (needRetype) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        if (isResolved) {
-            auto procId = FromString<ui32>(input->Child(1)->Content());
-            const auto& proc = NPg::LookupProc(procId, argTypes);
-            if (proc.Name != name) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Mismatch of resolved function name, expected: " << name << ", but got:" << proc.Name));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (proc.Kind == NPg::EProcKind::Window) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Window function " << name << " cannot be called directly"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (proc.Kind == NPg::EProcKind::Aggregate) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Aggregate function " << name << " cannot be called directly"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            auto result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
-            input->SetTypeAnn(result);
-            return IGraphTransformer::TStatus::Ok;
-        } else {
-            const auto& proc = NPg::LookupProc(TString(name), argTypes);
-            auto children = input->ChildrenList();
-            auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
-            children.insert(children.begin() + 1, idNode);
-            output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
-            return IGraphTransformer::TStatus::Repeat;
-        }
-    } else {
-        const TTypeAnnotationNode* result = nullptr;
-        TVector<const TTypeAnnotationNode*> argTypes;
-        bool isNull = false;
-        bool isOptional = false;
-        for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
-            auto type = input->Child(i)->GetTypeAnn();
-            if (type->GetKind() == ETypeAnnotationKind::Null) {
-                argTypes.push_back(type);
-                isNull = true;
-                result = type;
-                continue;
-            }
-
-            if (type->GetKind() == ETypeAnnotationKind::Optional) {
-                type = RemoveOptionalType(type);
-                isOptional = true;
-            }
-
-            argTypes.push_back(type);
-        }
-
-        const auto& funcs = TPgFuncMap::Instance().Funcs;
-        auto it = funcs.find(name);
-        if (it != funcs.end()) {
-            const auto& desc = it->second;
-            if (argTypes.size() > desc.MaxArgs || argTypes.size() < desc.MinArgs) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Incorrect arguments count: " << argTypes.size() << " for function: " << name));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            for (ui32 i = 0; i < argTypes.size(); ++i) {
-                auto expectedType = desc.DataTypes[i];
-                if (argTypes[i]->GetKind() != ETypeAnnotationKind::Null) {
-                    if (argTypes[i]->GetKind() != ETypeAnnotationKind::Data) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                            TStringBuilder() << "Expected type " << expectedType << " for argument " << (i + 1) << ", but got: " << argTypes[i]->GetKind() << " for function: " << name));
-                        return IGraphTransformer::TStatus::Error;
-                    } else {
-                        auto dataType = argTypes[i]->Cast<TDataExprType>()->GetSlot();
-                        if (dataType != expectedType) {
-                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                                TStringBuilder() << "Expected type " << expectedType << " for argument " << (i + 1) << ", but got: " << dataType << " for function: " << name));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-                    }
-                }
-            }
-
-            result = ctx.Expr.MakeType<TDataExprType>(desc.ReturnType);
-        } else {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Unsupported function: " << name));
+    TVector<ui32> argTypes;
+    bool needRetype = false;
+    for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
+        auto type = input->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!isNull && isOptional && result->GetKind() != ETypeAnnotationKind::Optional) {
-            result = ctx.Expr.MakeType<TOptionalExprType>(result);
+        if (convertToPg) {
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+            needRetype = true;
         }
 
+        argTypes.push_back(argType);
+    }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (isResolved) {
+        auto procId = FromString<ui32>(input->Child(1)->Content());
+        const auto& proc = NPg::LookupProc(procId, argTypes);
+        if (proc.Name != name) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Mismatch of resolved function name, expected: " << name << ", but got:" << proc.Name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (proc.Kind == NPg::EProcKind::Window) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Window function " << name << " cannot be called directly"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (proc.Kind == NPg::EProcKind::Aggregate) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Aggregate function " << name << " cannot be called directly"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
         input->SetTypeAnn(result);
         return IGraphTransformer::TStatus::Ok;
+    } else {
+        const auto& proc = NPg::LookupProc(TString(name), argTypes);
+        auto children = input->ChildrenList();
+        auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
+        children.insert(children.begin() + 1, idNode);
+        output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
+        return IGraphTransformer::TStatus::Repeat;
     }
 }
 
@@ -396,11 +331,7 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (ctx.Types.PgTypes) {
-            input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int8").TypeId));
-        } else {
-            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64)));
-        }
+        input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int8").TypeId));
     } else {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Unsupported function: " << name));
@@ -430,145 +361,45 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         }
     }
 
-    if (ctx.Types.PgTypes) {
-        TVector<ui32> argTypes;
-        bool needRetype = false;
-        for (ui32 i = overWindow ? 2 : 1; i < input->ChildrenSize(); ++i) {
-            auto type = input->Child(i)->GetTypeAnn();
-            ui32 argType;
-            bool convertToPg;
-            if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (convertToPg) {
-                input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
-                needRetype = true;
-            }
-
-            argTypes.push_back(argType);
-        }
-
-        if (needRetype) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        const auto& aggDesc = NPg::LookupAggregation(name, argTypes);
-        if (aggDesc.Kind != NPg::EAggKind::Normal) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                "Only normal aggregation supported"));
+    TVector<ui32> argTypes;
+    bool needRetype = false;
+    for (ui32 i = overWindow ? 2 : 1; i < input->ChildrenSize(); ++i) {
+        auto type = input->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        ui32 resultType;
-        if (!aggDesc.FinalFuncId) {
-            resultType = aggDesc.TransTypeId;
-        } else {
-            resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
+        if (convertToPg) {
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+            needRetype = true;
         }
 
-        auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
-        input->SetTypeAnn(result);
-        return IGraphTransformer::TStatus::Ok;
-    } else {
-        const TTypeAnnotationNode* result = nullptr;
-        TVector<const TTypeAnnotationNode*> argTypes;
-        bool isNull = false;
-        bool isOptional = false;
-        for (ui32 i = overWindow ? 2 : 1; i < input->ChildrenSize(); ++i) {
-            auto type = input->Child(i)->GetTypeAnn();
-            if (type->GetKind() == ETypeAnnotationKind::Null) {
-                argTypes.push_back(type);
-                isNull = true;
-                result = type;
-                continue;
-            }
-
-            if (type->GetKind() == ETypeAnnotationKind::Optional) {
-                type = RemoveOptionalType(type);
-                isOptional = true;
-            }
-
-            argTypes.push_back(type);
-        }
-
-        if (name == "count") {
-            if (argTypes.size() > 1) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Too many arguments for function: " << name));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            isNull = false;
-            isOptional = true;
-            result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
-        } else if (name == "min" || name == "max") {
-            if (argTypes.size() != 1) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Expected one argument for function: " << name));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (!isNull) {
-                auto argType = argTypes[0];
-                if (argType->GetKind() != ETypeAnnotationKind::Data) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Expected comparable type, but got: " << argType->GetKind() << " for function: " << name));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                auto slot = argType->Cast<TDataExprType>()->GetSlot();
-                if (slot == EDataSlot::Utf8 || slot == EDataSlot::Int32 || slot == EDataSlot::Double || slot == EDataSlot::Bool) {
-                    result = argType;
-                } else {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Expected comparable type, but got: " << slot << " for function: " << name));
-                    return IGraphTransformer::TStatus::Error;
-                }
-            }
-
-            isOptional = true;
-        } else if (name == "sum") {
-            if (argTypes.size() != 1) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                    TStringBuilder() << "Expected one argument for function: " << name));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (!isNull) {
-                auto argType = argTypes[0];
-                if (argType->GetKind() != ETypeAnnotationKind::Data) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Expected additive type, but got: " << argType->GetKind() << " for function: " << name));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                auto slot = argType->Cast<TDataExprType>()->GetSlot();
-                if (slot == EDataSlot::Int32) {
-                    result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
-                } else if (slot == EDataSlot::Double) {
-                    result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double);
-                } else {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                        TStringBuilder() << "Expected additive type, but got: " << slot << " for function: " << name));
-                    return IGraphTransformer::TStatus::Error;
-                }
-            }
-
-            isOptional = true;
-        } else {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Unsupported function: " << name));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!isNull && isOptional && result->GetKind() != ETypeAnnotationKind::Optional) {
-            result = ctx.Expr.MakeType<TOptionalExprType>(result);
-        }
-
-        input->SetTypeAnn(result);
-        return IGraphTransformer::TStatus::Ok;
+        argTypes.push_back(argType);
     }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    const auto& aggDesc = NPg::LookupAggregation(name, argTypes);
+    if (aggDesc.Kind != NPg::EAggKind::Normal) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            "Only normal aggregation supported"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    ui32 resultType;
+    if (!aggDesc.FinalFuncId) {
+        resultType = aggDesc.TransTypeId;
+    } else {
+        resultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(resultType);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
 }
 
 IGraphTransformer::TStatus PgQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {

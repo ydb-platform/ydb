@@ -37,7 +37,6 @@ namespace NSQLTranslation {
         , SyntaxVersion(0)
         , AnsiLexer(false)
         , PgParser(false)
-        , PgTypes(true)
         , InferSyntaxVersion(false)
         , V0Behavior(EV0Behavior::Silent)
         , V0ForceDisable(InTestEnvironment())

@@ -107,10 +107,6 @@ const Node* ListNodeNth(const List* list, int index) {
 
 class TConverter : public IPGParseEvents {
 public:
-    static THashMap<TString,TString> BinaryOpTranslation;
-    static THashMap<TString, TString> UnaryOpTranslation;
-    static THashSet<TString> AggregateFuncs;
-
     using TFromDesc = std::tuple<TAstNode*, TString, TVector<TString>, bool>;
     using TInsertDesc = std::tuple<TAstNode*,TAstNode*>;
 
@@ -149,10 +145,6 @@ public:
         auto configSource = L(A("DataSource"), QA(TString(NYql::ConfigProviderName)));
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
-        if (!Settings.PgTypes) {
-            Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
-                QA("DisablePgTypes"))));
-        }
 
         if (DqEngineEnabled) {
             Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
@@ -908,19 +900,13 @@ public:
         const auto& val = value->val;
         switch (NodeTag(val)) {
         case T_Integer: {
-            return Settings.PgTypes ?
-                L(A("PgConst"), QA(ToString(IntVal(val))), L(A("PgType"), QA("int4"))) :
-                L(A("Just"), L(A("Int32"), QA(ToString(IntVal(val)))));
+            return L(A("PgConst"), QA(ToString(IntVal(val))), L(A("PgType"), QA("int4")));
         }
         case T_Float: {
-            return Settings.PgTypes ?
-                L(A("PgConst"), QA(ToString(StrFloatVal(val))), L(A("PgType"), QA("float8"))) :
-                L(A("Just"), L(A("Double"), QA(ToString(StrFloatVal(val)))));
+            return L(A("PgConst"), QA(ToString(StrFloatVal(val))), L(A("PgType"), QA("float8")));
         }
         case T_String: {
-            return Settings.PgTypes ?
-                L(A("PgConst"), QA(ToString(StrVal(val))), L(A("PgType"), QA("text"))) :
-                L(A("Just"), L(A("Utf8"), QA(ToString(StrVal(val)))));
+            return L(A("PgConst"), QA(ToString(StrVal(val))), L(A("PgType"), QA("text")));
         }
         case T_Null: {
             return L(A("Null"));
@@ -1005,12 +991,7 @@ public:
         }
 
         auto name = names.back();
-        bool isAggregateFunc;
-        if (Settings.PgTypes) {
-            isAggregateFunc = NYql::NPg::HasAggregation(name);
-        } else {
-            isAggregateFunc = AggregateFuncs.count(name) > 0;
-        }
+        const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
 
         if (isAggregateFunc && !settings.AllowAggregates) {
             AddError(TStringBuilder() << "Aggregate functions are not allowed in: " << settings.Scope);
@@ -1101,39 +1082,11 @@ public:
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
                 auto str = StrVal(CAST_NODE(A_Const, arg)->val);
-                if (Settings.PgTypes) {
-                    return L(A("PgConst"), QA(str), L(A("PgType"), QA("bool")));
-                }
-
-                if (!StrCompare(str, "t")) {
-                    return L(A("Just"), L(A("Bool"), QA("1")));
-                } else if (!StrCompare(str, "f")) {
-                    return L(A("Just"), L(A("Bool"), QA("0")));
-                } else {
-                    AddError(TStringBuilder() << "Unsupported boolean literal: " << str);
-                    return nullptr;
-                }
-            }
-
-            if (!Settings.PgTypes && NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) {
-                TString yqlType;
-                if (targetType == "bool") {
-                    yqlType = "Bool";
-                } else if (targetType == "int4") {
-                    yqlType = "Int32";
-                } else if (targetType == "float8") {
-                    yqlType = "Double";
-                } else if (targetType == "varchar") {
-                    yqlType = "Utf8";
-                }
-
-                if (yqlType) {
-                    return L(A("Nothing"), L(A("OptionalType"), L(A("DataType"), QA(yqlType))));
-                }
+                return L(A("PgConst"), QA(str), L(A("PgType"), QA("bool")));
             }
         }
 
-        if (Settings.PgTypes && supportedTypeName) {
+        if (supportedTypeName) {
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             auto input = ParseExpr(arg, settings);
             if (!input) {
@@ -1166,7 +1119,7 @@ public:
                 return nullptr;
             }
 
-            return L(A(Settings.PgTypes ? "PgAnd" : "And"), lhs, rhs);
+            return L(A("PgAnd"), lhs, rhs);
         }
         case OR_EXPR: {
             if (ListLength(value->args) != 2) {
@@ -1180,7 +1133,7 @@ public:
                 return nullptr;
             }
 
-            return L(A(Settings.PgTypes ? "PgOr" : "Or"), lhs, rhs);
+            return L(A("PgOr"), lhs, rhs);
         }
         case NOT_EXPR: {
             if (ListLength(value->args) != 1) {
@@ -1193,7 +1146,7 @@ public:
                 return nullptr;
             }
 
-            return L(A(Settings.PgTypes ? "PgNot" : "Not"), arg);
+            return L(A("PgNot"), arg);
         }
         default:
             AddError(TStringBuilder() << "BoolExprType unsupported value: " << (int)value->boolop);
@@ -1559,17 +1512,7 @@ public:
                 return nullptr;
             }
 
-            if (Settings.PgTypes) {
-                return L(A("PgOp"), QA(op), rhs);
-            } else {
-                auto opIt = UnaryOpTranslation.find(op);
-                if (opIt == UnaryOpTranslation.end()) {
-                    AddError(TStringBuilder() << "Unsupported unary op: " << op);
-                    return nullptr;
-                }
-
-                return L(A(opIt->second), rhs);
-            }
+            return L(A("PgOp"), QA(op), rhs);
         } else {
             auto lhs = ParseExpr(value->lexpr, settings);
             auto rhs = ParseExpr(value->rexpr, settings);
@@ -1577,17 +1520,7 @@ public:
                 return nullptr;
             }
 
-            if (Settings.PgTypes) {
-                return L(A("PgOp"), QA(op), lhs, rhs);
-            } else {
-                auto opIt = BinaryOpTranslation.find(op);
-                if (opIt == BinaryOpTranslation.end()) {
-                    AddError(TStringBuilder() << "Unsupported binary op: " << op);
-                    return nullptr;
-                }
-
-                return L(A(opIt->second), lhs, rhs);
-            }
+            return L(A("PgOp"), QA(op), lhs, rhs);
         }
     }
 
@@ -1695,30 +1628,6 @@ private:
     bool DqEngineForce = false;
     TVector<TAstNode*> Statements;
     ui32 ReadIndex = 0;
-};
-
-THashMap<TString, TString> TConverter::BinaryOpTranslation = {
-    {"+","+"},
-    {"-","-"},
-    {"||","Concat"},
-    {"=","=="},
-    {"<","<"},
-    {">",">"},
-    {"<=","<="},
-    {">=",">="},
-    {"<>","!="},
-};
-
-THashMap<TString, TString> TConverter::UnaryOpTranslation = {
-    {"+","Plus"},
-    {"-","Minus"},
-};
-
-THashSet<TString> TConverter::AggregateFuncs = {
-    "count",
-    "min",
-    "max",
-    "sum"
 };
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {

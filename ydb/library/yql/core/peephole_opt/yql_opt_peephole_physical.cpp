@@ -259,35 +259,6 @@ TExprNode::TListType GetKeys(const TExprNode& side, const TExprNode& keys, TExpr
     return result;
 }
 
-TExprNode::TPtr ExpandPgCall(const TExprNode::TPtr& node, TExprContext& ctx) {
-    Y_UNUSED(ctx);
-    auto name = node->Head().Content();
-    if (name == "substring") {
-        return ctx.Builder(node->Pos())
-            .Callable("Apply")
-                .Callable(0, "Udf")
-                    .Atom(0, "Unicode.Substring")
-                .Seal()
-                .Add(1, node->ChildPtr(1))
-                .Callable(2, "-")
-                    .Add(0, node->ChildPtr(2))
-                    .Callable(1, "Uint64")
-                        .Atom(0, "1")
-                    .Seal()
-                .Seal()
-                .Callable(3, "+")
-                    .Add(0, node->ChildPtr(3))
-                    .Callable(1, "Uint64")
-                        .Atom(0, "0")
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-    } else {
-        YQL_ENSURE(false, "Unknown function: " << name);
-    }
-}
-
 TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     if (node.ChildrenSize() > 4U) {
         return SplitEquiJoinToPairs(node, ctx);
@@ -1960,13 +1931,9 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
 
-    return OptimizeExpr(input, output, [&optimizers, &types](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    return OptimizeExpr(input, output, [&optimizers](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto rule = optimizers.find(node->Content()); optimizers.cend() != rule)
             return (rule->second)(node, ctx);
-
-        if (!types.PgTypes && node->IsCallable("PgCall")) {
-            return ExpandPgCall(node, ctx);
-        }
 
         return node;
     }, ctx, settings);

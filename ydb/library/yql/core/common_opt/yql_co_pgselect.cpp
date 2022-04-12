@@ -502,43 +502,9 @@ TExprNode::TPtr BuildGroupByAndHaving(TPositionHandle pos, const TExprNode::TPtr
         .Seal()
         .Build();
 
-    auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yql");
-    YQL_ENSURE(exportsPtr);
-
-    TNodeOnNodeOwnedMap deepClones;
     TExprNode::TListType payloadItems;
     for (ui32 i = 0; i < aggs.size(); ++i) {
-        TExprNode::TPtr traits;
-        if (optCtx.Types->PgTypes) {
-            traits = BuildAggregationTraits(pos, false, aggs[i], listTypeNode, ctx);
-        } else {
-            auto func = aggs[i].first->Head().Content();
-            const auto& exports = exportsPtr->Symbols();
-            if (func == "count" && aggs[i].first->ChildrenSize() == 1) {
-                func = "count_all";
-            }
-
-            TString factory = TString(func) + "_traits_factory";
-            const auto ex = exports.find(factory);
-            YQL_ENSURE(exports.cend() != ex);
-            auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
-            auto arg = ctx.NewArgument(pos, "row");
-            auto arguments = ctx.NewArguments(pos, { arg });
-            auto extractor = ctx.NewLambda(pos, std::move(arguments),
-                ctx.ReplaceNode(aggs[i].first->TailPtr(), *aggs[i].second, arg));
-
-            traits = ctx.ReplaceNodes(lambda->TailPtr(), {
-                {lambda->Head().Child(0), listTypeNode},
-                {lambda->Head().Child(1), extractor}
-            });
-
-            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-            auto status = ExpandApply(traits, traits, ctx);
-            if (status == IGraphTransformer::TStatus::Error) {
-                return {};
-            }
-        }
-
+        auto traits = BuildAggregationTraits(pos, false, aggs[i], listTypeNode, ctx);
         payloadItems.push_back(ctx.Builder(pos)
             .List()
                 .Atom(0, "_yql_agg_" + ToString(i))
@@ -580,14 +546,6 @@ TExprNode::TPtr BuildGroupByAndHaving(TPositionHandle pos, const TExprNode::TPtr
                         .Atom(1, "_yql_agg_" + ToString(it->second))
                     .Seal()
                     .Build();
-                if (!optCtx.Types->PgTypes && node->Head().Content() == "count") {
-                    ret = ctx.Builder(pos)
-                        .Callable("SafeCast")
-                            .Add(0, ret)
-                            .Atom(1, "Int64")
-                        .Seal()
-                        .Build();
-                }
 
                 return ret;
             }
@@ -729,11 +687,9 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
     TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> winFuncs;
     TMap<ui32, TVector<ui32>> window2funcs;
     TNodeMap<ui32> winFuncsId;
-    bool hasAggsOverWindow = false;
     auto ret = list;
     VisitExpr(projectionLambda->TailPtr(), [&](const TExprNode::TPtr& node) {
         if (node->IsCallable("PgWindowCall") || node->IsCallable("PgAggWindowCall")) {
-            hasAggsOverWindow = hasAggsOverWindow || node->IsCallable("PgAggWindowCall");
             YQL_ENSURE(window);
             ui32 windowIndex;
             if (node->Child(1)->IsCallable("PgAnonWindow")) {
@@ -766,13 +722,6 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                 .Add(0, list)
             .Seal()
             .Build();
-
-        TNodeOnNodeOwnedMap deepClones;
-        const TExportTable* exportsPtr = nullptr;
-        if (hasAggsOverWindow) {
-            exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/window.yql");
-            YQL_ENSURE(exportsPtr);
-        }
 
         for (const auto& x : window2funcs) {
             auto win = window->Tail().Child(x.first);
@@ -807,36 +756,7 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                 bool isAgg = p.first->IsCallable("PgAggWindowCall");
                 TExprNode::TPtr value;
                 if (isAgg) {
-                    if (optCtx.Types->PgTypes) {
-                        value = BuildAggregationTraits(pos, true, p, listTypeNode, ctx);
-                    } else {
-                        const auto& exports = exportsPtr->Symbols();
-                        if (name == "count" && p.first->ChildrenSize() == 2) {
-                            name = "count_all";
-                        }
-
-                        TString factory = TString(name) + "_traits_factory";
-                        const auto ex = exports.find(factory);
-                        YQL_ENSURE(exports.cend() != ex);
-                        auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
-                        auto arg = ctx.NewArgument(pos, "row");
-                        auto arguments = ctx.NewArguments(pos, { arg });
-                        auto extractor = ctx.NewLambda(pos, std::move(arguments),
-                            ctx.ReplaceNode(p.first->TailPtr(), *p.second, arg));
-
-                        auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
-                            {lambda->Head().Child(0), listTypeNode},
-                            {lambda->Head().Child(1), extractor}
-                            });
-
-                        ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                        auto status = ExpandApply(traits, traits, ctx);
-                        if (status == IGraphTransformer::TStatus::Error) {
-                            return {};
-                        }
-
-                        value = traits;
-                    }
+                    value = BuildAggregationTraits(pos, true, p, listTypeNode, ctx);
                 } else {
                     if (name == "row_number") {
                         value = ctx.Builder(pos)
@@ -915,19 +835,13 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                     .Seal()
                     .Build();
 
-                if (!optCtx.Types->PgTypes && node->Head().Content() == "count" || node->Head().Content() == "row_number") {
-                    ret = ctx.Builder(node->Pos())
-                        .Callable("SafeCast")
-                            .Add(0, ret)
-                            .Atom(1, "Int64")
-                        .Seal()
-                        .Build();
-                }
-
-                if (optCtx.Types->PgTypes && node->Head().Content() == "row_number") {
+                if (node->Head().Content() == "row_number") {
                     ret = ctx.Builder(node->Pos())
                         .Callable("ToPg")
-                            .Add(0, ret)
+                            .Callable(0, "SafeCast")
+                                .Add(0, ret)
+                                .Atom(1, "Int64")
+                            .Seal()
                         .Seal()
                         .Build();
                 }

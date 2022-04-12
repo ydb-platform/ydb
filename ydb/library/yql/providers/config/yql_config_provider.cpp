@@ -735,14 +735,6 @@ namespace {
 
                 Types.OrderedColumns = (name == "OrderedColumns");
             }
-            else if (name == "PgTypes" || name == "DisablePgTypes") {
-                if (args.size() != 0) {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
-                    return false;
-                }
-
-                Types.PgTypes = (name == "PgTypes");
-            }
             else if (name == "FolderSubDirsLimit") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));

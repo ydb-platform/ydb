@@ -177,7 +177,7 @@ public:
             new TEvBlobStorage::TEvCollectGarbage(TabletInfo->TabletID, RecordGeneration, PerGenerationCounter,
                 channelIdx, true,
                 CollectOperation->Header.CollectGeneration, CollectOperation->Header.CollectStep,
-                keep.Release(), doNotKeep.Release(), TInstant::Max(), true), 0);
+                keep.Release(), doNotKeep.Release(), TInstant::Max(), true), (ui64)TKeyValueState::ECollectCookie::Soft);
     }
 
     STFUNC(StateWait) {

@@ -109,6 +109,7 @@ private:
     void RetryWrite(const TActorContext& ctx);
 
     void ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr& ev, const TActorContext& ctx);
+    void DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup=false);
 
     TString MirrorerDescription() const;
 

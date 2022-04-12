@@ -21,20 +21,19 @@ TMutex SanitizerSQLTranslationMutex;
 #endif
 
 using NSQLTranslation::ILexer;
-using NSQLTranslation::TParsedTokenList;
 
 class TV0Lexer : public ILexer {
 public:
     TV0Lexer() = default;
 
-    bool Tokenize(const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors) override {
+    bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) override {
         issues.Clear();
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
         NSQLTranslation::TErrorCollectorOverIssues collector(issues, maxErrors, "");
         NProtoAST::TLexerTokensCollector<NALP::SQLLexer> tokensCollector(query, (const char**)NALP::SQLParserTokenNames, queryName);
-        tokens = tokensCollector.CollectTokens(collector);
+        tokensCollector.CollectTokens(collector, onNextToken);
         return !AnyOf(issues.begin(), issues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });
     }
 };

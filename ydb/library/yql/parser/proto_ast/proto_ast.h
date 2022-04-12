@@ -114,8 +114,7 @@ namespace NProtoAST {
         {
         }
 
-        NSQLTranslation::TParsedTokenList CollectTokens(IErrorCollector& errors) {
-            NSQLTranslation::TParsedTokenList result;
+        void CollectTokens(IErrorCollector& errors, const NSQLTranslation::ILexer::TTokenCallback& onNextToken) {
             try {
                 Lexer.ReportErrors(&errors);
                 auto src = Lexer.get_tokSource();
@@ -123,22 +122,19 @@ namespace NProtoAST {
                     auto token = src->nextToken();
                     auto type = token->getType();
                     const bool isEOF = type == TLexer::CommonTokenType::TOKEN_EOF;
-                    result.emplace_back();
-                    NSQLTranslation::TParsedToken& last = result.back();
+                    NSQLTranslation::TParsedToken last;
                     last.Name = isEOF ? "EOF" : TokenNames[type];
                     last.Content = token->getText();
                     last.Line = token->get_line();
                     last.LinePos = token->get_charPositionInLine();
+                    onNextToken(std::move(last));
                     if (isEOF) {
                         break;
                     }
                 }
-                return result;
             } catch (const TTooManyErrors&) {
-                return result;
             } catch (const yexception& e) {
                 errors.Error(0, 0, e.what());
-                return result;
             }
         }
 

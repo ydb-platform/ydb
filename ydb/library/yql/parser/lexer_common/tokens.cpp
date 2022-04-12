@@ -10,4 +10,13 @@ IOutputStream& OutputTokens(IOutputStream& out, TParsedTokenList::const_iterator
     return out;
 }
 
+bool Tokenize(const ILexer::TPtr& lexer, const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors) {
+    auto onNextToken = [&tokens](TParsedToken&& token) {
+        tokens.push_back(std::move(token));
+    };
+
+    return lexer->Tokenize(query, queryName, onNextToken, issues, maxErrors);
+}
+
+
 }

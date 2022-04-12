@@ -4,6 +4,8 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 
+#include <functional>
+
 namespace NYql {
 
 class TIssues;
@@ -21,17 +23,19 @@ struct TParsedToken {
     ui32 LinePos = 0; // starts from 0
 };
 
-using TParsedTokenList = TVector<TParsedToken>;
-
-IOutputStream& OutputTokens(IOutputStream& out, TParsedTokenList::const_iterator begin, TParsedTokenList::const_iterator end);
-
 class ILexer {
 public:
     using TPtr = THolder<ILexer>;
+    using TTokenCallback = std::function<void(TParsedToken&& token)>;
 
-    virtual bool Tokenize(const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors) = 0;
+    virtual bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) = 0;
     virtual ~ILexer() = default;
 };
+
+using TParsedTokenList = TVector<TParsedToken>;
+
+IOutputStream& OutputTokens(IOutputStream& out, TParsedTokenList::const_iterator begin, TParsedTokenList::const_iterator end);
+bool Tokenize(const ILexer::TPtr& lexer, const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors);
 
 }
 

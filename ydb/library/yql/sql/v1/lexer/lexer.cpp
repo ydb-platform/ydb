@@ -26,7 +26,6 @@ TMutex SanitizerSQLTranslationMutex;
 #endif
 
 using NSQLTranslation::ILexer;
-using NSQLTranslation::TParsedTokenList;
 
 class TV1Lexer : public ILexer {
 public:
@@ -35,7 +34,7 @@ public:
     {
     }
 
-    bool Tokenize(const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors) override {
+    bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) override {
         issues.Clear();
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
@@ -43,10 +42,10 @@ public:
         NSQLTranslation::TErrorCollectorOverIssues collector(issues, maxErrors, "");
         if (Ansi) {
             NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
-            tokens = tokensCollector.CollectTokens(collector);
+            tokensCollector.CollectTokens(collector, onNextToken);
         } else {
             NProtoAST::TLexerTokensCollector<NALPDefault::SQLv1Lexer> tokensCollector(query, (const char**)NALPDefault::SQLv1ParserTokenNames, queryName);
-            tokens = tokensCollector.CollectTokens(collector);
+            tokensCollector.CollectTokens(collector, onNextToken);
         }
 
         return !AnyOf(issues.begin(), issues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });

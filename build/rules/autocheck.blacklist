@@ -1046,3 +1046,4 @@ testpers/bugs-priority
 haas/inventory/backend
 haas/inventory/frontend
 classifieds/vtf-tools
+a.yandex-team.ru/arc/trunk/arcadia/classifieds/infra/sender-proxy

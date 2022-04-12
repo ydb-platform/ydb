@@ -1563,27 +1563,29 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     FunctionRegistry.Reset(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone());
     FormatFactory.Reset(new TFormatFactory);
 
-#ifdef KIKIMR_UDF_DYNAMIC_LINK
     const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();
 
     TVector<TString> udfsPaths;
     if (!udfsDir.empty()) {
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
             NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
+            if (udfsPaths.empty()) {
+                Cout << "UDF directory " << udfsDir << " contains no dynamic UDFs. " << Endl;
+            } else {
+                Cout << "UDF directory " << udfsDir << " contains " << udfsPaths.size() << " dynamic UDFs. " << Endl;
+            }
+            NMiniKQL::TUdfModuleRemappings remappings;
+            for (const auto& udfPath : udfsPaths) {
+                FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
+            }
         } else {
-            Cout << "UDF directory doesn't exist, no UDFs will be loaded. " << Endl;
+            Cout << "UDF directory " << udfsDir << " doesn't exist, no dynamic UDFs will be loaded. " << Endl;
         }
+    } else {
+        Cout << "UDFsDir is not specified, no dynamic UDFs will be loaded. " << Endl;
     }
-
-    NMiniKQL::TUdfModuleRemappings remappings;
-    for (const auto& udfPath : udfsPaths) {
-        FunctionRegistry->LoadUdfs(udfPath, remappings, 0);
-    }
-#else
-    Y_UNUSED(runConfig);
 
     NKikimr::NMiniKQL::FillStaticModules(*FunctionRegistry);
-#endif
 
     NKikHouse::RegisterFormat(*FormatFactory);
 }

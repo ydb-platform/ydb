@@ -94,6 +94,9 @@ public:
     virtual TQueryResult SyncExecuteSchemeQuery(const TString& query, bool isSql) = 0;
 
     /* Scan queries */
+    virtual IAsyncQueryResultPtr PrepareScanQuery(const TString& query, bool isSql, const TPrepareSettings& settings) = 0;
+    virtual TQueryResult SyncPrepareScanQuery(const TString& query, bool isSql, const TPrepareSettings& settings) = 0;
+
     virtual IAsyncQueryResultPtr ExecuteScanQuery(const TString& query, bool isSql,
         NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target,
         const NYql::IKikimrQueryExecutor::TExecuteSettings& settings) = 0;

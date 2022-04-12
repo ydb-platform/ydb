@@ -133,12 +133,15 @@ struct TKqpQueryId {
     TString UserSid;
     TString Text;
     TKqpQuerySettings Settings;
+    bool Scan;
 
 public:
-    TKqpQueryId(const TString& cluster, const TString& database, const TString& text)
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& text, bool scan)
         : Cluster(cluster)
         , Database(database)
-        , Text(text) {}
+        , Text(text)
+        , Scan(scan)
+    {}
 
     bool operator==(const TKqpQueryId& other) const {
         return
@@ -146,7 +149,8 @@ public:
             Database == other.Database &&
             UserSid == other.UserSid &&
             Text == other.Text &&
-            Settings == other.Settings;
+            Settings == other.Settings &&
+            Scan == other.Scan;
     }
 
     bool operator!=(const TKqpQueryId& other) {
@@ -159,7 +163,7 @@ public:
     bool operator>=(const TKqpQueryId&) = delete;
 
     size_t GetHash() const noexcept {
-        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings);
+        auto tuple = std::make_tuple(Cluster, Database, UserSid, Text, Settings, Scan);
         return THash<decltype(tuple)>()(tuple);
     }
 };

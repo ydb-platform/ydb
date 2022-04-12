@@ -108,6 +108,9 @@ struct TKikimrQueryContext : TThrRefBase {
     THashMap<ui64, TIntrusivePtr<IKikimrQueryExecutor::TAsyncQueryResult>> InProgress;
     TVector<ui64> ExecutionOrder;
 
+    // Used to store results of transactions in TKqpSessionActor
+    TVector<TVector<NKikimrMiniKQL::TResult>> TxResults;
+
     NActors::TActorId ReplyTarget;
     TMaybe<NKikimrKqp::TRlPath> RlPath;
 

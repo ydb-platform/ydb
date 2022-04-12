@@ -1372,6 +1372,20 @@ public:
             });
     }
 
+    IAsyncQueryResultPtr PrepareScanQuery(const TString& query, bool isSql, const TPrepareSettings& /*settings*/) override {
+        return CheckedProcessQuery(*ExprCtx,
+            [this, &query, isSql] (TExprContext& ctx) mutable {
+                return PrepareScanQueryInternal(query, isSql, ctx);
+            });
+    }
+
+    TQueryResult SyncPrepareScanQuery(const TString& query, bool isSql, const TPrepareSettings& settings) override {
+        return CheckedSyncProcessQuery(
+            [this, &query, isSql, settings] () mutable {
+                return PrepareScanQuery(query, isSql, settings);
+            });
+    }
+
     IAsyncQueryResultPtr ExecuteScanQuery(const TString& query, bool isSql, NKikimrMiniKQL::TParams&& parameters,
         const NActors::TActorId& target, const IKikimrQueryExecutor::TExecuteSettings& settings) override
     {
@@ -1754,10 +1768,7 @@ private:
     }
 
     IAsyncQueryResultPtr ExplainScanQueryInternal(const TString& query, bool isSql, TExprContext& ctx) {
-        auto prepareResult = isSql
-            ? PrepareScanQueryInternal(query, ctx)
-            : PrepareScanQueryAstInternal(query, ctx);
-        return prepareResult;
+        return PrepareScanQueryInternal(query, isSql, ctx);
     }
 
     IAsyncQueryResultPtr PrepareDataQueryInternal(const TString& query, const TPrepareSettings& settings,
@@ -1813,6 +1824,14 @@ private:
 
         return MakeIntrusive<TAsyncExecuteKqlResult>(queryExpr.Get(), ctx, *DataQueryAstTransformer,
             SessionCtx, *ExecuteCtx);
+    }
+
+    IAsyncQueryResultPtr PrepareScanQueryInternal(const TString& query, bool isSql, TExprContext& ctx,
+        EKikimrStatsMode statsMode = EKikimrStatsMode::None)
+    {
+        return isSql
+            ? PrepareScanQueryInternal(query, ctx, statsMode)
+            : PrepareScanQueryAstInternal(query, ctx);
     }
 
     IAsyncQueryResultPtr PrepareScanQueryInternal(const TString& query, TExprContext& ctx, EKikimrStatsMode statsMode = EKikimrStatsMode::None) {
@@ -2069,9 +2088,7 @@ private:
         NKikimrMiniKQL::TParams&& parameters, const NActors::TActorId& target,
         const IKikimrQueryExecutor::TExecuteSettings& settings, TExprContext& ctx)
     {
-        auto prepareResult = isSql
-            ? PrepareScanQueryInternal(query, ctx, settings.StatsMode)
-            : PrepareScanQueryAstInternal(query, ctx);
+        auto prepareResult = PrepareScanQueryInternal(query, isSql, ctx, settings.StatsMode);
 
         if (!prepareResult) {
             return nullptr;

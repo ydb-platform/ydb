@@ -1050,3 +1050,4 @@ geoadv/backend
 market/mbo/archive/market-markup-worker
 data-ui/charts-pdf
 mds/admin/storage-juggler-config
+data-ui/charts-api-proxy

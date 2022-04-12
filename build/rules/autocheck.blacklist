@@ -1052,3 +1052,6 @@ mds/admin/storage-juggler-config
 data-ui/charts-api-proxy
 data-ui/stat
 data-ui/gateway
+market/ir/lib/zoofeeder
+market/ir/lib/sita-http-client
+passport/frontend/id

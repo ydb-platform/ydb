@@ -11,6 +11,7 @@ declare -A top_dirs=(
     [certs/]=1,
     [cmake/]=1,
     [.git/]=1,
+    [.github/]=1,
     [library/]=1,
     [tools/]=1,
 )

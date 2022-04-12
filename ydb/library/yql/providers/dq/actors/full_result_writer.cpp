@@ -89,7 +89,7 @@ private:
             if (ErrorMessage) {
                 Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ErrorMessage, false, true));
             } else {
-                Send(AggregatorID, MakeHolder<TEvDqFailure>().Release());
+                Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::SUCCESS).Release());
             }
         } catch (...) {
             TIssue issue(CurrentExceptionMessage());
@@ -97,7 +97,7 @@ private:
             if (ErrorMessage) {
                 issue.AddSubIssue(MakeIntrusive<TIssue>(*ErrorMessage));
             }
-            Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, issue, false, false).Release());
+            Send(AggregatorID, MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, issue, false, true).Release());
         }
         Send(SelfId(), MakeHolder<NActors::TEvents::TEvPoison>());
     }

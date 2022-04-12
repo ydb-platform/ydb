@@ -8,10 +8,14 @@ namespace NYql::NDqs {
         *Record.MutableTask() = std::move(task);
     }
 
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode) {
+        Record.SetStatusCode(statusCode);
+    }
+
     TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool retriable, bool needFallback) {
         IssuesToMessage(issues, Record.MutableIssues());
-        Record.SetRetriable(retriable);
-        Record.SetNeedFallback(needFallback);
+        Record.SetDeprecatedRetriable(retriable);
+        Record.SetDeprecatedNeedFallback(needFallback);
         Record.SetStatusCode(statusCode);
     }
 

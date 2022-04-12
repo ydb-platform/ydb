@@ -194,8 +194,9 @@ private:
         }
         // hacky conversion to TEvDqFailure
         auto convertedError = MakeHolder<TEvDqFailure>();
-        convertedError->Record.SetRetriable(NCommon::IsRetriable(ev));
-        convertedError->Record.SetNeedFallback(NCommon::NeedFallback(ev));
+        convertedError->Record.SetDeprecatedRetriable(NCommon::IsRetriable(ev));
+        convertedError->Record.SetDeprecatedNeedFallback(NCommon::NeedFallback(ev));
+        convertedError->Record.SetStatusCode(ev->Get()->Record.GetStatusCode());
         convertedError->Record.MutableIssues()->Swap(ev->Get()->Record.MutableIssues());
         SendFailure(std::move(convertedError));  // enreached with stats inside
     }

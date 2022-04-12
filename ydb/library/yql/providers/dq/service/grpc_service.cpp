@@ -131,7 +131,13 @@ namespace NYql::NDqs {
                 queryResult.Mutableresult()->CopyFrom(result.resultset());
                 queryResult.set_yson(result.yson());
 
-                if (result.GetNeedFallback()) {
+                auto needFallback = result.GetDeprecatedNeedFallback();
+
+                if (needFallback != NCommon::NeedFallback(ev->Get()->Record.GetStatusCode())) {
+                    Counters->GetSubgroup("MistmatchedNeedFallback", needFallback ? "False" : "True")->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode()))->Inc();
+                }
+
+                if (needFallback) {
                     NYql::TIssue rootIssue("Fatal Error");
                     rootIssue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
                     NYql::TIssues issues;
@@ -183,20 +189,27 @@ namespace NYql::NDqs {
                 YQL_LOG_CTX_SCOPE(TraceId);
                 YQL_LOG(DEBUG) << "TServiceProxyActor::OnReturnResult " << ev->Get()->Record.GetMetric().size();
                 QueryStat.AddCounters(ev->Get()->Record);
-                if (ev->Get()->Record.GetIssues().size() > 0 && ev->Get()->Record.GetRetriable() && Retry < MaxRetries) {
+                auto retriable = ev->Get()->Record.GetDeprecatedRetriable();
+
+                if (retriable != NCommon::IsRetriable(ev->Get()->Record.GetStatusCode())) {
+                    Counters->GetSubgroup("MistmatchedRetriable", retriable ? "False" : "True")->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode()))->Inc();
+                }
+
+                if (ev->Get()->Record.GetIssues().size() > 0 && retriable && Retry < MaxRetries) {
                     QueryStat.AddCounter(RetryName, TDuration::MilliSeconds(0));
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
                     YQL_LOG(WARN) << RetryName << " " << Retry << " Issues: " << issues.ToString();
                     DoRetry();
                 } else {
+                    auto needFallback = ev->Get()->Record.GetDeprecatedNeedFallback();
                     if (ev->Get()->Record.GetIssues().size() > 0) {
                         NYql::TIssues issues;
                         NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
                         YQL_LOG(WARN) << "Issues: " << issues.ToString();
                         *ErrorCounter += 1;
                     }
-                    if (ev->Get()->Record.GetNeedFallback()) {
+                    if (needFallback) {
                         // TODO: Remove GetNeedFallback, use only issue codes!
                         *FallbackCounter += 1;
                     }

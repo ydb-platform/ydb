@@ -651,13 +651,13 @@ private:
 
     void SaveQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
         auto& result = ev->Get()->Record;
-        LOG_D("Query response. Retryable: " << result.GetRetriable()
+        LOG_D("Query response. Retryable: " << result.GetDeprecatedRetriable()
             << ". Result set index: " << DqGraphIndex
             << ". Issues count: " << result.IssuesSize()
             << ". Rows count: " << result.GetRowsCount());
 
         AddIssues(result.issues());
-        RetryNeeded |= result.GetRetriable();
+        RetryNeeded |= result.GetDeprecatedRetriable();
 
         if (Finishing && !result.issues_size()) { // Race between abort and successful finishing. Override with success and provide results to user.
             FinalQueryStatus = YandexQuery::QueryMeta::COMPLETED;
@@ -713,7 +713,10 @@ private:
         // In this case we can have race between normal finishing of running query and aborting it.
         // If query is finished with success error code or failure != abort, we override abort with this result.
         // This logic is located in SaveQueryResponse() method.
-        ev->Get()->Record.SetRetriable(false); // User aborted => don't retry, only show issues
+        if (ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS) {
+            ev->Get()->Record.SetStatusCode(NYql::NDqProto::StatusIds::CANCELLED);
+        }
+        ev->Get()->Record.SetDeprecatedRetriable(false); // User aborted => don't retry, only show issues
 
         QueryResponseArrived = true;
         SaveQueryResponse(ev);

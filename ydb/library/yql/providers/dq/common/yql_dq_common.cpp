@@ -94,9 +94,33 @@ bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TStri
     return !name->empty();
 }
 
+bool IsRetriable(NYql::NDqProto::StatusIds::StatusCode statusCode) {
+    switch (statusCode) {
+    case NYql::NDqProto::StatusIds::UNSPECIFIED:
+    case NYql::NDqProto::StatusIds::SUCCESS:
+    case NYql::NDqProto::StatusIds::BAD_REQUEST:
+        return false;
+    default:
+        return true;
+    }
+}
+
 bool IsRetriable(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
-    const auto statusCode = ev->Get()->Record.GetStatusCode();
-    return statusCode != NYql::NDqProto::StatusIds::BAD_REQUEST;
+    return IsRetriable(ev->Get()->Record.GetStatusCode());
+}
+
+bool NeedFallback(NYql::NDqProto::StatusIds::StatusCode statusCode) {
+    switch (statusCode) {
+    case NYql::NDqProto::StatusIds::UNSPECIFIED:
+    case NYql::NDqProto::StatusIds::SUCCESS:
+    case NYql::NDqProto::StatusIds::ABORTED:
+    case NYql::NDqProto::StatusIds::CANCELLED:
+    case NYql::NDqProto::StatusIds::BAD_REQUEST:
+    case NYql::NDqProto::StatusIds::PRECONDITION_FAILED:
+        return false;
+    default:
+        return true;
+    }
 }
 
 bool NeedFallback(const NDq::TEvDq::TEvAbortExecution::TPtr& ev) {

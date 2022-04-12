@@ -87,7 +87,7 @@ private:
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});
             *ExecutionTimeoutCounter += 1;
-            Finish(/*retriable=*/ false, /*needFallback=*/ true);
+            Finish(NYql::NDqProto::StatusIds::TIMEOUT, /*retriable=*/ false, /*needFallback=*/ true);
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
     })
@@ -236,7 +236,7 @@ private:
         }
     }
 
-    void Finish(bool retriable, bool needFallback = false)
+    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode, bool retriable, bool needFallback = false)
     {
         YQL_LOG(DEBUG) << __FUNCTION__ << ", retriable=" << retriable << ", needFallback=" << needFallback;
         if (Finished) {
@@ -245,8 +245,9 @@ private:
             FlushCounter("ExecutionTime");
             TQueryResponse result;
             IssuesToMessage(Issues, result.MutableIssues());
-            result.SetRetriable(retriable);
-            result.SetNeedFallback(needFallback);
+            result.SetDeprecatedRetriable(retriable);
+            result.SetDeprecatedNeedFallback(needFallback);
+            result.SetStatusCode(statusCode);
             FlushCounters(result);
             Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
             Finished = true;
@@ -258,14 +259,14 @@ private:
             YQL_LOG_CTX_SCOPE(TraceId);
             YQL_LOG(DEBUG) << __FUNCTION__;
             AddCounters(ev->Get()->Record);
-            bool retriable = ev->Get()->Record.GetRetriable();
-            bool fallback = ev->Get()->Record.GetNeedFallback();
+            bool retriable = ev->Get()->Record.GetDeprecatedRetriable();
+            bool fallback = ev->Get()->Record.GetDeprecatedNeedFallback();
             if (ev->Get()->Record.IssuesSize()) {
                 TIssues issues;
                 IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
                 Issues.AddIssues(issues);
             }
-            Finish(retriable, fallback);
+            Finish(ev->Get()->Record.GetStatusCode(), retriable, fallback);
         }
     }
 
@@ -275,11 +276,11 @@ private:
         if (!Finished) {
             try {
                 TFailureInjector::Reach("dq_fail_on_finish", [] { throw yexception() << "dq_fail_on_finish"; });
-                Finish(false);
+                Finish(NYql::NDqProto::StatusIds::SUCCESS, false);
             } catch (...) {
                 YQL_LOG(ERROR) << " FailureInjector " << CurrentExceptionMessage();
                 Issues.AddIssue(TIssue("FailureInjection"));
-                Finish(true);
+                Finish(NYql::NDqProto::StatusIds::UNAVAILABLE, true);
             }
         }
     }
@@ -313,7 +314,7 @@ private:
                     << ev->Get()->Record.GetError().GetMessage() << ":"
                     << static_cast<int>(ev->Get()->Record.GetError().GetErrorCode());
                 Issues.AddIssue(TIssue(ev->Get()->Record.GetError().GetMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
-                Finish(/*retriable = */ true, /*fallback = */ true);
+                Finish(NYql::NDqProto::StatusIds::OVERLOADED, /*retriable = */ true, /*fallback = */ true);
                 return;
             }
             case TAllocateWorkersResponse::kNodes:

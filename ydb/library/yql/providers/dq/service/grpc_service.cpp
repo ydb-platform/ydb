@@ -59,6 +59,7 @@ namespace NYql::NDqs {
         class TServiceProxyActor: public TSynchronizableRichActor<TServiceProxyActor<RequestType, ResponseType>> {
         public:
             static constexpr char ActorName[] = "SERVICE_PROXY";
+            static constexpr char RetryName[] = "OperationRetry";
 
             explicit TServiceProxyActor(
                 NGrpc::IRequestContextBase* ctx,
@@ -69,7 +70,7 @@ namespace NYql::NDqs {
                 , Counters(counters)
                 , ServiceProxyActorCounters(counters->GetSubgroup("component", "ServiceProxyActor"))
                 , ClientDisconnectedCounter(ServiceProxyActorCounters->GetCounter("ClientDisconnected", /*derivative=*/ true))
-                , RetryCounter(ServiceProxyActorCounters->GetCounter("Retry", /*derivative=*/ true))
+                , RetryCounter(ServiceProxyActorCounters->GetCounter(RetryName, /*derivative=*/ true))
                 , FallbackCounter(ServiceProxyActorCounters->GetCounter("Fallback", /*derivative=*/ true))
                 , ErrorCounter(ServiceProxyActorCounters->GetCounter("UnrecoverableError", /*derivative=*/ true))
                 , Request(dynamic_cast<const RequestType*>(ctx->GetRequest()))
@@ -183,10 +184,10 @@ namespace NYql::NDqs {
                 YQL_LOG(DEBUG) << "TServiceProxyActor::OnReturnResult " << ev->Get()->Record.GetMetric().size();
                 QueryStat.AddCounters(ev->Get()->Record);
                 if (ev->Get()->Record.GetIssues().size() > 0 && ev->Get()->Record.GetRetriable() && Retry < MaxRetries) {
-                    QueryStat.AddCounter("Retry", TDuration::MilliSeconds(0));
+                    QueryStat.AddCounter(RetryName, TDuration::MilliSeconds(0));
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
-                    YQL_LOG(WARN) << "Retry " << Retry << " Issues: " << issues.ToString();
+                    YQL_LOG(WARN) << RetryName << " " << Retry << " Issues: " << issues.ToString();
                     DoRetry();
                 } else {
                     if (ev->Get()->Record.GetIssues().size() > 0) {

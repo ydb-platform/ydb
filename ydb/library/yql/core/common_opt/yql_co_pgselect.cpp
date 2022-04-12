@@ -153,21 +153,29 @@ void FillInputIndices(const TExprNode::TPtr& from, TUsedColumns& usedColumns, TO
         for (ui32 inputIndex = 0; inputIndex < from->Tail().ChildrenSize(); ++inputIndex) {
             const auto& read = from->Tail().Child(inputIndex)->Head();
             const auto& columns = from->Tail().Child(inputIndex)->Tail();
-            if (columns.ChildrenSize() > 0) {
-                auto readOrder = optCtx.Types->LookupColumnOrder(read);
-                YQL_ENSURE(*readOrder);
-                for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
-                    if (columns.Child(i)->Content() == x.first) {
-                        foundColumn = true;
-                        x.second.second = (*readOrder)[i];
-                        break;
-                    }
-                }
+            if (read.IsCallable("PgResolvedCall")) {
+                const auto& alias = from->Tail().Child(inputIndex)->Child(1)->Content();
+                Y_ENSURE(!alias.empty());
+                Y_ENSURE(columns.ChildrenSize() == 0 || columns.ChildrenSize() == 1);
+                auto memberName = (columns.ChildrenSize() == 1) ? columns.Head().Content() : alias;
+                foundColumn = (memberName == x.first);
             } else {
-                auto type = read.GetTypeAnn()->
-                    Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                auto pos = type->FindItem(x.first);
-                foundColumn = pos.Defined();
+                if (columns.ChildrenSize() > 0) {
+                    auto readOrder = optCtx.Types->LookupColumnOrder(read);
+                    YQL_ENSURE(readOrder);
+                    for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
+                        if (columns.Child(i)->Content() == x.first) {
+                            foundColumn = true;
+                            x.second.second = (*readOrder)[i];
+                            break;
+                        }
+                    }
+                } else {
+                    auto type = read.GetTypeAnn()->
+                        Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    auto pos = type->FindItem(x.first);
+                    foundColumn = pos.Defined();
+                }
             }
 
             if (foundColumn) {
@@ -183,9 +191,28 @@ void FillInputIndices(const TExprNode::TPtr& from, TUsedColumns& usedColumns, TO
 TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::TPtr& from, const TUsedColumns& usedColumns, TExprContext& ctx) {
     TExprNode::TListType cleanedInputs;
     for (ui32 i = 0; i < from->Tail().ChildrenSize(); ++i) {
+        auto list = from->Tail().Child(i)->HeadPtr();
+        if (list->IsCallable("PgResolvedCall")) {
+            const auto& alias = from->Tail().Child(i)->Child(1)->Content();
+            const auto& columns = from->Tail().Child(i)->Tail();
+            Y_ENSURE(!alias.empty());
+            Y_ENSURE(columns.ChildrenSize() == 0 || columns.ChildrenSize() == 1);
+            auto memberName = (columns.ChildrenSize() == 1) ? columns.Head().Content() : alias;
+            list = ctx.Builder(pos)
+                .Callable("AsList")
+                    .Callable(0, "AsStruct")
+                        .List(0)
+                            .Atom(0, memberName)
+                            .Add(1, list)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
         auto cleaned = ctx.Builder(pos)
             .Callable("Map")
-                .Add(0, from->Tail().Child(i)->HeadPtr())
+                .Add(0, list)
                 .Lambda(1)
                     .Param("row")
                     .Callable("AsStruct")

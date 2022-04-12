@@ -107,8 +107,17 @@ const Node* ListNodeNth(const List* list, int index) {
 
 class TConverter : public IPGParseEvents {
 public:
-    using TFromDesc = std::tuple<TAstNode*, TString, TVector<TString>, bool>;
-    using TInsertDesc = std::tuple<TAstNode*,TAstNode*>;
+    struct TFromDesc {
+        TAstNode* Source = nullptr;
+        TString Alias;
+        TVector<TString> ColNames;
+        bool InjectRead = false;
+    };
+
+    struct TInsertDesc {
+        TAstNode* Sink = nullptr;
+        TAstNode* Key = nullptr;
+    };
 
     struct TExprSettings {
         bool AllowColumns = false;
@@ -247,7 +256,7 @@ public:
                 auto node = ListNodeNth(x->fromClause, i);
                 if (NodeTag(node) != T_JoinExpr) {
                     auto p = ParseFromClause(node);
-                    if (!std::get<0>(p)) {
+                    if (!p.Source) {
                         return nullptr;
                     }
 
@@ -263,7 +272,7 @@ public:
                         if (NodeTag(top.first) != T_JoinExpr) {
                             // leaf
                             auto p = ParseFromClause(top.first);
-                            if (!std::get<0>(p)) {
+                            if (!p.Source) {
                                 return nullptr;
                             }
 
@@ -704,7 +713,7 @@ public:
         }
 
         auto insertDesc = ParseWriteRangeVar(value->relation);
-        if (!std::get<0>(insertDesc)) {
+        if (!insertDesc.Sink) {
             return nullptr;
         }
 
@@ -715,7 +724,7 @@ public:
 
         auto writeOptions = QL(QL(QA("mode"), QA("append")));
         Statements.push_back(L(A("let"), A("world"), L(A("Write!"),
-            A("world"), std::get<0>(insertDesc), std::get<1>(insertDesc), select, writeOptions)));
+            A("world"), insertDesc.Sink, insertDesc.Key, select, writeOptions)));
 
         return Statements.back();
     }
@@ -726,6 +735,8 @@ public:
             return ParseRangeVar(CAST_NODE(RangeVar, node));
         case T_RangeSubselect:
             return ParseRangeSubselect(CAST_NODE(RangeSubselect, node));
+        case T_RangeFunction:
+            return ParseRangeFunction(CAST_NODE(RangeFunction, node));
         default:
             NodeNotImplementedImpl<SelectStmt>(node);
             return {};
@@ -733,21 +744,21 @@ public:
     }
 
     void AddFrom(const TFromDesc& p, TVector<TAstNode*>& fromList) {
-        auto aliasNode = QA(std::get<1>(p));
+        auto aliasNode = QA(p.Alias);
         TVector<TAstNode*> colNamesNodes;
-        for (const auto& c : std::get<2>(p)) {
+        for (const auto& c : p.ColNames) {
             colNamesNodes.push_back(QA(c));
         }
 
         auto colNamesTuple = QVL(colNamesNodes.data(), colNamesNodes.size());
-        if (std::get<3>(p)) {
+        if (p.InjectRead) {
             auto label = "read" + ToString(ReadIndex);
-            Statements.push_back(L(A("let"), A(label), std::get<0>(p)));
+            Statements.push_back(L(A("let"), A(label), p.Source));
             Statements.push_back(L(A("let"), A("world"), L(A("Left!"), A(label))));
             fromList.push_back(QL(L(A("Right!"), A(label)), aliasNode, colNamesTuple));
             ++ReadIndex;
         } else {
-            fromList.push_back(QL(std::get<0>(p), aliasNode, colNamesTuple));
+            fromList.push_back(QL(p.Source, aliasNode, colNamesTuple));
         }
     }
 
@@ -833,6 +844,61 @@ public:
             QL(QA("table"), L(A("String"), QA(value->relname)))),
             L(A("Void")),
             QL()), alias, colnames, true };
+    }
+
+    TFromDesc ParseRangeFunction(const RangeFunction* value) {
+        if (value->lateral) {
+            AddError("RangeFunction: unsupported lateral");
+            return {};
+        }
+
+        if (value->ordinality) {
+            AddError("RangeFunction: unsupported ordinality");
+            return {};
+        }
+
+        if (value->is_rowsfrom) {
+            AddError("RangeFunction: unsupported is_rowsfrom");
+            return {};
+        }
+
+        if (ListLength(value->coldeflist) > 0) {
+            AddError("RangeFunction: unsupported coldeflist");
+            return {};
+        }
+
+        if (ListLength(value->functions) != 1) {
+            AddError("RangeFunction: only one function is supported");
+            return {};
+        }
+
+        TString alias;
+        TVector<TString> colnames;
+        if (!ParseAlias(value->alias, alias, colnames)) {
+            return {};
+        }
+
+        auto funcNode = ListNodeNth(value->functions, 0);
+        if (NodeTag(funcNode) != T_List) {
+            AddError("RangeFunction: expected pair");
+            return {};
+        }
+
+        auto lst = CAST_NODE(List, funcNode);
+        if (ListLength(lst) != 2) {
+            AddError("RangeFunction: expected pair");
+            return {};
+        }
+        
+        TExprSettings settings;
+        settings.AllowColumns = false;
+        settings.Scope = "RANGE FUNCTION";
+        auto func = ParseExpr(ListNodeNth(lst, 0), settings);
+        if (!func) {
+            return {};
+        }
+
+        return { func, alias, colnames, false };
     }
 
     TFromDesc ParseRangeSubselect(const RangeSubselect* value) {

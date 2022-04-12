@@ -23,26 +23,6 @@ IGraphTransformer::TStatus PgStarWrapper(const TExprNode::TPtr& input, TExprNode
     return IGraphTransformer::TStatus::Ok;
 }
 
-struct TPgFuncDesc {
-    ui32 MinArgs;
-    ui32 MaxArgs;
-    EDataSlot ReturnType;
-    TVector<EDataSlot> DataTypes;
-};
-
-class TPgFuncMap {
-public:
-    static const TPgFuncMap& Instance() {
-        return *Singleton<TPgFuncMap>();
-    }
-
-    THashMap<TString, TPgFuncDesc> Funcs;
-
-    TPgFuncMap() {
-        Funcs["substring"] = { 3, 3, EDataSlot::Utf8, { EDataSlot::Utf8, EDataSlot::Int32, EDataSlot::Int32 } };
-    }
-};
-
 IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     bool isResolved = input->Content().StartsWith("PgResolvedCall");
     if (!EnsureMinArgsCount(*input, isResolved ? 2 : 1, ctx.Expr)) {
@@ -1779,18 +1759,42 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         }
                     }
 
-                    auto columnOrder = ctx.Types.LookupColumnOrder(p->Head());
-                    if (!EnsureListType(p->Head(), ctx.Expr)) {
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
-                    auto inputRowType = p->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-                    if (!EnsureStructType(p->Head().Pos(), *inputRowType, ctx.Expr)) {
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
-                    auto inputStructType = inputRowType->Cast<TStructExprType>();
                     auto alias = TString(p->Child(1)->Content());
+                    auto columnOrder = ctx.Types.LookupColumnOrder(p->Head());
+                    const bool isRangeFunction = p->Head().IsCallable("PgResolvedCall");
+                    const TStructExprType* inputStructType = nullptr;
+                    if (isRangeFunction) {
+                        if (alias.empty()) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                                "Empty alias for range function is not allowed"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (p->Child(2)->ChildrenSize() > 0 && p->Child(2)->ChildrenSize() != 1) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                                TStringBuilder() << "Expected exactly one column name for range function, but got: " << p->Child(2)->ChildrenSize()));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        auto memberName = (p->Child(2)->ChildrenSize() == 1) ? p->Child(2)->Head().Content() : alias;
+                        TVector<const TItemExprType*> items;
+                        auto itemType = p->Head().GetTypeAnn();
+                        items.push_back(ctx.Expr.MakeType<TItemExprType>(memberName, itemType));
+                        inputStructType = ctx.Expr.MakeType<TStructExprType>(items);
+                        columnOrder = TColumnOrder({ TString(memberName) });
+                    } else {
+                        if (!EnsureListType(p->Head(), ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        auto inputRowType = p->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                        if (!EnsureStructType(p->Head().Pos(), *inputRowType, ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        inputStructType = inputRowType->Cast<TStructExprType>();
+                    }
+
                     if (!alias.empty()) {
                         if (!possibleAliases.insert(alias).second) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),

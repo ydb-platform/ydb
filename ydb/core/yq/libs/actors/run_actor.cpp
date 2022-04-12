@@ -1070,6 +1070,10 @@ private:
         LOG_D("Compiling query ...");
         NYql::TGatewaysConfig gatewaysConfig;
         SetupDqSettings(*gatewaysConfig.MutableDq()->MutableDefaultSettings());
+        // the main idea of having Params.GatewaysConfig is to copy clusters only
+        // but in this case we have to copy S3 provider limits
+        *gatewaysConfig.MutableS3() = Params.GatewaysConfig.GetS3();
+        gatewaysConfig.MutableS3()->ClearClusterMapping();
 
         THashMap<TString, TString> clusters;
 

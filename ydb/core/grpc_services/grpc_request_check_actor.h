@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "service_ratelimiter_events.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
 #include "rpc_calls.h"

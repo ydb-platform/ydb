@@ -1,4 +1,5 @@
 #include "local_rate_limiter.h"
+#include "service_ratelimiter_events.h"
 #include "rpc_common.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>

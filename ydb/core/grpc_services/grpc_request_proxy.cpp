@@ -581,12 +581,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvPQRemoveReadRuleRequest, PreHandle);
         HFunc(TEvPQDescribeTopicRequest, PreHandle);
         HFunc(TEvDiscoverPQClustersRequest, PreHandle);
-        HFunc(TEvCreateRateLimiterResource, PreHandle);
-        HFunc(TEvAlterRateLimiterResource, PreHandle);
-        HFunc(TEvDropRateLimiterResource, PreHandle);
-        HFunc(TEvListRateLimiterResources, PreHandle);
-        HFunc(TEvDescribeRateLimiterResource, PreHandle);
-        HFunc(TEvAcquireRateLimiterResource, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
 
         HFunc(TEvProxyRuntimeEvent, PreHandle);

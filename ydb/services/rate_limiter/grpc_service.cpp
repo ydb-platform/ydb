@@ -1,8 +1,8 @@
 #include "grpc_service.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/service_ratelimiter.h>
 
 namespace NKikimr::NQuoter {
 
@@ -34,12 +34,13 @@ void TRateLimiterGRpcService::DecRequest() {
 
 void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    using namespace NGRpcService;
 
 #ifdef SETUP_METHOD
 #error SETUP_METHOD macro collision
 #endif
 
-#define SETUP_METHOD(methodName, event)                                                      \
+#define SETUP_METHOD(methodName, cb, rps)                                                    \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                \
         Ydb::RateLimiter::Y_CAT(methodName, Request),                                        \
         Ydb::RateLimiter::Y_CAT(methodName, Response),                                       \
@@ -48,9 +49,13 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         this,                                                                                \
         &Service_,                                                                           \
         CQ,                                                                                  \
-        [this](NGrpc::IRequestContextBase* reqCtx) {                                   \
+        [this](NGrpc::IRequestContextBase* reqCtx) {                                         \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());               \
-            ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::event(reqCtx));          \
+            ActorSystem->Send(GRpcRequestProxyId,                                            \
+                new NGRpcService::TGrpcRequestOperationCall<                                 \
+                    Ydb::RateLimiter::Y_CAT(methodName, Request),                            \
+                    Ydb::RateLimiter::Y_CAT(methodName, Response)>                           \
+                        (reqCtx, &cb, TRequestAuxSettings{TRateLimiterMode::rps, nullptr})); \
         },                                                                                   \
         &Ydb::RateLimiter::V1::RateLimiterService::AsyncService::Y_CAT(Request, methodName), \
         "RateLimiter/" Y_STRINGIZE(methodName),                                              \
@@ -58,12 +63,12 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         getCounterBlock("rate_limiter", Y_STRINGIZE(methodName))                             \
     )->Run()
 
-    SETUP_METHOD(CreateResource, TEvCreateRateLimiterResource);
-    SETUP_METHOD(AlterResource, TEvAlterRateLimiterResource);
-    SETUP_METHOD(DropResource, TEvDropRateLimiterResource);
-    SETUP_METHOD(ListResources, TEvListRateLimiterResources);
-    SETUP_METHOD(DescribeResource, TEvDescribeRateLimiterResource);
-    SETUP_METHOD(AcquireResource, TEvAcquireRateLimiterResource);
+    SETUP_METHOD(CreateResource, DoCreateRateLimiterResource, Rps);
+    SETUP_METHOD(AlterResource, DoAlterRateLimiterResource, Rps);
+    SETUP_METHOD(DropResource, DoDropRateLimiterResource, Rps);
+    SETUP_METHOD(ListResources, DoListRateLimiterResources, Rps);
+    SETUP_METHOD(DescribeResource, DoDescribeRateLimiterResource, Rps);
+    SETUP_METHOD(AcquireResource, DoAcquireRateLimiterResource, Off);
 
 #undef SETUP_METHOD
 }

@@ -1,4 +1,5 @@
-#include "grpc_request_proxy.h"
+#include "service_ratelimiter.h"
+#include "service_ratelimiter_events.h"
 
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
@@ -494,28 +495,28 @@ public:
 
 } // namespace
 
-void TGRpcRequestProxy::Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TCreateRateLimiterResourceRPC(ev->Release().Release()));
+void DoCreateRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TCreateRateLimiterResourceRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TAlterRateLimiterResourceRPC(ev->Release().Release()));
+void DoAlterRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TAlterRateLimiterResourceRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvDropRateLimiterResource::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TDropRateLimiterResourceRPC(ev->Release().Release()));
+void DoDropRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDropRateLimiterResourceRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvListRateLimiterResources::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TListRateLimiterResourcesRPC(ev->Release().Release()));
+void DoListRateLimiterResources(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TListRateLimiterResourcesRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvDescribeRateLimiterResource::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TDescribeRateLimiterResourceRPC(ev->Release().Release()));
+void DoDescribeRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TDescribeRateLimiterResourceRPC(p.release()));
 }
 
-void TGRpcRequestProxy::Handle(TEvAcquireRateLimiterResource::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TAcquireRateLimiterResourceRPC(ev->Release().Release()));
+void DoAcquireRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TAcquireRateLimiterResourceRPC(p.release()));
 }
 
 template<>

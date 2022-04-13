@@ -63,12 +63,6 @@ protected:
     void Handle(TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDropRateLimiterResource::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvListRateLimiterResources::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDescribeRateLimiterResource::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvAcquireRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
 

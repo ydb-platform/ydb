@@ -6,10 +6,11 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDirectTxUpload : public IDirectTx,
-                        public TCommonUploadOps<
+class TDirectTxUpload : public IDirectTx
+                      , public TCommonUploadOps<
                             TEvDataShard::TEvUploadRowsRequest,
-                            TEvDataShard::TEvUploadRowsResponse> {
+                            TEvDataShard::TEvUploadRowsResponse>
+{
 public:
     explicit TDirectTxUpload(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
 

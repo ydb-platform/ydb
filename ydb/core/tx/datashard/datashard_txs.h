@@ -273,10 +273,11 @@ private:
     THolder<TEvDataShard::TEvS3DownloadInfo> Reply;
 };
 
-class TDataShard::TTxUnsafeUploadRows: public NTabletFlatExecutor::TTransactionBase<TDataShard>,
-                                              public TCommonUploadOps<
-                                                  TEvDataShard::TEvUnsafeUploadRowsRequest,
-                                                  TEvDataShard::TEvUnsafeUploadRowsResponse> {
+class TDataShard::TTxUnsafeUploadRows: public NTabletFlatExecutor::TTransactionBase<TDataShard>
+                                     , public TCommonUploadOps<
+                                           TEvDataShard::TEvUnsafeUploadRowsRequest,
+                                           TEvDataShard::TEvUnsafeUploadRowsResponse>
+{
 public:
     TTxUnsafeUploadRows(TDataShard* ds, TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;

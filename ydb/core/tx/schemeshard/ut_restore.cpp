@@ -1,5 +1,6 @@
 #include <contrib/libs/double-conversion/double-conversion/ieee.h>
 
+#include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -534,6 +535,65 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(result->GetBytesProcessed(), 16);
         UNIT_ASSERT_VALUES_EQUAL(result->GetRowsProcessed(), 2);
+    }
+
+    Y_UNIT_TEST(ShouldHandleOverloadedShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // prepare table schema with special policy
+        NKikimrSchemeOp::TTableDescription desc;
+        desc.SetName("Table");
+        desc.AddKeyColumnNames("key");
+        {
+            auto& column = *desc.AddColumns();
+            column.SetName("key");
+            column.SetType("Uint32");
+        }
+        {
+            auto& column = *desc.AddColumns();
+            column.SetName("value");
+            column.SetType("Utf8");
+        }
+
+        auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+        policy->InMemForceSizeToSnapshot = 1;
+        policy->Serialize(*desc.MutablePartitionConfig()->MutableCompactionPolicy());
+
+        // serialize schema
+        TString scheme;
+        UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(desc, &scheme));
+        TestCreateTable(runtime, ++txId, "/MyRoot", scheme);
+        env.TestWaitNotification(runtime, txId);
+
+        ui32 total = 0;
+        ui32 overloads = 0;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvUnsafeUploadRowsResponse) {
+                ++total;
+                const auto& record = ev->Get<TEvDataShard::TEvUnsafeUploadRowsResponse>()->Record;
+                overloads += ui32(record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TPortManager portManager;
+        THolder<TS3Mock> s3Mock;
+
+        const auto data = GenerateTestData("", 1000);
+        const ui32 batchSize = 32;
+        RestoreNoWait(runtime, ++txId, portManager.GetPort(), s3Mock, {data}, batchSize);
+
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT(overloads > 0);
+
+        const ui32 expected = data.Csv.size() / batchSize + ui32(bool(data.Csv.size() % batchSize));
+        UNIT_ASSERT_VALUES_EQUAL(expected, total - overloads);
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
+        NKqp::CompareYson(data.YsonStr, content);
     }
 
     Y_UNIT_TEST(ShouldFailOnFileWithoutNewLines) {

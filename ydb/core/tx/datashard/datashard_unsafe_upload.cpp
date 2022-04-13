@@ -11,8 +11,15 @@ TDataShard::TTxUnsafeUploadRows::TTxUnsafeUploadRows(TDataShard* ds, TEvDataShar
 
 bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TActorContext&) {
     auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
-    if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion))
+    if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion)) {
         return false;
+    }
+
+    auto* result = GetResult();
+    if (result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {
+        NIceDb::TNiceDb db(txc.DB);
+        result->Info = Self->S3Downloads.Store(db, GetRequest()->TxId, GetRequest()->Info);
+    }
 
     if (Self->IsMvccEnabled()) {
         // Note: we always wait for completion, so we can ignore the result

@@ -6,9 +6,9 @@ namespace NDataShard {
 
 template <typename TEvRequest, typename TEvResponse>
 TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges)
-    : BreakLocks(breakLocks)
+    : Ev(ev)
+    , BreakLocks(breakLocks)
     , CollectChanges(collectChanges)
-    , Ev(ev)
 {
 }
 
@@ -17,7 +17,6 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         const TRowVersion& readVersion, const TRowVersion& writeVersion)
 {
     const auto& record = Ev->Get()->Record;
-
     Result = MakeHolder<TEvResponse>(self->TabletID());
 
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
@@ -224,16 +223,14 @@ void TCommonUploadOps<TEvRequest, TEvResponse>::GetResult(TDataShard* self, TAct
 }
 
 template <typename TEvRequest, typename TEvResponse>
-void TCommonUploadOps<TEvRequest, TEvResponse>::SendResult(TDataShard* self, const TActorContext& ctx) {
+const TEvRequest* TCommonUploadOps<TEvRequest, TEvResponse>::GetRequest() const {
+    return Ev->Get();
+}
+
+template <typename TEvRequest, typename TEvResponse>
+TEvResponse* TCommonUploadOps<TEvRequest, TEvResponse>::GetResult() {
     Y_VERIFY(Result);
-
-    if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {
-        self->IncCounter(COUNTER_BULK_UPSERT_SUCCESS);
-    } else {
-        self->IncCounter(COUNTER_BULK_UPSERT_ERROR);
-    }
-
-    ctx.Send(Ev->Sender, std::move(Result));
+    return Result.Get();
 }
 
 template <typename TEvRequest, typename TEvResponse>

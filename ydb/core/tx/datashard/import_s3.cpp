@@ -86,15 +86,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
     class TUploadRowsRequestBuilder {
     public:
         void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
-            Request.Reset(new TEvDataShard::TEvUnsafeUploadRowsRequest());
-            Request->Record.SetTableId(tableInfo.GetId());
+            Record = std::make_shared<NKikimrTxDataShard::TEvUploadRowsRequest>();
+            Record->SetTableId(tableInfo.GetId());
 
             TVector<TString> columnNames;
             for (const auto& column : scheme.GetColumns()) {
                 columnNames.push_back(column.GetName());
             }
 
-            auto& rowScheme = *Request->Record.MutableRowScheme();
+            auto& rowScheme = *Record->MutableRowScheme();
             for (ui32 id : tableInfo.GetKeyColumnIds()) {
                 rowScheme.AddKeyColumnIds(id);
             }
@@ -104,26 +104,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         }
 
         void AddRow(const TVector<TCell>& keys, const TVector<TCell>& values) {
-            Y_VERIFY(Request);
-            auto& row = *Request->Record.AddRows();
+            Y_VERIFY(Record);
+            auto& row = *Record->AddRows();
             row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
             row.SetValueColumns(TSerializedCellVec::Serialize(values));
         }
 
-        const NKikimrTxDataShard::TEvUploadRowsRequest& GetRecord() const {
-            Y_VERIFY(Request);
-            return Request->Record;
-        }
-
-        THolder<TEvDataShard::TEvUnsafeUploadRowsRequest> Build() {
-            Y_VERIFY(Request);
-            return std::move(Request);
+        const std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest>& GetRecord() {
+            Y_VERIFY(Record);
+            return Record;
         }
 
     private:
-        THolder<TEvDataShard::TEvUnsafeUploadRowsRequest> Request;
+        std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest> Record;
 
     }; // TUploadRowsRequestBuilder
+
+    enum class EWakeupTag: ui64 {
+        Restart,
+        RetryUpload,
+    };
 
     void AllocateResource() {
         IMPORT_LOG_D("AllocateResource"
@@ -205,7 +205,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
 
-        Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(SelfId(), TxId));
+        Send(DataShard, new TEvDataShard::TEvGetS3DownloadInfo(TxId));
     }
 
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
@@ -213,15 +213,22 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
 
         IMPORT_LOG_D("Handle TEvDataShard::TEvS3DownloadInfo"
             << ": self# " << SelfId()
-            << ", info# " << info.ToString());
+            << ", info# " << info);
 
         if (!info.DataETag) {
-            Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(SelfId(),
-                TxId, ETag, ProcessedBytes, WrittenBytes, WrittenRows));
+            Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
+                ETag, ProcessedBytes, WrittenBytes, WrittenRows
+            }));
             return;
         }
 
-        if (!CheckETag(*info.DataETag, ETag, TStringBuf("DownloadInfo"))) {
+        ProcessDownloadInfo(info, TStringBuf("DownloadInfo"));
+    }
+
+    void ProcessDownloadInfo(const TS3Download& info, const TStringBuf marker) {
+        Y_VERIFY(info.DataETag);
+
+        if (!CheckETag(*info.DataETag, ETag, marker)) {
             return;
         }
 
@@ -283,14 +290,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             }
 
             const auto& record = RequestBuilder.GetRecord();
-            WrittenRows += record.RowsSize();
+            WrittenRows += record->RowsSize();
 
-            IMPORT_LOG_D("Upload rows"
-                << ": self# " << SelfId()
-                << ", count# " << record.RowsSize()
-                << ", size# " << record.ByteSizeLong());
-
-            Send(DataShard, RequestBuilder.Build().Release());
+            UploadRows();
             return false;
         }
 
@@ -320,27 +322,42 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         return true;
     }
 
+    void UploadRows() {
+        const auto& record = RequestBuilder.GetRecord();
+
+        IMPORT_LOG_D("Upload rows"
+            << ": self# " << SelfId()
+            << ", count# " << record->RowsSize()
+            << ", size# " << record->ByteSizeLong());
+
+        Send(DataShard, new TEvDataShard::TEvUnsafeUploadRowsRequest(TxId, record, {
+            ETag, ProcessedBytes, WrittenBytes, WrittenRows
+        }));
+    }
+
     void Handle(TEvDataShard::TEvUnsafeUploadRowsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
+        const auto& info = ev->Get()->Info;
 
         IMPORT_LOG_D("Handle TEvDataShard::TEvUnsafeUploadRowsResponse"
             << ": self# " << SelfId()
-            << ", record# " << record.ShortDebugString());
+            << ", record# " << record.ShortDebugString()
+            << ", info# " << info);
 
         switch (record.GetStatus()) {
         case NKikimrTxDataShard::TError::OK:
-            break;
+            return ProcessDownloadInfo(info, TStringBuf("UploadResponse"));
+
+        case NKikimrTxDataShard::TError::WRONG_SHARD_STATE: // OVERLOADED
+            return RetryUpload();
 
         case NKikimrTxDataShard::TError::SCHEME_ERROR:
         case NKikimrTxDataShard::TError::BAD_ARGUMENT:
             return Finish(false, record.GetErrorDescription());
 
         default:
-            return RetryOrFinish(record.GetErrorDescription());
+            return RestartOrFinish(record.GetErrorDescription());
         };
-
-        Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(SelfId(),
-            TxId, ETag, ProcessedBytes, WrittenBytes, WrittenRows));
     }
 
     template <typename TResult>
@@ -352,7 +369,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         IMPORT_LOG_E("Error at '" << marker << "'"
             << ": self# " << SelfId()
             << ", error# " << result);
-        RetryOrFinish(result.GetError().GetMessage().c_str());
+        RestartOrFinish(result.GetError().GetMessage().c_str());
 
         return false;
     }
@@ -417,14 +434,27 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         return true;
     }
 
-    void RetryOrFinish(const TString& error) {
+    void RetryUpload() {
+        Schedule(TDuration::MilliSeconds(50), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::RetryUpload)));
+    }
+
+    void RestartOrFinish(const TString& error) {
         if (Attempt++ < Retries) {
             Delay = Min(Delay * Attempt, MaxDelay);
             const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
 
-            Schedule(Delay + random, new TEvents::TEvWakeup());
+            Schedule(Delay + random, new TEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::Restart)));
         } else {
             Finish(false, error);
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
+        case EWakeupTag::Restart:
+            return Restart();
+        case EWakeupTag::RetryUpload:
+            return UploadRows();
         }
     }
 
@@ -505,8 +535,8 @@ public:
             hFunc(TEvDataShard::TEvS3DownloadInfo, Handle);
             hFunc(TEvDataShard::TEvUnsafeUploadRowsResponse, Handle);
 
-            cFunc(TEvents::TEvWakeup::EventType, Restart);
-            cFunc(TEvents::TEvPoisonPill::EventType, NotifyDied);
+            hFunc(TEvents::TEvWakeup, Handle);
+            sFunc(TEvents::TEvPoisonPill, NotifyDied);
         }
     }
 

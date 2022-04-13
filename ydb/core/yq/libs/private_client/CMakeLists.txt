@@ -17,6 +17,5 @@ target_link_libraries(yq-libs-private_client PUBLIC
   cpp-client-ydb_table
 )
 target_sources(yq-libs-private_client PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/private_client.cpp
 )

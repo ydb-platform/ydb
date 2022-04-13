@@ -2,9 +2,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
 #include <ydb/public/lib/yq/yq.h>
+#include <ydb/public/lib/yq/helpers.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/mock/yql_mock.h>
-#include <ydb/core/yq/libs/private_client/utils.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/message_builders.h>

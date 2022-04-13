@@ -1113,3 +1113,6 @@ data-ui/charts-shared
 classifieds/personal
 haas/bot/vintage/adm
 geoadv/frontend
+haas/bot/vintage/bcc
+admins/mysql-configurator
+data-ui/yt-interface

@@ -291,7 +291,7 @@ public:
         } else if (key == "proisstrict") {
             LastProc.IsStrict = (value == "t");
         } else if (key == "proretset") {
-            IsSupported = false;
+            LastProc.ReturnSet = (value == "t");
         }
     }
 
@@ -1118,6 +1118,24 @@ const TProcDesc& LookupProc(ui32 procId) {
     }
 
     return *procPtr;
+}
+
+bool HasReturnSetProc(const TStringBuf& name) {
+    const auto& catalog = TCatalog::Instance();
+    auto procIdPtr = catalog.ProcByName.FindPtr(name);
+    if (!procIdPtr) {
+        return false;
+    }
+
+    for (const auto& id : *procIdPtr) {
+        const auto& d = catalog.Procs.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->ReturnSet) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool HasType(const TStringBuf& name) {

@@ -198,16 +198,33 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
             Y_ENSURE(!alias.empty());
             Y_ENSURE(columns.ChildrenSize() == 0 || columns.ChildrenSize() == 1);
             auto memberName = (columns.ChildrenSize() == 1) ? columns.Head().Content() : alias;
-            list = ctx.Builder(pos)
-                .Callable("AsList")
-                    .Callable(0, "AsStruct")
-                        .List(0)
-                            .Atom(0, memberName)
-                            .Add(1, list)
+            if (list->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
+                list = ctx.Builder(pos)
+                    .Callable("OrderedMap")
+                        .Add(0, list)
+                        .Lambda(1)
+                            .Param("item")
+                            .Callable("AsStruct")
+                                .List(0)
+                                    .Atom(0, memberName)
+                                    .Arg(1, "item")
+                                .Seal()
+                            .Seal()
                         .Seal()
                     .Seal()
-                .Seal()
-                .Build();
+                    .Build();
+            } else {
+                list = ctx.Builder(pos)
+                    .Callable("AsList")
+                        .Callable(0, "AsStruct")
+                            .List(0)
+                                .Atom(0, memberName)
+                                .Add(1, list)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
         }
 
         auto cleaned = ctx.Builder(pos)

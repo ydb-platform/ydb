@@ -2,6 +2,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/minikql/computation/presort_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -26,8 +27,10 @@ extern "C" {
 #include "utils/builtins.h"
 #include "utils/memutils.h"
 #include "nodes/execnodes.h"
+#include "executor/executor.h"
 #include "lib/stringinfo.h"
 #include "thread_inits.h"
+    
 #undef Abs
 #undef Min
 #undef Max
@@ -253,7 +256,8 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         LOCAL_FCINFO(callInfo, 3);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfo);
+        FmgrInfo copyFmgrInfo = FInfo;
+        callInfo->flinfo = &copyFmgrInfo;
         callInfo->nargs = 3;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -312,6 +316,7 @@ class TFunctionCallInfo {
 public:
     TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo)
         : NumArgs(numArgs)
+        , CopyFmgrInfo(*finfo)
     {
         if (!finfo->fn_addr) {
             return;
@@ -321,7 +326,7 @@ public:
         Ptr = MKQLAllocWithSize(MemSize);
         auto& callInfo = Ref();
         Zero(callInfo);
-        callInfo.flinfo = const_cast<FmgrInfo*>(finfo);
+        callInfo.flinfo = &CopyFmgrInfo; // client may mutate fn_extra
         callInfo.nargs = NumArgs;
         callInfo.fncollation = DEFAULT_COLLATION_OID;
     }
@@ -344,16 +349,55 @@ private:
     const ui32 NumArgs = 0;
     ui32 MemSize = 0;
     void* Ptr = nullptr;
+    FmgrInfo CopyFmgrInfo;
 };
 
-class TPgResolvedCall : public TMutableComputationNode<TPgResolvedCall> {
-    typedef TMutableComputationNode<TPgResolvedCall> TBaseComputation;
+class TReturnSetInfo {
 public:
-    TPgResolvedCall(TComputationMutables& mutables, bool useContext, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
+    TReturnSetInfo() {
+        Ptr = MKQLAllocWithSize(sizeof(ReturnSetInfo));
+        Zero(Ref());
+        Ref().type = T_ReturnSetInfo;
+    }
+
+    ~TReturnSetInfo() {
+        MKQLFreeWithSize(Ptr, sizeof(ReturnSetInfo));
+    }
+
+    ReturnSetInfo& Ref() {
+        return *static_cast<ReturnSetInfo*>(Ptr);
+    }
+
+private:
+    void* Ptr = nullptr;
+};
+
+class TExprContextHolder {
+public:
+    TExprContextHolder() {
+        Ptr = CreateStandaloneExprContext();
+    }
+
+    ExprContext& Ref() {
+        return *Ptr;
+    }
+
+    ~TExprContextHolder() {
+        FreeExprContext(Ptr, true);
+    }
+
+private:
+    ExprContext* Ptr;
+};
+
+
+template <typename TDerived>
+class TPgResolvedCallBase : public TMutableComputationNode<TDerived> {
+    typedef TMutableComputationNode<TDerived> TBaseComputation;
+public:
+    TPgResolvedCallBase(TComputationMutables& mutables, const std::string_view& name, ui32 id,
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, bool isList)
         : TBaseComputation(mutables)
-        , StateIndex(mutables.CurValueIndex++)
-        , UseContext(useContext)
         , Name(name)
         , Id(id)
         , ArgNodes(std::move(argNodes))
@@ -364,7 +408,7 @@ public:
         Zero(FInfo);
         Y_ENSURE(Id);
         fmgr_info(Id, &FInfo);
-        Y_ENSURE(!FInfo.fn_retset);
+        Y_ENSURE(FInfo.fn_retset == isList);
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(FInfo.fn_nargs == ArgNodes.size());
         ArgDesc.reserve(ProcDesc.ArgTypes.size());
@@ -387,6 +431,35 @@ public:
         }
 
         Y_ENSURE(ArgDesc.size() == ArgNodes.size());
+    }
+
+private:
+    void RegisterDependencies() const final {
+        for (const auto node : ArgNodes) {
+            this->DependsOn(node);
+        }
+    }
+
+protected:
+    const std::string_view Name;
+    const ui32 Id;
+    FmgrInfo FInfo;
+    const NPg::TProcDesc ProcDesc;
+    const NPg::TTypeDesc RetTypeDesc;
+    const TComputationNodePtrVector ArgNodes;
+    const TVector<TType*> ArgTypes;
+    TVector<NPg::TTypeDesc> ArgDesc;
+};
+
+class TPgResolvedCall : public TPgResolvedCallBase<TPgResolvedCall> {
+    typedef TPgResolvedCallBase<TPgResolvedCall> TBaseComputation;
+public:
+    TPgResolvedCall(TComputationMutables& mutables, bool useContext, const std::string_view& name, ui32 id,
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
+        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), false)
+        , StateIndex(mutables.CurValueIndex++)
+        , UseContext(useContext)
+    {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
@@ -451,12 +524,6 @@ public:
     }
 
 private:
-    void RegisterDependencies() const final {
-        for (const auto node : ArgNodes) {
-            DependsOn(node);
-        }
-    }
-
     struct TState : public TComputationValue<TState> {
         TState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo)
             : TComputationValue(memInfo)
@@ -478,14 +545,139 @@ private:
 
     const ui32 StateIndex;
     const bool UseContext;
-    const std::string_view Name;
-    const ui32 Id;
-    FmgrInfo FInfo;
-    const NPg::TProcDesc ProcDesc;
-    const NPg::TTypeDesc RetTypeDesc;
-    const TComputationNodePtrVector ArgNodes;
-    const TVector<TType*> ArgTypes;
-    TVector<NPg::TTypeDesc> ArgDesc;
+};
+
+class TPgResolvedMultiCall : public TPgResolvedCallBase<TPgResolvedMultiCall> {
+    typedef TPgResolvedCallBase<TPgResolvedMultiCall> TBaseComputation;
+private:
+    class TListValue : public TCustomListValue {
+    public:
+        class TIterator : public TComputationValue<TIterator> {
+        public:
+            TIterator(TMemoryUsageInfo* memInfo, const std::string_view& name, const TUnboxedValueVector& args,
+                const TVector<NPg::TTypeDesc>& argDesc, const NPg::TTypeDesc& retTypeDesc, const FmgrInfo* fInfo)
+                : TComputationValue<TIterator>(memInfo)
+                , Name(name)
+                , Args(args)
+                , ArgDesc(argDesc)
+                , RetTypeDesc(retTypeDesc)
+                , CallInfo(argDesc.size(), fInfo)
+            {
+                auto& callInfo = CallInfo.Ref();
+                callInfo.resultinfo = (fmNodePtr)&RSInfo.Ref();
+                ((ReturnSetInfo*)callInfo.resultinfo)->econtext = &ExprContextHolder.Ref();
+                for (ui32 i = 0; i < args.size(); ++i) {
+                    const auto& value = args[i];
+                    NullableDatum argDatum = { 0, false };
+                    if (!value) {
+                        argDatum.isnull = true;
+                    } else {
+                        argDatum.value = ArgDesc[i].PassByValue ?
+                            ScalarDatumFromPod(value) :
+                            PointerDatumFromPod(value);
+                    }
+
+                    callInfo.args[i] = argDatum;
+                }
+            }
+
+            ~TIterator() {
+            }
+
+        private:
+            bool Next(NUdf::TUnboxedValue& value) final {
+                if (IsFinished) {
+                    return false;
+                }
+
+                auto& callInfo = CallInfo.Ref();
+                PG_TRY();
+                {
+                    callInfo.isnull = false;
+                    auto ret = callInfo.flinfo->fn_addr(&callInfo);
+                    if (RSInfo.Ref().isDone == ExprEndResult) {
+                        IsFinished = true;
+                        return false;
+                    }
+
+                    if (callInfo.isnull) {
+                        value = NUdf::TUnboxedValuePod();
+                    } else if (RetTypeDesc.PassByValue) {
+                        value = ScalarDatumToPod(ret);
+                    } else if (TVPtrHolder::IsBoxedVPtr(ret)) {
+                        // returned one of arguments
+                        value = OwnedPointerDatumToPod(ret);
+                    } else {
+                        value = PointerDatumToPod(ret);
+                    }
+
+                    return true;
+                }
+                PG_CATCH();
+                {
+                    auto error_data = CopyErrorData();
+                    TStringBuilder errMsg;
+                    errMsg << "Error in function: " << Name << ", reason: " << error_data->message;
+                    FreeErrorData(error_data);
+                    FlushErrorState();
+                    UdfTerminate(errMsg.c_str());
+                }
+                PG_END_TRY();
+            }
+
+            const std::string_view Name;
+            TUnboxedValueVector Args;
+            const TVector<NPg::TTypeDesc>& ArgDesc;
+            const NPg::TTypeDesc& RetTypeDesc;
+            TExprContextHolder ExprContextHolder;
+            TFunctionCallInfo CallInfo;
+            TReturnSetInfo RSInfo;
+            bool IsFinished = false;
+        };
+
+        TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
+            const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
+            const NPg::TTypeDesc& retTypeDesc, const FmgrInfo* fInfo)
+            : TCustomListValue(memInfo)
+            , CompCtx(compCtx)
+            , Name(name)
+            , Args(args)
+            , ArgDesc(argDesc)
+            , RetTypeDesc(retTypeDesc)
+            , FInfo(fInfo)
+        {
+        }
+
+    private:
+        NUdf::TUnboxedValue GetListIterator() const final {
+            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, FInfo);
+        }
+
+        TComputationContext& CompCtx;
+        const std::string_view Name;
+        TUnboxedValueVector Args;
+        const TVector<NPg::TTypeDesc>& ArgDesc;
+        const NPg::TTypeDesc& RetTypeDesc;
+        const FmgrInfo* FInfo;
+    };
+
+public:
+    TPgResolvedMultiCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
+        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), true)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        TUnboxedValueVector args;
+        args.reserve(ArgNodes.size());
+        for (ui32 i = 0; i < ArgNodes.size(); ++i) {
+            auto value = ArgNodes[i]->GetValue(compCtx);
+            args.push_back(value);
+        }
+
+        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, &FInfo);
+    }
 };
 
 class TPgCast : public TMutableComputationNode<TPgCast> {
@@ -824,7 +1016,13 @@ TComputationNodeFactory GetPgFactory() {
                     argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
 
-                return new TPgResolvedCall(ctx.Mutables, useContext, name, id, std::move(argNodes), std::move(argTypes));
+                const bool isList = callable.GetType()->GetReturnType()->IsList();
+                if (isList) {
+                    YQL_ENSURE(!useContext);
+                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
+                } else {
+                    return new TPgResolvedCall(ctx.Mutables, useContext, name, id, std::move(argNodes), std::move(argTypes));
+                }
             }
 
             if (name == "PgCast") {
@@ -1793,7 +1991,7 @@ public:
     ui64 Hash(NUdf::TUnboxedValuePod lhs) const override {
         LOCAL_FCINFO(callInfo, 1);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoHash); // don't copy becase of IHash isn't threadsafe
         callInfo->nargs = 1;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -1846,7 +2044,7 @@ public:
     bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoLess); // don't copy becase of ICompare isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -1877,7 +2075,7 @@ public:
     int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoCompare); // don't copy becase of ICompare isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;
@@ -1934,7 +2132,7 @@ public:
     bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         LOCAL_FCINFO(callInfo, 2);
         Zero(*callInfo);
-        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquate);
+        callInfo->flinfo = const_cast<FmgrInfo*>(&FInfoEquate); // don't copy becase of IEquate isn't threadsafe
         callInfo->nargs = 2;
         callInfo->fncollation = DEFAULT_COLLATION_OID;
         callInfo->isnull = false;

@@ -35,6 +35,7 @@ struct TProcDesc {
     ui32 ResultType = 0;
     bool IsStrict = true;
     EProcKind Kind = EProcKind::Function;
+    bool ReturnSet = false;
 };
 
 struct TTypeDesc {
@@ -135,6 +136,7 @@ enum class EHashAmProcNum {
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
+bool HasReturnSetProc(const TStringBuf& name);
 
 bool HasType(const TStringBuf& name);
 const TTypeDesc& LookupType(const TString& name);

@@ -123,6 +123,7 @@ public:
         bool AllowColumns = false;
         bool AllowAggregates = false;
         bool AllowOver = false;
+        bool AllowReturnSet = false;
         TVector<TAstNode*>* WindowItems = nullptr;
         TString Scope;
     };
@@ -874,6 +875,11 @@ public:
 
         TString alias;
         TVector<TString> colnames;
+        if (!value->alias) {
+            AddError("RangeFunction: expected alias");
+            return {};
+        }
+
         if (!ParseAlias(value->alias, alias, colnames)) {
             return {};
         }
@@ -892,6 +898,7 @@ public:
         
         TExprSettings settings;
         settings.AllowColumns = false;
+        settings.AllowReturnSet = true;
         settings.Scope = "RANGE FUNCTION";
         auto func = ParseExpr(ListNodeNth(lst, 0), settings);
         if (!func) {
@@ -1058,9 +1065,15 @@ public:
 
         auto name = names.back();
         const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+        const bool hasReturnSet = NYql::NPg::HasReturnSetProc(name);
 
         if (isAggregateFunc && !settings.AllowAggregates) {
             AddError(TStringBuilder() << "Aggregate functions are not allowed in: " << settings.Scope);
+            return nullptr;
+        }
+
+        if (hasReturnSet && !settings.AllowReturnSet) {
+            AddError(TStringBuilder() << "Generator functions are not allowed in: " << settings.Scope);
             return nullptr;
         }
 

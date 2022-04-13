@@ -84,7 +84,11 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
+        const TTypeAnnotationNode* result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
+        if (proc.ReturnSet) {
+            result = ctx.Expr.MakeType<TListExprType>(result);
+        }
+
         input->SetTypeAnn(result);
         return IGraphTransformer::TStatus::Ok;
     } else {
@@ -1779,6 +1783,10 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         auto memberName = (p->Child(2)->ChildrenSize() == 1) ? p->Child(2)->Head().Content() : alias;
                         TVector<const TItemExprType*> items;
                         auto itemType = p->Head().GetTypeAnn();
+                        if (itemType->GetKind() == ETypeAnnotationKind::List) {
+                            itemType = itemType->Cast<TListExprType>()->GetItemType();
+                        }
+
                         items.push_back(ctx.Expr.MakeType<TItemExprType>(memberName, itemType));
                         inputStructType = ctx.Expr.MakeType<TStructExprType>(items);
                         columnOrder = TColumnOrder({ TString(memberName) });

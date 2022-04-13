@@ -955,7 +955,7 @@ static void display_cert_info(struct Curl_easy *data,
   subject = CERT_NameToAscii(&cert->subject);
   issuer = CERT_NameToAscii(&cert->issuer);
   common_name = CERT_GetCommonName(&cert->subject);
-  infof(data, "subject: %s\n", subject);
+  infof(data, "subject: %s", subject);
 
   CERT_GetCertTimes(cert, &notBefore, &notAfter);
   PR_ExplodeTime(notBefore, PR_GMTParameters, &printableTime);
@@ -2250,10 +2250,11 @@ static CURLcode nss_connect_common(struct Curl_easy *data,
   case CURLE_OK:
     break;
   case CURLE_AGAIN:
+    /* CURLE_AGAIN in non-blocking mode is not an error */
     if(!blocking)
-      /* CURLE_AGAIN in non-blocking mode is not an error */
       return CURLE_OK;
-    /* FALLTHROUGH */
+    else
+      return result;
   default:
     return result;
   }

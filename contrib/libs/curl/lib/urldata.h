@@ -330,7 +330,7 @@ struct digestdata {
   char *opaque;
   char *qop;
   char *algorithm;
-  int nc; /* nounce count */
+  int nc; /* nonce count */
   BIT(stale); /* set true for re-negotiation */
   BIT(userhash);
 #endif
@@ -1554,6 +1554,7 @@ enum dupstring {
   STRING_SSH_PRIVATE_KEY, /* path to the private key file for auth */
   STRING_SSH_PUBLIC_KEY,  /* path to the public key file for auth */
   STRING_SSH_HOST_PUBLIC_KEY_MD5, /* md5 of host public key in ascii hex */
+  STRING_SSH_HOST_PUBLIC_KEY_SHA256, /* sha256 of host public key in base64 */
   STRING_SSH_KNOWNHOSTS,  /* file name of knownhosts file */
   STRING_PROXY_SERVICE_NAME, /* Proxy service name */
   STRING_SERVICE_NAME,    /* Service name */
@@ -1651,6 +1652,8 @@ struct UserDefined {
   curl_closesocket_callback fclosesocket; /* function for closing the
                                              socket */
   void *closesocket_client;
+  curl_prereq_callback fprereq; /* pre-initial request callback */
+  void *prereq_userp; /* pre-initial request user data */
 
   void *seek_client;    /* pointer to pass to the seek callback */
   /* the 3 curl_conv_callback functions below are used on non-ASCII hosts */
@@ -1675,6 +1678,8 @@ struct UserDefined {
   long server_response_timeout; /* in milliseconds, 0 means no timeout */
   long maxage_conn;     /* in seconds, max idle time to allow a connection that
                            is to be reused */
+  long maxlifetime_conn; /* in seconds, max time since creation to allow a
+                            connection that is to be reused */
   long tftp_blksize;    /* in bytes, 0 means use default */
   curl_off_t filesize;  /* size of file to upload, -1 means unknown */
   long low_speed_limit; /* bytes/second */
@@ -1852,7 +1857,6 @@ struct UserDefined {
   BIT(abstract_unix_socket);
   BIT(disallow_username_in_url); /* disallow username in url */
   BIT(doh); /* DNS-over-HTTPS enabled */
-  BIT(doh_get); /* use GET for DoH requests, instead of POST */
   BIT(doh_verifypeer);     /* DoH certificate peer verification */
   BIT(doh_verifyhost);     /* DoH certificate hostname verification */
   BIT(doh_verifystatus);   /* DoH certificate status verification */

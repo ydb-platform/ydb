@@ -227,6 +227,10 @@
 #endif
 #endif
 
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
+#define HAVE_RANDOM_INIT_BY_DEFAULT 1
+#endif
+
 struct ssl_backend_data {
   struct Curl_easy *logger; /* transfer handle to pass trace logs to, only
                                using sockindex 0 */
@@ -435,18 +439,21 @@ static bool rand_enough(void)
 
 static CURLcode ossl_seed(struct Curl_easy *data)
 {
-  char fname[256];
-
   /* This might get called before it has been added to a multi handle */
   if(data->multi && data->multi->ssl_seeded)
     return CURLE_OK;
 
   if(rand_enough()) {
-    /* OpenSSL 1.1.0+ will return here */
+    /* OpenSSL 1.1.0+ should return here */
     if(data->multi)
       data->multi->ssl_seeded = TRUE;
     return CURLE_OK;
   }
+#ifdef HAVE_RANDOM_INIT_BY_DEFAULT
+  /* with OpenSSL 1.1.0+, a failed RAND_status is a showstopper */
+  failf(data, "Insufficient randomness");
+  return CURLE_SSL_CONNECT_ERROR;
+#else
 
 #ifndef RANDOM_FILE
   /* if RANDOM_FILE isn't defined, we only perform this if an option tells
@@ -507,19 +514,23 @@ static CURLcode ossl_seed(struct Curl_easy *data)
     RAND_add(randb, (int)len, (double)len/2);
   } while(!rand_enough());
 
-  /* generates a default path for the random seed file */
-  fname[0] = 0; /* blank it first */
-  RAND_file_name(fname, sizeof(fname));
-  if(fname[0]) {
-    /* we got a file name to try */
-    RAND_load_file(fname, RAND_LOAD_LENGTH);
-    if(rand_enough())
-      return CURLE_OK;
+  {
+    /* generates a default path for the random seed file */
+    char fname[256];
+    fname[0] = 0; /* blank it first */
+    RAND_file_name(fname, sizeof(fname));
+    if(fname[0]) {
+      /* we got a file name to try */
+      RAND_load_file(fname, RAND_LOAD_LENGTH);
+      if(rand_enough())
+        return CURLE_OK;
+    }
   }
 
   infof(data, "libcurl is now using a weak random seed!");
   return (rand_enough() ? CURLE_OK :
-    CURLE_SSL_CONNECT_ERROR /* confusing error code */);
+          CURLE_SSL_CONNECT_ERROR /* confusing error code */);
+#endif
 }
 
 #ifndef SSL_FILETYPE_ENGINE
@@ -2493,6 +2504,7 @@ static int ossl_new_session_cb(SSL *ssl, SSL_SESSION *ssl_sessionid)
 
   if(SSL_SET_OPTION(primary.sessionid)) {
     bool incache;
+    bool added = FALSE;
     void *old_ssl_sessionid = NULL;
 
     Curl_ssl_sessionid_lock(data);
@@ -2511,9 +2523,11 @@ static int ossl_new_session_cb(SSL *ssl, SSL_SESSION *ssl_sessionid)
 
     if(!incache) {
       if(!Curl_ssl_addsessionid(data, conn, isproxy, ssl_sessionid,
-                                0 /* unknown size */, sockindex)) {
-        /* the session has been put into the session cache */
-        res = 1;
+                                0 /* unknown size */, sockindex, &added)) {
+        if(added) {
+          /* the session has been put into the session cache */
+          res = 1;
+        }
       }
       else
         failf(data, "failed to store ssl session");
@@ -2936,7 +2950,7 @@ static CURLcode ossl_connect_step1(struct Curl_easy *data,
                                NULL, cert_name, sizeof(cert_name))) {
           strcpy(cert_name, "Unknown");
         }
-        infof(data, "SSL: Checking cert %s\"\n", cert_name);
+        infof(data, "SSL: Checking cert \"%s\"", cert_name);
 #endif
 
         encoded_cert = (const unsigned char *)pContext->pbCertEncoded;
@@ -3052,60 +3066,36 @@ static CURLcode ossl_connect_step1(struct Curl_easy *data,
     }
   }
 
+  if(verifypeer && !imported_native_ca && (ssl_cafile || ssl_capath)) {
 #if defined(OPENSSL_VERSION_MAJOR) && (OPENSSL_VERSION_MAJOR >= 3)
   /* OpenSSL 3.0.0 has deprecated SSL_CTX_load_verify_locations */
-  {
-    if(ssl_cafile) {
-      if(!SSL_CTX_load_verify_file(backend->ctx, ssl_cafile)) {
-        if(verifypeer && !imported_native_ca) {
-          /* Fail if we insist on successfully verifying the server. */
-          failf(data, "error setting certificate file: %s", ssl_cafile);
-          return CURLE_SSL_CACERT_BADFILE;
-        }
-        /* Continue with warning if certificate verification isn't required. */
-        infof(data, "error setting certificate file, continuing anyway");
-      }
-      infof(data, " CAfile: %s", ssl_cafile);
+    if(ssl_cafile &&
+       !SSL_CTX_load_verify_file(backend->ctx, ssl_cafile)) {
+      /* Fail if we insist on successfully verifying the server. */
+      failf(data, "error setting certificate file: %s", ssl_cafile);
+      return CURLE_SSL_CACERT_BADFILE;
     }
-    if(ssl_capath) {
-      if(!SSL_CTX_load_verify_dir(backend->ctx, ssl_capath)) {
-        if(verifypeer && !imported_native_ca) {
-          /* Fail if we insist on successfully verifying the server. */
-          failf(data, "error setting certificate path: %s", ssl_capath);
-          return CURLE_SSL_CACERT_BADFILE;
-        }
-        /* Continue with warning if certificate verification isn't required. */
-        infof(data, "error setting certificate path, continuing anyway");
-      }
-      infof(data, " CApath: %s", ssl_capath);
+    if(ssl_capath &&
+       !SSL_CTX_load_verify_dir(backend->ctx, ssl_capath)) {
+      /* Fail if we insist on successfully verifying the server. */
+      failf(data, "error setting certificate path: %s", ssl_capath);
+      return CURLE_SSL_CACERT_BADFILE;
     }
-  }
 #else
-  if(ssl_cafile || ssl_capath) {
-    /* tell SSL where to find CA certificates that are used to verify
-       the server's certificate. */
+    /* tell OpenSSL where to find CA certificates that are used to verify the
+       server's certificate. */
     if(!SSL_CTX_load_verify_locations(backend->ctx, ssl_cafile, ssl_capath)) {
-      if(verifypeer && !imported_native_ca) {
-        /* Fail if we insist on successfully verifying the server. */
-        failf(data, "error setting certificate verify locations:"
-              "  CAfile: %s CApath: %s",
-              ssl_cafile ? ssl_cafile : "none",
-              ssl_capath ? ssl_capath : "none");
-        return CURLE_SSL_CACERT_BADFILE;
-      }
-      /* Just continue with a warning if no strict certificate verification
-         is required. */
-      infof(data, "error setting certificate verify locations,"
-            " continuing anyway:");
+      /* Fail if we insist on successfully verifying the server. */
+      failf(data, "error setting certificate verify locations:"
+            "  CAfile: %s CApath: %s",
+            ssl_cafile ? ssl_cafile : "none",
+            ssl_capath ? ssl_capath : "none");
+      return CURLE_SSL_CACERT_BADFILE;
     }
-    else {
-      /* Everything is fine. */
-      infof(data, "successfully set certificate verify locations:");
-    }
+#endif
     infof(data, " CAfile: %s", ssl_cafile ? ssl_cafile : "none");
     infof(data, " CApath: %s", ssl_capath ? ssl_capath : "none");
   }
-#endif
 
 #ifdef CURL_CA_FALLBACK
   if(verifypeer &&

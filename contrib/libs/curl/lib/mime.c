@@ -462,11 +462,13 @@ static size_t encoder_base64_read(char *buffer, size_t size, bool ateof,
       /* Buffered data size can only be 0, 1 or 2. */
       ptr[2] = ptr[3] = '=';
       i = 0;
-      switch(st->bufend - st->bufbeg) {
-      case 2:
-        i = (st->buf[st->bufbeg + 1] & 0xFF) << 8;
-        /* FALLTHROUGH */
-      case 1:
+
+      /* If there is buffered data */
+      if(st->bufend != st->bufbeg) {
+
+        if(st->bufend - st->bufbeg == 2)
+          i = (st->buf[st->bufbeg + 1] & 0xFF) << 8;
+
         i |= (st->buf[st->bufbeg] & 0xFF) << 16;
         ptr[0] = base64[(i >> 18) & 0x3F];
         ptr[1] = base64[(i >> 12) & 0x3F];
@@ -476,7 +478,6 @@ static size_t encoder_base64_read(char *buffer, size_t size, bool ateof,
         }
         cursize += 4;
         st->pos += 4;
-        break;
       }
     }
   }
@@ -1954,7 +1955,8 @@ void Curl_mime_unpause(curl_mimepart *part)
 }
 
 
-#else /* !CURL_DISABLE_HTTP || !CURL_DISABLE_SMTP || !CURL_DISABLE_IMAP */
+#else /* !CURL_DISABLE_HTTP && !CURL_DISABLE_MIME ||
+         !CURL_DISABLE_SMTP || !CURL_DISABLE_IMAP */
 
 /* Mime not compiled in: define stubs for externally-referenced functions. */
 curl_mime *curl_mime_init(CURL *easy)

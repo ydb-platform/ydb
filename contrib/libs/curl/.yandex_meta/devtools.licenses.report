@@ -38,14 +38,14 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        lib/md5.c [200:217]
+        lib/md5.c [215:232]
     Scancode info:
         Original SPDX id: LicenseRef-scancode-other-permissive
         Score           : 98.04
         Match type      : NOTICE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
     Files with this license:
-        lib/md5.c [200:217]
+        lib/md5.c [215:232]
 
 KEEP     Public-Domain        18ed429b519e9abeeb3f768979574386
 BELONGS ya.make
@@ -56,14 +56,14 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        lib/md4.c [212:229]
+        lib/md4.c [221:238]
     Scancode info:
         Original SPDX id: LicenseRef-scancode-other-permissive
         Score           : 97.06
         Match type      : NOTICE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/other-permissive.LICENSE
     Files with this license:
-        lib/md4.c [212:229]
+        lib/md4.c [221:238]
 
 KEEP     curl                 22ab1475a8e38f13b0b81e2e769b5d69
 BELONGS ya.make
@@ -437,7 +437,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        lib/sha256.c [215:216]
+        lib/sha256.c [251:252]
 
 KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
 BELONGS ya.make

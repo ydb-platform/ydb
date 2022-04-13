@@ -157,23 +157,23 @@ static size_t strlen_url(const char *url, bool relative)
       continue;
     }
 
-    switch(*ptr) {
-    case '?':
-      left = FALSE;
-      /* FALLTHROUGH */
-    default:
-      if(urlchar_needs_escaping(*ptr))
-        newlen += 2;
-      newlen++;
-      break;
-    case ' ':
+    if(*ptr == ' ') {
       if(left)
         newlen += 3;
       else
         newlen++;
-      break;
+      continue;
     }
+
+    if (*ptr == '?')
+      left = FALSE;
+
+    if(urlchar_needs_escaping(*ptr))
+      newlen += 2;
+
+    newlen++;
   }
+
   return newlen;
 }
 
@@ -202,19 +202,7 @@ static void strcpy_url(char *output, const char *url, bool relative)
       continue;
     }
 
-    switch(*iptr) {
-    case '?':
-      left = FALSE;
-      /* FALLTHROUGH */
-    default:
-      if(urlchar_needs_escaping(*iptr)) {
-        msnprintf(optr, 4, "%%%02x", *iptr);
-        optr += 3;
-      }
-      else
-        *optr++=*iptr;
-      break;
-    case ' ':
+    if(*iptr == ' ') {
       if(left) {
         *optr++='%'; /* add a '%' */
         *optr++='2'; /* add a '2' */
@@ -222,8 +210,18 @@ static void strcpy_url(char *output, const char *url, bool relative)
       }
       else
         *optr++='+'; /* add a '+' here */
-      break;
+      continue;
     }
+
+    if(*iptr == '?')
+      left = FALSE;
+
+    if(urlchar_needs_escaping(*iptr)) {
+      msnprintf(optr, 4, "%%%02x", *iptr);
+      optr += 3;
+    }
+    else
+      *optr++ = *iptr;
   }
   *optr = 0; /* null-terminate output buffer */
 
@@ -656,7 +654,7 @@ static CURLUcode hostname_check(struct Curl_URL *u, char *hostname)
   }
   else {
     /* letters from the second string is not ok */
-    len = strcspn(hostname, " ");
+    len = strcspn(hostname, " \r\n");
     if(hlen != len)
       /* hostname with bad content */
       return CURLUE_MALFORMED_INPUT;
@@ -756,10 +754,35 @@ static bool ipv4_normalize(const char *hostname, char *outp, size_t olen)
   return TRUE;
 }
 
+/* return strdup'ed version in 'outp', possibly percent decoded */
+static CURLUcode decode_host(char *hostname, char **outp)
+{
+  char *per = NULL;
+  if(hostname[0] != '[')
+    /* only decode if not an ipv6 numerical */
+    per = strchr(hostname, '%');
+  if(!per) {
+    *outp = strdup(hostname);
+    if(!*outp)
+      return CURLUE_OUT_OF_MEMORY;
+  }
+  else {
+    /* might be encoded */
+    size_t dlen;
+    CURLcode result = Curl_urldecode(NULL, hostname, 0,
+                                     outp, &dlen, REJECT_CTRL);
+    if(result)
+      return CURLUE_MALFORMED_INPUT;
+  }
+
+  return CURLUE_OK;
+}
+
 static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
 {
   char *path;
   bool path_alloced = FALSE;
+  bool uncpath = FALSE;
   char *hostname;
   char *query = NULL;
   char *fragment = NULL;
@@ -798,7 +821,6 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
     /* path has been allocated large enough to hold this */
     strcpy(path, &url[5]);
 
-    hostname = NULL; /* no host for file: URLs */
     u->scheme = strdup("file");
     if(!u->scheme)
       return CURLUE_OUT_OF_MEMORY;
@@ -820,10 +842,13 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
        *
        *  o the hostname matches "localhost" (case-insensitively), or
        *
-       *  o the hostname is a FQDN that resolves to this machine.
+       *  o the hostname is a FQDN that resolves to this machine, or
+       *
+       *  o it is an UNC String transformed to an URI (Windows only, RFC 8089
+       *    Appendix E.3).
        *
        * For brevity, we only consider URLs with empty, "localhost", or
-       * "127.0.0.1" hostnames as local.
+       * "127.0.0.1" hostnames as local, otherwise as an UNC String.
        *
        * Additionally, there is an exception for URLs with a Windows drive
        * letter in the authority (which was accidentally omitted from RFC 8089
@@ -832,17 +857,42 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
       if(ptr[0] != '/' && !STARTS_WITH_URL_DRIVE_PREFIX(ptr)) {
         /* the URL includes a host name, it must match "localhost" or
            "127.0.0.1" to be valid */
-        if(!checkprefix("localhost/", ptr) &&
-           !checkprefix("127.0.0.1/", ptr)) {
+        if(checkprefix("localhost/", ptr) ||
+           checkprefix("127.0.0.1/", ptr)) {
+          ptr += 9; /* now points to the slash after the host */
+        }
+        else {
+#if defined(WIN32)
+          size_t len;
+
+          /* the host name, NetBIOS computer name, can not contain disallowed
+             chars, and the delimiting slash character must be appended to the
+             host name */
+          path = strpbrk(ptr, "/\\:*?\"<>|");
+          if(!path || *path != '/')
+            return CURLUE_MALFORMED_INPUT;
+
+          len = path - ptr;
+          if(len) {
+            memcpy(hostname, ptr, len);
+            hostname[len] = 0;
+            uncpath = TRUE;
+          }
+
+          ptr -= 2; /* now points to the // before the host in UNC */
+#else
           /* Invalid file://hostname/, expected localhost or 127.0.0.1 or
              none */
           return CURLUE_MALFORMED_INPUT;
+#endif
         }
-        ptr += 9; /* now points to the slash after the host */
       }
 
       path = ptr;
     }
+
+    if(!uncpath)
+        hostname = NULL; /* no host for file: URLs by default */
 
 #if !defined(MSDOS) && !defined(WIN32) && !defined(__CYGWIN__)
     /* Don't allow Windows drive letters when not in Windows.
@@ -1003,20 +1053,22 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
 
     if(0 == strlen(hostname) && (flags & CURLU_NO_AUTHORITY)) {
       /* Skip hostname check, it's allowed to be empty. */
+      u->host = strdup("");
     }
     else {
-      result = hostname_check(u, hostname);
-      if(result)
-        return result;
+      if(ipv4_normalize(hostname, normalized_ipv4, sizeof(normalized_ipv4)))
+        u->host = strdup(normalized_ipv4);
+      else {
+        result = decode_host(hostname, &u->host);
+        if(result)
+          return result;
+        result = hostname_check(u, u->host);
+        if(result)
+          return result;
+      }
     }
-
-    if(ipv4_normalize(hostname, normalized_ipv4, sizeof(normalized_ipv4)))
-      u->host = strdup(normalized_ipv4);
-    else
-      u->host = strdup(hostname);
     if(!u->host)
       return CURLUE_OUT_OF_MEMORY;
-
     if((flags & CURLU_GUESS_SCHEME) && !schemep) {
       /* legacy curl-style guess based on host name */
       if(checkprefix("ftp.", hostname))
@@ -1111,6 +1163,7 @@ CURLUcode curl_url_get(CURLU *u, CURLUPart what,
   CURLUcode ifmissing = CURLUE_UNKNOWN_PART;
   char portbuf[7];
   bool urldecode = (flags & CURLU_URLDECODE)?1:0;
+  bool urlencode = (flags & CURLU_URLENCODE)?1:0;
   bool plusdecode = FALSE;
   (void)flags;
   if(!u)
@@ -1228,16 +1281,54 @@ CURLUcode curl_url_get(CURLU *u, CURLUPart what,
       if(h && !(h->flags & PROTOPT_URLOPTIONS))
         options = NULL;
 
-      if((u->host[0] == '[') && u->zoneid) {
-        /* make it '[ host %25 zoneid ]' */
-        size_t hostlen = strlen(u->host);
-        size_t alen = hostlen + 3 + strlen(u->zoneid) + 1;
-        allochost = malloc(alen);
+      if(u->host[0] == '[') {
+        if(u->zoneid) {
+          /* make it '[ host %25 zoneid ]' */
+          size_t hostlen = strlen(u->host);
+          size_t alen = hostlen + 3 + strlen(u->zoneid) + 1;
+          allochost = malloc(alen);
+          if(!allochost)
+            return CURLUE_OUT_OF_MEMORY;
+          memcpy(allochost, u->host, hostlen - 1);
+          msnprintf(&allochost[hostlen - 1], alen - hostlen + 1,
+                    "%%25%s]", u->zoneid);
+        }
+      }
+      else if(urlencode) {
+        allochost = curl_easy_escape(NULL, u->host, 0);
         if(!allochost)
           return CURLUE_OUT_OF_MEMORY;
-        memcpy(allochost, u->host, hostlen - 1);
-        msnprintf(&allochost[hostlen - 1], alen - hostlen + 1,
-                  "%%25%s]", u->zoneid);
+      }
+      else {
+        /* only encode '%' in output host name */
+        char *host = u->host;
+        size_t pcount = 0;
+        /* first, count number of percents present in the name */
+        while(*host) {
+          if(*host == '%')
+            pcount++;
+          host++;
+        }
+        /* if there were percents, encode the host name */
+        if(pcount) {
+          size_t hostlen = strlen(u->host);
+          size_t alen = hostlen + 2 * pcount + 1;
+          char *o = allochost = malloc(alen);
+          if(!allochost)
+            return CURLUE_OUT_OF_MEMORY;
+
+          host = u->host;
+          while(*host) {
+            if(*host == '%') {
+              memcpy(o, "%25", 3);
+              o += 3;
+              host++;
+              continue;
+            }
+            *o++ = *host++;
+          }
+          *o = '\0';
+        }
       }
 
       url = aprintf("%s://%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
@@ -1379,10 +1470,15 @@ CURLUcode curl_url_set(CURLU *u, CURLUPart what,
   case CURLUPART_OPTIONS:
     storep = &u->options;
     break;
-  case CURLUPART_HOST:
+  case CURLUPART_HOST: {
+    size_t len = strcspn(part, " \r\n");
+    if(strlen(part) != len)
+      /* hostname with bad content */
+      return CURLUE_MALFORMED_INPUT;
     storep = &u->host;
     Curl_safefree(u->zoneid);
     break;
+  }
   case CURLUPART_ZONEID:
     storep = &u->zoneid;
     break;

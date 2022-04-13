@@ -33,7 +33,7 @@ KEEP     COPYRIGHT_SERVICE_LABEL 01785bd64237dea815d6d9ed22d8812c
 BELONGS ya.make
     License text:
          * Copyright (C) 2017, Florin Petriuc, <petriuc.florin@gmail.com>
-         * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) 2018 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -206,6 +206,7 @@ BELONGS ya.make
         lib/sendf.c [8:8]
         lib/sendf.h [10:10]
         lib/setopt.c [8:8]
+        lib/setup-win32.h [10:10]
         lib/share.c [8:8]
         lib/share.h [10:10]
         lib/sigpipe.h [10:10]
@@ -474,7 +475,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/curl/options.h [10:10]
-        lib/curl_sha256.h [10:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 520dfafb050652350468b32c3d62b5cd
 BELONGS ya.make
@@ -649,7 +649,6 @@ BELONGS ya.make
         lib/psl.h [10:10]
         lib/rand.h [10:10]
         lib/setopt.h [10:10]
-        lib/setup-win32.h [10:10]
         lib/slist.c [8:8]
         lib/slist.h [10:10]
         lib/sockaddr.h [10:10]
@@ -705,6 +704,17 @@ BELONGS ya.make
         lib/socketpair.h [10:10]
         lib/vssh/wolfssh.c [8:8]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 90cdf298ce2c585659435307b15f1c38
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2015 - 2021, Steve Holme, <steve_holme@hotmail.com>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/curl_des.c [8:8]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 90ce0ec9551a9d561300240060256dff
 BELONGS ya.make
     License text:
@@ -749,7 +759,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/curl_des.c [8:8]
         lib/curl_des.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9d962b7054a48ee0efeaca166b582707
@@ -774,7 +783,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/system_win32.h [10:10]
-        lib/version_win32.c [8:8]
         lib/version_win32.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a708a3265e6d737aa48aa8db4c364178
@@ -954,6 +962,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/system_win32.c [8:8]
+        lib/version_win32.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e0d1701a5a15c429dd6d54ccbadea738
 BELONGS ya.make
@@ -997,8 +1006,8 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/md4.c [217:222]
-        lib/md5.c [205:210]
+        lib/md4.c [226:231]
+        lib/md5.c [220:225]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f5681c9f9526985592061799304792ee
 BELONGS ya.make
@@ -1021,6 +1030,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/curl/urlapi.h [10:10]
+        lib/curl_sha256.h [10:11]
         lib/doh.c [8:8]
         lib/doh.h [10:10]
         lib/sha256.c [8:9]

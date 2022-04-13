@@ -21,7 +21,6 @@ target_include_directories(contrib-libs-libxml PUBLIC
 )
 target_include_directories(contrib-libs-libxml PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/include
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libiconv/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml
 )
 target_link_libraries(contrib-libs-libxml PUBLIC

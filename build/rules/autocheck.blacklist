@@ -1116,3 +1116,13 @@ geoadv/frontend
 haas/bot/vintage/bcc
 admins/mysql-configurator
 data-ui/yt-interface
+haas/bot/vintage/rsg
+classifieds/vs
+admins/yandex-media-mongolag-checks
+admins/rotate-s3-backups
+kinopoisk/sre/yandex-kinopoisk-pkg-versions-env-check
+kinopoisk/sre/yandex-kinopoisk-angel-loggiver-script
+admins/yandex-media-mongo-dump-restore
+admins/yandex-media-common-cassandra-backup
+admins/ansible-juggler-configs
+data-ui/common-codemod

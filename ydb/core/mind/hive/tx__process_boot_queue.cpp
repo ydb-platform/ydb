@@ -5,6 +5,8 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxProcessBootQueue : public TTransactionBase<THive> {
+    TSideEffects SideEffects;
+
 public:
     TTxProcessBootQueue(THive *hive)
         : TBase(hive)
@@ -14,12 +16,14 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         BLOG_D("THive::TTxProcessBootQueue()::Execute");
-        Self->RunProcessBootQueue();
+        SideEffects.Reset(Self->SelfId());
+        Self->ExecuteProcessBootQueue(SideEffects);
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxProcessBootQueue()::Complete");
+        SideEffects.Complete(ctx);
     }
 };
 

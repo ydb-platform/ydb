@@ -7,9 +7,7 @@ namespace NHive {
 class TTxDeleteTabletResult : public TTransactionBase<THive> {
     TEvTabletBase::TEvDeleteTabletResult::TPtr Result;
     TTabletId TabletId;
-    TLeaderTabletInfo* Tablet = nullptr;
-    TVector<TActorId> StorageInfoSubscribers;
-    TActorId UnlockedFromActor;
+    TSideEffects SideEffects;
 
 public:
     TTxDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev, THive* hive)
@@ -21,59 +19,56 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_DELETE_TABLET_RESULT; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        SideEffects.Reset(Self->SelfId());
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
         BLOG_D("THive::TTxDeleteTabletResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
-        Tablet = Self->FindTabletEvenInDeleting(TabletId);
-        if (Tablet != nullptr) {
+        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
+        if (tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK) {
                 NIceDb::TNiceDb db(txc.DB);
-                db.Table<Schema::Metrics>().Key(Tablet->Id, 0).Delete();
-                for (const TTabletChannelInfo& channelInfo : Tablet->TabletStorageInfo->Channels) {
+                db.Table<Schema::Metrics>().Key(tablet->Id, 0).Delete();
+                for (const TTabletChannelInfo& channelInfo : tablet->TabletStorageInfo->Channels) {
                     for (const TTabletChannelInfo::THistoryEntry& historyInfo : channelInfo.History) {
-                        db.Table<Schema::TabletChannelGen>().Key(Tablet->Id, channelInfo.Channel, historyInfo.FromGeneration).Delete();
+                        db.Table<Schema::TabletChannelGen>().Key(tablet->Id, channelInfo.Channel, historyInfo.FromGeneration).Delete();
                     }
-                    db.Table<Schema::TabletChannel>().Key(Tablet->Id, channelInfo.Channel).Delete();
+                    db.Table<Schema::TabletChannel>().Key(tablet->Id, channelInfo.Channel).Delete();
                 }
-                for (TFollowerTabletInfo& follower : Tablet->Followers) {
+                for (TFollowerTabletInfo& follower : tablet->Followers) {
                     auto fullTabletId = follower.GetFullTabletId();
                     db.Table<Schema::TabletFollowerTablet>().Key(fullTabletId).Delete();
                     db.Table<Schema::Metrics>().Key(fullTabletId).Delete();
                 }
-                for (TFollowerGroup& group : Tablet->FollowerGroups) {
-                    db.Table<Schema::TabletFollowerGroup>().Key(Tablet->Id, group.Id).Delete();
+                for (TFollowerGroup& group : tablet->FollowerGroups) {
+                    db.Table<Schema::TabletFollowerGroup>().Key(tablet->Id, group.Id).Delete();
                 }
-                db.Table<Schema::Tablet>().Key(Tablet->Id).Delete();
-                StorageInfoSubscribers.swap(Tablet->StorageInfoSubscribers);
-                UnlockedFromActor = Tablet->ClearLockedToActor();
-                Self->PendingCreateTablets.erase({Tablet->Owner.first, Tablet->Owner.second});
-                Self->DeleteTablet(Tablet->Id);
+                db.Table<Schema::Tablet>().Key(tablet->Id).Delete();
+                TVector<TActorId> storageInfoSubscribers;
+                storageInfoSubscribers.swap(tablet->StorageInfoSubscribers);
+                for (const TActorId& subscriber : storageInfoSubscribers) {
+                    SideEffects.Send(
+                        subscriber,
+                        new TEvHive::TEvGetTabletStorageInfoResult(TabletId, NKikimrProto::ERROR, "Tablet deleted"));
+                }
+                TActorId unlockedFromActor = tablet->ClearLockedToActor();
+                if (unlockedFromActor) {
+                    // Notify lock owner that lock has been lost
+                    SideEffects.Send(unlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+                }
+                Self->PendingCreateTablets.erase({tablet->Owner.first, tablet->Owner.second});
+                Self->DeleteTablet(tablet->Id);
+            } else {
+                BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
+                Y_ENSURE_LOG(tablet->IsDeleting(), " tablet " << tablet->Id);
+                SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
             }
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
-        BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")::Complete");
-        Tablet = Self->FindTabletEvenInDeleting(TabletId);
-        if (Tablet) {
-            if (msg->Status == NKikimrProto::OK) {
-                //ctx.Send(Tablet.ActorToNotify, new TEvHive::TEvDeleteTabletReply(NKikimrProto::OK, Self->TabletID(), rec.GetTxId()));
-            } else {
-                BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
-                Y_ENSURE_LOG(Tablet->IsDeleting(), " tablet " << Tablet->Id);
-                ctx.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(Tablet->Id));
-            }
-        }
-        for (const TActorId& subscriber : StorageInfoSubscribers) {
-            ctx.Send(
-                subscriber,
-                new TEvHive::TEvGetTabletStorageInfoResult(TabletId, NKikimrProto::ERROR, "Tablet deleted"));
-        }
-        if (UnlockedFromActor) {
-            // Notify lock owner that lock has been lost
-            ctx.Send(UnlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId));
-        }
+        BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << ")::Complete SideEffects " << SideEffects);
+        SideEffects.Complete(ctx);
+
     }
 };
 

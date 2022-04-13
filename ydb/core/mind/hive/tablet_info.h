@@ -214,13 +214,14 @@ public:
     bool BecomeRunning(TNodeId nodeId);
     bool BecomeStopped();
 
-    void SendStopTablet(const TActorId& local, TFullTabletId tabletId);
-
-    bool InitiateStop();
+    TNodeInfo* GetNode() const;
+    TActorId GetLocal() const;
+    void SendStopTablet(TSideEffects& sideEffects);
+    void SendStopTablet(const TActorId& local, TSideEffects& sideEffects);
+    bool InitiateStop(TSideEffects& sideEffects);
 
     void BecomeUnknown(TNodeInfo* node);
     bool Kick();
-    void Kill();
     const TVector<i64>& GetTabletAllowedMetricIds() const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);

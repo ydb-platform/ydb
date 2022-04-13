@@ -5,13 +5,13 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxUpdateTabletStatus : public TTransactionBase<THive> {
-    const TTabletId TabletId;
+    TTabletId TabletId;
+    TFollowerId FollowerId;
     const TActorId Local;
     const TEvLocal::TEvTabletStatus::EStatus Status;
     const TEvTablet::TEvTabletDead::EReason Reason;
     ui32 Generation;
-    TFollowerId FollowerId;
-    TCompleteNotifications Notifications;
+    TSideEffects SideEffects;
 
 public:
     TTxUpdateTabletStatus(
@@ -24,11 +24,11 @@ public:
             THive *hive)
         : TBase(hive)
         , TabletId(tabletId)
+        , FollowerId(followerId)
         , Local(local)
         , Status(status)
         , Reason(reason)
         , Generation(generation)
-        , FollowerId(followerId)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_TABLET_STATUS; }
@@ -62,6 +62,7 @@ public:
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
+        SideEffects.Reset(Self->SelfId());
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
         if (tablet != nullptr) {
             BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet "
@@ -76,7 +77,6 @@ public:
                         << Local);
             NIceDb::TNiceDb db(txc.DB);
             TInstant now = TActivationContext::Now();
-            Notifications.Reset(Self->SelfId());
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
                 tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);
@@ -90,18 +90,18 @@ public:
                     return true;
                 }
                 for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
-                    Notifications.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK"));
+                    SideEffects.Send(actor, new TEvPrivate::TEvRestartComplete({TabletId, FollowerId}, "OK"));
                 }
                 tablet->ActorsToNotifyOnRestart.clear();
                 if (tablet->GetLeader().IsDeleting()) {
-                    tablet->SendStopTablet(Local, {TabletId, FollowerId});
+                    tablet->SendStopTablet(SideEffects);
                     return true;
                 }
                 tablet->BecomeRunning(Local.NodeId());
                 if (tablet->GetLeader().IsLockedToActor()) {
                     // Tablet is locked and shouldn't be running, but we just found out it's running on this node
                     // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
-                    tablet->InitiateStop();
+                    tablet->InitiateStop(SideEffects);
                 }
                 tablet->BootState = Self->BootStateRunning;
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
@@ -118,13 +118,13 @@ public:
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
                 }
                 for (const TActorId& actor : tablet->ActorsToNotify) {
-                    Notifications.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
+                    SideEffects.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
                 }
                 tablet->ActorsToNotify.clear();
                 db.Table<Schema::Tablet>().Key(TabletId).UpdateToNull<Schema::Tablet::ActorsToNotify>();
             } else {
                 if (Local) {
-                    Notifications.Send(Local, new TEvLocal::TEvDeadTabletAck(std::make_pair(TabletId, FollowerId), Generation));
+                    SideEffects.Send(Local, new TEvLocal::TEvDeadTabletAck(std::make_pair(TabletId, FollowerId), Generation));
                 }
                 if (tablet->IsLeader()) {
                     TLeaderTabletInfo& leader(tablet->AsLeader());
@@ -152,7 +152,7 @@ public:
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
                         }
-                        tablet->InitiateStop();
+                        tablet->InitiateStop(SideEffects);
                     }
                 }
                 switch (tablet->GetLeader().State) {
@@ -164,7 +164,7 @@ public:
                 case ETabletState::Stopping:
                     if (tablet->IsLeader()) {
                         for (const TActorId& actor : tablet->GetLeader().ActorsToNotify) {
-                            Notifications.Send(actor, new TEvHive::TEvStopTabletResult(NKikimrProto::OK, TabletId));
+                            SideEffects.Send(actor, new TEvHive::TEvStopTabletResult(NKikimrProto::OK, TabletId));
                         }
                         tablet->GetLeader().ActorsToNotify.clear();
                     }
@@ -181,18 +181,15 @@ public:
                     break;
                 };
             }
+            tablet->GetLeader().TryToBoot();
         }
+        Self->ProcessBootQueue(); // it's required to start followers on successful leader start
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " Notifications: " << Notifications);
-        Notifications.Send(ctx);
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-        if (tablet != nullptr) {
-            tablet->TryToBoot();
-        }
-        Self->ProcessBootQueue();
+        BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        SideEffects.Complete(ctx);
     }
 };
 
@@ -208,15 +205,3 @@ ITransaction* THive::CreateUpdateTabletStatus(
 
 } // NHive
 } // NKikimr
-
-template <>
-inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const NKikimr::NHive::TCompleteNotifications& n) {
-    o << n.SelfID << " -> [";
-    for (auto it = n.Notifications.begin(); it != n.Notifications.end(); ++it) {
-        if (it != n.Notifications.begin()) {
-            o << ',';
-        }
-        o << it->Get()->Recipient;
-    }
-    o << "]";
-}

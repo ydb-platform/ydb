@@ -437,6 +437,16 @@ namespace NKikimr {
                     Record.AddShardLocalIdx(idx);
                 }
             }
+
+            TEvDeleteTabletReply(NKikimrProto::EReplyStatus status, ui64 hiveID, const NKikimrHive::TEvDeleteTablet& request) {
+                Record.SetStatus(status);
+                Record.SetOrigin(hiveID);
+                Record.SetTxId_Deprecated(request.GetTxId_Deprecated());
+                Record.SetShardOwnerId(request.GetShardOwnerId());
+                for (auto idx : request.GetShardLocalIdx()) {
+                    Record.AddShardLocalIdx(idx);
+                }
+            }
         };
 
         struct TEvDeleteOwnerTablets : public TEventPB<TEvDeleteOwnerTablets,
@@ -543,6 +553,20 @@ namespace NKikimr {
         };
 
         struct TEvRequestHiveInfo : TEventPB<TEvRequestHiveInfo, NKikimrHive::TEvRequestHiveInfo, EvRequestHiveInfo> {
+            struct TRequestHiveInfoInitializer {
+                ui64 TabletId = 0;
+                bool ReturnFollowers = false;
+                bool ReturnMetrics = false;
+                bool ReturnChannelHistory = false;
+            };
+
+            TEvRequestHiveInfo(TRequestHiveInfoInitializer initializer) {
+                Record.SetTabletID(initializer.TabletId);
+                Record.SetReturnFollowers(initializer.ReturnFollowers);
+                Record.SetReturnMetrics(initializer.ReturnMetrics);
+                Record.SetReturnChannelHistory(initializer.ReturnChannelHistory);
+            }
+
             TEvRequestHiveInfo() = default;
 
             TEvRequestHiveInfo(bool returnFollowers) {

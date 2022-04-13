@@ -7,6 +7,7 @@ namespace NHive {
 class TTxBlockStorageResult : public TTransactionBase<THive> {
     TEvTabletBase::TEvBlockBlobStorageResult::TPtr Result;
     TTabletId TabletId;
+    TSideEffects SideEffects;
 public:
     TTxBlockStorageResult(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev, THive* hive)
         : TBase(hive)
@@ -17,6 +18,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_BLOCK_STORAGE_RESULT; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        SideEffects.Reset(Self->SelfId());
         TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
         BLOG_D("THive::TTxBlockStorageResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
@@ -27,19 +29,10 @@ public:
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update(NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::ReadyToWork));
                 } else if (tablet->State == ETabletState::Deleting) {
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
-                        follower.InitiateStop();
+                        follower.InitiateStop(SideEffects);
                     }
                 }
             }
-        }
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
-        BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
-        TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
-        if (tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK
                     || msg->Status == NKikimrProto::RACE
                     || msg->Status == NKikimrProto::BLOCKED
@@ -48,21 +41,28 @@ public:
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
                     }
-                    ctx.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
+                    SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
                     tablet->State = ETabletState::ReadyToWork;
                     if (tablet->IsBootingSuppressed()) {
                         // Use best effort to kill currently running tablet
-                        ctx.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
+                        SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
                     } else {
                         Self->Execute(Self->CreateRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
             } else {
                 BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
-                ctx.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateBlockStorage(tablet->Id));
+                SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateBlockStorage(tablet->Id));
             }
         }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        TEvTabletBase::TEvBlockBlobStorageResult* msg = Result->Get();
+        BLOG_D("THive::TTxBlockStorageResult::Complete(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        SideEffects.Complete(ctx);
     }
 };
 

@@ -9,6 +9,7 @@ class TTxReleaseTablets : public TTransactionBase<THive> {
     THolder<TEvHive::TEvReleaseTabletsReply> Response = MakeHolder<TEvHive::TEvReleaseTabletsReply>();
     TVector<std::pair<TTabletId, TActorId>> UnlockedFromActor;
     bool NeedToProcessPendingOperations = false;
+    TSideEffects SideEffects;
 
 public:
     TTxReleaseTablets(THolder<TEvHive::TEvReleaseTablets::THandle> event, THive *hive)
@@ -21,6 +22,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const NKikimrHive::TEvReleaseTablets& request(Request->Get()->Record);
         NKikimrHive::TEvReleaseTabletsReply& response(Response->Record);
+        SideEffects.Reset(Self->SelfId());
         BLOG_D("THive::TTxReleaseTablets::Execute " << request);
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : request.GetTabletIDs()) {
@@ -29,10 +31,10 @@ public:
                 Y_VERIFY(tablet->SeizedByChild);
 
                 if (tablet->IsAlive() && tablet->Node != nullptr) {
-                    tablet->SendStopTablet(tablet->Node->Local, tablet->GetFullTabletId());
+                    tablet->SendStopTablet(tablet->Node->Local, SideEffects);
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
                         if (follower.IsAlive() && follower.Node != nullptr) {
-                            follower.SendStopTablet(follower.Node->Local, follower.GetFullTabletId());
+                            follower.SendStopTablet(follower.Node->Local, SideEffects);
                         }
                     }
                 }
@@ -76,7 +78,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxReleaseTablets::Complete " << Request->Get()->Record);
+        BLOG_D("THive::TTxReleaseTablets::Complete " << Request->Get()->Record << " SideEffects: " << SideEffects);
+        SideEffects.Complete(ctx);
         for (const auto& unlockedFromActor : UnlockedFromActor) {
             // Notify lock owner that lock has been lost
             ctx.Send(unlockedFromActor.second, new TEvHive::TEvLockTabletExecutionLost(unlockedFromActor.first));

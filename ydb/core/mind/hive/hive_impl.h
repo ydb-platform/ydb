@@ -116,30 +116,6 @@ namespace std {
 namespace NKikimr {
 namespace NHive {
 
-struct TCompleteNotifications {
-    TVector<THolder<IEventHandle>> Notifications;
-    TActorId SelfID;
-
-    void Reset(const TActorId &selfId) {
-        Notifications.clear();
-        SelfID = selfId;
-    }
-
-    void Send(const TActorId &recipient, IEventBase *ev, ui32 flags = 0, ui64 cookie = 0) {
-        Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie));
-    }
-
-    void Send(const TActorContext& ctx) {
-        for (auto& notification : Notifications) {
-            ctx.ExecutorThread.Send(notification.Release());
-        }
-    }
-
-    size_t size() const {
-        return Notifications.size();
-    }
-};
-
 TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrTabletBase::TMetrics& metrics);
 NKikimrTabletBase::TMetrics MetricsFromResourceRawValues(const TResourceRawValues& values);
 TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrHive::TTabletMetrics& tabletMetrics);
@@ -183,6 +159,7 @@ protected:
     friend class TDrainNodeWaitActor;
 
     friend class TTxInitScheme;
+    friend class TTxDeleteBase;
     friend class TTxDeleteTablet;
     friend class TTxDeleteOwnerTablets;
     friend class TTxReassignGroups;
@@ -402,6 +379,7 @@ protected:
     };
 
     std::unordered_map<std::pair<ui64, ui64>, TPendingCreateTablet> PendingCreateTablets;
+    std::deque<THolder<IEventHandle>> PendingOperations;
 
     ui64 UpdateTabletMetricsInProgress = 0;
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
@@ -424,6 +402,7 @@ protected:
     std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit> TabletLimit; // built from CurrentConfig
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_set<TDataCenterId> RegisteredDataCenterIds;
+    std::unordered_set<TNodeId> ConnectedNodes;
 
     // to be removed later
     bool TabletOwnersSynced = false;
@@ -622,7 +601,7 @@ public:
     void KickTablet(const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
-    void RunProcessBootQueue();
+    void ExecuteProcessBootQueue(TCompleteNotifications& notifications);
 
     TTabletMetricsAggregates DefaultResourceMetricsAggregates;
     ui64 MetricsWindowSize = TDuration::Minutes(1).MilliSeconds();
@@ -772,6 +751,7 @@ public:
 protected:
     void ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event);
     void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet);
+    void DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects);
     void ScheduleUnlockTabletExecution(TNodeInfo& node);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;

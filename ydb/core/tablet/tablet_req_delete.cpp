@@ -20,7 +20,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
     };
 
     const TActorId Owner;
-    TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
+    ui64 TabletId;
     TVector<TRequestInfo> Requests;
     ui32 FinishedRequests;
     ui32 ErrorCount;
@@ -30,23 +30,25 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
         if (status == NKikimrProto::OK) {
             const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(
-                         TabletStorageInfo->TabletID,
+                         TabletId,
                          0,
                          NKikimrWhiteboard::TTabletStateInfo::Deleted,
                          std::numeric_limits<ui32>::max()),
                          true);
             // TODO(xenoxeno): broadcast message to more/all nodes ... maybe?
         }
-        ctx.Send(Owner, new TEvTabletBase::TEvDeleteTabletResult(status, TabletStorageInfo->TabletID));
+        ctx.Send(Owner, new TEvTabletBase::TEvDeleteTabletResult(status, TabletId));
         Die(ctx);
     }
 
-    void GenerateRequests() {
+    void GenerateRequests(const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo) {
         THashSet<std::pair<ui32, ui32>> groupChannels;
-        for (const TTabletChannelInfo& channelInfo : TabletStorageInfo->Channels) {
+        for (const TTabletChannelInfo& channelInfo : tabletStorageInfo->Channels) {
             for (const TTabletChannelInfo::THistoryEntry& historyInfo : channelInfo.History) {
-                if (groupChannels.emplace(historyInfo.GroupID, channelInfo.Channel).second) {
-                    Requests.emplace_back(historyInfo.GroupID, channelInfo.Channel);
+                if (historyInfo.FromGeneration <= Generation) {
+                    if (groupChannels.emplace(historyInfo.GroupID, channelInfo.Channel).second) {
+                        Requests.emplace_back(historyInfo.GroupID, channelInfo.Channel);
+                    }
                 }
             }
         }
@@ -58,7 +60,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
         const ui32 recordGeneration = total ? Generation : Generation + 1;
         const ui32 perGenerationCounter = total ? Max<ui32>() : 0;
         auto event = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(
-                    TabletStorageInfo->TabletID,      // tabletId
+                    TabletId,                         // tabletId
                     recordGeneration,                 // recordGeneration
                     perGenerationCounter,             // perGenerationCounter
                     info.Channel,                     // channel
@@ -82,9 +84,9 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
             ++FinishedRequests;
             if (FinishedRequests >= Requests.size()) {
                 if (Generation == std::numeric_limits<ui32>::max()) {
-                    ui64 StateStorageId = StateStorageGroupFromTabletID(TabletStorageInfo->TabletID);
+                    ui64 StateStorageId = StateStorageGroupFromTabletID(TabletId);
                     const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId);
-                    ctx.Send(proxyActorID, new TEvStateStorage::TEvDelete(TabletStorageInfo->TabletID));
+                    ctx.Send(proxyActorID, new TEvStateStorage::TEvDelete(TabletId));
                 }
 
                 ReplyAndDie(NKikimrProto::OK, ctx);
@@ -119,14 +121,15 @@ public:
 
     TTabletReqDelete(const TActorId &owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 generation = std::numeric_limits<ui32>::max())
         : Owner(owner)
-        , TabletStorageInfo(tabletStorageInfo)
+        , TabletId(tabletStorageInfo->TabletID)
         , FinishedRequests(0)
         , ErrorCount(0)
         , Generation(generation)
-    {}
+    {
+        GenerateRequests(tabletStorageInfo);
+    }
 
     void Bootstrap(const TActorContext& ctx) {
-        GenerateRequests();
         for (std::size_t i = 0; i < Requests.size(); ++i) {
             SendRequest(i, ctx);
         }

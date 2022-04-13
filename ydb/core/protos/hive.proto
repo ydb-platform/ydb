@@ -258,6 +258,7 @@ message TEvRequestHiveInfo {
     optional bool ReturnFollowers = 3;
     optional uint32 FollowerID = 4;
     optional bool ReturnMetrics = 5;
+    optional bool ReturnChannelHistory = 6;
 }
 
 message TEvResponseHiveInfo {

@@ -8,6 +8,7 @@ class TTxRestartTablet : public TTransactionBase<THive> {
 protected:
     TFullTabletId TabletId;
     TNodeId PreferredNodeId;
+    TSideEffects SideEffects;
 public:
     TTxRestartTablet(TFullTabletId tabletId, THive *hive)
         : TBase(hive)
@@ -24,9 +25,10 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_RESTART_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
+        SideEffects.Reset(Self->SelfId());
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
-            if (PreferredNodeId != 0) {
+            if (PreferredNodeId == 0) {
                 BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << ")::Execute");
             } else {
                 BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << " to node " << PreferredNodeId << ")::Execute");
@@ -40,7 +42,7 @@ public:
                         db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
-                tablet->InitiateStop();
+                tablet->InitiateStop(SideEffects);
             }
             tablet->PreferredNodeId = PreferredNodeId;
             tablet->GetLeader().TryToBoot();
@@ -48,8 +50,9 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxRestartTablet(" << TabletId << ")::Complete");
+    void Complete(const TActorContext& ctx) override {
+        BLOG_D("THive::TTxRestartTablet(" << TabletId << ")::Complete SideEffects: " << SideEffects);
+        SideEffects.Complete(ctx);
     }
 };
 

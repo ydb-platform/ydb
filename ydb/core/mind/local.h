@@ -173,10 +173,11 @@ struct TEvLocal {
         TEvStopTablet()
         {}
 
-        TEvStopTablet(std::pair<ui64, ui32> tabletId)
+        TEvStopTablet(std::pair<ui64, ui32> tabletId, ui32 generation = 0)
         {
             Record.SetTabletId(tabletId.first);
             Record.SetFollowerId(tabletId.second);
+            Record.SetGeneration(generation);
         }
     };
 

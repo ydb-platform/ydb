@@ -8,10 +8,11 @@ namespace NKikimr {
 constexpr ui32 MAX_ATTEMPTS = 3;
 
 class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBlockBlobStorageGroup> {
-    const TActorId Owner;
-    const ui64 TabletId;
-    const ui32 GroupId;
-    const ui32 Generation;
+public:
+    TActorId Owner;
+    ui64 TabletId;
+    ui32 GroupId;
+    ui32 Generation;
     ui32 ErrorCount;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
@@ -69,9 +70,8 @@ public:
         Become(&TThis::StateWait);
     }
 
-    TTabletReqBlockBlobStorageGroup(const TActorId &owner, ui64 tabletId, ui32 groupId, ui32 gen)
-        : Owner(owner)
-        , TabletId(tabletId)
+    TTabletReqBlockBlobStorageGroup(ui64 tabletId, ui32 groupId, ui32 gen)
+        : TabletId(tabletId)
         , GroupId(groupId)
         , Generation(gen)
         , ErrorCount(0)
@@ -79,12 +79,11 @@ public:
 };
 
 class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlobStorage> {
-    const TActorId Owner;
-    TIntrusiveConstPtr<TTabletStorageInfo> Info;
-    const ui32 Generation;
-    const bool BlockPrevEntry;
-
+    TActorId Owner;
+    ui64 TabletId;
+    ui32 Generation;
     ui32 Replied = 0;
+    TVector<THolder<TTabletReqBlockBlobStorageGroup>> Requests;
     TVector<TActorId> ReqActors;
 
     void PassAway() override {
@@ -96,7 +95,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
-        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, Info->TabletID, reason));
+        Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason));
         PassAway();
     }
 
@@ -116,35 +115,50 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
         }
     }
 public:
-    TTabletReqBlockBlobStorage(TActorId owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry)
+    TTabletReqBlockBlobStorage(TActorId owner, TTabletStorageInfo* info, ui32 generation, bool blockPrevEntry)
         : Owner(owner)
-        , Info(info)
+        , TabletId(info->TabletID)
         , Generation(generation)
-        , BlockPrevEntry(blockPrevEntry)
-    {}
+    {
+        std::unordered_set<ui32> blocked;
+        Requests.reserve(blockPrevEntry ? info->Channels.size() * 2 : info->Channels.size());
+        for (auto& channel : info->Channels) {
+            if (channel.History.empty()) {
+                continue;
+            }
+            auto itEntry = channel.History.rbegin();
+            while (itEntry != channel.History.rend() && itEntry->FromGeneration > generation) {
+                ++itEntry;
+            }
+            if (itEntry == channel.History.rend()) {
+                continue;
+            }
+            if (blocked.insert(itEntry->GroupID).second) {
+                Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation));
+            }
+
+            if (blockPrevEntry) {
+                ++itEntry;
+                if (itEntry == channel.History.rend()) {
+                    continue;
+                }
+                if (blocked.insert(itEntry->GroupID).second) {
+                    Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation));
+                }
+            }
+        }
+    }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_REQ_BLOCK_BS;
     }
 
     void Bootstrap() {
-        TSet<ui32> blocked;
-
-        const ui64 tabletId = Info->TabletID;
-        ReqActors.reserve(Info->Channels.size());
-        for (auto &x : Info->Channels) {
-            if (auto *g = x.LatestEntry()) {
-                if (blocked.insert(g->GroupID).second)
-                    ReqActors.push_back(RegisterWithSameMailbox(new TTabletReqBlockBlobStorageGroup(SelfId(), tabletId, g->GroupID, Generation)));
-            }
-
-            if (BlockPrevEntry) {
-                if (auto *pg = x.PreviousEntry())
-                    if (blocked.insert(pg->GroupID).second)
-                        ReqActors.push_back(RegisterWithSameMailbox(new TTabletReqBlockBlobStorageGroup(SelfId(), tabletId, pg->GroupID, Generation)));
-            }
+        ReqActors.reserve(Requests.size());
+        for (auto& req : Requests) {
+            req->Owner = SelfId();
+            ReqActors.push_back(RegisterWithSameMailbox(req.Release()));
         }
-
         Become(&TThis::StateWait);
     }
 
@@ -157,7 +171,7 @@ public:
     }
 };
 
-IActor* CreateTabletReqBlockBlobStorage(const TActorId &owner, TTabletStorageInfo *info, ui32 generation, bool blockPrevEntry) {
+IActor* CreateTabletReqBlockBlobStorage(const TActorId& owner, TTabletStorageInfo* info, ui32 generation, bool blockPrevEntry) {
     return new TTabletReqBlockBlobStorage(owner, info, generation, blockPrevEntry);
 }
 

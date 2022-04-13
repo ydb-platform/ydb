@@ -1,7 +1,14 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <util/stream/null.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include "storage_pool_info.h"
+
+#ifdef NDEBUG
+#define Ctest Cnull
+#else
+#define Ctest Cerr
+#endif
 
 using namespace NKikimr;
 using namespace NHive;
@@ -115,29 +122,29 @@ Y_UNIT_TEST_SUITE(StoragePool) {
 
 #ifndef _NDEBUG
         auto avg = GetAvg(groupUnits);
-        Cerr << "avg = " << avg << Endl;
+        Ctest << "avg = " << avg << Endl;
 
         auto min = GetMin(groupUnits);
-        Cerr << "min = " << min << Endl;
+        Ctest << "min = " << min << Endl;
 
         auto max = GetMax(groupUnits);
-        Cerr << "max = " << max << Endl;
+        Ctest << "max = " << max << Endl;
 
         auto stdDev = GetStdDev(groupUnits);
-        Cerr << "std-dev = " << stdDev << Endl;
+        Ctest << "std-dev = " << stdDev << Endl;
 
         for (int i = 0; i < CHANNELS; ++i) {
             auto avg = GetAvg(groupChannels[i]);
-            Cerr << "ch." << i << " avg = " << avg << Endl;
+            Ctest << "ch." << i << " avg = " << avg << Endl;
 
             auto min = GetMin(groupChannels[i]);
-            Cerr << "ch." << i << " min = " << min << Endl;
+            Ctest << "ch." << i << " min = " << min << Endl;
 
             auto max = GetMax(groupChannels[i]);
-            Cerr << "ch." << i << " max = " << max << Endl;
+            Ctest << "ch." << i << " max = " << max << Endl;
 
             auto stdDev = GetStdDev(groupChannels[i]);
-            Cerr << "ch." << i << " std-dev = " << stdDev << Endl;
+            Ctest << "ch." << i << " std-dev = " << stdDev << Endl;
         }
 #endif
 
@@ -183,11 +190,11 @@ Y_UNIT_TEST_SUITE(StoragePool) {
 
 #ifndef _NDEBUG
         auto avg = GetAvg(groupUnits);
-        Cerr << "avg = " << avg << Endl;
+        Ctest << "avg = " << avg << Endl;
 
 
         auto stdDev = GetStdDev(groupUnits);
-        Cerr << "std-dev = " << stdDev << Endl;
+        Ctest << "std-dev = " << stdDev << Endl;
 #endif
 
         UNIT_ASSERT_VALUES_EQUAL(round(GetAvg(groupUnits)), 1250);

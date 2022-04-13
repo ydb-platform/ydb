@@ -78,6 +78,83 @@ struct ISubActor {
     virtual void Cleanup() = 0;
 };
 
+
+struct TCompleteNotifications {
+    TVector<std::pair<THolder<IEventHandle>, TDuration>> Notifications;
+    TActorId SelfID;
+
+    void Reset(const TActorId& selfId) {
+        Notifications.clear();
+        SelfID = selfId;
+    }
+
+    void Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
+        Y_VERIFY(!!SelfID);
+        Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie), TDuration());
+    }
+
+    void Schedule(TDuration duration, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
+        Y_VERIFY(!!SelfID);
+        Notifications.emplace_back(new IEventHandle(SelfID, {}, ev, flags, cookie), duration);
+    }
+
+    size_t size() const {
+        return Notifications.size();
+    }
+
+    void Send(const TActorContext& ctx) {
+        for (auto& [notification, duration] : Notifications) {
+            if (duration) {
+                ctx.ExecutorThread.Schedule(duration, notification.Release());
+            } else {
+                ctx.ExecutorThread.Send(notification.Release());
+            }
+        }
+        Notifications.clear();
+    }
+};
+
+struct TCompleteActions {
+    std::vector<std::unique_ptr<IActor>> Actors;
+    std::vector<std::function<void()>> Callbacks;
+
+    void Reset() {
+        Actors.clear();
+        Callbacks.clear();
+    }
+
+    void Register(IActor* actor) {
+        Actors.emplace_back(actor);
+    }
+
+    void Callback(std::function<void()> callback) {
+        Callbacks.emplace_back(std::move(callback));
+    }
+
+    void Run(const TActorContext& ctx) {
+        for (auto& callback : Callbacks) {
+            callback();
+        }
+        Callbacks.clear();
+        for (auto& actor : Actors) {
+            ctx.Register(actor.release());
+        }
+        Actors.clear();
+    }
+};
+
+struct TSideEffects : TCompleteNotifications, TCompleteActions {
+    void Reset(const TActorId& selfId) {
+        TCompleteActions::Reset();
+        TCompleteNotifications::Reset(selfId);
+    }
+
+    void Complete(const TActorContext& ctx) {
+        TCompleteActions::Run(ctx);
+        TCompleteNotifications::Send(ctx);
+    }
+};
+
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, const TResourceRawValues& maximum);
 
@@ -146,3 +223,46 @@ struct TDrainSettings {
 
 } // NHive
 } // NKikimr
+
+template <>
+inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const NKikimr::NHive::TCompleteNotifications& n) {
+    if (!n.Notifications.empty()) {
+        o << "Notifications: ";
+        for (auto it = n.Notifications.begin(); it != n.Notifications.end(); ++it) {
+            if (it != n.Notifications.begin()) {
+                o << ',';
+            }
+            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient;
+        }
+    }
+}
+
+template <>
+inline void Out<NKikimr::NHive::TCompleteActions>(IOutputStream& o, const NKikimr::NHive::TCompleteActions& n) {
+    if (!n.Callbacks.empty()) {
+        o << "Callbacks: " << n.Callbacks.size();
+    }
+    if (!n.Actors.empty()) {
+        if (!n.Callbacks.empty()) {
+            o << ' ';
+        }
+        o << "Actions: ";
+        for (auto it = n.Actors.begin(); it != n.Actors.end(); ++it) {
+            if (it != n.Actors.begin()) {
+                o << '.';
+            }
+            o << TypeName(*(it->get()));
+        }
+    }
+}
+
+template <>
+inline void Out<NKikimr::NHive::TSideEffects>(IOutputStream& o, const NKikimr::NHive::TSideEffects& e) {
+    o << '{';
+    o << static_cast<const NKikimr::NHive::TCompleteNotifications&>(e);
+    if (!e.Notifications.empty() && !e.Actors.empty()) {
+        o << ' ';
+    }
+    o << static_cast<const NKikimr::NHive::TCompleteActions&>(e);
+    o << '}';
+}

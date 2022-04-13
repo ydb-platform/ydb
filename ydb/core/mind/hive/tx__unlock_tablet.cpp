@@ -12,8 +12,7 @@ class TTxUnlockTabletExecution : public TTransactionBase<THive> {
     const TActorId Sender;
     const ui64 Cookie;
 
-    NKikimrProto::EReplyStatus Status;
-    TString StatusMessage;
+    TSideEffects SideEffects;
     TActorId PreviousOwner;
 
 public:
@@ -38,27 +37,25 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxUnlockTabletExecution::Execute");
-
+        BLOG_D("THive::TTxUnlockTabletExecution::Execute TabletId: " << TabletId);
+        SideEffects.Reset(Self->SelfId());
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet == nullptr) {
-            Status = NKikimrProto::ERROR;
-            StatusMessage = TStringBuilder() << "Trying to unlock tablet " << TabletId
-                    << ", which doesn't exist";
+            SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
+                TStringBuilder() << "Trying to unlock tablet " << TabletId << ", which doesn't exist"), 0, Cookie);
             return true;
         }
 
         if (OwnerActor && tablet->LockedToActor != OwnerActor) {
-            Status = NKikimrProto::ERROR;
-            StatusMessage = TStringBuilder() << "Trying to unlock tablet " << TabletId
-                    << ", which is locked to " << tablet->LockedToActor << ", not " << OwnerActor;
+            SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
+                TStringBuilder() << "Trying to unlock tablet " << TabletId
+                << ", which is locked to " << tablet->LockedToActor << ", not " << OwnerActor), 0, Cookie);
             return true;
         }
 
         if (SeqNo && tablet->PendingUnlockSeqNo != SeqNo) {
-            Status = NKikimrProto::ERROR;
-            StatusMessage = TStringBuilder() << "Trying to unlock tablet " << TabletId
-                    << ", which is out of sequence";
+            SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::ERROR,
+                TStringBuilder() << "Trying to unlock tablet " << TabletId << ", which is out of sequence"), 0, Cookie);
             return true;
         }
 
@@ -71,32 +68,22 @@ public:
             NIceDb::TUpdate<Schema::Tablet::LockedToActor>(tablet->LockedToActor),
             NIceDb::TUpdate<Schema::Tablet::LockedReconnectTimeout>(tablet->LockedReconnectTimeout.MilliSeconds()));
 
-        Status = NKikimrProto::OK;
+        if (PreviousOwner) {
+            // Notify previous owner that its lock ownership has been lost
+            SideEffects.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+        }
+
+        if (!tablet->IsLockedToActor()) {
+            // Try to boot it if possible
+            tablet->TryToBoot();
+        }
+        SideEffects.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, NKikimrProto::OK, {}), 0, Cookie);
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUnlockTabletExecution::Complete TabletId: " << TabletId
-                << " Status: " << Status << " " << StatusMessage);
-
-        if (Status == NKikimrProto::OK) {
-            if (PreviousOwner) {
-                // Notify previous owner that its lock ownership has been lost
-                ctx.Send(PreviousOwner, new TEvHive::TEvLockTabletExecutionLost(TabletId));
-            }
-
-            if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) {
-                // Tablet still exists by the time transaction finished
-                if (!tablet->IsLockedToActor()) {
-                    // Try to boot it if possible
-                    tablet->TryToBoot();
-                }
-            }
-        }
-
-        if (Sender) {
-            ctx.Send(Sender, new TEvHive::TEvUnlockTabletExecutionResult(TabletId, Status, StatusMessage), 0, Cookie);
-        }
+        BLOG_D("THive::TTxUnlockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        SideEffects.Complete(ctx);
     }
 
 private:

@@ -36,6 +36,10 @@ public:
                 Self->UpdateRegisteredDataCenters(node.Location.GetDataCenterId());
             }
             Self->ProcessWaitQueue(); // new node connected
+            if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
+                BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete - continuing node drain");
+                Self->StartHiveDrain(nodeId, {.Persist = true, .KeepDown = node.Down});
+            }
         } else {
             BLOG_W("THive::TTxStatus(status=" << static_cast<int>(status)
                    << " node=" << TNodeInfo::EVolatileStateName(node.GetVolatileState()) << ") - killing node " << node.Id);
@@ -47,13 +51,6 @@ public:
     void Complete(const TActorContext&) override {
         TNodeId nodeId = Local.NodeId();
         BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete");
-        TNodeInfo* node = Self->FindNode(nodeId);
-        if (node != nullptr && node->IsAlive()) {
-            if (node->Drain && Self->BalancerNodes.count(nodeId) == 0) {
-                BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete - continuing node drain");
-                Self->StartHiveDrain(nodeId, {.Persist = true, .KeepDown = node->Down});
-            }
-        }
     }
 };
 

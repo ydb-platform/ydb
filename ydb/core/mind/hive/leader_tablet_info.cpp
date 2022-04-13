@@ -84,18 +84,18 @@ bool TLeaderTabletInfo::InitiateAssignTabletGroups() {
     return true;
 }
 
-bool TLeaderTabletInfo::InitiateBlockStorage() {
+bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects) {
     // attempt to kill tablet before blocking the storage group
-    Kill();
+    Kill(sideEffects);
     // blocks PREVIOUS entry of tablet history
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), KnownGeneration, true);
-    Hive.Register(x);
+    sideEffects.Register(x);
     return true;
 }
 
-bool TLeaderTabletInfo::InitiateBlockStorage(ui32 generation) {
+bool TLeaderTabletInfo::InitiateBlockStorage(TSideEffects& sideEffects, ui32 generation) {
     // attempt to kill tablet before blocking the storage group
-    Kill();
+    Kill(sideEffects);
     // blocks LATEST entry of tablet history
     const TTabletChannelInfo* channel = TabletStorageInfo->ChannelInfo(0);
     if (IsDeleting() && channel == nullptr) {
@@ -103,13 +103,13 @@ bool TLeaderTabletInfo::InitiateBlockStorage(ui32 generation) {
     }
     Y_VERIFY(channel != nullptr && !channel->History.empty());
     IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), generation, false);
-    Hive.Register(x);
+    sideEffects.Register(x);
     return true;
 }
 
-bool TLeaderTabletInfo::InitiateDeleteStorage() {
+bool TLeaderTabletInfo::InitiateDeleteStorage(TSideEffects& sideEffects) {
     IActor* x = CreateTabletReqDelete(Hive.SelfId(), TabletStorageInfo);
-    Hive.Register(x);
+    sideEffects.Register(x);
     return true;
 }
 

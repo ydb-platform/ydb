@@ -8,6 +8,7 @@ class TTxKillNode : public TTransactionBase<THive> {
 protected:
     TNodeId NodeId;
     TActorId Local;
+    TSideEffects SideEffects;
 public:
     TTxKillNode(TNodeId nodeId, const TActorId& local, THive *hive)
         : TBase(hive)
@@ -19,6 +20,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxKillNode(" << NodeId << ")::Execute");
+        SideEffects.Reset(Self->SelfId());
         TInstant now = TInstant::Now();
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
@@ -43,7 +45,7 @@ public:
             node->BecomeDisconnected();
             for (const TActorId& pipeServer : node->PipeServers) {
                 BLOG_TRACE("THive::TTxKillNode - killing pipe server " << pipeServer);
-                Self->Send(pipeServer, new TEvents::TEvPoisonPill());
+                SideEffects.Send(pipeServer, new TEvents::TEvPoisonPill());
             }
             node->PipeServers.clear();
             if (node->CanBeDeleted()) {
@@ -56,8 +58,9 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
+    void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxKillNode(" << NodeId << ")::Complete");
+        SideEffects.Complete(ctx);
         if (Local) {
             TNodeInfo* node = Self->FindNode(Local.NodeId());
             if (node == nullptr || node->IsDisconnected()) {

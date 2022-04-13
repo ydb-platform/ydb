@@ -195,12 +195,26 @@ bool TTabletInfo::InitiateBoot() {
     }
 }
 
-bool TTabletInfo::InitiateStop() {
+TActorId TTabletInfo::GetLocal() const {
     TActorId local;
+    TNodeInfo* node = GetNode();
+    if (node != nullptr) {
+        local = node->Local;
+    }
+    return local;
+}
+
+TNodeInfo* TTabletInfo::GetNode() const {
     TNodeInfo* node = Node;
     if (node == nullptr && NodeId != 0) {
         node = Hive.FindNode(NodeId);
     }
+    return node;
+}
+
+bool TTabletInfo::InitiateStop(TSideEffects& sideEffects) {
+    TNodeInfo* node = GetNode();
+    TActorId local;
     if (node != nullptr) {
         local = node->Local;
     }
@@ -209,13 +223,13 @@ bool TTabletInfo::InitiateStop() {
             // we only do it when we have PreferredNodeId, which means that we are moving from one node to another
             LastNodeId = node->Id;
         } else {
-            SendStopTablet(local, GetFullTabletId());
+            SendStopTablet(local, sideEffects);
             LastNodeId = 0;
         }
         if (IsLeader()) {
             for (TFollowerTabletInfo& follower : AsLeader().Followers) {
                 if (follower.FollowerGroup.LocalNodeOnly) {
-                    follower.InitiateStop();
+                    follower.InitiateStop(sideEffects);
                 }
             }
         }
@@ -289,20 +303,6 @@ bool TTabletInfo::Kick() {
         return true;
     } else {
         return false;
-    }
-}
-
-void TTabletInfo::Kill() {
-    TActorId local;
-    TNodeInfo* node = Node;
-    if (node == nullptr && NodeId != 0) {
-        node = Hive.FindNode(NodeId);
-    }
-    if (node != nullptr) {
-        local = node->Local;
-    }
-    if (local) {
-        Hive.StopTablet(local, *this);
     }
 }
 
@@ -458,9 +458,22 @@ bool TTabletInfo::InitiateStart(TNodeInfo* node) {
     return false;
 }
 
-void TTabletInfo::SendStopTablet(const TActorId& local, TFullTabletId tabletId) {
+void TTabletInfo::SendStopTablet(TSideEffects& sideEffects) {
+    TActorId local = GetLocal();
     if (local) {
-        Hive.StopTablet(local, tabletId);
+        SendStopTablet(local, sideEffects);
+    }
+}
+
+void TTabletInfo::SendStopTablet(const TActorId& local, TSideEffects& sideEffects) {
+    if (local) {
+        TFullTabletId tabletId = GetFullTabletId();
+        ui32 gen = 0;
+        if (IsLeader()) {
+            gen = AsLeader().KnownGeneration;
+        }
+        BLOG_D("Sending TEvStopTablet(" << ToString() << " gen " << gen << ") to node " << local.NodeId());
+        sideEffects.Send(local, new TEvLocal::TEvStopTablet(tabletId, gen));
     }
 }
 

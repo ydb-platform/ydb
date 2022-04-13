@@ -5,9 +5,6 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxProcessPendingOperations : public TTransactionBase<THive> {
-protected:
-    std::deque<THolder<IEventHandle>> Events;
-
 public:
     TTxProcessPendingOperations(THive *hive)
         : TBase(hive)
@@ -20,17 +17,18 @@ public:
         for (auto& [owner, pendingCreateTablet] : Self->PendingCreateTablets) {
             THolder<TEvHive::TEvCreateTablet> evCreateTablet(new TEvHive::TEvCreateTablet());
             evCreateTablet->Record = pendingCreateTablet.CreateTablet;
-            Events.emplace_back(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
+            BLOG_D("THive::TTxProcessPendingOperations(): retry CreateTablet");
+            TlsActivationContext->Send(new IEventHandle(Self->SelfId(), pendingCreateTablet.Sender, evCreateTablet.Release(), 0, pendingCreateTablet.Cookie));
         }
+        for (auto& handle : Self->PendingOperations) {
+            TlsActivationContext->Send(handle);
+        }
+        Self->PendingOperations.clear();
         return true;
     }
 
     void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxProcessPendingOperations()::Complete");
-        for (THolder<IEventHandle>& event : Events) {
-            BLOG_D("THive::TTxProcessPendingOperations(): retry event " << event->Type);
-            TlsActivationContext->Send(event.Release());
-        }
     }
 };
 

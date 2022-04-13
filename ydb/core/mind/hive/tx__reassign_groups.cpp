@@ -9,7 +9,6 @@ protected:
     TTabletId TabletId;
     TActorId Sender;
     std::bitset<MAX_TABLET_CHANNELS> ChannelProfileNewGroup;
-    bool InitiatedReassignTablet = false;
 
 public:
     TTxReassignGroups(TTabletId tabletId,
@@ -45,7 +44,7 @@ public:
                         db.Table<Schema::TabletChannel>().Key(TabletId, channelId).Update(NIceDb::TUpdate<Schema::TabletChannel::NeedNewGroup>(true));
                     }
                 }
-                InitiatedReassignTablet = true;
+                tablet->InitiateAssignTabletGroups();
             } else {
                 BLOG_W("THive::TTxReassignGroups(" << tablet->Id << ")::Execute - tablet is not ready for group reassignment");
             }
@@ -55,16 +54,6 @@ public:
 
     void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxReassignGroups(" << TabletId << ")::Complete");
-        if (InitiatedReassignTablet) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-            if (tablet != nullptr) {
-                if (tablet->IsReadyToAssignGroups()) {
-                    tablet->InitiateAssignTabletGroups();
-                } else {
-                    BLOG_W("THive::TTxReassignGroups(" << tablet->Id << ")::Complete - tablet is not ready for group reassignment");
-                }
-            }
-        }
     }
 };
 

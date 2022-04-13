@@ -481,17 +481,20 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         const NKikimrLocal::TEvStopTablet &record = ev->Get()->Record;
         Y_VERIFY(record.HasTabletId());
         TTabletId tabletId(record.GetTabletId(), record.GetFollowerId());
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvStopTablet TabletId:" << tabletId);
+        ui32 generation(record.GetGeneration());
+        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvStopTablet TabletId:" << tabletId << " Generation:" << generation);
 
         auto onlineTabletIt = OnlineTablets.find(tabletId);
         if (onlineTabletIt != OnlineTablets.end()) {
-            // Provide/check generation here
-            ctx.Send(onlineTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
+            if (generation == 0 || onlineTabletIt->second.Generation <= generation) {
+                ctx.Send(onlineTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
+            }
         } else {
             auto inbootTabletIt = InbootTablets.find(tabletId);
             if (inbootTabletIt != InbootTablets.end()) {
-                // Provide/check generation here
-                ctx.Send(inbootTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
+                if (generation == 0 || onlineTabletIt->second.Generation <= generation) {
+                    ctx.Send(inbootTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
+                }
             }
         }
     }

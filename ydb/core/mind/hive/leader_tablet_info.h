@@ -110,7 +110,7 @@ public:
     }
 
     bool IsSomeoneAliveOnNode(TNodeId nodeId) const;
-    
+
     bool IsLockedToActor() const {
         return !!LockedToActor;
     }
@@ -194,16 +194,16 @@ public:
         return result;
     }
 
-    void Kill() {
+    void Kill(TSideEffects& sideEffects) {
         for (TFollowerTabletInfo& follower : Followers) {
-            follower.Kill();
+            follower.SendStopTablet(sideEffects);
         }
-        TTabletInfo::Kill();
+        TTabletInfo::SendStopTablet(sideEffects);
     }
 
-    bool InitiateBlockStorage();
-    bool InitiateBlockStorage(ui32 generation);
-    bool InitiateDeleteStorage();
+    bool InitiateBlockStorage(TSideEffects& sideEffects);
+    bool InitiateBlockStorage(TSideEffects& sideEffects, ui32 generation);
+    bool InitiateDeleteStorage(TSideEffects& sideEffects);
 
     void IncreaseGeneration() {
         Y_VERIFY(KnownGeneration < Max<ui32>());
@@ -279,11 +279,11 @@ public:
         return *it;
     }
 
-    void NotifyStorageInfo(const TActorContext& ctx) {
+    void NotifyStorageInfo(TCompleteNotifications& notifications) {
         TVector<TActorId> targets;
         targets.swap(StorageInfoSubscribers);
         for (TActorId target : targets) {
-            ctx.Send(target, new TEvHive::TEvGetTabletStorageInfoResult(Id, *TabletStorageInfo));
+            notifications.Send(target, new TEvHive::TEvGetTabletStorageInfoResult(Id, *TabletStorageInfo));
         }
     }
 
@@ -294,7 +294,7 @@ public:
     }
 
     void ActualizeTabletStatistics(TInstant now);
-    
+
     void ResetTabletGroupsRequests() {
         ChannelProfileNewGroup.reset();
     }

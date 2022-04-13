@@ -5,85 +5,84 @@ namespace NKikimr {
 namespace NHive {
 
 class TTxStopTablet : public TTransactionBase<THive> {
-    const TTabletId TabletId;
-    const TActorId ActorToNotify;
-    NKikimrProto::EReplyStatus Status;
+    TTabletId TabletId;
+    TActorId ActorToNotify;
+    TSideEffects SideEffects;
 
 public:
     TTxStopTablet(ui64 tabletId, const TActorId &actorToNotify, THive *hive)
         : TBase(hive)
         , TabletId(tabletId)
         , ActorToNotify(actorToNotify)
-        , Status(NKikimrProto::UNKNOWN)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_STOP_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId);
+        SideEffects.Reset(Self->SelfId());
+        NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
-            ETabletState State = tablet->State;
-            ETabletState NewState = State;
+            ETabletState state = tablet->State;
+            ETabletState newState = state;
             NIceDb::TNiceDb db(txc.DB);
-            switch (State) {
+            switch (state) {
             case ETabletState::GroupAssignment:
                 // switch to StoppingInGroupAssignment
-                NewState = ETabletState::StoppingInGroupAssignment;
-                Status = NKikimrProto::OK;
+                newState = ETabletState::StoppingInGroupAssignment;
+                status = NKikimrProto::OK;
                 // TODO: Notify of previous request failure
                 // TODO: Set new notification receiver
                 break;
             case ETabletState::Stopped:
                 // notify with OK
-                Status = NKikimrProto::ALREADY;
+                status = NKikimrProto::ALREADY;
                 break;
             case ETabletState::ReadyToWork:
                 // Switch to Stopping
-                NewState = ETabletState::Stopped;
+                newState = ETabletState::Stopped;
                 for (TTabletInfo& follower : tablet->Followers) {
                     if (follower.IsAlive()) {
-                        follower.InitiateStop();
+                        follower.InitiateStop(SideEffects);
                         db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
                 if (tablet->IsAlive()) {
-                    tablet->InitiateStop();
+                    tablet->InitiateStop(SideEffects);
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::LeaderNode>(0);
                 }
-                Status = NKikimrProto::OK;
+                status = NKikimrProto::OK;
                 break;
             case ETabletState::Deleting:
-                Status = NKikimrProto::ERROR;
+                status = NKikimrProto::ERROR;
                 break;
             case ETabletState::BlockStorage:
-                Status = NKikimrProto::ERROR;
+                status = NKikimrProto::ERROR;
                 break;
             case ETabletState::Stopping:
             case ETabletState::StoppingInGroupAssignment:
             case ETabletState::Unknown:
-                Status = NKikimrProto::ERROR;
+                status = NKikimrProto::ERROR;
                 break;
             }
-            if (Status == NKikimrProto::OK && NewState != State) {
-                db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(NewState);
-                tablet->State = NewState;
+            if (status == NKikimrProto::OK && newState != state) {
+                db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(newState);
+                tablet->State = newState;
             }
+            if (status != NKikimrProto::UNKNOWN) {
+                SideEffects.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
+                Self->ReportStoppedToWhiteboard(*tablet);
+                BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+            }
+            Self->ProcessBootQueue();
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxStopTablet::Complete TabletId: " << TabletId);
-        if (Status != NKikimrProto::UNKNOWN) {
-            ctx.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(Status, TabletId), 0, 0);
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-            if (tablet != nullptr) {
-                Self->ReportStoppedToWhiteboard(*tablet);
-                BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
-            }
-        }
-        Self->ProcessBootQueue();
+        SideEffects.Complete(ctx);
     }
 };
 

@@ -14,7 +14,6 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     const TActorId Sender;
     const ui64 Cookie;
 
-    NKikimrProto::EReplyStatus Status;
     NKikimrHive::EErrorReason ErrorReason;
     ui64 TabletId;
     TObjectId ObjectId;
@@ -25,11 +24,12 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     TVector<TDataCenterId> AllowedDataCenterIds;
     NKikimrHive::TDataCentersPreference DataCentersPreference;
     TVector<TSubDomainKey> AllowedDomains;
-    ETabletState State;
     NKikimrHive::TTabletCategory TabletCategory;
     TVector<NKikimrHive::TFollowerGroup> FollowerGroups;
     NKikimrHive::ETabletBootMode BootMode;
     NKikimrHive::TForwardRequest ForwardRequest;
+
+    TSideEffects SideEffects;
 
 public:
     TTxCreateTablet(NKikimrHive::TEvCreateTablet record, const TActorId& sender, const ui64 cookie, THive* hive)
@@ -42,13 +42,11 @@ public:
             StateStorageGroupFromTabletID(hive->TabletID()))
         , Sender(sender)
         , Cookie(cookie)
-        , Status(NKikimrProto::UNKNOWN)
         , TabletId(0)
         , ObjectId(0)
         , ObjectDomain(RequestData.GetObjectDomain())
         , BoundChannels(RequestData.GetBindedChannels().begin(), RequestData.GetBindedChannels().end())
         , AllowedDomains(RequestData.GetAllowedDomains().begin(), RequestData.GetAllowedDomains().end())
-        , State(ETabletState::Unknown)
         , BootMode(RequestData.GetTabletBootMode())
     {
         const ui32 allowedNodeIdsSize = RequestData.AllowedNodeIDsSize();
@@ -99,7 +97,7 @@ public:
         ObjectId = RequestData.GetObjectId();
     }
 
-    void UpdateChannelsBinding(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db) {
+    bool UpdateChannelsBinding(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db) {
         Y_VERIFY(tablet.BoundChannels.size() <= BoundChannels.size(), "only expansion channels number is allowed in Binded Channels");
 
         std::bitset<MAX_TABLET_CHANNELS> newChannels;
@@ -129,7 +127,7 @@ public:
 
         if (newChannels.any()) {
             tablet.ChannelProfileNewGroup |= newChannels;
-            tablet.State = State = ETabletState::GroupAssignment;
+            tablet.State = ETabletState::GroupAssignment;
             tablet.ChannelProfileReassignReason = NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
             tablet.BoundChannels = BoundChannels;
             for (auto& bind : tablet.BoundChannels) {
@@ -137,10 +135,11 @@ public:
             }
             db.Table<Schema::Tablet>().Key(TabletId)
                 .Update<Schema::Tablet::State, Schema::Tablet::ReassignReason, Schema::Tablet::ActorsToNotify>(
-                    State, NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO, {Sender}
+                    tablet.State, NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO, {Sender}
                     );
-            Status = NKikimrProto::OK; // otherwise it would be ALREADY
+            return true;
         }
+        return false;
     }
 
     bool ValidateChannelsBinding(TLeaderTabletInfo& tablet) {
@@ -151,11 +150,52 @@ public:
         return true;
     }
 
+    void PostponeCreateTablet() {
+        THive::TPendingCreateTablet& pendingCreateTablet(Self->PendingCreateTablets[{OwnerId, OwnerIdx}]);
+        pendingCreateTablet.CreateTablet = RequestData; // TODO: consider std::move
+        pendingCreateTablet.Sender = Sender;
+        pendingCreateTablet.Cookie = Cookie;
+    }
+
+    void RequestFreeSequence() {
+        if (Self->AreWeSubDomainHive()) {
+            if (!Self->RequestingSequenceNow) {
+                Self->RequestFreeSequence();
+            }
+        }
+    }
+
+    void ReplyToSender(NKikimrProto::EReplyStatus status) {
+        BLOG_D("THive::TTxCreateTablet::Execute TabletId: " << TabletId <<
+            " Status: " << NKikimrProto::EReplyStatus_Name(status));
+        Y_VERIFY(!!Sender);
+        THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
+        if (ForwardRequest.HasHiveTabletId()) {
+            reply->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
+        }
+        SideEffects.Send(Sender, reply.Release(), 0, Cookie);
+    }
+
+    void ProcessTablet(TLeaderTabletInfo& tablet) {
+        if (tablet.IsReadyToAssignGroups()) {
+            tablet.InitiateAssignTabletGroups();
+        } else if (tablet.IsBootingSuppressed()) {
+            // Tablet will never boot, so notify about creation right now
+            for (const TActorId& actor : tablet.ActorsToNotify) {
+                SideEffects.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
+            }
+            tablet.ActorsToNotify.clear();
+        } else {
+            tablet.TryToBoot();
+        }
+    }
+
     TTxType GetTxType() const override { return NHive::TXTYPE_CREATE_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxCreateTablet::Execute");
-        State = ETabletState::Unknown;
+        const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
+        BLOG_D("THive::TTxCreateTablet::Execute " << RequestData.ShortDebugString());
+        SideEffects.Reset(Self->SelfId());
         ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN;
         for (const auto& domain : AllowedDomains) {
             if (!Self->SeenDomain(domain)) {
@@ -168,13 +208,13 @@ public:
             }
         }
         if (Self->BlockedOwners.count(OwnerId) != 0) {
-            Status = NKikimrProto::BLOCKED;
             BLOG_W("THive::TTxCreateTablet::Execute Owner " << OwnerId << " is blocked");
+            ReplyToSender(NKikimrProto::BLOCKED);
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
-        // check if tablet is already created
-        const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
+        // check if tablet has already been created
+
         {
             auto itOwner = Self->OwnerToTablet.find(ownerIdx);
             if (itOwner != Self->OwnerToTablet.end()) { // tablet is already created
@@ -186,60 +226,37 @@ public:
                     TabletId = tabletId;
                     if (existingTabletType != TabletType || tablet->SeizedByChild) {
                         if (tablet->SeizedByChild) {
-                            BLOG_D("THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " seized by child - operation postponed");
-                            Status = NKikimrProto::UNKNOWN; // retry later
+                            BLOG_W("THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " seized by child - operation postponed");
+                            PostponeCreateTablet();
                         } else {
-                            Status = NKikimrProto::ERROR;
+                            BLOG_ERROR("THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has different type");
+                            ReplyToSender(NKikimrProto::ERROR);
                         }
-                    } else {
-                        Status = NKikimrProto::ALREADY;
-                    }
-                    if (Status == NKikimrProto::ALREADY) {
-                        if (BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
-                            // Make sure any running tablets are stopped
-                            for (TFollowerTabletInfo& follower : tablet->Followers) {
-                                follower.InitiateStop();
-                            }
-                            tablet->InitiateStop();
-                        }
-
-                        State = tablet->State;
-                        if (State == ETabletState::StoppingInGroupAssignment) {
-                            BLOG_D("THive::TTxCreateTablet::Execute TabletId: " << TabletId <<
-                                      " Status: " << (ui32)Status << " Stopping in group assignment");
-                            tablet->ActorsToNotify.push_back(Sender);
-                            tablet->BootMode = BootMode;
-                            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ActorsToNotify>(tablet->ActorsToNotify);
-                            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BootMode>(tablet->BootMode);
-                            if (tablet->State != ETabletState::GroupAssignment) {
-                                tablet->State = State = ETabletState::GroupAssignment;
-                                db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(State);
-                            }
-                            return true;
-                        } else if (State == ETabletState::Stopping || State == ETabletState::Stopped) {
-                            BLOG_D("THive::TTxCreateTablet::Execute TabletId: " << TabletId <<
-                                        " Status: " << (ui32)Status << " Stopping or Stopped");
-                            tablet->ActorsToNotify.push_back(Sender);
-                            tablet->BootMode = BootMode;
-                            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ActorsToNotify>(tablet->ActorsToNotify);
-                            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BootMode>(tablet->BootMode);
-                            if (tablet->State != ETabletState::ReadyToWork) {
-                                tablet->State = State = ETabletState::ReadyToWork;
-                                db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(State);
-                            }
-                            return true;
-                        }
-                    } else {
-                        BLOG_D("THive::TTxCreateTablet::Execute TabletId: " << TabletId << " Status: " << Status);
                         return true;
                     }
+                    BLOG_D("THive::TTxCreateTablet::Execute TabletId: " << TabletId << " State: " << ETabletStateName(tablet->State));
 
                     if (!ValidateChannelsBinding(*tablet)) {
-                        Status = NKikimrProto::ERROR;
+                        BLOG_ERROR("THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has invalid channel bindings");
+                        ReplyToSender(NKikimrProto::ERROR);
                         return true;
                     }
 
-                    db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(State);
+                    if (BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
+                        // Make sure any running tablets are stopped
+                        for (TFollowerTabletInfo& follower : tablet->Followers) {
+                            follower.InitiateStop(SideEffects);
+                        }
+                        tablet->InitiateStop(SideEffects);
+                    }
+
+                    if (tablet->State == ETabletState::StoppingInGroupAssignment) {
+                        tablet->State = ETabletState::GroupAssignment;
+                    } else if (tablet->State == ETabletState::Stopping || tablet->State == ETabletState::Stopped) {
+                        tablet->State = ETabletState::ReadyToWork;
+                    }
+
+                    db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(tablet->State);
                     tablet->ActorsToNotify.push_back(Sender);
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ActorsToNotify>(tablet->ActorsToNotify);
                     tablet->AllowedNodes = AllowedNodeIds;
@@ -287,19 +304,23 @@ public:
                         for (ui32 i = followerGroup.GetComputedFollowerCount(Self->GetDataCenters()); i < oldFollowerCount; ++i) {
                             TFollowerTabletInfo& follower = tablet->Followers.back();
                             db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Delete();
-                            follower.InitiateStop();
+                            follower.InitiateStop(SideEffects);
                             tablet->Followers.pop_back();
                         }
                         ++itFollowerGroup;
                     }
 
+                    ProcessTablet(*tablet);
+
+                    BLOG_D("THive::TTxCreateTablet::Execute Existing tablet " << tablet->ToString() << " has been successfully updated");
+                    ReplyToSender(NKikimrProto::OK);
                     return true;
                 }
             } else if (RequestData.HasTabletID()) {
                 TTabletId tabletId = RequestData.GetTabletID();
                 if (Self->CheckForForwardTabletRequest(tabletId, ForwardRequest)) {
                     TabletId = tabletId;
-                    Status = NKikimrProto::INVALID_OWNER; // actually this status from blob storage, but I think it fits this situation perfectly
+                    ReplyToSender(NKikimrProto::INVALID_OWNER); // actually this status from blob storage, but I think it fits this situation perfectly
                     return true; // abort transaction
                 }
             }
@@ -307,7 +328,8 @@ public:
 
         switch((TTabletTypes::EType)TabletType) {
         case TTabletTypes::BSController:
-            Status = NKikimrProto::ERROR;
+            BLOG_ERROR("THive::TTxCreateTablet::Execute Cannot create such tablet");
+            ReplyToSender(NKikimrProto::ERROR);
             return true;
         default:
             break;
@@ -316,7 +338,9 @@ public:
         std::vector<TSequencer::TOwnerType> modified;
         auto tabletIdIndex = Self->Sequencer.AllocateElement(modified);
         if (tabletIdIndex == TSequencer::NO_ELEMENT) {
-            Status = NKikimrProto::UNKNOWN;
+            BLOG_W("THive::TTxCreateTablet::Execute CreateTablet Postponed");
+            PostponeCreateTablet();
+            RequestFreeSequence();
             return true;
         } else {
             TabletId = MakeTabletID(AssignStateStorage, Self->HiveUid, tabletIdIndex);
@@ -338,13 +362,11 @@ public:
         TInstant now = TlsActivationContext->Now();
 
         // insert entry for new tablet
-        State = ETabletState::GroupAssignment;
-
         TLeaderTabletInfo& tablet = Self->GetTablet(TabletId);
         tablet.NodeId = 0;
         tablet.Type = (TTabletTypes::EType)TabletType;
         tablet.KnownGeneration = 0; // because we will increase it on start
-        tablet.State = State;
+        tablet.State = ETabletState::GroupAssignment;
         tablet.ActorsToNotify.push_back(Sender);
         tablet.AllowedNodes = AllowedNodeIds;
         tablet.Owner = ownerIdx;
@@ -456,56 +478,28 @@ public:
         Self->OwnerToTablet.emplace(ownerIdx, TabletId);
         Self->ObjectToTabletMetrics[tablet.ObjectId].IncreaseCount();
         Self->TabletTypeToTabletMetrics[tablet.Type].IncreaseCount();
-        Status = NKikimrProto::OK;
+
+        ReplyToSender(NKikimrProto::OK);
+
+        if (tablet.Type == TTabletTypes::Hive) {
+            auto itSubDomain = Self->Domains.find(tablet.ObjectDomain);
+            if (itSubDomain != Self->Domains.end()) {
+                if (itSubDomain->second.HiveId == 0) {
+                    itSubDomain->second.HiveId = tablet.Id;
+                }
+                Self->Execute(Self->CreateUpdateDomain(tablet.ObjectDomain));
+            }
+        }
+
+        ProcessTablet(tablet);
+
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (Status != NKikimrProto::UNKNOWN) {
-            BLOG_D("THive::TTxCreateTablet::Complete TabletId: " << TabletId <<
-                " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " State: " << ETabletStateName(State));
-            Y_VERIFY(!!Sender);
-            THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>(Status, OwnerId, OwnerIdx, TabletId, Self->TabletID(), ErrorReason);
-            if (ForwardRequest.HasHiveTabletId()) {
-                reply->Record.MutableForwardRequest()->CopyFrom(ForwardRequest);
-            }
-            ctx.Send(Sender, reply.Release(), 0, Cookie);
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-            if (tablet != nullptr) {
-                if (Status == NKikimrProto::OK && tablet->Type == TTabletTypes::Hive) {
-                    auto itSubDomain = Self->Domains.find(tablet->ObjectDomain);
-                    if (itSubDomain != Self->Domains.end()) {
-                        if (itSubDomain->second.HiveId == 0) {
-                            itSubDomain->second.HiveId = tablet->Id;
-                        }
-                        Self->Execute(Self->CreateUpdateDomain(tablet->ObjectDomain));
-                    }
-                }
-                if (Status == NKikimrProto::OK && tablet->IsReadyToAssignGroups()) {
-                    tablet->InitiateAssignTabletGroups();
-                } else if (Status == NKikimrProto::OK && tablet->IsBootingSuppressed()) {
-                    // Tablet will never boot, so notify about creation right now
-                    for (const TActorId& actor : tablet->ActorsToNotify) {
-                        ctx.Send(actor, new TEvHive::TEvTabletCreationResult(NKikimrProto::OK, TabletId));
-                    }
-                    tablet->ActorsToNotify.clear();
-                } else {
-                    tablet->TryToBoot();
-                }
-            }
-            Self->ProcessBootQueue();
-        } else {
-            BLOG_D("THive::TTxCreateTablet::Complete CreateTablet Postponed");
-            THive::TPendingCreateTablet& pendingCreateTablet(Self->PendingCreateTablets[{OwnerId, OwnerIdx}]);
-            pendingCreateTablet.CreateTablet = RequestData; // TODO: consider std::move
-            pendingCreateTablet.Sender = Sender;
-            pendingCreateTablet.Cookie = Cookie;
-            if (Self->AreWeSubDomainHive()) {
-                if (!Self->RequestingSequenceNow) {
-                    Self->RequestFreeSequence();
-                }
-            }
-        }
+        const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
+        BLOG_D("THive::TTxCreateTablet::Complete " << ownerIdx << " TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        SideEffects.Complete(ctx);
     }
 };
 

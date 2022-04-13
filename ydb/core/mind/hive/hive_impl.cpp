@@ -168,7 +168,16 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
     Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
-void THive::RunProcessBootQueue() {
+void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& sideEffects) {
+    Y_ENSURE_LOG(tablet->IsDeleting(), "tablet " << tablet->Id);
+    Y_ENSURE_LOG(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty(), "tablet " << tablet->Id);
+
+    // Tablet has no storage, so there's nothing to block or delete
+    // Simulate a response from CreateTabletReqDelete as if all steps have been completed
+    sideEffects.Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
+}
+
+void THive::ExecuteProcessBootQueue(TCompleteNotifications& notifications) {
     TInstant now = TActivationContext::Now();
     BLOG_D("Handle ProcessBootQueue (size: " << BootQueue.BootQueue.size() << ")");
     THPTimer bootQueueProcessingTimer;
@@ -199,7 +208,7 @@ void THive::RunProcessBootQueue() {
                 }
             } else {
                 for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
-                    Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
+                    notifications.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                 }
                 tablet->ActorsToNotifyOnRestart.clear();
                 if (!bestNodeResult.TryToContinue) {
@@ -412,6 +421,8 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     TVector<TTabletId> tabletsToReleaseFromParent;
+    TSideEffects sideEffects;
+    sideEffects.Reset(SelfId());
     for (auto& tab : Tablets) {
         TLeaderTabletInfo& tablet = tab.second;
         if (tablet.NeedToReleaseFromParent) {
@@ -422,9 +433,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsReadyToAssignGroups()) {
             tablet.InitiateAssignTabletGroups();
         } else if (tablet.IsReadyToBlockStorage()) {
-            tablet.InitiateBlockStorage();
+            tablet.InitiateBlockStorage(sideEffects);
         } else if (tablet.IsDeleting()) {
-            if (!tablet.InitiateBlockStorage(std::numeric_limits<ui32>::max())) {
+            if (!tablet.InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
                 DeleteTabletWithoutStorage(&tablet);
             }
         } else if (tablet.IsStopped() && tablet.State == ETabletState::Stopped) {
@@ -445,6 +456,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             SeenDomain(tablet.ObjectDomain);
         }
     }
+    sideEffects.Complete(DEPRECATED_CTX);
     SignalTabletActive(DEPRECATED_CTX);
     ReadyForConnections = true;
     if (AreWeRootHive()) {
@@ -615,12 +627,18 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
 
 void THive::Handle(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
     TNodeId nodeId = ev->Get()->NodeId;
-    BLOG_W("Handle TEvInterconnect::TEvNodeConnected, NodeId " << nodeId);
-    Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
+    if (ConnectedNodes.insert(nodeId).second) {
+        BLOG_W("Handle TEvInterconnect::TEvNodeConnected, NodeId " << nodeId << " Cookie " << ev->Cookie);
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(nodeId));
+    } else {
+        BLOG_TRACE("Handle TEvInterconnect::TEvNodeConnected (duplicate), NodeId " << nodeId << " Cookie " << ev->Cookie);
+    }
 }
 
 void THive::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
-    BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << ev->Get()->NodeId);
+    TNodeId nodeId = ev->Get()->NodeId;
+    BLOG_W("Handle TEvInterconnect::TEvNodeDisconnected, NodeId " << nodeId);
+    ConnectedNodes.erase(nodeId);
     Execute(CreateDisconnectNode(THolder<TEvInterconnect::TEvNodeDisconnected>(ev->Release().Release())));
 }
 
@@ -704,26 +722,32 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
 void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     BLOG_D("THive::Handle::TEvInitiateBlockStorage TabletId=" << tabletId);
+    TSideEffects sideEffects;
+    sideEffects.Reset(SelfId());
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr) {
         if (tablet->IsDeleting()) {
-            if (!tablet->InitiateBlockStorage(std::numeric_limits<ui32>::max())) {
+            if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
                 DeleteTabletWithoutStorage(tablet);
             }
         } else
         if (tablet->IsReadyToBlockStorage()) {
-            tablet->InitiateBlockStorage();
+            tablet->InitiateBlockStorage(sideEffects);
         }
     }
+    sideEffects.Complete(DEPRECATED_CTX);
 }
 
 void THive::Handle(TEvHive::TEvInitiateDeleteStorage::TPtr &ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     BLOG_D("THive::Handle::TEvInitiateDeleteStorage TabletId=" << tabletId);
+    TSideEffects sideEffects;
+    sideEffects.Reset(SelfId());
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr) {
-        tablet->InitiateDeleteStorage();
+        tablet->InitiateDeleteStorage(sideEffects);
     }
+    sideEffects.Complete(DEPRECATED_CTX);
 }
 
 void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
@@ -1601,6 +1625,17 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         if (req.GetReturnMetrics()) {
             tabletInfo.MutableMetrics()->CopyFrom(info->GetResourceValues());
         }
+        if (req.GetReturnChannelHistory()) {
+            for (const auto& channel : info->TabletStorageInfo->Channels) {
+                auto& tabletChannel = *tabletInfo.AddTabletChannels();
+                for (const auto& history : channel.History) {
+                    auto& tabletHistory = *tabletChannel.AddHistory();
+                    tabletHistory.SetGroup(history.GroupID);
+                    tabletHistory.SetGeneration(history.FromGeneration);
+                    tabletHistory.SetTimestamp(history.Timestamp.MilliSeconds());
+                }
+            }
+        }
         if (req.GetReturnFollowers()) {
             for (const auto& follower : info->Followers) {
                 if (req.HasFollowerID() && req.GetFollowerID() != follower.Id)
@@ -2352,16 +2387,6 @@ STFUNC(THive::StateWork) {
 
 void THive::KickTablet(const TTabletInfo& tablet) {
     Send(SelfId(), new TEvPrivate::TEvKickTablet(tablet));
-}
-
-void THive::StopTablet(const TActorId& local, const TTabletInfo& tablet) {
-    BLOG_D("Sending TEvStopTablet(" << tablet.ToString() << ") to node " << local.NodeId());
-    Send(local, new TEvLocal::TEvStopTablet(tablet.GetFullTabletId()));
-}
-
-void THive::StopTablet(const TActorId& local, TFullTabletId tabletId) {
-    BLOG_D("Sending TEvStopTablet(" << tabletId << ") to node " << local.NodeId());
-    Send(local, new TEvLocal::TEvStopTablet(tabletId));
 }
 
 void THive::Handle(TEvHive::TEvRequestTabletIdSequence::TPtr& ev) {

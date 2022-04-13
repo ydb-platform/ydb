@@ -1131,3 +1131,10 @@ kinopoisk/sre/kinopoisk-logcollector-monitoring
 admins/yandex-media-common-configinterfacesmock
 kinopoisk/sre/kinopoisk-jobs-info
 data-ui/fontawesome
+kinopoisk/sre/yandex-kinopoisk-antiadblock-loggiver-script
+market/sovetnik/redir
+admins/mongo-hack-tools
+kinopoisk/sre/config-monrun-media-recalc
+data-ui/snapter
+data-ui/cloud-org
+kinopoisk/sre/yasm-mdb-pg-alerts

@@ -207,14 +207,14 @@ void THive::ExecuteProcessBootQueue(TCompleteNotifications& notifications) {
                     continue;
                 }
             } else {
-                for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
-                    notifications.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
-                }
-                tablet->ActorsToNotifyOnRestart.clear();
                 if (!bestNodeResult.TryToContinue) {
                     delayedTablets.push_back(record);
                     break;
                 } else {
+                    for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
+                        notifications.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
+                    }
+                    tablet->ActorsToNotifyOnRestart.clear();
                     BootQueue.AddToWaitQueue(record); // waiting for new node
                     continue;
                 }

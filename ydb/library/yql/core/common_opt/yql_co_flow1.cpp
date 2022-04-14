@@ -69,9 +69,9 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
     if (IsJustOrSingleAsList(innerBody.Ref())) {
         auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder");
 
-        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) {
-                return placeHolder;
+                return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
             }
             return node;
         }, ctx, TOptimizeExprSettings(types));
@@ -102,9 +102,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                                 .Apply(TCoLambda(outerLambda))
                                 .With(0, outerArgValue)
                                 .With(clonedInnerLambda.Args().Arg(0), "item")
-                                .template With<TCoDependsOn>(TExprBase(placeHolder))
-                                    .Input("item")
-                                .Build()
+                                .With(TExprBase(placeHolder), "item")
                             .Build()
                         .Build()
                     .Build()
@@ -122,9 +120,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                                 .Apply(TCoLambda(outerLambda))
                                 .With(0, outerArgValue)
                                 .With(clonedInnerLambda.Args().Arg(0), "item")
-                                .template With<TCoDependsOn>(TExprBase(placeHolder))
-                                    .Input("item")
-                                .Build()
+                                .With(TExprBase(placeHolder), "item")
                             .Build()
                             .FreeArgs()
                                 .template Add<TCoDependsOn>()
@@ -147,9 +143,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                                 .Apply(TCoLambda(outerLambda))
                                 .With(0, outerArgValue)
                                 .With(clonedInnerLambda.Args().Arg(0), "item")
-                                .template With<TCoDependsOn>(TExprBase(placeHolder))
-                                    .Input("item")
-                                .Build()
+                                .With(TExprBase(placeHolder), "item")
                             .Build()
                         .Build()
                     .Build()
@@ -165,9 +159,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                     .Apply(TCoLambda(outerLambda))
                     .With(0, outerArgValue)
                     .With(clonedInnerLambda.Args().Arg(0), "item")
-                    .template With<TCoDependsOn>(TExprBase(placeHolder))
-                        .Input("item")
-                    .Build()
+                    .With(TExprBase(placeHolder), "item")
                 .Build()
             .Build()
             .Done().Ptr();
@@ -180,9 +172,9 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
         auto outerLambda = outerMap.Lambda().Ptr();
         auto outerLambdaArg = outerMap.Lambda().Args().Arg(0).Raw();
 
-        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) {
-                return placeHolder;
+                return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
             }
             return node;
         }, ctx, TOptimizeExprSettings(types));
@@ -231,9 +223,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                             .template Input<TExprApplier>()
                                 .Apply(newBody)
                                 .With(innerMap.Lambda().Args().Arg(0), "item")
-                                .template With<TCoDependsOn>(TExprBase(placeHolder))
-                                    .Input("item")
-                                .Build()
+                                .With(TExprBase(placeHolder), "item")
                             .Build()
                         .Build()
                     .Build()
@@ -250,9 +240,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                             .template Input<TExprApplier>()
                                 .Apply(newBody)
                                 .With(innerMap.Lambda().Args().Arg(0), "item")
-                                .template With<TCoDependsOn>(TExprBase(placeHolder))
-                                    .Input("item")
-                                .Build()
+                                .With(TExprBase(placeHolder), "item")
                             .Build()
                             .FreeArgs()
                                 .template Add<TCoDependsOn>()
@@ -274,9 +262,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                             .template Optional<TExprApplier>()
                                 .Apply(newBody)
                                 .With(innerMap.Lambda().Args().Arg(0), "item")
-                                .template With<TCoDependsOn>(TExprBase(placeHolder))
-                                    .Input("item")
-                                .Build()
+                                .With(TExprBase(placeHolder), "item")
                             .Build()
                         .Build()
                     .Build()
@@ -291,9 +277,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                 .template Body<TExprApplier>()
                     .Apply(newBody)
                     .With(innerMap.Lambda().Args().Arg(0), "item")
-                    .template With<TCoDependsOn>(TExprBase(placeHolder))
-                        .Input("item")
-                    .Build()
+                    .With(TExprBase(placeHolder), "item")
                 .Build()
             .Build()
             .Done().Ptr();

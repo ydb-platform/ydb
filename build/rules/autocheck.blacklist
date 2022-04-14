@@ -1131,6 +1131,8 @@ kinopoisk/sre/kinopoisk-jobs-info
 data-ui/fontawesome
 kinopoisk/sre/yandex-kinopoisk-antiadblock-loggiver-script
 market/sovetnik/redir
+classifieds/mobile-realty-client-android
+classifieds/mobile-realty-bot
 admins/mongo-hack-tools
 kinopoisk/sre/config-monrun-media-recalc
 data-ui/snapter

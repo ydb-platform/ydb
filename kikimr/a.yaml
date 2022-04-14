@@ -12,6 +12,13 @@ ci:
         - on: pr
           filters:
             - sub-paths: [ public/sdk/java/** ]
+    deploy_sdk_java_artifacts:
+      title: Deploy Java SDK artifacts
+      flow: deploy_java_sdk_to_internal
+      triggers:
+        - on: commit
+          filters:
+            - sub-paths: [ public/sdk/java/pom.xml ]
   release-title-source: flow
   releases:
     run_periodic_export_of_data:
@@ -187,6 +194,43 @@ ci:
                   secret_spec:
                     uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
                     key: ci.token
+              arc_mount_config:
+                enabled: true
+    deploy_java_sdk_to_internal:
+      jobs:
+        deploy_all:
+          title: Build and deploy kikimr/public/sdk/java artefacts to internal repo
+          task: common/misc/run_command
+          requirements:
+            cores: 16
+            ram: 32 GB
+            sandbox:
+              client_tags: GENERIC & LINUX & SSD
+              container_resource: 2309143241 # Container with Java 8, Java 11 and Maven
+              dns: dns64
+          input:
+            config:
+              cmd_line: |
+                set -ex
+                cd $ARCADIA_PATH
+                export PATH=$ARCADIA_PATH:$PATH
+                export JAVA_HOME=/usr/local/java8
+                mkdir -p ~/.m2
+                cp ci/tasklet/registry/common/misc/run_command/maven/settings.xml ~/.m2/
+                sed 's#[ ]</servers>#<server><id>internal</id><username>$${env.USERNAME}</username><password>$${env.PASSWORD}</password></server></servers>#' -i ~/.m2/settings.xml
+                cd kikimr/public/sdk/java
+                ya make
+                ./gen-proto.sh
+                mvn -B -Pinternal install deploy
+              secret_environment_variables:
+                - key: USERNAME
+                  secret_spec:
+                    uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
+                    key: yandex.infra.username
+                - key: PASSWORD
+                  secret_spec:
+                    uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
+                    key: yandex.infra.password
               arc_mount_config:
                 enabled: true
     run_periodic_export_of_data:

@@ -156,7 +156,14 @@ public:
 
             db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
 
-            ui32 fromGeneration = channel->History.empty() ? 0 : (tablet->KnownGeneration + 1);
+            ui32 fromGeneration;
+            if (channel->History.empty()) {
+                fromGeneration = 0;
+            } else {
+                tablet->IncreaseGeneration();
+                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration);
+                fromGeneration = tablet->KnownGeneration;
+            }
             TInstant timestamp = ctx.Now();
             db.Table<Schema::TabletChannelGen>().Key(tablet->Id, channelId, fromGeneration).Update(
                         NIceDb::TUpdate<Schema::TabletChannelGen::Group>(group->GetGroupID()),

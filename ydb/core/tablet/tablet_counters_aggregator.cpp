@@ -146,14 +146,15 @@ public:
     void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, TTabletTypes::EType tabletType) {
         Y_VERIFY(counterIndex < CountersByTabletID.size(),
             "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-        auto it = CountersByTabletID[counterIndex].find(tabletID);
+        TCountersByTabletIDMap::insert_ctx insertCtx;
+        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
         if (it != CountersByTabletID[counterIndex].end()) {
             if (it->second != value) {
                 ChangedCounters[counterIndex] = true;
                 it->second = value;
             }
         } else {
-            CountersByTabletID[counterIndex].insert(std::make_pair(tabletID, value));
+            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, value), insertCtx);
             ChangedCounters[counterIndex] = true;
         }
     }
@@ -161,8 +162,8 @@ public:
     void ForgetTablet(ui64 tabletId) {
         for (ui32 idx : xrange(CountersByTabletID.size())) {
             auto &counters = CountersByTabletID[idx];
-            counters.erase(tabletId);
-            ChangedCounters[idx] = true;
+            if (counters.erase(tabletId) != 0)
+                ChangedCounters[idx] = true;
         }
     }
 
@@ -248,14 +249,15 @@ public:
 
     void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, TTabletTypes::EType tabletType) {
         Y_VERIFY(counterIndex < CountersByTabletID.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-        auto it = CountersByTabletID[counterIndex].find(tabletID);
+        TCountersByTabletIDMap::insert_ctx insertCtx;
+        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
         if (it != CountersByTabletID[counterIndex].end()) {
             if (it->second != value) {
                 ChangedCounters[counterIndex] = true;
                 it->second = value;
             }
         } else {
-            CountersByTabletID[counterIndex].insert(std::make_pair(tabletID, value));
+            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, value), insertCtx);
             ChangedCounters[counterIndex] = true;
         }
     }
@@ -263,8 +265,8 @@ public:
     void ForgetTablet(ui64 tabletId) {
         for (ui32 idx : xrange(CountersByTabletID.size())) {
             auto &counters = CountersByTabletID[idx];
-            counters.erase(tabletId);
-            ChangedCounters[idx] = true;
+            if (counters.erase(tabletId) != 0)
+                ChangedCounters[idx] = true;
         }
     }
 

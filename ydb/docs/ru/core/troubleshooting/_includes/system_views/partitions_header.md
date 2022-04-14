@@ -1,4 +1,4 @@
-## Партиции таблиц
+## Партиции {#partitions}
 
 * **partition_stats**
 

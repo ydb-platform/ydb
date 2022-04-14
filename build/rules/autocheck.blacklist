@@ -525,7 +525,6 @@ data-ui/infra-sockets
 portal/archive/postcards
 trust/simplebrother
 taxi/dmp/spark/spark
-browser/analytics/stat-scripts
 data-ui/rtmr
 portal/tune
 intranet/ok
@@ -1212,3 +1211,5 @@ connect-ui-components
 practicum/services/sigma
 education/english/landings/main-landing
 investors/esg/frontend
+education/english/landings/tutors-landing
+education/english/mobile/ios-app

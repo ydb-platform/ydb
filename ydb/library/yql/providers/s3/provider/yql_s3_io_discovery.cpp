@@ -29,7 +29,7 @@ std::array<TExprNode::TPtr, 2U> GetSchema(const TExprNode& settings) {
     return {};
 }
 
-using TItemsMap = std::map<TString, std::size_t>;
+using TItemsMap = std::map<TString, ui64>;
 using TPendingBuckets = std::unordered_map<std::tuple<TString, TString, TString>, std::tuple<TNodeSet, TItemsMap, TIssues>, THash<std::tuple<TString, TString, TString>>>;
 
 ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {
@@ -73,7 +73,7 @@ void OnDiscovery(
             }
 
             for (const auto& content : contents) {
-                items.emplace(content.Node("s3:Key", false, nss).Value<TString>(), content.Node("s3:Size", false, nss).Value<unsigned>());
+                items.emplace(content.Node("s3:Key", false, nss).Value<TString>(), content.Node("s3:Size", false, nss).Value<ui64>());
             }
 
             if (root.Node("s3:IsTruncated", false, nss).Value<bool>()) {

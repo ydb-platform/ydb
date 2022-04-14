@@ -3123,6 +3123,15 @@ public:
         Add("lambda", Q(params), body);
     }
 
+    TLambdaNode(TPosition pos, TNodePtr params, TVector<TNodePtr> bodies)
+        : TAstListNode(pos)
+    {
+        Add("lambda", Q(params));
+        for (const auto& b : bodies) {
+            Add(b);
+        }
+    }
+
 protected:
     TPtr DoClone() const final {
         return {};
@@ -3135,6 +3144,10 @@ protected:
 
 TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName) {
     return new TLambdaNode(pos, params, body, resName);
+}
+
+TNodePtr BuildLambda(TPosition pos, TNodePtr params, const TVector<TNodePtr>& bodies) {
+    return new TLambdaNode(pos, params, bodies);
 }
 
 TNodePtr BuildDataType(TPosition pos, const TString& typeName) {

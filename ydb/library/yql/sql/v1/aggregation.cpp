@@ -31,10 +31,11 @@ namespace {
 
 class TAggregationFactory : public IAggregation {
 public:
-    TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false)
+    TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode,
+        bool multi = false, bool validateArgs = true)
         : IAggregation(pos, name, func, aggMode), Factory(!func.empty() ?
             BuildBind(Pos, aggMode == EAggregateMode::OverWindow ? "window_module" : "aggregate_module", func) : nullptr),
-        Multi(multi), DynamicFactory(!Factory)
+        Multi(multi), ValidateArgs(validateArgs), DynamicFactory(!Factory)
     {
         if (!Factory) {
             FakeSource = BuildFakeSource(pos);
@@ -43,29 +44,41 @@ public:
 
 protected:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
-        ui32 expectedArgs = !Factory ? 2 : (isFactory ? 0 : 1);
-        if (!Factory) {
-            YQL_ENSURE(!isFactory);
+        if (ValidateArgs || isFactory) {
+            ui32 expectedArgs = ValidateArgs && !Factory ? 2 : (isFactory ? 0 : 1);
+            if (!Factory && ValidateArgs) {
+                YQL_ENSURE(!isFactory);
+            }
+
+            if (expectedArgs != exprs.size()) {
+                ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name
+                    << " requires exactly " << expectedArgs << " argument(s), given: " << exprs.size();
+                return false;
+            }
         }
 
-        if (expectedArgs != exprs.size()) {
-            ctx.Error(Pos) << "Aggregation function " << (isFactory  ? "factory " : "") << Name
-                << " requires exactly " << expectedArgs << " argument(s), given: " << exprs.size();
-            return false;
+        if (!ValidateArgs) {
+            Exprs = exprs;
         }
 
         if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
             return false;
         }
 
-        if (!Factory) {
-            Factory = exprs[1];
+        if (ValidateArgs) {
+            if (!Factory) {
+                Factory = exprs[1];
+            }
         }
 
         if (!isFactory) {
-            Expr = exprs.front();
+            if (ValidateArgs) {
+                Expr = exprs.front();
+            }
+
             Name = src->MakeLocalName(Name);
         }
+
 
         if (!Init(ctx, src)) {
             return false;
@@ -98,6 +111,20 @@ protected:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArgs) {
+            for (auto x : Exprs) {
+                if (!x->Init(ctx, src)) {
+                    return false;
+                }
+                if (x->IsAggregated() && !x->IsAggregationKey() && !IsOverWindow()) {
+                    ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         if (!Expr) {
             return true;
         }
@@ -144,14 +171,7 @@ protected:
             if (AggMode == EAggregateMode::OverWindow) {
                 Factory = BuildLambda(Pos, Y("type", "extractor"), Y("block", Q(Y(
                     Y("let", "x", Y("Apply", Factory, "type", "extractor")),
-                    Y("return", Y("WindowTraits",
-                        Y("NthArg", Q("0"), "x"),
-                        Y("NthArg", Q("1"), "x"),
-                        Y("NthArg", Q("2"), "x"),
-                        BuildLambda(Pos, Y("value", "state"), Y("Void")),
-                        Y("NthArg", Q("6"), "x"),
-                        Y("NthArg", Q("7"), "x")
-                    ))
+                    Y("return", Y("ToWindowTraits", "x"))
                 ))));
             }
         }
@@ -162,6 +182,8 @@ protected:
     TNodePtr Factory;
     TNodePtr Expr;
     bool Multi;
+    bool ValidateArgs;
+    TVector<TNodePtr> Exprs;
 
 private:
     TSourcePtr FakeSource;
@@ -1206,6 +1228,45 @@ private:
 
 TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode) {
     return new TCountAggregation(pos, name, func, aggMode);
+}
+
+class TPGFactoryAggregation final : public TAggregationFactory {
+public:
+    TPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode)
+        : TAggregationFactory(pos, name, "", aggMode, false, false)
+        , PgFunc(Name)
+    {}
+
+    bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) override {
+        auto ret = TAggregationFactory::InitAggr(ctx, isFactory, src, node, exprs);
+        if (ret) {
+            if (isFactory) {
+                Factory = BuildLambda(Pos, Y("type", "extractor"), Y(AggMode == EAggregateMode::OverWindow ? "PgWindowTraitsTuple" : "PgAggregationTraitsTuple",
+                    Q(PgFunc), Y("ListItemType", "type"), "extractor"));
+            } else {
+                Lambda = BuildLambda(Pos, Y("row"), exprs);
+            }
+        }
+
+        return ret;
+    }
+
+    TNodePtr GetApply(const TNodePtr& type) const final {
+        return Y(AggMode == EAggregateMode::OverWindow ? "PgWindowTraits" : "PgAggregationTraits",
+            Q(PgFunc), Y("ListItemType", type), Lambda);
+    }
+
+private:
+    TNodePtr DoClone() const final {
+        return new TPGFactoryAggregation(Pos, Name, AggMode);
+    }
+
+    TString PgFunc;
+    TNodePtr Lambda;
+};
+
+TAggregationPtr BuildPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode) {
+    return new TPGFactoryAggregation(pos, name, aggMode);
 }
 
 } // namespace NSQLTranslationV1

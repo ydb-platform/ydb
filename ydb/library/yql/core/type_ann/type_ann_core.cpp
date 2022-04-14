@@ -11212,6 +11212,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WinOnGroups"] = &WinOnWrapper;
         Functions["WinOnRange"] = &WinOnWrapper;
         Functions["WindowTraits"] = &WindowTraitsWrapper;
+        Functions["ToWindowTraits"] = &ToWindowTraitsWrapper;
         Functions["CalcOverWindow"] = &CalcOverWindowWrapper;
         Functions["CalcOverSessionWindow"] = &CalcOverWindowWrapper;
         Functions["CalcOverWindowGroup"] = &CalcOverWindowGroupWrapper;
@@ -11266,6 +11267,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgNot"] = &PgBoolOpWrapper;
         Functions["PgAggregationTraits"] = &PgAggregationTraitsWrapper;
         Functions["PgWindowTraits"] = &PgAggregationTraitsWrapper;
+        Functions["PgAggregationTraitsTuple"] = &PgAggregationTraitsWrapper;
+        Functions["PgWindowTraitsTuple"] = &PgAggregationTraitsWrapper;
         Functions["PgInternal0"] = &PgInternal0Wrapper;
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;

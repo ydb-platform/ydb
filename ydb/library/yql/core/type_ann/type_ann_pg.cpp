@@ -794,7 +794,8 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
 }
 
 IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    const bool onWindow = input->IsCallable("PgWindowTraits");
+    const bool onWindow = input->Content().StartsWith("PgWindowTraits");
+    const bool tupleExtractor = input->Content().EndsWith("Tuple");
     if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -824,6 +825,33 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    if (tupleExtractor) {
+        // convert lambda with tuple type into multi lambda
+        auto args = input->ChildrenList();
+        if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+            Y_ENSURE(lambda->ChildrenSize() == 2);
+            auto tupleTypeSize = lambda->GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
+            auto newArg = ctx.Expr.NewArgument(lambda->Pos(), "row");
+            auto newBody = ctx.Expr.ReplaceNode(lambda->TailPtr(), lambda->Head().Head(), newArg);
+            TExprNode::TListType bodies;
+            for (ui32 i = 0; i < tupleTypeSize; ++i) {
+                bodies.push_back(ctx.Expr.Builder(lambda->Pos())
+                    .Callable("Nth")
+                        .Add(0, newBody)
+                        .Atom(1, ToString(i))
+                    .Seal()
+                    .Build());
+            }
+
+            args[2] = ctx.Expr.NewLambda(lambda->Pos(), ctx.Expr.NewArguments(lambda->Pos(), { newArg }), std::move(bodies));
+        }
+
+        output = ctx.Expr.NewCallable(input->Pos(), input->Content().substr(0, input->Content().Size() - 5), std::move(args));
+        //ctx.Expr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+        //return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     TVector<ui32> argTypes;
     bool needRetype = false;
     for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
@@ -842,7 +870,7 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
     }
 
     if (needRetype) {
-        lambda = ctx.Expr.DeepCopyLambda(*lambda);
+        auto newLambda = ctx.Expr.DeepCopyLambda(*lambda);
         for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
             auto type = lambda->Child(i)->GetTypeAnn();
             ui32 argType;
@@ -852,10 +880,11 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
             }
 
             if (convertToPg) {
-                lambda->ChildRef(i) = ctx.Expr.NewCallable(lambda->Child(i)->Pos(), "ToPg", { lambda->ChildPtr(i) });
+                newLambda->ChildRef(i) = ctx.Expr.NewCallable(lambda->Child(i)->Pos(), "ToPg", { lambda->ChildPtr(i) });
             }
         }
 
+        lambda = newLambda;
         return IGraphTransformer::TStatus::Repeat;
     }
 

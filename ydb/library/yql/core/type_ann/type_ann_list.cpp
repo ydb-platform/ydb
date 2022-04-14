@@ -71,12 +71,22 @@ namespace {
         TExprNode::TListType defValueArgs;
 
         auto traitsFactory = node.ChildPtr(2);
-        if (!traitsFactory->Child(1)->IsCallable("AggregationTraits") && !traitsFactory->Child(1)->IsCallable("WindowTraits")) {
+        auto traitsFactoryBody = traitsFactory->ChildPtr(1);
+        if (traitsFactoryBody->IsCallable("ToWindowTraits")) {
+            if (!traitsFactoryBody->Head().IsCallable("AggregationTraits")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Expected AggregationTraits inside ToWindowTraits"));
+                return nullptr;
+            }
+
+            traitsFactoryBody = ExpandToWindowTraits(traitsFactoryBody->Head(), ctx);
+        }
+
+        if (!traitsFactoryBody->IsCallable("AggregationTraits") && !traitsFactoryBody->IsCallable("WindowTraits")) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Expected AggregationTraits or WindowTraits"));
             return nullptr;
         }
 
-        bool onWindow = traitsFactory->Child(1)->IsCallable("WindowTraits");
+        bool onWindow = traitsFactoryBody->IsCallable("WindowTraits");
 
         bool isNullDefValue = true;
         bool isLambdaDefValue = false;
@@ -121,7 +131,7 @@ namespace {
             factoryReplaces[traitsFactory->Head().Child(0)] = listType ? ExpandType(node.Pos(), *listType->GetItemType(), ctx) : node.HeadPtr();
             factoryReplaces[traitsFactory->Head().Child(1)] = extractor;
 
-            auto traits = ctx.ReplaceNodes(traitsFactory->ChildPtr(1), factoryReplaces);
+            auto traits = ctx.ReplaceNodes(TExprNode::TPtr(traitsFactoryBody), factoryReplaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
             auto status = ExpandApply(traits, traits, ctx);
             if (status == IGraphTransformer::TStatus::Error) {
@@ -5035,6 +5045,22 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus ToWindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!input->Head().IsCallable("AggregationTraits")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                "Expected AggregationTraits"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& traits = input->Head();
+        output = ExpandToWindowTraits(traits, ctx.Expr);
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus WindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 6, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -6357,6 +6383,25 @@ namespace {
         const auto itemType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType();
         input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TListExprType>(itemType)));
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TPtr ExpandToWindowTraits(const TExprNode& input, TExprContext& ctx) {
+        YQL_ENSURE(input.IsCallable("AggregationTraits"));
+        return ctx.Builder(input.Pos())
+            .Callable("WindowTraits")
+                .Add(0, input.ChildPtr(0))
+                .Add(1, input.ChildPtr(1))
+                .Add(2, input.ChildPtr(2))
+                .Lambda(3)
+                    .Param("value")
+                    .Param("state")
+                    .Callable("Void")
+                    .Seal()
+                .Seal()
+                .Add(4, input.ChildPtr(6))
+                .Add(5, input.ChildPtr(7))
+            .Seal()
+            .Build();
     }
 } // namespace NTypeAnnImpl
 }

@@ -9,6 +9,7 @@ namespace NYql {
 namespace NTypeAnnImpl {
     IGraphTransformer::TStatus InferPositionalUnionType(TPositionHandle pos, const TExprNode::TListType& children,
         TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx);
+    TExprNode::TPtr ExpandToWindowTraits(const TExprNode& input, TExprContext& ctx);
 
     IGraphTransformer::TStatus FilterWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     template <bool InverseCondition>
@@ -99,6 +100,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus SkipNullElementsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus WindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus ToWindowTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus CalcOverWindowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus CalcOverWindowGroupWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus WinLeadLagWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

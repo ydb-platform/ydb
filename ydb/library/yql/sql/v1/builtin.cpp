@@ -10,6 +10,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/public/issue/yql_issue_id.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 #include <library/cpp/charset/ci_string.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -2421,7 +2422,8 @@ enum EAggrFuncTypeCallback {
     TOP_BY,
     COUNT_DISTINCT_ESTIMATE,
     LIST,
-    UDAF
+    UDAF,
+    PG
 };
 
 struct TCoreFuncInfo {
@@ -2501,6 +2503,9 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
             break;
         case UDAF:
             factory = BuildUserDefinedFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+            break;
+        case PG:
+            factory = BuildPGFactoryAggregation(pos, realFunctionName, aggMode);
             break;
         }
         if (isFactory) {
@@ -3131,10 +3136,19 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
     } else if (ns == "pg") {
-        TVector<TNodePtr> pgCallArgs;
-        pgCallArgs.push_back(BuildLiteralRawString(pos, name));
-        pgCallArgs.insert(pgCallArgs.end(), args.begin(), args.end());
-        return new TYqlPgCall(pos, pgCallArgs);
+        const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+        if (isAggregateFunc) {
+            if (aggMode == EAggregateMode::Distinct) {
+                return new TInvalidBuiltin(pos, "Distinct is not supported yet for PG aggregation ");
+            }
+
+            return BuildAggrFuncFactoryCallback(name, "", EAggrFuncTypeCallback::PG)(pos, args, aggMode, false);
+        } else {
+            TVector<TNodePtr> pgCallArgs;
+            pgCallArgs.push_back(BuildLiteralRawString(pos, name));
+            pgCallArgs.insert(pgCallArgs.end(), args.begin(), args.end());
+            return new TYqlPgCall(pos, pgCallArgs);
+        }
     } else if (name == "MakeLibraPreprocessor") {
         if (args.size() != 1) {
             return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires exactly one argument");
@@ -3273,13 +3287,23 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 return new TInvalidBuiltin(pos, "MULTI_AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY");
             }
 
+            if (aggMode == EAggregateMode::Distinct) {
+                return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
+            }
+
+            if (to_lower(*args[0]->GetLiteral("String")).StartsWith("pg::")) {
+                auto name = args[0]->GetLiteral("String")->substr(4);
+                const bool isAggregateFunc = NYql::NPg::HasAggregation(name);
+                if (!isAggregateFunc) {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
+                }
+
+                return BuildAggrFuncFactoryCallback(name, "", EAggrFuncTypeCallback::PG)(pos, args, aggMode, true);
+            }
+
             auto aggrCallback = aggrFuncs.find(aggNormalizedName);
             if (aggrCallback == aggrFuncs.end()) {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
-            }
-
-            if (aggMode == EAggregateMode::Distinct) {
-                return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
             }
 
             return (*aggrCallback).second(pos, args, aggMode, true).Release();

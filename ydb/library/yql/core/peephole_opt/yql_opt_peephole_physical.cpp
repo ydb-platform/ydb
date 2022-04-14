@@ -2247,6 +2247,7 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream;
     TExprNode::TPtr sort;
     auto keyExtractor = node->ChildPtr(1);
+    const bool isConstKey = !IsDepended(keyExtractor->Tail(), keyExtractor->Head().Head());
     const bool haveSort = !node->Child(2)->IsCallable("Void");
     auto idLambda = ctx.Builder(node->Pos())
         .Lambda()
@@ -2286,31 +2287,45 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         .Seal()
         .Build();
 
-    if (isStream) {
-        sort = ctx.Builder(node->Pos())
-            .Callable("OrderedFlatMap")
-                .Callable(0, "SqueezeToDict")
+    if (isConstKey) {
+        if (haveSort) {
+            sort = ctx.Builder(node->Pos())
+                .Callable("Sort")
                     .Add(0, node->HeadPtr())
-                    .Add(1, keyExtractor)
-                    .Add(2, idLambda)
-                    .Add(3, settings)
+                    .Add(1, node->ChildPtr(2))
+                    .Add(2, node->ChildPtr(3))
                 .Seal()
-                .Add(1, flatten)
-            .Seal()
-            .Build();
+                .Build();
+        } else {
+            sort = node->HeadPtr();
+        }
     } else {
-        sort = ctx.Builder(node->Pos())
-            .Apply(flatten)
-                .With(0)
-                    .Callable("ToDict")
+        if (isStream) {
+            sort = ctx.Builder(node->Pos())
+                .Callable("OrderedFlatMap")
+                    .Callable(0, "SqueezeToDict")
                         .Add(0, node->HeadPtr())
                         .Add(1, keyExtractor)
                         .Add(2, idLambda)
                         .Add(3, settings)
                     .Seal()
-                .Done()
-            .Seal()
-            .Build();
+                    .Add(1, flatten)
+                .Seal()
+                .Build();
+        } else {
+            sort = ctx.Builder(node->Pos())
+                .Apply(flatten)
+                    .With(0)
+                        .Callable("ToDict")
+                            .Add(0, node->HeadPtr())
+                            .Add(1, keyExtractor)
+                            .Add(2, idLambda)
+                            .Add(3, settings)
+                        .Seal()
+                    .Done()
+                .Seal()
+                .Build();
+        }
     }
 
     return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));

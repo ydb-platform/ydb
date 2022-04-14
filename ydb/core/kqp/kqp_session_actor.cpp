@@ -45,12 +45,17 @@ namespace {
 #define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 #define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, msg)
 
-class TBadRequestFail : public yexception {
+class TRequestFail : public yexception {
 public:
     TKqpRequestInfo RequestInfo;
+    Ydb::StatusIds::StatusCode Status;
+    std::optional<google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>> Issues;
 
-    TBadRequestFail(TKqpRequestInfo info)
+    TRequestFail(TKqpRequestInfo info, Ydb::StatusIds::StatusCode status,
+            std::optional<google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>> issues = {})
         : RequestInfo(info)
+        , Status(status)
+        , Issues(std::move(issues))
     {}
 };
 
@@ -562,8 +567,13 @@ public:
                 AbortedTransactions.emplace_back(std::move(it.Value()));
                 ExplicitTransactions.Erase(it);
             } else {
-                YQL_ENSURE(false, "Too many transactions, current active: " << ExplicitTransactions.Size()
-                        << " MaxTxPerSession: " << *Config->_KqpMaxActiveTxPerSession.Get());
+                auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
+                std::vector<TIssue> issues{
+                    YqlIssue({}, TIssuesIds::KIKIMR_TOO_MANY_TRANSACTIONS)
+                };
+                ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_SESSION, MessageFromIssues(issues))
+                    << "Too many transactions, current active: " << ExplicitTransactions.Size()
+                    << " MaxTxPerSession: " << *Config->_KqpMaxActiveTxPerSession.Get();
             }
         }
     }
@@ -749,12 +759,12 @@ public:
                 return &newParameter;
             }
 
-            ythrow TBadRequestFail(requestInfo) << "Missing value for parameter: " << name;
+            ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST) << "Missing value for parameter: " << name;
             return nullptr;
         }
 
         if (!IsSameType(parameter->GetType(), type)) {
-            ythrow TBadRequestFail(requestInfo) << "Parameter " << name << " type mismatch, expected: " << type
+            ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST) << "Parameter " << name << " type mismatch, expected: " << type
                 << ", actual: " << parameter->GetType();
         }
 
@@ -777,7 +787,7 @@ public:
                 YQL_ENSURE(it.second);
             } catch (const yexception& ex) {
                 auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-                ythrow TBadRequestFail(requestInfo) << ex.what();
+                ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST) << ex.what();
             }
         }
 
@@ -874,7 +884,7 @@ public:
 
         while (tx->GetHasEffects()) {
             if (!txCtx.AddDeferredEffect(tx, CreateKqpValueMap(*tx))) {
-                ythrow TBadRequestFail(requestInfo) << "Failed to mix queries with old- and new- engines";
+                ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST) << "Failed to mix queries with old- and new- engines";
             }
             if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
                 LWTRACK(KqpPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
@@ -1633,7 +1643,7 @@ public:
         }
 
         bool canContinue = Reply(std::move(ev));
-        Cleanup();
+        Cleanup(!canContinue);
         return canContinue;
     }
 
@@ -1650,8 +1660,8 @@ public:
             default:
                 UnexpectedEvent("ReadyState", ev);
             }
-        } catch (const TBadRequestFail& ex) {
-            ReplyQueryError(ex.RequestInfo, Ydb::StatusIds::BAD_REQUEST, ex.what());
+        } catch (const TRequestFail& ex) {
+            ReplyQueryError(ex.RequestInfo, ex.Status, ex.what(), ex.Issues);
         } catch (const yexception& ex) {
             InternalError(ex.what());
         }
@@ -1669,8 +1679,8 @@ public:
             default:
                 UnexpectedEvent("CompileState", ev);
             }
-        } catch (const TBadRequestFail& ex) {
-            ReplyQueryError(ex.RequestInfo, Ydb::StatusIds::BAD_REQUEST, ex.what());
+        } catch (const TRequestFail& ex) {
+            ReplyQueryError(ex.RequestInfo, ex.Status, ex.what(), ex.Issues);
         } catch (const yexception& ex) {
             InternalError(ex.what());
         }
@@ -1695,8 +1705,8 @@ public:
             default:
                 UnexpectedEvent("ExecuteState", ev);
             }
-        } catch (const TBadRequestFail& ex) {
-            ReplyQueryError(ex.RequestInfo, Ydb::StatusIds::BAD_REQUEST, ex.what());
+        } catch (const TRequestFail& ex) {
+            ReplyQueryError(ex.RequestInfo, ex.Status, ex.what(), ex.Issues);
         } catch (const yexception& ex) {
             InternalError(ex.what());
         }
@@ -1729,10 +1739,7 @@ private:
         LOG_E("Internal error, SelfId: " << SelfId() << ", message: " << message);
         if (QueryState) {
             auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-            bool canContinue = ReplyQueryError(requestInfo, Ydb::StatusIds::INTERNAL_ERROR, message);
-            if (!canContinue) {
-                PassAway();
-            }
+            ReplyQueryError(requestInfo, Ydb::StatusIds::INTERNAL_ERROR, message);
         } else {
             PassAway();
         }

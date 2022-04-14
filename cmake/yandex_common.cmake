@@ -3,6 +3,8 @@
 find_package(Python2 REQUIRED)
 find_package(Python3 REQUIRED)
 
+add_compile_definitions(CATBOOST_OPENSOURCE=yes)
+
 function(target_ragel_lexers TgtName Key Src)
   SET(RAGEL_BIN ${CMAKE_BINARY_DIR}/bin/ragel)
   get_filename_component(OutPath ${Src} NAME)

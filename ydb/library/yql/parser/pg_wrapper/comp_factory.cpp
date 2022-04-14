@@ -451,36 +451,46 @@ protected:
     TVector<NPg::TTypeDesc> ArgDesc;
 };
 
-class TPgResolvedCall : public TPgResolvedCallBase<TPgResolvedCall> {
-    typedef TPgResolvedCallBase<TPgResolvedCall> TBaseComputation;
+struct TPgResolvedCallState : public TComputationValue<TPgResolvedCallState> {
+    TPgResolvedCallState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo)
+        : TComputationValue(memInfo)
+        , CallInfo(numArgs, finfo)
+    {
+    }
+
+    TFunctionCallInfo CallInfo;
+};
+
+template <bool UseContext>
+class TPgResolvedCall : public TPgResolvedCallBase<TPgResolvedCall<UseContext>> {
+    typedef TPgResolvedCallBase<TPgResolvedCall<UseContext>> TBaseComputation;
 public:
-    TPgResolvedCall(TComputationMutables& mutables, bool useContext, const std::string_view& name, ui32 id,
+    TPgResolvedCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
         TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
         : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), false)
         , StateIndex(mutables.CurValueIndex++)
-        , UseContext(useContext)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        auto& state = GetState(compCtx);
+        auto& state = this->GetState(compCtx);
         auto& callInfo = state.CallInfo.Ref();
-        if (UseContext) {
+        if constexpr (UseContext) {
             callInfo.context = (Node*)TlsAllocState->CurrentContext;
         }
 
         callInfo.isnull = false;
-        for (ui32 i = 0; i < ArgNodes.size(); ++i) {
-            auto value = ArgNodes[i]->GetValue(compCtx);
+        for (ui32 i = 0; i < this->ArgNodes.size(); ++i) {
+            auto value = this->ArgNodes[i]->GetValue(compCtx);
             NullableDatum argDatum = { 0, false };
             if (!value) {
-                if (FInfo.fn_strict) {
+                if (this->FInfo.fn_strict) {
                     return NUdf::TUnboxedValuePod();
                 }
 
                 argDatum.isnull = true;
             } else {
-                argDatum.value = ArgDesc[i].PassByValue ?
+                argDatum.value = this->ArgDesc[i].PassByValue ?
                     ScalarDatumFromPod(value) :
                     PointerDatumFromPod(value);
             }
@@ -488,19 +498,26 @@ public:
             callInfo.args[i] = argDatum;
         }
 
-        TMaybe<TPAllocScope> call;
-        if (!callInfo.context) {
-            call.ConstructInPlace();
+        if constexpr (!UseContext) {
+            TPAllocScope call;
+            return this->DoCall(callInfo);
         }
 
+        if constexpr (UseContext) {
+            return this->DoCall(callInfo);
+        }
+    }
+
+private:
+    NUdf::TUnboxedValuePod DoCall(FunctionCallInfoBaseData& callInfo) const {
         PG_TRY();
         {
-            auto ret = FInfo.fn_addr(&callInfo);
+            auto ret = this->FInfo.fn_addr(&callInfo);
             if (callInfo.isnull) {
                 return NUdf::TUnboxedValuePod();
             }
 
-            if (RetTypeDesc.PassByValue) {
+            if (this->RetTypeDesc.PassByValue) {
                 return ScalarDatumToPod(ret);
             }
 
@@ -515,7 +532,7 @@ public:
         {
             auto error_data = CopyErrorData();
             TStringBuilder errMsg;
-            errMsg << "Error in function: " << Name << ", reason: " << error_data->message;
+            errMsg << "Error in function: " << this->Name << ", reason: " << error_data->message;
             FreeErrorData(error_data);
             FlushErrorState();
             UdfTerminate(errMsg.c_str());
@@ -523,28 +540,16 @@ public:
         PG_END_TRY();
     }
 
-private:
-    struct TState : public TComputationValue<TState> {
-        TState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo)
-            : TComputationValue(memInfo)
-            , CallInfo(numArgs, finfo)
-        {
-        }
-
-        TFunctionCallInfo CallInfo;
-    };
-
-    TState& GetState(TComputationContext& compCtx) const {
-        auto& result = compCtx.MutableValues[StateIndex];
+    TPgResolvedCallState& GetState(TComputationContext& compCtx) const {
+        auto& result = compCtx.MutableValues[this->StateIndex];
         if (!result.HasValue()) {
-            result = compCtx.HolderFactory.Create<TState>(ArgNodes.size(), &FInfo);
+            result = compCtx.HolderFactory.Create<TPgResolvedCallState>(this->ArgNodes.size(), &this->FInfo);
         }
 
-        return *static_cast<TState*>(result.AsBoxed().Get());
+        return *static_cast<TPgResolvedCallState*>(result.AsBoxed().Get());
     }
 
     const ui32 StateIndex;
-    const bool UseContext;
 };
 
 class TPgResolvedMultiCall : public TPgResolvedCallBase<TPgResolvedMultiCall> {
@@ -1021,7 +1026,11 @@ TComputationNodeFactory GetPgFactory() {
                     YQL_ENSURE(!useContext);
                     return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
                 } else {
-                    return new TPgResolvedCall(ctx.Mutables, useContext, name, id, std::move(argNodes), std::move(argTypes));
+                    if (useContext) {
+                        return new TPgResolvedCall<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
+                    } else {
+                        return new TPgResolvedCall<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
+                    }
                 }
             }
 

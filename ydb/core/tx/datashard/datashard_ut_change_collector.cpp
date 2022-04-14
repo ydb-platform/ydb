@@ -540,6 +540,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     NKikimrPQ::TPQConfig WithProtoSourceIdInfo() {
         NKikimrPQ::TPQConfig pqConfig;
         pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
         return pqConfig;
     }
 

@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/api_key.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PAPIKS";
+
+service ApiKeyService {
+
+  rpc List (ListApiKeysRequest) returns (ListApiKeysResponse) {
+    option (google.api.http) = {get: "/iam/v1/apiKeys"};
+  }
+
+  rpc Get (GetApiKeyRequest) returns (ApiKey) {
+    option (google.api.http) = {get: "/iam/v1/apiKeys/{api_key_id}"};
+  }
+
+  rpc Create (CreateApiKeyRequest) returns (CreateApiKeyResponse) {
+    option (google.api.http) = {post: "/iam/v1/apiKeys" body: "*"};
+  }
+
+  rpc Update (UpdateApiKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/iam/v1/apiKeys/{api_key_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateApiKeyMetadata"
+      response: "ApiKey"
+    };
+  }
+
+  rpc Delete (DeleteApiKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iam/v1/apiKeys/{api_key_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteApiKeyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListApiKeyOperationsRequest) returns (ListApiKeyOperationsResponse) {
+    option (google.api.http) = {get: "/iam/v1/apiKeys/{api_key_id}/operations"};
+  }
+}
+
+message GetApiKeyRequest {
+  string api_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListApiKeysRequest {
+  string service_account_id = 1 [(length) = "<=50"]; // use current subject identity if this not set
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListApiKeysResponse {
+  repeated ApiKey api_keys = 1;
+  string next_page_token = 2;
+}
+
+message CreateApiKeyRequest {
+  string api_key_id = 3 [(required) = false, (length) = "<=50"];
+  string service_account_id = 1 [(length) = "<=50"]; // use current subject identity if this not set
+  string description = 2 [(length) = "<=256"];
+}
+
+message CreateApiKeyResponse {
+  ApiKey api_key = 1;
+  string secret = 2 [(sensitive) = true];
+}
+
+message UpdateApiKeyRequest {
+  string api_key_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+  string description = 3 [(length) = "<=256"];
+}
+
+message UpdateApiKeyMetadata {
+  string api_key_id = 1;
+}
+
+message DeleteApiKeyRequest {
+  string api_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteApiKeyMetadata {
+  string api_key_id = 1;
+}
+
+message ListApiKeyOperationsRequest {
+  string api_key_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListApiKeyOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

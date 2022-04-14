@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.mfa;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/mfa/totp_profile.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/mfa;mfa";
+option java_outer_classname = "PTPS";
+
+// A set of methods for managing time-based one time passwords (TOTP).
+// The user credentials should be passed in the authorization header.
+service TotpProfileService {
+
+  // Returns the TOTP profile for the user.
+  rpc Get (google.protobuf.Empty) returns (TotpProfile) {}
+
+  // Creates a new TOTP profile for the user. This method will fail, if the user
+  // already has an active TOTP profile.
+  rpc Create (CreateTotpProfileRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateTotpProfileMetadata"
+      response: "CreateTotpProfileResponse"
+    };
+  }
+
+  // Deletes the TOTP profile for the user.
+  rpc Delete (DeleteTotpProfileRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTotpProfileMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  // Retrieves the list of Operations for the specified TOTP profile.
+  rpc ListOperations (ListTotpProfileOperationsRequest) returns (ListTotpProfileOperationsResponse) {}
+
+  // Verifies user-supplied TOTP value. See https://tools.ietf.org/html/rfc6238#section-5.2 for the reference.
+  rpc Verify (VerifyTotpRequest) returns (VerifyTotpResponse) {}
+
+  // Returns the TOTP profile for the specified user.
+  // This method requires `iam.totpProfiles.manage` permission.
+  rpc GetForSubject (GetTotpProfileForSubjectRequest) returns (TotpProfile) {}
+
+  // Deletes the TOTP profile for the specified user.
+  // This method requires `iam.totpProfiles.manage` permission.
+  rpc DeleteForSubject (DeleteTotpProfileForSubjectRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteTotpProfileForSubjectMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+}
+
+message CreateTotpProfileRequest {
+  // The algorithm used to calculate the hash (SHA1, SHA256 or SHA512). Default is SHA1.
+  HashAlgorithm algorithm = 1;
+  // The length of the TOTP code (6, 7 or 8). Default is 6.
+  int64 digits = 2 [(value) = "0,6,7,8"];
+  // The default value for time step is 30 seconds.
+  TotpProfileOptions options = 3;
+}
+
+message CreateTotpProfileMetadata {
+  string subject_id = 1;
+}
+
+message CreateTotpProfileResponse {
+  // The secret parameter is an arbitrary key value encoded in Base32 according
+  // to RFC https://tools.ietf.org/html/rfc3548.
+  string secret = 1 [(sensitive) = true];
+  // The issuer parameter is a string value indicating the provider
+  // or service this account is associated with.
+  string issuer = 2;
+  // Newly created TOTP profile.
+  TotpProfile totp_profile = 3;
+}
+
+message GetTotpProfileForSubjectRequest {
+  string subject_id = 1 [(required) = true];
+}
+
+message DeleteTotpProfileRequest {
+  int64 code = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_REMOVE, (value) = ">0"];
+}
+
+message DeleteTotpProfileForSubjectRequest {
+  string subject_id = 1 [(required) = true];
+}
+
+message DeleteTotpProfileMetadata {
+  string subject_id = 1;
+}
+
+message DeleteTotpProfileForSubjectMetadata {
+  string subject_id = 1;
+}
+
+message ListTotpProfileOperationsRequest {
+  int64 page_size = 1 [(value) = "0-1000"];
+  string page_token = 2 [(length) = "<=100"];
+}
+
+message ListTotpProfileOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+message VerifyTotpRequest {
+  int64 code = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_REMOVE, (value) = ">0"];
+}
+
+message VerifyTotpResponse {
+  VerificationResult result = 1;
+  // HTTP-header Set-Cookie for End-User with required per-service cookies, e.g. yc_session.
+  // See also yandex/cloud/priv/oauth/v1/session_service.proto specification.
+  repeated string set_cookie_header = 2 [(sensitive) = true];
+  google.protobuf.Timestamp retry_at = 3;
+}

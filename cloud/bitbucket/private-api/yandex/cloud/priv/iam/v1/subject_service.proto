@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PSS";
+
+service SubjectService {
+  rpc GetOrCreate (GetOrCreateSubjectRequest) returns (GetOrCreateSubjectResponse);
+
+  rpc Merge (MergeSubjectsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "MergeSubjectsMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc Delete (DeleteSubjectRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSubjectMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+message GetOrCreateSubjectRequest {
+  // Optional IAM Subject unique identifier (well-known-id).
+  string subject_id = 1 [(required) = false, (length) = "<=50"];
+  // IAM Subject type. May be one of:
+  //    * serviceAccount (unsupported yet)
+  //    * federatedUser  (unsupported yet)
+  //    * invitee
+  string subject_type = 2 [(required) = true, (length) = "<=256"];
+  // The Subject external (IdP-specific) identifier.
+  string external_id = 3 [(required) = true, (length) = "3-256"];
+  // Json-string representation of map<string, object> IAM Subject attributes.
+  string attributes = 4 [(length) = "<=262144"];
+  // Json-string representation of map<string, object> IAM Subject settings.
+  string settings = 5 [(length) = "<=262144"];
+}
+
+message GetOrCreateSubjectResponse {
+  // IAM Subject unique identifier.
+  string id = 1;
+  // IAM Subject type.
+  string subject_type = 2;
+  // The Subject external (IdP-specific) identifier.
+  string external_id = 3;
+  // Json-string representation of map<string, object> IAM Subject attributes.
+  string attributes = 4;
+  // Json-string representation of map<string, object> IAM Subject settings.
+  string settings = 5;
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message MergeSubjectsRequest {
+  // Source subject.
+  // Attention!!! Source subject will be deleted at the end of the merge operation.
+  string source_subject_id = 1 [(required) = true];
+  // Destination subject.
+  string destination_subject_id = 2 [(required) = true];
+}
+
+message MergeSubjectsMetadata {
+  string source_subject_id = 1;
+  string destination_subject_id = 2;
+}
+
+message DeleteSubjectRequest {
+  string subject_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteSubjectMetadata {
+  string subject_id = 1;
+}

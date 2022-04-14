@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/permission.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PPES";
+
+service PermissionService {
+  rpc Get (GetPermissionRequest) returns (Permission);
+
+  rpc List (ListPermissionsRequest) returns (ListPermissionsResponse);
+
+  rpc Create (CreatePermissionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "Permission"
+      metadata: "CreatePermissionMetadata"
+    };
+  }
+
+  rpc Update (UpdatePermissionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "Permission"
+      metadata: "UpdatePermissionMetadata"
+    };
+  }
+
+  rpc Delete (DeletePermissionRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "google.protobuf.Empty"
+      metadata: "DeletePermissionMetadata"
+    };
+  }
+}
+
+message CreatePermissionMetadata {
+  string permission_id = 1;
+}
+
+message UpdatePermissionMetadata {
+  string permission_id = 1;
+}
+
+message DeletePermissionMetadata {
+  string permission_id = 1;
+}
+
+message CreatePermissionRequest {
+  string permission_id = 1 [(required) = true];
+  string stage = 2 [(required) = true];
+}
+
+message UpdatePermissionRequest {
+  string permission_id = 1 [(required) = true];
+  google.protobuf.FieldMask update_mask = 2;
+  string stage = 3;
+}
+
+message DeletePermissionRequest {
+  string permission_id = 1 [(required) = true];
+}
+
+message GetPermissionRequest {
+  string permission_id = 1 [(required) = true];
+}
+
+message ListPermissionsRequest {
+  int64 page_size = 1 [(value) = "0-1000"];
+  string page_token = 2 [(length) = "<=100"];
+}
+
+message ListPermissionsResponse {
+  repeated Permission permissions = 1;
+  string next_page_token = 2;
+}

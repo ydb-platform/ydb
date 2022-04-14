@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.servicecontrol.v1;
+
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/servicecontrol/v1;servicecontrol";
+option java_outer_classname = "PR";
+
+message Resource {
+  string id = 1 [(required) = true, (length) = "<=50"];
+
+  // The type of the resource, e.g. resource-manager.folder, billing.account, compute.snapshot, etc.
+  string type = 2 [(required) = true, (length) = "<=64"];
+}
+
+message ResourcePath {
+  repeated Resource path = 1 [(size) = "1-128"];
+}

@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.saml;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/saml/certificate.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/saml;saml";
+option java_outer_classname = "PSCS";
+
+service CertificateService {
+  rpc Get (GetCertificateRequest) returns (Certificate) {
+    option (google.api.http) = { get: "/iam/v1/saml/certificates/{certificate_id}" };
+  }
+
+  rpc List (ListCertificatesRequest) returns (ListCertificatesResponse) {
+    option (google.api.http) = { get: "/iam/v1/saml/certificates" };
+  }
+
+  rpc Create (CreateCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/iam/v1/saml/certificates" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateCertificateMetadata"
+      response: "Certificate"
+    };
+  }
+
+  // Updates the specified certificate.
+  rpc Update (UpdateCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/iam/v1/saml/certificates/{certificate_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateCertificateMetadata"
+      response: "Certificate"
+    };
+  }
+
+  rpc Delete (DeleteCertificateRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/iam/v1/saml/certificates/{certificate_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteCertificateMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListCertificateOperationsRequest) returns (ListCertificateOperationsResponse) {
+    option (google.api.http) = { get: "/iam/v1/saml/certificates/{certificate_id}/operations" };
+  }
+}
+
+message GetCertificateRequest {
+  string certificate_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListCertificatesRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+  string filter = 4 [(length) = "<=1000"];
+}
+
+message ListCertificatesResponse {
+  repeated Certificate certificates = 1;
+  string next_page_token = 2;
+}
+
+message CreateCertificateRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2 [(pattern) = "([a-z]([-a-z0-9]{0,61}[a-z0-9])?)?"];
+  string description = 3 [(length) = "<=256"];
+  string data = 4 [(required) = true, (length) = "<=32000"];
+}
+
+message CreateCertificateMetadata {
+  string certificate_id = 1;
+}
+
+message UpdateCertificateRequest {
+  string certificate_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 4 [(length) = "<=256"];
+  string data = 5 [(length) = "<=32000"];
+}
+
+message UpdateCertificateMetadata {
+  string certificate_id = 1;
+}
+
+message DeleteCertificateRequest {
+  string certificate_id = 1 [(length) = "<=50"];
+}
+
+message DeleteCertificateMetadata {
+  string certificate_id = 1;
+}
+
+message ListCertificateOperationsRequest {
+  string certificate_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListCertificateOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

@@ -245,25 +245,25 @@ namespace NKikimr::NGRpcProxy::V1 {
                     if (!alter)
                         pqDescr->SetPartitionPerTablet(FromString<ui32>(pair.second));
                     if (pqDescr->GetPartitionPerTablet() > 20) {
-                        error = TStringBuilder() << "Attirbute partitons_per_tablet is " << pair.second << ", which is greater than 20";
+                        error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is greater than 20";
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 } catch(...) {
-                    error = TStringBuilder() << "Attirbute partitons_per_tablet is " << pair.second << ", which is not ui32";
+                    error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is not ui32";
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
             } else if (pair.first == "_allow_unauthenticated_read") {
                 try {
                     config->SetRequireAuthRead(!FromString<bool>(pair.second));
                 } catch(...) {
-                    error = TStringBuilder() << "Attirbute allow_unauthenticated_read is " << pair.second << ", which is not bool";
+                    error = TStringBuilder() << "Attribute allow_unauthenticated_read is " << pair.second << ", which is not bool";
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
             } else if (pair.first == "_allow_unauthenticated_write") {
                 try {
                     config->SetRequireAuthWrite(!FromString<bool>(pair.second));
                 } catch(...) {
-                    error = TStringBuilder() << "Attirbute allow_unauthenticated_write is " << pair.second << ", which is not bool";
+                    error = TStringBuilder() << "Attribute allow_unauthenticated_write is " << pair.second << ", which is not bool";
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
             } else if (pair.first == "_abc_slug") {
@@ -272,17 +272,19 @@ namespace NKikimr::NGRpcProxy::V1 {
                 try {
                     config->SetAbcId(!FromString<ui32>(pair.second));
                 } catch(...) {
-                    error = TStringBuilder() << "Attirbute abc_id is " << pair.second << ", which is not integer";
+                    error = TStringBuilder() << "Attribute abc_id is " << pair.second << ", which is not integer";
                     return Ydb::StatusIds::BAD_REQUEST;
                 }
             } else {
-                error = TStringBuilder() << "Attirbute " << pair.first << " is not supported";
+                error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
         bool local = !settings.client_write_disabled();
         config->SetLocalDC(local);
         config->SetDC(NPersQueue::GetDC(name));
+        config->SetTopicName(name);
+        config->SetTopicPath(NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name}));
         config->SetProducer(NPersQueue::GetProducer(name));
         config->SetTopic(LegacySubstr(NPersQueue::GetRealTopic(name), config->GetProducer().size() + 2));
         config->SetIdent(config->GetProducer());

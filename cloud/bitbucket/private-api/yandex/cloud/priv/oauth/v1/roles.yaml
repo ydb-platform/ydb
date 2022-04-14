@@ -1,0 +1,42 @@
+role_groups:
+  oauth:
+    name: OAuth roles
+
+roles:
+  internal.sessionService:
+    groups: [oauth]
+    name: (Внутренняя) session service
+    visibility: internal
+    description: Роль для выписывания per-service cookie в session service (кросс-доменная аутентификация)
+    permissions:
+    - iam.userAccounts.issueCookie
+    - iam.userAccounts.issueToken
+    - iam.serviceAccounts.issueCookie
+    - iam.serviceAccounts.issueToken
+    - iam.subjects.issueCookie
+    - iam.subjects.issueToken
+
+  internal.sessionService.userAccountAgent:
+    groups: [oauth]
+    name: User Account Agent
+    visibility: internal
+    description: Внутренняя роль для просмотра пользовательских аккаунтов
+    permissions:
+      - internal.oauth.getUserAccountClaims
+
+  internal.oauth.client:
+    groups: [oauth]
+    name: (Внутренняя) session service + oauth client
+    visibility: internal
+    description: Роль для выписывания и проверки per-service cookie конечными сервисами
+    permissions:
+      - internal.oauth.checkSession
+      - internal.oauth.createSession
+
+  internal.oauth.passportClient:
+    groups: [oauth]
+    name: (Внутренняя) session service
+    visibility: internal
+    description: Роль для выписывания и проверки per-service IAM-token конечными сервисами по Session_id куке Yandex.Passport
+    permissions:
+      - internal.oauth.checkPassportSession

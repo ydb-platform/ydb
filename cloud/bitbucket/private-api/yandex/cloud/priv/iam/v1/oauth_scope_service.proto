@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/oauth_scope.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "POASS";
+
+service OAuthScopeService {
+  rpc Get (GetOAuthScopeRequest) returns (OAuthScope);
+
+  rpc List (ListOAuthScopesRequest) returns (ListOAuthScopesResponse);
+
+  rpc Create (CreateOAuthScopeRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "OAuthScope"
+      metadata: "CreateOAuthScopeMetadata"
+    };
+  }
+
+  rpc Update (UpdateOAuthScopeRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "OAuthScope"
+      metadata: "UpdateOAuthScopeMetadata"
+    };
+  }
+
+  rpc Delete (DeleteOAuthScopeRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "google.protobuf.Empty"
+      metadata: "DeleteOAuthScopeMetadata"
+    };
+  }
+}
+
+message ListOAuthScopesRequest {
+  int64 page_size = 1 [(value) = "0-1000"];
+  string page_token = 2 [(length) = "<=100"];
+}
+
+message ListOAuthScopesResponse {
+  repeated OAuthScopeListView oauth_scopes = 1;
+  string next_page_token = 2;
+}
+
+message GetOAuthScopeRequest {
+  string oauth_scope_id = 1 [(required) = true];
+}
+
+message OAuthScopeListView {
+  string id = 1;
+  bool is_system = 2;
+  string service = 3;
+}
+
+message CreateOAuthScopeMetadata {
+  string oauth_scope_id = 1;
+}
+
+message UpdateOAuthScopeMetadata {
+  string oauth_scope_id = 1;
+}
+
+message DeleteOAuthScopeMetadata {
+  string oauth_scope_id = 1;
+}
+
+message CreateOAuthScopeRequest {
+  string oauth_scope_id = 1 [(required) = true];
+  bool is_system = 2;
+  string service = 3 [(required) = true];
+  repeated string permission_ids = 4 [(size) = "<=10000", (length) = "<=255"];
+}
+
+message UpdateOAuthScopeRequest {
+  string oauth_scope_id = 1 [(required) = true];
+  google.protobuf.FieldMask update_mask = 2;
+  bool is_system = 3;
+  string service = 4;
+  repeated string permission_ids = 5 [(size) = "<=10000", (length) = "<=255"];
+}
+
+message DeleteOAuthScopeRequest {
+  string oauth_scope_id = 1 [(required) = true];
+}

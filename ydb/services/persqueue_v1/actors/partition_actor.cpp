@@ -18,9 +18,12 @@ using namespace PersQueue::V1;
 #define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
 
 
-TPartitionActor::TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie, const TString& session,
-                                    const TPartitionId& partition, const ui32 generation, const ui32 step, const ui64 tabletID,
-                                 const TTopicCounters& counters, bool commitsDisabled, const TString& clientDC, bool rangesMode)
+TPartitionActor::TPartitionActor(
+        const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
+        const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
+        const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
+        const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic
+)
     : ParentId(parentId)
     , ClientId(clientId)
     , ClientPath(clientPath)
@@ -58,6 +61,7 @@ TPartitionActor::TPartitionActor(const TActorId& parentId, const TString& client
     , Counters(counters)
     , CommitsDisabled(commitsDisabled)
     , CommitCookie(1)
+    , Topic(topic)
 {
 }
 
@@ -161,7 +165,7 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
     NKikimrClient::TPersQueueRequest request;
-    request.MutablePartitionRequest()->SetTopic(Partition.TopicConverter->GetPrimaryPath());
+    request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
     request.MutablePartitionRequest()->SetCookie(readId);
 
@@ -204,7 +208,7 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     ctx.Schedule(TDuration::MilliSeconds(RESTART_PIPE_DELAY_MS), new TEvPQProxy::TEvRestartPipe());
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                            << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason);
+                                                                  << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason);
 }
 
 
@@ -250,13 +254,16 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     }
 }
 
-bool FillBatchedData(MigrationStreamingReadServerMessage::DataBatch * data, const NKikimrClient::TCmdReadResult& res, const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset, const TActorContext& ctx) {
+bool FillBatchedData(
+        MigrationStreamingReadServerMessage::DataBatch * data, const NKikimrClient::TCmdReadResult& res,
+        const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
+        const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) {
 
     auto* partitionData = data->add_partition_data();
-    partitionData->mutable_topic()->set_path(Partition.TopicConverter->GetModernName());
-    partitionData->set_cluster(Partition.TopicConverter->GetCluster());
+    partitionData->mutable_topic()->set_path(topic->GetFederationPath());
+    partitionData->set_cluster(topic->GetCluster());
     partitionData->set_partition(Partition.Partition);
-    partitionData->set_deprecated_topic(Partition.TopicConverter->GetFullLegacyName());
+    partitionData->set_deprecated_topic(topic->GetClientsideName());
     partitionData->mutable_cookie()->set_assign_id(Partition.AssignId);
     partitionData->mutable_cookie()->set_partition_cookie(ReadIdToResponse);
 
@@ -494,7 +501,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     response.set_status(Ydb::StatusIds::SUCCESS);
 
     auto* data = response.mutable_data_batch();
-    bool hasData = FillBatchedData(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, ctx);
+    bool hasData = FillBatchedData(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);
 
     if (!CommitsDisabled && !RangesMode) {
@@ -590,7 +597,8 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
     Y_VERIFY(AllPrepareInited);
     Y_VERIFY(!WaitForData);
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Start reading " << Partition
-                        << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset << " clientReadOffset " << ClientReadOffset);
+                        << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset
+                        << " clientCommitOffset " << ClientCommitOffset << " clientReadOffset " << ClientReadOffset);
 
     Counters.PartitionsToBeLocked.Dec();
     LockCounted = false;
@@ -599,36 +607,45 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
 
     if (ClientVerifyReadOffset) {
         if (ClientReadOffset < ClientCommitOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder()
-                << "trying to read from position that is less than position provided to commit: read " << ClientReadOffset << " committed " << ClientCommitOffset,
-                PersQueue::ErrorCode::BAD_REQUEST));
+            ctx.Send(ParentId,
+                     new TEvPQProxy::TEvCloseSession(TStringBuilder()
+                            << "trying to read from position that is less than position provided to commit: read " << ClientReadOffset
+                            << " committed " << ClientCommitOffset,
+                        PersQueue::ErrorCode::BAD_REQUEST));
             return;
         }
 
         if (ClientCommitOffset < CommittedOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder()
-                    << "trying to commit to position that is less than committed: read " << ClientCommitOffset << " committed " << CommittedOffset,
-                    PersQueue::ErrorCode::BAD_REQUEST));
+            ctx.Send(ParentId,
+                     new TEvPQProxy::TEvCloseSession(TStringBuilder()
+                            << "trying to commit to position that is less than committed: read " << ClientCommitOffset
+                            << " committed " << CommittedOffset,
+                        PersQueue::ErrorCode::BAD_REQUEST));
             return;
         }
         if (ClientReadOffset < CommittedOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder()
-                    << "trying to read from position that is less than committed: read " << ClientReadOffset << " committed " << CommittedOffset,
-                    PersQueue::ErrorCode::BAD_REQUEST));
+            ctx.Send(ParentId,
+                     new TEvPQProxy::TEvCloseSession(TStringBuilder()
+                            << "trying to read from position that is less than committed: read " << ClientReadOffset
+                            << " committed " << CommittedOffset,
+                        PersQueue::ErrorCode::BAD_REQUEST));
             return;
         }
     }
 
     if (ClientCommitOffset > CommittedOffset) {
         if (ClientCommitOffset > ReadOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder()
-                        << "trying to read from position that is less than provided to commit: read " << ReadOffset << " commit " << ClientCommitOffset,
+            ctx.Send(ParentId,
+                     new TEvPQProxy::TEvCloseSession(TStringBuilder()
+                            << "trying to read from position that is less than provided to commit: read " << ReadOffset
+                            << " commit " << ClientCommitOffset,
                         PersQueue::ErrorCode::BAD_REQUEST));
             return;
         }
         if (ClientCommitOffset > EndOffset) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(TStringBuilder()
-                        << "trying to commit to future: commit " << ClientCommitOffset << " endOffset " << EndOffset,
+            ctx.Send(ParentId,
+                     new TEvPQProxy::TEvCloseSession(TStringBuilder()
+                           << "trying to commit to future: commit " << ClientCommitOffset << " endOffset " << EndOffset,
                         PersQueue::ErrorCode::BAD_REQUEST));
             return;
         }
@@ -679,7 +696,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
         NKikimrClient::TPersQueueRequest request;
 
-        request.MutablePartitionRequest()->SetTopic(Partition.TopicConverter->GetPrimaryPath());
+        request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
         request.MutablePartitionRequest()->SetPartition(Partition.Partition);
         request.MutablePartitionRequest()->SetCookie(INIT_COOKIE);
 
@@ -763,7 +780,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                     << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "
-                    << record.GetEndOffset() << " commitOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset  << " cookie " << ev->Get()->Record.GetCookie());
+                    << record.GetEndOffset() << " commitOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset
+                    << " cookie " << ev->Get()->Record.GetCookie());
 
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
@@ -784,8 +802,10 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
 void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " READ FROM " << Partition
-                    << "maxCount " << ev->Get()->MaxCount << " maxSize " << ev->Get()->MaxSize << " maxTimeLagMs " << ev->Get()->MaxTimeLagMs << " readTimestampMs " << ev->Get()->ReadTimestampMs
-                    << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " ClientCommitOffset " << ClientCommitOffset << " committedOffset " << CommittedOffset << " Guid " << ev->Get()->Guid);
+                    << "maxCount " << ev->Get()->MaxCount << " maxSize " << ev->Get()->MaxSize << " maxTimeLagMs "
+                    << ev->Get()->MaxTimeLagMs << " readTimestampMs " << ev->Get()->ReadTimestampMs
+                    << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " ClientCommitOffset "
+                    << ClientCommitOffset << " committedOffset " << CommittedOffset << " Guid " << ev->Get()->Guid);
 
     Y_VERIFY(!NeedRelease);
     Y_VERIFY(!Released);
@@ -799,7 +819,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
 
     NKikimrClient::TPersQueueRequest request;
 
-    request.MutablePartitionRequest()->SetTopic(Partition.TopicConverter->GetPrimaryPath());
+    request.MutablePartitionRequest()->SetTopic(Topic->GetPrimaryPath());
 
     request.MutablePartitionRequest()->SetPartition(Partition.Partition);
     request.MutablePartitionRequest()->SetCookie((ui64)ReadOffset);

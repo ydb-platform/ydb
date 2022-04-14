@@ -137,6 +137,7 @@ struct TTestContext {
         outActiveZone = false;
         Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(200);
+
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
         setup(*Runtime);
@@ -146,6 +147,8 @@ struct TTestContext {
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
+
         Runtime->DispatchEvents(options);
 
         CreateTestBootstrapper(*Runtime,
@@ -185,6 +188,7 @@ struct TTestContext {
         Edge = Runtime->AllocateEdgeActor();
 
         Runtime->SetScheduledEventFilter(&RequestTimeoutFilter);
+        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
     }
 
 
@@ -228,7 +232,8 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::p
             request->Record.MutableTabletConfig()->SetCacheSize(10_MB);
             request->Record.SetTxId(12345);
             auto tabletConfig = request->Record.MutableTabletConfig();
-            tabletConfig->SetTopicName("topic");
+            tabletConfig->SetTopicName("rt3.dc1--topic");
+            tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
             tabletConfig->SetLocalDC(localDC);
             tabletConfig->AddReadRules("user");

@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/token;iam";
+option java_outer_classname = "PIT";
+
+message IamToken {
+  string iam_token = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN];
+  google.protobuf.Timestamp expires_at = 2;
+}

@@ -1,0 +1,488 @@
+service: kikimr
+title: CI for YDB
+ci:
+  secret: sec-01ekjvt2kbg4ag64z9z03jt0hp
+  runtime:
+    sandbox-owner: STORAGE-DEV
+  actions:
+    run_sdk_java_tests:
+      title: Run Java tests using Maven
+      flow: run_java_tests
+      triggers:
+        - on: pr
+          filters:
+            - sub-paths: [ public/sdk/java/** ]
+  release-title-source: flow
+  releases:
+    run_periodic_export_of_data:
+      title: Run periodic export of data to monitoring
+      flow: run_periodic_export_of_data
+      auto:
+        conditions:
+        - schedule:
+            time: 9:00 - 12:00 MSK
+          since-last-release: 24h
+      stages:
+        package:
+          title: Run periodic export of data to monitoring
+    sync_python_sdk_from_git:
+      title: Sync from git
+      flow: sync_python_sdk_from_git
+      auto:
+        conditions:
+        - schedule:
+            time: 9:00 - 12:00 MSK
+          since-last-release: 24h
+      stages:
+        package:
+          title: Sync from git
+    publish_ydb_internal:
+      title: Build YDB Python SDK (Yandex Internal)
+      flow: publish_python_sdk_pypi_internal
+      auto: true
+      flow-vars:
+        package-path: kikimr/public/sdk/packages/python/pkg.json
+      stages:
+        package:
+          title: Build Python SDK
+    publish_ydb_persqueue_internal:
+      title: Build YDB Persqueue Python SDK (Yandex Internal)
+      flow: publish_python_sdk_pypi_internal
+      auto: true
+      flow-vars:
+        package-path: kikimr/public/sdk/packages/ydb-persqueue/pkg.json
+      stages:
+        package:
+          title: Build Python SDK
+    ydb_server_recipe_binary:
+      title: YDB Recipe Binary Release
+      description: |
+        Релиз бинарника YDB сервера в Аркадийный рецептах.
+
+        По умолчанию, ресурс с бинарником собирается автоматически из HEAD trunk.
+        После сборки ресурсов создается PR и мержится после успешного прохождения тестов.
+        Чтобы переключить рецепт на новую мажорную версию, нужно обновить ветку в [a.yaml](http://a.yandex-team.ru/arc_vcs/kikimr/a.yaml), параметр `checkout-arcadia-from-url`.
+
+        Автоматические релизы по понедельникам в первой половине дня.
+
+      flow: recipe_tool
+      flow-vars:
+        build-project: kikimr/driver/kikimr
+        prebuilt-ya-make-path: kikimr/public/tools/package/stable
+        checkout-arcadia-from-url: "arcadia-arc:/#trunk"
+      auto:
+        conditions:
+        - schedule:
+            days: MON
+            time: 9:00 - 12:00 MSK
+          since-last-release: 24h
+      stages:
+        package:
+          title: Build binaries
+    lbk_recipe_tool:
+      title: LOGBROKER Recipe Tool Release
+      description: |
+        Релиз программы, запускающей сервер Аркадийном рецепте LOGBROKER.
+
+        По умолчанию, рецепт обновляеся автоматически из trunk.
+        Релизы программы утром в понедельник.
+      flow: recipe_tool
+      flow-vars:
+        build-project: kikimr/public/tools/lbk_recipe/bin/lbk_recipe
+        prebuilt-ya-make-path: kikimr/public/tools/lbk_recipe/prebuilt
+        checkout-arcadia-from-url: "arcadia-arc:/#trunk"
+      auto:
+        conditions:
+        - schedule:
+            days: MON
+            time: 9:00 - 12:00 MSK
+          since-last-release: 24h
+      stages:
+        package:
+          title: Build binaries
+    sqs_recipe_tool:
+      title: SQS Recipe Tool Release
+      description: |
+        Релиз программы, запускающей сервер Аркадийном рецепте SQS.
+
+        По умолчанию, рецепт обновляеся автоматически из trunk.
+        Релизы программы утром в понедельник.
+      flow: recipe_tool
+      flow-vars:
+        build-project: kikimr/public/tools/sqs_recipe/bin/sqs_recipe
+        prebuilt-ya-make-path: kikimr/public/tools/sqs_recipe/prebuilt
+        checkout-arcadia-from-url: "arcadia-arc:/#trunk"
+      auto:
+        conditions:
+        - schedule:
+            days: MON
+            time: 9:00 - 12:00 MSK
+          since-last-release: 24h
+      stages:
+        package:
+          title: Build binaries
+    ydb_recipe_tool:
+      title: YDB Recipe Tool Release
+      flow: recipe_tool
+      description: |
+        Релиз программы, запускающей сервер Аркадийном рецепте.
+
+        По умолчанию, рецепт обновляеся автоматически из trunk.
+        Подробнее в [a.yaml](http://a.yandex-team.ru/arc_vcs/kikimr/a.yaml)
+      flow-vars:
+        build-project: kikimr/public/tools/ydb_recipe/bin/ydb_recipe
+        prebuilt-ya-make-path: kikimr/public/tools/ydb_recipe/prebuilt
+        checkout-arcadia-from-url: "arcadia-arc:/#trunk"
+      auto:
+        conditions:
+        - schedule:
+            days: MON
+            time: 9:00 - 12:00 MSK
+          since-last-release: 24h
+      stages:
+        package:
+          title: Build binaries
+    ydbcp_release:
+      title: YDB Control Plane Release
+      description: |
+        Релиз YDB Control Plane
+      flow: ydbcp-release-flow
+      start-version: 50
+      branches:
+        pattern: releases/ydb/ydbcp/stable-${version}
+        auto-create: true
+      stages:
+      - id: test-ydbcp
+        title: Run ydbcp tests
+      - id: build-ydbcp
+        title: Build ydbcp
+  flows:
+    run_java_tests:
+      jobs:
+        run_test:
+          title: Build and mvn install kikimr/public/sdk/java
+          task: common/misc/run_command
+          requirements:
+            cores: 16
+            ram: 32 GB
+            sandbox:
+              client_tags: GENERIC & LINUX & SSD
+              container_resource: 2309143241 # Container with Java 8, Java 11 and Maven
+              dns: dns64
+          input:
+            config:
+              cmd_line: |
+                set -ex
+                cd $ARCADIA_PATH
+                export PATH=$ARCADIA_PATH:$PATH
+                export JAVA_HOME=/usr/local/java8
+                mkdir -p ~/.m2
+                cp ci/tasklet/registry/common/misc/run_command/maven/settings.xml ~/.m2/
+                cd kikimr/public/sdk/java
+                ya make
+                ./gen-proto.sh
+                mvn -B -Pwith-examples install
+              secret_environment_variables:
+                - key: YA_TOKEN
+                  secret_spec:
+                    uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
+                    key: ci.token
+              arc_mount_config:
+                enabled: true
+    run_periodic_export_of_data:
+      jobs:
+        run_test:
+          title: run_periodic_export_of_data
+          task: common/misc/run_command
+          requirements:
+            sandbox:
+              client_tags: GENERIC & LINUX
+              dns: dns64
+          input:
+            config:
+              secret_environment_variables:
+                - key: YC_OAUTH_TOKEN
+                  secret_spec:
+                    uuid: sec-01fzd4egdm6zk7bfxd3bnf3fnw
+                    key: token
+                - key: YA_TOKEN
+                  secret_spec:
+                    uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
+                    key: ci.token
+                - key: YT_TOKEN
+                  secret_spec:
+                    uuid: sec-01fzd4egdm6zk7bfxd3bnf3fnw
+                    key: yt
+              arc_mount_config:
+                enabled: true
+              cmd_line: |
+                set -xe
+                curl https://s3.mds.yandex.net/mcdev/ycp/install.sh | bash
+                export PATH=/home/sandbox/ycp/bin:$PATH
+                ycp init
+                cp $ARCADIA_PATH/kikimr/ydbcp/abc_database/config.yaml /home/sandbox/.config/ycp/config.yaml
+                sed -i "s/TOKEN_TO_REPLACE/"$YC_OAUTH_TOKEN"/g" /home/sandbox/.config/ycp/config.yaml
+                ycp --format json --profile internal team integration abc resolve -r - <<<"abc_slug: kikimr"
+                cd $ARCADIA_PATH/kikimr/ydbcp/abc_database/
+                $ARCADIA_PATH/ya make -r
+                ./collect_info
+                cat result.txt
+                cat result.txt | YT_PROXY=hahn $ARCADIA_PATH/ya tool yt write --table //home/solomon/service_provider_alerts/service_provider_exports/ydb --format json
+    run_build_from_git:
+      jobs:
+        run_test:
+          title: Build python sdk and then run tests
+          task: common/misc/run_command
+          requirements:
+            cores: 56
+            ram: 256 GB
+            sandbox:
+              client_tags: GENERIC & LINUX & SSD
+              dns: dns64
+          input:
+            config:
+              result_resources:
+              - path: package
+                description: YDBD TAR
+                type: OTHER_RESOURCE
+                compression_type: tgz
+                ci_badge: true
+                attributes:
+                  released: stable
+                  ttl: "14"
+              cmd_line: |
+                git clone https://github.yandex-team.ru/arcadia-devtools/ydb_oss.git
+                mkdir $RESULT_RESOURCES_PATH/package
+                cd ydb_oss
+                ./ya make -r -k ydb/apps/ydbd/
+                cp ydb/apps/ydbd/ydbd $RESULT_RESOURCES_PATH/package/
+                cp ydb/apps/ydbd/*.so $RESULT_RESOURCES_PATH/package/
+    publish_python_sdk_pypi_internal:
+      title: Build YDB Python SDK (Yandex Internal)
+      jobs:
+        package:
+          title: Build YDB Python SDK (Yandex Internal)
+          description: Runs ya package in sandbox
+          task: common/arcadia/ya_package
+          input:
+            packages: ${flow-vars.package-path}
+            build_type: release
+            package_type: wheel
+            publish_package: True
+            publish_to: ""
+            wheel_access_key_token: robot_ydb_pypi_access_token
+            wheel_secret_key_token: robot_ydb_pypi_key_token
+            wheel_upload_repo: https://pypi.yandex-team.ru/simple
+            build_system: ya
+            sandbox_container: 1329390397
+          stage: package
+    ydbcp-release-flow:
+      title: Release YDBCP
+      jobs:
+        start-release:
+          title: Start release
+          task: dummy
+          stage: test-ydbcp
+        run-ydbcp-tests:
+          title: Run ydbcp tests
+          description: Run ydbcp tests
+          task: common/arcadia/ya_make
+          stage: test-ydbcp
+          needs: start-release
+          requirements:
+            sandbox:
+              client_tags: GENERIC & LINUX & SSD
+            cores: 56
+            ram: 256GB
+          input: &run-tests-on-distbuild-input
+            build_system: ya_force
+            test: True
+            keep_on: True
+            checkout: False
+            checkout_mode: manual
+            output_only_tests: True
+            test_log_level: debug
+            collect_test_cores: False
+            do_not_restart: True
+            strip_binaries: True
+            check_return_code: True
+            fail_on_any_error: True
+            junit_report: True
+            kill_timeout: 14400
+            build_output_ttl: 1
+            build_output_html_ttl: 14
+            ya_timeout: 13500
+            test_threads: 50
+            # distbuild_pool: "//man/users/ydb"
+            # env_vars: "YA_TOKEN='$(vault:value:STORAGE-DEV:ARC_TOKEN)'"
+            targets: "kikimr/ydbcp"
+        validate-test-failures:
+          title: Validate test fails
+          task: dummy
+          manual:
+            enabled: true
+            prompt: "Ignore test failures?"
+          needs: start-release
+        run-create-tag:
+          title: Make YDBCP release tag
+          description: "Mount ARC and create the tag"
+          task: common/misc/run_command
+          requirements:
+            cores: 2
+            ram: 16G
+            sandbox:
+              client_tags: GENERIC & LINUX
+          needs-type: any
+          needs:
+            - run-ydbcp-tests
+            - validate-test-failures
+          stage: build-ydbcp
+          input:
+            config:
+              arc_mount_config:
+                enabled: true
+                revision_hash: trunk
+              environment_variables:
+                - key: ARC_TAG
+                  value: "tags/releases/ydb/ydbcp/stable-${context.version_info.major}-${not_null(context.version_info.minor, `0`)}"
+                - key: ARC_COMMIT
+                  value: "${context.target_revision.hash}"
+              secret_environment_variables:
+                - key: YA_TOKEN
+                  secret_spec:
+                    uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
+                    key: ci.token
+              cmd_line: |
+                pwd
+                $ARC_BIN status
+                $ARC_BIN push $ARC_COMMIT:$ARC_TAG
+        build-ydbcp:
+          title: Run build YDBCP packages
+          description: Run build YDB packages
+          task: common/arcadia/ya_package_2
+          needs: run-create-tag
+          stage: build-ydbcp
+          requirements:
+            sandbox:
+              client_tags: GENERIC & LINUX & SSD
+            cores: 56
+            ram: 256GB
+          input:
+            build_system: ya_force
+            checkout_arcadia_from_url: "arcadia-arc:/#tags/releases/ydb/ydbcp/stable-${context.version_info.major}-${not_null(context.version_info.minor, `0`)}"
+            key_user: robot-simcity
+            publish_package: True            
+            multiple_publish: True
+            publish_to: search
+            multiple_publish_to: search
+            build_logs_ttl: 1
+            package_ttl: 1
+            package_type: debian
+            build_output_ttl: 1
+            packages: "kikimr/ydbcp/packages/ydb-ydbcp-bin/pkg.json;kikimr/ydbcp/packages/ydb-ydbcp-init/pkg.json;kikimr/ydbcp/packages/ydb-ydbcp-prestable-meta-cfg/pkg.json;kikimr/ydbcp/packages/ydb-ydbcp-prod-meta-cfg/pkg.json;"
+    sync_python_sdk_from_git:
+      title: Sync from git
+      jobs:
+        sync_ydb_python_sdk_from_git:
+          title: Make PR with update
+          description: Runs
+          task: common/misc/run_command
+          requirements:
+            cores: 2
+            ram: 16G
+            sandbox:
+              client_tags: GENERIC & LINUX
+              dns: dns64
+          input:
+            config:
+              arc_mount_config:
+                enabled: true
+                revision_hash: trunk
+              environment_variables:
+                - key: ARC_BRANCH
+                  value: "users/robot-kikimr-dev/execute-sync-from-github-${context.version_info.major}"
+              secret_environment_variables:
+                - key: YA_TOKEN
+                  secret_spec:
+                    uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
+                    key: ci.token
+              cmd_line: |
+                pwd
+                $ARC_BIN status
+                $ARC_BIN info --json
+                $ARC_BIN checkout -b execute-sync-from-github
+                git clone https://github.com/yandex-cloud/ydb-python-sdk ~/tmp
+                rm -rf ydb/public/sdk/python/*
+                cp -r ~/tmp/* ydb/public/sdk/python/
+                python3 kikimr/public/sdk/python/make_ya_make.py
+                $ARC_BIN add -f ydb/public/sdk/python
+                $ARC_BIN commit -am "Release YDB recipe binaries"
+                $ARC_BIN push --set-upstream $ARC_BRANCH
+                $ARC_BIN pr create --publish -m 'Sync YDB SDK from github' --no-edit
+    recipe_tool:
+      title: Recipe tool binary
+      jobs:
+        start-build:
+          title: Build applications
+          task: dummy
+          stage: package
+        build-project:
+          title: Build Recipe Tool
+          description: Runs sandbox task
+          task: common/arcadia/build_arcadia_project_for_all
+          needs:
+            - start-build
+          input:
+            project: ${flow-vars.build-project}
+            checkout_arcadia_from_url: ${flow-vars.checkout-arcadia-from-url}
+            platforms_list:
+              - linux
+              - darwin
+            strip_binaries: True
+            definition_flags: -DUSE_YDB_TRUNK_RECIPE_TOOLS=1
+        recipe_pr:
+          title: Make PR with resources
+          description: Runs
+          task: common/misc/run_command
+          requirements:
+            cores: 2
+            ram: 16G
+            sandbox:
+              client_tags: GENERIC & LINUX
+          needs:
+            - start-build
+            - build-project
+          input:
+            config:
+              arc_mount_config:
+                enabled: true
+                revision_hash: trunk
+              environment_variables:
+                - key: YDB_LINUX
+                  value: ${to_string((tasks.build-project.resources[?type == 'ARCADIA_PROJECT_TGZ' && attributes.platform == 'linux'])[0].id)}
+                - key: YDB_DARWIN
+                  value: ${to_string((tasks.build-project.resources[?type == 'ARCADIA_PROJECT_TGZ' && attributes.platform == 'darwin'])[0].id)}
+                - key: RECIPE_TOOL_PATH
+                  value: ${flow-vars.prebuilt-ya-make-path}
+              secret_environment_variables:
+                - key: YA_TOKEN
+                  secret_spec:
+                    uuid: sec-01ekjvt2kbg4ag64z9z03jt0hp
+                    key: ci.token
+              cmd_line: |
+                pwd
+                $ARC_BIN status
+                $ARC_BIN info --json
+                $ARC_BIN checkout -b release-recipe-binaries-$YDB_LINUX-$YDB_DARWIN
+                rm $RECIPE_TOOL_PATH/ya.make
+                cp $RECIPE_TOOL_PATH/ya.make-template $RECIPE_TOOL_PATH/ya.make
+                sed -i 's/YDB_LINUX/'$YDB_LINUX'/g' $RECIPE_TOOL_PATH/ya.make
+                sed -i 's/YDB_DARWIN/'$YDB_DARWIN'/g' $RECIPE_TOOL_PATH/ya.make
+                $ARC_BIN add $RECIPE_TOOL_PATH/ya.make
+                $ARC_BIN commit -am "Release YDB recipe binaries"
+                $ARC_BIN push --set-upstream users/robot-kikimr-dev/release-recipe-binaries-$YDB_LINUX-$YDB_DARWIN
+                $ARC_BIN pr create --publish -m 'Release YDB recipe binaries' --no-edit
+  autocheck:
+    strong: true
+    fast-targets:
+      kikimr

@@ -39,7 +39,6 @@ public:
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
-        appConfig.MutablePQConfig()->SetMetaCacheRefreshIntervalMilliSeconds(30000);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);

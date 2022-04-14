@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package yandex.cloud.api;
+
+import "google/protobuf/descriptor.proto";
+import "yandex/cloud/api/tools/options.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/common-api/yandex/cloud/api;api";
+option (cloud.api.tools.file).lint_skip.java_package = true;
+
+extend google.protobuf.MethodOptions { Operation operation = 87334; }
+
+// Operation is annotation for rpc that returns longrunning operation, describes
+// message types that will be returned in metadata [google.protobuf.Any], and
+// in response [google.protobuf.Any] (for successful operation).
+message Operation {
+  // Optional. If present, rpc returns operation which metadata field will
+  // contains message of specified type.
+  string metadata = 1; // Optional.
+
+  // Required. rpc returns operation, in case of success response will contains message of
+  // specified field.
+  string response = 2; // Required.
+}

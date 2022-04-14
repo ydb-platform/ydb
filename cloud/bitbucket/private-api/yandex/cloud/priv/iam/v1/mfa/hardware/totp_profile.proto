@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.mfa.hardware;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/iam/v1/mfa/totp_profile.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/mfa/hardware;mfa_hardware";
+option java_outer_classname = "PHTP";
+
+message TotpProfile {
+  // TOTP profile ID.
+  string id = 1;
+  // The organization in which the hardware token is registered
+  string organization_id = 2;
+  // The user that this token binds to.
+  string subject_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // True, if the user has ever been successfully verified.
+  bool active = 5;
+  // Descriptions of profile
+  string description = 6;
+  // Labels of profile
+  map<string, string> labels = 7;
+  // The algorithm used to calculate the hash.
+  HashAlgorithm algorithm = 8;
+  // The length of the TOTP code (6-8).
+  int64 digits = 9;
+  // The period that a TOTP code will be valid for.
+  google.protobuf.Duration time_step = 10 [(value) = "10s-10m"];
+  // Serial number hardware token
+  string serial_no = 11;
+  // Manufacturer hardware token
+  string manufacturer = 12;
+  // Model hardware token
+  string model = 13;
+  // Start time for the hardware token. Default is Unix Epoch.
+  google.protobuf.Timestamp start_time = 14;
+  // Token time lags
+  google.protobuf.Duration time_drift = 15;
+}

@@ -1,0 +1,460 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.Yndx.KeyValue;
+
+option java_package = "com.yandex.ydb.yndx.rate_limiter";
+option java_outer_classname = "YndxkeyValueProtos";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/ydb_operation.proto";
+
+//
+// KeyValue API.
+//
+
+message Flags {
+    // Free disk space is low.
+    bool disk_space_cyan = 1;
+
+    // Free disk space is low, it is recommended to stop writing additional data.
+    bool disk_space_light_yellow_move = 2;
+    bool disk_space_yellow_stop = 3;
+
+    // Free disk space is very low, clients must stop writing additional data.
+    bool disk_space_light_orange = 4;
+    bool disk_space_orange = 5;
+
+    // Free disk space is extremely low, operations other than deletion may not be performed.
+    bool disk_space_red = 6;
+
+    // No free disk space available.
+    bool disk_space_black = 7;
+}
+
+
+message Statuses {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_NO_DATA = 2;
+        STATUS_ERROR = 3;
+        STATUS_OVERRUN = 4;
+    }
+}
+
+
+message StorageChannel {
+    // XXX
+    Statuses.Status status = 1;
+
+    // Storage channel index.
+    uint32 storage_channel = 2;
+
+    // If present, contains the status flags of the storage channel. Empty if status flags could not be obtained.
+    optional Flags status_flags = 3;
+}
+
+
+message Priorities {
+    enum Priority {
+        PRIORITY_UNSPECIFIED = 0;
+
+        // High priority for user-initiated operations.
+        PRIORITY_REALTIME = 1;
+
+        // Low prioroty for background system activity.
+        PRIORITY_BACKGROUND = 2;
+    }
+}
+
+
+message KVRange {
+    // The first bound of the range of the keys
+    // If no one is assigned then specify in order for the range to begin from the lowest key
+    oneof from_bound {
+        // Specify in order for the range to include the key specified
+        string from_key_inclusive = 1;
+        // Specify in order for the range not to include the key specified
+        string from_key_exclusive = 2;
+    }
+
+    // The second bound of the range of the keys
+    // If no one is assigned then specify in order for the range to end to the highest keys
+    oneof to_bound {
+        // Specify in order for the range to include the key specified
+        string to_key_inclusive = 3;
+        // Specify in order for the range not to include the key specified
+        string to_key_exclusive = 4;
+    }
+}
+
+
+message AcquireLockRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+    uint64 partition_id = 3;
+}
+
+
+message AcquireLockResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message AcquireLockResult {
+    // The generation of the lock to provide as an argument to all the operaions the user performs with the tablet.
+    uint64 lock_generation = 1;
+}
+
+message ExecuteTransactionRequest {
+    message Command {
+        message Rename {
+            // The key to change.
+            string old_key = 1;
+
+            // The new key to change the old key to.
+            string new_key = 2;
+        }
+        message Concat {
+            // Keys to use as the source for the concatenation.
+            repeated string input_keys = 1;
+
+            // New key to use for the result of the concatenation
+            string output_key = 2;
+
+            // Input keys are deleted after the concatenation by default. In order to keep both the inputs and the
+            // output, set keep_inputs to true.
+            bool keep_inputs = 3;
+        }
+
+        // Makes a copy of a range of key-value pairs. New keys are formed by removing a prefix and/or prepending a new
+        // prefix. For example, copy of the key-value pairs [{aaabc,1},{aaaef,2}] can be stripped of the 'aa' prefix and
+        // prepended with the 'x' so that the new pairs are [{xabc, 1}, {xaef, 2}].
+        message CopyRange {
+            // The range of keys to copy
+            KVRange range = 1;
+
+            // For each source key that begins with the prefix_to_remove, that prefix is removed from the new key before
+            // prepending it with the prefix_to_add.  Acts as filter if not empty.
+            string prefix_to_remove = 2;
+
+            // The prefix_to_add prefix is prepended to each new key.
+            string prefix_to_add = 3;
+        }
+        message Write {
+            enum Tactic {
+                TACTIC_UNSPECIFIED = 0;
+
+                // Write minimum required redundant data. Does not affect storage durability.
+                TACTIC_MAX_THROUGHPUT = 1;
+
+                // Write additional redundant data to more disks to reduce operation duration. Does not affect storage
+                // durability, but will use additional space.
+                TACTIC_MIN_LATENCY = 2;
+            }
+            // Key of the key-value pair to write.
+            string key = 1;
+
+            // Value of the key-value pair to write.
+            bytes value = 2;
+
+            // Storage channel to write the value to. Channel numbers begin with 1 and may go up to approximately 250
+            // (depends on the channel configuration of each tablet).
+            // Channel 1 is called the INLINE channel (value is stored in the index table).
+            // Channel 2 is called the MAIN channel (value is stored as a separate blob in the Distributed Storage).
+            // Channels 1 and 2 are available for all tablets.
+            // If the storage channel specified is not configured for the tablet, the value is stored in
+            // channel 2 (the MAIN channel).
+            uint32 storage_channel = 3; // (default = 0 is same as 2 or MAIN)
+
+            // Priority to use for the Distributed Storage Get operation. Has no effect for the 1st (inline) storage
+            // channel. Defaults to PRIORITY_UNSPECIFIED which interpreted like PRIORITY_REALTIME.
+            Priorities.Priority priority = 4;
+
+            // Tactic to use for the Distributed Storage Put operation. Has no effect for the 1st (inline) storage
+            // channel. Defaults to TACTIC_UNSPECIFIED which interpreted like TACTIC_MAX_THROUGHPUT.
+            Tactic tactic = 5;
+        }
+        message DeleteRange {
+            // The range of keys to delete
+            KVRange range = 1;
+        }
+
+        oneof action {
+            // Deletes key-value pairs with keys in the range specified.
+            DeleteRange delete_range = 1;
+
+            // Changes the key of a key-value pair.
+            Rename rename = 2;
+
+            // Creates a copy of key-value pairs with keys in the range specified by removin and/or prepending a prefix
+            // specified to each key.
+            CopyRange copy_range = 3;
+
+            // Creates a new key-value pair with key specified by concatenating values of multiple other key-value pairs
+            // with keys specified.
+            Concat concat = 4;
+
+            // Creates a new key-value pair with key and value specified.
+            Write write = 5;
+        }
+    }
+
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock obtained for the tablet as a result of an AcquireLock call.
+    uint64 lock_generation = 4;
+
+    // Commands to execute as a single atomic transaction. The order of execution of commands is the same as the order
+    // of commands in the ExecuteTransactionRequest. Order of execution of different transactions is not specified.
+    repeated Command commands = 5;
+}
+
+message ExecuteTransactionResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ExecuteTransactionResult {
+    repeated StorageChannel storage_channel = 1;
+}
+
+message ReadRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock obtained for the tablet as a result of an AcquireLock call.
+    uint64 lock_generation = 4;
+
+    // Key of the key-value pair to read.
+    string key = 5;
+
+    // Offset in bytes from the beginning of the value to read data from.
+    uint64 offset = 6;
+
+    // Size of the data to read in bytes. 0 means "read to the end of the value".
+    uint64 size = 7;
+
+    // Result protobuf size limit. If not 0, overrides the default one only with a smaller value.
+    uint64 limit_bytes = 8;
+
+    // Priority to use for the Distributed Storage Get operation. Has no effect for the 1st (inline) storage
+    // channel. Defaults to PRIORITY_UNSPECIFIED which interpreted like PRIORITY_REALTIME.
+    Priorities.Priority priority = 9;
+}
+
+message ReadResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReadResult {
+    // The key of the requested key-value pair
+    string requested_key = 1;
+
+    // Offset in bytes from the beginning of the value requested
+    uint64 requested_offset = 2;
+
+    // Size of the data requested
+    uint64 requested_size = 3;
+
+    // The bytes of the requested part of the value of the requested key-value pair
+    bytes value = 4;
+
+    // XXX
+    string msg = 5;
+
+    Statuses.Status status = 6;
+}
+
+message ReadRangeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock obtained for the tablet as a result of an AcquireLock call.
+    uint64 lock_generation = 4;
+
+    // The range of keys to read
+    KVRange range = 5;
+
+    // Result protobuf size limit. If not 0, overrides the default one only with a smaller value.
+    uint64 limit_bytes = 6;
+
+    // Priority to use for the Distributed Storage Get operation. Has no effect for the 1st (inline) storage
+    // channel. Defaults to PRIORITY_UNSPECIFIED which interpreted like PRIORITY_REALTIME.
+    Priorities.Priority priority = 7;
+}
+
+message ReadRangeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReadRangeResult {
+    message KeyValuePair {
+        // The key of the key-value pair.
+        string key = 1;
+
+        // The value of the key-value pair. Present only if the request was performed with include_data set to true.
+        bytes value = 2;
+
+        // Full size of the value of the key-value pair.
+        uint32 value_size = 3;
+
+        // Unix time of the creation of the key-value pair (in ms).
+        uint64 creation_unix_time = 4;
+
+        // Contains the index of the actualy used storage channel. The actually used storage channel may differ from
+        // the value specified in the write request for example if there were no such storage channel at the moment
+        // of execution of the write command.
+        // For values created as a result of a concatenation or a copy of such values, the storage channel of the first
+        // part of the value is specified.
+        uint32 storage_channel = 5; // Returns the _actual_ storage channel
+
+        Statuses.Status status = 6;
+    }
+    Statuses.Status status = 1;
+
+    // List of the key-value pairs and metadata requested.
+    repeated KeyValuePair pair = 2;
+}
+
+message ListRangeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock obtained for the tablet as a result of an AcquireLock call.
+    uint64 lock_generation = 4;
+
+    // The range of keys to read
+    KVRange range = 5;
+
+    // Result protobuf size limit. If not 0, overrides the default one only with a smaller value.
+    uint64 limit_bytes = 6;
+
+    // Priority to use for the Distributed Storage Get operation. Has no effect for the 1st (inline) storage
+    // channel. Defaults to PRIORITY_UNSPECIFIED which interpreted like PRIORITY_REALTIME.
+    Priorities.Priority priority = 7;
+}
+
+message ListRangeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListRangeResult {
+    message KeyInfo {
+        // The key of the key-value pair.
+        string key = 1;
+
+        // Full size of the value of the key-value pair.
+        uint32 value_size = 2;
+
+        // Unix time of the creation of the key-value pair (in ms).
+        uint64 creation_unix_time = 3;
+
+        // Contains the index of the actualy used storage channel. The actually used storage channel may differ from
+        // the value specified in the write request for example if there were no such storage channel at the moment
+        // of execution of the write command.
+        // For values created as a result of a concatenation or a copy of such values, the storage channel of the first
+        // part of the value is specified.
+        uint32 storage_channel = 4; // Returns the _actual_ storage channel
+    }
+    Statuses.Status status = 1;
+
+    // List of the key-value pairs and metadata requested.
+    repeated KeyInfo key = 2;
+}
+
+message GetStorageChannelStatusRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+    uint64 partition_id = 3;
+
+    // Generation of the exclusive lock obtained for the tablet as a result of an AcquireLock call.
+    uint64 lock_generation = 4;
+
+    // Storage channel index.
+    repeated uint32 storage_channel = 5;
+}
+
+message GetStorageChannelStatusResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetStorageChannelStatusResult {
+    repeated StorageChannel storage_channel = 1;
+}
+
+message CreateVolumeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+    uint32 channel_profile_id = 3;
+    uint32 partition_count = 4;
+}
+
+message CreateVolumeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CreateVolumeResult {
+}
+
+message DropVolumeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+}
+
+message DropVolumeResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DropVolumeResult {
+}
+
+message ListLocalPartitionsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Path to the volume
+    string path = 2;
+
+    // If it's zero than it used local node.
+    uint64 node_id = 3;
+}
+
+message ListLocalPartitionsResponse {
+    // Operation contains the result of the request. Check the ydb_operation.proto.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListLocalPartitionsResult {
+    string requested_path = 1;
+    uint64 node_id = 2;
+
+    repeated uint64 partition_ids = 3;
+}

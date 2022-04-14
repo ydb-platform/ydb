@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "POS";
+
+service OperationService {
+  rpc Get (GetOperationRequest) returns (operation.Operation) {
+    option (google.api.http) = { get: "/iam/v1/operations/{operation_id}" };
+  }
+}
+
+message GetOperationRequest {
+  string operation_id = 1 [(required) = true, (length) = "<=50"];
+}

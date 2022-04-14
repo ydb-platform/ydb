@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "POAC";
+
+message OAuthClient {
+  string id = 1;
+  string name = 2;
+  repeated string permission_ids = 3;
+  string client_secret_sha256 = 4;
+  repeated string redirect_uris = 5;
+  repeated string scopes = 6;
+  repeated string auto_approve_scopes = 7;
+  repeated string authorized_grant_types = 8;
+  string federation_id = 9;
+}

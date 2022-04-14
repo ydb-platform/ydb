@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.oauth.v1;
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/oauth/claims.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/oauth/v1;oauth";
+option java_outer_classname = "PACS";
+
+service ClaimService {
+    rpc Get (GetClaimsRequest) returns (GetClaimsResponse);
+}
+
+message GetClaimsRequest {
+    repeated string subject_ids = 1 [(size) = "1-1000", (length) = "<=50"];
+}
+
+message GetClaimsResponse {
+    repeated SubjectDetails subject_details = 2;
+}
+
+message SubjectDetails {
+    SubjectClaims subject_claims = 1 [(required) = true];
+}

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PYPC";
+
+message YandexPassportCookies {
+  // Cookies Session_id and sessionid2
+  // https://doc.yandex-team.ru/blackbox/reference/MethodSessionID.html
+
+  // Also blackbox verify client's IP to belong to internal networks.
+  // Internal services set different cookies depending on which network the user's IP - external or internal.
+  //
+  // Use X-Forwarded-For to send user's IP which will be sent to blackbox.
+  //
+  // IP address need specify in standard IPv4 format (for example, 194.84.46.241)
+  // or IPv6 (for example, 2001:0db8:11a3:09d7:1f34:8a2e:07a0:765d).
+  // If IP address in the wrong format, returns an error message.
+
+  // Value of the cookie being checked Session_id.
+  string session_id = 1 [(required) = true, (length) = "<=4093", (sensitive) = true];
+
+  // The value of a cookie sessionid2.
+  string ssl_session_id = 2 [(length) = "<=4093", (sensitive) = true];
+
+  // Host address, for example "yandex.ua" or "volozh.ya.ru".
+  string host = 3 [(required) = true, (length) = "<=253"];
+}

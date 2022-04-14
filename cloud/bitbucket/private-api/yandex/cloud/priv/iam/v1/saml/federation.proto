@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.saml;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/saml;saml";
+option java_outer_classname = "PSF";
+
+// A federation resource.
+// For more information, see [federations](/docs/iam/concepts/users/saml-federations).
+message Federation {
+
+  // ID of the federation.
+  string id = 1;
+
+  // ID of the folder that the federation belongs to.
+  string folder_id = 2;
+
+  // Name of the federation.
+  // The name is unique within the cloud. 3-63 characters long.
+  string name = 3;
+
+  // Description of the federation. 0-256 characters long.
+  string description = 4;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 5;
+
+  // The 'IAM_COOKIE' cookie max age in seconds.
+  // The value should be in range from 10 min to 12 hours.
+  // The default value is 8 hours.
+  google.protobuf.Duration cookie_max_age = 6;
+
+  // Auto create accounts for new user on first login.
+  bool auto_create_account_on_login = 7;
+
+  // federation issuer (entity Id).
+  string issuer = 8;
+
+  // Single sign on endpoint binding type.
+  BindingType sso_binding = 9;
+
+  // Single sign on endpoint URL.
+  string sso_url = 10;
+
+  // Federation security settings.
+  FederationSecuritySettings security_settings = 11;
+
+  // Use case insensitive Name IDs.
+  bool case_insensitive_name_ids = 12;
+}
+
+// SAML Binding is a mapping of a SAML protocol message onto standard messaging formats and/or communications protocols.
+enum BindingType {
+
+  // Invalid
+  BINDING_TYPE_UNSPECIFIED = 0;
+
+  // HTTP POST binding.
+  POST = 1;
+
+  // HTTP redirect binding.
+  REDIRECT = 2;
+
+  // HTTP artifact binding.
+  ARTIFACT = 3;
+
+}
+
+message FederationSecuritySettings {
+  // Enable encrypted assertions.
+  bool encrypted_assertions = 1;
+}
+
+message ServiceProviderCertificate {
+  // ID of the federation that the certificate belongs to.
+  string federation_id = 2;
+
+  // Certificate data in PEM format.
+  string data = 6;
+
+  // SHA256-fingerprint of the certificate.
+  string fingerprint = 7;
+
+  // Time after which the certificate is not valid.
+  google.protobuf.Timestamp not_after = 8;
+
+  // Time before which the certificate is not valid.
+  google.protobuf.Timestamp not_before = 9;
+}

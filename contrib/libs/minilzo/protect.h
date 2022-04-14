@@ -1,0 +1,18 @@
+#pragma once
+
+#define __lzo_align_gap _minilzo___lzo_align_gap
+#define __lzo_init_v2 _minilzo___lzo_init_v2
+#define __lzo_ptr_linear _minilzo___lzo_ptr_linear
+#define _lzo_config_check _minilzo__lzo_config_check
+#define _lzo_version_date _minilzo__lzo_version_date
+#define _lzo_version_string _minilzo__lzo_version_string
+#define lzo1x_1_compress _minilzo_lzo1x_1_compress
+#define lzo1x_decompress _minilzo_lzo1x_decompress
+#define lzo1x_decompress_safe _minilzo_lzo1x_decompress_safe
+#define lzo_adler32 _minilzo_lzo_adler32
+#define lzo_copyright _minilzo_lzo_copyright
+#define lzo_crc32 _minilzo_lzo_crc32
+#define lzo_get_crc32_table _minilzo_lzo_get_crc32_table
+#define lzo_version _minilzo_lzo_version
+#define lzo_version_date _minilzo_lzo_version_date
+#define lzo_version_string _minilzo_lzo_version_string

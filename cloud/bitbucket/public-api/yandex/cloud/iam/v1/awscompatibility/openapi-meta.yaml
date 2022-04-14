@@ -1,0 +1,7 @@
+info:
+  title: Yandex IAM API
+  version: v1
+  description: This API reference is organized by resource. Actions are performed by sending HTTP requests to resource URLs or making RPC calls. For more information about Yandex.Cloud API architecture, see [API Concepts](/docs/api-design-guide/).
+  x-y-docUri: api-ref
+  x-y-baseUrl: "https://iam.api.cloud.yandex.net"
+docName: "/docs/iam/api-ref"

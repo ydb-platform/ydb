@@ -9,6 +9,8 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <kikimr/persqueue/sdk/deprecated/cpp/v2/ut_utils/test_server.h>
+
 namespace NKikimr::NMsgBusProxy {
 using namespace NPqMetaCacheV2;
 using namespace Tests;
@@ -20,38 +22,24 @@ namespace NTests {
 class TPqMetaCacheV2Test: public TTestBase {
     void SetUp() override {
         TTestBase::SetUp();
-        TPortManager pm{};
-        MainServerPort = pm.GetPort(2134);
-        GrpcServerPort = pm.GetPort(2135);
-        NKikimr::NPersQueueTests::TServerSettings settings = NKikimr::NPersQueueTests::PQSettings(MainServerPort);
+        NKikimr::NPersQueueTests::TServerSettings settings = NKikimr::NPersQueueTests::PQSettings(0);
+        settings.SetGrpcPort(GrpcServerPort);
         settings.SetDomainName("Root");
         settings.SetDomain(0);
         settings.SetUseRealThreads(true);
-        //settings.PQConfig.SetMetaCacheSkipVersionCheck(true);
-        Server = MakeHolder<NKikimr::Tests::TServer>(settings);
+        Server = MakeHolder<::NPersQueue::TTestServer>(settings);
+        GrpcServerPort = Server->GrpcPort;
+        auto* runtime = Server->CleverServer->GetRuntime();
+        Server->EnableLogs({NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_WRITE_PROXY});
+        Server->EnableLogs({NKikimrServices::PERSQUEUE}, NActors::NLog::PRI_INFO);
+        //runtime->SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_EMERG);
 
-        Server->EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(GrpcServerPort));
-        auto* runtime = Server->GetRuntime();
-        //runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
-//        runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
-//        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::PQ_METACACHE, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_EMERG);
-        runtime->SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_EMERG);
-
-        Client = std::make_shared<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, GrpcServerPort);
-
-        Client->InitRootScheme();
 
         NYdb::TDriverConfig driverCfg;
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << GrpcServerPort);
         YdbDriver = std::make_shared<NYdb::TDriver>(driverCfg);
         TableClient.Reset(new NYdb::NTable::TTableClient(*YdbDriver));
         PQClient = std::make_shared<NYdb::NPersQueue::TPersQueueClient>(*YdbDriver);
-
-        Client->MkDir("/Root", "PQ");
-        Client->MkDir("/Root/PQ", "Config");
-        Client->MkDir("/Root/PQ/Config", "V2");
 
         auto tableDesc = TTableBuilder()
                 .AddNullableColumn("path", EPrimitiveType::Utf8)
@@ -134,19 +122,20 @@ class TPqMetaCacheV2Test: public TTestBase {
 
     template<class TEvType>
     THolder<TEvType> DoMetaCacheRequest(const TVector<TTopicInfo>& topicList = {}) {
+        auto factory = std::make_shared<::NPersQueue::TTopicNamesConverterFactory>(false, "/Root/PQ", "dc1");
         IEventBase* ev;
         if (topicList.empty()) {
             ev = new TEvPqNewMetaCache::TEvDescribeAllTopicsRequest();
         } else {
-            TVector<TString> topicNames;
+            TVector<::NPersQueue::TDiscoveryConverterPtr> topicNames;
             for (const auto &topic : topicList) {
-                topicNames.emplace_back(TString("/Root/PQ/") + ::NPersQueue::BuildFullTopicName(topic.Path, topic.Cluster));
+                topicNames.emplace_back(factory->MakeDiscoveryConverter(topic.Path, false, topic.Cluster));
             }
             ev = new TEvPqNewMetaCache::TEvDescribeTopicsRequest(topicNames);
         }
         auto handle = new IEventHandle(MetaCacheId, EdgeActorId, ev);
-        Server->GetRuntime()->Send(handle);
-        auto response = Server->GetRuntime()->GrabEdgeEvent<TEvType>();
+        Server->CleverServer->GetRuntime()->Send(handle);
+        auto response = Server->CleverServer->GetRuntime()->GrabEdgeEvent<TEvType>();
         return std::move(response);
     }
 
@@ -158,7 +147,7 @@ class TPqMetaCacheV2Test: public TTestBase {
         return DoMetaCacheRequest<TEvPqNewMetaCache::TEvDescribeAllTopicsResponse>();
     }
 
-    void CheckTopicInfo(const TVector<TTopicInfo>& expected, std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> result) {
+    void CheckTopicInfo(const TVector<TTopicInfo>& expected, std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result) {
         ui64 i = 0;
         Cerr << "=== Got cache navigate response: \n" << result->ToString(NKikimr::NScheme::TTypeRegistry()) << Endl;
         Cerr << "=== Expect to have " << expected.size() << " records, got: " << result->ResultSet.size() << " records" << Endl;
@@ -179,7 +168,7 @@ class TPqMetaCacheV2Test: public TTestBase {
     void WaitForVersion(ui64 version, TDuration timeout = TDuration::Seconds(5)) {
         ui64 currentVersion = 0;
         auto endTime = TInstant::Now() + timeout;
-        auto* runtime = Server->GetRuntime();
+        auto* runtime = Server->CleverServer->GetRuntime();
         while (endTime > TInstant::Now()) {
             auto handle = new IEventHandle(MetaCacheId, EdgeActorId, new TEvPqNewMetaCache::TEvGetVersionRequest());
             runtime->Send(handle);
@@ -195,7 +184,7 @@ class TPqMetaCacheV2Test: public TTestBase {
     }
 
     TActorId MakeEdgeTargetedMetaCache() {
-        auto anotherMetaCacheId = Server->GetRuntime()->Register(
+        auto anotherMetaCacheId = Server->CleverServer->GetRuntime()->Register(
                 NPqMetaCacheV2::CreatePQMetaCache(EdgeActorId)
 
         );
@@ -236,7 +225,7 @@ class TPqMetaCacheV2Test: public TTestBase {
         ui64 totalTopics = topics.size() + lotOfTopics.size();
         auto secondMetaCache = MakeEdgeTargetedMetaCache();
         Cerr << "===Registered secondary meta cache: " << secondMetaCache.ToString() << Endl;
-        auto* runtime = Server->GetRuntime();
+        auto* runtime = Server->CleverServer->GetRuntime();
 
         auto sendRequest = [&]() {
             auto* ev = new TEvPqNewMetaCache::TEvDescribeAllTopicsRequest();
@@ -282,9 +271,9 @@ class TPqMetaCacheV2Test: public TTestBase {
 
     void TestDescribeAllTopics() {
         auto topics = TVector<TTopicInfo>({
-              {"topic1", "man", true},
-              {"topic2", "man", true},
-              {"topic3", "man", false}
+              {"topic1", "dc1", true},
+              {"topic2", "dc1", true},
+              {"topic3", "dc1", false}
         });
         AddTopics(topics);
         auto ev = DescribeAllTopics();
@@ -294,18 +283,20 @@ class TPqMetaCacheV2Test: public TTestBase {
 
     void TestTopicsUpdate() {
         auto topics = TVector<TTopicInfo>({
-                {"topic1", "man", true},
-                {"topic2", "man", true},
-                {"topic3", "man", false}
+                {"topic1", "dc1", true},
+                {"topic2", "dc1", true},
+                {"topic3", "dc1", false}
           });
         AddTopics(topics);
         CheckTopicInfo(topics, DescribeTopics(topics)->Result);
         WaitForVersion(Version);
 
-        TTopicInfo topic{"topic1", "sas", true};
+        TTopicInfo topic{"topic1", "dc2", false};
+        Server->AnnoyingClient->CreateTopic(NPersQueueTests::TRequestCreatePQ("rt3.dc2--topic1", 1), false);
         AddTopics({topic}, false);
 
         CheckTopicInfo(topics, DescribeAllTopics()->Result);
+        topic.DoCreate = true;
 
         AddTopics({}, true);
         WaitForVersion(Version);
@@ -334,15 +325,13 @@ class TPqMetaCacheV2Test: public TTestBase {
         UNIT_TEST(TestTopicsUpdate)
     UNIT_TEST_SUITE_END();
 private:
-    ui16 MainServerPort;
     ui16 GrpcServerPort;
-    THolder<Tests::TServer> Server;
+    THolder<::NPersQueue::TTestServer> Server;
 
     TActorId EdgeActorId;
     TActorId SchemeCacheId;
     TActorId MetaCacheId;
     ui64 Version = 1;
-    std::shared_ptr<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> Client;
 
     std::shared_ptr<NYdb::TDriver> YdbDriver;
     TAtomicSharedPtr<NYdb::NTable::TTableClient> TableClient;

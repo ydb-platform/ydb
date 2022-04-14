@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/os_login.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "POLS";
+
+service OsLoginService {
+  rpc Get (GetOsLoginRequest) returns (OsLoginInfo);
+
+  rpc Update (UpdateOsLoginRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateOsLoginMetadata"
+      response: "OsLoginInfo"
+    };
+  }
+}
+
+message GetOsLoginRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+  oneof subject {// use calling subject if not specified
+    string subject_id = 2 [(length) = "<=50"];
+    string os_login = 3 [(length) = "<=32"];
+    int64 uid = 4;
+  }
+}
+
+message UpdateOsLoginRequest {
+  string cloud_id = 1 [(required) = true, (length) = "<=50"];
+  string subject_id = 2 [(length) = "<=50"]; // use calling subject if not specified
+  google.protobuf.FieldMask update_mask = 3;
+  string os_login = 4 [(length) = "<=32"];
+  int64 uid = 5;
+}
+
+message UpdateOsLoginMetadata {
+  string cloud_id = 1;
+  string subject_id = 2;
+}

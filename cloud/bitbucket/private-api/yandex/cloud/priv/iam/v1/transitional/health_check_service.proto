@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.transitional;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/tools/options.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/transitional;iam";
+option java_outer_classname = "PTHCS";
+
+service HealthCheckService {
+  rpc GetHealth (HealthCheckRequest) returns (HealthCheckResponse) {
+    option (google.api.http) = { get: "/iam/v1/health" };
+  }
+}
+
+message HealthCheckRequest {
+}
+
+message HealthCheckResponse {
+  HealthStatus health = 1;
+
+  enum HealthStatus {
+    option (cloud.api.tools.enumeration).lint_skip.unspecified_value = true;
+    PASSED = 0;
+    FAILED = 1;
+    UNKNOWN = 2;
+  }
+}

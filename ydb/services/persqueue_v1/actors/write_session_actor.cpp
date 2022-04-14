@@ -1,4 +1,5 @@
 #include "write_session_actor.h"
+#include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include "codecs.h"
 
@@ -260,7 +261,7 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
         }
     } else {
         TString errorReason = Sprintf("access to topic '%s' denied for '%s' due to 'no WriteTopic rights', Marker# PQ1125",
-            TopicConverter->GetClientsideName().c_str(),
+            DiscoveryConverter->GetPrintableString().c_str(),
             Token->GetUserSID().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::ACCESS_DENIED, ctx);
     }
@@ -274,17 +275,17 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         CloseSession("got second init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    const auto& init = event->Request.init_request();
+    InitRequest = event->Request.init_request();
 
-    if (init.topic().empty() || init.message_group_id().empty()) {
+    if (InitRequest.topic().empty() || InitRequest.message_group_id().empty()) {
         CloseSession("no topic or message_group_id in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
 
-    TopicConverter = TopicsController.GetWriteTopicConverter(init.topic(), Request->GetDatabaseName().GetOrElse("/Root"));
-    if (!TopicConverter->IsValid()) {
+    DiscoveryConverter = TopicsController.GetWriteTopicConverter(InitRequest.topic(), Request->GetDatabaseName().GetOrElse("/Root"));
+    if (!DiscoveryConverter->IsValid()) {
         CloseSession(
-                TStringBuilder() << "topic " << init.topic() << " could not be recognized: " << TopicConverter->GetReason(),
+                TStringBuilder() << "topic " << InitRequest.topic() << " could not be recognized: " << DiscoveryConverter->GetReason(),
                 PersQueue::ErrorCode::BAD_REQUEST, ctx
         );
         return;
@@ -292,21 +293,9 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
     PeerName = event->PeerName;
 
-    SourceId = init.message_group_id();
-    try {
-        // "Bad" hash - in legacy mode calculated from full name ("rt3...", not short name);
-        // Here we had a bug for all the time being and now have to keep compatibility was invalid hashes
-        // Generally GetTopicForSrcIdHash for encoding. Do not copy-paste this line;
-        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(TopicConverter->GetTopicForSrcId(), SourceId);
+    SourceId = InitRequest.message_group_id();
 
-        // Good hash and proper way of calcultion;
-        CompatibleHash = NSourceIdEncoding::EncodeSrcId(TopicConverter->GetTopicForSrcIdHash(), SourceId).Hash;
-    } catch (yexception& e) {
-        CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
-
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << init << " from " << PeerName);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << InitRequest << " from " << PeerName);
     //TODO: get user agent from headers
     UserAgent = "pqv1 server";
     LogSession(ctx);
@@ -321,21 +310,37 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
     InitCheckSchema(ctx, true);
 
-    PreferedPartition = init.partition_group_id() > 0 ? init.partition_group_id() - 1 : Max<ui32>();
+    PreferedPartition = InitRequest.partition_group_id() > 0 ? InitRequest.partition_group_id() - 1 : Max<ui32>();
 
-    InitMeta = GetInitialDataChunk(init, TopicConverter->GetFullLegacyName(), PeerName); // ToDo[migration] - check?
+    const auto& preferredCluster = InitRequest.preferred_cluster();
+    if (!preferredCluster.empty()) {
+        Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionSetPreferredCluster(Cookie, preferredCluster));
+    }
+}
+
+void TWriteSessionActor::InitAfterDiscovery(const TActorContext& ctx) {
+    try {
+        // "Bad" hash - in legacy mode calculated from full name ("rt3...", not short name);
+        // Here we had a bug for all the time being and now have to keep compatibility was invalid hashes
+        // Generally GetTopicForSrcIdHash for encoding. Do not copy-paste this line;
+        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcId(), SourceId);
+
+        // Good hash and proper way of calcultion;
+        CompatibleHash = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcIdHash(), SourceId).Hash;
+    } catch (yexception& e) {
+        CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
+        return;
+    }
+
+    InitMeta = GetInitialDataChunk(InitRequest, FullConverter->GetClientsideName(), PeerName); // ToDo[migration] - check?
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
-    Aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
+    Aggr = {{{{"Account", FullConverter->GetAccount()}}, {"total"}}};
 
     SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false);
     SLIErrors = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsError"}, true, "sensor", false);
     SLITotal.Inc();
 
-    const auto& preferredCluster = init.preferred_cluster();
-    if (!preferredCluster.empty()) {
-        Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionSetPreferredCluster(Cookie, preferredCluster));
-    }
 }
 
 void TWriteSessionActor::SetupCounters()
@@ -346,7 +351,7 @@ void TWriteSessionActor::SetupCounters()
 
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetServiceCounters(Counters, "pqproxy|writeSession");
-    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(TopicConverter->GetClientsideName());
+    auto aggr = NPersQueue::GetLabels(FullConverter);
 
     BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflight"}, false);
     BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflightTotal"}, false);
@@ -365,8 +370,8 @@ void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& db
     }
 
     //now topic is checked, can create group for real topic, not garbage
-    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters);
-    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(TopicConverter->GetClientsideName(), cloudId, dbId, folderId);
+    auto subGroup = NPersQueue::GetCountersForStream(Counters);
+    auto aggr = NPersQueue::GetLabelsForStream(FullConverter, cloudId, dbId, folderId);
 
     BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding"}, false, "name");
     BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding_total"}, false, "name");
@@ -384,7 +389,7 @@ void TWriteSessionActor::InitCheckSchema(const TActorContext& ctx, bool needWait
     if (!needWaitSchema) {
         ACLCheckInProgress = true;
     }
-    ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({TopicConverter->GetPrimaryPath()}));
+    ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({DiscoveryConverter}));
     if (needWaitSchema) {
         State = ES_WAIT_SCHEME_2;
     }
@@ -406,6 +411,8 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
     Y_VERIFY(description.PartitionsSize() > 0);
     Y_VERIFY(description.HasPQTabletConfig());
     InitialPQTabletConfig = description.GetPQTabletConfig();
+    FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig);
+    InitAfterDiscovery(ctx);
 
     BalancerTabletId = description.GetBalancerTabletID();
 
@@ -452,8 +459,8 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
         ProceedPartition(partitionId, ctx);
         return;
     }
-    SendSelectPartitionRequest(CompatibleHash, TopicConverter->GetFullLegacyName(), ctx);
-    SendSelectPartitionRequest(EncodedSourceId.Hash, TopicConverter->GetFullLegacyName(), ctx);
+    SendSelectPartitionRequest(CompatibleHash, FullConverter->GetClientsideName(), ctx);
+    SendSelectPartitionRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
     State = ES_WAIT_TABLE_REQUEST_1;
 }
 
@@ -627,12 +634,12 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
 void TWriteSessionActor::SendUpdateSrcIdsRequests(const TActorContext& ctx) {
     {
         //full legacy name (rt3.dc--acc--topic)
-        auto ev = MakeUpdateSourceIdMetadataRequest(CompatibleHash, TopicConverter->GetFullLegacyName(), ctx);
+        auto ev = MakeUpdateSourceIdMetadataRequest(CompatibleHash, FullConverter->GetClientsideName(), ctx);
         SourceIdUpdatesInflight++;
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
     {
-        auto ev = MakeUpdateSourceIdMetadataRequest(EncodedSourceId.Hash, TopicConverter->GetFullLegacyName(), ctx);
+        auto ev = MakeUpdateSourceIdMetadataRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
         SourceIdUpdatesInflight++;
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
@@ -656,7 +663,8 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
 
     if (!tabletId) {
         CloseSession(
-                Sprintf("no partition %u in topic '%s', Marker# PQ4", Partition, TopicConverter->GetClientsideName().c_str()),
+                Sprintf("no partition %u in topic '%s', Marker# PQ4", Partition,
+                        DiscoveryConverter->GetPrintableString().c_str()),
                 PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx
         );
         return;
@@ -734,8 +742,8 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev
     init->set_session_id(EscapeC(OwnerCookie));
     init->set_last_sequence_number(maxSeqNo);
     init->set_partition_id(Partition);
-    init->set_topic(TopicConverter->GetModernName());
-    init->set_cluster(TopicConverter->GetCluster());
+    init->set_topic(FullConverter->GetFederationPath());
+    init->set_cluster(FullConverter->GetCluster());
     init->set_block_format_version(0);
     if (InitialPQTabletConfig.HasCodecs()) {
         for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
@@ -1067,7 +1075,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
 
         if (data.blocks_message_counts(messageIndex) != 1) {
             CloseSession(TStringBuilder() << "bad write request - 'blocks_message_counts' at position " << messageIndex << " is " << data.blocks_message_counts(messageIndex)
-                << ", only single message per block is supported by block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx);
+                                          << ", only single message per block is supported by block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return false;
         }
         return true;
@@ -1095,7 +1103,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
             return;
 
         }
-     } else {
+    } else {
         NextRequestInited = false;
     }
 
@@ -1109,8 +1117,12 @@ void TWriteSessionActor::HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const
 }
 
 void TWriteSessionActor::LogSession(const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent << "\" ip=" << PeerName << " proto=v1 "
-                            << " topic=" << TopicConverter->GetModernName() << " durationSec=" << (ctx.Now() - StartTime).Seconds());
+    LOG_INFO_S(
+            ctx, NKikimrServices::PQ_WRITE_PROXY,
+            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent
+                                      << "\" ip=" << PeerName << " proto=v1 "
+                                      << " topic=" << DiscoveryConverter->GetInternalName()
+                                      << " durationSec=" << (ctx.Now() - StartTime).Seconds());
 
     LogSessionDeadline = ctx.Now() + TDuration::Hours(1) + TDuration::Seconds(rand() % 60);
 }

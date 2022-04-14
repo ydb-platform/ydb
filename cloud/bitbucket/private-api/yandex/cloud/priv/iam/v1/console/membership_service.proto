@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.console;
+
+import "yandex/cloud/priv/oauth/claims.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/console;iam_console";
+option java_outer_classname = "PCMS";
+
+// Console-specific MembershipService.
+
+service MembershipService {
+  rpc ListMembers (ListMembersRequest) returns (ListMembersResponse);
+}
+
+message ListMembersRequest {
+  oneof list_context {
+    option (exactly_one) = true;
+    string organization_id = 1 [(length) = "<=50"];
+    string cloud_id = 2 [(length) = "<=50"];
+  }
+
+  // Subjects listing filter.
+  // Filter specs: https://wiki.yandex-team.ru/users/zdazzy/cloud/iam/service/console/objectfilter/
+  string filter = 3 [(length) = "<=1000"];
+
+  int64 page_size = 4 [(value) = "<=1000"];
+  string page_token = 5 [(length) = "<=100"];
+}
+
+message ListMembersResponse {
+  repeated SubjectWithClaims members = 1;
+  string next_page_token = 2;
+}
+
+message SubjectWithClaims {
+  yandex.cloud.priv.oauth.SubjectClaims subject_claims = 1;
+}

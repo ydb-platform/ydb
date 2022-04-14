@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PMS";
+
+service MembershipService {
+  rpc ListResourceMembers (ListResourceMembersRequest) returns (ListResourceMembersResponse);
+
+  // List member resources for specified resource type. Response resources are sorted by resource_id.
+  rpc ListMemberResources (ListMemberResourcesRequest) returns (ListMemberResourcesResponse);
+}
+
+// List all members of a resource of type "resource_type" with id "resource_id".
+message ListResourceMembersRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  string resource_type = 2 [(required) = true, (length) = "<=100"];
+  int64 page_size = 3 [(value) = "0-1000"];
+  string page_token = 4 [(length) = "<=100"];
+}
+
+message ListResourceMembersResponse {
+  repeated ResourceMember resource_members = 1;
+  string next_page_token = 2;
+}
+
+message ResourceMember {
+  string subject_id = 1;
+}
+
+// List all resources of type "resource_type" in which "subject_id" is a member.
+message ListMemberResourcesRequest {
+  string subject_id = 1 [(required) = true, (length) = "<=50"];
+  string resource_type = 2 [(required) = true, (length) = "<=100"];
+  int64 page_size = 3 [(value) = "0-1000"];
+  string page_token = 4 [(length) = "<=100"];
+}
+
+message ListMemberResourcesResponse {
+  repeated MemberResource member_resources = 1;
+  string next_page_token = 2;
+}
+
+message MemberResource {
+  string resource_id = 1;
+  string resource_type = 2;
+}

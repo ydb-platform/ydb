@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PSK";
+
+message SshKey {
+  string id = 1;
+  string data = 2;
+  string fingerprint = 3;
+  google.protobuf.Timestamp created_at = 4;
+}

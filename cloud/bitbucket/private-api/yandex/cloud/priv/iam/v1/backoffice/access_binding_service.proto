@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.backoffice;
+
+import "yandex/cloud/priv/servicecontrol/v1/resource.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/backoffice;iam_backoffice";
+option java_outer_classname = "PBOABS";
+
+service AccessBindingService {
+  rpc ListBySubject (ListSubjectAccessBindingsRequest) returns (ListSubjectAccessBindingsResponse);
+}
+
+message ListSubjectAccessBindingsRequest {
+  string subject_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "<=1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListSubjectAccessBindingsResponse {
+  repeated SubjectAccessBinding access_bindings = 1;
+  string next_page_token = 2;
+}
+
+message SubjectAccessBinding {
+  string role_id = 1;
+  servicecontrol.v1.Resource resource = 2;
+}

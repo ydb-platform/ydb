@@ -88,7 +88,7 @@ public:
         TActorId tabletActor,
         TActorId partitionActor,
         ui64 tabletId,
-        const TString& topicName,
+        const NPersQueue::TTopicConverterPtr& topicConverter,
         ui32 partition,
         const TString& user,
         const TTabletCountersBase& counters
@@ -111,7 +111,7 @@ private:
     const TActorId TabletActor;
     const TActorId PartitionActor;
     const ui64 TabletId;
-    const TString TopicName;
+    const NPersQueue::TTopicConverterPtr TopicConverter;
     const ui32 Partition;
     const TString User;
     const TString ConsumerPath;

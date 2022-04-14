@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.awscompatibility;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/awscompatibility/access_key.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/awscompatibility;awscompatibility";
+option java_outer_classname = "PAKS";
+
+service AccessKeyService {
+
+  rpc List (ListAccessKeysRequest) returns (ListAccessKeysResponse) {
+    option (google.api.http) = {get: "/iam/v1/accessKeys"};
+  }
+
+  rpc ListByFingerprint (ListAccessKeysByFingerprintRequest) returns (ListAccessKeysByFingerprintResponse);
+
+  rpc Get (GetAccessKeyRequest) returns (AccessKey) {
+    option (google.api.http) = {get: "/iam/v1/accessKeys/{access_key_id}"};
+  }
+
+  rpc Create (CreateAccessKeyRequest) returns (CreateAccessKeyResponse) {
+    option (google.api.http) = {post: "/iam/v1/accessKeys" body: "*"};
+  }
+
+  rpc Update (UpdateAccessKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = {patch: "/iam/v1/accessKeys/{access_key_id}" body: "*"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAccessKeyMetadata"
+      response: "AccessKey"
+    };
+  }
+
+  rpc Delete (DeleteAccessKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = {delete: "/iam/v1/accessKeys/{access_key_id}"};
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteAccessKeyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListAccessKeyOperationsRequest) returns (ListAccessKeyOperationsResponse) {
+    option (google.api.http) = {get: "/iam/v1/accessKeys/{access_key_id}/operations"};
+  }
+}
+
+message GetAccessKeyRequest {
+  string access_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListAccessKeysRequest {
+  string service_account_id = 1 [(length) = "<=50"]; // use current subject identity if this not set
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListAccessKeysResponse {
+  repeated AccessKey access_keys = 1;
+  string next_page_token = 2;
+}
+
+message ListAccessKeysByFingerprintRequest {
+  string fingerprint = 1 [(length) = "43"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListAccessKeysByFingerprintResponse {
+  repeated AccessKey access_keys = 1;
+  string next_page_token = 2;
+}
+
+message CreateAccessKeyRequest {
+  string access_key_id = 3 [(required) = false, (length) = "<=50"];
+  string service_account_id = 1 [(length) = "<=50"]; // use current subject identity if this not set
+  string description = 2 [(length) = "<=256"];
+}
+
+message CreateAccessKeyResponse {
+  AccessKey access_key = 1;
+  string secret = 2 [(sensitive) = true];
+}
+
+message UpdateAccessKeyRequest {
+  string access_key_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+  string description = 3 [(length) = "<=256"];
+}
+
+message UpdateAccessKeyMetadata {
+  string access_key_id = 1;
+}
+
+message DeleteAccessKeyRequest {
+  string access_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteAccessKeyMetadata {
+  string access_key_id = 1;
+}
+
+message ListAccessKeyOperationsRequest {
+  string access_key_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListAccessKeyOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

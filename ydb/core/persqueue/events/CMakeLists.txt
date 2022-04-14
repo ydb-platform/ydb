@@ -17,6 +17,7 @@ target_link_libraries(core-persqueue-events PUBLIC
   ydb-core-protos
   ydb-core-tablet
   api-protos
+  library-persqueue-topic_parser
 )
 target_sources(core-persqueue-events PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/events/events.cpp

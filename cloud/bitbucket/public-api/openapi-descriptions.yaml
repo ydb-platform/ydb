@@ -1,0 +1,25 @@
+replace-description:
+  google.protobuf.Empty: |-
+    Empty JSON object `` {} ``.
+  google.protobuf.FieldMask: |-
+    A comma-separated names off ALL fields to be updated.
+    Оnly the specified fields will be changed. The others will be left untouched.
+    If the field is specified in `` updateMask `` and no value for that field was sent in the request,
+    the field's value will be reset to the default. The default value for most fields is null or 0.
+
+    If `` updateMask `` is not sent in the request, all fields' values will be updated.
+    Fields specified in the request will be updated to provided values.
+    The rest of the fields will be reset to the default.
+
+  google.rpc.Status: |-
+    The error result of the operation in case of failure or cancellation.
+  google.rpc.Status.code: |-
+    Error code. An enum value of [google.rpc.Code][google.rpc.Code].
+  google.rpc.Status.message: |-
+    An error message.
+  google.rpc.Status.details: |-
+    A list of messages that carry the error details.
+
+append-format:
+  google.protobuf.Timestamp: |-
+    String in [RFC3339](https://www.ietf.org/rfc/rfc3339.txt) text format.

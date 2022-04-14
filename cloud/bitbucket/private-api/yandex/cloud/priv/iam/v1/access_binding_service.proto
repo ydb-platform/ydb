@@ -1,0 +1,258 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "google/rpc/error_details.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/api/tools/options.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/servicecontrol/v1/resource.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PABS";
+
+service AccessBindingService {
+  rpc ListAccessBindings (ListAccessBindingsRequest) returns (ListAccessBindingsResponse) {
+    option (google.api.http) = { get: "/iam/v1/listAccessBindings" };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc SetAccessBindings (SetAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/iam/v1/setAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "SetAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc UpdateAccessBindings (UpdateAccessBindingsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/iam/v1/updateAccessBindings" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateAccessBindingsMetadata"
+      response: "google.protobuf.Empty"
+    };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+    option (yandex.cloud.api.tools.method).lint_skip.http_verb = true;
+  }
+
+  rpc CheckLikelyPubliclyAccessible (CheckLikelyPubliclyAccessibleRequest) returns (CheckLikelyPubliclyAccessibleResponse);
+
+  rpc ChangeTopLevelResource (ChangeTopLevelResourceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "ChangeTopLevelResourceMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc DeleteByTopLevelResource (DeleteByTopLevelResourceRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteByTopLevelResourceMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+}
+
+// * `type = system, id = allUsers`: A special identifier that represents anyone.
+//
+// * `type = system, id = allAuthenticatedUsers`: A special identifier that represents anyone
+//    who is authenticated.
+//
+// * `type = userAccount, id = <cloud generated id>`
+//
+// * `type = federatedUser, id = <cloud generated id>`
+//
+// * `type = serviceAccount, id = <cloud generated id>`
+//
+// * `type = group, id = <cloud generated id>`
+//
+// * `type = invitee, id = <cloud generated id>`
+message Subject {
+  string id = 1 [(required) = true, (length) = "<=50"];
+  string type = 2 [(required) = true, (length) = "<=100"];
+}
+
+message AccessBinding {
+  string role_id = 1 [(required) = true, (length) = "<=50"];
+  Subject subject = 2 [(required) = true];
+  string managed_by = 3 [(length) = "<=50"];
+}
+
+message ListAccessBindingsRequest {
+  string resource_id = 1 [(required) = true, (length) = "<=50"];
+  string resource_type = 2 [(required) = true, (length) = "<=100"];
+  // A flag allowing the service to determine that the original action was
+  // initiated from services (private API) when [private_call] = true, or from
+  // the public API when [private_call] = false. [private_call] = false adds
+  // additional restrictions on the execution of the action (ex. the prohibition
+  // of manipulating internal roles, internal roles are not returned in a result).
+  // When proxying from the public API, this field MUST be mapped to false.
+  bool private_call = 3;
+  int64 page_size = 4 [(value) = "<=1000"];
+  string page_token = 5 [(length) = "<=100"];
+}
+
+message ListAccessBindingsResponse {
+  repeated AccessBinding access_bindings = 1;
+  string next_page_token = 2;
+}
+
+message SetAccessBindingsRequest {
+  // Path to resource, from most to least specific according to resource hierarchy.
+  // E.g. [storage.bucket, resource-manager.folder, resource-manager.cloud].
+  // If specified, takes precedence over resource_id/resource_type.
+  repeated servicecontrol.v1.Resource resource_path = 5;
+  // Access bindings to set.
+  repeated AccessBinding access_bindings = 4 [(size) = "<=1000"];
+  // A flag allowing the service to determine that the original action was
+  // initiated from services (private API) when [private_call] = true, or from
+  // the public API when [private_call] = false. [private_call] = false adds
+  // additional restrictions on the execution of the action (ex. the prohibition
+  // of manipulating internal roles, throwing NotFoundException on an
+  // internal role). When proxying from the public API,
+  // this field MUST be mapped to false.
+  bool private_call = 3;
+  // If set, perform operation on behalf of subject with this id.
+  string on_behalf_of_subject_id = 6 [(length) = "<=50"];
+
+  // Legacy resource specifiers. Use resource_path instead.
+  string resource_id = 1 [(length) = "<=50"];
+  string resource_type = 2 [(length) = "<=100"];
+}
+
+message SetAccessBindingsMetadata {
+  string resource_id = 1;
+  string resource_type = 2;
+  repeated servicecontrol.v1.Resource resource_path = 3;
+  string on_behalf_of_subject_id = 4;
+}
+
+message UpdateAccessBindingsRequest {
+  // Path to resource, from most to least specific according to resource hierarchy
+  // E.g. [storage.bucket, resource-manager.folder, resource-manager.cloud].
+  // If specified, takes precedence over resource_id/resource_type.
+  repeated servicecontrol.v1.Resource resource_path = 5;
+  // Access bindings to add/remove.
+  repeated AccessBindingDelta access_binding_deltas = 3 [(size) = "1-1000"];
+  // A flag allowing the service to determine that the original action was
+  // initiated from services (private API) when [private_call] = true, or from
+  // the public API when [private_call] = false. [private_call] = false adds
+  // additional restrictions on the execution of the action (ex. the prohibition
+  // of manipulating internal roles, throwing NotFoundException on an
+  // internal role). When proxying from the public API,
+  // this field MUST be mapped to false.
+  bool private_call = 4;
+  // If set, perform operation on behalf of subject with this id.
+  string on_behalf_of_subject_id = 6 [(length) = "<=50"];
+
+  // Legacy resource specifiers. Use resource_path instead.
+  string resource_id = 1 [(length) = "<=50"];
+  string resource_type = 2 [(length) = "<=100"];
+}
+
+message UpdateAccessBindingsMetadata {
+  string resource_id = 1;
+  string resource_type = 2;
+  repeated servicecontrol.v1.Resource resource_path = 3;
+  string on_behalf_of_subject_id = 4;
+}
+
+enum AccessBindingAction {
+  ACCESS_BINDING_ACTION_UNSPECIFIED = 0;
+  ADD = 1;
+  REMOVE = 2;
+}
+
+message AccessBindingDelta {
+  AccessBindingAction action = 1 [(required) = true];
+  AccessBinding access_binding = 2 [(required) = true];
+}
+
+// Access bindings operation status. Returned as an element of google.rpc.Status.details.
+// Returned only when a {set,update}AccessBindings() call is made on behalf of other subject,
+// in which case the "code" and "message" values should be returned to that subject as the GRPC result
+// of your service's {set,update}AccessBindings() method calls.
+message AccessBindingsOperationStatus {
+  // End-user facing GRPC status code.
+  int64 code = 1;
+
+  // End-user facing message.
+  string message = 2;
+
+  // Private message details.
+  google.rpc.DebugInfo internal = 3;
+}
+
+// Access bindings added or removed during this operation.
+message AccessBindingsOperationDelta {
+  repeated AccessBindingDelta access_binding_deltas = 1;
+}
+
+// Deprecated in favor of above message.
+message BindingsOperationStatus {
+  int64 code = 1 [deprecated = true];
+  string message = 2 [deprecated = true];
+  google.rpc.DebugInfo internal = 3 [deprecated = true];
+}
+
+message CheckLikelyPubliclyAccessibleRequest {
+  // Resources to check.
+  repeated servicecontrol.v1.Resource resources = 1 [(size) = "1-1000"];
+}
+
+message CheckLikelyPubliclyAccessibleResponse {
+  // Resources that are likely publicly accessible;
+  repeated servicecontrol.v1.Resource resources = 1;
+}
+
+message ChangeTopLevelResourceRequest {
+  // Path to resource.
+  repeated servicecontrol.v1.Resource resource_path = 1;
+  // Top level resource to change to.
+  servicecontrol.v1.Resource top_level_resource = 2;
+  // Dry run flag. When this flag is true, perform preliminary check instead. In case there are
+  // access bindings that would be lost in the process, returned failed operation with code FAILED_PRECONDITION
+  // will contain a ChangeTopLevelResourceDryRunErrorDetails error detail describing subjects whose
+  // access bindings would be lost.
+  bool dry_run = 3;
+}
+
+message ChangeTopLevelResourceMetadata {
+  repeated servicecontrol.v1.Resource resource_path = 1;
+  servicecontrol.v1.Resource top_level_resource = 2;
+  bool dry_run = 3;
+}
+
+message ChangeTopLevelResourceDryRunErrorDetails {
+  // Some of the public access bindings that would be lost when changing top level resource.
+  // This list might be empty in case only system bindings are present.
+  // These can be displayed to public end users.
+  repeated AccessBinding public_access_bindings = 1 [(size) = "<=10"];
+  // Some of the system access bindings that would be lost when changing top level resource.
+  // This list might be empty in case only public bindings are present.
+  // These should only be displayed to staff members.
+  // In case only system bindings are present, public end users should receive a vague
+  // message like "cannot move access bindings", without any specifics.
+  repeated AccessBinding system_access_bindings = 2 [(size) = "<=10"];
+
+  message AccessBinding {
+    string role_id = 1;
+    string subject_id = 2;
+    string resource_id = 3;
+    string resource_type = 4;
+  }
+}
+
+message DeleteByTopLevelResourceRequest {
+  // Subject IDs whose bindings are to be removed.
+  repeated string subject_ids = 1 [(size) = "1-1000"];
+  // Top level resource filter of access bindings.
+  servicecontrol.v1.Resource top_level_resource = 2 [(required) = true];
+}
+
+message DeleteByTopLevelResourceMetadata {
+  repeated string subject_ids = 1;
+  servicecontrol.v1.Resource top_level_resource = 2;
+}

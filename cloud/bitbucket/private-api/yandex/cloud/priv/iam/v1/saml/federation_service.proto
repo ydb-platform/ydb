@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.saml;
+
+import "google/api/annotations.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/user_account.proto";
+import "yandex/cloud/priv/iam/v1/saml/federation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/saml;saml";
+option java_outer_classname = "PSFS";
+
+service FederationService {
+  rpc Get (GetFederationRequest) returns (Federation) {
+    option (google.api.http) = { get: "/iam/v1/saml/federations/{federation_id}" };
+  }
+
+  rpc List (ListFederationsRequest) returns (ListFederationsResponse) {
+    option (google.api.http) = { get: "/iam/v1/saml/federations" };
+  }
+
+  rpc Create (CreateFederationRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/iam/v1/saml/federations" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateFederationMetadata"
+      response: "Federation"
+    };
+  }
+
+  rpc Update (UpdateFederationRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/iam/v1/saml/federations/{federation_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateFederationMetadata"
+      response: "Federation"
+    };
+  }
+
+  rpc Delete (DeleteFederationRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/iam/v1/saml/federations/{federation_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteFederationMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc AddUserAccounts (AddFederatedUserAccountsRequest) returns (operation.Operation) {
+    option (google.api.http) = { post: "/iam/v1/saml/federations/{federation_id}:addUserAccounts" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddFederatedUserAccountsMetadata"
+      response: "AddFederatedUserAccountsResponse"
+    };
+  }
+
+  rpc ListUserAccounts (ListFederatedUserAccountsRequest) returns (ListFederatedUserAccountsResponse) {
+    option (google.api.http) = { get: "/iam/v1/saml/federations/{federation_id}:listUserAccounts" };
+  }
+
+  rpc ListOperations (ListFederationOperationsRequest) returns (ListFederationOperationsResponse) {
+    option (google.api.http) = { get: "/iam/v1/saml/federations/{federation_id}/operations" };
+  }
+
+  rpc GetServiceProviderCertificate (GetServiceProviderCertificateRequest) returns (ServiceProviderCertificate);
+}
+
+message GetFederationRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message GetServiceProviderCertificateRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListFederationsRequest {
+  oneof scope {
+    option (exactly_one) = true;
+    string cloud_id = 1 [(length) = "<=50"];
+    string folder_id = 2 [(length) = "<=50"];
+  }
+  int64 page_size = 3 [(value) = "0-1000"];
+  string page_token = 4 [(length) = "<=100"];
+  string filter = 5 [(length) = "<=1000"];
+}
+
+message ListFederationsResponse {
+  repeated Federation federations = 1;
+  string next_page_token = 2;
+}
+
+message CreateFederationRequest {
+  string id = 11 [(length) = "<=50"];
+  string folder_id = 1 [(required) = true, (length) = "<=50"];
+  string name = 2 [(required) = true, (pattern) = "[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 3 [(length) = "<=256"];
+  google.protobuf.Duration cookie_max_age = 4 [(value) = "10m-12h"];
+  bool auto_create_account_on_login = 5;
+  string issuer = 6 [(required) = true, (length) = "<=8000"];
+  BindingType sso_binding = 7 [(required) = true];
+  string sso_url = 8 [(required) = true, (length) = "<=8000"];
+  FederationSecuritySettings security_settings = 9;
+  bool case_insensitive_name_ids = 10;
+}
+
+message CreateFederationMetadata {
+  string federation_id = 1;
+}
+
+message UpdateFederationRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+
+  string name = 3 [(pattern) = "|[a-z]([-a-z0-9]{0,61}[a-z0-9])?"];
+  string description = 4 [(length) = "<=256"];
+  google.protobuf.Duration cookie_max_age = 5 [(value) = "10m-12h"];
+  bool auto_create_account_on_login = 6;
+  string issuer = 7 [(length) = "<=8000"];
+  BindingType sso_binding = 8;
+  string sso_url = 9 [(length) = "<=8000"];
+  FederationSecuritySettings security_settings = 10;
+  bool case_insensitive_name_ids = 11;
+}
+
+message UpdateFederationMetadata {
+  string federation_id = 1;
+}
+
+message DeleteFederationRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteFederationMetadata {
+  string federation_id = 1;
+}
+
+message AddFederatedUserAccountsRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+  repeated string name_ids = 2 [(size) = "1-1000", (length) = "1-1000"];
+}
+
+message AddFederatedUserAccountsMetadata {
+  string federation_id = 1;
+}
+
+message AddFederatedUserAccountsResponse {
+  repeated UserAccount user_accounts = 1;
+}
+
+message ListFederatedUserAccountsRequest {
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListFederatedUserAccountsResponse {
+  repeated UserAccount user_accounts = 1;
+  string next_page_token = 2;
+}
+
+message ListFederationOperationsRequest {
+  string federation_id = 1 [(length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListFederationOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

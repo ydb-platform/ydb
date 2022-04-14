@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.console;
+
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/console;iam_console";
+option java_outer_classname = "PCOLS";
+
+service OsLoginService {
+  // Get OS Login info for current subject.
+  rpc Get (GetOsLoginRequest) returns (GetOsLoginResponse);
+}
+
+message GetOsLoginRequest {
+  // ID of the cloud to search for OS Login if called by a non-service account.
+  string cloud_id = 1 [(length) = "<=50"];
+}
+
+message GetOsLoginResponse {
+  string subject_id = 1;
+  string os_login = 2;
+}

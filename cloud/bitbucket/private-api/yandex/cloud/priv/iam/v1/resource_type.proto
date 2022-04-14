@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PRST";
+
+message ResourceType {
+  string id = 1;
+  string access_bindings_listing_permission = 2;
+}

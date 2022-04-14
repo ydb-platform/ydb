@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "POAS";
+
+message OAuthScope {
+  string id = 1;
+  bool is_system = 2;
+  string service = 3;
+  repeated string permission_ids = 4;
+}

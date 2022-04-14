@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/ssh_key.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PSKS";
+
+service SshKeyService {
+  rpc Get (GetSshKeyRequest) returns (SshKey);
+
+  rpc List (ListSshKeysRequest) returns (ListSshKeysResponse);
+
+  rpc Create (CreateSshKeyRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "CreateSshKeyMetadata"
+      response: "SshKey"
+    };
+  }
+
+  rpc Delete (DeleteSshKeyRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteSshKeyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListSshKeyOperationsRequest) returns (ListSshKeyOperationsResponse);
+}
+
+message GetSshKeyRequest {
+  string ssh_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message ListSshKeysRequest {
+  oneof subject {
+    string service_account_id = 1;
+    string user_account_id = 2;
+    string federated_user_id = 3;
+  }
+  int64 page_size = 4 [(value) = "0-1000"];
+  string page_token = 5 [(length) = "<=100"];
+}
+
+message ListSshKeysResponse {
+  repeated SshKey ssh_keys = 1;
+  string next_page_token = 2;
+}
+
+message CreateSshKeyRequest {
+  string ssh_key_id = 1 [(length) = "<=50"];
+  oneof subject {
+    string service_account_id = 2;
+    string user_account_id = 3;
+    string federated_user_id = 4;
+  }
+  string ssh_key_data = 5 [(required) = true, (length) = "<=20000"];
+}
+
+message CreateSshKeyMetadata {
+  string ssh_key_id = 1;
+  string subject_id = 2;
+}
+
+message DeleteSshKeyRequest {
+  string ssh_key_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteSshKeyMetadata {
+  string ssh_key_id = 1;
+}
+
+message ListSshKeyOperationsRequest {
+  string ssh_key_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListSshKeyOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}

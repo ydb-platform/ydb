@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.transitional;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/tools/options.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/transitional;iam";
+option java_outer_classname = "PTAGS";
+
+// TODO console
+service AgreementService {
+  rpc AcceptAgreements (AcceptAgreementsRequest) returns (AcceptAgreementsResponse) {
+    option (google.api.http) = { post: "/iam/v1/acceptAgreements" body: "*" };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc AcceptAgreementsOauth (AcceptAgreementsRequest) returns (AcceptAgreementsResponse) {
+    option (google.api.http) = { post: "/iam/v1/acceptAgreementsOauth" body: "*" };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc AcceptAgreementsLogin (AcceptAgreementsRequest) returns (AcceptAgreementsResponse) {
+    option (google.api.http) = { post: "/iam/v1/acceptAgreementsLogin" body: "*" };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+}
+
+message AcceptAgreementsRequest {
+  string eula = 1;
+  string privacy_policy = 2;
+}
+
+message AcceptAgreementsResponse {
+  string agreements = 1;
+}

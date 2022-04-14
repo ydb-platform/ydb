@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/api/tools/options.proto";
+import "yandex/cloud/priv/iam/v1/key.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PKS";
+
+service KeyService {
+
+  rpc Get (GetKeyRequest) returns (Key) {
+    option (google.api.http) = { get: "/iam/v1/keys/{key_id}" };
+  }
+
+  rpc List (ListKeysRequest) returns (ListKeysResponse) {
+    option (google.api.http) = { get: "/iam/v1/keys" };
+  }
+
+  rpc ListByFingerprint (ListKeysByFingerprintRequest) returns (ListKeysByFingerprintResponse);
+
+  rpc Create (CreateKeyRequest) returns (CreateKeyResponse) {
+    option (google.api.http) = { post: "/iam/v1/keys" body: "*" };
+  }
+
+  rpc Update (UpdateKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { patch: "/iam/v1/keys/{key_id}" body: "*" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "UpdateKeyMetadata"
+      response: "Key"
+    };
+  }
+
+  rpc Delete (DeleteKeyRequest) returns (operation.Operation) {
+    option (google.api.http) = { delete: "/iam/v1/keys/{key_id}" };
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteKeyMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc ListOperations (ListKeyOperationsRequest) returns (ListKeyOperationsResponse) {
+    option (google.api.http) = { get: "/iam/v1/keys/{key_id}/operations" };
+  }
+}
+
+message GetKeyRequest {
+  string key_id = 1 [(length) = "<=50"];
+  KeyFormat format = 2;
+}
+
+message ListKeysRequest {
+  KeyFormat format = 1;
+  // one of service_account_id, user_account_id or federated_user_id.
+  // cannot be made oneof{} in spec due to public API incompatibility issues.
+  // https://bb.yandex-team.ru/projects/CLOUD/repos/cloud-go/pull-requests/7995/overview?commentId=1093148
+  // use calling subject if not specified
+  string service_account_id = 2 [(length) = "<=50"];
+  string user_account_id = 5 [(length) = "<=50"];
+  string federated_user_id = 6 [(length) = "<=50"];
+  int64 page_size = 3 [(value) = "0-1000"];
+  string page_token = 4 [(length) = "<=100"];
+}
+
+message ListKeysResponse {
+  repeated Key keys = 1;
+  string next_page_token = 2;
+}
+
+message ListKeysByFingerprintRequest {
+  string fingerprint = 1 [(length) = "43"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListKeysByFingerprintResponse {
+  repeated Key keys = 1;
+  string next_page_token = 2;
+}
+
+message CreateKeyRequest {
+  string key_id = 5 [(length) = "<=50"];
+  // one of service_account_id, user_account_id or federated_user_id.
+  // cannot be made oneof{} in spec due to public API incompatibility issues.
+  // https://bb.yandex-team.ru/projects/CLOUD/repos/cloud-go/pull-requests/7995/overview?commentId=1093148
+  // use calling subject if not specified
+  string service_account_id = 1 [(length) = "<=50"];
+  string user_account_id = 7 [(length) = "<=50"];
+  string federated_user_id = 8 [(length) = "<=50"];
+  string description = 2 [(length) = "<=256"];
+  KeyFormat format = 3;
+  Key.Algorithm key_algorithm = 4;
+  string public_key = 6 [(length) = "<=15000"]; // create key with custom public part. no private key in response.
+}
+
+message CreateKeyResponse {
+  Key key = 1;
+  string private_key = 2 [(sensitive) = true];
+}
+
+message UpdateKeyRequest {
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+  google.protobuf.FieldMask update_mask = 2;
+  string description = 3 [(length) = "<=256"];
+}
+
+message UpdateKeyMetadata {
+  string key_id = 1;
+}
+
+message DeleteKeyRequest {
+  string key_id = 1 [(length) = "<=50"];
+}
+
+message DeleteKeyMetadata {
+  string key_id = 1;
+}
+
+message ListKeyOperationsRequest {
+  string key_id = 1 [(required) = true, (length) = "<=50"];
+  int64 page_size = 2 [(value) = "0-1000"];
+  string page_token = 3 [(length) = "<=100"];
+}
+
+message ListKeyOperationsResponse {
+  repeated operation.Operation operations = 1;
+  string next_page_token = 2;
+}
+
+enum KeyFormat {
+  option (cloud.api.tools.enumeration).lint_skip.unspecified_value = true;
+  PEM_FILE = 0;
+}

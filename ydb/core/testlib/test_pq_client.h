@@ -31,6 +31,7 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     authConfig.SetUseAccessServiceTLS(false);
     authConfig.SetUseStaff(false);
     pqConfig.SetRoundRobinPartitionMapping(roundrobin);
+    pqConfig.SetTopicsAreFirstClassCitizen(false);
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
@@ -121,6 +122,8 @@ struct TRequestCreatePQ {
         auto config = req->MutableConfig();
         if (CacheSize)
             config->SetCacheSize(CacheSize);
+        config->SetTopicName(Topic);
+        config->SetTopicPath(TString("/Root/PQ/") + Topic);
         config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
         config->MutablePartitionConfig()->SetSourceIdLifetimeSeconds(SourceIdLifetime);
         config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount);
@@ -731,6 +734,7 @@ public:
         UNIT_ASSERT(resp.TopicInfoSize() == 1);
         const auto& topicInfo = resp.GetTopicInfo(0);
         UNIT_ASSERT(topicInfo.GetTopic() == name);
+        UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
         if (cacheSize) {
             UNIT_ASSERT(topicInfo.GetConfig().HasCacheSize());
             ui64 actualSize = topicInfo.GetConfig().GetCacheSize();
@@ -831,9 +835,11 @@ public:
     }
 
 
-    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true, TVector<TString> rr = {"user"}) {
+    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true,
+                             const TMaybe<TString>& dc = Nothing(), TVector<TString> rr = {"user"}
+    ) {
         TString path = name;
-        if (UseConfigTables) {
+        if (UseConfigTables && !path.StartsWith("/Root")) {
             path = TStringBuilder() << "/Root/PQ/" << name;
         }
 
@@ -849,7 +855,7 @@ public:
         auto res = pqClient.CreateTopic(path, settings);
         //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server
         if (UseConfigTables) {
-            AddTopic(name);
+            AddTopic(name, dc);
         }
         if (doWait) {
             res.Wait();
@@ -1363,15 +1369,15 @@ private:
     }
 
 public:
-    void AddTopic(const TString& topic) {
-        return AddOrRemoveTopic(topic, true);
+    void AddTopic(const TString& topic, const TMaybe<TString>& dc = Nothing()) {
+        return AddOrRemoveTopic(topic, true, dc);
     }
 
     void RemoveTopic(const TString& topic) {
         return AddOrRemoveTopic(topic, false);
     }
 
-    void AddOrRemoveTopic(const TString& topic, bool add) {
+    void AddOrRemoveTopic(const TString& topic, bool add, const TMaybe<TString>& dc = Nothing()) {
         TStringBuilder query;
         query << "DECLARE $version as Int64; DECLARE $path AS Utf8; DECLARE $cluster as Utf8; ";
         if (add) {
@@ -1379,12 +1385,13 @@ public:
         } else {
             query << "DELETE FROM [/Root/PQ/Config/V2/Topics] WHERE path = $path AND dc = $cluster; ";
         }
+        TString cluster = dc.GetOrElse(NPersQueue::GetDC(topic));
         query << GetAlterTopicsVersionQuery();
         NYdb::TParamsBuilder builder;
         auto params = builder
                 .AddParam("$version").Int64(++TopicsVersion).Build()
                 .AddParam("$path").Utf8(NPersQueue::GetTopicPath(topic)).Build()
-                .AddParam("$cluster").Utf8(NPersQueue::GetDC(topic)).Build()
+                .AddParam("$cluster").Utf8(cluster).Build()
                 .Build();
 
         Cerr << "===Run query:``" << query << "`` with topic = " << NPersQueue::GetTopicPath(topic) << ", dc = " << NPersQueue::GetDC(topic) << Endl;

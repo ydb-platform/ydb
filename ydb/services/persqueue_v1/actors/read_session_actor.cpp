@@ -1,5 +1,5 @@
 #include "read_session_actor.h"
-
+#include <ydb/library/persqueue/topic_parser/counters.h>
 #include "partition_actor.h"
 #include "read_init_auth_actor.h"
 
@@ -136,7 +136,8 @@ void TReadSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActor
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvAuth(token));
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read done: success: " << ev->Get()->Success << " data: " << request);
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
+                PQ_LOG_PREFIX << " grpc read done: success: " << ev->Get()->Success << " data: " << request);
 
     if (!ev->Get()->Success) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed");
@@ -145,19 +146,26 @@ void TReadSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActor
     }
     auto converterFactory = TopicsHandler.GetConverterFactory();
     auto MakePartitionId = [&](auto& request) {
-        auto converter = converterFactory->MakeTopicNameConverter(
-                request.topic().path(), request.cluster(), Request->GetDatabaseName().GetOrElse(TString())
+        auto converter = converterFactory->MakeDiscoveryConverter(
+                request.topic().path(), {}, request.cluster(), Request->GetDatabaseName().GetOrElse(TString())
         );
-        if (!converter->IsValid()) {
-            CloseSession(
-                    TStringBuilder() << "Topic " << request.topic().path() << " not recognized: " << converter->GetReason(),
-                    PersQueue::ErrorCode::BAD_REQUEST, ctx
-            );
-        }
+
         const ui32 partition = request.partition();
         const ui64 assignId = request.assign_id();
         return TPartitionId{converter, partition, assignId};
     };
+
+
+#define GET_PART_ID_OR_EXIT(request)             \
+auto partId = MakePartitionId(request);      \
+if (!partId.DiscoveryConverter->IsValid()) { \
+    CloseSession(TStringBuilder() << "Invalid topic in request: " << partId.DiscoveryConverter->GetOriginalTopic() \
+                                  << ", reason: " << partId.DiscoveryConverter->GetReason(),                       \
+                 PersQueue::ErrorCode::BAD_REQUEST, ctx);                                                          \
+    return;                                  \
+}
+
+
     switch (request.request_case()) {
         case MigrationStreamingReadClientMessage::kInitRequest: {
             ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReadInit(request, Request->GetStreamCtx()->GetPeerName()));
@@ -165,7 +173,8 @@ void TReadSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActor
         }
         case MigrationStreamingReadClientMessage::kStatus: {
             //const auto& req = request.status();
-            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvGetStatus(MakePartitionId(request.status())));
+            GET_PART_ID_OR_EXIT(request.status());
+            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvGetStatus(partId));
             if (!Request->GetStreamCtx()->Read()) {
                 LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                 Die(ctx);
@@ -179,8 +188,8 @@ void TReadSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActor
             break;
         }
         case MigrationStreamingReadClientMessage::kReleased: {
-            //const auto& req = request.released();
-            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReleased(MakePartitionId(request.released())));
+            GET_PART_ID_OR_EXIT(request.released());
+            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReleased(partId));
             if (!Request->GetStreamCtx()->Read()) {
                 LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                 Die(ctx);
@@ -195,8 +204,8 @@ void TReadSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActor
             const ui64 readOffset = req.read_offset();
             const ui64 commitOffset = req.commit_offset();
             const bool verifyReadOffset = req.verify_read_offset();
-
-            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(MakePartitionId(request.start_read()), readOffset, commitOffset, verifyReadOffset));
+            GET_PART_ID_OR_EXIT(request.start_read());
+            ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(partId, readOffset, commitOffset, verifyReadOffset));
             if (!Request->GetStreamCtx()->Read()) {
                 LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                 Die(ctx);
@@ -250,6 +259,8 @@ void TReadSessionActor::Handle(IContext::TEvReadFinished::TPtr& ev, const TActor
     }
 }
 
+#undef GET_PART_ID_OR_EXIT
+
 
 void TReadSessionActor::Handle(IContext::TEvWriteFinished::TPtr& ev, const TActorContext& ctx) {
     if (!ev->Get()->Success) {
@@ -275,7 +286,8 @@ void TReadSessionActor::Die(const TActorContext& ctx) {
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
 
         if (!p.second.Released) {
-            auto it = TopicCounters.find(p.second.Partition.TopicConverter->GetClientsideName());
+            // ToDo[counters]
+            auto it = TopicCounters.find(p.second.Partition.DiscoveryConverter->GetInternalName());
             Y_VERIFY(it != TopicCounters.end());
             it->second.PartitionsInfly.Dec();
             it->second.PartitionsReleased.Inc();
@@ -420,8 +432,9 @@ void TReadSessionActor::DropPartition(THashMap<ui64, TPartitionActorInfo>::itera
     bool res = ActualPartitionActors.erase(it->second.Actor);
     Y_VERIFY(res);
 
-    if (--NumPartitionsFromTopic[it->second.Partition.TopicConverter->GetClientsideName()] == 0) {
-        bool res = TopicCounters.erase(it->second.Partition.TopicConverter->GetClientsideName());
+    if (--NumPartitionsFromTopic[it->second.Partition.DiscoveryConverter->GetInternalName()] == 0) {
+        //ToDo[counters]
+        bool res = TopicCounters.erase(it->second.Partition.DiscoveryConverter->GetInternalName());
         Y_VERIFY(res);
     }
 
@@ -486,7 +499,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadSessionStatus::TPtr& ev, const
     THolder<TEvPQProxy::TEvReadSessionStatusResponse> result(new TEvPQProxy::TEvReadSessionStatusResponse());
     for (auto& p : Partitions) {
         auto part = result->Record.AddPartition();
-        part->SetTopic(p.second.Partition.TopicConverter->GetPrimaryPath());
+        part->SetTopic(p.second.Partition.DiscoveryConverter->GetPrimaryPath());
         part->SetPartition(p.second.Partition.Partition);
         part->SetAssignId(p.second.Partition.AssignId);
         for (auto& c : p.second.NextCommits) {
@@ -558,15 +571,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     ReadOnlyLocal = init.read_only_original();
 
     for (const auto& topic : init.topics_read_settings()) {
-        auto converter = TopicsHandler.GetConverterFactory()->MakeTopicNameConverter(
-                topic.topic(), TString(), Request->GetDatabaseName().GetOrElse(TString())
-        );
-        if (!converter->IsValid()) {
-            CloseSession(TStringBuilder() << "invalid topic '" << topic.topic() << "' in init request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return;
-        }
-        const auto topicName = converter->GetModernName();
-        if (topicName.empty()) {
+        if (topic.topic().empty()) {
             CloseSession("empty topic in init request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return;
         }
@@ -574,25 +579,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
             CloseSession("start_from_written_at_ms must be nonnegative number", PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return;
         }
-        TopicsToResolve.insert(topicName);
-        for (i64 pg : topic.partition_group_ids()) {
-            if (pg < 0) {
-                CloseSession("partition group id must be nonnegative number", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-                return;
-            }
-            if (pg > Max<ui32>()) {
-                CloseSession(TStringBuilder() << "partition group id " << pg << " is too big for partition group id", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-                return;
-            }
-            TopicGroups[topicName].push_back(static_cast<ui32>(pg));
-        }
-        ReadFromTimestamp[topicName] = topic.start_from_written_at_ms();
-    }
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " init: " << event->Request << " from " << PeerName);
-
-
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        SetupCounters();
+        TopicsToResolve.insert(topic.topic());
     }
 
     if (Request->GetInternalToken().empty()) {
@@ -605,9 +592,50 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         Auth = *(Request->GetYdbToken());
         Token = new NACLib::TUserToken(Request->GetInternalToken());
     }
+    TopicsList = TopicsHandler.GetReadTopicsList(
+            TopicsToResolve, ReadOnlyLocal, Request->GetDatabaseName().GetOrElse(TString())
+    );
+
+    if (!TopicsList.IsValid) {
+        return CloseSession(
+                TopicsList.Reason,
+                PersQueue::ErrorCode::BAD_REQUEST, ctx
+        );
+    }
+
+    for (const auto& topic : init.topics_read_settings()) {
+        auto topicIter = TopicsList.ClientTopics.find(topic.topic());
+        Y_VERIFY(!topicIter.IsEnd());
+        for (const auto& converter: topicIter->second) {
+            const auto internalName = converter->GetInternalName();
+            for (i64 pg: topic.partition_group_ids()) {
+                if (pg < 0) {
+                    CloseSession("partition group id must be nonnegative number", PersQueue::ErrorCode::BAD_REQUEST,
+                                 ctx);
+                    return;
+                }
+                if (pg > Max<ui32>()) {
+                    CloseSession(
+                            TStringBuilder() << "partition group id " << pg << " is too big for partition group id",
+                            PersQueue::ErrorCode::BAD_REQUEST, ctx);
+                    return;
+                }
+                TopicGroups[internalName].push_back(static_cast<ui32>(pg));
+            }
+            ReadFromTimestamp[internalName] = topic.start_from_written_at_ms();
+        }
+    }
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " init: " << event->Request << " from " << PeerName);
+
+
+    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        SetupCounters();
+    }
+
+
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-            ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token,
-            TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, Request->GetDatabaseName().GetOrElse(TString())), TopicsHandler.GetLocalCluster()
+            ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
+            TopicsHandler.GetLocalCluster()
     ));
 
 
@@ -644,9 +672,8 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
     InitDone = true;
 
     for (auto& t : Topics) {
-        auto& topic = t.first;
-        RegisterSession(t.second.PipeClient, topic, t.second.Groups, ctx);
-        NumPartitionsFromTopic[t.second.TopicNameConverter->GetClientsideName()] = 0;
+        RegisterSession(t.second.PipeClient, t.second.FullConverter->GetInternalName(), t.second.Groups, ctx);
+        NumPartitionsFromTopic[t.second.FullConverter->GetInternalName()] = 0;
     }
 }
 
@@ -681,12 +708,12 @@ void TReadSessionActor::SetupCounters()
 }
 
 
-void TReadSessionActor::SetupTopicCounters(const TString& topic)
+void TReadSessionActor::SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic)
 {
-    auto& topicCounters = TopicCounters[topic];
+    auto& topicCounters = TopicCounters[topic->GetInternalName()];
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
 //client/consumerPath Account/Producer OriginDC Topic/TopicPath
-    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(topic);
+    auto aggr = NPersQueue::GetLabels(topic);
     TVector<std::pair<TString, TString>> cons = {{"Client", ClientId}, {"ConsumerPath", ClientPath}};
 
     topicCounters.PartitionsLocked       = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsLocked"}, true);
@@ -703,14 +730,14 @@ void TReadSessionActor::SetupTopicCounters(const TString& topic)
     topicCounters.SLITotal               = SLITotal;
 }
 
-void TReadSessionActor::SetupTopicCounters(const TString& topic, const TString& cloudId,
+void TReadSessionActor::SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic, const TString& cloudId,
                                            const TString& dbId, const TString& folderId)
 {
-    auto& topicCounters = TopicCounters[topic];
-    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters);
+    auto& topicCounters = TopicCounters[topic->GetInternalName()];
+    auto subGroup = NPersQueue::GetCountersForStream(Counters);
 //client/consumerPath Account/Producer OriginDC Topic/TopicPath
-    TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(topic, cloudId, dbId, folderId);
-    TVector<std::pair<TString, TString>> cons = {{"consumer", ClientPath}};
+    auto aggr = NPersQueue::GetLabelsForStream(topic, cloudId, dbId, folderId);
+    TVector<std::pair<TString, TString>> cons{{"consumer", ClientPath}};
 
     topicCounters.PartitionsLocked       = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_locked_per_second"}, true, "name");
     topicCounters.PartitionsReleased     = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"stream.internal_read.partitions_released_per_second"}, true, "name");
@@ -779,13 +806,14 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAct
         BalancersInitStarted = true;
 
         for (auto& t : ev->Get()->TopicAndTablets) { // ToDo - return something from Init and Auth Actor (Full Path - ?)
-            auto& topicHolder = Topics[t.TopicNameConverter->GetClientsideName()];
+            auto& topicHolder = Topics[t.TopicNameConverter->GetInternalName()];
             topicHolder.TabletID = t.TabletID;
-            topicHolder.TopicNameConverter = t.TopicNameConverter;
+            topicHolder.FullConverter = t.TopicNameConverter;
             topicHolder.CloudId = t.CloudId;
             topicHolder.DbId = t.DbId;
             topicHolder.FolderId = t.FolderId;
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
+            FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
         }
 
         for (auto& t : Topics) {
@@ -795,8 +823,8 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAct
 
             clientConfig.RetryPolicy = RetryPolicyForPipes;
             t.second.PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, t.second.TabletID, clientConfig));
-
-            auto it = TopicGroups.find(t.second.TopicNameConverter->GetModernName());
+            Y_VERIFY(t.second.FullConverter);
+            auto it = TopicGroups.find(t.second.FullConverter->GetInternalName());
             if (it != TopicGroups.end()) {
                 t.second.Groups = it->second;
             }
@@ -807,10 +835,10 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAct
         ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
     } else {
         for (auto& t : ev->Get()->TopicAndTablets) {
-            if (Topics.find(t.TopicNameConverter->GetClientsideName()) == Topics.end()) {
+            if (Topics.find(t.TopicNameConverter->GetInternalName()) == Topics.end()) {
                 CloseSession(
                         TStringBuilder() << "list of topics changed - new topic '"
-                                         << t.TopicNameConverter->GetClientsideName() << "' found",
+                                         << t.TopicNameConverter->GetPrintableString() << "' found",
                         PersQueue::ErrorCode::BAD_REQUEST, ctx
                 );
                 return;
@@ -827,7 +855,11 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     Y_VERIFY(record.GetClientId() == ClientId);
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
-    auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(record.GetPath()));
+    auto path = record.GetPath();
+    if (path.empty()) {
+        path = record.GetTopic();
+    }
+    auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(path));
 
     if (converterIter.IsEnd()) {
         LOG_DEBUG_S(
@@ -836,41 +868,46 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         );
         return;
     }
-    const auto& topic = converterIter->second->GetClientsideName();
-    auto jt = Topics.find(topic); // ToDo - Check
+    //const auto& topic = converterIter->second->GetPrimaryPath();
+    const auto& intName = converterIter->second->GetInternalName();
+    auto jt = Topics.find(intName);
     if (jt == Topics.end() || pipe != jt->second.PipeClient) { //this is message from old version of pipe
         LOG_ALERT_S(
                 ctx, NKikimrServices::PQ_READ_PROXY,
-                PQ_LOG_PREFIX << " ignored ev lock for topic = " << topic
+                PQ_LOG_PREFIX << " ignored ev lock for topic = " << intName
                               << " path recognized, but topic is unknown, this is unexpected"
         );
         return;
     }
 
-    if (NumPartitionsFromTopic[topic]++ == 0) {
+    //ToDo[counters]
+    if (NumPartitionsFromTopic[converterIter->second->GetInternalName()]++ == 0) {
         if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            SetupTopicCounters(topic, jt->second.CloudId, jt->second.DbId, jt->second.FolderId);
+            SetupTopicCounters(converterIter->second, jt->second.CloudId, jt->second.DbId, jt->second.FolderId);
         } else {
-            SetupTopicCounters(topic);
+            SetupTopicCounters(converterIter->second);
         }
     }
 
-    auto it = TopicCounters.find(topic);
+    //ToDo[counters]
+    auto it = TopicCounters.find(converterIter->second->GetInternalName());
     Y_VERIFY(it != TopicCounters.end());
 
     ui64 assignId = NextAssignId++;
     BalancerGeneration[assignId] = {record.GetGeneration(), record.GetStep()};
     TPartitionId partitionId{converterIter->second, record.GetPartition(), assignId};
 
-    IActor* partitionActor = new TPartitionActor(ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
-                                                 record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode);
+    IActor* partitionActor = new TPartitionActor(
+            ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
+            record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
+            converterIter->second);
 
     TActorId actorId = ctx.Register(partitionActor);
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
     }
     Y_VERIFY(record.GetGeneration() > 0);
-    auto pp = Partitions.insert(std::make_pair(assignId, TPartitionActorInfo{actorId, partitionId, ctx}));
+    auto pp = Partitions.insert(std::make_pair(assignId, TPartitionActorInfo{actorId, partitionId, converterIter->second, ctx}));
     Y_VERIFY(pp.second);
     if (SessionsActive) {
         PartsPerSession.IncFor(Partitions.size(), 1);
@@ -904,8 +941,8 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
         MigrationStreamingReadServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
 
-        result.mutable_assigned()->mutable_topic()->set_path(ev->Get()->Partition.TopicConverter->GetModernName());
-        result.mutable_assigned()->set_cluster(ev->Get()->Partition.TopicConverter->GetCluster());
+        result.mutable_assigned()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());
+        result.mutable_assigned()->set_cluster(it->second.Topic->GetCluster());
         result.mutable_assigned()->set_partition(ev->Get()->Partition.Partition);
         result.mutable_assigned()->set_assign_id(it->first);
 
@@ -933,8 +970,8 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
         MigrationStreamingReadServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
 
-        result.mutable_partition_status()->mutable_topic()->set_path(ev->Get()->Partition.TopicConverter->GetModernName());
-        result.mutable_partition_status()->set_cluster(ev->Get()->Partition.TopicConverter->GetCluster());
+        result.mutable_partition_status()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());
+        result.mutable_partition_status()->set_cluster(it->second.Topic->GetCluster());
         result.mutable_partition_status()->set_partition(ev->Get()->Partition.Partition);
         result.mutable_partition_status()->set_assign_id(it->first);
 
@@ -968,8 +1005,8 @@ void TReadSessionActor::SendReleaseSignalToClient(const THashMap<ui64, TPartitio
     MigrationStreamingReadServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
 
-    result.mutable_release()->mutable_topic()->set_path(it->second.Partition.TopicConverter->GetModernName());
-    result.mutable_release()->set_cluster(it->second.Partition.TopicConverter->GetCluster());
+    result.mutable_release()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());
+    result.mutable_release()->set_cluster(it->second.Topic->GetCluster());
     result.mutable_release()->set_partition(it->second.Partition.Partition);
     result.mutable_release()->set_assign_id(it->second.Partition.AssignId);
     result.mutable_release()->set_forceful_release(kill);
@@ -1002,9 +1039,9 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
     ui32 group = record.HasGroup() ? record.GetGroup() : 0;
     auto pathIter = FullPathToConverter.find(topicPath);
     Y_VERIFY(!pathIter.IsEnd());
-    auto it = Topics.find(pathIter->second->GetClientsideName());
+    auto it = Topics.find(pathIter->second->GetInternalName());
     Y_VERIFY(!it.IsEnd());
-    auto& converter = it->second.TopicNameConverter;
+    auto& converter = it->second.FullConverter;
 
     TActorId pipe = ActorIdFromProto(record.GetPipeClient());
 
@@ -1019,10 +1056,10 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
         auto jt = Partitions.begin();
         ui32 i = 0;
         for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-            if (it->second.Partition.TopicConverter->GetPrimaryPath() == converter->GetPrimaryPath()
+            if (it->second.Topic->GetInternalName() == converter->GetInternalName()
                 && !it->second.Releasing
                 && (group == 0 || it->second.Partition.Partition + 1 == group)
-            ) {
+                    ) {
                 ++i;
                 if (rand() % i == 0) { //will lead to 1/n probability for each of n partitions
                     actorId = it->second.Actor;
@@ -1033,7 +1070,8 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
         Y_VERIFY(actorId);
 
         {
-            auto it = TopicCounters.find(converter->GetClientsideName());
+            //ToDo[counters]
+            auto it = TopicCounters.find(converter->GetInternalName());
             Y_VERIFY(it != TopicCounters.end());
             it->second.PartitionsToBeReleased.Inc();
         }
@@ -1068,8 +1106,8 @@ void TReadSessionActor::InformBalancerAboutRelease(const THashMap<ui64, TPartiti
     request.Reset(new TEvPersQueue::TEvPartitionReleased);
     auto& req = request->Record;
 
-    const auto& converter = it->second.Partition.TopicConverter;
-    auto jt = Topics.find(converter->GetClientsideName());
+    const auto& converter = it->second.Topic;
+    auto jt = Topics.find(converter->GetInternalName());
     Y_VERIFY(jt != Topics.end());
 
     req.SetSession(Session);
@@ -1147,10 +1185,11 @@ bool TReadSessionActor::ActualPartitionActor(const TActorId& part) {
 
 
 void TReadSessionActor::ReleasePartition(const THashMap<ui64, TPartitionActorInfo>::iterator& it,
-                                        bool couldBeReads, const TActorContext& ctx)
+                                         bool couldBeReads, const TActorContext& ctx)
 {
     {
-        auto jt = TopicCounters.find(it->second.Partition.TopicConverter->GetClientsideName());
+        //ToDo[counters]
+        auto jt = TopicCounters.find(it->second.Topic->GetInternalName());
         Y_VERIFY(jt != TopicCounters.end());
         jt->second.PartitionsReleased.Inc();
         jt->second.PartitionsInfly.Dec();
@@ -1184,11 +1223,15 @@ void TReadSessionActor::ReleasePartition(const THashMap<ui64, TPartitionActorInf
 bool TReadSessionActor::ProcessBalancerDead(const ui64 tablet, const TActorContext& ctx) {
     for (auto& t : Topics) {
         if (t.second.TabletID == tablet) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " balancer for topic " << t.first << " is dead, restarting all from this topic");
+            LOG_INFO_S(
+                    ctx, NKikimrServices::PQ_READ_PROXY,
+                    PQ_LOG_PREFIX << " balancer for topic " << t.second.FullConverter->GetPrintableString()
+                                  << " is dead, restarting all from this topic"
+            );
 
             //Drop all partitions from this topic
             for (auto it = Partitions.begin(); it != Partitions.end();) {
-                if (it->second.Partition.TopicConverter->GetClientsideName() == t.first) { //partition from this topic
+                if (it->second.Topic->GetInternalName() == t.first) { //partition from this topic
                     // kill actor
                     auto jt = it;
                     ++it;
@@ -1298,8 +1341,8 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadResponse::TPtr& ev, const TAct
     TFormedReadResponse::TPtr formedResponse = it->second;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " read done guid " << formedResponse->Guid
-                                                                  << partitionIt->second.Partition
-                                                                  << " size " << event->Response.ByteSize());
+                                                                   << partitionIt->second.Partition
+                                                                   << " size " << event->Response.ByteSize());
 
     const i64 diff = formedResponse->ApplyResponse(std::move(event->Response));
     if (event->FromDisk) {
@@ -1440,7 +1483,7 @@ void TReadSessionActor::ProcessReads(const TActorContext& ctx) {
             size -= csize;
             Y_VERIFY(csize < Max<i32>());
 
-            auto jt = ReadFromTimestamp.find(it->second.Partition.TopicConverter->GetModernName());
+            auto jt = ReadFromTimestamp.find(it->second.Topic->GetInternalName());
             Y_VERIFY(jt != ReadFromTimestamp.end());
             ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
 
@@ -1502,7 +1545,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionReady::TPtr& ev, const TA
     const auto it = PartitionToReadResponse.find(ev->Sender); // check whether this partition is taking part in read response
     auto& container = it != PartitionToReadResponse.end() ? it->second->PartitionsBecameAvailable : AvailablePartitions;
     auto res = container.insert(TPartitionInfo{ev->Get()->Partition.AssignId, ev->Get()->WTime, ev->Get()->SizeLag,
-                                 ev->Get()->EndOffset - ev->Get()->ReadOffset});
+                                               ev->Get()->EndOffset - ev->Get()->ReadOffset});
     Y_VERIFY(res.second);
     ProcessReads(ctx);
 }
@@ -1522,8 +1565,8 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " checking auth because of timeout");
 
         AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-                ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token,
-                TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, Request->GetDatabaseName().GetOrElse(TString())), TopicsHandler.GetLocalCluster()
+                ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
+                TopicsHandler.GetLocalCluster()
         ));
     }
 }

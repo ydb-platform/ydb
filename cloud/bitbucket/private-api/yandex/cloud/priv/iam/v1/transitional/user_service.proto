@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.transitional;
+
+import "google/api/annotations.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/api/tools/options.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/transitional;iam";
+option java_outer_classname = "PTUS";
+
+service UserService {
+  rpc GetMetadata (GetUserMetadataRequest) returns (GetUserMetadataResponse) {
+    option (google.api.http) = { get: "/iam/v1/org/{org_id}/user/{user_id}/metadata" };
+  }
+
+  rpc SetMetadata (SetUserMetadataRequest) returns (SetUserMetadataResponse) {
+    option (google.api.http) = { post: "/iam/v1/org/{org_id}/user/{user_id}/metadata" body: "*" };
+  }
+
+  rpc GetPassportUser (GetPassportUserRequest) returns (GetPassportUserResponse) {
+    option (google.api.http) = { get: "/iam/v1/passportUid" };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc ListUsers (ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = { get: "/iam/v1/cloud/{cloud_id}/users" };
+    option (yandex.cloud.api.tools.method).lint_skip.contains_resource_name = true;
+  }
+
+  rpc GetCurrentSubject (google.protobuf.Empty) returns (GetCurrentSubjectResponse) {
+      option (google.api.http) = { get: "/iam/v1/whoami" };
+  }
+}
+
+message GetUserMetadataRequest {
+  string org_id = 1;
+  string user_id = 2;
+}
+
+message GetUserMetadataResponse {
+  string metadata = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+}
+
+message SetUserMetadataRequest {
+  string org_id = 1;
+  string user_id = 2;
+  string metadata = 3[(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+}
+
+message SetUserMetadataResponse {
+  string status = 1;
+}
+
+message GetPassportUserRequest {
+  string subject_id = 1;
+}
+
+message GetPassportUserResponse {
+  string passport_uid = 1;
+}
+
+message ListUsersRequest {
+  string cloud_id = 1;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+
+  message User {
+    string id = 1;
+    string login = 2;
+    string first_name = 3;
+    string last_name = 4;
+    string avatar = 5;
+  }
+}
+
+message GetCurrentSubjectResponse {
+  string id = 1;
+  string cloud_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string subject_type = 4;
+  string login = 5;
+  string email = 6;
+  string reference = 7;
+  int64 deleted = 8;
+}

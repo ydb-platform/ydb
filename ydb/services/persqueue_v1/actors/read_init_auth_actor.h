@@ -15,14 +15,14 @@
 namespace NKikimr::NGRpcProxy::V1 {
 
 class TReadInitAndAuthActor : public NActors::TActorBootstrapped<TReadInitAndAuthActor> {
-using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
-using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
+    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
+    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
 public:
-     TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
-                           const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                           TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token,
-                           const NPersQueue::TTopicsToConverter& topics, const TString& localCluster);
+    TReadInitAndAuthActor(const TActorContext& ctx, const TActorId& parentId, const TString& clientId, const ui64 cookie,
+                          const TString& session, const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+                          TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TIntrusivePtr<NACLib::TUserToken> token,
+                          const NPersQueue::TTopicsToConverter& topics, const TString& localCluster);
 
     ~TReadInitAndAuthActor();
 

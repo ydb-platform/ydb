@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/iam/v1/restriction_type.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PRN";
+
+message Restriction {
+  RestrictionKind restriction_kind = 1;
+  string restriction_type_id = 2;
+  google.protobuf.Timestamp added_at = 3;
+  string added_by = 4;
+}

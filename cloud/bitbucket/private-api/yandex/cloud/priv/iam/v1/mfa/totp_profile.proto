@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.mfa;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/mfa;mfa";
+option java_outer_classname = "PTP";
+
+enum VerificationResult {
+  VERIFICATION_RESULT_UNSPECIFIED = 0;
+  // The verification succeeded.
+  OK = 1;
+  // The TOTP code sent by the client does not match the code generated on the server side.
+  CODE_MISMATCH = 2;
+  // The TOTP code has been used already (possibly a reuse attack).
+  CODE_REUSE = 3;
+  // Blocked due to brute force.
+  TOO_MANY_REQUESTS = 4;
+  // No TOTP configured for this user.
+  NOT_SET = 5;
+  // The verification succeeded, but item >= inner window size (and item < outer window size).
+  NEED_MORE_CODES = 6;
+}
+
+// Default is SHA1.
+enum HashAlgorithm {
+  HASH_ALGORITHM_UNSPECIFIED = 0;
+  SHA1 = 1;
+  SHA256 = 2;
+  SHA512 = 3;
+}
+
+message TotpProfile {
+  // TOTP profile ID.
+  string id = 1;
+  // The user that this password belongs to.
+  string subject_id = 2;
+  // The algorithm used to calculate the hash.
+  HashAlgorithm algorithm = 3;
+  // The length of the TOTP code (6-8).
+  int64 digits = 4;
+  google.protobuf.Timestamp created_at = 5;
+  // Additional TOTP parameters.
+  TotpProfileOptions options = 6;
+  // True, if the user has ever been successfully verified.
+  bool active = 7;
+}
+
+// Additional TOTP parameters.
+message TotpProfileOptions {
+  // The period that a TOTP code will be valid for.
+  google.protobuf.Duration time_step = 1 [(value) = "10s-10m"];
+}

@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.transitional;
+
+import "google/api/annotations.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/transitional;iam";
+option java_outer_classname = "PTPS";
+
+service PolicyService {
+  rpc List (ListPoliciesRequest) returns (ListPoliciesResponse) {
+    option (google.api.http) = { get: "/iam/v1/cloud/{cloud_id}/policies" };
+  }
+
+  rpc ListCompat (ListPoliciesCompatRequest) returns (ListPoliciesResponse) {
+    option (google.api.http) = { get: "/iam/v1/org/{org_id}/policies" };
+  }
+
+  rpc Set (SetPolicyRequest) returns (SetPolicyResponse) {
+    option (google.api.http) = { post: "/iam/v1/cloud/{cloud_id}/policies" body: "*" };
+  }
+
+  rpc SetCompat (SetPolicyCompatRequest) returns (SetPolicyResponse) {
+    option (google.api.http) = { post: "/iam/v1/org/{org_id}/policies" body: "*" };
+  }
+
+  rpc Delete (DeletePolicyRequest) returns (DeletePolicyResponse) {
+    option (google.api.http) = { delete: "/iam/v1/cloud/{cloud_id}/policy/{assignment_id}" };
+  }
+
+  rpc DeleteCompat (DeletePolicyCompatRequest) returns (DeletePolicyResponse) {
+    option (google.api.http) = { delete: "/iam/v1/cloud/{org_id}/policy/{assignment_id}" };
+  }
+}
+
+message ListPoliciesRequest {
+  string cloud_id = 1;
+}
+
+message ListPoliciesCompatRequest {
+  string org_id = 1;
+}
+
+message Assignment {
+  string id = 1;
+}
+
+message ListPoliciesResponse {
+  repeated Assignment result = 1;
+}
+
+message SetPolicyRequest {
+  string cloud_id = 1;
+  string policy_id = 2;
+}
+
+message SetPolicyCompatRequest {
+  string org_id = 1;
+  string policy_id = 2;
+}
+
+message SetPolicyResponse {
+  string status = 1;
+  string id = 2;
+}
+
+message DeletePolicyRequest {
+  string cloud_id = 1;
+  string assignment_id = 2;
+}
+
+message DeletePolicyCompatRequest {
+  string org_id = 1;
+  string assignment_id = 2;
+}
+
+message DeletePolicyResponse {
+  string status = 1;
+}

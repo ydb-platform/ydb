@@ -2,6 +2,7 @@
 
 #include "global.h"
 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/persqueue/key.h>
@@ -85,6 +86,7 @@ struct TEvPQ {
         EvInitComplete,
         EvChangeOwner,
         EvChangeConfig,
+        EvChangePartitionConfig,
         EvChangeCacheConfig,
         EvPartitionCounters,
         EvTabletCacheCounters,
@@ -447,6 +449,15 @@ struct TEvPQ {
         {}
 
         TString TopicName;
+        NKikimrPQ::TPQTabletConfig Config;
+    };
+    struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
+        TEvChangePartitionConfig(const NPersQueue::TTopicConverterPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config)
+            : TopicConverter(topicConverter)
+            , Config(config)
+        {}
+
+        NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig Config;
     };
 

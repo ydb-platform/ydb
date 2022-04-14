@@ -98,7 +98,7 @@ namespace {
 
 
 
-    Y_UNIT_TEST_SUITE(TPersQueueTest) {
+Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(AllEqual) {
         using NGRpcProxy::V1::AllEqual;
 
@@ -116,21 +116,27 @@ namespace {
     }
 
     Y_UNIT_TEST(SetupLockSession2) {
+        Cerr << "=== Start server\n";
         TPersQueueV1TestServer server;
+        Cerr << "=== Started server\n";
         SET_LOCALS;
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+
         const TString topicPath = server.GetTopicPathMultipleDC();
 
         auto driver = server.Server->AnnoyingClient->GetDriver();
 
         NYdb::NPersQueue::TReadSessionSettings settings;
         settings.ConsumerName("shared/user").AppendTopics(topicPath).ReadMirrored("dc1");
+        Cerr << "=== Create reader\n";
         auto reader = CreateReader(*driver, settings);
 
+        Cerr << "===Start reader event loop\n";
         for (ui32 i = 0; i < 2; ++i) {
             auto msg = reader->GetEvent(true, 1);
             UNIT_ASSERT(msg);
 
-            Cerr << "Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
+            Cerr << "===Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
 
             auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
 
@@ -143,7 +149,7 @@ namespace {
         }
         auto wait = reader->WaitEvent();
         UNIT_ASSERT(!wait.Wait(TDuration::Seconds(1)));
-
+        Cerr << "======Altering topic\n";
         pqClient->AlterTopicNoLegacy("/Root/PQ/rt3.dc2--acc--topic2dc", 2);
         Cerr << "======Alter topic done\n";
         UNIT_ASSERT(wait.Wait(TDuration::Seconds(5)));
@@ -167,6 +173,10 @@ namespace {
         TPersQueueV1TestServer server;
         SET_LOCALS;
         MAKE_INSECURE_STUB;
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+
         auto readStream = StubP_->MigrationStreamingRead(&rcontext);
         UNIT_ASSERT(readStream);
 
@@ -196,7 +206,7 @@ namespace {
                 }
             }
         }
-
+        Cerr << "===First block done\n";
         {
             Sleep(TDuration::Seconds(10));
             ReadInfoRequest request;
@@ -213,6 +223,8 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
             UNIT_ASSERT(res.topics(0).status() == Ydb::StatusIds::SUCCESS);
         }
+        Cerr << "===Second block done\n";
+
         ui64 assignId = 0;
         {
             MigrationStreamingReadClientMessage  req;
@@ -238,6 +250,7 @@ namespace {
             }
 
         }
+        Cerr << "===Third block done\n";
 
         auto driver = server.Server->AnnoyingClient->GetDriver();
 
@@ -250,6 +263,7 @@ namespace {
             bool res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
         }
+        Cerr << "===4th block done\n";
 
         //check read results
         MigrationStreamingReadServerMessage resp;
@@ -279,6 +293,7 @@ namespace {
         }
 
 
+        Cerr << "=== ===AlterTopic\n";
         pqClient->AlterTopic("rt3.dc1--acc--topic1", 10);
         {
             ReadInfoRequest request;
@@ -296,7 +311,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(res.topics(0).partitions_size(), 10);
         }
-
+        Cerr << "=== ===AlterTopic block done\n";
         {
             ReadInfoRequest request;
             ReadInfoResponse response;
@@ -678,6 +693,7 @@ namespace {
 
     Y_UNIT_TEST(WriteNonExistingPartition) {
         NPersQueue::TTestServer server{PQSettings(0).SetDomainName("Root").SetNodeCount(2)};
+        server.EnableLogs({ NKikimrServices::PQ_METACACHE });
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
@@ -1137,7 +1153,8 @@ namespace {
 
     Y_UNIT_TEST(CheckACLForGrpcRead) {
         NPersQueue::TTestServer server(PQSettings(0, 1));
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_METACACHE });
+        //server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_METACACHE });
         server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);
         TString topic2 = DEFAULT_TOPIC_NAME + "2";
         TString shortTopic2Name = "topic12";
@@ -1230,6 +1247,7 @@ namespace {
         }
 */
         Cerr << "==== Start second loop\n";
+        server.AnnoyingClient->CreateTopic("rt3.dc1--account--test-topic123", 1);
         for (ui32 i = 0; i < 3; ++i){
             server.AnnoyingClient->GetClientInfo({topic2}, "user1", true);
 
@@ -1252,7 +1270,7 @@ namespace {
             UNIT_ASSERT(status.ok());
             ReadInfoResult res;
             response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
+            Cerr << "Response: " << response << "\n" << res << "\n";
             UNIT_ASSERT(response.operation().ready() == true);
             UNIT_ASSERT(response.operation().status() == (i < 2) ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::SUCCESS);
         }
@@ -1738,7 +1756,7 @@ namespace {
         }
         {
             msg = writer->GetEvent(true);
-            UNIT_ASSERT(msg); // Ack on write
+            UNIT_ASSERT(msg); // ReadyToAcceptEvent
             auto ev2 = std::get_if<NYdb::NPersQueue::TWriteSessionEvent::TAcksEvent>(&*msg);
             UNIT_ASSERT(ev2);
         }
@@ -2666,6 +2684,7 @@ namespace {
       }
       SourceIdMaxCounts: 6000000
     }
+    TopicName: "rt3.dc1--acc--topic3"
     Version: 3
     LocalDC: true
     RequireAuthWrite: true
@@ -2692,6 +2711,7 @@ namespace {
       Codecs: "zstd"
     }
     ReadRuleVersions: 567
+    TopicPath: "/Root/PQ/rt3.dc1--acc--topic3"
     YdbDatabasePath: "/Root"
   }
   ErrorCode: OK
@@ -3661,6 +3681,7 @@ namespace {
                 partition,
                 createStream->GetPartitionStream()->GetPartitionId(),
                 stepDescription
+
             );
         }
     }

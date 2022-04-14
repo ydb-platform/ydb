@@ -1,0 +1,107 @@
+scopes:
+
+  yc.iam.accessBindings.manage:
+    service: iam
+    name: 'управление биндингами'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.accessBindings.list
+      - iam.accessBinding.delete # TODO remove ?
+      - iam.accessBindings.set
+      - iam.accessBindings.update
+
+  yc.iam.clouds.manage:
+    service: iam
+    name: 'удалять облако и редактировать его настройки'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.clouds.delete
+      - iam.clouds.setUserListingSetting
+
+  yc.iam.federations.manage:
+    service: iam
+    name: 'управление федерациями'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.federations.createCertificate
+      - iam.federations.createUser
+      - iam.federations.deleteCertificate
+      - iam.federations.deleteUser
+      - iam.federations.getCertificate
+      - iam.federations.listCertificate
+      - iam.federations.updateCertificate
+      - iam.federations.{create,delete,update}
+      - iam.federations.{get,list}
+
+  yc.iam.serviceAccounts.manage:
+    service: iam
+    name: 'управление сервисными аккаунтами'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.tokenKeys.{create,delete,update}
+      - iam.authorizedKeys.{create,delete,update}
+      - iam.serviceAccounts.{create,update,delete}AccessKey
+      - iam.serviceAccounts.{create,update,delete}ApiKey
+      - iam.serviceAccounts.{create,delete}SshKey
+      - iam.serviceAccounts.{create,delete,update}
+
+  yc.iam.serviceAccounts.apiKey.get:
+    service: iam
+    name: 'получение информации об API-ключах'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.serviceAccounts.{getApiKey,listApiKeys}
+
+  yc.iam.serviceAccounts.accessKey.get:
+    service: iam
+    name: 'получение информации об авторизованных ключах'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.serviceAccounts.{getAccessKey,listAccessKeys}
+
+  yc.iam.serviceAccounts.sshKey.get:
+    service: iam
+    name: 'получение информации об SSH-ключах'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.serviceAccounts.getSshKey
+
+  yc.iam.serviceAccounts.get:
+    service: iam
+    name: 'получение информации о сервисных аккаунтах'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.serviceAccounts.{get,list}
+
+  yc.iam.serviceAccounts.use:
+    service: iam
+    name: 'использование сервисного аккаунта'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.serviceAccounts.use
+
+  yc.iam.serviceAccounts.issueToken:
+    service: iam
+    name: 'получения токена сервисного-аккаунта'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.serviceAccounts.issueToken
+
+  yc.iam.authorizedKeys.get:
+    service: iam
+    name: 'чтение авторизованных ключей'
+    description: ''
+    visibility: internal
+    permissions:
+      - iam.authorizedKeys.get
+      - iam.tokenKeys.get

@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-client-server-ut PUBLIC
   ydb-core-tablet_flat
   ydb-core-testlib
   core-testlib-actors
+  cpp-v2-ut_utils
 )
 target_link_options(ydb-core-client-server-ut PRIVATE
   -ldl

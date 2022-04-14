@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.awscompatibility;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/awscompatibility;awscompatibility";
+option java_outer_classname = "PAK";
+
+message AccessKey {
+  string id = 1;
+  string service_account_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string description = 4;
+  string key_id = 5;
+  // Base64-encoded (no padding) sha256 hash of binary secret key
+  string fingerprint = 6;
+}

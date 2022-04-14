@@ -1,0 +1,17 @@
+*.pyc
+*.so
+.om.cache
+om.conf.local
+local.cmake
+local.ymake
+/.gcc-compiler
+/.gxx-compiler
+.svn
+*.log
+test-results
+*.a
+*_pb2.py
+*.pkg
+*.so.1
+kikimr/driver/kikimr
+.idea

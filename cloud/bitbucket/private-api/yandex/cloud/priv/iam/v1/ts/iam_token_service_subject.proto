@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.ts;
+
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/ts;iam";
+option java_outer_classname = "PITS";
+
+message Subject {
+  oneof type {
+    option (exactly_one) = true;
+
+    UserAccount user_account = 1;
+    ServiceAccount service_account = 2;
+  }
+
+  message UserAccount {
+    string id = 1 [(required) = true, (length) = "<=50"];
+  }
+
+  message ServiceAccount {
+    string id = 1 [(required) = true, (length) = "<=50"];
+  }
+}

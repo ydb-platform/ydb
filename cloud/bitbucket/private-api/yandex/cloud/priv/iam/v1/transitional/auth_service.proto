@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.transitional;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/priv/sensitive.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/transitional;iam";
+option java_outer_classname = "PTAS";
+
+service AuthService {
+  // TODO legacy v2
+  rpc SessionId (SessionIdRequest) returns (SessionIdResponse) {
+    option (google.api.http) = { post: "/iam/v1/auth/session_id" body: "*" };
+  }
+}
+
+message SessionIdRequest {
+  string organization_id = 1;
+}
+
+message SessionIdResponse {
+  string token = 1 [(sensitive) = true];
+  string secret_key = 2 [(sensitive) = true];
+}

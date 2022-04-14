@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PK";
+
+message Key {
+  enum Algorithm {
+    ALGORITHM_UNSPECIFIED = 0;
+    RSA_2048 = 1;
+    RSA_4096 = 2;
+  }
+
+  string id = 1;
+
+  oneof subject {
+    string user_account_id = 2;
+    string service_account_id = 3;
+  }
+
+  google.protobuf.Timestamp created_at = 4;
+  string description = 5;
+
+  Algorithm key_algorithm = 6;
+  string public_key = 7;
+
+  // Base64-encoded (no padding) sha256 hash of DER-encoded RSA public key in SubjectPublicKeyInfo format.
+  string fingerprint = 8;
+}

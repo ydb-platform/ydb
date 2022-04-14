@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud;
+
+// This file contains all imports that may not be required by API itself, but
+// should present in PB-descriptor for grpc-json conversion. The most vivid
+// examples are messages defined in google/rpc/error_details.proto, which
+// may appear in status details but are not mentioned anywhere else in API as
+// import.
+
+import "google/rpc/status.proto";
+import "google/rpc/error_details.proto";
+import "google/rpc/code.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud;cloud";
+option java_package = "yandex.cloud.api";
+
+message Dummy {
+  // Reference all includes to avoid 'unused' warnings.
+  google.rpc.Status status = 1;
+  google.rpc.Code code = 2;
+  google.rpc.RequestInfo request_info = 3;
+}

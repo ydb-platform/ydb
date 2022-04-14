@@ -28,8 +28,8 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
     , Counters(counters)
     , LocalCluster(localCluster)
 {
-    for (const auto& [path, converter] : topics) {
-        Topics[path].TopicNameConverter = converter;
+    for (const auto& [path, converter] : topics.Topics) {
+        Topics[path].DiscoveryConverter = converter;
     }
 }
 
@@ -45,13 +45,14 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
 }
 
 void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate) {
-    TVector<TString> topicNames;
-    for (const auto& [_, holder] : Topics) {
-        topicNames.emplace_back(holder.TopicNameConverter->GetPrimaryPath());
+    TVector<NPersQueue::TDiscoveryConverterPtr> topics;
+    for (const auto& topic : Topics) {
+        topics.push_back(topic.second.DiscoveryConverter);
+        Y_VERIFY(topic.second.DiscoveryConverter->IsValid());
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
-    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topicNames, true, showPrivate));
+    //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
+    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, showPrivate));
 }
 
 void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
@@ -65,7 +66,8 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
     TActorBootstrapped<TReadInitAndAuthActor>::Die(ctx);
 }
 
-void TReadInitAndAuthActor::CloseSession(const TString& errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode code, const TActorContext& ctx)
+void TReadInitAndAuthActor::CloseSession(const TString& errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode code,
+                                         const TActorContext& ctx)
 {
     ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(errorReason, code));
     Die(ctx);
@@ -93,6 +95,9 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
     topicsIter->second.DbId = pqDescr.GetPQTabletConfig().GetYdbDatabaseId();
     topicsIter->second.FolderId = pqDescr.GetPQTabletConfig().GetYcFolderId();
+    topicsIter->second.FullConverter = topicsIter->second.DiscoveryConverter->UpgradeToFullConverter(
+            pqDescr.GetPQTabletConfig()
+    );
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }
 
@@ -101,8 +106,10 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Handle describe topics response");
 
     bool reDescribe = false;
+    auto i = 0u;
+    auto& topicsRequested = ev->Get()->TopicsRequested;
     for (const auto& entry : ev->Get()->Result->ResultSet) {
-        auto path = JoinPath(entry.Path);
+        const auto& path = topicsRequested[i++]->GetInternalName();
         auto it = Topics.find(path);
         Y_VERIFY(it != Topics.end());
 
@@ -110,8 +117,8 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
             Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
-            it->second.TopicNameConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
-            Topics[it->second.TopicNameConverter->GetPrimaryPath()] = it->second;
+            it->second.DiscoveryConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
+            Topics[it->second.DiscoveryConverter->GetInternalName()] = it->second;
             Topics.erase(it);
 
             reDescribe = true;
@@ -239,7 +246,7 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicTabletsPairs res;
     for (auto& [_, holder] : Topics) {
         res.emplace_back(decltype(res)::value_type({
-            holder.TopicNameConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.FolderId
+            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.FolderId
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

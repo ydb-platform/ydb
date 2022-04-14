@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/permission_stage.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PPSS";
+
+service PermissionStageService {
+  rpc Get (GetPermissionStageRequest) returns (PermissionStage);
+
+  rpc List (ListPermissionStagesRequest) returns (ListPermissionStagesResponse);
+
+  rpc Create (CreatePermissionStageRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "PermissionStage"
+      metadata: "CreatePermissionStageMetadata"
+    };
+  }
+
+  rpc Delete (DeletePermissionStageRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      response: "google.protobuf.Empty"
+      metadata: "DeletePermissionMetadata"
+    };
+  }
+}
+
+message CreatePermissionStageMetadata {
+  string permission_stage_id = 1;
+}
+
+message UpdatePermissionStageMetadata {
+  string permission_stage_id = 1;
+}
+
+message DeletePermissionStageMetadata {
+  string permission_stage_id = 1;
+}
+
+message CreatePermissionStageRequest {
+  string permission_stage_id = 1 [(required) = true];
+}
+
+message UpdatePermissionStageRequest {
+  string permission_stage_id = 1 [(required) = true];
+}
+
+message DeletePermissionStageRequest {
+  string permission_stage_id = 1 [(required) = true];
+}
+
+message GetPermissionStageRequest {
+  string permission_stage_id = 1 [(required) = true];
+}
+
+message ListPermissionStagesRequest {
+  int64 page_size = 1 [(value) = "0-1000"];
+  string page_token = 2 [(length) = "<=100"];
+  string filter = 3 [(length) = "<=1000"];
+}
+
+message ListPermissionStagesResponse {
+  repeated PermissionStage permission_stages = 1;
+  string next_page_token = 2;
+}

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package yandex.cloud.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/public-api/yandex/cloud/iam/v1;iam";
+option java_package = "yandex.cloud.api.iam.v1";
+
+// An ApiKey resource. For more information, see [Api-Key](/docs/iam/concepts/authorization/api-key).
+message ApiKey {
+  // ID of the API Key.
+  string id = 1;
+
+  // ID of the service account that the API key belongs to.
+  string service_account_id = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // Description of the API key. 0-256 characters long.
+  string description = 4;
+}

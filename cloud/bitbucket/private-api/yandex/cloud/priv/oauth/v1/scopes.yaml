@@ -1,0 +1,39 @@
+scopes:
+  openid:
+    service: oauth
+    name: ''
+    # description полжен завершать предложение "приложение сможет" и отвечать на вопрос "сможет что делать?"
+    description: 'аутентифицировать пользователя и получить его sub (subjectId)'
+    visibility: public
+    # сейчас нет возможности выдать пользователю права на чтение только своего профиля, поэтому список пермишенов пустой
+    permissions: []
+  profile:
+    service: oauth
+    name: 'получить доступ к основным данным профиля аутентифицированного пользователя (name, family_name, given_name, middle_name, nickname, preferred_username, profile, picture, website, gender, birthdate, zoneinfo, locale, updated_at)'
+    description: ''
+    visibility: public
+    permissions: []
+  email:
+    service: oauth
+    name: 'получить доступ к атрибутам email, email_verified аутентифицированного пользователя'
+    description: ''
+    visibility: public
+    permissions: []
+  address:
+    service: oauth
+    name: 'получить доступ к атрибуту address аутентифицированного пользователя'
+    description: ''
+    visibility: public
+    permissions: []
+  phone:
+    service: oauth
+    name: 'получить доступ к атрибутам phone_number, phone_number_verified аутентифицированного пользователя'
+    description: ''
+    visibility: public
+    permissions: []
+  offline_access:
+    service: oauth
+    name: 'получить refresh_token для аутентифицированного пользователя'
+    description: ''
+    visibility: public
+    permissions: []

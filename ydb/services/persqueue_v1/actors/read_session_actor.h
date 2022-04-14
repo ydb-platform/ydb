@@ -126,8 +126,8 @@ private:
                       const NActors::TActorContext& ctx);
 
     void SetupCounters();
-    void SetupTopicCounters(const TString& topic);
-    void SetupTopicCounters(const TString& topic, const TString& cloudId, const TString& dbId,
+    void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
+    void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic, const TString& cloudId, const TString& dbId,
                             const TString& folderId);
 
     void ProcessReads(const NActors::TActorContext& ctx); // returns false if actor died
@@ -205,7 +205,10 @@ private:
 
         TInstant AssignTimestamp;
 
-        TPartitionActorInfo(const TActorId& actor, const TPartitionId& partition, const TActorContext& ctx)
+	    NPersQueue::TTopicConverterPtr Topic;
+
+        TPartitionActorInfo(const TActorId& actor, const TPartitionId& partition,
+                            const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx)
             : Actor(actor)
             , Partition(partition)
             , Reading(false)
@@ -217,6 +220,7 @@ private:
             , ReadIdCommitted(0)
             , Offset(0)
             , AssignTimestamp(ctx.Now())
+            , Topic(topic)
         { }
 
         void MakeCommit(const TActorContext& ctx);
@@ -229,7 +233,7 @@ private:
     THashMap<ui64, TPartitionActorInfo> Partitions; //assignId -> info
 
     THashMap<TString, TTopicHolder> Topics; // topic -> info
-    THashMap<TString, NPersQueue::TConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
+    THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
     THashMap<TString, ui64> ReadFromTimestamp;
@@ -320,7 +324,7 @@ private:
     THashMap<TString, TTopicCounters> TopicCounters;
     THashMap<TString, ui32> NumPartitionsFromTopic;
 
-    TVector<NPQ::TLabelsInfo> Aggr;
+    TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;
     NKikimr::NPQ::TMultiCounter SLIErrors;
     TInstant StartTime;
@@ -333,6 +337,7 @@ private:
     NKikimr::NPQ::TMultiCounter ReadsTotal;
 
     NPersQueue::TTopicsListController TopicsHandler;
+    NPersQueue::TTopicsToConverter TopicsList;
 };
 
 }

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.transitional;
+
+import "google/api/annotations.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/transitional;iam";
+option java_outer_classname = "PTRS";
+
+service RoleService {
+  rpc List (ListRolesRequest) returns (ListRolesResponse) {
+    option (google.api.http) = { get: "/iam/v1/role" };
+  }
+}
+
+message ListRolesRequest {
+  string language = 1;
+}
+
+message ListRolesResponse {
+  repeated Role result = 1;
+
+  message Role {
+    string slug = 1;
+    string name = 2;
+    string desc = 3;
+  }
+}

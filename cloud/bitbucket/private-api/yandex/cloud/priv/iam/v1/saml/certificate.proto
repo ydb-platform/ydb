@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.saml;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/saml;saml";
+option java_outer_classname = "PSC";
+
+// A certificate.
+message Certificate {
+
+  // ID of the certificate.
+  string id = 1;
+
+  // ID of the federation that the certificate belongs to.
+  string federation_id = 2;
+
+  // Name of the certificate. 3-63 characters long.
+  string name = 3;
+
+  // Description of the certificate. 0-256 characters long.
+  string description = 4;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 5;
+
+  // Certificate data in PEM format.
+  string data = 6;
+
+  // SHA256-fingerprint of the certificate.
+  string fingerprint = 7;
+
+  // Time after which the certificate is not valid.
+  google.protobuf.Timestamp not_after = 8;
+
+  // Time before which the certificate is not valid.
+  google.protobuf.Timestamp not_before = 9;
+}

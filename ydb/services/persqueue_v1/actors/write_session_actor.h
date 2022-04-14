@@ -24,9 +24,9 @@ inline TActorId GetPQWriteServiceActorID() {
 }
 
 class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor> {
-using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::StreamingWriteClientMessage, PersQueue::V1::StreamingWriteServerMessage>;
-using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
-using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
+    using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::StreamingWriteClientMessage, PersQueue::V1::StreamingWriteServerMessage>;
+    using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
+    using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
 // Codec ID size in bytes
 static constexpr ui32 CODEC_ID_SIZE = 1;
@@ -98,7 +98,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
-
+    void InitAfterDiscovery(const TActorContext& ctx);
     void DiscoverPartition(const NActors::TActorContext& ctx);
     void SendSelectPartitionRequest(ui32 hash, const TString& topic, const NActors::TActorContext& ctx);
 
@@ -155,7 +155,8 @@ private:
     ui64 Cookie;
 
     NPersQueue::TTopicsListController TopicsController;
-    NPersQueue::TConverterPtr TopicConverter;
+    NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
+    NPersQueue::TTopicConverterPtr FullConverter;
     ui32 Partition;
     ui32 PreferedPartition;
     bool PartitionFound = false;
@@ -244,12 +245,14 @@ private:
     ui64 SourceIdCreateTime;
     ui32 SourceIdUpdatesInflight = 0;
 
-    TVector<NPQ::TLabelsInfo> Aggr;
+    TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;
     NKikimr::NPQ::TMultiCounter SLIErrors;
     TInstant StartTime;
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
+
+    PersQueue::V1::StreamingWriteClientMessage::InitRequest InitRequest;
 };
 
 }

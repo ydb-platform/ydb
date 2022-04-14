@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PUA";
+
+message UserAccount {
+  string id = 1;
+  oneof user_account {
+    option (exactly_one) = true;
+    YandexPassportUserAccount yandex_passport_user_account = 2;
+    SamlUserAccount saml_user_account = 3;
+    OAuthUserAccount oauth_user_account = 4;
+  }
+}
+
+message YandexPassportUserAccount {
+  string login = 1;
+  string default_email = 2;
+}
+
+// A SAML federated user.
+// For more information, see [federations](/docs/iam/concepts/users/saml-federations).
+message SamlUserAccount {
+    message Attribute {
+        repeated string value = 1;
+    }
+    // ID of the federation that the user belongs to.
+    string federation_id = 1 [(required) = true, (length) = "<=50"];
+    // Name Id of the SAML federated user.
+    // The name is unique within the federation. 1-256 characters long.
+    string name_id = 2 [(required) = true, (length) = "1-256"];
+    // Additional attributes of the SAML federated user.
+    map <string, Attribute> attributes = 3;
+}
+
+// A OAuth federated user.
+message OAuthUserAccount {
+  // ID of the federation that the user belongs to.
+  string federation_id = 1 [(required) = true, (length) = "<=50"];
+  // Federated user claims.
+  map <string, string> claims = 2;
+}

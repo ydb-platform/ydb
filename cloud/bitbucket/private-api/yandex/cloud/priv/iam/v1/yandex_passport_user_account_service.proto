@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/iam/v1/user_account.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PYPUAS";
+
+service YandexPassportUserAccountService {
+  rpc GetByLogin (GetUserAccountByLoginRequest) returns (UserAccount) {
+    option (google.api.http) = { get: "/iam/v1/yandexPassportUserAccounts:byLogin" };
+  }
+
+  // create subject_id for Yandex.Passport user identifier.
+  rpc AddUserAccounts (AddPassportUserAccountsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddUserAccountsMetadata"
+      response: "AddUserAccountsResponse"
+    };
+  }
+}
+
+message GetUserAccountByLoginRequest {
+  string login = 1 [(required) = true];
+}
+
+message AddUserAccountsMetadata {
+}
+
+message AddUserAccountsResponse {
+  repeated UserAccount valid_users = 1;
+  repeated PassportUser invalid_users = 2;
+}
+
+
+message AddPassportUserAccountsRequest {
+  repeated PassportUser passport_users = 1 [(size) = "1-100"];
+}
+
+message PassportUser {
+  oneof identity {
+    option (exactly_one) = true;
+    // Yandex.Passport login or Yandex.Passport email
+    string login = 1 [(length) = "2-63"];
+    int64 uid = 2 [(value) = ">0"];
+  }
+}

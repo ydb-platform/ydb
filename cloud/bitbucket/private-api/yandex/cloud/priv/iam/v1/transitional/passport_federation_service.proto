@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.transitional;
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/iam/v1/user_account.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/transitional;iam";
+option java_outer_classname = "PTPFS";
+
+service PassportFederationService {
+
+  rpc AddUserAccounts (AddPassportUserAccountsRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "AddUserAccountsMetadata"
+      response: "AddUserAccountsResponse"
+    };
+  }
+
+}
+
+message AddPassportUserAccountsRequest {
+  oneof ids {
+    option (exactly_one) = true;
+    Logins logins = 1;
+    Uids uids = 2;
+  }
+}
+
+message Uids {
+  repeated int64 values = 1 [(size) = "<=1000", (value) = ">0"];
+}
+
+message Logins {
+  repeated string values = 1 [(size) = "<=1000", (length) = "2-63"];
+}
+
+message AddUserAccountsMetadata {
+}
+
+message AddUserAccountsResponse {
+  repeated UserAccount user_accounts = 1;
+}

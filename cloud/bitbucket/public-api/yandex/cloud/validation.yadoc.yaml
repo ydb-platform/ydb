@@ -1,0 +1,127 @@
+# NOTE(skipor): text will be placed in description, which is CommonMark Markdown
+# so escape regular expressions using `` <pattern> `` escaping, to escape even '`' characters.
+
+required: Required.
+
+pattern:
+  usual: Value must match the regular expression `` $PATTERN ``.
+  repeated: Each value must match the regular expression `` $PATTERN ``.
+  map_value: Each value must match the regular expression `` $PATTERN ``.
+
+value:
+  usual:
+    "<=": The maximum value is $MAX_VALUE.
+    "<": Value must be less than $MAX_VALUE.
+    ">=": The minimum value is $MIN_VALUE.
+    ">": Value must be greater than $MIN_VALUE.
+    "min-max": Acceptable values are $MIN_VALUE to $MAX_VALUE, inclusive.
+    "=": Value must be equal to $VALUE.
+    "list": Value must be one of $FIRST_VALUES or $LAST_VALUE.
+  repeated:
+    "<=": Each value must be less than or equal to $MAX_VALUE.
+    "<": Each value must be less than $MAX_VALUE.
+    ">=": Each value must be greater than or equal to $MIN_VALUE.
+    ">": Each value must be greater than $MIN_VALUE.
+    "min-max": Acceptable values are $MIN_VALUE to $MAX_VALUE, inclusive.
+    "=": Each value must be equal to $VALUE.
+    "list": Each value must be one of $FIRST_VALUES or $LAST_VALUE.
+  map_value:
+    "<=": Each value must be less than or equal to $MAX_VALUE.
+    "<": Each value must be less than $MAX_VALUE.
+    ">=": Each value must be greater than or equal to $MIN_VALUE.
+    ">": Each value must be greater than $MIN_VALUE.
+    "min-max": Acceptable values are $MIN_VALUE to $MAX_VALUE, inclusive.
+    "=": Each value must be equal to $VALUE.
+    "list": Each value must be one of $FIRST_VALUES or $LAST_VALUE.
+
+size:
+  repeated:
+    "<=": The maximum number of elements is $MAX_VALUE.
+    "<": The number of elements must be less than $MAX_VALUE.
+    ">=": The minimum number of elements is $MIN_VALUE.
+    ">0": Must contain at least one element.
+    ">": The number of elements must be greater than $MIN_VALUE.
+    "min-max": The number of elements must be in the range $MIN_VALUE-$MAX_VALUE.
+    "1": Must contain exactly 1 element.
+    "=": The number of elements must be exactly $VALUE.
+    "list": The number of elements must be one of $FIRST_VALUES or $LAST_VALUE.
+  map_value:
+    "<=": No more than $MAX_VALUE per resource.
+    "<": Less than $MAX_VALUE per resource.
+    ">=": No less than $MIN_VALUE per resource.
+    ">0": At least one per resource.
+    ">": More than $MIN_VALUE per resource.
+    "min-max": $MIN_VALUE-$MAX_VALUE per resource.
+    "=": Exactly $VALUE per resource.
+    "list": $FIRST_VALUES or $LAST_VALUE per resource.
+
+length:
+  usual:
+    "<=": The maximum string length in characters is $MAX_VALUE.
+    "<": The string length in characters must be less than $MAX_VALUE.
+    ">=": The minimum string length in characters is $MIN_VALUE.
+    ">": The string length in characters must be greater than $MIN_VALUE.
+    "min-max": The string length in characters must be $MIN_VALUE-$MAX_VALUE.
+    "=": The string length in characters must be equal to $VALUE.
+    "list": The string length in characters must be equal to one of $FIRST_VALUES or $LAST_VALUE.
+  repeated:
+    "<=": The maximum string length in characters for each value is $MAX_VALUE.
+    "<": The string length in characters for each value must be less than $MAX_VALUE.
+    ">=": The minimum string length in characters for each value is $MIN_VALUE.
+    ">": The string length in characters for each value must be greater than $MIN_VALUE.
+    "min-max": The string length in characters for each value must be $MIN_VALUE-$MAX_VALUE.
+    "=": The string length in characters for each value must be equal to $VALUE.
+    "list": The string length in characters for each value must be equal to one of $FIRST_VALUES or $LAST_VALUE.
+  map_value:
+    "<=": The maximum string length in characters for each value is $MAX_VALUE.
+    "<": The string length in characters for each value must be less than $MAX_VALUE.
+    ">=": The minimum string length in characters for each value is $MIN_VALUE.
+    ">": The string length in characters for each value must be greater than $MIN_VALUE.
+    "min-max": The string length in characters for each value must be $MIN_VALUE-$MAX_VALUE.
+    "=": The string length in characters for each value must be equal to $VALUE.
+    "list": The string length in characters for each value must be equal to one of $FIRST_VALUES or $LAST_VALUE.
+
+bytes:
+  usual:
+    "<=": The maximum size in bytes is $MAX_VALUE.
+    "<": The size in bytes must be less than $MAX_VALUE.
+    ">=": The minimum size in bytes is $MIN_VALUE.
+    ">": The size in bytes must be greater than $MIN_VALUE.
+    "min-max": The size in bytes must be $MIN_VALUE-$MAX_VALUE.
+    "=": The size in bytes must be equal to $VALUE.
+    "list": The size in bytes must be equal to one of $FIRST_VALUES or $LAST_VALUE.
+  repeated:
+    "<=": The maximum size in bytes for each value is $MAX_VALUE.
+    "<": The size in bytes for each value must be less than $MAX_VALUE.
+    ">=": The minimum size in bytes for each value is $MIN_VALUE.
+    ">": The size in bytes for each value must be greater than $MIN_VALUE.
+    "min-max": The size in bytes for each value must be $MIN_VALUE-$MAX_VALUE.
+    "=": The size in bytes for each value must be equal to $VALUE.
+    "list": The size in bytes for each value must be equal to one of $FIRST_VALUES or $LAST_VALUE.
+  map_value:
+    "<=": The maximum size in bytes for each value is $MAX_VALUE.
+    "<": The size in bytes for each value must be less than $MAX_VALUE.
+    ">=": The minimum size in bytes for each value is $MIN_VALUE.
+    ">": The size in bytes for each value must be greater than $MIN_VALUE.
+    "min-max": The size in bytes for each value must be $MIN_VALUE-$MAX_VALUE.
+    "=": The size in bytes for each value must be equal to $VALUE.
+    "list": The size in bytes for each value must be equal to one of $FIRST_VALUES or $LAST_VALUE.
+
+map_key:
+  value:
+    "<=": Each key must be less than or equal to $MAX_VALUE.
+    "<": Each key must be less than $MAX_VALUE.
+    ">=": Each key must be greater than or equal to $MIN_VALUE.
+    ">": Each key must be greater than $MIN_VALUE.
+    "min-max": Acceptable keys are $MIN_VALUE to $MAX_VALUE, inclusive.
+    "=": Each key must be equal to $VALUE.
+    "list": Each key must be one of $FIRST_VALUES or $LAST_VALUE.
+  pattern: Each key must match the regular expression `` $PATTERN ``.
+  length:
+    "<=": The maximum string length in characters for each key is $MAX_VALUE.
+    "<": The string length in characters for each key must be less than $MAX_VALUE.
+    ">=": The minimum string length in characters for each key is $MIN_VALUE.
+    ">": The string length in characters for each key must be greater than $MIN_VALUE.
+    "min-max": The string length in characters for each key must be $MIN_VALUE-$MAX_VALUE.
+    "=": The string length in characters for each key must be equal to $VALUE.
+    "list": The string length in characters for each key must be equal to one of $FIRST_VALUES or $LAST_VALUE.

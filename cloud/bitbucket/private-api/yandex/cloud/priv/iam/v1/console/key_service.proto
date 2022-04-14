@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.console;
+
+import "yandex/cloud/priv/iam/v1/key.proto";
+import "yandex/cloud/priv/sensitive.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/console;iam_console";
+option java_outer_classname = "PCKS";
+
+service KeyService {
+
+  rpc Create (CreateKeyRequest) returns (CreateKeyResponse);
+
+}
+
+message CreateKeyRequest {
+  string service_account_id = 1 [(required) = true, (length) = "<=50"];
+  string description = 4 [(length) = "<=256"];
+  Key.Algorithm key_algorithm = 5;
+}
+
+message CreateKeyResponse {
+  Key key = 1;
+  string private_key = 2 [(sensitive) = true];
+  string key_json = 3  [(sensitive) = true];
+}

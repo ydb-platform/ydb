@@ -1,0 +1,72 @@
+oauth_clients:
+  yc.oauth.oauth_server:
+    name: 'Yandex.Cloud OAuth Server'
+    scopes: []
+  yc.oauth.assembly_workshop:
+    name: 'Yandex.Cloud OAuth Server'
+    scopes: []
+
+  yc.oauth.console:
+    name: 'Yandex.Cloud Management Console'
+    includedRoles:
+      - resource-manager.clouds.owner
+    scopes:
+      - yc.organization-manager.federations.manage
+      - yc.organization-manager.users.manage # invite users to ogranization from cloud ACL page
+      - yc.organization-manager.users.get # suggest users
+    permissions:
+      - organization-manager.organizations.listAccessBindings # show inherited bindings from organization
+      - certificate-manager.providers.use # permission to request/view internal certificates for YC developers
+
+  yc.oauth.doubleconsole:
+    name: 'DoubleCloud Management Console'
+    includedRoles:
+      - organization-manager.organizations.owner
+      - resource-manager.clouds.owner
+    scopes: []
+
+  yc.oauth.mobile-app:
+    name: 'Yandex.Cloud Mobile Application'
+    scopes: []
+    includedRoles:
+      - resource-manager.clouds.owner
+
+  yc.oauth.partners:
+    name: 'Yandex.Cloud Partners Portal'
+    includedRoles:
+      - viewer
+      - billing.clouds.owner
+      - billing.accounts.admin
+      - marketplace.editor
+    scopes:
+      - yc.support.tickets.manage
+      - yc.resource-manager.clouds.accessBindings.manage # XXX temporary, see CLOUD-70244 and CLOUDBIZ-5425 for details
+
+  yc.oauth.iap-ydb-viewer:
+    name: 'Yandex.Cloud Identity-Aware Proxy for YDB Viewer'
+    scopes: []
+    includedRoles:
+      - iap.web.user
+      - ydb.viewer
+
+  yc.oauth.query:
+    name: 'Yandex.Cloud Query'
+    includedRoles:
+      - ydb.viewer
+      - mdb.viewer
+      - storage.viewer
+      - yds.viewer
+      - yq.admin
+      - yq.internal.admin # to view additional internal data for developers
+    scopes:
+      - yc.iam.serviceAccounts.get
+      - yc.iam.serviceAccounts.use
+      - yc.resource-manager.folders.get
+      - yc.resource-manager.clouds.get
+      - yc.organization-manager.users.get
+
+  yc.oauth.chats-api:
+    name: 'Yandex.Cloud Support Chats'
+    scopes:
+      - yc.support.chats.manage
+      - yc.support.tickets.manage

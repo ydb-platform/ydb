@@ -68,8 +68,10 @@ private:
 
 
 public:
-     TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie, const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
-                     const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled, const TString& clientDC, bool rangesMode);
+     TPartitionActor(const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
+                     const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
+                     const ui64 tabletID, const TTopicCounters& counters, const bool commitsDisabled,
+                     const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -195,6 +197,7 @@ private:
 
     bool CommitsDisabled;
     ui64 CommitCookie;
+    NPersQueue::TTopicConverterPtr Topic;
 };
 
 

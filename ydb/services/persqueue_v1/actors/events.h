@@ -351,8 +351,8 @@ struct TEvPQProxy {
 
     struct TEvDieCommand : public NActors::TEventLocal<TEvDieCommand, EvDieCommand> {
         TEvDieCommand(const TString& reason, const PersQueue::ErrorCode::ErrorCode errorCode)
-        : Reason(reason)
-        , ErrorCode(errorCode)
+            : Reason(reason)
+            , ErrorCode(errorCode)
         { }
 
         TString Reason;
@@ -361,11 +361,11 @@ struct TEvPQProxy {
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
         TEvPartitionStatus(const TPartitionId& partition, const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, bool init = true)
-        : Partition(partition)
-        , Offset(offset)
-        , EndOffset(endOffset)
-        , WriteTimestampEstimateMs(writeTimestampEstimateMs)
-        , Init(init)
+            : Partition(partition)
+            , Offset(offset)
+            , EndOffset(endOffset)
+            , WriteTimestampEstimateMs(writeTimestampEstimateMs)
+            , Init(init)
         { }
 
         TPartitionId Partition;
@@ -376,5 +376,4 @@ struct TEvPQProxy {
     };
 
 };
-
 }

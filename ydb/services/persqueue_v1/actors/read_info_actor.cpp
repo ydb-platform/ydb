@@ -62,12 +62,19 @@ void TReadInfoActor::Bootstrap(const TActorContext& ctx) {
         }
         topicsToResolve.insert(t.path());
     }
+    auto topicsList = TopicsHandler.GetReadTopicsList(
+            topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString())
+    );
+    if (!topicsList.IsValid) {
+        return AnswerError(
+                topicsList.Reason,
+                PersQueue::ErrorCode::BAD_REQUEST, ctx
+        );
+    }
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token,
-            TopicsHandler.GetReadTopicsList(topicsToResolve, readOnlyLocal, Request().GetDatabaseName().GetOrElse(TString())),
-            TopicsHandler.GetLocalCluster()
+            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler.GetLocalCluster()
     ));
 }
 

@@ -17,4 +17,5 @@ target_link_libraries(library-persqueue-topic_parser PUBLIC
 )
 target_sources(library-persqueue-topic_parser PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/topic_parser.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/persqueue/topic_parser/counters.cpp
 )

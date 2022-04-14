@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1.console;
+
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1/console;iam_console";
+option java_outer_classname = "PCUAS";
+
+service UserAccountService {
+
+  // Deletes all access keys for the current authenticated user.
+  rpc RevokeAllAccessKeys (RevokeAllAccessKeysRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "RevokeAllAccessKeysMetadata"
+      response: "google.protobuf.Empty"
+    };
+
+  }
+
+}
+
+message RevokeAllAccessKeysRequest {
+}
+
+message RevokeAllAccessKeysMetadata {
+  string subject_id = 1;
+}

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PR";
+
+message Role {
+  string id = 1;
+  string description = 2;
+  repeated string permission_ids = 3;
+  bool is_system = 4;
+}

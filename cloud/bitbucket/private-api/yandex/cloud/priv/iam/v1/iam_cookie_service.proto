@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+import "yandex/cloud/priv/iam/v1/ts/iam_token_service_subject.proto";
+import "yandex/cloud/priv/iam/v1/yandex_passport_cookie.proto";
+import "yandex/cloud/priv/oauth/v1/oauth_request.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PICS";
+
+service IamCookieService {
+  rpc Create (CreateIamCookieRequest) returns (CreateIamCookieResponse);
+  rpc CreateForUserAccount (CreateIamCookieForSubjectRequest) returns (CreateIamCookieResponse) {
+    option deprecated = true;
+  }
+  rpc CreateForSubject (CreateIamCookieForSubjectRequest) returns (CreateIamCookieResponse);
+  rpc Revoke (RevokeCookieRequest) returns (RevokeCookieResponse);
+}
+
+message CreateIamCookieForSubjectRequest {
+  string subject_id = 1 [(required) = true, (length) = "<=50"];
+  yandex.cloud.priv.oauth.v1.OAuthRequest oauth_request = 2;
+  // additional parameters for cross-domain authentication
+  string session_id = 3;
+}
+
+message CreateIamCookieRequest {
+  oneof identity {
+    option (exactly_one) = true;
+    string user_account_id = 1 [deprecated = true];
+    YandexPassportCookies yandex_passport_cookies = 2;
+  }
+  yandex.cloud.priv.oauth.v1.OAuthRequest oauth_request = 10;
+  // additional parameters for cross-domain authentication
+  string session_id = 11;
+}
+
+message RevokeCookieRequest {
+  string iam_cookie = 1 [(required) = true, (sensitive) = true, (sensitive_type) = SENSITIVE_IAM_COOKIE];
+  YandexPassportCookies yandex_passport_cookies = 2;
+}
+
+message RevokeCookieResponse {
+  yandex.cloud.priv.iam.v1.ts.Subject subject = 1;
+}
+
+message CreateIamCookieResponse {
+  string iam_cookie = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_COOKIE];
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp expires_at = 2;
+  yandex.cloud.priv.iam.v1.ts.Subject subject = 3;
+}

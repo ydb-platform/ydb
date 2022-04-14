@@ -31,24 +31,22 @@ namespace NDeprecatedUserData {
 TUsersInfoStorage::TUsersInfoStorage(
     TString dcId,
     ui64 tabletId,
-    const TString& topicName,
+    const NPersQueue::TTopicConverterPtr& topicConverter,
     ui32 partition,
     const TTabletCountersBase& counters,
     const NKikimrPQ::TPQTabletConfig& config,
     const TString& cloudId,
     const TString& dbId,
-    const TString& folderId,
-    const TString& streamName
+    const TString& folderId
 )
     : DCId(std::move(dcId))
     , TabletId(tabletId)
-    , TopicName(topicName)
+    , TopicConverter(topicConverter)
     , Partition(partition)
     , Config(config)
     , CloudId(cloudId)
     , DbId(dbId)
     , FolderId(folderId)
-    , StreamName(streamName)
     , CurReadRuleGeneration(0)
 {
     Counters.Populate(counters);
@@ -165,9 +163,11 @@ TUserInfo& TUsersInfoStorage::Create(
     auto result = UsersInfo.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(user),
-        std::forward_as_tuple(ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important,
-                              TopicName, Partition, session, gen, step, offset, readOffsetRewindSum, DCId,
-                              readFromTimestamp, CloudId, DbId, FolderId, burst, speed, StreamName)
+        std::forward_as_tuple(
+                ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
+                session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, FolderId,
+                burst, speed
+        )
     );
     Y_VERIFY(result.second);
     return result.first->second;
@@ -194,7 +194,7 @@ THolder<TReadSpeedLimiterHolder> TUsersInfoStorage::CreateReadSpeedLimiter(const
                 TabletActor.GetRef(),
                 PartitionActor.GetRef(),
                 TabletId,
-                TopicName,
+                TopicConverter,
                 Partition,
                 user,
                 Counters

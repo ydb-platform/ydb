@@ -41,7 +41,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(NKikimr::NGRpcService::TEvStreamPQReadRequest, Handle);
             HFunc(NKikimr::NGRpcService::TEvPQReadInfoRequest, Handle);
-            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
+            HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
             HFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, Handle);
             HFunc(TEvPQProxy::TEvSessionDead, Handle);
         }
@@ -50,7 +50,7 @@ private:
 private:
     void Handle(NKikimr::NGRpcService::TEvStreamPQReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev);
+    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx);
     void Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext& ctx);

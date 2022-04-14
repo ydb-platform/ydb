@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/priv/validation.proto";
+import "yandex/cloud/priv/sensitive.proto";
+import "yandex/cloud/priv/iam/v1/ts/iam_token_service_subject.proto";
+import "yandex/cloud/priv/iam/v1/yandex_passport_cookie.proto";
+import "yandex/cloud/priv/oauth/v1/oauth_request.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PITS";
+
+service IamTokenService {
+
+  // method doesn't require auth
+  rpc Create (CreateIamTokenRequest) returns (CreateIamTokenResponse) {
+    option (google.api.http) = { post: "/iam/v1/tokens" body: "*" };
+  }
+
+  // create iam token for service account
+  rpc CreateForServiceAccount (CreateIamTokenForServiceAccountRequest) returns (CreateIamTokenResponse);
+
+  // create iam token for compute instance
+  rpc CreateForComputeInstance (CreateIamTokenForComputeInstanceRequest) returns (CreateIamTokenResponse);
+
+  // create iam token for oauth request
+  rpc CreateForUserAccount (CreateIamTokenForSubjectRequest) returns (CreateIamTokenResponse) {
+    option deprecated = true;
+  }
+
+  // create iam token for oauth request
+  rpc CreateForSubject (CreateIamTokenForSubjectRequest) returns (CreateIamTokenResponse);
+}
+
+message CreateIamTokenRequest {
+  oneof identity {
+    option (exactly_one) = true;
+    string yandex_passport_oauth_token = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_YANDEX_PASSPORT_OAUTH_TOKEN, (length) = "<=4000"];
+    string jwt = 2 [(sensitive) = true, (length) = "<=8000"];
+    string iam_cookie = 3 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_COOKIE];
+    YandexPassportCookies yandex_passport_cookies = 4;
+  }
+}
+
+message CreateIamTokenForSubjectRequest {
+  string subject_id = 1 [(required) = true, (length) = "<=50"];
+  yandex.cloud.priv.oauth.v1.OAuthRequest oauth_request = 2;
+  // additional parameters for cross-domain authentication
+  string session_id = 3;
+}
+
+message CreateIamTokenForServiceAccountRequest {
+  string service_account_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message CreateIamTokenForComputeInstanceRequest {
+  string service_account_id = 1 [(required) = true, (length) = "<=50"];
+  string instance_id = 2 [(required) = true, (length) = "<=50"];
+}
+
+message CreateIamTokenResponse {
+  string iam_token = 1 [(sensitive) = true, (sensitive_type) = SENSITIVE_IAM_TOKEN];
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp expires_at = 2;
+  yandex.cloud.priv.iam.v1.ts.Subject subject = 3;
+}

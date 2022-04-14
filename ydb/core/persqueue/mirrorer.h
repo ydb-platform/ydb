@@ -120,9 +120,9 @@ public:
     TMirrorer(
         TActorId tabletActor,
         TActorId partitionActor,
-        const TString& topicName,
+        const NPersQueue::TTopicConverterPtr& topicConverter,
         ui32 partition,
-        bool localDC,
+        bool isLocalDC,
         ui64 endOffset,
         const NKikimrPQ::TMirrorPartitionConfig& config,
         const TTabletCountersBase& counters
@@ -149,9 +149,9 @@ public:
 private:
     TActorId TabletActor;
     TActorId PartitionActor;
-    TString TopicName;
+    NPersQueue::TTopicConverterPtr TopicConverter;
     ui32 Partition;
-    bool LocalDC;
+    bool IsLocalDC;
     ui64 EndOffset;
     ui64 OffsetToRead;
     NKikimrPQ::TMirrorPartitionConfig Config;

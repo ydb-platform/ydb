@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/protobuf/duration.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PRNT";
+
+enum RestrictionKind {
+  RESTRICTION_KIND_UNSPECIFIED = 0;
+  BLOCK_PERMISSIONS = 1;
+}
+
+message RestrictionType {
+  string id = 1;
+  RestrictionKind restriction_kind = 2;
+
+  oneof type {
+    BlockPermissions block_permissions = 3;
+  }
+
+  message BlockPermissions {
+    string role_mask = 1;
+    bool direct_mask = 2;
+    repeated string services_to_stop = 3;
+    repeated string resources_to_stop = 4;
+    google.protobuf.Duration stop_delay = 5;
+    google.protobuf.Duration deletion_initiation_interval = 6;
+    google.protobuf.Duration deletion_delay = 7;
+  }
+}

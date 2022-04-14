@@ -45,14 +45,15 @@ void TPQReadService::Bootstrap(const TActorContext& ctx) {
     if (HaveClusters) {
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
+    } else {
+        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
+                AppData(ctx)->PQConfig, ""
+        );
+        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
+                TopicConverterFactory
+        );
     }
     ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
-    TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-            AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(), AppData(ctx)->PQConfig.GetRoot()
-    );
-    TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-            TopicConverterFactory, HaveClusters, Clusters, LocalCluster
-    );
     Become(&TThis::StateFunc);
 }
 
@@ -72,7 +73,7 @@ void TPQReadService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdat
     DatacenterClassifier = ev->Get()->Classifier;
 }
 
-void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) {
+void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
     Y_VERIFY(ev->Get()->ClustersList);
 
     Y_VERIFY(ev->Get()->ClustersList->Clusters.size());
@@ -90,7 +91,15 @@ void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClusters
     for (size_t i = 0; i < clusters.size(); ++i) {
         Clusters[i] = clusters[i].Name;
     }
-    TopicsHandler->UpdateClusters(Clusters, LocalCluster);
+    if (TopicConverterFactory == nullptr) {
+        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
+                AppData(ctx)->PQConfig, LocalCluster
+        );
+        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
+                TopicConverterFactory, Clusters
+        );
+    }
+    TopicsHandler->UpdateClusters(Clusters);
 }
 
 
@@ -123,8 +132,7 @@ void TPQReadService::Handle(NKikimr::NGRpcService::TEvStreamPQReadRequest::TPtr&
         ev->Get()->GetStreamCtx()->WriteAndFinish(FillReadResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
         return;
     }
-    if (HaveClusters
-    && (Clusters.empty() || LocalCluster.empty())) {
+    if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - cluster is not known yet");
 
         ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
@@ -132,6 +140,8 @@ void TPQReadService::Handle(NKikimr::NGRpcService::TEvStreamPQReadRequest::TPtr&
         // TODO: Inc SLI Errors
         return;
     } else {
+
+        Y_VERIFY(TopicsHandler != nullptr);
         const ui64 cookie = NextCookie();
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new session created cookie " << cookie);

@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "yandex/cloud/api/operation.proto";
+import "yandex/cloud/priv/operation/operation.proto";
+import "yandex/cloud/priv/iam/v1/user_account.proto";
+import "yandex/cloud/priv/sensitive.proto";
+import "yandex/cloud/priv/validation.proto";
+
+option go_package = "a.yandex-team.ru/cloud/bitbucket/private-api/yandex/cloud/priv/iam/v1;iam";
+option java_outer_classname = "PUAS";
+
+service UserAccountService {
+  rpc Get (GetUserAccountRequest) returns (UserAccount) {
+    option (google.api.http) = { get: "/iam/v1/userAccounts/{user_account_id}" };
+  }
+
+  rpc Delete (DeleteUserAccountRequest) returns (operation.Operation) {
+    option (yandex.cloud.api.operation) = {
+      metadata: "DeleteUserAccountMetadata"
+      response: "google.protobuf.Empty"
+    };
+  }
+
+  rpc GetSettings (GetSettingsRequest) returns (UserSettings);
+
+  rpc UpdateSettings (UpdateSettingsRequest) returns (UserSettings);
+
+  rpc PresignUrl(PresignUrlRequest) returns (PresignUrlResponse);
+}
+
+message GetUserAccountRequest {
+  string user_account_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteUserAccountRequest {
+  string subject_id = 1 [(required) = true, (length) = "<=50"];
+}
+
+message DeleteUserAccountMetadata {
+  string subject_id = 1;
+}
+
+message GetSettingsRequest {
+  // Empty list means full settings.
+  repeated string response_json_path = 1 [(size) = "<=100", (length) = "1-1000"];
+  // Optional - get specified subject user settings. By default equals to authenticated subject.
+  string subject_id = 2 [(length) = "<=50"];
+}
+
+message UserSettings {
+  // JSON-serialized user-settings.
+  string json = 1;
+}
+
+message UpdateSettingsRequest {
+  // Empty list means full settings.
+  repeated string response_json_path = 1 [(size) = "<=100", (length) = "1-1000"];
+  // Serialized JSON Patch (https://tools.ietf.org/html/rfc6902).
+  string json_patch = 2 [(length) = "<=10000"];
+}
+
+message PresignUrlRequest {
+  string subject_id = 1 [(required) = true, (length) = "<=50"];
+  // The formatted string to sign, see https://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
+  repeated string strings_to_sign = 2 [(size) = "1-100", (length) = "1-1024", (unique) = true];
+
+  oneof parameters {
+    option (exactly_one) = true;
+
+    Version2Parameters v2_parameters = 4;
+    Version4Parameters v4_parameters = 5;
+  }
+
+  // https://docs.aws.amazon.com/general/latest/gr/signature-version-2.html
+  message Version2Parameters {
+    SignatureMethod signature_method = 1 [(required) = true];
+
+    enum SignatureMethod {
+      SIGNATURE_METHOD_UNSPECIFIED = 0;
+      HMAC_SHA1 = 1;
+      HMAC_SHA256 = 2;
+    }
+  }
+
+  // https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html
+  message Version4Parameters {
+    google.protobuf.Timestamp signed_at = 1 [(required) = true];
+    string service = 2 [(required) = true, (length) = "<=64"];
+    string region = 3 [(required) = true, (length) = "<=32"];
+  }
+
+}
+
+message PresignUrlResponse {
+  string access_key_id = 1;
+  repeated SignedString signed_strings = 2;
+}
+
+message SignedString {
+  string string_to_sign = 1;
+  string signature = 2 [(sensitive) = true, (sensitive_type) = SENSITIVE_CRC];
+}

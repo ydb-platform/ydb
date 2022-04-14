@@ -46,7 +46,7 @@ namespace NTabletFlatExecutor {
     XX(GC_BARRIERS_ACTIVE, "GcBarriersActive") \
     XX(CACHE_FRESH_SIZE, "CacheFreshSize") \
     XX(CACHE_STAGING_SIZE, "CacheStagingSize") \
-    XX(CACHE_WARM_SIZE, "CacheMemTableSize") \
+    XX(CACHE_WARM_SIZE, "CacheWarmSize") \
     XX(CACHE_PINNED_SET, "CachePinned") \
     XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \
     XX(CACHE_TOTAL_COLLECTIONS, "CacheTotalCollections") \

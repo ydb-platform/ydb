@@ -454,7 +454,7 @@ class TExecutor
     bool NeedFollowerSnapshot = false;
 
     TCacheCacheConfig::TCounterPtr CounterCacheFresh;
-    TCacheCacheConfig::TCounterPtr CounterCacheMemTable;
+    TCacheCacheConfig::TCounterPtr CounterCacheWarm;
     TCacheCacheConfig::TCounterPtr CounterCacheStaging;
 
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;

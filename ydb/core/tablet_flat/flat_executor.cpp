@@ -145,7 +145,7 @@ void TExecutor::Broken() {
 
 void TExecutor::RecreatePageCollectionsCache() noexcept
 {
-    TCacheCacheConfig cacheConfig(Scheme().Executor.CacheSize, CounterCacheFresh, CounterCacheStaging, CounterCacheMemTable);
+    TCacheCacheConfig cacheConfig(Scheme().Executor.CacheSize, CounterCacheFresh, CounterCacheStaging, CounterCacheWarm);
     PrivatePageCache = MakeHolder<TPrivatePageCache>(cacheConfig);
 
     Stats->PacksMetaBytes = 0;
@@ -329,7 +329,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     CounterCacheFresh = new NMonitoring::TCounterForPtr;
     CounterCacheStaging = new NMonitoring::TCounterForPtr;
-    CounterCacheMemTable = new NMonitoring::TCounterForPtr;
+    CounterCacheWarm = new NMonitoring::TCounterForPtr;
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher);
 
@@ -383,7 +383,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CounterCacheFresh = new NMonitoring::TCounterForPtr;
     CounterCacheStaging = new NMonitoring::TCounterForPtr;
-    CounterCacheMemTable = new NMonitoring::TCounterForPtr;
+    CounterCacheWarm = new NMonitoring::TCounterForPtr;
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
 
@@ -3415,7 +3415,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::DB_BYKEY_BYTES].Set(dbCounters.Parts.ByKeyBytes);
                 Counters->Simple()[TExecutorCounters::CACHE_FRESH_SIZE].Set(CounterCacheFresh->Val());
                 Counters->Simple()[TExecutorCounters::CACHE_STAGING_SIZE].Set(CounterCacheStaging->Val());
-                Counters->Simple()[TExecutorCounters::CACHE_WARM_SIZE].Set(CounterCacheMemTable->Val());
+                Counters->Simple()[TExecutorCounters::CACHE_WARM_SIZE].Set(CounterCacheWarm->Val());
                 Counters->Simple()[TExecutorCounters::USED_TABLET_MEMORY].Set(UsedTabletMemory);
             }
 
@@ -3952,7 +3952,7 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             H3() {str << "Page collection cache:";}
             DIV_CLASS("row") {str << "fresh bytes: " << CounterCacheFresh->Val(); }
             DIV_CLASS("row") {str << "staging bytes: " << CounterCacheStaging->Val(); }
-            DIV_CLASS("row") {str << "memTable bytes: " << CounterCacheMemTable->Val(); }
+            DIV_CLASS("row") {str << "warm bytes: " << CounterCacheWarm->Val(); }
             DIV_CLASS("row") {str << "Total collections: " << PrivatePageCache->GetStats().TotalCollections; }
             DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().TotalSharedBody; }
             DIV_CLASS("row") {str << "Total bytes in local cache: " << PrivatePageCache->GetStats().TotalPinnedBody; }

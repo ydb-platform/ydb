@@ -492,7 +492,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         } else {
             auto inbootTabletIt = InbootTablets.find(tabletId);
             if (inbootTabletIt != InbootTablets.end()) {
-                if (generation == 0 || onlineTabletIt->second.Generation <= generation) {
+                if (generation == 0 || inbootTabletIt->second.Generation <= generation) {
                     ctx.Send(inbootTabletIt->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
                 }
             }

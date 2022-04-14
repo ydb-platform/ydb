@@ -23,6 +23,21 @@ namespace NMiniKQL {
 
 namespace {
 
+const unsigned ERROR_FRAGMENT_LIMIT = 5000;
+
+[[noreturn]]
+void ThrowConvertError(NYql::NUdf::TStringRef data, TStringBuf type) {
+    TStringBuilder builder;
+    builder << "could not convert \"";
+    if (data.Size() < ERROR_FRAGMENT_LIMIT) {
+        builder << data << "\"";
+    } else {
+        builder << TStringBuf(data.Data(), ERROR_FRAGMENT_LIMIT) << "\" (truncated)";
+    }
+    builder << " to " << type;
+    UdfTerminate(builder.data());
+}
+
 template <bool IsStrict, bool IsOptional>
 class TDecimalFromStringWrapper : public TMutableCodegeneratorNode<TDecimalFromStringWrapper<IsStrict, IsOptional>> {
     typedef TMutableCodegeneratorNode<TDecimalFromStringWrapper<IsStrict, IsOptional>> TBaseComputation;
@@ -142,10 +157,8 @@ private:
     }
 
     [[noreturn]] static void Throw(const NUdf::TUnboxedValuePod data, ui8 precision, ui8 scale) {
-        const auto& ref = data.AsStringRef();
-        UdfTerminate((TStringBuilder() << "could not convert "
-            << TString(ref.Data(), ref.Size()).Quote()
-            << " to Decimal(" << unsigned(precision) << "," << unsigned(scale) << ")").data());
+        const TString type = TStringBuilder() << "Decimal(" << unsigned(precision) << ", " << unsigned(scale) << ")";
+        ThrowConvertError(data.AsStringRef(), type);
     }
 
     IComputationNode* const Data;
@@ -259,9 +272,7 @@ private:
 
     [[noreturn]] static void Throw(const NUdf::TUnboxedValuePod data, NUdf::EDataSlot slot) {
         const auto& ref = data.AsStringRef();
-        UdfTerminate((TStringBuilder() << "could not convert "
-            << TString(ref.Data(), ref.Size()).Quote()
-            << " to " << NUdf::GetDataTypeInfo(slot).Name).data());
+        ThrowConvertError(data.AsStringRef(), NUdf::GetDataTypeInfo(slot).Name);
     }
 
     IComputationNode* const Data;

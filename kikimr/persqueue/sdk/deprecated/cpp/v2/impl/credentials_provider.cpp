@@ -66,7 +66,7 @@ public:
     TTVMCredentialsProvider(const NTvmAuth::NTvmApi::TClientSettings& settings, const TString& alias, TIntrusivePtr<ILogger> logger = nullptr)
         : Alias(alias)
     {
-       if (!settings.GetDstAliases().contains(Alias)) {
+       if (!settings.FetchServiceTicketsForDstsWithAliases.contains(Alias)) {
            ythrow yexception() << "alias for `" << Alias << "` must be set";
        }
        Logger = MakeIntrusive<TLogBridge>(std::move(logger));

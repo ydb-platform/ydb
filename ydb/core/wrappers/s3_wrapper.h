@@ -16,6 +16,8 @@
 
 #include <ydb/core/base/events.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr {
 namespace NWrappers {
 
@@ -35,6 +37,12 @@ struct TEvS3Wrapper {
         {
         }
 
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Request: " << Request
+            << " }";
+        }
+
         using TBase = TGenericRequest<TDerived, EventType, TRequest>;
     };
 
@@ -50,6 +58,13 @@ struct TEvS3Wrapper {
         {
         }
 
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Request: " << this->Request
+                << " Body: " << Body.size() << "b"
+            << " }";
+        }
+
         using TBase = TRequestWithBody<TDerived, EventType, T>;
     };
 
@@ -57,11 +72,12 @@ struct TEvS3Wrapper {
     struct TGenericResponse: public TEventLocal<TDerived, EventType> {
         using TOutcome = Aws::Utils::Outcome<T, Aws::S3::S3Error>;
         using TResult = Aws::Utils::Outcome<U, Aws::S3::S3Error>;
+        using TKey = std::optional<TString>;
 
-        std::optional<TString> Key;
+        TKey Key;
         TResult Result;
 
-        explicit TGenericResponse(const std::optional<TString>& key, const TOutcome& outcome)
+        explicit TGenericResponse(const TKey& key, const TOutcome& outcome)
             : Key(key)
             , Result(TDerived::ResultFromOutcome(outcome))
         {
@@ -71,25 +87,40 @@ struct TEvS3Wrapper {
             return outcome;
         }
 
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Key: " << (Key ? "null" : *Key)
+                << " Result: " << Result
+            << " }";
+        }
+
         using TBase = TGenericResponse<TDerived, EventType, T, U>;
     };
 
     template <typename TDerived, ui32 EventType, typename T, typename U>
     struct TResponseWithBody: public TGenericResponse<TDerived, EventType, T, U> {
         using TGeneric = TGenericResponse<TDerived, EventType, T, U>;
+        using TKey = typename TGeneric::TKey;
 
         TString Body;
 
-        explicit TResponseWithBody(const std::optional<TString>& key, const typename TGeneric::TOutcome& outcome)
+        explicit TResponseWithBody(const TKey& key, const typename TGeneric::TOutcome& outcome)
             : TGeneric(key, outcome)
         {
         }
 
-        explicit TResponseWithBody(const std::optional<TString>& key, const typename TGeneric::TOutcome& outcome,
-                                   TString&& body)
+        explicit TResponseWithBody(const TKey& key, const typename TGeneric::TOutcome& outcome, TString&& body)
             : TGeneric(key, outcome)
             , Body(std::move(body))
         {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Key: " << (this->Key ? "null" : *this->Key)
+                << " Result: " << this->Result
+                << " Body: " << Body.size() << "b"
+            << " }";
         }
 
         using TBase = TResponseWithBody<TDerived, EventType, T, U>;

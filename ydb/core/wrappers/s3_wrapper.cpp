@@ -95,6 +95,10 @@ TS3User::~TS3User() {
 class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
     template <typename TEvRequest, typename TEvResponse>
     class TContextBase: public AsyncCallerContext {
+    protected:
+        using TRequest = typename TEvRequest::TRequest;
+        using TOutcome = typename TEvResponse::TOutcome;
+
     public:
         explicit TContextBase(const TActorSystem* sys, const TActorId& sender)
             : AsyncCallerContext()
@@ -108,16 +112,14 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
             return ActorSystem;
         }
 
-        virtual const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) {
+        virtual const TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) {
             return ev->Get()->Request;
         }
 
-        void Reply(const typename TEvRequest::TRequest& request,
-                   const typename TEvResponse::TOutcome& outcome) const
-        {
+        void Reply(const TRequest& request, const TOutcome& outcome) const {
             Y_VERIFY(!std::exchange(Replied, true), "Double-reply");
 
-            std::optional<TString> key;
+            typename TEvResponse::TKey key;
             if (request.KeyHasBeenSet()) {
                 key = request.GetKey();
             }
@@ -134,9 +136,7 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
             Send(Sender, ev);
         }
 
-        virtual THolder<IEventBase> MakeResponse(const std::optional<TString>& key,
-                                                 const typename TEvResponse::TOutcome& outcome) const
-        {
+        virtual THolder<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const TOutcome& outcome) const {
             return MakeHolder<TEvResponse>(key, outcome);
         }
 
@@ -150,6 +150,11 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
 
     template <typename TEvRequest, typename TEvResponse>
     class TOutputStreamContext: public TContextBase<TEvRequest, TEvResponse> {
+    protected:
+        using TRequest = typename TEvRequest::TRequest;
+        using TOutcome = typename TEvResponse::TOutcome;
+
+    private:
         class TOutputStreamBuf: public PreallocatedStreamBuf {
             TOutputStreamBuf(char* data, size_t size)
                 : PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(data), size)
@@ -186,7 +191,7 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
     public:
         using TContextBase<TEvRequest, TEvResponse>::TContextBase;
 
-        const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
+        const TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
             auto& request = ev->Get()->Request;
 
             std::pair<ui64, ui64> range;
@@ -202,9 +207,7 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
         }
 
     protected:
-        THolder<IEventBase> MakeResponse(const std::optional<TString>& key,
-                                         const typename TEvResponse::TOutcome& outcome) const override
-        {
+        THolder<IEventBase> MakeResponse(const typename TEvResponse::TKey& key, const TOutcome& outcome) const override {
             if (outcome.IsSuccess()) {
                 return MakeHolder<TEvResponse>(key, outcome, std::move(Buffer));
             } else {
@@ -219,6 +222,11 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
 
     template <typename TEvRequest, typename TEvResponse>
     class TInputStreamContext: public TContextBase<TEvRequest, TEvResponse> {
+    protected:
+        using TRequest = typename TEvRequest::TRequest;
+        using TOutcome = typename TEvResponse::TOutcome;
+
+    private:
         class TInputStreamBuf: public PreallocatedStreamBuf {
             TInputStreamBuf(char* data, size_t size)
                 : PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(data), size)
@@ -240,7 +248,7 @@ class TS3Wrapper: public TActor<TS3Wrapper>, private TS3User {
     public:
         using TContextBase<TEvRequest, TEvResponse>::TContextBase;
 
-        const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
+        const TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) override {
             auto& request = ev->Get()->Request;
 
             Buffer = std::move(ev->Get()->Body);

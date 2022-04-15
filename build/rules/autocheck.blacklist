@@ -1241,3 +1241,8 @@ practicum/packages/praktikum-front-configs
 practicum/services/wrspracticum
 practicum/packages/sigma-e2e
 practicum/services/docs
+practicum/services/practicum-pumpkin
+practicum/services/monetochka-front
+practicum/services/monetochka
+practicum/services/epicbox-http
+practicum/packages/revisor

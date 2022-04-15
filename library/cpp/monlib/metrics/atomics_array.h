@@ -26,7 +26,7 @@ namespace NMonitoring {
             return Size_;
         }
 
-        void Add(size_t index, ui32 count) noexcept {
+        void Add(size_t index, ui64 count) noexcept {
             Y_VERIFY_DEBUG(index < Size_);
             Values_[index].fetch_add(count, std::memory_order_relaxed);
         }

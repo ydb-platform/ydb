@@ -141,11 +141,11 @@ namespace NMonitoring {
             Collector_->Collect(value);
         }
 
-        void Collect(i64 value, ui32 count) {
+        void Collect(i64 value, ui64 count) {
             Collector_->Collect(value, count);
         }
 
-        void Collect(double value, ui32 count) {
+        void Collect(double value, ui64 count) {
             Collector_->Collect(value, count);
         }
 

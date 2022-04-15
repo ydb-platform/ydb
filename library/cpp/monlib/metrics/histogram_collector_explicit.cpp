@@ -21,7 +21,7 @@ namespace NMonitoring {
             Bounds_.push_back(Max<TBucketBound>());
         }
 
-        void Collect(double value, ui32 count) override {
+        void Collect(double value, ui64 count) override {
             auto it = LowerBound(Bounds_.begin(), Bounds_.end(), value);
             auto index = std::distance(Bounds_.begin(), it);
             Values_.Add(index, count);

@@ -155,6 +155,17 @@ public:
         Initialize(rangeCount, ranges, integral);
     }
 
+    void Initialize(const TRangeDef* ranges, size_t rangeCount, bool integral) {
+        Initialize(rangeCount, ranges, integral);
+    }
+
+    // mainly for use in tests
+    TTabletPercentileCounter& AddFor(ui64 what, ui64 value) {
+        ui32 index = FindSlot(what);
+        Values[index] += value;
+        return *this;
+    }
+
     TTabletPercentileCounter& IncrementFor(ui64 what) {
         ui32 index = FindSlot(what);
         Values[index] += 1;

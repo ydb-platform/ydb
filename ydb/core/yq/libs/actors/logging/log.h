@@ -175,3 +175,14 @@
 #define LOG_YQ_AUDIT_SERVICE_INFO(logRecordStream) LOG_STREAMS_IMPL(INFO, YQ_AUDIT, logRecordStream)
 #define LOG_YQ_AUDIT_SERVICE_DEBUG(logRecordStream) LOG_STREAMS_IMPL(DEBUG, YQ_AUDIT, logRecordStream)
 #define LOG_YQ_AUDIT_SERVICE_TRACE(logRecordStream) LOG_STREAMS_IMPL(TRACE, YQ_AUDIT, logRecordStream)
+
+// Component: YQ_HEALTH.
+#define LOG_YQ_HEALTH_EMERG(logRecordStream) LOG_STREAMS_IMPL(EMERG, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_ALERT(logRecordStream) LOG_STREAMS_IMPL(ALERT, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_CRIT(logRecordStream) LOG_STREAMS_IMPL(CRIT, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_ERROR(logRecordStream) LOG_STREAMS_IMPL(ERROR, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_WARN(logRecordStream) LOG_STREAMS_IMPL(WARN, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_NOTICE(logRecordStream) LOG_STREAMS_IMPL(NOTICE, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_INFO(logRecordStream) LOG_STREAMS_IMPL(INFO, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_DEBUG(logRecordStream) LOG_STREAMS_IMPL(DEBUG, YQ_HEALTH, logRecordStream)
+#define LOG_YQ_HEALTH_TRACE(logRecordStream) LOG_STREAMS_IMPL(TRACE, YQ_HEALTH, logRecordStream)

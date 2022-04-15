@@ -300,6 +300,7 @@ enum EServiceKikimr {
     YQ_TEST_CONNECTION = 1023;
     YQ_AUDIT = 1150;
     YQ_AUDIT_EVENT_SENDER = 1151;
+    YQ_HEALTH = 1152;
 
     // 1024 - 1099 is reserved for nbs
 
@@ -884,5 +885,6 @@ message TActivity {
         BLOCKSTORE_USER_STATS = 566;
         TX_COLUMNSHARD_S3_ACTOR = 567;
         TX_COLUMNSHARD_EXPORT_ACTOR = 568;
+        YQ_HEALTH_ACTOR = 569;
     };
 };

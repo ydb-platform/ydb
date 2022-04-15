@@ -27,6 +27,7 @@ target_link_libraries(yq-libs-init PUBLIC
   yq-libs-control_plane_storage
   yq-libs-events
   yq-libs-gateway
+  yq-libs-health
   yq-libs-shared_resources
   yq-libs-test_connection
   ydb-library-folder_service

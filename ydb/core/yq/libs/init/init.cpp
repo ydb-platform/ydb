@@ -4,11 +4,12 @@
 #include <ydb/core/yq/libs/test_connection/test_connection.h>
 
 #include <ydb/core/yq/libs/audit/yq_audit_service.h>
-#include <ydb/library/yql/providers/common/metrics/service_counters.h>
-#include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
-#include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
+#include <ydb/core/yq/libs/health/health.h>
+#include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/folder_service/folder_service.h>
+#include <ydb/library/yql/providers/common/metrics/service_counters.h>
 
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -227,6 +228,14 @@ void Init(
             protoConfig.GetTokenAccessor());
 
         actorRegistrator(MakeYqPrivateProxyId(), proxyPrivate);
+    }
+
+    if (protoConfig.GetHealth().GetEnabled()) {
+        auto health = NYq::CreateHealthActor(
+            protoConfig.GetHealth(),
+            yqSharedResources,
+            serviceCounters.Counters);
+        actorRegistrator(NYq::HealthActorId(), health);
     }
 }
 

@@ -24,6 +24,7 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/control_plane_storage.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/db_pool.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/gateways.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/health.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/issue_id.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/nodes_manager.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/pending_fetcher.proto

@@ -44,7 +44,8 @@ namespace NKikimr::NHttpProxy {
             EvError,
             EvCounter,
             EvHistCounter,
-            EvToken
+            EvToken,
+            EvClientReady
         };
 
         struct TEvGrpcRequestResult : public TEventLocal<TEvGrpcRequestResult, EvGrpcRequestResult> {
@@ -121,6 +122,11 @@ namespace NKikimr::NHttpProxy {
             , IamToken(iamToken)
             {}
         };
+
+        struct TEvClientReady : public TEventLocal<TEvClientReady, EvClientReady> {
+            TEvClientReady() {}
+        };
+
 
         struct TEvError : public TEventLocal<TEvError, EvError> {
             NYdb::EStatus Status;

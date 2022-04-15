@@ -201,6 +201,8 @@ namespace NYdb::NDataStreams::V1 {
         template<class TProtoRequest, class TProtoResponse, class TProtoResult, class TMethod>
         NThreading::TFuture<TProtoResultWrapper<TProtoResult>> DoProtoRequest(const TProtoRequest& request, TMethod method, TProtoRequestSettings settings = TProtoRequestSettings());
 
+        NThreading::TFuture<void> DiscoveryCompleted();
+
     private:
         std::shared_ptr<TImpl> Impl_;
     };

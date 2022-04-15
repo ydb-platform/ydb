@@ -45,6 +45,10 @@ public:
         Y_VERIFY(DbDriverState_);
     }
 
+    NThreading::TFuture<void> DiscoveryCompleted() const {
+        return DbDriverState_->DiscoveryCompleted();
+    }
+
 protected:
     template<typename TService, typename TRequest, typename TResponse>
     using TAsyncRequest = typename NGrpc::TSimpleRequestProcessor<

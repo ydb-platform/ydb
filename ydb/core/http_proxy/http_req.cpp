@@ -622,6 +622,7 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                     HFunc(TEvents::TEvWakeup, HandleTimeout);
                     HFunc(TEvServerlessProxy::TEvToken, HandleToken);
                     HFunc(TEvServerlessProxy::TEvError, HandleError);
+                    HFunc(TEvServerlessProxy::TEvClientReady, HandleClientReady);
                     default:
                         HandleUnexpectedEvent(ev, ctx);
                         break;
@@ -637,6 +638,37 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                 ctx.Send(MakeTenantDiscoveryID(), std::move(request));
             }
 
+            void CreateClient(const TActorContext& ctx) {
+                RequestState = StateListEndpoints;
+                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+                              "create client to '" << HttpContext.DiscoveryEndpoint <<
+                              "' database: '" << HttpContext.DatabaseName <<
+                              "' iam token size: " << HttpContext.IamToken.size());
+
+                auto clientSettings = NYdb::TCommonClientSettings()
+                        .DiscoveryEndpoint(HttpContext.DiscoveryEndpoint)
+                        .Database(HttpContext.DatabaseName)
+                        .AuthToken(HttpContext.IamToken)
+                        .DiscoveryMode(NYdb::EDiscoveryMode::Async);
+
+                if (!HttpContext.DatabaseName.empty()) {
+                    if (!HttpContext.ServiceConfig.GetTestMode()) {
+                        clientSettings.Database(HttpContext.DatabaseName);
+                    }
+                }
+                Y_VERIFY(!Client);
+                Client.Reset(new TDataStreamsClient(*HttpContext.Driver, clientSettings));
+                DiscoveryFuture = MakeHolder<NThreading::TFuture<void>>(Client->DiscoveryCompleted());
+                DiscoveryFuture->Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()](const NThreading::TFuture<void>&) {
+                    actorSystem->Send(actorId, new TEvServerlessProxy::TEvClientReady());
+                });
+            }
+
+            void HandleClientReady(TEvServerlessProxy::TEvClientReady::TPtr&, const TActorContext& ctx){
+                SendGrpcRequest(ctx);
+            }
+
+
             void SendGrpcRequest(const TActorContext& ctx) {
                 RequestState = StateGrpcRequest;
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
@@ -644,23 +676,14 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                               "' database: '" << HttpContext.DatabaseName <<
                               "' iam token size: " << HttpContext.IamToken.size());
 
-                auto clientSettings = NYdb::TCommonClientSettings()
-                        .DiscoveryEndpoint(HttpContext.DiscoveryEndpoint)
-                        .Database(HttpContext.DatabaseName)
-                        .AuthToken(HttpContext.IamToken);
+                Y_VERIFY(Client);
+                Y_VERIFY(DiscoveryFuture->HasValue());
 
-                if (!HttpContext.DatabaseName.empty()) {
-                    if (!HttpContext.ServiceConfig.GetTestMode()) {
-                        clientSettings.Database(HttpContext.DatabaseName);
-                    }
-                }
-
-                TDataStreamsClient client(*HttpContext.Driver, clientSettings);
                 TProtoResponse response;
 
                 LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "sending grpc request " << Request.DebugString());
 
-                Future = MakeHolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>>(client.template DoProtoRequest<TProtoRequest, TProtoResponse, TProtoResult, TProtoCall>(std::move(Request), ProtoCall));
+                Future = MakeHolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>>(Client->template DoProtoRequest<TProtoRequest, TProtoResponse, TProtoResult, TProtoCall>(std::move(Request), ProtoCall));
                 Future->Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()](const NThreading::TFuture<TProtoResultWrapper<TProtoResult>>& future) {
                     auto& response = future.GetValueSync();
                     auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
@@ -728,8 +751,7 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                     FillInputCustomMetrics<TProtoRequest>(Request, HttpContext, ctx);
                     ctx.Send(MakeMetricsServiceID(), new TEvServerlessProxy::TEvCounter{1, true, true, BuildLabels(Method, HttpContext, "api.http.requests_per_second")
                                             });
-
-                    SendGrpcRequest(ctx);
+                    CreateClient(ctx);
                     return;
                 }
 
@@ -827,10 +849,13 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             THolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>> Future;
+            THolder<NThreading::TFuture<void>> DiscoveryFuture;
             TProtoCall ProtoCall;
             TString Method;
             TString SourceAddress;
             TRetryCounter RetryCounter;
+
+            THolder<TDataStreamsClient> Client;
 
             TActorId AuthActor;
         };

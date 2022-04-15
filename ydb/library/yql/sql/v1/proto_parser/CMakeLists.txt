@@ -7,20 +7,17 @@
 
 
 
-add_library(library-yql-sql)
-target_link_libraries(library-yql-sql PUBLIC
+add_library(sql-v1-proto_parser)
+target_link_libraries(sql-v1-proto_parser PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-deprecated-split
-  yql-sql-settings
-  yql-sql-v0
-  sql-v0-lexer
-  yql-sql-v1
-  sql-v1-lexer
-  sql-v1-proto_parser
   library-yql-utils
+  yql-parser-proto_ast
+  parser-proto_ast-collect_issues
+  proto_ast-gen-v1
+  proto_ast-gen-v1_ansi
+  proto_ast-gen-v1_proto
 )
-target_sources(library-yql-sql PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/cluster_mapping.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/sql.cpp
+target_sources(sql-v1-proto_parser PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/v1/proto_parser/proto_parser.cpp
 )

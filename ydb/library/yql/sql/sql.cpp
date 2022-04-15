@@ -5,6 +5,7 @@
 #include <ydb/library/yql/sql/v0/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/sql.h>
 #include <ydb/library/yql/sql/v1/lexer/lexer.h>
+#include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 #include "pg_sql.h"
 
 #include <google/protobuf/arena.h>

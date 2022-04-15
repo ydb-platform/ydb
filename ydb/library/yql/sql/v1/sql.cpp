@@ -10,6 +10,8 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h>
 
+#include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -42,10 +44,6 @@ using namespace NYql;
 namespace NSQLTranslationV1 {
 
 using NALPDefault::SQLv1LexerTokens;
-
-#if defined(_tsan_enabled_)
-    TMutex SanitizerSQLTranslationMutex;
-#endif
 
 using namespace NSQLv1Generated;
 
@@ -10123,35 +10121,6 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
     }
 
     return BuildWorldForNode(Ctx.Pos(), exprNode, bodyNode, elseNode, isEvaluate);
-}
-
-google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, TIssues& err, size_t maxErrors, bool ansiLexer, google::protobuf::Arena* arena) {
-    YQL_ENSURE(arena);
-#if defined(_tsan_enabled_)
-    TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
-#endif
-    NSQLTranslation::TErrorCollectorOverIssues collector(err, maxErrors, "");
-    if (ansiLexer) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
-        return builder.BuildAST(collector);
-    } else {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
-        return builder.BuildAST(collector);
-    }
-}
-
-google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err, bool ansiLexer, google::protobuf::Arena* arena) {
-    YQL_ENSURE(arena);
-#if defined(_tsan_enabled_)
-    TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
-#endif
-    if (ansiLexer) {
-        NProtoAST::TProtoASTBuilder<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
-        return builder.BuildAST(err);
-    } else {
-        NProtoAST::TProtoASTBuilder<NALPDefault::SQLv1Parser, NALPDefault::SQLv1Lexer> builder(query, queryName, arena);
-        return builder.BuildAST(err);
-    }
 }
 
 TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) {

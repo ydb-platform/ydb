@@ -30,6 +30,7 @@ target_link_libraries(yql-sql-v1 PUBLIC
   proto_ast-gen-v1_ansi
   proto_ast-gen-v1_proto
   yql-parser-pg_catalog
+  sql-v1-proto_parser
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-sql-v1 PRIVATE

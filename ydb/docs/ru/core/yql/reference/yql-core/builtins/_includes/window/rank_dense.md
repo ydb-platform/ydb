@@ -11,6 +11,12 @@
 
 {% endnote %}
 
+**Сигнатура**
+```
+RANK([T])->Uint64
+DENSE_RANK([T])->Uint64
+```
+
 **Примеры**
 ``` yql
 SELECT

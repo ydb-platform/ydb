@@ -1719,7 +1719,7 @@ TTenantsManager::TStoragePool::TPtr TTenantsManager::MakeStoragePool(TTenant::TP
     auto poolName = tenant->MakeStoragePoolName(kind);
     auto &config = Domain->StoragePoolTypes.at(kind);
 
-    TStoragePool::TPtr pool = new TStoragePool(poolName, kind, size, config);
+    TStoragePool::TPtr pool = new TStoragePool(poolName, size, kind, config, false);
     if (tenant->HasSubDomainKey())
         pool->SetScopeId(tenant->DomainId);
 
@@ -1774,8 +1774,20 @@ void TTenantsManager::DeleteTenantPools(TTenant::TPtr tenant, const TActorContex
     }
 
     for (auto &pr : tenant->StoragePools) {
-        if (pr.second->State != TStoragePool::DELETED)
+        if (pr.second->State == TStoragePool::DELETED) {
+            continue;
+        }
+
+        if (pr.second->Borrowed) {
+            BLOG_D("Mark borrowed pool as deleted"
+                << ": tenant# " << tenant->Path
+                << ", pool# " << pr.second->Config.GetName());
+
+            pr.second->Worker = SelfId();
+            ctx.Send(SelfId(), new TTenantsManager::TEvPrivate::TEvPoolDeleted(tenant, pr.second));
+        } else {
             pr.second->Worker = ctx.RegisterWithSameMailbox(new TPoolManip(SelfId(), Domain, tenant, pr.second, TPoolManip::DEALLOCATE));
+        }
     }
 }
 
@@ -2451,23 +2463,24 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
     while (!poolRowset.EndOfSet()) {
         TString path = poolRowset.GetValue<Schema::TenantPools::Tenant>();
-        TString type = poolRowset.GetValue<Schema::TenantPools::PoolType>();
+        TString kind = poolRowset.GetValue<Schema::TenantPools::PoolType>();
         TString configVal = poolRowset.GetValue<Schema::TenantPools::Config>();
         ui32 allocated = poolRowset.GetValue<Schema::TenantPools::AllocatedNumGroups>();
         ui32 stateVal = poolRowset.GetValue<Schema::TenantPools::State>();
+        bool borrowed = poolRowset.GetValueOrDefault<Schema::TenantPools::Borrowed>(false);
         TStoragePool::EState state = static_cast<TStoragePool::EState>(stateVal);
 
         NKikimrBlobStorage::TDefineStoragePool config;
         Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configVal.data(), configVal.size());
 
-        TStoragePool::TPtr pool = new TStoragePool(type, config);
+        TStoragePool::TPtr pool = new TStoragePool(kind, config, borrowed);
         pool->AllocatedNumGroups = allocated;
         pool->State = state;
 
         auto tenant = GetTenant(path);
         Y_VERIFY_DEBUG(tenant, "loaded pool for unknown tenant %s", path.data());
         if (tenant) {
-            tenant->StoragePools[type] = pool;
+            tenant->StoragePools[kind] = pool;
 
             Counters.Inc(pool->Kind, COUNTER_REQUESTED_STORAGE_UNITS, pool->GetGroups());
             Counters.Inc(pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS, pool->AllocatedNumGroups);
@@ -3085,7 +3098,6 @@ void TTenantsManager::Handle(TEvConsole::TEvRemoveTenantRequest::TPtr &ev, const
 {
     Counters.Inc(COUNTER_REMOVE_REQUESTS);
 
-    auto path = CanonizePath(ev->Get()->Record.GetRequest().path());
     TxProcessor->ProcessTx(CreateTxRemoveTenant(ev), ctx);
 }
 

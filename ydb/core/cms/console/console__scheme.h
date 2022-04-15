@@ -63,9 +63,10 @@ struct Schema : NIceDb::Schema {
         struct Config : Column<3, NScheme::NTypeIds::Utf8> {};
         struct AllocatedNumGroups : Column<4, NScheme::NTypeIds::Uint32> {};
         struct State : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct Borrowed : Column<6, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Tenant, PoolType>;
-        using TColumns = TableColumns<Tenant, PoolType, Config, AllocatedNumGroups, State>;
+        using TColumns = TableColumns<Tenant, PoolType, Config, AllocatedNumGroups, State, Borrowed>;
     };
 
     struct TenantUnits : Table<4> {

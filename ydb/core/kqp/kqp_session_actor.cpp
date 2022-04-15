@@ -625,7 +625,6 @@ public:
                     }
                     QueryState->TxCtx = *it;
                     QueryState->TxId = txId;
-                    QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
                     break;
                 }
                 case Ydb::Table::TransactionControl::kBeginTx: {

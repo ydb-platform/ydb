@@ -25,7 +25,6 @@ target_link_libraries(ydb-core-client-server-ut PUBLIC
   ydb-core-tablet_flat
   ydb-core-testlib
   core-testlib-actors
-  cpp-v2-ut_utils
 )
 target_link_options(ydb-core-client-server-ut PRIVATE
   -Wl,-no_deduplicate
@@ -36,7 +35,6 @@ target_link_options(ydb-core-client-server-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-client-server-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/pq_metacache_v2_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_pq_metarequest_ut.cpp
 )
 add_test(

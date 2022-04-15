@@ -1247,3 +1247,13 @@ practicum/services/monetochka
 practicum/services/epicbox-http
 practicum/packages/revisor
 practicum/packages/praktikum-aiohttp-utils
+practicum/services/weather-data-analyst
+practicum/services/store-data-analyst
+practicum/services/pdfgen
+practicum/packages/mathlive
+practicum/packages/eslint
+market/sovetnik/static
+haas/map/backend
+haas/map/frontend
+practicum/services/bourbon
+practicum/packages/csslint

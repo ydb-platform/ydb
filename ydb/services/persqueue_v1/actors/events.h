@@ -30,10 +30,12 @@ struct TEvPQProxy {
         EvWrite,
         EvDone,
         EvReadInit,
+        EvMigrationReadInit,
         EvRead,
         EvCloseSession,
         EvPartitionReady,
         EvReadResponse,
+        EvMigrationReadResponse,
         EvCommitCookie,
         EvCommitDone,
         EvStartRead,
@@ -147,7 +149,17 @@ struct TEvPQProxy {
     };
 
     struct TEvReadInit : public NActors::TEventLocal<TEvReadInit, EvReadInit> {
-        TEvReadInit(const PersQueue::V1::MigrationStreamingReadClientMessage& req, const TString& peerName)
+        TEvReadInit(const PersQueue::V1::StreamingReadClientMessage& req, const TString& peerName)
+            : Request(req)
+            , PeerName(peerName)
+        { }
+
+        PersQueue::V1::StreamingReadClientMessage Request;
+        TString PeerName;
+    };
+
+    struct TEvMigrationReadInit : public NActors::TEventLocal<TEvMigrationReadInit, EvMigrationReadInit> {
+        TEvMigrationReadInit(const PersQueue::V1::MigrationStreamingReadClientMessage& req, const TString& peerName)
             : Request(req)
             , PeerName(peerName)
         { }
@@ -208,7 +220,21 @@ struct TEvPQProxy {
     };
 
     struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EvReadResponse> {
-        explicit TEvReadResponse(PersQueue::V1::MigrationStreamingReadServerMessage&& resp, ui64 nextReadOffset, bool fromDisk, TDuration waitQuotaTime)
+        explicit TEvReadResponse(PersQueue::V1::StreamingReadServerMessage&& resp, ui64 nextReadOffset, bool fromDisk, TDuration waitQuotaTime)
+            : Response(std::move(resp))
+            , NextReadOffset(nextReadOffset)
+            , FromDisk(fromDisk)
+            , WaitQuotaTime(waitQuotaTime)
+        { }
+
+        PersQueue::V1::StreamingReadServerMessage Response;
+        ui64 NextReadOffset;
+        bool FromDisk;
+        TDuration WaitQuotaTime;
+    };
+
+    struct TEvMigrationReadResponse : public NActors::TEventLocal<TEvMigrationReadResponse, EvMigrationReadResponse> {
+        explicit TEvMigrationReadResponse(PersQueue::V1::MigrationStreamingReadServerMessage&& resp, ui64 nextReadOffset, bool fromDisk, TDuration waitQuotaTime)
             : Response(std::move(resp))
             , NextReadOffset(nextReadOffset)
             , FromDisk(fromDisk)

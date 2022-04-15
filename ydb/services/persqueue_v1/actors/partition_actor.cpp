@@ -15,14 +15,13 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace PersQueue::V1;
 
-#define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
-
 
 TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& clientId, const TString& clientPath, const ui64 cookie,
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
-        const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic
+        const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic,
+        bool useMigrationProtocol
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -62,6 +61,7 @@ TPartitionActor::TPartitionActor(
     , CommitsDisabled(commitsDisabled)
     , CommitCookie(1)
     , Topic(topic)
+    , UseMigrationProtocol(useMigrationProtocol)
 {
 }
 
@@ -254,8 +254,10 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     }
 }
 
+// TODO: keep only Migration version
+template<typename TServerMessage>
 bool FillBatchedData(
-        MigrationStreamingReadServerMessage::DataBatch * data, const NKikimrClient::TCmdReadResult& res,
+        typename TServerMessage::DataBatch * data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
         const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) {
 
@@ -270,7 +272,7 @@ bool FillBatchedData(
     bool hasOffset = false;
     bool hasData = false;
 
-    MigrationStreamingReadServerMessage::DataBatch::Batch* currentBatch = nullptr;
+    typename TServerMessage::DataBatch::Batch* currentBatch = nullptr;
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
@@ -497,11 +499,20 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     EndOffset = res.GetMaxOffset();
     SizeLag = res.GetSizeLag();
 
-    MigrationStreamingReadServerMessage response;
+    StreamingReadServerMessage response;
     response.set_status(Ydb::StatusIds::SUCCESS);
+    MigrationStreamingReadServerMessage migrationResponse;
+    migrationResponse.set_status(Ydb::StatusIds::SUCCESS);
 
-    auto* data = response.mutable_data_batch();
-    bool hasData = FillBatchedData(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+    bool hasData = false;
+    if (UseMigrationProtocol) {
+        auto* data = migrationResponse.mutable_data_batch();
+        hasData = FillBatchedData<MigrationStreamingReadServerMessage>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+    } else {
+        auto* data = response.mutable_data_batch();
+        hasData = FillBatchedData<StreamingReadServerMessage>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+    }
+
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);
 
     if (!CommitsDisabled && !RangesMode) {
@@ -534,13 +545,24 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
                 << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " ReadGuid " << ReadGuid << " has messages " << hasData);
 
     ReadGuid = TString();
-    auto readResponse = MakeHolder<TEvPQProxy::TEvReadResponse>(
-        std::move(response),
-        ReadOffset,
-        res.GetBlobsFromDisk() > 0,
-        TDuration::MilliSeconds(res.GetWaitQuotaTimeMs())
-    );
-    ctx.Send(ParentId, readResponse.Release());
+
+    if (UseMigrationProtocol) {
+        auto readResponse = MakeHolder<TEvPQProxy::TEvMigrationReadResponse>(
+            std::move(migrationResponse),
+            ReadOffset,
+            res.GetBlobsFromDisk() > 0,
+            TDuration::MilliSeconds(res.GetWaitQuotaTimeMs())
+        );
+        ctx.Send(ParentId, readResponse.Release());
+    } else {
+        auto readResponse = MakeHolder<TEvPQProxy::TEvReadResponse>(
+            std::move(response),
+            ReadOffset,
+            res.GetBlobsFromDisk() > 0,
+            TDuration::MilliSeconds(res.GetWaitQuotaTimeMs())
+        );
+        ctx.Send(ParentId, readResponse.Release());
+    }
     CheckRelease(ctx);
 
     PipeGeneration = 0; //reset tries counter - all ok

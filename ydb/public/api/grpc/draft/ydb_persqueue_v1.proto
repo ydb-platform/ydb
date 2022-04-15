@@ -38,6 +38,15 @@ service PersQueueService {
      * Creates Read Session
      * Pipeline:
      * client                  server
+     *
+     * TODO description
+     */
+    rpc StreamingRead(stream StreamingReadClientMessage) returns (stream StreamingReadServerMessage);
+
+    /**
+     * Creates Read Session
+     * Pipeline:
+     * client                  server
      *         Init(Topics, ClientId, ...)
      *        ---------------->
      *         Init(SessionId)

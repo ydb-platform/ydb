@@ -334,6 +334,171 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
+    Y_UNIT_TEST(SetupLockSessionMigrated) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB;
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+
+        auto readStream = StubP_->StreamingRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        // init read session
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_topic("acc/topic1");
+
+            req.mutable_init_request()->set_consumer("user");
+            req.mutable_init_request()->set_read_only_original(true);
+            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.response_case() == StreamingReadServerMessage::kInitResponse);
+            //send some reads
+            req.Clear();
+            req.mutable_read();
+            for (ui32 i = 0; i < 10; ++i) {
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+            }
+        }
+        Cerr << "===First block done\n";
+        {
+            Sleep(TDuration::Seconds(10));
+            ReadInfoRequest request;
+            ReadInfoResponse response;
+            request.mutable_consumer()->set_path("user");
+            request.set_get_only_original(true);
+            request.add_topics()->set_path("acc/topic1");
+            grpc::ClientContext rcontext;
+            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            ReadInfoResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << "Read info response: " << response << Endl << res << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
+            UNIT_ASSERT(res.topics(0).status() == Ydb::StatusIds::SUCCESS);
+        }
+        Cerr << "===Second block done\n";
+
+        ui64 assignId = 0;
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            //lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.response_case() == StreamingReadServerMessage::kAssigned);
+            UNIT_ASSERT(resp.assigned().topic().path() == "acc/topic1");
+            UNIT_ASSERT(resp.assigned().cluster() == "dc1");
+            UNIT_ASSERT(resp.assigned().partition() == 0);
+
+            assignId = resp.assigned().assign_id();
+            req.Clear();
+            req.mutable_start_read()->mutable_topic()->set_path("acc/topic1");
+            req.mutable_start_read()->set_cluster("dc1");
+            req.mutable_start_read()->set_partition(0);
+            req.mutable_start_read()->set_assign_id(assignId);
+
+            req.mutable_start_read()->set_read_offset(10);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+        }
+        Cerr << "===Third block done\n";
+
+        auto driver = server.Server->AnnoyingClient->GetDriver();
+
+        {
+            auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source");
+            for (int i = 1; i < 17; ++i) {
+                bool res = writer->Write("valuevaluevalue" + ToString(i), i);
+                UNIT_ASSERT(res);
+            }
+            bool res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
+        Cerr << "===4th block done\n";
+
+        //check read results
+        StreamingReadServerMessage resp;
+        for (ui32 i = 10; i < 16; ++i) {
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "Got read response " << resp << "\n";
+            UNIT_ASSERT_C(resp.response_case() == StreamingReadServerMessage::kDataBatch, resp);
+            UNIT_ASSERT(resp.data_batch().partition_data_size() == 1);
+            UNIT_ASSERT(resp.data_batch().partition_data(0).batches_size() == 1);
+            UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data_size() == 1);
+            UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data(0).offset() == i);
+        }
+        //TODO: restart here readSession and read from position 10
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            auto cookie = req.mutable_commit()->add_cookies();
+            cookie->set_assign_id(assignId);
+            cookie->set_partition_cookie(1);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.response_case() == StreamingReadServerMessage::kCommitted, resp);
+        }
+
+
+        Cerr << "=== ===AlterTopic\n";
+        pqClient->AlterTopic("rt3.dc1--acc--topic1", 10);
+        {
+            ReadInfoRequest request;
+            ReadInfoResponse response;
+            request.mutable_consumer()->set_path("user");
+            request.set_get_only_original(false);
+            request.add_topics()->set_path("acc/topic1");
+            grpc::ClientContext rcontext;
+            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            ReadInfoResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << "Get read session info response: " << response << "\n" << res << "\n";
+//            UNIT_ASSERT(res.sessions_size() == 1);
+            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(res.topics(0).partitions_size(), 10);
+        }
+        Cerr << "=== ===AlterTopic block done\n";
+        {
+            ReadInfoRequest request;
+            ReadInfoResponse response;
+            request.mutable_consumer()->set_path("user");
+            request.set_get_only_original(false);
+            request.add_topics()->set_path("acc/topic1");
+            grpc::ClientContext rcontext;
+
+            pqClient->MarkNodeInHive(runtime, 0, false);
+            pqClient->MarkNodeInHive(runtime, 1, false);
+
+            pqClient->RestartBalancerTablet(runtime, "rt3.dc1--acc--topic1");
+            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            ReadInfoResult res;
+            response.operation().result().UnpackTo(&res);
+            Cerr << "Read sessions info response: " << response << "\nResult: " << res << "\n";
+            UNIT_ASSERT(res.topics().size() == 1);
+            UNIT_ASSERT(res.topics(0).partitions(0).status() == Ydb::StatusIds::UNAVAILABLE);
+        }
+    }
+
 
     void SetupWriteSessionImpl(bool rr) {
         NPersQueue::TTestServer server{PQSettings(0, 2, rr), false};
@@ -607,6 +772,85 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             }
 
             UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kDataBatch, resp);
+            i += resp.data_batch().partition_data_size();
+        }
+    }
+
+    Y_UNIT_TEST(ReadFromSeveralPartitionsMigrated) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_METACACHE });
+
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
+
+        TPQDataWriter writer("source1", server);
+        Cerr << "===Writer started\n";
+        std::shared_ptr<grpc::Channel> Channel_;
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;
+
+        Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+        StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_);
+
+
+        //Write some data
+        writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"});
+
+        TPQDataWriter writer2("source2", server);
+        writer2.Write(SHORT_TOPIC_NAME, {"valuevaluevalue2"});
+        Cerr << "===Writer - writes done\n";
+
+        grpc::ClientContext rcontext;
+        auto readStream = StubP_->StreamingRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        // init read session
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_topic(SHORT_TOPIC_NAME);
+
+            req.mutable_init_request()->set_consumer("user");
+            req.mutable_init_request()->set_read_only_original(true);
+
+            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1000);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            Cerr << "===Try to get read response\n";
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "Read server response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.response_case() == StreamingReadServerMessage::kInitResponse);
+
+            //send some reads
+            Sleep(TDuration::Seconds(5));
+            for (ui32 i = 0; i < 10; ++i) {
+                req.Clear();
+                req.mutable_read();
+
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+            }
+        }
+
+        //check read results
+        StreamingReadServerMessage resp;
+        for (ui32 i = 0; i < 2;) {
+            StreamingReadServerMessage resp;
+            UNIT_ASSERT(readStream->Read(&resp));
+            if (resp.response_case() == StreamingReadServerMessage::kAssigned) {
+                auto assignId = resp.assigned().assign_id();
+                StreamingReadClientMessage req;
+                req.mutable_start_read()->mutable_topic()->set_path(SHORT_TOPIC_NAME);
+                req.mutable_start_read()->set_cluster("dc1");
+                req.mutable_start_read()->set_assign_id(assignId);
+                UNIT_ASSERT(readStream->Write(req));
+                continue;
+            }
+
+            UNIT_ASSERT_C(resp.response_case() == StreamingReadServerMessage::kDataBatch, resp);
             i += resp.data_batch().partition_data_size();
         }
     }

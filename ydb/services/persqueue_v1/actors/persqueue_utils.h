@@ -9,6 +9,11 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
+#ifdef PQ_LOG_PREFIX
+#undef PQ_LOG_PREFIX
+#endif
+#define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
+
 static const TDuration CHECK_ACL_DELAY = TDuration::Minutes(5);
 
 // moved to ydb/core/client/server/msgbus_server_persqueue.h?

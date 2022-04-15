@@ -91,6 +91,26 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     }
 
     {
+        using TBiRequest = Ydb::PersQueue::V1::StreamingReadClientMessage;
+
+        using TBiResponse = Ydb::PersQueue::V1::StreamingReadServerMessage;
+
+        using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+                    TBiRequest,
+                    TBiResponse,
+                    TGRpcPersQueueService,
+                    NKikimrServices::GRPC_SERVER>;
+
+
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestStreamingRead,
+                    [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
+                        ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQReadRequest(context));
+                    },
+                    *ActorSystem, "PersQueueService/CreateReadSession", getCounterBlock("persistent_queue", "ReadSession", true, true), nullptr
+                );
+    }
+
+    {
         using TBiRequest = Ydb::PersQueue::V1::MigrationStreamingReadClientMessage;
 
         using TBiResponse = Ydb::PersQueue::V1::MigrationStreamingReadServerMessage;
@@ -104,9 +124,9 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 
         TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestMigrationStreamingRead,
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-                        ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQReadRequest(context));
+                        ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest(context));
                     },
-                    *ActorSystem, "PersQueueService/CreateReadSession", getCounterBlock("persistent_queue", "ReadSession", true, true), nullptr
+                    *ActorSystem, "PersQueueService/CreateMigrationReadSession", getCounterBlock("persistent_queue", "MigrationReadSession", true, true), nullptr
                 );
     }
 

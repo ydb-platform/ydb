@@ -101,6 +101,7 @@ struct TRpcServices {
         EvExperimentalStreamQuery,
         EvStreamPQWrite,
         EvStreamPQRead,
+        EvStreamPQMigrationRead,
         EvPQReadInfo,
         EvListOperations,
         EvExportToYt,

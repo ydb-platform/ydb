@@ -1345,3 +1345,311 @@ message DescribeTopicResult {
 
 }
 
+///////////////////////////////////////////////////////////
+
+message StreamingReadClientMessage {
+    message TopicReadSettings {
+        // Topic path.
+        string topic = 1;
+        // Partition groups that will be read by this session.
+        // If list is empty - then session will read all partition groups.
+        repeated int64 partition_group_ids = 2;
+        // Read data only after this timestamp from this topic.
+        int64 start_from_written_at_ms = 3;
+    }
+
+    // Handshake request.
+    message InitRequest {
+        // Message that describes topic to read.
+        // Topics that will be read by this session.
+        repeated TopicReadSettings topics_read_settings = 1;
+        // Flag that indicates reading only of original topics in cluster or all including mirrored.
+        bool read_only_original = 2;
+        // Path of consumer that is used for reading by this session.
+        string consumer = 3;
+
+        // Skip all messages that has write timestamp smaller than now - max_time_lag_ms.
+        int64 max_lag_duration_ms = 4;
+        // Read data only after this timestamp from all topics.
+        int64 start_from_written_at_ms = 5;
+
+        // Maximum block format version supported by the client. Server will asses this parameter and return actual data blocks version in
+        // StreamingReadServerMessage.InitResponse.block_format_version_by_topic (and StreamingReadServerMessage.AddTopicResponse.block_format_version)
+        // or error if client will not be able to read data.
+        int64 max_supported_block_format_version = 6;
+
+        // Maximal size of client cache for message_group_id, ip and meta, per partition.
+        // There is separate caches for each partition partition streams.
+        // There is separate caches for message group identifiers, ip and meta inside one partition partition stream.
+        int64 max_meta_cache_size = 10;
+
+        // State of client read session. Could be provided to server for retries.
+        message State {
+            message PartitionStreamState {
+                enum Status {
+                    // Not used state.
+                    STATUS_UNSPECIFIED = 0;
+                    // Client seen Create message but not yet responded to server with Created message.
+                    CREATING = 1;
+                    // Client seen Destroy message but not yet responded with Released message.
+                    DESTROYING = 2;
+                    // Client sent Created or ResumeReadRequest message to server for this partition stream.
+                    READING = 3;
+                    // Client sent StopReadRequest for this partition stream.
+                    STOPPED = 4;
+                }
+                // Partition partition stream.
+                PartitionStream partition_stream = 1;
+                // Current read offset if has one. Actual for states DESTROYING, READING and STOPPED.
+                int64 read_offset = 2;
+                // Ranges of committed by client offsets.
+                repeated OffsetsRange offset_ranges = 3;
+                // Status of partition stream.
+                Status status = 4;
+            }
+            repeated PartitionStreamState partition_streams_states = 1;
+        }
+
+        // Session identifier for retries. Must be the same as session_id from Inited server response. If this is first connect, not retry - do not use this field.
+        string session_id = 100;
+        // 0 for first init message and incremental value for connect retries.
+        int64 connection_attempt = 101;
+        // Formed state for retries. If not retry - do not use this field.
+        State state = 102;
+
+        int64 idle_timeout_ms = 200;
+
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // TODO: remove after refactoring
+        // Single read request params.
+        ReadParams read_params = 42;
+
+        bool ranges_mode = 442;
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    }
+
+    // Request of single read.
+    message Read {
+    }
+
+    message StartRead {
+        // Topic path of partition.
+        Path topic = 1;
+        // Cluster of topic instance.
+        string cluster = 2;
+        // Partition identifier. Explicit only for debug purposes.
+        uint64 partition = 3;
+
+        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with StartRead responses from client.
+        uint64 assign_id = 5;
+
+        // Start reading from partition offset that is not less than read_offset.
+        // ReadParams.max_time_lag_ms and ReadParams.read_timestamp_ms could lead to skip of more messages.
+        // The same with actual committed offset. Regardless of set read_offset server will return data from maximal offset from read_offset, actual committed offset
+        // and offsets calculated from ReadParams.max_time_lag_ms and ReadParams.read_timestamp_ms.
+        uint64 read_offset = 6;
+        // All messages with offset less than commit_offset are processed by client. Server will commit this position if this is not done yet.
+        uint64 commit_offset = 7;
+
+        // This option will enable sanity check on server for read_offset. Server will verify that read_offset is no less that actual committed offset.
+        // If verification will fail then server will kill this read session and client will find out error in reading logic.
+        // If client is not setting read_offset, sanity check will fail so do not set verify_read_offset if you not setting correct read_offset.
+        bool verify_read_offset = 8; //if true then check that committed position is <= ReadOffset; otherwise it means error in client logic
+
+    }
+    // Signal for server that client finished working with this partition. Must be sent only after corresponding Release request from server.
+    // Server will give this partition to other read session only after Released signal.
+    message Released {
+        // Topic path of partition.
+        Path topic = 1;
+        // Cluster of topic instance.
+        string cluster = 2;
+        // Partition identifier. Explicit only for debug purposes.
+        uint64 partition = 3;
+
+        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with Released responses from client.
+        uint64 assign_id = 5;
+    }
+
+    // Signal for server that client processed some read data.
+    message Commit {
+        // Partition read cookies that indicates processed data.
+        repeated CommitCookie cookies = 1;
+
+        repeated CommitOffsetRange offset_ranges = 2;
+    }
+
+    message Status {
+        // Topic path of partition.
+        Path topic = 1;
+        // Cluster of topic instance.
+        string cluster = 2;
+        // Partition identifier. Explicit only for debug purposes.
+        uint64 partition = 3;
+
+        // Assign identifier of Assign request from server. Used for mathing Assign requests from server with Released responses from client.
+        uint64 assign_id = 5;
+
+    }
+
+    oneof request {
+        InitRequest init_request = 1;
+        Read read = 2;
+        StartRead start_read = 3;
+        Commit commit = 4;
+        Released released = 5;
+        Status status = 6;
+    }
+
+    // User credentials if update is needed or empty string.
+    bytes token = 20;
+}
+
+message StreamingReadServerMessage {
+    // Handshake response.
+    message InitResponse {
+        // Read session identifier for debug purposes.
+        string session_id = 1;
+        // Block format version of data client will receive from topics.
+        map<string, int64> block_format_version_by_topic = 2;
+
+        // Choosed maximan cache size by server.
+        // Client must use cache of this size. Could change on retries - reduce size of cache in this case.
+        int64 max_meta_cache_size = 10;
+    }
+
+    // Signal that partition is assigned to this read session. Client must react on this signal by sending StartRead when ready.
+    message Assigned {
+        // Partition's topic path.
+        Path topic = 1;
+        // Topic's instance cluster name.
+        string cluster = 2;
+        // Partition identifier. topic:cluster:partition is unique addressing of partition.
+        uint64 partition = 3;
+
+        // Assign idenfier. Is not unique between diffrent partitions. Used for matching Assigned request from server and StartRead response from client.
+        uint64 assign_id = 5;
+
+        // Actual read offset. Equeal to last committed offset.
+        uint64 read_offset = 6;
+        // Offset of first not existing message in partition at this time.
+        uint64 end_offset = 7;
+    }
+
+    // Partition release request from server.
+    message Release {
+        // Partition's topic path.
+        Path topic = 1;
+        // Topic's instance cluster name.
+        string cluster = 2;
+        // Partition identifier. topic:cluster:partition is unique addressing of partition.
+        uint64 partition = 3;
+
+        // Assign idenfier. Used for matching Assigned and Release requests from server.
+        uint64 assign_id = 5;
+
+        // If False then server is waiting for Released signal from client before giving of this partition for other read session.
+        // If True then server gives partition for other session right now. All futher commits for this partition has no effect. Server is not waiting for Released signal.
+        bool forceful_release = 6;
+        // Last known committed offset.
+        uint64 commit_offset = 7;
+    }
+
+    // Acknowledgement for commits.
+    message Committed {
+        // List of cookies that correspond to commit of processing read data.
+        repeated CommitCookie cookies = 1;
+
+        repeated CommitOffsetRange offset_ranges = 2;
+
+    }
+
+    // Readed data.
+    message DataBatch {
+        // One client message representation.
+        message MessageData {
+            // Partition offset in partition that assigned for message.
+            uint64 offset = 1; //unique value for clientside deduplication - Topic:Cluster:Partition:Offset
+            // Sequence number that provided with message on write from client.
+            uint64 seq_no = 2;
+            // Timestamp of creation of message provided on write from client.
+            uint64 create_timestamp_ms = 3;
+            // Codec that is used for data compressing.
+            Codec codec = 4;
+            // Compressed client message body.
+            bytes data = 5;
+            // Uncompressed size of client message body.
+            uint64 uncompressed_size = 6;
+            // kinesis data
+            string partition_key = 7;
+            bytes explicit_hash = 8;
+        }
+
+        // Representation of sequence of client messages from one write session.
+        message Batch {
+            // Source identifier provided by client for this batch of client messages.
+            bytes source_id = 2;
+            // Client metadata attached to write session, the same for all messages in batch.
+            repeated KeyValue extra_fields = 3;
+            // Persist timestamp on server for batch.
+            uint64 write_timestamp_ms = 4;
+            // Peer address of node that created write session.
+            string ip = 5;
+
+            // List of client messages.
+            repeated MessageData message_data = 1;
+        }
+
+        // Representation of sequence of messages from one partition.
+        message PartitionData {
+            // Partition's topic path.
+            Path topic = 1;
+            // Topic's instance cluster name.
+            string cluster = 2;
+            // Partition identifier. topic:cluster:partition is unique addressing for partition.
+            uint64 partition = 3;
+
+            // Client messages, divided by write sessions.
+            repeated Batch batches = 4;
+
+            // Cookie for addressing this partition messages batch for committing.
+            CommitCookie cookie = 5;
+
+             // Old formatted topic name with cluster inside.
+            string deprecated_topic = 10;
+        }
+
+        // Client messages, divided by partitions.
+        repeated PartitionData partition_data = 1;
+    }
+
+    // Response for status requst.
+    message PartitionStatus {
+        // Partition's topic path.
+        Path topic = 1;
+        // Topic's instance cluster name.
+        string cluster = 2;
+        // Partition identifier. topic:cluster:partition is unique addressing of partition.
+        uint64 partition = 3;
+
+        // Assign idenfier. Used for matching Assigned and Release requests from server.
+        uint64 assign_id = 5;
+
+        uint64 committed_offset = 6;
+        uint64 end_offset = 7;
+        uint64 write_watermark_ms = 8;
+    }
+    Ydb.StatusIds.StatusCode status = 1;
+
+    repeated Ydb.Issue.IssueMessage issues = 2;
+
+    oneof response {
+        InitResponse init_response = 3;
+        DataBatch data_batch = 4;
+        Assigned assigned = 5;
+        Release release = 6;
+        Committed committed = 7;
+        PartitionStatus partition_status = 8;
+    }
+}

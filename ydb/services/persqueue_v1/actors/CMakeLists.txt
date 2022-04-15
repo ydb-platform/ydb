@@ -28,10 +28,10 @@ target_link_libraries(services-persqueue_v1-actors PUBLIC
 target_sources(services-persqueue_v1-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/codecs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/persqueue_utils.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_init_auth_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_info_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_session_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/write_session_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/schema_actors.cpp
 )

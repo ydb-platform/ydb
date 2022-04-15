@@ -15,6 +15,8 @@
 #include <util/generic/guid.h>
 #include <util/system/compiler.h>
 
+#include <type_traits>
+
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -22,10 +24,120 @@ inline TActorId GetPQReadServiceActorID() {
     return TActorId(0, "PQReadSvc");
 }
 
-class TReadSessionActor : public TActorBootstrapped<TReadSessionActor> {
-using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::MigrationStreamingReadClientMessage, PersQueue::V1::MigrationStreamingReadServerMessage>;
+struct TPartitionActorInfo {
+    TActorId Actor;
+    const TPartitionId Partition;
+    std::deque<ui64> Commits;
+    bool Reading;
+    bool Releasing;
+    bool Released;
+    bool LockSent;
+    bool ReleaseSent;
+
+    ui64 ReadIdToResponse;
+    ui64 ReadIdCommitted;
+    TSet<ui64> NextCommits;
+    TDisjointIntervalTree<ui64> NextRanges;
+
+    ui64 Offset;
+
+    TInstant AssignTimestamp;
+
+    NPersQueue::TTopicConverterPtr Topic;
+
+    TPartitionActorInfo(const TActorId& actor, const TPartitionId& partition,
+                        const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx)
+        : Actor(actor)
+        , Partition(partition)
+        , Reading(false)
+        , Releasing(false)
+        , Released(false)
+        , LockSent(false)
+        , ReleaseSent(false)
+        , ReadIdToResponse(1)
+        , ReadIdCommitted(0)
+        , Offset(0)
+        , AssignTimestamp(ctx.Now())
+        , Topic(topic)
+    { }
+
+    void MakeCommit(const TActorContext& ctx);
+};
+
+struct TPartitionInfo {
+    ui64 AssignId;
+    ui64 WTime;
+    ui64 SizeLag;
+    ui64 MsgLag;
+    bool operator < (const TPartitionInfo& rhs) const {
+        return std::tie(WTime, AssignId) < std::tie(rhs.WTime, rhs.AssignId);
+    }
+};
+
+template <typename TServerMessage>
+struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMessage>> {
+    using TPtr = TIntrusivePtr<TFormedReadResponse>;
+
+    TFormedReadResponse(const TString& guid, const TInstant start)
+        : Guid(guid)
+        , Start(start)
+        , FromDisk(false)
+    {
+    }
+
+    TServerMessage Response;
+    ui32 RequestsInfly = 0;
+    i64 ByteSize = 0;
+    ui64 RequestedBytes = 0;
+
+    //returns byteSize diff
+    i64 ApplyResponse(TServerMessage&& resp);
+
+    THashSet<TActorId> PartitionsTookPartInRead;
+    TSet<TPartitionId> PartitionsTookPartInControlMessages;
+
+    TSet<TPartitionInfo> PartitionsBecameAvailable; // Partitions that became available during this read request execution.
+
+                                                    // These partitions are bringed back to AvailablePartitions after reply to this read request.
+
+    const TString Guid;
+    TInstant Start;
+    bool FromDisk;
+    TDuration WaitQuotaTime;
+};
+
+
+template<bool UseMigrationProtocol>
+class TReadSessionActor : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>> {
+    using TClientMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadClientMessage, PersQueue::V1::StreamingReadClientMessage>;
+    using TServerMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadServerMessage, PersQueue::V1::StreamingReadServerMessage>;
+
+    using IContext = NGRpcServer::IGRpcStreamingContext<TClientMessage, TServerMessage>;
+
+    using TEvReadInit = typename std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvMigrationReadInit, TEvPQProxy::TEvReadInit>;
+    using TEvReadResponse = typename std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvMigrationReadResponse, TEvPQProxy::TEvReadResponse>;
+    // using TEvReadResponse = TEvPQProxy::TEvReadResponse;
+    using TEvStreamPQReadRequest = typename std::conditional_t<UseMigrationProtocol, NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest, NKikimr::NGRpcService::TEvStreamPQReadRequest>;
+
+private:
+    //11 tries = 10,23 seconds, then each try for 5 seconds , so 21 retries will take near 1 min
+    static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {
+        .RetryLimitCount = 21,
+        .MinRetryTime = TDuration::MilliSeconds(10),
+        .MaxRetryTime = TDuration::Seconds(5),
+        .BackoffMultiplier = 2,
+        .DoFirstRetryInstantly = true
+    };
+
+    static constexpr ui64 MAX_INFLY_BYTES = 25_MB;
+    static constexpr ui32 MAX_INFLY_READS = 10;
+
+    static constexpr ui64 MAX_READ_SIZE = 100 << 20; //100mb;
+
+    static constexpr double LAG_GROW_MULTIPLIER = 1.2; //assume that 20% more data arrived to partitions
+
 public:
-     TReadSessionActor(NKikimr::NGRpcService::TEvStreamPQReadRequest* request, const ui64 cookie,
+     TReadSessionActor(TEvStreamPQReadRequest* request, const ui64 cookie,
                        const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
                        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
                        const NPersQueue::TTopicsListController& topicsHandler);
@@ -51,7 +163,8 @@ private:
             HFunc(TEvPQProxy::TEvAuthResultOk, Handle); // form auth actor
 
             HFunc(TEvPQProxy::TEvDieCommand, HandlePoison)
-            HFunc(TEvPQProxy::TEvReadInit,  Handle) //from gRPC
+
+            HFunc(/* type alias */ TEvReadInit,  Handle) //from gRPC
             HFunc(TEvPQProxy::TEvReadSessionStatus, Handle) // from read sessions info builder proxy
             HFunc(TEvPQProxy::TEvRead, Handle) //from gRPC
             HFunc(TEvPQProxy::TEvDone, Handle) //from gRPC
@@ -59,7 +172,7 @@ private:
             HFunc(TEvPQProxy::TEvPartitionReady, Handle) //from partitionActor
             HFunc(TEvPQProxy::TEvPartitionReleased, Handle) //from partitionActor
 
-            HFunc(TEvPQProxy::TEvReadResponse, Handle) //from partitionActor
+            HFunc(/* type alias */ TEvReadResponse, Handle) //from partitionActor
             HFunc(TEvPQProxy::TEvCommitCookie, Handle) //from gRPC
             HFunc(TEvPQProxy::TEvCommitRange, Handle) //from gRPC
             HFunc(TEvPQProxy::TEvStartRead, Handle) //from gRPC
@@ -82,19 +195,19 @@ private:
         };
     }
 
-    bool WriteResponse(PersQueue::V1::MigrationStreamingReadServerMessage&& response, bool finish = false);
+    bool WriteResponse(TServerMessage&& response, bool finish = false);
 
-    void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
-    void Handle(IContext::TEvWriteFinished::TPtr& ev, const TActorContext &ctx);
+    void Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
+    void Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext &ctx);
     void HandleDone(const TActorContext &ctx);
 
     void Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev, const TActorContext &ctx);
 
 
-    void Handle(TEvPQProxy::TEvReadInit::TPtr& ev,  const NActors::TActorContext& ctx);
+    void Handle(typename TEvReadInit::TPtr& ev,  const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadSessionStatus::TPtr& ev,  const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvRead::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPQProxy::TEvReadResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(typename TEvReadResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvPartitionReady::TPtr& ev, const NActors::TActorContext& ctx);
@@ -131,28 +244,26 @@ private:
                             const TString& folderId);
 
     void ProcessReads(const NActors::TActorContext& ctx); // returns false if actor died
-    struct TFormedReadResponse;
-    void ProcessAnswer(const NActors::TActorContext& ctx, TIntrusivePtr<TFormedReadResponse> formedResponse); // returns false if actor died
+    void ProcessAnswer(const NActors::TActorContext& ctx, typename TFormedReadResponse<TServerMessage>::TPtr formedResponse); // returns false if actor died
 
     void RegisterSessions(const NActors::TActorContext& ctx);
     void RegisterSession(const TActorId& pipe, const TString& topic, const TVector<ui32>& groups, const TActorContext& ctx);
 
-    struct TPartitionActorInfo;
-    void DropPartition(THashMap<ui64, TPartitionActorInfo>::iterator it, const TActorContext& ctx);
+    void DropPartition(typename THashMap<ui64, TPartitionActorInfo>::iterator it, const TActorContext& ctx);
 
     bool ActualPartitionActor(const TActorId& part);
-    void ReleasePartition(const THashMap<ui64, TPartitionActorInfo>::iterator& it,
+    void ReleasePartition(const typename THashMap<ui64, TPartitionActorInfo>::iterator& it,
                         bool couldBeReads, const TActorContext& ctx); // returns false if actor died
 
-    void SendReleaseSignalToClient(const THashMap<ui64, TPartitionActorInfo>::iterator& it, bool kill, const TActorContext& ctx);
+    void SendReleaseSignalToClient(const typename THashMap<ui64, TPartitionActorInfo>::iterator& it, bool kill, const TActorContext& ctx);
 
-    void InformBalancerAboutRelease(const THashMap<ui64, TPartitionActorInfo>::iterator& it, const TActorContext& ctx);
+    void InformBalancerAboutRelease(const typename THashMap<ui64, TPartitionActorInfo>::iterator& it, const TActorContext& ctx);
 
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
 
 private:
-    std::unique_ptr<NKikimr::NGRpcService::TEvStreamPQReadRequest> Request;
+    std::unique_ptr</* type alias */ TEvStreamPQReadRequest> Request;
 
     const TString ClientDC;
 
@@ -186,47 +297,6 @@ private:
     bool RequestNotChecked;
     TInstant LastACLCheckTimestamp;
 
-    struct TPartitionActorInfo {
-        TActorId Actor;
-        const TPartitionId Partition;
-        std::deque<ui64> Commits;
-        bool Reading;
-        bool Releasing;
-        bool Released;
-        bool LockSent;
-        bool ReleaseSent;
-
-        ui64 ReadIdToResponse;
-        ui64 ReadIdCommitted;
-        TSet<ui64> NextCommits;
-        TDisjointIntervalTree<ui64> NextRanges;
-
-        ui64 Offset;
-
-        TInstant AssignTimestamp;
-
-	    NPersQueue::TTopicConverterPtr Topic;
-
-        TPartitionActorInfo(const TActorId& actor, const TPartitionId& partition,
-                            const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx)
-            : Actor(actor)
-            , Partition(partition)
-            , Reading(false)
-            , Releasing(false)
-            , Released(false)
-            , LockSent(false)
-            , ReleaseSent(false)
-            , ReadIdToResponse(1)
-            , ReadIdCommitted(0)
-            , Offset(0)
-            , AssignTimestamp(ctx.Now())
-            , Topic(topic)
-        { }
-
-        void MakeCommit(const TActorContext& ctx);
-    };
-
-
     THashSet<TActorId> ActualPartitionActors;
     THashMap<ui64, std::pair<ui32, ui64>> BalancerGeneration;
     ui64 NextAssignId;
@@ -241,54 +311,13 @@ private:
     bool ReadOnlyLocal;
     TDuration CommitInterval;
 
-    struct TPartitionInfo {
-        ui64 AssignId;
-        ui64 WTime;
-        ui64 SizeLag;
-        ui64 MsgLag;
-        bool operator < (const TPartitionInfo& rhs) const {
-            return std::tie(WTime, AssignId) < std::tie(rhs.WTime, rhs.AssignId);
-        }
-    };
-
     TSet<TPartitionInfo> AvailablePartitions;
 
-    struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse> {
-        using TPtr = TIntrusivePtr<TFormedReadResponse>;
-
-        TFormedReadResponse(const TString& guid, const TInstant start)
-            : Guid(guid)
-            , Start(start)
-            , FromDisk(false)
-        {
-        }
-
-        PersQueue::V1::MigrationStreamingReadServerMessage Response;
-        ui32 RequestsInfly = 0;
-        i64 ByteSize = 0;
-        ui64 RequestedBytes = 0;
-
-        //returns byteSize diff
-        i64 ApplyResponse(PersQueue::V1::MigrationStreamingReadServerMessage&& resp);
-
-        THashSet<TActorId> PartitionsTookPartInRead;
-        TSet<TPartitionId> PartitionsTookPartInControlMessages;
-
-        TSet<TPartitionInfo> PartitionsBecameAvailable; // Partitions that became available during this read request execution.
-
-                                                        // These partitions are bringed back to AvailablePartitions after reply to this read request.
-
-        const TString Guid;
-        TInstant Start;
-        bool FromDisk;
-        TDuration WaitQuotaTime;
-    };
-
-    THashMap<TActorId, TFormedReadResponse::TPtr> PartitionToReadResponse; // Partition actor -> TFormedReadResponse answer that has this partition.
+    THashMap<TActorId, typename TFormedReadResponse<TServerMessage>::TPtr> PartitionToReadResponse; // Partition actor -> TFormedReadResponse answer that has this partition.
                                                                            // PartitionsTookPartInRead in formed read response contain this actor id.
 
     struct TControlMessages {
-        TVector<PersQueue::V1::MigrationStreamingReadServerMessage> ControlMessages;
+        TVector<TServerMessage> ControlMessages;
         ui32 Infly = 0;
     };
 
@@ -341,3 +370,9 @@ private:
 };
 
 }
+
+/////////////////////////////////////////
+// Implementation
+#define READ_SESSION_ACTOR_IMPL
+#include "read_session_actor.ipp"
+#undef READ_SESSION_ACTOR_IMPL

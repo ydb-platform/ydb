@@ -387,7 +387,11 @@ private:
         Y_VERIFY(res.size() == 2);
 
         auto ptr = InflightBuffer.find(cookie);
-        Y_VERIFY(ptr != InflightBuffer.end());
+        // TODO: YQ-1025
+        // Y_VERIFY(ptr != InflightBuffer.end());
+        if (ptr == InflightBuffer.end()) {
+            return;
+        }
 
         const ui64 writtenMetricsCount = std::stoul(res[0]);
         *Metrics.СonfirmedMetrics += writtenMetricsCount;

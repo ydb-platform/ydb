@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import argparse
 import shutil
 import signal
 import os
@@ -335,12 +336,15 @@ def deploy(arguments):
 
         endpoints.append("localhost:%d" % node.grpc_port)
 
+    endpoint = endpoints[0]
+    database = cluster.domain_name
     recipe.write_metafile(info)
-    recipe.write_endpoint(endpoints[0])
+    recipe.write_endpoint(endpoint)
     recipe.write_database(cluster.domain_name)
-    recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoints[0] + "?database=/" + cluster.domain_name)
+    recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
     if enable_tls():
         recipe.write_certificates_path(configuration.grpc_tls_ca())
+    return endpoint, database
 
 
 def _stop_instances(arguments):
@@ -418,3 +422,38 @@ def cleanup(arguments):
         func(
             arguments
         )
+
+
+def produce_arguments(args):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--use-packages", action="store", default=None)
+    parser.add_argument("--suppress-version-check", action='store_true', default=False)
+    parser.add_argument("--ydb-working-dir", action="store")
+    parser.add_argument("--debug-logging", nargs='*')
+    parser.add_argument("--enable-pq", action='store_true', default=False)
+    parser.add_argument("--pq-client-service-type", action='append', default=[])
+    parser.add_argument("--enable-datastreams", action='store_true', default=False)
+    parser.add_argument("--enable-pqcd", action='store_true', default=False)
+    parsed, _ = parser.parse_known_args()
+    arguments = EmptyArguments()
+    arguments.suppress_version_check = parsed.suppress_version_check
+    arguments.ydb_working_dir = parsed.ydb_working_dir
+    if parsed.use_packages is not None:
+        arguments.use_packages = parsed.use_packages
+    if parsed.debug_logging:
+        arguments.debug_logging = parsed.debug_logging
+    arguments.enable_pq = parsed.enable_pq
+    arguments.pq_client_service_types = parsed.pq_client_service_type
+    arguments.enable_datastreams = parsed.enable_datastreams
+    arguments.enable_pqcd = parsed.enable_pqcd
+    return arguments
+
+
+def start_recipe(args):
+    arguments = produce_arguments(args)
+    return deploy(arguments)
+
+
+def stop_recipe(args):
+    arguments = produce_arguments(args)
+    cleanup(arguments)

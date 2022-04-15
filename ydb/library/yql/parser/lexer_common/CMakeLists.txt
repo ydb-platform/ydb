@@ -11,7 +11,10 @@ add_library(yql-parser-lexer_common)
 target_link_libraries(yql-parser-lexer_common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  yql-public-issue
 )
 target_sources(yql-parser-lexer_common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/tokens.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/hints.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/lexer_common/parse_hints_impl.cpp
 )

@@ -1,3 +1,5 @@
+# Агрегатные функции
+
 {% include [simple.md](_includes/aggregation/simple.md) %}
 
 {% include [count_distinct_estimate.md](_includes/aggregation/count_distinct_estimate.md) %}

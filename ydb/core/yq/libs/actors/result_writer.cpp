@@ -19,7 +19,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/yq/libs/private_client/internal_service.h>
 
 #define LOG_E(stream)                                                        \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
@@ -37,29 +37,18 @@ using namespace NDqs;
 class TResultWriter : public NActors::TActorBootstrapped<TResultWriter> {
 public:
     TResultWriter(
-        const NYdb::TDriver& driver,
         const NActors::TActorId& executerId,
         const TString& resultType,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const NConfig::TPrivateApiConfig& privateApiConfig,
         const TResultId& resultId,
         const TVector<TString>& columns,
         const TString& traceId,
-        const TInstant& deadline,
-        const NMonitoring::TDynamicCounterPtr& clientCounters)
+        const TInstant& deadline)
         : ExecuterId(executerId)
         , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
         , ResultId({resultId})
         , TraceId(traceId)
         , Deadline(deadline)
-        , Client(
-            driver,
-            NYdb::TCommonClientSettings()
-                .DiscoveryEndpoint(privateApiConfig.GetTaskServiceEndpoint())
-                .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = privateApiConfig.GetSaKeyFile(), .IamEndpoint = privateApiConfig.GetIamEndpoint()}))
-                .EnableSsl(privateApiConfig.GetSecureTaskService())
-                .Database(privateApiConfig.GetTaskServiceDatabase() ? privateApiConfig.GetTaskServiceDatabase(): TMaybe<TString>()),
-            clientCounters)
+        , InternalServiceId(MakeInternalServiceActorId())
     { }
 
     static constexpr char ActorName[] = "YQ_RESULT_WRITER";
@@ -78,7 +67,7 @@ private:
         HFunc(TEvReadyState, OnReadyState);
         HFunc(TEvQueryResponse, OnQueryResult);
 
-        hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, HandleResponse);
+        hFunc(TEvInternalService::TEvWriteResultResponse, HandleResponse);
     )
 
     void PassAway() {
@@ -123,14 +112,14 @@ private:
 
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { }
 
-    void HandleResponse(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
+    void HandleResponse(TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
         const auto& issues = ev->Get()->Issues;
-        auto it = Requests.find(ev->Get()->RequestId);
         if (issues) {
             SendIssuesAndSetErrorFlag(issues);
             return;
         }
 
+        auto it = Requests.find(ev->Get()->Result.request_id());
         if (it == Requests.end()) {
             HasError = true;
             auto req = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false, /*needFallback=*/false);
@@ -196,29 +185,7 @@ private:
             return;
         }
         ++InflightCounter;
-        const auto actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto selfId = SelfId();
-        Client
-            .WriteTaskResult(std::move(ResultChunks[CurChunkInd++]))
-            .Subscribe([actorSystem, selfId](const auto& future) {
-                try {
-                    const auto& wrappedResult = future.GetValue();
-                    if (wrappedResult.IsResultSet()) {
-                        actorSystem->Send(selfId,
-                            new NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse(wrappedResult.GetIssues(), wrappedResult.GetResult().request_id()));
-                    } else {
-                        auto issues = wrappedResult.GetIssues();
-                        issues.AddIssue("Error on writing result");
-                        actorSystem->Send(selfId,
-                            new NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse(issues, UINT64_MAX));
-                    }
-                } catch(...) {
-                    TIssues issues;
-                    issues.AddIssue(CurrentExceptionMessage());
-                        actorSystem->Send(selfId,
-                            new NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse(issues, UINT64_MAX));
-                }
-            });
+        Send(InternalServiceId, new TEvInternalService::TEvWriteResultRequest(std::move(ResultChunks[CurChunkInd++])));
     }
 
     void ConstructResults(const Ydb::ResultSet& resultSet, ui64 startRowIndex) {
@@ -338,7 +305,6 @@ private:
     const TResultId ResultId;
     const TString TraceId;
     TInstant Deadline;
-    TPrivateClient Client;
     const TInstant StartTime = TInstant::Now();
 
     ui64 RowIndex = 0;
@@ -355,21 +321,18 @@ private:
     TVector<Yq::Private::WriteTaskResultRequest> ResultChunks;
     size_t CurChunkInd = 0;
     ui32 InflightCounter = 0;
+    TActorId InternalServiceId;
 };
 
 NActors::IActor* CreateResultWriter(
-    const NYdb::TDriver& driver,
     const NActors::TActorId& executerId,
     const TString& resultType,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,
     const TVector<TString>& columns,
     const TString& traceId,
-    const TInstant& deadline,
-    const NMonitoring::TDynamicCounterPtr& clientCounters)
+    const TInstant& deadline)
 {
-    return new TResultWriter(driver, executerId, resultType, credentialsProviderFactory, privateApiConfig, resultId, columns, traceId, deadline, clientCounters);
+    return new TResultWriter(executerId, resultType, resultId, columns, traceId, deadline);
 }
 
 } // namespace NYq

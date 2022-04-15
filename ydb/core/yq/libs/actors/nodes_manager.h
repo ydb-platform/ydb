@@ -18,20 +18,17 @@ namespace NYq {
 
 using namespace NActors;
 
-TActorId MakeYqlNodesManagerId();
-TActorId MakeYqlNodesManagerHttpId();
+TActorId MakeNodesManagerId();
 
-IActor* CreateYqlNodesManager(
+IActor* CreateNodesManager(
     const NYql::NDqs::TWorkerManagerCounters& workerManagerCounters,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort,
     const TString& tenant = "",
-    ui64 mkqlInitialMemoryLimit = 0,
-    const NMonitoring::TDynamicCounterPtr& clientCounters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+    ui64 mkqlInitialMemoryLimit = 0);
 
 }

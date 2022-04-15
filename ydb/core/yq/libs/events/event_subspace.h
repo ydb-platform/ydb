@@ -26,6 +26,7 @@ struct TYqEventSubspace {
         ControlPlaneProxy,
         AuditService,
         TestConnection,
+        InternalService,
 
         SubspacesEnd,
     };

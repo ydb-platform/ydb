@@ -7,6 +7,8 @@
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/health/health.h>
+#include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/yq/libs/private_client/internal_service.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
@@ -175,21 +177,29 @@ void Init(
 
     ::NYql::NCommon::TServiceCounters serviceCounters(appData->Counters);
 
+    if (protoConfig.GetNodesManager().GetEnabled() || protoConfig.GetPendingFetcher().GetEnabled()) {
+        auto internal = CreateInternalServiceActor(
+            yqSharedResources,
+            credentialsProviderFactory,
+            protoConfig.GetPrivateApi(),
+            clientCounters
+            );
+        actorRegistrator(MakeInternalServiceActorId(), internal);
+    }
+
     if (protoConfig.GetNodesManager().GetEnabled()) {
-        auto nodesManager = CreateYqlNodesManager(
+        auto nodesManager = CreateNodesManager(
             workerManagerCounters,
             TAppData::TimeProvider,
             TAppData::RandomProvider,
             serviceCounters,
             protoConfig.GetPrivateApi(),
             yqSharedResources,
-            credentialsProviderFactory,
             icPort,
             tenant,
-            mkqlInitialMemoryLimit,
-            clientCounters);
+            mkqlInitialMemoryLimit);
 
-        actorRegistrator(MakeYqlNodesManagerId(), nodesManager);
+        actorRegistrator(MakeNodesManagerId(), nodesManager);
     }
 
     auto httpProxy = NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance());

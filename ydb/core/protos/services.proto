@@ -301,6 +301,7 @@ enum EServiceKikimr {
     YQ_AUDIT = 1150;
     YQ_AUDIT_EVENT_SENDER = 1151;
     YQ_HEALTH = 1152;
+    FQ_INTERNAL_SERVICE = 1153;
 
     // 1024 - 1099 is reserved for nbs
 

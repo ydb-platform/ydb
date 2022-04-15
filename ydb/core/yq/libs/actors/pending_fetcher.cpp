@@ -47,7 +47,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/yq/libs/private_client/internal_service.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -78,8 +78,7 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
-        EvGetTaskInternalResponse = EvBegin,
-        EvCleanupCounters,
+        EvCleanupCounters = EvBegin,
 
         EvEnd
     };
@@ -87,21 +86,6 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvGetTaskInternalResponse : public NActors::TEventLocal<TEvGetTaskInternalResponse, EvGetTaskInternalResponse> {
-        bool Success = false;
-        const TIssues Issues;
-        const Yq::Private::GetTaskResult Result;
-
-        TEvGetTaskInternalResponse(
-                                   bool success,
-                                   const TIssues& issues,
-                                   const Yq::Private::GetTaskResult& result)
-            : Success(success)
-            , Issues(issues)
-            , Result(result)
-        { }
-    };
-
     struct TEvCleanupCounters : public NActors::TEventLocal<TEvCleanupCounters, EvCleanupCounters> {
         TEvCleanupCounters(const TString& queryId, const NActors::TActorId& runActorId)
             : QueryId(queryId)
@@ -161,15 +145,8 @@ public:
         , PqCmConnections(std::move(pqCmConnections))
         , Guid(CreateGuidAsString())
         , ClientCounters(clientCounters)
-        , Client(
-            YqSharedResources->CoreYdbDriver,
-            NYdb::TCommonClientSettings()
-                .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
-                .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = PrivateApiConfig.GetSaKeyFile(), .IamEndpoint = PrivateApiConfig.GetIamEndpoint()}))
-                .EnableSsl(PrivateApiConfig.GetSecureTaskService())
-                .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
-            ClientCounters)
         , TenantName(tenantName)
+        , InternalServiceId(MakeInternalServiceActorId())
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -226,7 +203,7 @@ private:
         CountersMap.erase(countersIt);
     }
 
-    void HandleResponse(TEvPrivate::TEvGetTaskInternalResponse::TPtr& ev) {
+    void Handle(TEvInternalService::TEvGetTaskResponse::TPtr& ev) {
         HasRunningRequest = false;
         LOG_D("Got GetTask response from PrivateApi");
         if (!ev->Get()->Success) {
@@ -270,28 +247,7 @@ private:
         request.set_owner_id(Guid);
         request.set_host(HostName());
         request.set_tenant(TenantName);
-        const auto actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto selfId = SelfId();
-        Client
-            .GetTask(std::move(request))
-            .Subscribe([actorSystem, selfId](const NThreading::TFuture<TGetTaskResult>& future) {
-                try {
-                    const auto& wrappedResult = future.GetValue();
-                    if (wrappedResult.IsResultSet()) {
-                        actorSystem->Send(selfId, new TEvPrivate::TEvGetTaskInternalResponse(
-                            wrappedResult.IsSuccess(), wrappedResult.GetIssues(), wrappedResult.GetResult())
-                        );
-                    } else {
-                        actorSystem->Send(selfId, new TEvPrivate::TEvGetTaskInternalResponse(
-                            false, TIssues{{TIssue{"grpc private api result is not set for get task call"}}}, Yq::Private::GetTaskResult{})
-                        );
-                    }
-                } catch (...) {
-                    actorSystem->Send(selfId, new TEvPrivate::TEvGetTaskInternalResponse(
-                        false, TIssues{{TIssue{CurrentExceptionMessage()}}}, Yq::Private::GetTaskResult{})
-                    );
-                }
-            });
+        Send(InternalServiceId, new TEvInternalService::TEvGetTaskRequest(request));
     }
 
     void ProcessTask(const Yq::Private::GetTaskResult& result) {
@@ -386,7 +342,7 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
         HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        hFunc(TEvPrivate::TEvGetTaskInternalResponse, HandleResponse)
+        hFunc(TEvInternalService::TEvGetTaskResponse, Handle)
         hFunc(NActors::TEvents::TEvPoisonTaken, HandlePoisonTaken)
         hFunc(TEvPrivate::TEvCleanupCounters, HandleCleanupCounters)
     );
@@ -419,7 +375,6 @@ private:
 
     const TString Guid; //OwnerId
     const NMonitoring::TDynamicCounterPtr ClientCounters;
-    TPrivateClient Client;
 
     TMaybe<NYql::NLog::TScopedBackend<NYql::NDq::TYqlLogScope>> LogScope;
 
@@ -432,6 +387,7 @@ private:
     TMap<TString, TQueryCountersInfo> CountersMap;
     TMap<TActorId, TString> RunActorMap;
     TString TenantName;
+    TActorId InternalServiceId;
 };
 
 

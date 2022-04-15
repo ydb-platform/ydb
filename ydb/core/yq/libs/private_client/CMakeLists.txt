@@ -8,6 +8,9 @@
 
 
 add_library(yq-libs-private_client)
+target_compile_options(yq-libs-private_client PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(yq-libs-private_client PUBLIC
   contrib-libs-cxxsupp
   yutil
@@ -15,7 +18,11 @@ target_link_libraries(yq-libs-private_client PUBLIC
   cpp-protobuf-json
   api-grpc-draft
   cpp-client-ydb_table
+  libs-control_plane_storage-proto
+  yq-libs-shared_resources
+  ydb-core-protos
 )
 target_sources(yq-libs-private_client PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/internal_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/private_client.cpp
 )

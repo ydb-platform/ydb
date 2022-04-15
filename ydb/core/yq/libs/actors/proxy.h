@@ -67,16 +67,12 @@ struct TResultId {
 };
 
 NActors::IActor* CreateResultWriter(
-    const NYdb::TDriver& driver,
     const NActors::TActorId& executerId,
     const TString& resultType,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,
     const TVector<TString>& columns,
     const TString& traceId,
-    const TInstant& deadline,
-    const NMonitoring::TDynamicCounterPtr& clientCounters
+    const TInstant& deadline
     );
 
 NActors::IActor* CreatePingerActor(
@@ -85,7 +81,6 @@ NActors::IActor* CreatePingerActor(
     const TString& userId,
     const TString& id,
     const TString& owner,
-    const NYq::TPrivateClient& client,
     const NActors::TActorId parent,
     const NConfig::TPingerConfig& config,
     TInstant deadline,

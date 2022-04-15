@@ -112,14 +112,6 @@ public:
                 Params.UserId,
                 Params.QueryId,
                 Params.Owner,
-                TPrivateClient(
-                    Params.YqSharedResources->CoreYdbDriver,
-                    NYdb::TCommonClientSettings()
-                    .DiscoveryEndpoint(Params.PrivateApiConfig.GetTaskServiceEndpoint())
-                    .CredentialsProviderFactory(Params.CredentialsProviderFactory({.SaKeyFile = Params.PrivateApiConfig.GetSaKeyFile(), .IamEndpoint = Params.PrivateApiConfig.GetIamEndpoint()}))
-                    .EnableSsl(Params.PrivateApiConfig.GetSecureTaskService())
-                    .Database(Params.PrivateApiConfig.GetTaskServiceDatabase() ? Params.PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
-                    Params.ClientCounters),
                 SelfId(),
                 Params.PingerConfig,
                 Params.Deadline,
@@ -817,7 +809,7 @@ private:
         dqConfiguration->FreezeDefaults();
         dqConfiguration->FallbackPolicy = "never";
 
-        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
+        ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, QueryCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
 
         NActors::TActorId resultId;
         if (dqGraphParams.GetResultType()) {
@@ -834,8 +826,8 @@ private:
             }
             resultId = NActors::TActivationContext::Register(
                     CreateResultWriter(
-                        Params.YqSharedResources->UserSpaceYdbDriver, ExecuterId, dqGraphParams.GetResultType(), Params.CredentialsProviderFactory, Params.PrivateApiConfig,
-                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ClientCounters));
+                        ExecuterId, dqGraphParams.GetResultType(),
+                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline));
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
             resultId = ExecuterId;

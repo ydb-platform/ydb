@@ -9,7 +9,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
-#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/yq/libs/private_client/internal_service.h>
 #include <library/cpp/actors/core/log.h>
 #include <util/system/hostname.h>
 #include <ydb/core/protos/services.pb.h>
@@ -28,33 +28,14 @@ using namespace NActors;
 using namespace NYql;
 using namespace NDqs;
 
-struct TEvHealthNodesResponse : public NActors::TEventLocal<TEvHealthNodesResponse, NActors::TEvents::TSystem::Completed>{
-    bool Success;
-    NYdb::EStatus Status;
-    const NYql::TIssues Issues;
-    Yq::Private::NodesHealthCheckResult Record;
-
-    explicit TEvHealthNodesResponse(
-        const bool success,
-        const NYdb::EStatus& status,
-        const TIssues& issues,
-        const Yq::Private::NodesHealthCheckResult& record)
-        : Success(success)
-        , Status(status)
-        , Issues(issues)
-        , Record(record)
-    { }
-};
-
-class TYqlNodesManagerActor : public NActors::TActorBootstrapped<TYqlNodesManagerActor> {
+class TNodesManagerActor : public NActors::TActorBootstrapped<TNodesManagerActor> {
 public:
     enum EWakeUp {
         WU_NodesHealthCheck
     };
 
-    TYqlNodesManagerActor(
+    TNodesManagerActor(
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NDqs::TWorkerManagerCounters& workerManagerCounters,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -62,8 +43,7 @@ public:
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const ui32& icPort,
         const TString& tenant,
-        ui64 mkqlInitialMemoryLimit,
-        const NMonitoring::TDynamicCounterPtr& clientCounters)
+        ui64 mkqlInitialMemoryLimit)
         : WorkerManagerCounters(workerManagerCounters)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
@@ -73,14 +53,7 @@ public:
         , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
         , YqSharedResources(yqSharedResources)
         , IcPort(icPort)
-        , Client(
-            YqSharedResources->CoreYdbDriver,
-            NYdb::TCommonClientSettings()
-                .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
-                .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = PrivateApiConfig.GetSaKeyFile(), .IamEndpoint = PrivateApiConfig.GetIamEndpoint()}))
-                .EnableSsl(PrivateApiConfig.GetSecureTaskService())
-                .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
-            clientCounters)
+        , InternalServiceId(MakeInternalServiceActorId())
 
     {
         InstanceId = GetGuidAsString(RandomProvider->GenUuid4());
@@ -94,7 +67,7 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
-        Become(&TYqlNodesManagerActor::StateFunc);
+        Become(&TNodesManagerActor::StateFunc);
         ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
         LOG_I("Bootstrap STARTED");
         NodesHealthCheck();
@@ -163,7 +136,7 @@ private:
         hFunc(NDqs::TEvAllocateWorkersRequest, Handle)
         hFunc(NDqs::TEvFreeWorkersNotify, Handle)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        hFunc(TEvHealthNodesResponse, HandleResponse)
+        hFunc(TEvInternalService::TEvHealthCheckResponse, HandleResponse)
         )
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -192,34 +165,22 @@ private:
         node.set_memory_limit(AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic()));
         node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic()));
         node.set_interconnect_port(IcPort);
-        // node.set_node_address(Address); // TODO: Clarify Address use and necessity
-        const auto actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto selfId = SelfId();
-        Client
-            .NodesHealthCheck(std::move(request))
-            .Subscribe([actorSystem, selfId](const auto& future) {
-                const auto& wrappedResult = future.GetValue();
-                if (wrappedResult.IsResultSet()) {
-                    actorSystem->Send(selfId,
-                        new TEvHealthNodesResponse{wrappedResult.IsSuccess(), wrappedResult.GetStatus(),
-                            wrappedResult.GetIssues(), wrappedResult.GetResult()});
-                }
-            });
+        Send(InternalServiceId, new TEvInternalService::TEvHealthCheckRequest(request));
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        LOG_E("TYqlNodesManagerActor::OnUndelivered");
+        LOG_E("TNodesManagerActor::OnUndelivered");
         ServiceCounters.Counters->GetCounter("OnUndelivered", true)->Inc();
     }
 
-    void HandleResponse(TEvHealthNodesResponse::TPtr& ev) {
+    void HandleResponse(TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
         try {
             const auto& status = ev->Get()->Status;
             THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo());
             if (!ev->Get()->Success) {
                 ythrow yexception() <<  status << '\n' << ev->Get()->Issues.ToString();
             }
-            const auto& res = ev->Get()->Record;
+            const auto& res = ev->Get()->Result;
 
             auto& nodesInfo = nameServiceUpdateReq->Nodes;
             nodesInfo.reserve(res.nodes().size());
@@ -266,8 +227,6 @@ private:
 
     const ui32 IcPort; // Interconnect Port
 
-    TPrivateClient Client;
-
     struct TPeer {
         ui32 NodeId;
         TString InstanceId;
@@ -279,33 +238,27 @@ private:
     ui32 ResourceIdPart = 0;
     ui32 NextPeer = 0;
     TString InstanceId;
+    TActorId InternalServiceId;
 };
 
-TActorId MakeYqlNodesManagerId() {
-    constexpr TStringBuf name = "YQLNODESCTRL";
+TActorId MakeNodesManagerId() {
+    constexpr TStringBuf name = "FQNODEMAN";
     return NActors::TActorId(0, name);
 }
 
-TActorId MakeYqlNodesManagerHttpId() {
-    constexpr TStringBuf name = "YQLHTTPNODES";
-    return NActors::TActorId(0, name);
-}
-
-IActor* CreateYqlNodesManager(
+IActor* CreateNodesManager(
     const NDqs::TWorkerManagerCounters& workerManagerCounters,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort,
     const TString& tenant,
-    ui64 mkqlInitialMemoryLimit,
-    const NMonitoring::TDynamicCounterPtr& clientCounters) {
-    return new TYqlNodesManagerActor(yqSharedResources, credentialsProviderFactory, workerManagerCounters,
+    ui64 mkqlInitialMemoryLimit) {
+    return new TNodesManagerActor(yqSharedResources, workerManagerCounters,
         timeProvider, randomProvider,
-        serviceCounters, privateApiConfig, icPort, tenant, mkqlInitialMemoryLimit, clientCounters);
+        serviceCounters, privateApiConfig, icPort, tenant, mkqlInitialMemoryLimit);
 }
 
 } // namespace NYq

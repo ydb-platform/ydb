@@ -5,6 +5,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/private_client/internal_service.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -147,7 +148,6 @@ public:
         const TString& userId,
         const TString& id,
         const TString& ownerId,
-        const TPrivateClient& client,
         const TActorId parent,
         const NConfig::TPingerConfig& config,
         TInstant deadline,
@@ -159,11 +159,11 @@ public:
         , UserId(userId)
         , Id(id)
         , OwnerId(ownerId)
-        , Client(client)
         , Parent(parent)
         , Deadline(deadline)
         , QueryCounters(queryCounters)
         , CreatedAt(createdAt)
+        , InternalServiceId(MakeInternalServiceActorId())
     {
     }
 
@@ -181,7 +181,7 @@ private:
         StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         hFunc(NActors::TEvents::TEvWakeup, Wakeup)
-        hFunc(TEvPingResponse, Handle)
+        hFunc(TEvInternalService::TEvPingTaskResponse, Handle)
         hFunc(TEvents::TEvForwardPingRequest, Handle)
     )
 
@@ -262,12 +262,12 @@ private:
         }
     }
 
-    static bool Retryable(TEvPingResponse::TPtr& ev) {
-        if (ev->Get()->Result.IsTransportError()) {
+    static bool Retryable(TEvInternalService::TEvPingTaskResponse::TPtr& ev) {
+        if (ev->Get()->TransportError) {
             return true;
         }
 
-        const NYdb::EStatus status = ev->Get()->Result.GetStatus();
+        const NYdb::EStatus status = ev->Get()->Status;
         if (status == NYdb::EStatus::INTERNAL_ERROR
             || status == NYdb::EStatus::UNAVAILABLE
             || status == NYdb::EStatus::OVERLOADED
@@ -281,14 +281,14 @@ private:
         return false;
     }
 
-    void Handle(TEvPingResponse::TPtr& ev) {
+    void Handle(TEvInternalService::TEvPingTaskResponse::TPtr& ev) {
         if (FatalError) {
             LOG_D("Got ping response after fatal error. Ignore");
             return;
         }
 
         const TInstant now = TActivationContext::Now();
-        const bool success = ev->Get()->Result.IsSuccess();
+        const bool success = ev->Get()->Success;
         const bool retryable = !success && Retryable(ev);
         const bool continueLeaseRequest = ev->Cookie == ContinueLeaseRequestCookie;
         TRetryState* retryState = nullptr;
@@ -317,9 +317,9 @@ private:
         }
 
         if (success) {
-            LOG_D("Ping response success: " << ev->Get()->Result.GetResult());
+            LOG_D("Ping response success: " << ev->Get()->Result);
             StartLeaseTime = now;
-            auto action = ev->Get()->Action;
+            auto action = ev->Get()->GetAction();
             if (action != YandexQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
                 LOG_D("Query action: " << YandexQuery::QueryAction_Name(action));
                 SendQueryAction(action);
@@ -328,7 +328,7 @@ private:
             if (continueLeaseRequest) {
                 ScheduleNextPing();
             } else {
-                Send(Parent, new TEvents::TEvForwardPingResponse(true, ev->Get()->Action), 0, ev->Cookie);
+                Send(Parent, new TEvents::TEvForwardPingResponse(true, action), 0, ev->Cookie);
                 ForwardRequests.pop_front();
 
                 // Process next forward ping request.
@@ -337,15 +337,15 @@ private:
                 }
             }
         } else if (retryAfter) {
-            LOG_W("Ping response error: " << ev->Get()->Result.GetIssues().ToOneLineString() << ". Retry after: " << *retryAfter);
+            LOG_W("Ping response error: " << ev->Get()->Issues.ToOneLineString() << ". Retry after: " << *retryAfter);
             Schedule(*retryAfter, new NActors::TEvents::TEvWakeup(continueLeaseRequest ? RetryContinueLeaseWakeupTag : RetryForwardPingRequestWakeupTag));
         } else {
             TRetryState* retryStateForLogging = retryState;
             if (!retryStateForLogging) {
                 retryStateForLogging = continueLeaseRequest ? &RetryState : &ForwardRequests.front().RetryState;
             }
-            LOG_E("Ping response error: " << ev->Get()->Result.GetIssues().ToOneLineString() << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
-            Send(Parent, new TEvents::TEvForwardPingResponse(false, ev->Get()->Action), 0, ev->Cookie);
+            LOG_E("Ping response error: " << ev->Get()->Issues.ToOneLineString() << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
+            Send(Parent, new TEvents::TEvForwardPingResponse(false, ev->Get()->GetAction()), 0, ev->Cookie);
             FatalError = true;
             ForwardRequests.clear();
         }
@@ -391,25 +391,7 @@ private:
         request.set_owner_id(OwnerId);
         request.mutable_query_id()->set_value(Id);
         *request.mutable_deadline() = NProtoInterop::CastToProto(Deadline);
-
-        const auto* actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto selfId = SelfId();
-        LOG_T("Send ping task request: " << request);
-        auto future = Client.PingTask(std::move(request));
-        future.Subscribe(
-            [actorSystem, selfId, cookie, future](const NThreading::TFuture<TPingTaskResult>&) mutable {
-                std::unique_ptr<TEvPingResponse> ev;
-                try {
-                    auto result = future.ExtractValue();
-                    ev = std::make_unique<TEvPingResponse>(std::move(result));
-                } catch (...) {
-                    ev = std::make_unique<TEvPingResponse>(TStringBuilder()
-                        << "Exception on ping response: "
-                        << CurrentExceptionMessage());
-                }
-                actorSystem->Send(new IEventHandle(selfId, selfId, ev.release(), 0, cookie));
-            }
-        );
+        Send(InternalServiceId, new TEvInternalService::TEvPingTaskRequest(request), 0, cookie);
     }
 
     static constexpr ui64 ContinueLeaseRequestCookie = Max();
@@ -427,7 +409,6 @@ private:
     const TString UserId;
     const TString Id;
     const TString OwnerId;
-    TPrivateClient Client;
 
     bool Requested = false;
     TInstant StartLeaseTime;
@@ -443,6 +424,7 @@ private:
     bool FatalError = false; // Nonretryable error from PingTask or all retries finished.
 
     TSchedulerCookieHolder SchedulerCookieHolder;
+    TActorId InternalServiceId;
 };
 
 IActor* CreatePingerActor(
@@ -451,7 +433,6 @@ IActor* CreatePingerActor(
     const TString& userId,
     const TString& id,
     const TString& ownerId,
-    const TPrivateClient& client,
     const TActorId parent,
     const NConfig::TPingerConfig& config,
     TInstant deadline,
@@ -464,7 +445,6 @@ IActor* CreatePingerActor(
         userId,
         id,
         ownerId,
-        client,
         parent,
         config,
         deadline,

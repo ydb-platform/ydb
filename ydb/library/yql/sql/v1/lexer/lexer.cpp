@@ -35,11 +35,11 @@ public:
     }
 
     bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) override {
-        issues.Clear();
+        NYql::TIssues newIssues;
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-        NSQLTranslation::TErrorCollectorOverIssues collector(issues, maxErrors, "");
+        NSQLTranslation::TErrorCollectorOverIssues collector(newIssues, maxErrors, "");
         if (Ansi) {
             NProtoAST::TLexerTokensCollector<NALPAnsi::SQLv1Lexer> tokensCollector(query, (const char**)NALPAnsi::SQLv1ParserTokenNames, queryName);
             tokensCollector.CollectTokens(collector, onNextToken);
@@ -48,7 +48,8 @@ public:
             tokensCollector.CollectTokens(collector, onNextToken);
         }
 
-        return !AnyOf(issues.begin(), issues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });
+        issues.AddIssues(newIssues);
+        return !AnyOf(newIssues.begin(), newIssues.end(), [](auto issue) { return issue.GetSeverity() == NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR; });
     }
 
 private:

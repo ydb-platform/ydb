@@ -29,15 +29,16 @@ void TSQLHint::Out(IOutputStream& o) const {
 
 namespace {
 
-TPosition ExtractPosition(const TParsedToken& token) {
-    return TPosition(token.LinePos + 1, token.Line);
-}
-
 class TTokenProcessor {
 public:
-    explicit TTokenProcessor(TSQLHints& hints)
-        : Hints(hints)
+    TTokenProcessor(const TString& queryFile, TSQLHints& hints)
+        : QueryFile(queryFile)
+        , Hints(hints)
     {}
+
+    TPosition ExtractPosition(const TParsedToken& token) const {
+        return TPosition(token.LinePos + 1, token.Line, QueryFile);
+    }
 
     void ProcessToken(TParsedToken&& token) {
         if (token.Name == "EOF") {
@@ -67,13 +68,14 @@ public:
 
 private:
     TMaybe<TPosition> PrevNonCommentPos;
+    const TString QueryFile;
     TSQLHints& Hints;
 };
 
 }
 
-bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors) {
-    TTokenProcessor tp(hints);
+bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName, const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors) {
+    TTokenProcessor tp(queryFile, hints);
     return lexer.Tokenize(query, queryName, [&tp](TParsedToken&& token) { tp.ProcessToken(std::move(token)); }, issues, maxErrors);
 }
 

@@ -319,7 +319,7 @@ private:
         if (success) {
             LOG_D("Ping response success: " << ev->Get()->Result);
             StartLeaseTime = now;
-            auto action = ev->Get()->GetAction();
+            auto action = ev->Get()->Result.action();
             if (action != YandexQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
                 LOG_D("Query action: " << YandexQuery::QueryAction_Name(action));
                 SendQueryAction(action);
@@ -345,7 +345,8 @@ private:
                 retryStateForLogging = continueLeaseRequest ? &RetryState : &ForwardRequests.front().RetryState;
             }
             LOG_E("Ping response error: " << ev->Get()->Issues.ToOneLineString() << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
-            Send(Parent, new TEvents::TEvForwardPingResponse(false, ev->Get()->GetAction()), 0, ev->Cookie);
+            auto action = ev->Get()->Success ? ev->Get()->Result.action() : YandexQuery::QUERY_ACTION_UNSPECIFIED;
+            Send(Parent, new TEvents::TEvForwardPingResponse(false, action), 0, ev->Cookie);
             FatalError = true;
             ForwardRequests.clear();
         }

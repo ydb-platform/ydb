@@ -29,81 +29,36 @@ struct TEvInternalService {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::InternalService), "All events must be in their subspace");
 
-    struct TEvHealthCheckRequest : public NActors::TEventLocal<TEvHealthCheckRequest, EvHealthCheckRequest> {
-        Yq::Private::NodesHealthCheckRequest Request;
+    template <class TProtoRequest, ui32 TEventType>
+    struct TInternalServiceRequestEvent : public NActors::TEventLocal<TInternalServiceRequestEvent<TProtoRequest, TEventType>, TEventType> {
+        TProtoRequest Request;
         TInstant SentAt;
-        explicit TEvHealthCheckRequest(const Yq::Private::NodesHealthCheckRequest& request)
+        explicit TInternalServiceRequestEvent(const TProtoRequest& request) 
             : Request(request), SentAt(Now())
         { }
     };
 
-    struct TEvHealthCheckResponse : public NActors::TEventLocal<TEvHealthCheckResponse, EvHealthCheckResponse>{
-        bool Success;
-        NYdb::EStatus Status;
-        const NYql::TIssues Issues;
-        Yq::Private::NodesHealthCheckResult Result;
-        TEvHealthCheckResponse(bool success, NYdb::EStatus status, const NYql::TIssues& issues, const Yq::Private::NodesHealthCheckResult& result)
-            : Success(success), Status(status), Issues(issues), Result(result)
-        { }
-    };
+    using TEvHealthCheckRequest = TInternalServiceRequestEvent<Yq::Private::NodesHealthCheckRequest, EvHealthCheckRequest>;
+    using TEvGetTaskRequest = TInternalServiceRequestEvent<Yq::Private::GetTaskRequest, EvGetTaskRequest>;
+    using TEvPingTaskRequest = TInternalServiceRequestEvent<Yq::Private::PingTaskRequest, EvPingTaskRequest>;
+    using TEvWriteResultRequest = TInternalServiceRequestEvent<Yq::Private::WriteTaskResultRequest, EvWriteResultRequest>;
 
-    struct TEvGetTaskRequest : public NActors::TEventLocal<TEvGetTaskRequest, EvGetTaskRequest> {
-        Yq::Private::GetTaskRequest Request;
-        TInstant SentAt;
-        explicit TEvGetTaskRequest(const Yq::Private::GetTaskRequest& request)
-            : Request(request), SentAt(Now())
-        { }
-    };
-
-    struct TEvGetTaskResponse : public NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
+    template <class TProtoResult, ui32 TEventType>
+    struct TInternalServiceResponseEvent : public NActors::TEventLocal<TInternalServiceResponseEvent<TProtoResult, TEventType>, TEventType> {
         bool Success = false;
         NYdb::EStatus Status;
         const NYql::TIssues Issues;
-        const Yq::Private::GetTaskResult Result;
-        TEvGetTaskResponse(bool success, NYdb::EStatus status, const NYql::TIssues& issues, const Yq::Private::GetTaskResult& result)
-            : Success(success), Status(status), Issues(issues), Result(result)
-        { }
-    };
-
-    struct TEvPingTaskRequest : public NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
-        Yq::Private::PingTaskRequest Request;
-        TInstant SentAt;
-        explicit TEvPingTaskRequest(const Yq::Private::PingTaskRequest& request)
-            : Request(request), SentAt(Now())
-        { }
-    };
-
-    struct TEvPingTaskResponse : public NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {
-        bool Success = false;
-        NYdb::EStatus Status;
-        const NYql::TIssues Issues;
-        const Yq::Private::PingTaskResult Result;
+        TProtoResult Result;
         bool TransportError = false;
-        TEvPingTaskResponse(bool success, NYdb::EStatus status, const NYql::TIssues& issues, const Yq::Private::PingTaskResult& result, bool transportError = false)
+        explicit TInternalServiceResponseEvent(bool success, NYdb::EStatus status, const NYql::TIssues& issues, const TProtoResult& result, bool transportError = false) 
             : Success(success), Status(status), Issues(issues), Result(result), TransportError(transportError)
         { }
-        YandexQuery::QueryAction GetAction() {
-            return Success ? Result.action() : YandexQuery::QUERY_ACTION_UNSPECIFIED;
-        }
     };
 
-    struct TEvWriteResultRequest : public NActors::TEventLocal<TEvWriteResultRequest, EvWriteResultRequest> {
-        Yq::Private::WriteTaskResultRequest Request;
-        TInstant SentAt;
-        explicit TEvWriteResultRequest(const Yq::Private::WriteTaskResultRequest& request)
-            : Request(request), SentAt(Now())
-        { }
-    };
-
-    struct TEvWriteResultResponse : public NActors::TEventLocal<TEvWriteResultResponse, EvWriteResultResponse> {
-        bool Success = false;
-        NYdb::EStatus Status;
-        const NYql::TIssues Issues;
-        const Yq::Private::WriteTaskResultResult Result;
-        TEvWriteResultResponse(bool success, NYdb::EStatus status, const NYql::TIssues& issues, const Yq::Private::WriteTaskResultResult& result)
-            : Success(success), Status(status), Issues(issues), Result(result)
-        { }
-    };
+    using TEvHealthCheckResponse = TInternalServiceResponseEvent<Yq::Private::NodesHealthCheckResult, EvHealthCheckResponse>;
+    using TEvGetTaskResponse = TInternalServiceResponseEvent<Yq::Private::GetTaskResult, EvGetTaskResponse>;
+    using TEvPingTaskResponse = TInternalServiceResponseEvent<Yq::Private::PingTaskResult, EvPingTaskResponse>;
+    using TEvWriteResultResponse = TInternalServiceResponseEvent<Yq::Private::WriteTaskResultResult, EvWriteResultResponse>;
 };
 
 NActors::TActorId MakeInternalServiceActorId();

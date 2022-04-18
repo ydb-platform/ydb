@@ -144,12 +144,16 @@ public:
 
 public:
     STATEFN(WaitResolveState) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
-            hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
-            hFunc(TEvents::TEvWakeup, HandleTimeout);
-            default:
-                UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvents::TEvWakeup, HandleTimeout);
+                default:
+                    UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
         }
         ReportEventElapsedTime();
     }
@@ -1069,7 +1073,8 @@ private:
                 }
 
                 default: {
-                    YQL_ENSURE(false, "Unexpected table operation: " << (ui32) op.GetTypeCase());
+                    YQL_ENSURE(false, "Unexpected table operation: " << (ui32) op.GetTypeCase() << Endl
+                        << this->DebugString());
                 }
             }
         }
@@ -1106,7 +1111,8 @@ private:
                     case NKqpProto::TKqpPhyConnection::kMerge:
                         break;
                     default:
-                        YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase());
+                        YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl
+                            << this->DebugString());
                 }
             }
 
@@ -1693,7 +1699,7 @@ public:
         channelDesc.SetSrcTaskId(channel.SrcTask);
         channelDesc.SetDstTaskId(channel.DstTask);
 
-        YQL_ENSURE(channel.SrcTask);
+        YQL_ENSURE(channel.SrcTask, "" << this->DebugString());
         FillEndpointDesc(*channelDesc.MutableSrcEndpoint(), TasksGraph.GetTask(channel.SrcTask));
 
         if (channel.DstTask) {

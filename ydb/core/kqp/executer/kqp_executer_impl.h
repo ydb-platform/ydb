@@ -374,7 +374,7 @@ protected:
                 break;
             }
             default:
-                YQL_ENSURE(false, "Unexpected task input type: " + ToString(static_cast<int>(input.Type())));
+                YQL_ENSURE(false, "Unexpected task input type: " << (int) input.Type() << Endl << this->DebugString());
         }
 
         for (ui64 channel : input.Channels) {
@@ -386,7 +386,7 @@ protected:
     void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {
         switch (output.Type) {
             case TTaskOutputType::Map:
-                YQL_ENSURE(output.Channels.size() == 1);
+                YQL_ENSURE(output.Channels.size() == 1, "" << this->DebugString());
                 outputDesc.MutableMap();
                 break;
 
@@ -429,7 +429,7 @@ protected:
             }
 
             default: {
-                YQL_ENSURE(false, "Unexpected task output type " << output.Type);
+                YQL_ENSURE(false, "Unexpected task output type " << output.Type << Endl << this->DebugString());
             }
         }
 
@@ -460,7 +460,7 @@ protected:
                 auto [type, value] = NMiniKQL::ImportValueFromProto(
                     literalValue.GetType(), literalValue.GetValue(), typeEnv, holderFactory);
 
-                YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
+                YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data, "" << this->DebugString());
                 itemsLimit = value.Get<ui64>();
                 itemsLimitType = type;
 
@@ -479,7 +479,7 @@ protected:
                 auto [type, value] = NMiniKQL::ImportValueFromProto(
                     itemsLimitParam->GetType(), itemsLimitParam->GetValue(), typeEnv, holderFactory);
 
-                YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
+                YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data, "" << this->DebugString());
                 itemsLimit = value.Get<ui64>();
 
                 NYql::NDq::TDqDataSerializer dataSerializer(typeEnv, holderFactory, NYql::NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
@@ -621,6 +621,18 @@ protected:
         if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType) {
             IActor::PassAway();
         }
+    }
+
+protected:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "[KqpExecuter], type: " << (ExecType == EExecType::Data ? "Data" : "Scan")
+           << ", Database: " << Database << ", TxId: " << TxId << ", TxCnt: " << Request.Transactions.size()
+           << ", Transactions: " << Endl;
+        for (const auto& tx : Request.Transactions) {
+            sb << "tx: " << tx.Body.DebugString() << Endl;
+        }
+        return std::move(sb);
     }
 
 protected:

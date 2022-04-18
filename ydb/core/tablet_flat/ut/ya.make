@@ -22,6 +22,7 @@ SRCS(
     flat_executor_ut.cpp
     flat_executor_database_ut.cpp
     flat_executor_gclogic_ut.cpp
+    flat_executor_leases_ut.cpp
     flat_range_cache_ut.cpp
     flat_row_versions_ut.cpp
     flat_sausagecache_ut.cpp
@@ -64,6 +65,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet_flat/test/libs/exec
     ydb/core/tablet_flat/test/libs/table
+    ydb/core/testlib
     ydb/library/yql/public/udf/service/exception_policy
 )
 

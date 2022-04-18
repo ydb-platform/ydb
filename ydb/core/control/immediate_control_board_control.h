@@ -16,6 +16,7 @@ public:
     TControl(TAtomicBase defaultValue, TAtomicBase lowerBound, TAtomicBase upperBound);
 
     void Set(TAtomicBase newValue);
+    void Reset(TAtomicBase defaultValue, TAtomicBase lowerBound, TAtomicBase upperBound);
 
     TAtomicBase SetFromHtmlRequest(TAtomicBase newValue);
 

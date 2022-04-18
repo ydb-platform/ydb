@@ -7,6 +7,7 @@ OWNER(
 
 SRCS(
     defs.h
+    flat_boot_lease.cpp
     flat_boot_misc.cpp
     flat_comp.cpp
     flat_comp_create.cpp

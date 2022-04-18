@@ -204,7 +204,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
     return true;
 }
 
-void TDirectTxErase::SendResult(TDataShard* self, const TActorContext& ctx) {
+TDirectTxResult TDirectTxErase::GetResult(TDataShard* self) {
     Y_VERIFY(Result);
 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TEvEraseRowsResponse::OK) {
@@ -213,7 +213,11 @@ void TDirectTxErase::SendResult(TDataShard* self, const TActorContext& ctx) {
         self->IncCounter(COUNTER_ERASE_ROWS_ERROR);
     }
 
-    ctx.Send(Ev->Sender, std::move(Result));
+    TDirectTxResult res;
+    res.Target = Ev->Sender;
+    res.Event = std::move(Result);
+    res.Cookie = 0;
+    return res;
 }
 
 TVector<NMiniKQL::IChangeCollector::TChange> TDirectTxErase::GetCollectedChanges() const {

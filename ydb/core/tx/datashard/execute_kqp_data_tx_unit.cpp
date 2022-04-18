@@ -183,10 +183,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         AddLocksToResult(op, ctx);
 
-        if (op->IsImmediate() && !op->IsReadOnly()) {
-            DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
-        }
-
         if (auto changes = dataTx->GetCollectedChanges()) {
             op->ChangeRecords().reserve(changes.size());
             for (const auto& change : changes) {

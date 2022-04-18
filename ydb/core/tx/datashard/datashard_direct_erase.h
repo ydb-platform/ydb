@@ -66,7 +66,7 @@ public:
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error);
 
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) override;
-    void SendResult(TDataShard* self, const TActorContext& ctx) override;
+    TDirectTxResult GetResult(TDataShard* self) override;
     TVector<IChangeCollector::TChange> GetCollectedChanges() const override;
 };
 

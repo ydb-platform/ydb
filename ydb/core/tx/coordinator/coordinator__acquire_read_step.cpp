@@ -96,8 +96,24 @@ void TTxCoordinator::Handle(TEvTxProxy::TEvAcquireReadStep::TPtr& ev, const TAct
     LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID()
         << " HANDLE TEvAcquireReadStep");
 
+    IncCounter(COUNTER_REQ_ACQUIRE_READ_STEP);
+
     if (Y_UNLIKELY(Stopping)) {
         // We won't be able to commit anyway
+        return;
+    }
+
+    if (ReadOnlyLeaseEnabled()) {
+        // We acquire read step using a read-only lease from executor
+        // It is guaranteed that any future generation was not running at
+        // the time ConfirmReadOnlyLease was called.
+        TActorId sender = ev->Sender;
+        ui64 cookie = ev->Cookie;
+        ui64 step = Max(VolatileState.LastSentStep, VolatileState.LastAcquired);
+        VolatileState.LastAcquired = step;
+        Executor()->ConfirmReadOnlyLease([this, sender, cookie, step]() {
+            Send(sender, new TEvTxProxy::TEvAcquireReadStepResult(TabletID(), step), 0, cookie);
+        });
         return;
     }
 

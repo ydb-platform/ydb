@@ -124,6 +124,14 @@ namespace NKqpHelpers {
         return ev->Get()->Record.GetResponse().GetSessionId();
     }
 
+    inline void CloseSession(TTestActorRuntime& runtime, TActorId sender, const TString& sessionId) {
+        auto request = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        request->Record.MutableRequest()->SetSessionId(sessionId);
+        runtime.Send(
+            new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()),
+            0, /* via actor system */ true);
+    }
+
     inline THolder<NKqp::TEvKqp::TEvQueryRequest> MakeStreamRequest(
         const TActorId sender,
         const TString& sql,

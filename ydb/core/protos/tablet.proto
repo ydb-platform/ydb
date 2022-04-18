@@ -60,6 +60,11 @@ message TTabletTypes {
     }
 }
 
+message TTabletLogMetadata {
+    optional uint32 Key = 1;
+    optional bytes Data = 2;
+}
+
 message TTabletLogEntry {
     // normal log entries
     repeated uint32 DependsOn = 1;
@@ -79,6 +84,7 @@ message TTabletLogEntry {
     repeated fixed64 ZeroTailBitmask = 12;
 
     optional bytes EmbeddedLogBody = 13;
+    repeated TTabletLogMetadata EmbeddedMetadata = 14;
 }
 
 message TTabletChannelInfo {
@@ -237,4 +243,12 @@ message TEvTabletStop {
 
     optional uint64 TabletID = 1;
     optional EReason Reason = 2;
+}
+
+message TEvDropLease {
+    optional uint64 TabletID = 1;
+}
+
+message TEvLeaseDropped {
+    optional uint64 TabletID = 1;
 }

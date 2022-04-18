@@ -50,6 +50,8 @@ const ui32 TTxCoordinator::Schema::CurrentVersion = 1;
 TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+    , EnableLeaderLeases(0, 0, 1)
+    , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
 #ifdef COORDINATOR_LOG_TO_FILE
     , DebugName(Sprintf("/tmp/coordinator_db_log_%" PRIu64 ".%" PRIi32 ".%" PRIu64 ".gz", TabletID(), getpid(), tablet.LocalId()))
     , DebugLogFile(DebugName)
@@ -316,7 +318,28 @@ void TTxCoordinator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, cons
     }
 }
 
+void TTxCoordinator::IcbRegister() {
+    if (!IcbRegistered) {
+        AppData()->Icb->RegisterSharedControl(EnableLeaderLeases, "CoordinatorControls.EnableLeaderLeases");
+        AppData()->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "CoordinatorControls.MinLeaderLeaseDurationUs");
+        IcbRegistered = true;
+    }
+}
+
+bool TTxCoordinator::ReadOnlyLeaseEnabled() {
+    IcbRegister();
+    ui64 value = EnableLeaderLeases;
+    return value != 0;
+}
+
+TDuration TTxCoordinator::ReadOnlyLeaseDuration() {
+    IcbRegister();
+    ui64 value = MinLeaderLeaseDurationUs;
+    return TDuration::MicroSeconds(value);
+}
+
 void TTxCoordinator::OnActivateExecutor(const TActorContext &ctx) {
+    IcbRegister();
     TryInitMonCounters(ctx);
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxSchema(), ctx);

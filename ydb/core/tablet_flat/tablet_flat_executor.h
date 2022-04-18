@@ -452,6 +452,10 @@ namespace NFlatExecutorSetup {
 
         virtual void OnLeaderUserAuxUpdate(TString) { /* default */ }
 
+        virtual bool ReadOnlyLeaseEnabled();
+        virtual TDuration ReadOnlyLeaseDuration();
+        virtual void ReadOnlyLeaseDropped();
+
         // create transaction?
     protected:
         ITablet(TTabletStorageInfo *info, const TActorId &tablet)
@@ -495,6 +499,10 @@ namespace NFlatExecutorSetup {
         virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
 
         virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
+
+        virtual void ConfirmReadOnlyLease(TMonotonic at) = 0;
+        virtual void ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) = 0;
+        virtual void ConfirmReadOnlyLease(std::function<void()> callback) = 0;
 
         /* Make blob with data required for table bootstapping. Note:
             1. Once non-trivial blob obtained and commited in tx all of its

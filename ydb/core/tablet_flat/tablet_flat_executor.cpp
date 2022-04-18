@@ -44,6 +44,18 @@ namespace NFlatExecutorSetup {
         if (launcherID)
             LauncherActorID = launcherID;
     }
+
+    bool ITablet::ReadOnlyLeaseEnabled() {
+        return false;
+    }
+
+    TDuration ITablet::ReadOnlyLeaseDuration() {
+        return TDuration::MilliSeconds(250);
+    }
+
+    void ITablet::ReadOnlyLeaseDropped() {
+        // nothing by default
+    }
 }
 
 }}

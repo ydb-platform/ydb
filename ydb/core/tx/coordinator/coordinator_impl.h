@@ -8,6 +8,8 @@
 #include <library/cpp/actors/helpers/mon_histogram_helper.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -461,6 +463,10 @@ private:
         i64 CurrentTxInFly;
     };
 
+    bool IcbRegistered = false;
+    TControlWrapper EnableLeaderLeases;
+    TControlWrapper MinLeaderLeaseDurationUs;
+
     TVolatileState VolatileState;
     TConfig Config;
     TCoordinatorMonCounters MonCounters;
@@ -501,6 +507,14 @@ private:
             *MonCounters.TxInFly -= MonCounters.CurrentTxInFly;
 
         return TActor::Die(ctx);
+    }
+
+    void IcbRegister();
+    bool ReadOnlyLeaseEnabled() override;
+    TDuration ReadOnlyLeaseDuration() override;
+
+    void IncCounter(NFlatTxCoordinator::ECumulativeCounters counter, ui64 num = 1) {
+        TabletCounters->Cumulative()[counter].Increment(num);
     }
 
     void OnActivateExecutor(const TActorContext &ctx) override;

@@ -29,6 +29,15 @@ public:
     bool IsTheSame(TControlWrapper another) {
         return Control == another.Control;
     }
+
+    /**
+     * Resets an existing control to different values.
+     *
+     * WARNING: this method is not thread safe and may only be used during initialization.
+     */
+    void Reset(TAtomicBase defaultValue, TAtomicBase lowerBound, TAtomicBase upperBound) {
+        Control->Reset(defaultValue, lowerBound, upperBound);
+    }
 };
 
 class TMemorizableControlWrapper {

@@ -207,9 +207,6 @@ namespace Tests {
         const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
         SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams);
 
-        CreateBootstrapTablets();
-        SetupStorage();
-
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
             Runtime->GetAppData(nodeIdx).AuthConfig.MergeFrom(Settings->AuthConfig);
@@ -223,6 +220,9 @@ namespace Tests {
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }
+
+        CreateBootstrapTablets();
+        SetupStorage();
     }
 
     void TServer::SetupMessageBus(ui16 port, const TString &tracePath) {

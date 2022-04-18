@@ -14,7 +14,7 @@ public:
     explicit TDirectTxUpload(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
 
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion) override;
-    void SendResult(TDataShard* self, const TActorContext& ctx) override;
+    TDirectTxResult GetResult(TDataShard* self) override;
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const override;
 };
 

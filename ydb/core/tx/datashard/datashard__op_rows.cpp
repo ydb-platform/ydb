@@ -132,6 +132,11 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
 }
 
 void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
+    if (MediatorStateWaiting) {
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
     if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
     } else {
@@ -140,6 +145,11 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
 }
 
 void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
+    if (MediatorStateWaiting) {
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return;
+    }
     if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);
     } else {

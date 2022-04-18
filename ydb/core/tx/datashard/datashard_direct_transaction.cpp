@@ -31,16 +31,25 @@ void TDirectTransaction::BuildExecutionPlan(bool loaded)
 }
 
 bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
-    auto [readVersion, writeVersion] = self->GetReadWriteVersions();
+    auto [readVersion, writeVersion] = self->GetReadWriteVersions(this);
     if (!Impl->Execute(self, txc, readVersion, writeVersion))
         return false;
 
-    self->PromoteCompleteEdge(writeVersion.Step, txc);
+    if (self->IsMvccEnabled()) {
+        // Note: we always wait for completion, so we can ignore the result
+        self->PromoteImmediatePostExecuteEdges(writeVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+    }
+
     return true;
 }
 
 void TDirectTransaction::SendResult(TDataShard* self, const TActorContext& ctx) {
-    Impl->SendResult(self, ctx);
+    auto result = Impl->GetResult(self);
+    if (MvccReadWriteVersion) {
+        self->SendImmediateWriteResult(*MvccReadWriteVersion, result.Target, result.Event.Release(), result.Cookie);
+    } else {
+        ctx.Send(result.Target, result.Event.Release(), 0, result.Cookie);
+    }
 }
 
 TVector<NMiniKQL::IChangeCollector::TChange> TDirectTransaction::GetCollectedChanges() const {

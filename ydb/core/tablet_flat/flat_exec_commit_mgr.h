@@ -175,6 +175,7 @@ namespace NTabletFlatExecutor {
             ev->FollowerAux = std::move(commit.FollowerAux);
             ev->GcDiscovered = std::move(commit.GcDelta.Created);
             ev->GcLeft = std::move(commit.GcDelta.Deleted);
+            ev->EmbeddedMetadata = std::move(commit.Metadata);
 
             Ops->Send(Owner, ev, 0, ui64(commit.Type));
         }

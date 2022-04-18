@@ -12,8 +12,10 @@ bool TDirectTxUpload::Execute(TDataShard* self, TTransactionContext& txc, const 
     return TCommonUploadOps::Execute(self, txc, readVersion, writeVersion);
 }
 
-void TDirectTxUpload::SendResult(TDataShard* self, const TActorContext& ctx) {
-    TCommonUploadOps::SendResult(self, ctx);
+TDirectTxResult TDirectTxUpload::GetResult(TDataShard* self) {
+    TDirectTxResult res;
+    TCommonUploadOps::GetResult(self, res.Target, res.Event, res.Cookie);
+    return res;
 }
 
 TVector<NMiniKQL::IChangeCollector::TChange> TDirectTxUpload::GetCollectedChanges() const {

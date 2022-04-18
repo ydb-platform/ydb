@@ -83,6 +83,8 @@ SRCS(
     mon_stats.h
     monotonic.cpp
     monotonic.h
+    monotonic_provider.cpp
+    monotonic_provider.h
     worker_context.cpp
     worker_context.h
     probes.cpp

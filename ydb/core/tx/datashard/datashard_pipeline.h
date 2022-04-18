@@ -329,11 +329,11 @@ public:
 
     ui64 WaitingTxs() const { return WaitingDataTxOps.size(); }
     bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
-    void ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx);
+    void ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, const TActorContext& ctx);
     void ActivateWaitingTxOps(const TActorContext& ctx);
 
     TRowVersion GetReadEdge() const;
-    TRowVersion GetUnreadableEdge() const;
+    TRowVersion GetUnreadableEdge(bool prioritizedReads) const;
 
     void AddCompletingOp(const TOperation::TPtr& op);
     void RemoveCompletingOp(const TOperation::TPtr& op);

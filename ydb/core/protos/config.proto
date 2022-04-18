@@ -1178,6 +1178,28 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 PrioritizedMvccSnapshotReads = 8 [(ControlOptions) = {
+            Description: "Enables prioritized mvcc snapshot reads over immediate writes",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 UnprotectedMvccSnapshotReads = 9 [(ControlOptions) = {
+            Description: "Enables unprotected (fully readonly) mvcc snapshot reads",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+
+        optional uint64 EnableLeaderLeases = 10 [(ControlOptions) = {
+            Description: "Enables leader leases for processing read-only queries",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MinLeaderLeaseDurationUs = 11 [(ControlOptions) = {
+            Description: "The minimum leader lease duration in microseconds",
+            MinValue: 1000,
+            MaxValue: 5000000,
+            DefaultValue: 250000 }];
     }
 
     message TTxLimitControls {
@@ -1203,8 +1225,22 @@ message TImmediateControlsConfig {
             DefaultValue: 60000 }];
     }
 
+    message TCoordinatorControls {
+        optional uint64 EnableLeaderLeases = 1 [(ControlOptions) = {
+            Description: "Enables leader leases for processing read-only queries",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MinLeaderLeaseDurationUs = 2 [(ControlOptions) = {
+            Description: "The minimum leader lease duration in microseconds",
+            MinValue: 1000,
+            MaxValue: 5000000,
+            DefaultValue: 250000 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
+    optional TCoordinatorControls CoordinatorControls = 3;
 };
 
 message TMeteringConfig {

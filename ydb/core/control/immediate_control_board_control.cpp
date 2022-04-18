@@ -15,6 +15,13 @@ void TControl::Set(TAtomicBase newValue) {
     AtomicSet(Default, newValue);
 }
 
+void TControl::Reset(TAtomicBase defaultValue, TAtomicBase lowerBound, TAtomicBase upperBound) {
+    Value = defaultValue;
+    Default = defaultValue;
+    LowerBound = lowerBound;
+    UpperBound = upperBound;
+}
+
 TAtomicBase TControl::SetFromHtmlRequest(TAtomicBase newValue) {
     TAtomicBase prevValue = AtomicGet(Value);
     if (newValue == AtomicGet(Default)) {

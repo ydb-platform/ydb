@@ -68,6 +68,10 @@ namespace NBoot {
         const ui32 Raw = 0; /* only lower 24 bits are used */
     };
 
+    enum class ELogCommitMeta : ui32 {
+        LeaseInfo = 1,
+    };
+
 }
 }
 }

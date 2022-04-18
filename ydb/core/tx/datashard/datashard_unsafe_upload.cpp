@@ -14,12 +14,26 @@ bool TDataShard::TTxUnsafeUploadRows::Execute(TTransactionContext& txc, const TA
     if (!TCommonUploadOps::Execute(Self, txc, readVersion, writeVersion))
         return false;
 
-    Self->PromoteCompleteEdge(writeVersion.Step, txc);
+    if (Self->IsMvccEnabled()) {
+        // Note: we always wait for completion, so we can ignore the result
+        Self->PromoteImmediatePostExecuteEdges(writeVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+        MvccVersion = writeVersion;
+    }
+
     return true;
 }
 
 void TDataShard::TTxUnsafeUploadRows::Complete(const TActorContext& ctx) {
-    TCommonUploadOps::SendResult(Self, ctx);
+    TActorId target;
+    THolder<IEventBase> event;
+    ui64 cookie;
+    TCommonUploadOps::GetResult(Self, target, event, cookie);
+
+    if (MvccVersion) {
+        Self->SendImmediateWriteResult(MvccVersion, target, event.Release(), cookie);
+    } else {
+        ctx.Send(target, event.Release(), 0, cookie);
+    }
 }
 
 } // NDataShard

@@ -52,6 +52,7 @@ struct TEvTablet {
         EvFollowerSyncComplete, // from leader to user tablet when all old followers are touched and synced
         EvCutTabletHistory,
         EvUpdateConfig,
+        EvDropLease,
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -60,6 +61,7 @@ struct TEvTablet {
         EvTabletActive,
         EvPromoteToLeader,
         EvFGcAck, // from user tablet to follower
+        EvLeaseDropped,
 
         EvTabletDead = EvBoot + 1024,
         EvFollowerUpdateState, // notifications to guardian
@@ -101,6 +103,16 @@ struct TEvTablet {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TABLET)");
 
+    struct TCommitMetadata {
+        ui32 Key;
+        TString Data;
+
+        TCommitMetadata(ui32 key, TString data)
+            : Key(key)
+            , Data(std::move(data))
+        { }
+    };
+
     struct TDependencyGraph : public TThrRefBase {
         struct TEntry {
             std::pair<ui32, ui32> Id;
@@ -111,28 +123,29 @@ struct TEvTablet {
             TVector<TLogoBlobID> GcLeft;
 
             TString EmbeddedLogBody;
+            TVector<TCommitMetadata> EmbeddedMetadata;
 
-            TEntry()
-                : IsSnapshot(false)
-            {}
+            TEntry(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &&refs, bool isSnapshot,
+                    TVector<TLogoBlobID> &&gcDiscovered, TVector<TLogoBlobID> &&gcLeft,
+                    TVector<TCommitMetadata> &&metadata)
+                : Id(id)
+                , IsSnapshot(isSnapshot)
+                , References(std::move(refs))
+                , GcDiscovered(std::move(gcDiscovered))
+                , GcLeft(std::move(gcLeft))
+                , EmbeddedMetadata(std::move(metadata))
+            { }
 
-            void Set(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &refs, bool isSnapshot, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
-                Id = id;
-                References.swap(refs);
-                IsSnapshot = isSnapshot;
-                GcDiscovered.swap(gcDiscovered);
-                GcLeft.swap(gcLeft);
-                EmbeddedLogBody.clear();
-            }
-
-            void Set(const std::pair<ui32, ui32> &id, const TString &embeddedLogBody, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
-                Id = id;
-                References.clear();
-                IsSnapshot = false;
-                GcDiscovered.swap(gcDiscovered);
-                GcLeft.swap(gcLeft);
-                EmbeddedLogBody = embeddedLogBody;
-            }
+            TEntry(const std::pair<ui32, ui32> &id, TString embeddedLogBody,
+                    TVector<TLogoBlobID> &&gcDiscovered, TVector<TLogoBlobID> &&gcLeft,
+                    TVector<TCommitMetadata> &&metadata)
+                : Id(id)
+                , IsSnapshot(false)
+                , GcDiscovered(std::move(gcDiscovered))
+                , GcLeft(std::move(gcLeft))
+                , EmbeddedLogBody(std::move(embeddedLogBody))
+                , EmbeddedMetadata(std::move(metadata))
+            { }
         };
 
         std::pair<ui32, ui32> Snapshot;
@@ -148,19 +161,23 @@ struct TEvTablet {
                 << " entries " << Entries.size() << "}";
         }
 
-        void AddEntry(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &references, bool isSnapshot, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
+        TEntry& AddEntry(const std::pair<ui32, ui32> &id, TVector<TLogoBlobID> &&refs, bool isSnapshot,
+                TVector<TLogoBlobID> &&gcDiscovered, TVector<TLogoBlobID> &&gcLeft,
+                TVector<TCommitMetadata> &&metadata)
+        {
             if (isSnapshot) {
                 Snapshot = id;
                 Entries.clear();
             }
 
-            Entries.push_back(TEntry());
-            Entries.back().Set(id, references, isSnapshot, gcDiscovered, gcLeft);
+            return Entries.emplace_back(id, std::move(refs), isSnapshot, std::move(gcDiscovered), std::move(gcLeft), std::move(metadata));
         }
 
-        void AddEntry(const std::pair<ui32, ui32> &id, const TString &embeddedLogBody, TVector<TLogoBlobID> &gcDiscovered, TVector<TLogoBlobID> &gcLeft) {
-            Entries.push_back(TEntry());
-            Entries.back().Set(id, embeddedLogBody, gcDiscovered, gcLeft);
+        TEntry& AddEntry(const std::pair<ui32, ui32> &id, TString embeddedLogBody,
+                TVector<TLogoBlobID> &&gcDiscovered, TVector<TLogoBlobID> &&gcLeft,
+                TVector<TCommitMetadata> &&metadata)
+        {
+            return Entries.emplace_back(id, std::move(embeddedLogBody), std::move(gcDiscovered), std::move(gcLeft), std::move(metadata));
         }
 
         void Invalidate() {
@@ -268,6 +285,8 @@ struct TEvTablet {
 
         TString EmbeddedLogBody;
         TString FollowerAux;
+
+        TVector<TCommitMetadata> EmbeddedMetadata;
 
         TEvCommit(ui64 tabletId, ui32 gen, ui32 step, const TVector<ui32> &dependsOn, bool isSnapshot
                 , bool preCommited = false
@@ -777,6 +796,22 @@ struct TEvTablet {
     };
 
     struct TEvTabletStopped : TEventLocal<TEvTabletStopped, EvTabletStopped> {};
+
+    struct TEvDropLease : TEventPB<TEvDropLease, NKikimrTabletBase::TEvDropLease, EvDropLease> {
+        TEvDropLease() = default;
+
+        explicit TEvDropLease(ui64 tabletId) {
+            Record.SetTabletID(tabletId);
+        }
+    };
+
+    struct TEvLeaseDropped : TEventPB<TEvLeaseDropped, NKikimrTabletBase::TEvLeaseDropped, EvLeaseDropped> {
+        TEvLeaseDropped() = default;
+
+        explicit TEvLeaseDropped(ui64 tabletId) {
+            Record.SetTabletID(tabletId);
+        }
+    };
 };
 
 IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId = 0, ui32 maxGeneration = Max<ui32>());

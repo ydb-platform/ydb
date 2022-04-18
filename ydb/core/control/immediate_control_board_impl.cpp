@@ -15,8 +15,14 @@ bool TControlBoard::RegisterLocalControl(TControlWrapper control, TString name) 
     return result;
 }
 
-void TControlBoard::RegisterSharedControl(TControlWrapper& control, TString name) {
-    control.Control = Board.InsertIfAbsent(name, control.Control);
+bool TControlBoard::RegisterSharedControl(TControlWrapper& control, TString name) {
+    auto& ptr = Board.InsertIfAbsent(name, control.Control);
+    if (control.Control == ptr) {
+        return true;
+    } else {
+        control.Control = ptr;
+        return false;
+    }
 }
 
 void TControlBoard::RestoreDefaults() {

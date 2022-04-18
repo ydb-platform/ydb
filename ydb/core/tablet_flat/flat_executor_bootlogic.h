@@ -74,8 +74,9 @@ private:
     TAutoPtr<NBoot::TBack> State_;
     TAutoPtr<NBoot::TResult> Result_;
     TAutoPtr<NBoot::TRoot> Steps;
+    TActorId LeaseWaiter;
 
-    TInstant BootStartTime;
+    TMonotonic BootTimestamp;
 
     const TIntrusiveConstPtr<TTabletStorageInfo> Info;
 
@@ -91,6 +92,7 @@ private:
     EOpResult CheckCompletion();
 
     void PrepareEnv(bool follower, ui32 generation, TExecutorCaches caches) noexcept;
+    void StartLeaseWaiter(TMonotonic bootTimestamp, const TEvTablet::TDependencyGraph& graph) noexcept;
     ui32 GetBSGroupFor(const TLogoBlobID &logo) const;
     ui32 GetBSGroupID(ui32 channel, ui32 generation);
     void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>);

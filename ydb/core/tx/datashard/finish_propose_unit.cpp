@@ -20,6 +20,7 @@ public:
                   const TActorContext &ctx) override;
 
 private:
+    TDataShard::TPromotePostExecuteEdges PromoteImmediatePostExecuteEdges(TOperation* op, TTransactionContext& txc);
     void CompleteRequest(TOperation::TPtr op,
                          const TActorContext &ctx);
     void AddDiagnosticsResult(TOutputOpData::TResultPtr &res);
@@ -43,6 +44,27 @@ bool TFinishProposeUnit::IsReadyToExecute(TOperation::TPtr) const
     return true;
 }
 
+TDataShard::TPromotePostExecuteEdges TFinishProposeUnit::PromoteImmediatePostExecuteEdges(
+        TOperation* op,
+        TTransactionContext& txc)
+{
+    if (op->IsMvccSnapshotRead()) {
+        if (op->IsMvccSnapshotRepeatable()) {
+            return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::RepeatableRead, txc);
+        } else {
+            return DataShard.PromoteImmediatePostExecuteEdges(op->GetMvccSnapshot(), TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
+        }
+    } else if (op->MvccReadWriteVersion) {
+        if (op->IsReadOnly()) {
+            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadOnly, txc);
+        } else {
+            return DataShard.PromoteImmediatePostExecuteEdges(*op->MvccReadWriteVersion, TDataShard::EPromotePostExecuteEdges::ReadWrite, txc);
+        }
+    } else {
+        return { };
+    }
+}
+
 EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
@@ -53,24 +75,18 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
     bool hadWrites = false;
 
     // When mvcc is enabled we perform marking after transaction is executed
-    if (DataShard.IsMvccEnabled() && op->IsImmediate()) {
-        if (op->IsMvccSnapshotRead()) {
-            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(op->GetMvccSnapshot(), txc);
-            if (op->IsMvccSnapshotRepeatable()) {
-                hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc);
-                if (!hadWrites && DataShard.GetSnapshotManager().GetCommittedCompleteEdge() < op->GetMvccSnapshot()) {
-                    // We need to wait for completion because some other transaction
-                    // has moved complete edge, but it's not committed yet.
-                    op->SetWaitCompletionFlag(true);
-                }
-            }
-        } else if (op->MvccReadWriteVersion) {
-            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(*op->MvccReadWriteVersion, txc);
+    if (op->IsAborted()) {
+        // Make sure we confirm aborts with a commit
+        op->SetWaitCompletionFlag(true);
+    } else if (DataShard.IsMvccEnabled() && op->IsImmediate()) {
+        auto res = PromoteImmediatePostExecuteEdges(op.Get(), txc);
+
+        if (res.HadWrites) {
+            hadWrites = true;
+            res.WaitCompletion = true;
         }
 
-        if (hadWrites) {
-            // FIXME: even if transaction itself didn't promote, we may still need to
-            // wait for completion, when current in-memory state is not actually committed
+        if (res.WaitCompletion) {
             op->SetWaitCompletionFlag(true);
         }
     }
@@ -159,8 +175,16 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
 
     DataShard.IncCounter(COUNTER_TX_RESULT_SIZE, res->Record.GetTxResult().size());
 
-    if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId()))
-        ctx.Send(op->GetTarget(), res.Release(), 0, op->GetCookie());
+    if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
+        if (op->IsImmediate() && !op->IsReadOnly() && !op->IsAborted() && op->MvccReadWriteVersion) {
+            DataShard.SendImmediateWriteResult(*op->MvccReadWriteVersion, op->GetTarget(), res.Release(), op->GetCookie());
+        } else if (op->IsImmediate() && op->IsReadOnly() && !op->IsAborted()) {
+            // TODO: we should actually measure a read timestamp and use it here
+            DataShard.SendImmediateReadResult(op->GetTarget(), res.Release(), op->GetCookie());
+        } else {
+            ctx.Send(op->GetTarget(), res.Release(), 0, op->GetCookie());
+        }
+    }
 }
 
 void TFinishProposeUnit::AddDiagnosticsResult(TOutputOpData::TResultPtr &res)

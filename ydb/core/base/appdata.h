@@ -21,6 +21,7 @@
 
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/core/executor_thread.h>
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/actors/util/should_continue.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -116,6 +117,7 @@ struct TAppData {
 
     static TIntrusivePtr<IRandomProvider> RandomProvider;
     static TIntrusivePtr<ITimeProvider> TimeProvider;
+    TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;
     TIntrusivePtr<TDomainsInfo> DomainsInfo;
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
     TIntrusivePtr<TDynamicNameserviceConfig> DynamicNameserviceConfig;

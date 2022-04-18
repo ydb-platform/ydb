@@ -171,13 +171,6 @@ bool TConfigsManager::IsConfigItemScopeAllowed(TConfigItem::TPtr item,
                 return false;
         return config.AllowedHostScopeKinds.contains(item->Kind);
     }
-    if (item->UsageScope.Tenant && item->UsageScope.NodeType)
-        return (config.AllowedTenantScopeKinds.contains(item->Kind)
-                && config.AllowedNodeTypeScopeKinds.contains(item->Kind));
-    if (item->UsageScope.Tenant)
-        return config.AllowedTenantScopeKinds.contains(item->Kind);
-    if (item->UsageScope.NodeType)
-        return config.AllowedNodeTypeScopeKinds.contains(item->Kind);
     return !config.DisallowedDomainScopeKinds.contains(item->Kind);
 }
 

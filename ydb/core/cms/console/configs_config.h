@@ -20,8 +20,6 @@ struct TConfigsConfig {
 
     THashSet<ui32> AllowedNodeIdScopeKinds;
     THashSet<ui32> AllowedHostScopeKinds;
-    THashSet<ui32> AllowedTenantScopeKinds;
-    THashSet<ui32> AllowedNodeTypeScopeKinds;
     THashSet<ui32> DisallowedDomainScopeKinds;
 
     NKikimrConsole::EValidationLevel ValidationLevel;

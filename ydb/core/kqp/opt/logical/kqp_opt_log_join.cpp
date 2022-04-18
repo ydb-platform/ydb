@@ -281,9 +281,11 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    auto leftData = Build<TDqPrecompute>(ctx, join.Pos())
-        .Input(join.LeftInput())
-        .Done();
+    TExprBase leftData = join.LeftInput().Maybe<TCoParameter>()
+        ? join.LeftInput()
+        : Build<TDqPrecompute>(ctx, join.Pos())
+            .Input(join.LeftInput())
+            .Done();
     auto leftDataDeduplicated = DeduplicateByMembers(leftData, leftJoinKeys, ctx, join.Pos());
 
     if (!equalLeftKeys.empty())    {

@@ -290,6 +290,9 @@ TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
 }
 
 bool RequireLookupPrecomputeStage(const TKqlLookupTable& lookup) {
+    if (lookup.LookupKeys().Maybe<TCoParameter>()) {
+        return false;
+    }
     if (!lookup.LookupKeys().Maybe<TCoAsList>()) {
         return true;
     }

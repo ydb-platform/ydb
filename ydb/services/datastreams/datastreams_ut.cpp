@@ -28,6 +28,9 @@ struct WithSslAndAuth : TKikimrTestSettings {
 };
 using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
 
+static constexpr const char NON_CHARGEABLE_USER[] = "superuser@bultin";
+static constexpr const char NON_CHARGEABLE_USER_X[] = "superuser_x@bultin";
+static constexpr const char NON_CHARGEABLE_USER_Y[] = "superuser_y@bultin";
 
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
@@ -43,6 +46,9 @@ public:
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetFlushIntervalSec(1);
         appConfig.MutablePQConfig()->AddClientServiceType()->SetName("data-streams");
+        appConfig.MutablePQConfig()->AddNonChargeableUser(NON_CHARGEABLE_USER);
+        appConfig.MutablePQConfig()->AddNonChargeableUser(NON_CHARGEABLE_USER_X);
+        appConfig.MutablePQConfig()->AddNonChargeableUser(NON_CHARGEABLE_USER_Y);
 
         MeteringFile = MakeHolder<TTempFileHandle>("meteringData.txt");
         appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
@@ -92,7 +98,8 @@ public:
 using TInsecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchema, false>;
 using TSecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchemaSecure, true>;
 
-void CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath) {
+void CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
+                       std::function<void(const NJson::TJsonValue::TMapType& map)> usage_check) {
     Sleep(TDuration::Seconds(1));
     meteringFile->Flush();
     meteringFile->Close();
@@ -121,15 +128,21 @@ void CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath)
         if (!tags.empty()) {
             UNIT_ASSERT_VALUES_EQUAL(tags.size(), 3);
         }
-        UNIT_ASSERT(map.contains("usage"));
-        auto& usage = map.find("usage")->second.GetMap();
-        UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
+        usage_check(map);
     }
     UNIT_ASSERT(totalLines >= 2);
 }
 
 
 #define Y_UNIT_TEST_NAME this->Name_;
+
+
+#define SET_YDS_LOCALS                               \
+    auto& kikimr = testServer.KikimrServer->Server_; \
+    Y_UNUSED(kikimr);                                \
+    auto& driver = testServer.Driver;                \
+    Y_UNUSED(driver);                                \
+
 
 Y_UNIT_TEST_SUITE(DataStreams) {
 
@@ -242,7 +255,43 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         }
-        CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName);
+        CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName,
+                          [](const NJson::TJsonValue::TMapType& map) {
+                              UNIT_ASSERT(map.contains("usage"));
+                              auto& usage = map.find("usage")->second.GetMap();
+                              UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
+                          });
+    }
+
+    Y_UNIT_TEST(TestNonChargeableUser) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        SET_YDS_LOCALS;
+        NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken(NON_CHARGEABLE_USER));
+
+        {
+            auto result = client.CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(3)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {  // for metering purposes
+            std::vector<NYDS_V1::TDataRecord> records;
+            for (ui32 i = 1; i <= 30; ++i) {
+                TString data = Sprintf("%04u", i);
+                records.push_back({data, data, ""});
+            }
+            auto result = client.PutRecords(streamName, records).ExtractValueSync();
+            Cerr << result.GetResult().DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        Sleep(TDuration::Seconds(1));
+        testServer.MeteringFile.Get()->Flush();
+        UNIT_ASSERT_VALUES_EQUAL(testServer.MeteringFile.Get()->GetLength(), 0);
+        testServer.MeteringFile.Get()->Close();
     }
 
     Y_UNIT_TEST(TestCreateExistingStream) {
@@ -516,13 +565,27 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
     }
 
+    Y_UNIT_TEST(TestPutRecordsOfAnauthorizedUser) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        SET_YDS_LOCALS;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
 
-#define SET_YDS_LOCALS                               \
-    auto& kikimr = testServer.KikimrServer->Server_; \
-    Y_UNUSED(kikimr);                                \
-    auto& driver = testServer.Driver;                \
-    Y_UNUSED(driver);                                \
+        NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken(""));
 
+        const TString dataStr = "9876543210";
+
+        auto putRecordResult = client.PutRecord("/Root/" + streamName, {dataStr, dataStr, dataStr}).ExtractValueSync();
+        Cerr << putRecordResult.GetResult().DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+    }
 
     Y_UNIT_TEST(TestPutRecordsWithRead) {
         TInsecureDatastreamsTestServer testServer;

@@ -44,12 +44,13 @@ namespace NKikimr::NDataStreams::V1 {
     public:
         using TBase = TActorBootstrapped<TDatastreamsPartitionActor>;
 
-        TDatastreamsPartitionActor(NActors::TActorId parentId, ui64 tabletId, ui32 partition, const TString& topic, TVector<TPutRecordsItem> dataToWrite)
+        TDatastreamsPartitionActor(NActors::TActorId parentId, ui64 tabletId, ui32 partition, const TString& topic, TVector<TPutRecordsItem> dataToWrite, bool shouldBeCharged)
             : ParentId(std::move(parentId))
             , TabletId(tabletId)
             , Partition(partition)
             , Topic(topic)
             , DataToWrite(std::move(dataToWrite))
+            , ShouldBeCharged(shouldBeCharged)
         {
         }
 
@@ -62,7 +63,8 @@ namespace NKikimr::NDataStreams::V1 {
                 .BackoffMultiplier = 2,
                 .DoFirstRetryInstantly = true
             };
-            PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig));
+            PipeClient = ctx.RegisterWithSameMailbox(
+                NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig));
 
             SendWriteRequest(ctx);
             Become(&TDatastreamsPartitionActor::PartitionWriteFunc);
@@ -110,10 +112,13 @@ namespace NKikimr::NDataStreams::V1 {
                 w->SetExternalOperation(true);
                 totalSize += (item.Data.size() + item.Key.size() + item.ExplicitHash.size());
             }
-            ui64 putUnitsCount = totalSize / PUT_UNIT_SIZE;
-            if (totalSize % PUT_UNIT_SIZE != 0)
-                putUnitsCount++;
-            request.MutablePartitionRequest()->SetPutUnitsSize(putUnitsCount);
+
+            if (ShouldBeCharged) {
+                ui64 putUnitsCount = totalSize / PUT_UNIT_SIZE;
+                if (totalSize % PUT_UNIT_SIZE != 0)
+                    putUnitsCount++;
+                request.MutablePartitionRequest()->SetPutUnitsSize(putUnitsCount);
+            }
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record.Swap(&request);
@@ -171,6 +176,7 @@ namespace NKikimr::NDataStreams::V1 {
         TString Topic;
         TVector<TPutRecordsItem> DataToWrite;
         NActors::TActorId PipeClient;
+        bool ShouldBeCharged;
     };
 
     //------------------------------------------------------------------------------------
@@ -233,12 +239,12 @@ namespace NKikimr::NDataStreams::V1 {
         Ydb::DataStreams::V1::PutRecordsResult PutRecordsResult;
 
         TString Ip;
+        bool ShouldBeCharged;
 
         void SendNavigateRequest(const TActorContext &ctx);
-
-        void Handle(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult::TPtr& ev, const TActorContext& ctx);
+        void Handle(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult::TPtr& ev,
+                    const TActorContext& ctx);
         void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
-
         void CheckFinish(const TActorContext& ctx);
 
         STFUNC(StateFunc) {
@@ -263,15 +269,26 @@ namespace NKikimr::NDataStreams::V1 {
         TString error = CheckRequestIsValid(static_cast<TDerived*>(this)->GetPutRecordsRequest());
 
         if (!error.empty()) {
-            return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
+            return this->ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                        Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                                        error, ctx);
         }
 
         if (this->Request_->GetInternalToken().empty()) {
             if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
-                                            "Request without authentication are not allowed", ctx);
+                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
+                                            Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                                            TStringBuilder() << "Access to stream "
+                                            << this->GetProtoRequest()->stream_name()
+                                            << " is denied", ctx);
             }
         }
+        NACLib::TUserToken token(this->Request_->GetInternalToken());
+
+        ShouldBeCharged = std::find(
+            AppData(ctx)->PQConfig.GetNonChargeableUser().begin(),
+            AppData(ctx)->PQConfig.GetNonChargeableUser().end(),
+            token.GetUserSID()) != AppData(ctx)->PQConfig.GetNonChargeableUser().end();
 
         SendNavigateRequest(ctx);
         this->Become(&TPutRecordsActorBase<TDerived, TProto>::StateFunc);
@@ -297,13 +314,14 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow,
-                                                        this->Request_->GetInternalToken())) {
-                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+            NACLib::TUserToken token(this->Request_->GetInternalToken());
+            if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, token)) {
+                return this->ReplyWithError(Ydb::StatusIds::UNAUTHORIZED,
+                                            Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
                                             TStringBuilder() << "Access for stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << this->Request_->GetInternalToken(), ctx);
+                                            << token.GetUserSID(), ctx);
             }
         }
 
@@ -319,8 +337,9 @@ namespace NKikimr::NDataStreams::V1 {
             auto part = partition.GetPartitionId();
             if (items[part].empty()) continue;
             PartitionToActor[part].ActorId = ctx.Register(
-                                                          new TDatastreamsPartitionActor(ctx.SelfID, partition.GetTabletId(), part, this->GetTopicPath(ctx), std::move(items[part]))
-                                                          );
+                new TDatastreamsPartitionActor(ctx.SelfID, partition.GetTabletId(), part,
+                                               this->GetTopicPath(ctx), std::move(items[part]),
+                                               ShouldBeCharged));
         }
         this->CheckFinish(ctx);
     }

@@ -14,7 +14,7 @@ If consistency or freshness requirement for data read by a transaction can be re
 
 * *Online Read-Only*. Each of the reads in the transaction reads data that is most recent at the time of its execution. The consistency of retrieved data depends on the *allow_inconsistent_reads* setting:
   * *false* (consistent reads). In this mode, each individual read returns consistent data, but no consistency between different reads is guaranteed. Reading the same table range twice may return different results.
-  * *true* (inconsistent reads). In this mode, even data from separately taken reads may contain inconsistent results.
+  * *true* (inconsistent reads). In this mode, even a single read operation may contain inconsistent data.
 * *Stale Read Only*. Data reads in a transaction return results with a possible delay (fractions of a second). Each individual read returns consistent data, but no consistency between different reads is guaranteed.
 
 The transaction execution mode is specified in its settings when creating the transaction.

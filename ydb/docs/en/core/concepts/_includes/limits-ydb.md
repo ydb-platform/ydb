@@ -4,7 +4,7 @@ This section describes the parameters of limits set in {{ ydb-short-name }}.
 
 ## Schema object limits
 
-The table below shows the limits that apply to schema objects: tables, databases, and columns. The_Object_ column specifies the type of schema object that the limit applies to.
+The table below shows the limits that apply to schema objects: tables, databases, and columns. The _Object_ column specifies the type of schema object that the limit applies to.
 The _Error type_ column shows the status that the query ends with if an error occurs. For more information about statuses, see [Error handling in the API](../../reference/ydb-sdk/error_handling.md).
 
 | Object | Limit | Value | Explanation | Internal<br>name | Error<br>type |

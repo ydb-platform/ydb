@@ -18,11 +18,11 @@ To interact with {{ ydb-short-name }}, you can use the [{{ ydb-short-name }} CLI
 
 {{ ydb-short-name }} supports a relational [data model](../../../concepts/datamodel.md) and manages tables with a predefined schema. To make it easier to organize tables, directories can be created like in the file system.
 
-Database commands are mainly written in YQL, an SQL dialect. This gives the user a powerful and already familiar way to interact with the database.
+Database commands are mainly written in YQL, an SQL dialect. This gives the user a powerful and familiar way to interact with the database.
 
 {{ ydb-short-name }} supports high-performance distributed [ACID](https://en.wikipedia.org/wiki/ACID_(computer_science)) transactions that may affect multiple records in different tables. It provides the serializable isolation level, which is the strictest transaction isolation. You can also lower the level of isolation to raise performance.
 
-{{ ydb-short-name }} natively supports different processing options, such as [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) and [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing). The current version offers limited analytical query support. This is why we can say that {{ ydb-short-name }} is currently an OLTP database.
+{{ ydb-short-name }} is designed to service different workload types, such as [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) and [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing). The current version offers limited analytical query support. This is why we can say that {{ ydb-short-name }} is currently an OLTP database.
 
 {{ ydb-short-name }} is used in Yandex services as a high-performance [OLTP](https://en.wikipedia.org/wiki/Online_transaction_processing) DBMS. In particular, {{ yandex-cloud }} {{ objstorage-full-name}} use {{ ydb-short-name }} to store data and are based on its components.
 

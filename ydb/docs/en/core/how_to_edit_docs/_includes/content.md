@@ -16,7 +16,7 @@ When adding content, you should first choose where to add it: to the OpenSource 
 
 {% include [custom_extension.md](content/custom_extension.md) %}
 
-In the sections where the requirements differ for basic content and customization, there are two corresponding bookmarks:
+In the sections below where the requirements differ for basic content and customization, there are two corresponding tabs:
 
 - **Core**: The core of any documentation, the basic content.
 - **Overlay**: Content that is overlaid on top of the core and adapting it to a custom build.
@@ -43,7 +43,7 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
 - Core
 
-  Any article in the basic OpenSource documentation is created with a view to extend or adjust it in the customized documentation created on its basis. At the same time, improvements to the basic documentation should be applied in a customized version with no manual merge of content changes, otherwise maintaining a lot of derived documentation versions becomes a very labor-intensive task and monitoring the completeness of manual adaptations becomes impossible.
+  Any article in the basic OpenSource documentation is created with a perspective to extend or adjust it in the customized documentation created on its basis. At the same time, improvements to the base documentation should be applied in a customized version with no manual merge of content changes, otherwise maintaining a lot of derived documentation versions becomes a very labor-intensive task and monitoring the completeness of manual adaptations becomes impossible.
 
   To achieve this goal using the existing tools, a file with an article inside a subject directory does not directly contain any content and is designed to be redefined when customizing the documentation. The content is located in one or more files with content blocks included in the article file through include directives.
 
@@ -162,9 +162,9 @@ The presence of the "Overview" article lets you refer to the entire directory ra
 
 ### Other use cases for include {#include-reuse}
 
-The `{% include ... %}` directive can technically be used both to support the creation of derivative documentation versions and just to reuse content in several articles. However, this is undesirable, since the appearance of the same content in different articles confuses the user, and editing the included content without understanding the context it is given in can easily lead to loss of meaning.
+The `{% include ... %}` directive can technically be used not just to support the creation of derivative documentation versions, but also to reuse content in several articles. However, this is undesirable, since the appearance of the same content in different articles confuses the user, and editing the included content without understanding the context it is given in can easily lead to loss of meaning.
 
-An acceptable and good way to use the reused content is to provide the same information in different grouping options within the same context. For example, the FAQ section contains both articles on certain topics and the "All questions on all topics" article. Similarly, information about prices can be given both in specialized articles on some chargeable functions and in the general article of the price list.
+An acceptable and good way to leverage the reusable content is to provide the same information in different grouping options within the same context. For example, the FAQ section contains both articles on certain topics and the "All questions on all topics" article. Similarly, information about prices can be given both in specialized articles on some chargeable functions and in the general article with the price list.
 
 ## Table of contents {#toc}
 
@@ -265,7 +265,7 @@ There are two types of links:
    ```md
    To keep a kitten active, you [need to feed it] (../feeding/index.md).
    ```
-2. To resources external to the documentation. These are fully-qualified URLs in which no index is ever added:
+2. To resources external to the documentation. These are fully-qualified URLs in which no `index` is ever added:
 
    ```md
    You can find a good choice of cat food at the [Pushok store](http://www.pushok.ru/catalog).
@@ -291,7 +291,7 @@ The text specified in square brackets is displayed in the browser until the imag
 
 Desirable image formats:
 
-- Charts: [.SVG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Scalable_Vector_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/SVG){% endif %}
+- Diagrams: [.SVG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Scalable_Vector_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/SVG){% endif %}
 - Screenshots: [.PNG]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Portable_Network_Graphics){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/PNG){% endif %}
 
 Since an image is part of an article, it is impossible to post the image without this article. If there is no text of the article yet, determine the subject directory for its placement and the file name of the future article and only specify a link to the image in the text (keep in mind that the [text of the article is placed in the `_includes` subdirectory](#articles)!), and do not include the article itself in the TOC until it is ready for publication.
@@ -303,7 +303,7 @@ When inserting images, you can also specify:
 
 ## Backward compatibility {#compatibility}
 
-The development of documentation should not lead to a situation when users encounter saved links that are broken: both in browser tabs and those fixed in a variety of resources that are not controlled by the documentation developers, such as wiki pages.
+The development of documentation should not lead to a situation when users encounter saved links that are broken: both in browser bookmarks and those recorded in a variety of resources that are not controlled by the documentation developers, such as wiki pages.
 
 This means that you generally can't rename articles or move them across directories.
 

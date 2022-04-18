@@ -4,7 +4,7 @@ This section describes how to deploy a local {{ ydb-short-name }} cluster using 
 
 ## Connection parameters {#conn}
 
-As a result of completing the steps below, you'll get a YDB database running on a local VM instance that you can connect to using the following:
+As a result of completing the steps below, you'll get a YDB database running on a local machine that you can connect to using the following:
 
 - [Endpoint](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
 - [Database location](../../../concepts/connect.md#database): `/Root/test`
@@ -22,7 +22,7 @@ curl https://binaries.ydb.tech/local_scripts/install.sh | bash
 
 ## Starting {#start}
 
-The local YDB server can be started in disk or in-memory mode:
+The local YDB server can be started in two modes:
 
 {% list tabs %}
 
@@ -38,7 +38,7 @@ The local YDB server can be started in disk or in-memory mode:
 
 - Storing data in memory
 
-  - Under in-memory data storage, the data is lost when stopping the server.
+  - When using in-memory data storage, the data is lost when stopping the server.
 
   - Run the following command from the working directory:
 

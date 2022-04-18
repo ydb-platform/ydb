@@ -12,7 +12,7 @@ A topic description includes:
    - {{ ydb-short-name }} developer/contributor
 2. Purpose: The reader's task or problem the solution of which is described in the content.
 
-Basically, the directory structure directly affects the structure of the documentation table of contents. Typical exceptions are:
+In general, the directory structure directly affects the structure of the documentation table of contents. Typical exceptions are:
 
 - Intermediate stages of documentation creation. A new directory is created immediately to preserve the referential integrity in the future, but its content is still insufficient to be designed as a separate submenu in the table of contents. In this case, articles can be temporarily included in existing submenus.
 - Historically established directories whose transfer is undesirable due to the loss of referential integrity.

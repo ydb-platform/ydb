@@ -2,7 +2,7 @@
 
 ## Prerequisites {#prerequisites}
 
-To run commands via the CLI, you will need database connection settings you can retrieve when [creating](../create_db.md) a connection:
+To run commands via the CLI, you will need database connection settings you can get when [creating](../create_db.md) a database:
 
 * [Endpoint](../../concepts/connect.md#endpoint)
 * [Database name](../../concepts/connect.md#database)
@@ -44,7 +44,7 @@ To test connection, you can use the command for [listing objects](../../referenc
 {{ ydb-cli }} -e <endpoint> -d <database> scheme ls
 ```
 
-If the command is successful, a list of objects in the database is shown in response. If you haven't created anything in the database yet, the output will only contain the `.sys` and `.sys_health` system directories with [diagnostic representations of YDB](../../troubleshooting/system_views_db.md).
+If the command is successful, a list of objects in the database is shown in response. If you haven't created anything in the database yet, the output will only contain the `.sys` and `.sys_health` system directories with [diagnostic views of YDB](../../troubleshooting/system_views_db.md).
 
 {% include [cli/ls_examples.md](cli/ls_examples.md) %}
 
@@ -102,7 +102,7 @@ Executing commands via `ydb yql` is a nice and easy way to get started. However,
 
 The YDB CLI supports individual commands with complete sets of options for any existing YDB API. For a full list of commands, see the [YDB CLI reference](../../reference/ydb-cli/index.md).
 
-## Learn more about YDB {#next}
+## Next step {#next}
 
-Proceed to the [YQL - Getting started](../yql.md) article to learn more about YDB.
+Go to [YQL - Getting started](../yql.md) to proceed with the 'Getting started' scenario.
 

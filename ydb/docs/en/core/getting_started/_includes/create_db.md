@@ -4,7 +4,7 @@ Detailed information about databases can be found in the article [Terms and defi
 
 {% include [create_db_overlay.md](create_db_overlay.md) %}
 
-## Self-deployment {#self-hosted}
+## Self-hosted deployment {#self-hosted}
 
 There are three methods you can use to deploy {{ ydb-short-name }}:
 
@@ -12,7 +12,7 @@ There are three methods you can use to deploy {{ ydb-short-name }}:
 * [In Kubernetes](../../deploy/orchestrated/concepts.md).
 * [Locally, from a downloaded executable file](../self_hosted/ydb_local.md).
 
-## Learn more about YDB {#next}
+## Next step {#next}
 
-After creating your database, proceed to the [Authentication - Getting started](../auth.md) article to learn more about YDB.
+After creating your database, proceed to the [Authentication - Getting started](../auth.md) article.
 

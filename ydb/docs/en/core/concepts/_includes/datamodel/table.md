@@ -4,9 +4,9 @@ A table in {{ ydb-short-name }} is a [relational table](https://en.wikipedia.org
 
 ![Datamodel_of_a_relational_table](../../_assets/datamodel_rtable.png)
 
-{{ ydb-short-name }} uses [YQL](../../datatypes.md) as its data type. Columns may use [simple YQL data types](../../../yql/reference/types/primitive.md). All columns may contain the special `NULL` value to signify that a value is missing.
+{{ ydb-short-name }} uses [YQL datatypes](../../datatypes.md). Columns may use [simple YQL data types](../../../yql/reference/types/primitive.md). All columns may contain the special `NULL` value to signify that a value is missing.
 
-{{ ydb-short-name }} tables always have one or more columns that make up the key ([primary key](https://en.wikipedia.org/wiki/Unique_key)). Each table row has a unique key value, so there can be no more than one row per key value. {{ ydb-short-name }} tables are always ordered by key. This means that you can efficiently make point reads by key and range-based queries by key or key prefix (actually using an index). In the example above, the key columns are highlighted in gray and marked with a special sign. Tables consisting only of key columns are supported. However, you can't create tables without a primary key.
+{{ ydb-short-name }} tables always have one or more columns that make up the [primary key](https://en.wikipedia.org/wiki/Unique_key). Each table row has a unique key value, so there can be no more than one row per key value. {{ ydb-short-name }} tables are always ordered by key. This means that you can efficiently make point reads by key and range-based queries by key or key prefix (actually using an index). In the example above, the key columns are highlighted in gray and marked with a special sign. Tables consisting only of key columns are supported. However, you can't create tables without a primary key.
 
 Often, when you design a table schema, you already have a set of fields, which can naturally serve as the primary key. Be careful when selecting the key to avoid hotspots. For example, if you insert data into a table with a monotonically increasing key, you write the data to the end of the table. But since {{ ydb-short-name }} splits table data by key range, your inserts are always processed by the same server, so you lose the main benefits of a distributed database. To distribute the load evenly across different servers and to avoid hotspots when processing large tables, we recommend hashing the natural key and using the hash as the first component of the primary key as well as changing the order of the primary key components.
 
@@ -20,7 +20,7 @@ The size-based shard split threshold and automatic splitting can be configured (
 
 In addition to automatically splitting shards, you can create an empty table with a predefined number of shards. You can manually set the exact shard key split range or evenly split it into a predefined number of shards. In this case, ranges are created based on the first component of the primary key. You can set even splitting for tables that have a Uint64 or Uint32 integer as the first component of the primary key.
 
-Partitioning parameters refer to the table itself rather than to secondary indexes built from its data. Each index is served by its own set of shards and decisions to split or merge its partitions are made independently based on the default settings. These settings may become available to users in the future like the settings of the main table.
+Partitioning parameters refer to the table itself rather than to secondary indexes built on its data. Each index is served by its own set of shards and decisions to split or merge its partitions are made independently based on the default settings. These settings may become available to users in the future like the settings of the main table.
 
 A split or a merge usually takes about 500 milliseconds. During this time, the data involved in the operation becomes temporarily unavailable for reads and writes. Without raising it to the application level, special wrapper methods in the {{ ydb-short-name }} SDK make automatic retries when they discover that a shard is being split or merged. Please note that if the system is overloaded for some reason (for example, due to a general shortage of CPU or insufficient DB disk throughput), split and merge operations may take longer.
 
@@ -63,7 +63,7 @@ Partitions are only merged if their actual number exceeds the value specified by
 * Type: `Uint64`.
 * Default value: `50`.
 
-Partitions are only split if their number doesn't exceed the value specified by this parameter. With any automatic partitioning mode enabled, we recommend that you set a meaningful value for this parameter and monitor when the actual number of partitions approaches this value, otherwise splitting of partitions will sooner or later stop under an increase in data or load, which will lead to a failure.
+Partitions are only split if their number doesn't exceed the value specified by this parameter. With any automatic partitioning mode enabled, we recommend that you set a meaningful value for this parameter and monitor when the actual number of partitions approaches this value, otherwise splitting of partitions will stop sooner or later under an increase in data or load, which will lead to a failure.
 
 #### UNIFORM_PARTITIONS
 
@@ -72,7 +72,7 @@ Partitions are only split if their number doesn't exceed the value specified by 
 
 The number of partitions for uniform initial table partitioning. The primary key's first column must have type `Uint64` or `Uint32`. A created table is immediately divided into the specified number of partitions.
 
-When automatic partitioning is enabled, make sure to set the correct value for [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](#auto_partitioning_min_partitions_count) so as not to merge all partitions into one immediately after creating the table.
+When automatic partitioning is enabled, make sure to set the correct value for [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](#auto_partitioning_min_partitions_count) to avoid merging all partitions into one immediately after creating the table.
 
 #### PARTITION_AT_KEYS
 
@@ -81,7 +81,7 @@ When automatic partitioning is enabled, make sure to set the correct value for [
 
 Boundary values of keys for initial table partitioning. It's a list of boundary values separated by commas and surrounded with brackets. Each boundary value can be either a set of values of key columns (also separated by commas and surrounded with brackets) or a single value if only the values of the first key column are specified. Examples: `(100, 1000)`, `((100, "abc"), (1000, "cde"))`.
 
-When automatic partitioning is enabled, make sure to set the correct value for [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](#auto_partitioning_min_partitions_count) so as not to merge all partitions into one immediately after creating the table.
+When automatic partitioning is enabled, make sure to set the correct value for [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](#auto_partitioning_min_partitions_count) to avoid merging all partitions into one immediately after creating the table.
 
 ### Reading data from replicas {#read_only_replicas}
 
@@ -89,10 +89,10 @@ When making queries in {{ ydb-short-name }}, the actual execution of a query to 
 
 Reading data from followers allows you:
 
-* To serve clients demanding minimal delay, which is otherwise unachievable in a multi-DC cluster. This is accomplished by executing queries soon after they are formulated, which eliminates the delay associated with inter-DC transfers. As a result, you can both preserve all the storage reliability guarantees of a multi-DC cluster and respond to occasional read queries in milliseconds.
+* To serve clients demanding minimal delay, which is otherwise unachievable in a multi-DC cluster. This is accomplished by executing queries soon after they are formulated, which eliminates the delay associated with inter-DC transfers. As a result, you can both preserve all the storage reliability guarantees of a multi-DC cluster and respond to point read queries in milliseconds.
 * To handle read queries from followers without affecting modifying queries running on a shard. This can be useful both for isolating different scenarios and for increasing the partition bandwidth.
-* To ensuring continued service when moving a partition leader (both in a planned manner for load balancing and in an emergency). It lets the processes in the cluster survive without affecting the reading clients.
-* To increasing the overall shard read performance if many read queries access the same keys.
+* To ensure continued service when moving a partition leader (both in a planned manner for load balancing and in an emergency). It lets the processes in the cluster survive without affecting the reading clients.
+* To increase the overall shard read performance if many read queries access the same keys.
 
 You can enable running read replicas for each shard of the table in the table data schema. The read replicas (followers) are typically accessed without leaving the data center network, which ensures response delays in milliseconds.
 
@@ -102,13 +102,13 @@ You can enable running read replicas for each shard of the table in the table da
 
 The internal state of each of the followers is restored exactly and fully consistently from the leader state.
 
-Besides the data status in storage, followers also receive a stream of updates from the leader. Updates are sent in real time, immediately after the commit to the log. However, they are sent asynchronously, resulting in some delay (usually no more than dozens of milliseconds, but sometimes longer in the event of cluster connectivity issues) in applying updates to followers relative to their commit on the leader. Therefore, reading data from followers is only supported in the [transaction mode](../transactions.md#modes) `StaleReadOnly()`.
+Besides the data state in storage, followers also receive a stream of updates from the leader. Updates are sent in real time, immediately after the commit to the log. However, they are sent asynchronously, resulting in some delay (usually no more than dozens of milliseconds, but sometimes longer in the event of cluster connectivity issues) in applying updates to followers relative to their commit on the leader. Therefore, reading data from followers is only supported in the [transaction mode](../transactions.md#modes) `StaleReadOnly()`.
 
 If there are multiple followers, their delay from the leader may vary: although each follower of each of the shards retains internal consistency, artifacts may be observed from shard to shard. Please provide for this in your application code. For that same reason, it's currently impossible to perform cross-shard transactions from followers.
 
 ### Deleting expired data (TTL) {#ttl}
 
-{{ ydb-short-name }} supports automatic background deletion of expired data. A table data schema may define a column containing a `Datetime` or a `Timestamp` value. A comparison of this value with the current time for all rows will be performed in the background. Rows for which the current time becomes greater than the column value, factoring in the specified delay, will be deleted.
+{{ ydb-short-name }} supports automatic background deletion of expired data. A table data schema may define a column containing a `Datetime` or a `Timestamp` value. A comparison of this value with the current time for all rows will be performed in the background. Rows for which the current time becomes greater than the column value plus specified delay, will be deleted.
 
 | Parameter name | Type | Acceptable values | Update possibility | Reset capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |

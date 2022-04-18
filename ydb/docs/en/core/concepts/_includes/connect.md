@@ -10,23 +10,23 @@ To connect to the {{ ydb-short-name }} database from the {{ ydb-short-name }} CL
 
 ## Endpoint {#endpoint}
 
-An endpoint is a string structured as `protocol://host:port` and provided by a {{ ydb-short-name }} cluster owner for proper routing of client queries to its databases by way of a network infrastructure as well as for proper network connections. Cloud databases display the endpoint in the management console on the requisite DB page and also normally send it via the cloud provider's CLI. In corporate environments, endpoint names {{ ydb-short-name }} are provided by the administration team or obtained in the internal cloud management console.
+An endpoint is a string structured as `protocol://host:port` and provided by a {{ ydb-short-name }} cluster owner for proper routing of client queries to its databases over the network infrastructure as well as for network connection initialization. Cloud databases display the endpoint in the management console on the required DB page and also normally provide it via the cloud CLI. In corporate environments, endpoint names {{ ydb-short-name }} are provided by the administration team or obtained in the internal cloud management console.
 
 {% include [overlay/endpoint.md](connect_overlay/endpoint.md) %}
 
 Examples:
 
-* `grpc://localhost:7135` is an unencrypted data interchange protocol (gRPC) with the server running on port 7135 of the same host as the client.
-* `grpcs://ydb.somecorp-int.ru` is an encrypted data interchange protocol (gRPCs) with the server running on a host called ydb.somecorp-int.ru on the SomeCorp isolated corporate network and listening for connections on YDB default port 2135.
-* `grpcs://ydb.serverless.yandexcloud.net:2135` is an encrypted data interchange protocol (gRPCs), public {{ yandex-cloud }} Serverless YDB server at ydb.serverless.yandexcloud.net, port 2135.
+* `grpc://localhost:7135` is an unencrypted data transfer protocol (gRPC) with the server running on port 7135 of the same host as the client.
+* `grpcs://ydb.somecorp-int.ru` is an encrypted data transfer protocol (gRPCs) with the server running on a host called ydb.somecorp-int.ru on the SomeCorp isolated corporate network and listening for connections on YDB default port 2135.
+* `grpcs://ydb.serverless.yandexcloud.net:2135` is an encrypted data transfer protocol (gRPCs), public {{ yandex-cloud }} Serverless YDB server at ydb.serverless.yandexcloud.net, port 2135.
 
 {% include [overlay/endpoint_example.md](connect_overlay/endpoint_example.md) %}
 
 ## Authentication information {#auth}
 
-Once a network connection is established, the server starts to accept client requests with authentication information for processing. The server uses it to identify the client's account and to verify access to execute the query.
+Once a network connection is established, the server starts to accept client requests for processing supplied with authentication information. The server uses it to identify the client's account and to verify access to execute the query.
 
-The basic operation model assumes that there is a separate system for managing credentials and permissions: [IAM (Identity and Access Management)](https://en.wikipedia.org/wiki/Identity_management). IAM issues a token linked to the account, which the {{ ydb-short-name }} client passes to the server along with a request. The {{ ydb-short-name }} server accesses IAM to verify the token and permissions to perform the requested operation and caches the result.
+The primary operation model assumes that there is a separate system for managing credentials and permissions: [IAM (Identity and Access Management)](https://en.wikipedia.org/wiki/Identity_management). IAM issues a token linked to the account, which the {{ ydb-short-name }} client passes to the server along with a request. The {{ ydb-short-name }} server accesses IAM to verify the token and permissions to perform the requested operation and caches the result.
 
 {{ ydb-short-name }} also supports username and password based authentication without interacting with IAM, but using this model in practice is limited to simple configurations, primarily local ones.
 
@@ -38,7 +38,7 @@ The basic operation model assumes that there is a separate system for managing c
 * **Access Token**: Fixed token set as a parameter for the client (SDK or CLI) and passed in requests.
 * **Refresh Token**: [OAuth token](https://auth0.com/blog/refresh-tokens-what-are-they-and-when-to-use-them/) of a user's personal account set as a parameter for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
 * **Service Account Key**: Service account attributes and a signature key set as parameters for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
-* **Metadata**: Client (SDK or CLI) periodically accessing a local service to rotate a token (obtain a new one) to pass in requests.
+* **Metadata**: Client (SDK or CLI) periodically accesses a local service to rotate a token (obtain a new one) to pass in requests.
 
 Any owner of a valid token can get access to perform operations; therefore, the principal objective of the security system is to ensure that a token remains private and to protect it from being compromised.
 
@@ -49,7 +49,7 @@ The highest level of security and performance is provided when using the **Metad
 When choosing the authentication mode among those supported by the server and environment, follow the recommendations below:
 
 * **You would normally use Anonymous** on self-deployed local {{ ydb-short-name }} clusters that are inaccessible over the network.
-* **You would use Access Token** when other modes are not supported server side or for setup/debugging purposes. It does not require that the client access IAM. However, if the IAM system supports an API for token rotation, fixed tokens issued by this IAM usually have a short validity period, which makes it necessary to update them manually in the IAM system on a regular basis.
+* **You would use Access Token** when other modes are not supported on server side or for setup/debugging purposes. It does not require that the client access IAM. However, if the IAM system supports an API for token rotation, fixed tokens issued by this IAM usually have a short validity period, which makes it necessary to update them manually in the IAM system on a regular basis.
 * **Refresh Token** can be used when performing one-time manual operations under a personal account, for example, related to DB data maintenance, performing ad-hoc operations in the CLI, or running applications from a workstation. You can manually obtain this token from IAM once to have it last a long time and save it in an environment variable on a personal workstation to use automatically and with no additional authentication parameters on CLI launch.
 * **Service Account Key** is mainly used for applications designed to run in environments where the **Metadata** mode is supported, when testing them outside these environments (for example, on a workstation). It can also be used for applications outside these environments, working as an analog of **Refresh Token** for service accounts. Unlike a personal account, service account access objects and roles can be restricted.
 * **Metadata** is used when deploying applications in clouds. Currently, this mode is supported on virtual machines and in {{ sf-name }} {{ yandex-cloud }}.
@@ -62,11 +62,11 @@ When using modes in which the {{ ydb-short-name }} client accesses the IAM syste
 
 ## Database location {#database}
 
-Database location (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. Has the format [file paths]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Path_(computing)){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Путь_к_файлу){% endif %} and uses the `/` character as separator. It always starts with a `/`.
+Database location (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. It has the [path to file]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Path_(computing)){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Путь_к_файлу){% endif %} format and uses the `/` character as separator. It always starts with a `/`.
 
 A {{ ydb-short-name }} cluster may have multiple databases deployed, and their location is defined by the cluster configuration. Like the endpoint, `database` for cloud databases is displayed in the management console on the desired database page, and can also be obtained via the CLI of the cloud provider.
 
-For cloud solutions, databases are created and hosted on the {{ ydb-short-name }} cluster in self-service mode, with no need in attendance of the cluster owner or administrators.
+For cloud solutions, databases are created and hosted on the {{ ydb-short-name }} cluster in self-service mode, with no need in involvement of the cluster owner or administrators.
 
 {% include [overlay/database.md](connect_overlay/database.md) %}
 
@@ -94,9 +94,9 @@ For information about how to define connection parameters on the client, see the
 
 ### A root certificate for TLS {#tls-cert}
 
-When using an encrypted protocol ([gRPC over TLS](https://grpc.io/docs/guides/auth/), or gRPCS), a network connection can only be continued if the client is sure that it receives a response from the genuine server that it is trying to connect to, rather than someone in-between intercepting its request on the network. This is assured by verifications through a [chain of trust]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Chain_of_trust){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Цепочка_доверия){% endif %} which requires the client to have a root certificate installed to operate.
+When using an encrypted protocol ([gRPC over TLS](https://grpc.io/docs/guides/auth/), or gRPCS), a network connection can only be continued if the client is sure that it receives a response from the genuine server that it is trying to connect to, rather than someone in-the-middle intercepting its request on the network. This is assured by verifications through a [chain of trust]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Chain_of_trust){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Цепочка_доверия){% endif %} which requires the client to have a root certificate installed to operate.
 
-The OS that the client runs on already include a set of root certificates from the world's major certification authorities. However, the {{ ydb-short-name }} cluster owner can use its own CA that is not associated with any of the global ones, which is often the case in corporate environments, and is almost always used for self-deployment of clusters with connection encryption support. In this case, the cluster owner must somehow transfer its root certificate for use on the client side. This certificate may be installed in the operating system's certificate store where the client runs (manually by a user or by a corporate OS administration team) or built into the client itself (as is the case for {{ yandex-cloud }} in {{ ydb-short-name }} CLI and SDK).
+The OS that the client runs on already include a set of root certificates from the world's major certification authorities. However, the {{ ydb-short-name }} cluster owner can use its own CA that is not associated with any of the global ones, which is often the case in corporate environments, and is almost always used for self-hosted deployment of clusters with connection encryption support. In this case, the cluster owner must somehow transfer its root certificate for use on the client side. This certificate may be installed in the operating system's certificate store where the client runs (manually by a user or by a corporate OS administration team) or built into the client itself (as is the case for {{ yandex-cloud }} in {{ ydb-short-name }} CLI and SDK).
 
 ### API for getting IAM tokens {#token-refresh-api}
 

@@ -1,4 +1,4 @@
-# Self-deployment of a database {{ ydb-short-name }}
+# Self-hosted deployment of a database {{ ydb-short-name }}
 
 This section contains articles describing simple YDB deployment scenarios. They can be used by application developers to quickly deploy their own YDB database for development or testing purposes.
 

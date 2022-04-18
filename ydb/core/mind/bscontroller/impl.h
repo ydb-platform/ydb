@@ -51,6 +51,7 @@ public:
     class TTxMigrate;
     class TTxLoadEverything;
     class TTxMonEvent_OperationLog;
+    class TTxMonEvent_OperationLogEntry;
     class TTxMonEvent_HealthEvents;
     class TTxMonEvent_SetDown;
     class TTxMonEvent_GetDown;

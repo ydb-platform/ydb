@@ -24,21 +24,19 @@ static TString PrintMaybe(const TMaybe<T>& m) {
     }
 }
 
+struct TOperationLogEntry {
+    using T = Schema::OperationLog;
+    T::Index::Type Index;
+    T::Timestamp::Type Timestamp;
+    T::Request::Type Request;
+    T::Response::Type Response;
+    T::ExecutionTime::Type ExecutionTime;
+};
+
 class TBlobStorageController::TTxMonEvent_OperationLog : public TTransactionBase<TBlobStorageController> {
     const TActorId RespondTo;
     const TCgiParameters Params;
 
-private:
-    struct TOperationLogEntry {
-        using T = Schema::OperationLog;
-        T::Index::Type Index;
-        T::Timestamp::Type Timestamp;
-        T::Request::Type Request;
-        T::Response::Type Response;
-        T::ExecutionTime::Type ExecutionTime;
-    };
-
-private:
     TVector<TOperationLogEntry> Logs;
     ui64 NumRows = 0;
 
@@ -53,7 +51,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         ui64 count = FromStringWithDefault<ui64>(Params.Get("RowsCount"), 1000);
-        ui64 offset = FromStringWithDefault<ui64>(Params.Get("RowsOffset"), 0);
+        ui64 offset = FromStringWithDefault<ui64>(Params.Get("RowsOffset"), Self->NextOperationLogIndex - 1);
         if (!count) {
             count = 1;
         }
@@ -86,7 +84,7 @@ public:
         }
 
         // scan the table
-        auto table = db.Table<T>().GreaterOrEqual(firstRecordIndex + offset).Select();
+        auto table = db.Table<T>().Reverse().LessOrEqual(offset).Select();
         if (!table.IsReady()) {
             return false;
         }
@@ -130,17 +128,27 @@ public:
                             NKikimrBlobStorage::TConfigResponse response;
                             Y_PROTOBUF_SUPPRESS_NODISCARD request.ParseFromString(entry.Request);
                             Y_PROTOBUF_SUPPRESS_NODISCARD response.ParseFromString(entry.Response);
-                            TABLED() { out << entry.Index; }
+                            TABLED() {
+                                out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLogEntry"
+                                    "&RowIndex=" << entry.Index << "'>" << entry.Index << "</a>";
+                            }
                             TABLED() { out << entry.Timestamp.ToRfc822String(); }
+                            auto limitString = [] (const TString& str) {
+                                const size_t STR_LIMIT = 4096;
+                                if (str.size() > STR_LIMIT) {
+                                    return TString(str, 0, STR_LIMIT) + "\n... truncated";
+                                }
+                                return str;
+                            };
                             TABLED() {
                                 out << "<input class='hide' id='request-" << id << "' type='checkbox'>"
                                    "<label for='request-" << id << "'>Show</label>"
-                                   "<pre>" << request.DebugString() << "</pre>";
+                                   "<pre>" << limitString(request.DebugString()) << "</pre>";
                             }
                             TABLED() {
                                 out << "<input class='hide' id='response-" << id << "' type='checkbox'>"
                                    "<label for='response-" << id << "'>Show</label>"
-                                   "<pre>" << response.DebugString() << "</pre>";
+                                   "<pre>" << limitString(response.DebugString()) << "</pre>";
                             }
                             TABLED() {
                                 out << entry.ExecutionTime;
@@ -151,20 +159,129 @@ public:
             }
         }
 
-        out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
-            << (Max(offset, count) - count) << "'>Previous</a>";
-        out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
-            << (offset + count) << "' style='padding-left: 15px;'>Next</a>";
-        out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
-            << 0 << "' style='padding-left: 15px;'>First page</a>";
-        ui64 lastPageIndex = 0;
         if (NumRows) {
-            lastPageIndex = NumRows - 10;
-            lastPageIndex -= lastPageIndex % count;
-            ++lastPageIndex;
+            ui64 firstPageIndex = Self->NextOperationLogIndex - 1;
+            ui64 lastPageIndex = firstPageIndex - (NumRows / count) * count;
+            if (NumRows % count == 0) {
+                lastPageIndex += count;
+            }
+
+            if (offset + count <= firstPageIndex) {
+                out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
+                    << (offset + count) << "' style='padding-right: 15px;'>Previous</a>";
+            }
+            if (offset >= lastPageIndex + count) {
+                out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
+                    << (offset - count) << "' style='padding-right: 15px;'>Next</a>";
+            }
+
+            out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
+                << firstPageIndex << "' style='padding-right: 15px;'>First page</a>";
+
+            out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
+                << lastPageIndex << "' style='padding-right: 15px;'>Last page</a>";
         }
-        out << "<a href='?TabletID=" << Self->TabletID() << "&page=OperationLog&RowsCount=" << count << "&RowsOffset="
-            << lastPageIndex << "' style='padding-left: 15px;'>Last page</a>";
+
+        Self->RenderFooter(out);
+    }
+};
+
+class TBlobStorageController::TTxMonEvent_OperationLogEntry : public TTransactionBase<TBlobStorageController> {
+    const TActorId RespondTo;
+    const TCgiParameters Params;
+
+    TOperationLogEntry Entry;
+    ui64 RowIndex = 0;
+    bool HasEntry = false;
+
+public:
+    TTxMonEvent_OperationLogEntry(const TActorId& sender, TCgiParameters params, TSelf *controller)
+        : TBase(controller)
+        , RespondTo(sender)
+        , Params(std::move(params))
+    {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_MON_EVENT_OPERATION_LOG_ENTRY; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        RowIndex = FromStringWithDefault<ui64>(Params.Get("RowIndex"), Self->NextOperationLogIndex - 1);
+        if (!LoadOperationLogEntry(txc)) {
+            return false;
+        }
+        TStringStream str;
+        RenderOperationLogEntry(str);
+        TActivationContext::Send(new IEventHandle(RespondTo, Self->SelfId(), new NMon::TEvRemoteHttpInfoRes(str.Str())));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override
+    {}
+
+private:
+    bool LoadOperationLogEntry(TTransactionContext& txc) {
+        NIceDb::TNiceDb db(txc.DB);
+        using T = Schema::OperationLog;
+
+        auto table = db.Table<T>().Key(RowIndex).Select();
+        if (!table.IsReady()) {
+            return false;
+        }
+
+        if (table.EndOfSet()) {
+            HasEntry = false;
+            return true;
+        }
+
+        const auto& index = table.GetValue<Schema::OperationLog::Index>();
+        const auto& timestamp = table.GetValue<Schema::OperationLog::Timestamp>();
+        const auto& request = table.GetValue<Schema::OperationLog::Request>();
+        const auto& response = table.GetValue<Schema::OperationLog::Response>();
+        const auto& executionTime = table.GetValue<Schema::OperationLog::ExecutionTime>();
+
+        Entry = TOperationLogEntry{index, timestamp, request, response, executionTime};
+        HasEntry = true;
+        return true;
+    }
+
+    void RenderOperationLogEntry(IOutputStream& out) {
+        Self->RenderHeader(out);
+
+        HTML(out) {
+            H3() {
+                out << "Operation Log ";
+                if (HasEntry) {
+                    out << "(entry " << RowIndex << ")";
+                } else {
+                    out << "(missing entry)";
+                }
+            }
+            TABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { out << "Index"; }
+                        TABLEH() { out << "Timestamp"; }
+                        TABLEH() { out << "Request"; }
+                        TABLEH() { out << "Response"; }
+                        TABLEH() { out << "Execution<br/>time"; }
+                    }
+                }
+                if (HasEntry) {
+                    TABLEBODY() {
+                        TABLER() {
+                            NKikimrBlobStorage::TConfigRequest request;
+                            NKikimrBlobStorage::TConfigResponse response;
+                            Y_PROTOBUF_SUPPRESS_NODISCARD request.ParseFromString(Entry.Request);
+                            Y_PROTOBUF_SUPPRESS_NODISCARD response.ParseFromString(Entry.Response);
+                            TABLED() { out << Entry.Index; }
+                            TABLED() { out << Entry.Timestamp.ToRfc822String(); }
+                            TABLED() { out << "<pre>" << request.DebugString() << "</pre>"; }
+                            TABLED() { out << "<pre>" << response.DebugString() << "</pre>"; }
+                            TABLED() { out << Entry.ExecutionTime; }
+                        }
+                    }
+                }
+            }
+        }
 
         Self->RenderFooter(out);
     }
@@ -639,6 +756,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             tx.Reset(new TTxMonEvent_GetDown(ev->Sender, groupId, this));
         } else if (page == "OperationLog") {
             tx.Reset(new TTxMonEvent_OperationLog(ev->Sender, cgi, this));
+        } else if (page == "OperationLogEntry") {
+            tx.Reset(new TTxMonEvent_OperationLogEntry(ev->Sender, cgi, this));
         } else if (page == "HealthEvents") {
             Execute(new TTxMonEvent_HealthEvents(ev->Sender, cgi, this));
             return true;

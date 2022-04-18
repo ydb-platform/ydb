@@ -1,5 +1,5 @@
 ---
-title: Using timeouts in Yandex Database (YDB)
+title: Using timeouts in YDB
 description: 'The operation_timeout value determines the time during which the query result is interesting to the user. If the operation has not been performed during this time, the server returns an error with the Timeout code and tries to terminate the execution of the request, but the cancellation of the request is not guaranteed. It is always recommended to set both the operation timeout and the transport timeout.'
 ---
 # Using timeouts

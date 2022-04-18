@@ -11,7 +11,7 @@ default:
   feature_map_tables: true
   feature_group_by_rollup_cube: true
   feature_window_functions: true
-  ydb-full-name: Yandex Database
+  ydb-full-name: YDB
   ydb-short-name: YDB
   yandex-cloud: Yandex.Cloud
   ydb-name: YDB

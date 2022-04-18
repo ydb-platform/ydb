@@ -1,3 +1,4 @@
+#include "kqp_opt_log_impl.h"
 #include "kqp_opt_log_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -125,48 +126,30 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
         return node;
     }
 
-    TMaybeNode<TKqlReadTableBase> readTable;
-    TMaybeNode<TCoFilterNullMembers> filterNull;
-    TMaybeNode<TCoSkipNullMembers> skipNull;
-
-    TMaybeNode<TCoAtom> indexName;
-
-    if (auto maybeRead = flatmap.Input().Maybe<TKqlReadTable>()) {
-        readTable = maybeRead.Cast();
-    }
-
-    if (auto maybeRead = flatmap.Input().Maybe<TKqlReadTableIndex>()) {
-        readTable = maybeRead.Cast();
-        indexName = maybeRead.Cast().Index();
-    }
-
-    if (auto maybeRead = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTable>()) {
-        readTable = maybeRead.Cast();
-        filterNull = flatmap.Input().Cast<TCoFilterNullMembers>();
-    }
-
-    if (auto maybeRead = flatmap.Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTableIndex>()) {
-        readTable = maybeRead.Cast();
-        filterNull = flatmap.Input().Cast<TCoFilterNullMembers>();
-        indexName = maybeRead.Cast().Index();
-    }
-
-    if (auto maybeRead = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTable>()) {
-        readTable = maybeRead.Cast();
-        skipNull = flatmap.Input().Cast<TCoSkipNullMembers>();
-    }
-
-    if (auto maybeRead = flatmap.Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTableIndex>()) {
-        readTable = maybeRead.Cast();
-        skipNull = flatmap.Input().Cast<TCoSkipNullMembers>();
-        indexName = maybeRead.Cast().Index();
-    }
-
-    if (!readTable) {
+    auto readMatch = MatchRead<TKqlReadTableBase>(flatmap.Input());
+    if (!readMatch) {
         return node;
     }
 
-    auto read = readTable.Cast();
+    if (readMatch->FlatMap) {
+        return node;
+    }
+
+    auto read = readMatch->Read.Cast<TKqlReadTableBase>();
+
+    static const std::set<TStringBuf> supportedReads {
+        TKqlReadTable::CallableName(),
+        TKqlReadTableIndex::CallableName(),
+    };
+
+    if (!supportedReads.contains(read.CallableName())) {
+        return node;
+    }
+
+    TMaybeNode<TCoAtom> indexName;
+    if (auto maybeIndexRead = read.Maybe<TKqlReadTableIndex>()) {
+        indexName = maybeIndexRead.Cast().Index();
+    }
 
     if (read.Range().From().ArgCount() > 0 || read.Range().To().ArgCount() > 0) {
         return node;
@@ -260,19 +243,7 @@ TExprBase KqpPushPredicateToReadTable(TExprBase node, TExprContext& ctx, const T
 
         auto newBody = ctx.ChangeChild(flatmap.Lambda().Body().Ref(), 0, std::move(residualPredicate));
 
-        if (filterNull) {
-            input = Build<TCoFilterNullMembers>(ctx, node.Pos())
-                .Input(input)
-                .Members(filterNull.Cast().Members())
-                .Done();
-        }
-
-        if (skipNull) {
-            input = Build<TCoSkipNullMembers>(ctx, node.Pos())
-                .Input(input)
-                .Members(skipNull.Cast().Members())
-                .Done();
-        }
+        input = readMatch->BuildProcessNodes(input, ctx);
 
         auto fetch = Build<TCoFlatMap>(ctx, node.Pos())
             .Input(input)

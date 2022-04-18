@@ -301,6 +301,26 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         AssertTableReads(result, "/Root/Join1_2", 3);
     }
 
+    Y_UNIT_TEST_NEW_ENGINE(IdxLookupSelf) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTables(session);
+
+        const TString query = Q_(R"(
+            SELECT t1.Fk21 AS Key, t2.Value AS Value
+            FROM Join1_1 AS t1
+            LEFT JOIN Join1_1 AS t2
+            ON t1.Fk21 == t2.Key
+            WHERE t1.Key == 2
+            ORDER BY Key;
+        )");
+
+        auto result = ExecQueryAndTestResult(session, query, R"([[[102];#]])");
+        AssertTableReads(result, "/Root/Join1_1", 1);
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(LeftJoinWithNull) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

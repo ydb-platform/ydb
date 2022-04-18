@@ -8,6 +8,7 @@ OWNER(
 SRCS(
     kqp_opt_log_effects.cpp
     kqp_opt_log_extract.cpp
+    kqp_opt_log_helpers.cpp
     kqp_opt_log_join.cpp
     kqp_opt_log_indexes.cpp
     kqp_opt_log_ranges.cpp

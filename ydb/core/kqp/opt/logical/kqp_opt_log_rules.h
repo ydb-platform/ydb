@@ -24,14 +24,6 @@ NYql::NNodes::TExprBase KqpPushPredicateToReadTable(NYql::NNodes::TExprBase node
 NYql::NNodes::TExprBase KqpPushExtractedPredicateToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx);
 
-NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
-
-NYql::NNodes::TExprBase KqpApplyExtractMembersToReadOlapTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
-
-NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTableRanges(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
-
-NYql::NNodes::TExprBase KqpApplyExtractMembersToLookupTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
-
 NYql::NNodes::TExprBase KqpJoinToIndexLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrConfiguration::TPtr& config);
 
@@ -59,5 +51,17 @@ NYql::NNodes::TExprBase KqpExcessUpsertInputColumns(const NYql::NNodes::TExprBas
 
 NYql::NNodes::TExprBase KqpDropTakeOverLookupTable(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
+
+NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
+
+NYql::NNodes::TExprBase KqpApplyExtractMembersToReadOlapTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
+
+NYql::NNodes::TExprBase KqpApplyExtractMembersToReadTableRanges(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
+
+NYql::NNodes::TExprBase KqpApplyExtractMembersToLookupTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const NYql::TParentsMap& parentsMap, bool allowMultiUsage);
 
 } // namespace NKikimr::NKqp::NOpt

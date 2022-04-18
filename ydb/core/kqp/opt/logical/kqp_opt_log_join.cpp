@@ -1,3 +1,4 @@
+#include "kqp_opt_log_impl.h"
 #include "kqp_opt_log_rules.h"
 
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
@@ -155,46 +156,22 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    TMaybeNode<TKqlReadTableBase> rightRead;
-    TMaybeNode<TCoFlatMap> rightFlatmap;
-    TMaybeNode<TCoFilterNullMembers> rightFilterNull;
-    TMaybeNode<TCoSkipNullMembers> rightSkipNull;
-
-    if (auto readTable = join.RightInput().Maybe<TKqlReadTableBase>()) {
-        rightRead = readTable;
-    }
-
-    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TKqlReadTableBase>()) {
-        rightRead = readTable;
-        rightFlatmap = join.RightInput().Maybe<TCoFlatMap>();
-    }
-
-    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TCoFilterNullMembers>().Input().Maybe<TKqlReadTableBase>()) {
-        rightRead = readTable;
-        rightFlatmap = join.RightInput().Maybe<TCoFlatMap>();
-        rightFilterNull = rightFlatmap.Input().Cast<TCoFilterNullMembers>();
-    }
-
-    if (auto readTable = join.RightInput().Maybe<TCoFlatMap>().Input().Maybe<TCoSkipNullMembers>().Input().Maybe<TKqlReadTableBase>()) {
-        rightRead = readTable;
-        rightFlatmap = join.RightInput().Maybe<TCoFlatMap>();
-        rightSkipNull = rightFlatmap.Input().Cast<TCoSkipNullMembers>();
-    }
-
-    if (!rightRead) {
+    auto rightReadMatch = MatchRead<TKqlReadTableBase>(join.RightInput());
+    if (!rightReadMatch) {
         return {};
     }
+
+    if (rightReadMatch->FlatMap && !IsPassthroughFlatMap(rightReadMatch->FlatMap.Cast(), nullptr)) {
+        return {};
+    }
+
+    auto rightRead = rightReadMatch->Read.Cast<TKqlReadTableBase>();
 
     Y_ENSURE(rightRead.Maybe<TKqlReadTable>() || rightRead.Maybe<TKqlReadTableIndex>());
 
-    const TKqlReadTableBase read = rightRead.Cast();
+    const TKqlReadTableBase read = rightRead;
     if (!read.Table().SysView().Value().empty()) {
         // Can't lookup in system views
-        return {};
-    }
-
-    if (rightFlatmap && !IsPassthroughFlatMap(rightFlatmap.Cast(), nullptr)) {
-        // Can't lookup in modified table
         return {};
     }
 
@@ -373,32 +350,15 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Build()
         .Done();
 
-    if (rightFilterNull) {
-        lookup = Build<TCoFilterNullMembers>(ctx, join.Pos())
-            .Input(lookup)
-            .Members(rightFilterNull.Cast().Members())
-            .Done();
-    }
-
-    if (rightSkipNull) {
-        lookup = Build<TCoSkipNullMembers>(ctx, join.Pos())
-            .Input(lookup)
-            .Members(rightSkipNull.Cast().Members())
-            .Done();
-    }
-
-    if (rightFlatmap) {
-        lookup = Build<TCoFlatMap>(ctx, join.Pos())
-            .Input(lookup)
-            .Lambda(rightFlatmap.Cast().Lambda())
-            .Done();
-    }
+    rightReadMatch->ExtractMembers = {}; // We already fetching only required columns
+    lookup = rightReadMatch->BuildProcessNodes(lookup, ctx);
 
     if (join.JoinType().Value() == "RightSemi") {
         auto arg = TCoArgument(ctx.NewArgument(join.Pos(), "row"));
         auto rightLabel = join.RightLabel().Cast<TCoAtom>().Value();
 
-        TVector<TExprBase> renames = CreateRenames(rightFlatmap, read.Columns(), arg, rightLabel, join.Pos(), ctx);
+        TVector<TExprBase> renames = CreateRenames(rightReadMatch->FlatMap, read.Columns(), arg, rightLabel,
+            join.Pos(), ctx);
 
         lookup = Build<TCoMap>(ctx, join.Pos())
             .Input(lookup)

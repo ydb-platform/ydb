@@ -505,6 +505,44 @@ Y_UNIT_TEST_SUITE(KqpNewEngineEffects) {
             [[4000000003u];["Updated"];[6]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(DeletePkPrefixWithIndex) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE Tmp (
+                Key1 Uint32,
+                Key2 String,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX Index GLOBAL ON (Value, Key1)
+            )
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeResult.GetStatus(), EStatus::SUCCESS, schemeResult.GetIssues().ToString());
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            DECLARE $key1 as Uint32;
+
+            DELETE FROM Tmp WHERE Key1 = $key1;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        auto table = plan["tables"][0];
+        UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/Tmp");
+        auto reads = table["reads"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
+        UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
+    }
 }
 
 } // namespace NKqp

@@ -5226,6 +5226,45 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             [[2];[40u];["Two"];["Value4"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST_TWIN(IndexMultipleRead, UseNewEngine) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$fks")
+                .BeginList()
+                .AddListItem().Int32(5)
+                .AddListItem().Int32(10)
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $fks AS List<Int32>;
+
+            SELECT * FROM SecondaryKeys VIEW Index WHERE Fk IN $fks;
+            SELECT COUNT(*) FROM SecondaryKeys VIEW Index WHERE Fk IN $fks;
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        AssertTableStats(result, "/Root/SecondaryKeys", {
+            .ExpectedReads = UseNewEngine ? 2 : 1, // TODO: Looks like missing SkipNullMembers in NewEngine
+        });
+
+        AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {
+            .ExpectedReads = UseNewEngine ? 1 : 2,
+        });
+
+        CompareYson(R"([[[5];[5];["Payload5"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(1)));
+    }
 }
 
 }

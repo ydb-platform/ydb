@@ -6442,6 +6442,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
 
+        if (isCompact) {
+            if (!EnsurePersistableType(input->Pos(), *payloadType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
         input->SetTypeAnn(dictType);
         if (isOptional) {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(input->GetTypeAnn()));

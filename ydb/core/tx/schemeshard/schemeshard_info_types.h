@@ -479,7 +479,8 @@ public:
         }
     }
 
-    TVector<ui32> FillDescription(TPathElement::TPtr pathInfo);
+    void ResetDescriptionCache();
+    TVector<ui32> FillDescriptionCache(TPathElement::TPtr pathInfo);
 
     void SetRoom(const TStorageRoom& room) {
         // WARNING: this is legacy support code

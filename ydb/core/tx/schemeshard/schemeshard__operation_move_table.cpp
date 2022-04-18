@@ -228,6 +228,7 @@ public:
         Y_VERIFY(context.SS->Tables.contains(srcPath.Base()->PathId));
 
         TTableInfo::TPtr tableInfo = new TTableInfo(*context.SS->Tables.at(srcPath.Base()->PathId));
+        tableInfo->ResetDescriptionCache();
         tableInfo->AlterVersion += 1;
 
         // copy table info

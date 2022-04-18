@@ -196,11 +196,33 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
 {
     Y_VERIFY_DEBUG(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
 
+    for (size_t index = 0; index < key.size(); ++index) {
+        if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
+            Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+        }
+    }
+    for (size_t index = 0; index < ops.size(); ++index) {
+        if (auto error = NScheme::HasUnexpectedValueSize(ops[index].Value)) {
+            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, ops[index].Tag, error.c_str());
+        }
+    }
+
     Redo->EvUpdate(table, rop, key, ops, rowVersion);
 }
 
 void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId)
 {
+    for (size_t index = 0; index < key.size(); ++index) {
+        if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
+            Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+        }
+    }
+    for (size_t index = 0; index < ops.size(); ++index) {
+        if (auto error = NScheme::HasUnexpectedValueSize(ops[index].Value)) {
+            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, ops[index].Tag, error.c_str());
+        }
+    }
+
     Redo->EvUpdateTx(table, rop, key, ops, txId);
 }
 

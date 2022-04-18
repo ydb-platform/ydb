@@ -15,6 +15,9 @@
     /**/
 
 namespace NKikimr {
+
+    struct TCell;
+
 namespace NScheme {
 
 ////////////////////////////////////////////////////////
@@ -59,6 +62,20 @@ inline ui32 GetFixedSize(NKikimr::NScheme::TTypeId typeId) {
         return 0;
     }
 }
+
+/**
+ * Checks if the given value matches the expected type size
+ *
+ * Returns empty string on success or an error description in case of failure
+ */
+::TString HasUnexpectedValueSize(const ::NKikimr::TRawTypeValue& value);
+
+/**
+ * Checks if the given cell/type combination matches the expected type size
+ * 
+ * Returns empty string on success or an error description in case of failure
+ */
+::TString HasUnexpectedValueSize(const ::NKikimr::TCell& value, TTypeId typeId);
 
 } // namespace NScheme
 } // namespace NKikimr

@@ -14,6 +14,17 @@ namespace {
 
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
+TShardCompactionInfo MakeCompactionInfo(ui64 idx, ui64 ts, ui64 sh = 0, ui64 d = 0) {
+    TShardIdx shardId = TShardIdx(1, idx);
+    TTableInfo::TPartitionStats stats;
+    stats.FullCompactionTs = ts;
+    stats.SearchHeight = sh;
+    stats.RowDeletes = d;
+    stats.PartCount = 100; // random number to not consider shard as empty
+    stats.RowCount = 100;  // random number to not consider shard as empty
+    return TShardCompactionInfo(shardId, stats);
+}
+
 std::pair<TTableInfoMap, ui64> GetTables(
     TTestActorRuntime &runtime,
     ui64 tabletId)
@@ -35,6 +46,69 @@ std::pair<TTableInfoMap, ui64> GetTables(
     return std::make_pair(result, ownerId);
 }
 
+struct TPathInfo {
+    ui64 OwnerId = TTestTxConfig::SchemeShard;
+    NKikimrTxDataShard::TEvGetInfoResponse::TUserTable UserTable;
+    TVector<ui64> Shards;
+};
+
+TPathInfo GetPathInfo(
+    TTestActorRuntime &runtime,
+    const char* fullPath,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    TPathInfo info;
+    auto description = DescribePrivatePath(runtime, schemeshardId,  fullPath, true, true);
+    for (auto &part : description.GetPathDescription().GetTablePartitions())
+        info.Shards.push_back(part.GetDatashardId());
+
+    auto [tables, ownerId] = GetTables(runtime, info.Shards.at(0));
+    auto userTableName = TStringBuf(fullPath).RNextTok('/');
+    info.UserTable = tables[userTableName];
+    info.OwnerId = ownerId;
+
+    return info;
+}
+
+void CreateTableWithData(
+    TTestActorRuntime &runtime,
+    TTestEnv& env,
+    const char* path,
+    const char* name,
+    ui32 shardsCount,
+    ui64& txId,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    TestCreateTable(runtime, schemeshardId, ++txId, path,
+        Sprintf(R"____(
+            Name: "%s"
+            Columns { Name: "key"  Type: "Uint64"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: %d
+        )____", name, shardsCount));
+    env.TestWaitNotification(runtime, txId, schemeshardId);
+
+    auto fnWriteRow = [&] (ui64 tabletId, ui64 key, const char* tableName) {
+        TString writeQuery = Sprintf(R"(
+            (
+                (let key '( '('key (Uint64 '%lu)) ) )
+                (let value '('('value (Utf8 'MostMeaninglessValueInTheWorld)) ) )
+                (return (AsList (UpdateRow '__user__%s key value) ))
+            )
+        )", key, tableName);
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+        UNIT_ASSERT_VALUES_EQUAL(err, "");
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+    };
+
+    for (ui64 key = 0; key < 100; ++key) {
+        fnWriteRow(TTestTxConfig::FakeHiveTablets, key, name);
+    }
+}
+
 void SetFeatures(
     TTestActorRuntime &runtime,
     TTestEnv&,
@@ -49,6 +123,11 @@ void SetFeatures(
     compactionConfig->MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig->MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig->MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+
+    // 1 compaction / second
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMaxRate(1);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
 
     auto sender = runtime.AllocateEdgeActor();
 
@@ -85,6 +164,11 @@ void DisableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
 
+    // 1 compaction / second
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMaxRate(1);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
+
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
 }
@@ -105,11 +189,33 @@ void EnableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
 
+    // 1 compaction / second
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMaxRate(1);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
+
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
 }
 
-ui64 GetCompactionsCount(
+struct TCompactionStats {
+    ui64 BackgroundRequestCount = 0;
+    ui64 BackgroundCompactionCount = 0;
+
+    TCompactionStats() = default;
+
+    TCompactionStats(const NKikimrTxDataShard::TEvGetCompactTableStatsResult& stats)
+        : BackgroundRequestCount(stats.GetBackgroundCompactionRequests())
+        , BackgroundCompactionCount(stats.GetBackgroundCompactionCount())
+    {}
+
+    void Update(const TCompactionStats& other) {
+        BackgroundRequestCount += other.BackgroundRequestCount;
+        BackgroundCompactionCount += other.BackgroundCompactionCount;
+    }
+};
+
+TCompactionStats GetCompactionStats(
     TTestActorRuntime &runtime,
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     ui64 tabletId,
@@ -124,25 +230,41 @@ ui64 GetCompactionsCount(
     auto response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetCompactTableStatsResult>(handle);
     UNIT_ASSERT(response->Record.HasBackgroundCompactionRequests());
 
-    return response->Record.GetBackgroundCompactionRequests();
+    return TCompactionStats(response->Record);
 }
 
-ui64 GetCompactionsCount(
+TCompactionStats GetCompactionStats(
     TTestActorRuntime &runtime,
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     const TVector<ui64>& shards,
     ui64 ownerId)
 {
-    ui64 compactionsCount = 0;
+    TCompactionStats stats;
+
     for (auto shard: shards) {
-        compactionsCount += GetCompactionsCount(
+        stats.Update(GetCompactionStats(
             runtime,
             userTable,
             shard,
-            ownerId);
+            ownerId));
     }
 
-    return compactionsCount;
+    return stats;
+}
+
+TCompactionStats GetCompactionStats(
+    TTestActorRuntime &runtime,
+    const TString& path,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
+{
+    auto info = GetPathInfo(runtime, path.c_str(), schemeshardId);
+    UNIT_ASSERT(!info.Shards.empty());
+
+    return GetCompactionStats(
+        runtime,
+        info.UserTable,
+        info.Shards,
+        info.OwnerId);
 }
 
 void CheckShardCompacted(
@@ -152,11 +274,11 @@ void CheckShardCompacted(
     ui64 ownerId,
     bool shouldCompacted = true)
 {
-    auto count = GetCompactionsCount(
+    auto count = GetCompactionStats(
         runtime,
         userTable,
         tabletId,
-        ownerId);
+        ownerId).BackgroundRequestCount;
 
     if (shouldCompacted) {
         UNIT_ASSERT(count > 0);
@@ -165,39 +287,30 @@ void CheckShardCompacted(
     }
 }
 
-void CheckNoCompactions(
+void CheckNoCompactionsInPeriod(
     TTestActorRuntime &runtime,
     TTestEnv& env,
-    ui64 schemeshardId,
-    const TString& path)
+    const TString& path,
+    ui64 schemeshardId = TTestTxConfig::SchemeShard)
 {
-    auto description = DescribePrivatePath(runtime, schemeshardId, path, true, true);
-    TVector<ui64> shards;
-    for (auto &part : description.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
-
-    UNIT_ASSERT(!shards.empty());
+    auto info = GetPathInfo(runtime, path.c_str(), schemeshardId);
+    UNIT_ASSERT(!info.Shards.empty());
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto [tables, ownerId] = GetTables(runtime, shards.at(0));
-
-    auto userTableName = TStringBuf(path).RNextTok('/');
-    const auto& userTable = tables[userTableName];
-
-    auto count1 = GetCompactionsCount(
+    auto count1 = GetCompactionStats(
         runtime,
-        userTable,
-        shards,
-        ownerId);
+        info.UserTable,
+        info.Shards,
+        info.OwnerId).BackgroundRequestCount;
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto count2 = GetCompactionsCount(
+    auto count2 = GetCompactionStats(
         runtime,
-        userTable,
-        shards,
-        ownerId);
+        info.UserTable,
+        info.Shards,
+        info.OwnerId).BackgroundRequestCount;
 
     UNIT_ASSERT_VALUES_EQUAL(count1, count2);
 }
@@ -210,29 +323,14 @@ void TestBackgroundCompaction(
 {
     ui64 txId = 1000;
 
-    TestCreateTable(runtime, ++txId, "/MyRoot",
-        R"____(
-            Name: "Simple"
-            Columns { Name: "key1"  Type: "Uint32"}
-            Columns { Name: "Value" Type: "Utf8"}
-            KeyColumnNames: ["key1"]
-            UniformPartitionsCount: 2
-        )____");
-    env.TestWaitNotification(runtime, txId);
+    CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
+    auto info = GetPathInfo(runtime, "/MyRoot/Simple");
 
     enableBackgroundCompactionFunc(runtime, env);
-
-    auto description = DescribePrivatePath(runtime, "/MyRoot/Simple", true, true);
-    TVector<ui64> shards;
-    for (auto &part : description.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
-
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto [tables, ownerId] = GetTables(runtime, shards.at(0));
-
-    for (auto shard: shards)
-        CheckShardCompacted(runtime, tables["Simple"], shard, ownerId);
+    for (auto shard: info.Shards)
+        CheckShardCompacted(runtime, info.UserTable, shard, info.OwnerId);
 }
 
 ui64 TestServerless(
@@ -318,17 +416,13 @@ ui64 TestServerless(
     // turn on background compaction
     EnableBackgroundCompactionViaRestart(runtime, env, schemeshardId, enableServerless);
 
-    auto description = DescribePrivatePath(runtime, schemeshardId, "/MyRoot/User/Simple", true, true);
-    TVector<ui64> shards;
-    for (auto &part : description.GetPathDescription().GetTablePartitions())
-        shards.push_back(part.GetDatashardId());
+    auto info = GetPathInfo(runtime, "/MyRoot/User/Simple", schemeshardId);
+    UNIT_ASSERT(!info.Shards.empty());
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    auto [tables, ownerId] = GetTables(runtime, shards.at(0));
-
-    for (auto shard: shards)
-        CheckShardCompacted(runtime, tables["Simple"], shard, ownerId, enableServerless);
+    for (auto shard: info.Shards)
+        CheckShardCompacted(runtime, info.UserTable, shard, info.OwnerId, enableServerless);
 
     return schemeshardId;
 }
@@ -391,7 +485,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // some time to finish compactions in progress
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        CheckNoCompactions(runtime, env, TTestTxConfig::SchemeShard, "/MyRoot/Simple");
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
     }
 
     Y_UNIT_TEST(ShouldNotCompactServerless) {
@@ -433,7 +527,88 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // some time to finish compactions in progress
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        CheckNoCompactions(runtime, env, schemeshardId, "/MyRoot/User/Simple");
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/User/Simple", schemeshardId);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactBackups) {
+        // enabled via schemeshard restart
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        // disable for the case, when compaction is enabled by default
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 2, txId);
+
+        // backup table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+            IsBackup: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
+        UNIT_ASSERT_VALUES_EQUAL(GetCompactionStats(runtime, "/MyRoot/CopyTable").BackgroundRequestCount, 0UL);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactBorrowed) {
+        // enabled via schemeshard restart
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        //runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_TRACE);
+
+        // disable for the case, when compaction is enabled by default
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
+
+        // capture original observer func by setting dummy one
+        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // now set our observer backed up by original
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactBorrowed:
+                // we should not compact borrowed to check that background compaction
+                // will not compact shard with borrowed parts as well
+                Y_UNUSED(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            default:
+                return originalObserver(runtime, ev);
+            }
+        });
+
+        ui64 txId = 1000;
+
+        // note that we create 1-sharded table to avoid complications
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        // copy table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
+        UNIT_ASSERT_VALUES_EQUAL(GetCompactionStats(runtime, "/MyRoot/CopyTable").BackgroundRequestCount, 0UL);
+
+        // original table should not be compacted as well
+        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
     }
 };
 
@@ -560,48 +735,272 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
     }
 
-    Y_UNIT_TEST(UpdateBelowSearchHeightThreshold) {
+    Y_UNIT_TEST(RemoveLastShardFromSubQueues) {
+        // check that when last shard is removed from BySearchHeight
+        // or from ByRowDeletes, active queue is properly switched
         TCompactionQueueImpl::TConfig config;
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 10;
 
-        TTableInfo::TPartitionStats stats;
-        stats.RowCount = 10;
-        stats.RowDeletes = 100;
-        stats.SearchHeight = 20;
-        stats.PartCount = 100; // random number to not consider shard as empty
+        std::vector<TShardCompactionInfo> shardInfos = {
+            //                id,   ts,     sh,     d
+            MakeCompactionInfo(0,    0,     0,      0),
+            MakeCompactionInfo(1,    1,     0,      0),
+            MakeCompactionInfo(2,    2,     0,      0),
+            MakeCompactionInfo(3,    3,     0,      0),
+            MakeCompactionInfo(4,    4,     100,    0),
+            MakeCompactionInfo(5,    5,     100,    0),
+            MakeCompactionInfo(6,    6,     0,      100),
+            MakeCompactionInfo(7,    7,     0,      100),
+        };
 
         TCompactionQueueImpl queue(config);
-        UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
-        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
+        for(const auto& info: shardInfos) {
+            UNIT_ASSERT(queue.Enqueue(info));
+        }
 
-        stats.SearchHeight = 1;
-        UNIT_ASSERT(queue.UpdateIfFound({ShardIdx, stats}));
-        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
+        // initial queue state
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 8UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 8);
+
+        // remove from LastCompaction, active queue should not change
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 0), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 7UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 7);
+
+        // pop from LastCompaction, BySearchHeight is active now
+        queue.PopFront();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 6UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::BySearchHeight);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 2);
+
+        // remove1 from BySearchHeight (active queue should not change)
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 4), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 5UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::BySearchHeight);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
+
+        // remove2 from BySearchHeight, ByRowDeletes is active now
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 5), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByRowDeletes);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 2);
+
+        // remove1 from ByRowDeletes
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 6), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByRowDeletes);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
+
+        // remove2 from ByRowDeletes
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 7), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 2);
+
+        // remove1 from LastCompaction
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 2), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
+
+        // remove2 from LastCompaction
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 3), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 0);
+
+        // check case BySearchHeight -> ByLastCompaction, i.e. empty ByRowDeletes
+
+        shardInfos = {
+            //                id,   ts,     sh,     d
+            MakeCompactionInfo(1,    1,     0,      0),
+            MakeCompactionInfo(2,    2,     0,      0),
+            MakeCompactionInfo(3,    3,     0,      0),
+            MakeCompactionInfo(4,    4,     100,    0),
+        };
+
+        for(const auto& info: shardInfos) {
+            UNIT_ASSERT(queue.Enqueue(info));
+        }
+
+        // pop from LastCompaction, BySearchHeight not empty
+        queue.PopFront();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::BySearchHeight);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
+
+        // remove from BySearchHeight
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 4), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 2);
+
+        // check case ByLastCompaction -> ByRowDeletes, i.e. BySearchHeight is empty
+
+        while (!queue.Empty())
+            queue.PopFront();
+
+        shardInfos = {
+            //                id,   ts,     sh,     d
+            MakeCompactionInfo(1,    1,     0,      0),
+            MakeCompactionInfo(2,    2,     0,      0),
+            MakeCompactionInfo(3,    3,     0,      0),
+            MakeCompactionInfo(4,    4,     0,    100),
+        };
+
+        for(const auto& info: shardInfos) {
+            UNIT_ASSERT(queue.Enqueue(info));
+        }
+
+        // pop from LastCompaction, BySearchHeight empty, ByRowDeletes is not empty
+        queue.PopFront();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByRowDeletes);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
     }
 
-    Y_UNIT_TEST(UpdateBelowRowDeletesThreshold) {
+    Y_UNIT_TEST(UpdateBelowThreshold) {
+        // check that last shard is removed (via low threshold and stats update) from BySearchHeight queue
+        // while ByRowDeletes queue is not empty, thus becomes active
         TCompactionQueueImpl::TConfig config;
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 10;
 
-        TTableInfo::TPartitionStats stats;
-        stats.RowCount = 10;
-        stats.RowDeletes = 1000;
-        stats.SearchHeight = 20;
-        stats.PartCount = 100; // random number to not consider shard as empty
+        std::vector<TShardCompactionInfo> shardInfos = {
+            //                id,   ts,     sh,     d
+            MakeCompactionInfo(1,    1,     0,      0),
+            MakeCompactionInfo(2,    2,     0,      0),
+            MakeCompactionInfo(3,    3,     0,      0),
+            MakeCompactionInfo(4,    4,     100,    0),
+            MakeCompactionInfo(5,    5,     0,      100),
+        };
 
         TCompactionQueueImpl queue(config);
-        UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
-        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        for(const auto& info: shardInfos) {
+            UNIT_ASSERT(queue.Enqueue(info));
+        }
 
-        stats.RowDeletes = 1;
-        UNIT_ASSERT(queue.UpdateIfFound({ShardIdx, stats}));
-        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 5UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 5);
+
+        // change to BySearchHeight queue
+        queue.PopFront();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::BySearchHeight);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
+
+        TTableInfo::TPartitionStats statsBelow;
+        statsBelow.RowDeletes = 100;
+        statsBelow.FullCompactionTs = 4;
+        statsBelow.SearchHeight = 1; // below threshold
+        statsBelow.RowDeletes = 1;   // below threshold
+        statsBelow.PartCount = 100;  // random number to not consider shard as empty
+        statsBelow.RowCount = 100;   // random number to not consider shard as empty
+
+        // remove from BySearchHeight by updating stats (note that shard remains in LastCompaction queue)
+        UNIT_ASSERT(queue.UpdateIfFound({TShardIdx(1, 4), statsBelow}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByRowDeletes);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
+
+        // remove from BySearchHeight by updating stats (note that shard remains in LastCompaction queue)
+        statsBelow.FullCompactionTs = 5;
+        UNIT_ASSERT(queue.UpdateIfFound({TShardIdx(1, 5), statsBelow}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 4);
+
+        // Now check transition from BySearchHeight to LastCompaction, i.e. empty RowDeletes
+
+        // step1: populate w with item
+        TTableInfo::TPartitionStats statsSh;
+        statsSh.FullCompactionTs = 4;
+        statsSh.SearchHeight = 100; // above threshold
+        statsSh.RowDeletes = 1;     // below threshold
+        statsSh.PartCount = 100;    // random number to not consider shard as empty
+        statsSh.RowCount = 100;     // random number to not consider shard as empty
+        UNIT_ASSERT(queue.UpdateIfFound({TShardIdx(1, 4), statsSh}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 4);
+
+        // step2: change to BySearchHeight queue
+        queue.PopFront();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::BySearchHeight);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
+
+        // step3: BySearchHeight -> LastCompaction
+        UNIT_ASSERT(queue.UpdateIfFound({TShardIdx(1, 4), statsBelow}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 3);
+
+        // check ByLastCompaction -> ByRowDeletes, i.e. empty BySearchHeight
+
+        // step1: populate ByRowDeletes with item
+        TTableInfo::TPartitionStats statsDel;
+        statsDel.FullCompactionTs = 5;
+        statsDel.SearchHeight = 1; // below threshold
+        statsDel.RowDeletes = 100; // above threshold
+        statsDel.PartCount = 100;  // random number to not consider shard as empty
+        statsDel.RowCount = 100;   // random number to not consider shard as empty
+        UNIT_ASSERT(queue.UpdateIfFound({TShardIdx(1, 5), statsDel}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByLastCompaction);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 3);
+
+        // step2: change to ByRowDeletes
+        queue.PopFront();
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::ByRowDeletes);
+        UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
     }
 
     Y_UNIT_TEST(UpdateWithEmptyShard) {
@@ -633,20 +1032,12 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 100;
         config.RowDeletesThreshold = 100;
 
-        auto makeInfo = [](ui64 idx, ui64 ts) {
-            TShardIdx shardId = TShardIdx(1, idx);
-            TTableInfo::TPartitionStats stats;
-            stats.FullCompactionTs = ts;
-            stats.PartCount = 100; // random number to not consider shard as empty
-            return TShardCompactionInfo(shardId, stats);
-        };
-
         std::vector<TShardCompactionInfo> shardInfos = {
-            //       id,   ts
-            makeInfo(1,    1),
-            makeInfo(2,    2),
-            makeInfo(3,    3),
-            makeInfo(4,    4)
+            //                id,   ts
+            MakeCompactionInfo(1,    1),
+            MakeCompactionInfo(2,    2),
+            MakeCompactionInfo(3,    3),
+            MakeCompactionInfo(4,    4)
         };
 
         auto rng = std::default_random_engine {};
@@ -676,29 +1067,19 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 10;
 
-        auto makeInfo = [](ui64 idx, ui64 ts, ui64 sh, ui64 d) {
-            TShardIdx shardId = TShardIdx(1, idx);
-            TTableInfo::TPartitionStats stats;
-            stats.FullCompactionTs = ts;
-            stats.SearchHeight = sh;
-            stats.RowDeletes = d;
-            stats.PartCount = 100; // random number to not consider shard as empty
-            return TShardCompactionInfo(shardId, stats);
-        };
-
         std::vector<TShardCompactionInfo> shardInfos = {
-            //       id,   ts,     sh,     d
-            makeInfo(1,    1,     100,    100),   // top in TS
-            makeInfo(2,    3,     100,    50),    // top in SH
-            makeInfo(3,    4,     50,     100),   // top in D
-            makeInfo(4,    2,     0,      0),     // 2 in TS
-            makeInfo(5,    3,     90,     0),     // 2 in SH
-            makeInfo(6,    4,     0,      90),    // 2 in D
-            makeInfo(7,    3,     0,      0),     // 3 in TS
-            makeInfo(8,    5,     0,      80),    // 3 in D
-            makeInfo(9,    5,     0,      0),     // 4 in TS, since this point only TS queue contains items
-            makeInfo(10,   6,     0,      0),     // 5 in TS
-            makeInfo(11,   7,     0,      0),     // 6 in TS
+            //                 id,   ts,     sh,     d
+            MakeCompactionInfo(1,    1,     100,    100),   // top in TS
+            MakeCompactionInfo(2,    3,     100,    50),    // top in SH
+            MakeCompactionInfo(3,    4,     50,     100),   // top in D
+            MakeCompactionInfo(4,    2,     0,      0),     // 2 in TS
+            MakeCompactionInfo(5,    3,     90,     0),     // 2 in SH
+            MakeCompactionInfo(6,    4,     0,      90),    // 2 in D
+            MakeCompactionInfo(7,    3,     0,      0),     // 3 in TS
+            MakeCompactionInfo(8,    5,     0,      80),    // 3 in D
+            MakeCompactionInfo(9,    5,     0,      0),     // 4 in TS, since this point only TS queue contains items
+            MakeCompactionInfo(10,   6,     0,      0),     // 5 in TS
+            MakeCompactionInfo(11,   7,     0,      0),     // 6 in TS
         };
 
         auto rng = std::default_random_engine {};

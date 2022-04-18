@@ -126,6 +126,7 @@ public:
         Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
         Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
         Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds());
+        Result->Record.MutableTableStats()->SetHasLoanedParts(Self->Executor()->HasLoanedParts());
 
         Result->Record.SetShardState(Self->State);
         for (const auto& pi : tableInfo.Stats.PartOwners) {

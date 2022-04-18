@@ -247,7 +247,10 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ui32 ShardState = NKikimrTxDataShard::Unknown;
 
         // True when PartOwners has parts from other tablets
-        bool HasBorrowed = false;
+        bool HasBorrowedData = false;
+
+        // True when lent parts to other tablets
+        bool HasLoanedData = false;
 
         // Tablet actor started at
         TInstant StartTime;

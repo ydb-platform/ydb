@@ -168,6 +168,9 @@ public:
 
     // for cleanup
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const;
+
+    // i.e. parts we own, but loaned to others
+    bool HasLoanedParts() const;
 };
 
 }}

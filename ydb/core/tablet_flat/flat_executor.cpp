@@ -3624,6 +3624,12 @@ THashMap<TLogoBlobID, TVector<ui64>> TExecutor::GetBorrowedParts() const {
     return { };
 }
 
+bool TExecutor::HasLoanedParts() const {
+    if (BorrowLogic)
+        return BorrowLogic->HasLoanedParts();
+    return false;
+}
+
 const TExecutorStats& TExecutor::GetStats() const {
     return *Stats;
 }

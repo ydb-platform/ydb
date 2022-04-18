@@ -1203,6 +1203,31 @@ void CreateShardedTable(Tests::TServer::TPtr server,
     CreateShardedTable(server, sender, root, name, opts);
 }
 
+ui64 AsyncCreateCopyTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString &root,
+        const TString &name,
+        const TString &from)
+{
+    auto &runtime = *server->GetRuntime();
+
+    // Create table with four shards.
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+    tx.SetWorkingDir(root);
+    auto &desc = *tx.MutableCreateTable();
+    desc.SetName(name);
+    desc.SetCopyFromTable(from);
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+    return ev->Get()->Record.GetTxId();
+}
+
 NKikimrScheme::TEvDescribeSchemeResult DescribeTable(Tests::TServer::TPtr server,
                                                      TActorId sender,
                                                      const TString &path)

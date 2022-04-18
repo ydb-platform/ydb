@@ -66,7 +66,6 @@ public:
         const TUserTable& tableInfo = *it->second;
         const auto localTid = tableInfo.LocalTid;
 
-        // TODO: consider using metrics instead
         ++tableInfo.Stats.BackgroundCompactionRequests;
 
         auto stats = txc.DB.GetCompactionStats(localTid);
@@ -82,11 +81,12 @@ public:
 
         if (hasBorrowed && !record.GetCompactBorrowed()) {
             // normally we should not receive requests to compact in this case
+            // but in some rare cases like schemeshard restart we can
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Background compaction of tablet# " << Self->TabletID()
                 << " of path# " << pathId
                 << ", requested from# " << Ev->Sender
-                << " contains borrowed data, failed");
+                << " contains borrowed parts, failed");
 
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED);
 
@@ -94,6 +94,25 @@ public:
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
+            ctx.Send(Ev->Sender, std::move(response));
+            return true;
+        }
+
+        if (Self->Executor()->HasLoanedParts()) {
+            // normally we should not receive requests to compact in this case
+            // but in some rare cases like schemeshard restart we can
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Background compaction of tablet# " << Self->TabletID()
+                << " of path# " << pathId
+                << ", requested from# " << Ev->Sender
+                << " contains loaned parts, failed");
+
+            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED);
+
+            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+                Self->TabletID(),
+                pathId,
+                NKikimrTxDataShard::TEvCompactTableResult::LOANED);
             ctx.Send(Ev->Sender, std::move(response));
             return true;
         }
@@ -133,6 +152,7 @@ public:
 
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION);
             Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(std::make_tuple(compactionId, pathId, Ev->Sender));
+            ++tableInfo.Stats.BackgroundCompactionCount;
         } else {
             // compaction failed, for now we don't care
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START);
@@ -253,6 +273,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
     if (it != TableInfos.end()) {
         const TUserTable& tableInfo = *it->second;
         response->Record.SetBackgroundCompactionRequests(tableInfo.Stats.BackgroundCompactionRequests);
+        response->Record.SetBackgroundCompactionCount(tableInfo.Stats.BackgroundCompactionCount);
     }
 
     ctx.Send(ev->Sender, std::move(response));

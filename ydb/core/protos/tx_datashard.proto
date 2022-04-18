@@ -1400,7 +1400,7 @@ message TEvKqpScan {
 
 message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
-    optional bool CompactBorrowed = 2;
+    optional bool CompactBorrowed = 2; // i.e. taken
     optional bool CompactSinglePartedShards = 3;
 }
 
@@ -1410,6 +1410,7 @@ message TEvCompactTableResult {
         NOT_NEEDED = 1;
         FAILED = 2;
         BORROWED = 3;
+        LOANED = 4;
     };
 
     optional uint64 TabletId = 1;
@@ -1427,6 +1428,7 @@ message TEvGetCompactTableStats {
 
 message TEvGetCompactTableStatsResult {
     optional uint64 BackgroundCompactionRequests = 1;
+    optional uint64 BackgroundCompactionCount = 2;
 }
 
 // TEvRead is used to request multiple queries from a shard and

@@ -211,6 +211,8 @@ GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 
+GENERATE_ENUM_SERIALIZATION(operation_queue_timer.h)
+
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen

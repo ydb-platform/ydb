@@ -605,6 +605,7 @@ public:
     void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) override;
 
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override;
+    bool HasLoanedParts() const override;
 
     const TExecutorStats& GetStats() const override;
     NMetrics::TResourceMetrics* GetResourceMetrics() const override;

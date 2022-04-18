@@ -467,6 +467,12 @@ void CreateShardedTable(Tests::TServer::TPtr server,
                         const NLocalDb::TCompactionPolicy* policy = nullptr,
                         EShadowDataMode shadowData = EShadowDataMode::Default);
 
+ui64 AsyncCreateCopyTable(Tests::TServer::TPtr server,
+                          TActorId sender,
+                          const TString &root,
+                          const TString &name,
+                          const TString &from);
+
 TVector<ui64> GetTableShards(Tests::TServer::TPtr server,
                              TActorId sender,
                              const TString &path);

@@ -42,7 +42,7 @@ SELECT $x;
 If the URL is specified, the library is downloaded from the URL rather than from the pre-attached file as in the following example:
 
 ```yql
-PRAGMA library("a.sql","https://paste.yandex-team.ru/5618566/text");
+PRAGMA library("a.sql","{{ corporate-paste }}/5618566/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
@@ -51,7 +51,7 @@ In this case, you can use text parameter value substitution in the URL:
 
 ```yql
 DECLARE $_ver AS STRING; -- "5618566"
-PRAGMA library("a.sql","https://paste.yandex-team.ru/{$_ver}/text");
+PRAGMA library("a.sql","{{ corporate-paste }}/{$_ver}/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```

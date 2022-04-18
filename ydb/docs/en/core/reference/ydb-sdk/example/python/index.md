@@ -1,6 +1,6 @@
 # App in Python
 
-This page contains a detailed description of the code of a [test app](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/basic_example_v1) that is available as part of the {{ ydb-short-name }} [Python SDK](https://github.com/yandex-cloud/ydb-python-sdk).
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-python-sdk/tree/master/examples/basic_example_v1) that is available as part of the {{ ydb-short-name }} [Python SDK](https://github.com/ydb-platform/ydb-python-sdk).
 
 ## Downloading and starting {#download}
 

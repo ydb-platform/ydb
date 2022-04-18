@@ -1,6 +1,6 @@
 # App in Node.js
 
-This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1) that is available as part of the {{ ydb-short-name }} [Node.js SDK](https://github.com/yandex-cloud/ydb-nodejs-sdk).
+This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/master/examples/basic-example-v1) that is available as part of the {{ ydb-short-name }} [Node.js SDK](https://github.com/ydb-platform/ydb-nodejs-sdk).
 
 {% include [init.md](steps/01_init.md) %}
 

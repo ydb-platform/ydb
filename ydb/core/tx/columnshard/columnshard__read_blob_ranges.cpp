@@ -118,9 +118,75 @@ void TTxReadBlobRanges::Complete(const TActorContext& ctx) {
     LOG_S_DEBUG("TTxReadBlobRanges.Complete at tablet " << Self->TabletID());
 }
 
+static std::unique_ptr<TEvColumnShard::TEvReadBlobRangesResult>
+MakeErrorResponse(const TEvColumnShard::TEvReadBlobRanges& msg, ui64 tabletId, ui32 status) {
+    auto result = std::make_unique<TEvColumnShard::TEvReadBlobRangesResult>(tabletId);
+    for (const auto& range : msg.Record.GetBlobRanges()) {
+        auto* res = result->Record.AddResults();
+        res->MutableBlobRange()->CopyFrom(range);
+        res->SetStatus(status);
+    }
+    return result;
+}
+
 void TColumnShard::Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TActorContext& ctx) {
-    LOG_S_DEBUG("Read blob ranges at tablet " << TabletID() << ev->Get()->Record);
-    Execute(new TTxReadBlobRanges(this, ev), ctx);
+    auto& msg = *ev->Get();
+
+    LOG_S_DEBUG("Read blob ranges at tablet " << TabletID() << msg.Record);
+
+    if (msg.BlobRanges.empty()) {
+        TBlobGroupSelector dsGroupSelector(Info());
+        TString errString;
+        msg.RestoreFromProto(&dsGroupSelector, errString);
+        Y_VERIFY_S(errString.empty(), errString);
+    }
+
+    std::optional<TUnifiedBlobId> evictedBlobId;
+    bool isSmall = false;
+    bool isFallback = false;
+    bool isOther = false;
+    for (const auto& range : msg.BlobRanges) {
+        auto& blobId = range.BlobId;
+        if (blobId.IsSmallBlob()) {
+            isSmall = true;
+        } else if (blobId.IsDsBlob()) {
+            isFallback = true;
+            if (evictedBlobId) {
+                // Can read only one blobId at a time (but multiple ranges from it)
+                Y_VERIFY(evictedBlobId == blobId);
+            } else {
+                evictedBlobId = blobId;
+            }
+        } else {
+            isOther = true;
+        }
+    }
+
+    Y_VERIFY(isSmall != isFallback && !isOther);
+
+    if (isSmall) {
+        Execute(new TTxReadBlobRanges(this, ev), ctx);
+    } else if (isFallback) {
+        Y_VERIFY(evictedBlobId->IsValid());
+
+        ui32 status = NKikimrProto::EReplyStatus::ERROR;
+
+        NKikimrTxColumnShard::TEvictMetadata meta;
+        auto evicted = BlobManager->GetEvicted(*evictedBlobId, meta);
+
+        if (!evicted.Blob.IsValid() || !evicted.ExternBlob.IsValid()) {
+            auto result = MakeErrorResponse(msg, TabletID(), status);
+            ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
+        }
+
+        TString tierName = meta.GetTierName();
+        Y_VERIFY(!tierName.empty());
+
+        if (!GetExportedBlob(ctx, ev->Sender, ev->Cookie, tierName, std::move(evicted), std::move(msg.BlobRanges))) {
+            auto result = MakeErrorResponse(msg, TabletID(), status);
+            ctx.Send(ev->Sender, result.release(), 0, ev->Cookie);
+        }
+    }
 }
 
 }

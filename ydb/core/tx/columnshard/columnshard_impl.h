@@ -426,9 +426,13 @@ private:
     void SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions);
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
+    void MapExternBlobs(const TActorContext& ctx, NOlap::TReadMetadata& metadata);
+    TActorId GetS3ActorForTier(const TString& tierName, const TString& phase);
     void ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
                      THashMap<TUnifiedBlobId, TString>&& blobsIds);
     void ForgetBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs);
+    bool GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
+                         NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges);
     ui32 InitS3Actors(const TActorContext& ctx, bool init);
     void StopS3Actors(const TActorContext& ctx);
 

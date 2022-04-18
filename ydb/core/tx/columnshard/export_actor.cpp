@@ -88,7 +88,7 @@ private:
     void SendReadRequest(const NBlobCache::TBlobRange& blobRange) {
         Y_VERIFY(!blobRange.Offset);
         Y_VERIFY(blobRange.Size);
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, false));
+        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, false, false));
     }
 
     void SendResultAndDie(const TActorContext& ctx) {

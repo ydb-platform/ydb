@@ -13,6 +13,24 @@
 
 namespace NKikimr::NBlobCache {
 
+namespace {
+    // Blobs with same tagret can be read in a single request
+    // (e.g. DS blobs from the same tablet residing on the same DS group, or 2 small blobs from the same tablet)
+    std::pair<ui64, ui32> BlobSource(const TUnifiedBlobId& blobId) {
+        Y_VERIFY(blobId.IsValid());
+
+        if (blobId.IsDsBlob()) {
+            // Tablet & group restriction
+            return {blobId.GetTabletId(), blobId.GetDsGroup()};
+        } else if (blobId.IsSmallBlob()) {
+            // Tablet restriction, no group restrictions
+            return {blobId.GetTabletId(), 0};
+        }
+
+        return {0, 0};
+    }
+}
+
 using namespace NActors;
 
 class TBlobCache: public TActorBootstrapped<TBlobCache> {
@@ -26,6 +44,11 @@ private:
         {}
     };
 
+    struct TReadItem {
+        TBlobRange BlobRange;
+        bool Fallback{false};
+    };
+
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(5);
@@ -35,17 +58,18 @@ private:
                                                             // It is used to remove all blob ranges from cache when
                                                             // it gets a notification that a blob has been deleted
     TControlWrapper MaxCacheDataSize;
+    TControlWrapper MaxCacheExternalDataSize; // Cache size for extern (i.e. S3) blobs
     TControlWrapper MaxInFlightDataSize;
     i64 CacheDataSize;              // Current size of all blobs in cache
     ui64 ReadCookie;
     THashMap<ui64, std::vector<TBlobRange>> CookieToRange;  // All in-flight requests
     THashMap<TBlobRange, TReadInfo> OutstandingReads;   // All in-flight and enqueued reads
-    TDeque<TBlobRange> ReadQueue;   // Reads that are waiting to be sent
+    TDeque<TReadItem> ReadQueue;    // Reads that are waiting to be sent
                                     // TODO: Consider making per-group queues
     i64 InFlightDataSize;           // Current size of all in-flight blobs
 
     THashMap<ui64, TActorId> ShardPipes;    // TabletId -> PipeClient for small blob read requests
-    THashMap<ui64, THashSet<ui64>> InFlightSmallBlobRequests;   // TabletId -> list to read cookies
+    THashMap<ui64, THashSet<ui64>> InFlightTabletRequests;  // TabletId -> list to read cookies
 
     using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
     const TCounterPtr SizeBytes;
@@ -75,6 +99,7 @@ public:
         : TActorBootstrapped<TBlobCache>()
         , Cache(SIZE_MAX)
         , MaxCacheDataSize(maxSize, 0, 1ull << 40)
+        , MaxCacheExternalDataSize(0, 0, 1ull << 40)
         , MaxInFlightDataSize(Min<i64>(MaxCacheDataSize, MAX_IN_FLIGHT_BYTES), 0, 10ull << 30)
         , CacheDataSize(0)
         , ReadCookie(1)
@@ -98,8 +123,10 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        AppData(ctx)->Icb->RegisterSharedControl(MaxCacheDataSize, "BlobCache.MaxCacheDataSize");
-        AppData(ctx)->Icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
+        auto& icb = AppData(ctx)->Icb;
+        icb->RegisterSharedControl(MaxCacheDataSize, "BlobCache.MaxCacheDataSize");
+        icb->RegisterSharedControl(MaxCacheExternalDataSize, "BlobCache.MaxCacheExternalDataSize");
+        icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
         Become(&TBlobCache::StateFunc);
         ScheduleWakeup();
     }
@@ -142,17 +169,18 @@ private:
 
     void Handle(TEvBlobCache::TEvReadBlobRange::TPtr& ev, const TActorContext& ctx) {
         const TBlobRange& blobRange = ev->Get()->BlobRange;
-        const bool promote = ev->Get()->Cache;
+        const bool promote = ev->Get()->CacheAfterRead;
+        const bool fallback = ev->Get()->Fallback;
 
-        LOG_S_DEBUG("Read request: " << blobRange);
+        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback);
 
-        HandleSingleRangeRead(blobRange, promote, ev->Sender, ctx);
+        HandleSingleRangeRead(blobRange, promote, fallback, ev->Sender, ctx);
 
         MakeReadRequests(ctx);
     }
 
     void HandleSingleRangeRead(const TBlobRange& blobRange,
-        const bool promoteInCache, const TActorId& sender,  const TActorContext& ctx)
+        bool promoteInCache, bool fallback, const TActorId& sender,  const TActorContext& ctx)
     {
         // Is in cache?
         auto it = promoteInCache ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
@@ -164,7 +192,13 @@ private:
 
         Misses->Inc();
 
-        // Is outsanding?
+        // Disable promoting reads for external blobs if MaxCacheExternalDataSize is zero. But keep promoting hits.
+        // For now MaxCacheExternalDataSize is just a disabled/enabled flag. TODO: real MaxCacheExternalDataSize
+        if (fallback && MaxCacheExternalDataSize == 0) {
+            promoteInCache = false;
+        }
+
+        // Is outstanding?
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt != OutstandingReads.end()) {
             readIt->second.Waiting.push_back(sender);
@@ -172,15 +206,16 @@ private:
             return;
         }
 
-        EnqueueRead(blobRange, promoteInCache, sender);
+        EnqueueRead(blobRange, promoteInCache, sender, fallback);
     }
 
     void Handle(TEvBlobCache::TEvReadBlobRangeBatch::TPtr& ev, const TActorContext& ctx) {
         const auto& ranges = ev->Get()->BlobRanges;
+        bool fallback = ev->Get()->Fallback;
         LOG_S_DEBUG("Batch read request: " << JoinStrings(ranges.begin(), ranges.end(), " "));
 
         for (const auto& blobRange : ranges) {
-            HandleSingleRangeRead(blobRange, ev->Get()->Cache, ev->Sender, ctx);
+            HandleSingleRangeRead(blobRange, ev->Get()->CacheAfterRead, fallback, ev->Sender, ctx);
         }
 
         MakeReadRequests(ctx);
@@ -240,14 +275,14 @@ private:
         CachedRanges.erase(blobIdIt);
     }
 
-    void EnqueueRead(const TBlobRange& blobRange, const bool promoteInCache, const TActorId& sender) {
+    void EnqueueRead(const TBlobRange& blobRange, bool promoteInCache, const TActorId& sender, bool fallback) {
         TReadInfo& blobInfo = OutstandingReads[blobRange];
         blobInfo.Waiting.push_back(sender);
         blobInfo.Cache = promoteInCache;
 
         LOG_S_DEBUG("Enqueue read range: " << blobRange);
 
-        ReadQueue.push_back(blobRange);
+        ReadQueue.push_back(TReadItem{blobRange, fallback});
         ReadsInQueue->Set(ReadQueue.size());
     }
 
@@ -284,68 +319,74 @@ private:
         ReadRequests->Inc();
     }
 
-    // Checks if 2 blobs can be read in a single request (e.g. DS blobs from the same
-    // tablet residing on the same DS group, or 2 small blobs from the same tablet)
-    inline bool CanBatchReads(const TUnifiedBlobId& a, const TUnifiedBlobId& b) {
-        if (a.GetType() != b.GetType()) {
-            return false;
-        }
-
-        if (!a.IsValid()) {
-            return false;
-        }
-
-        // Same tablet and same DS group?
-        if (a.IsDsBlob()) {
-            return a.GetTabletId() == b.GetTabletId() &&
-                a.GetDsGroup() == b.GetDsGroup();
-        }
-
-        // Small blobs from the same tablet?
-        if (a.IsSmallBlob()) {
-            return a.GetTabletId() == b.GetTabletId();
-        }
-
-        return false;
-    }
-
     void MakeReadRequests(const TActorContext& ctx) {
-        std::vector<TBlobRange> blobRanges;
-        ui64 cookie = ++ReadCookie;
-        ui64 requestSize = 0;
+        THashMap<std::pair<ui64, ui32>, std::vector<TBlobRange>> groupedBlobRanges;
+        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> fallbackRanges;
 
-        // NOTE: if queue is not empty, at least 1 in-flight request is allowed
-        while (!ReadQueue.empty() && (InFlightDataSize == 0 || InFlightDataSize < MaxInFlightDataSize)) {
-            const TBlobRange& blobRange = ReadQueue.front();
+        while (!ReadQueue.empty()) {
+            const auto& readItem = ReadQueue.front();
+            const TBlobRange& blobRange = readItem.BlobRange;
 
-            // Only group ranges from the same Tablet and same DS group
-            if (!blobRanges.empty() && (
-                    !CanBatchReads(blobRanges.back().BlobId, blobRange.BlobId) ||
-                    requestSize > MAX_REQUEST_BYTES
-                ))
-            {
-                SendBatchReadRequest(blobRanges, cookie, ctx);
-                blobRanges.clear();
-                cookie = ++ReadCookie;
-                requestSize = 0;
+            if (readItem.Fallback) {
+                // For now it's always possible to add external read cause we must not block ReadQueue by such reads
+                // TODO: separate ReadQueue and InFlightDataSize for external reads
+                fallbackRanges[blobRange.BlobId].push_back(blobRange);
+            } else {
+                // NOTE: if queue is not empty, at least 1 in-flight request is allowed
+                if (InFlightDataSize && InFlightDataSize >= MaxInFlightDataSize) {
+                    break;
+                }
+                InFlightDataSize += blobRange.Size;
+
+                std::pair<ui64, ui32> blobSrc = BlobSource(blobRange.BlobId);
+                groupedBlobRanges[blobSrc].push_back(blobRange);
             }
-            blobRanges.push_back(blobRange);
-            requestSize += blobRange.Size;
-            CookieToRange[cookie].push_back(blobRange);
 
             SizeBytesInFlight->Add(blobRange.Size);
             SizeBlobsInFlight->Inc();
-            InFlightDataSize += blobRange.Size;
-
-            // We might need to free some space to accomodate the results of new reads
-            Evict(ctx);
 
             ReadQueue.pop_front();
         }
-        if (!blobRanges.empty()) {
-            SendBatchReadRequest(blobRanges, cookie, ctx);
-        }
+
         ReadsInQueue->Set(ReadQueue.size());
+
+        // We might need to free some space to accomodate the results of new reads
+        Evict(ctx);
+
+        ui64 cookie = ++ReadCookie;
+
+        for (auto& [target, rangesGroup] : groupedBlobRanges) {
+            std::vector<TBlobRange> rangesBatch;
+            rangesBatch.reserve(rangesGroup.size());
+            ui64 requestSize = 0;
+
+            for (auto& blobRange : rangesGroup) {
+                if (!rangesBatch.empty() && (requestSize + blobRange.Size > MAX_REQUEST_BYTES)) {
+                    SendBatchReadRequest(rangesBatch, cookie, ctx);
+                    rangesBatch.clear();
+                    cookie = ++ReadCookie;
+                    requestSize = 0;
+                }
+
+                rangesBatch.push_back(blobRange);
+                requestSize += blobRange.Size;
+                CookieToRange[cookie].push_back(blobRange);
+            }
+            if (!rangesBatch.empty()) {
+                SendBatchReadRequest(rangesBatch, cookie, ctx);
+            }
+        }
+
+        for (auto& [blobId, ranges] : fallbackRanges) {
+            Y_VERIFY(blobId.IsDsBlob());
+            Y_VERIFY(!ranges.empty());
+
+            cookie = ++ReadCookie;
+            for (auto& blobRange : ranges) {
+                CookieToRange[cookie].push_back(blobRange);
+            }
+            SendBatchReadRequestToTablet(ranges, cookie, ctx);
+        }
     }
 
     void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status,
@@ -445,15 +486,9 @@ private:
             ShardPipes[tabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         }
 
-        auto ev = std::make_unique<TEvColumnShard::TEvReadBlobRanges>();
-        for (const auto& r : blobRanges) {
-            auto* range = ev->Record.AddBlobRanges();
-            range->SetBlobId(r.BlobId.ToStringNew());
-            range->SetOffset(r.Offset);
-            range->SetSize(r.Size);
-        }
+        auto ev = std::make_unique<TEvColumnShard::TEvReadBlobRanges>(blobRanges);
 
-        InFlightSmallBlobRequests[tabletId].insert(cookie);
+        InFlightTabletRequests[tabletId].insert(cookie);
         NTabletPipe::SendData(ctx, ShardPipes[tabletId], ev.release(), cookie);
     }
 
@@ -461,8 +496,8 @@ private:
     void DestroyPipe(ui64 tabletId, const TActorContext& ctx) {
         ShardPipes.erase(tabletId);
         // Send errors for in-flight requests
-        auto cookies = std::move(InFlightSmallBlobRequests[tabletId]);
-        InFlightSmallBlobRequests.erase(tabletId);
+        auto cookies = std::move(InFlightTabletRequests[tabletId]);
+        InFlightTabletRequests.erase(tabletId);
         for (ui64 readCookie : cookies) {
             auto cookieIt = CookieToRange.find(readCookie);
             if (cookieIt == CookieToRange.end()) {
@@ -509,7 +544,7 @@ private:
         ui64 readCookie = ev->Cookie;
         LOG_S_DEBUG("Got read result from tablet: " << tabletId);
 
-        InFlightSmallBlobRequests[tabletId].erase(readCookie);
+        InFlightTabletRequests[tabletId].erase(readCookie);
 
         auto cookieIt = CookieToRange.find(readCookie);
         if (cookieIt == CookieToRange.end()) {

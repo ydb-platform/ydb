@@ -13,6 +13,10 @@
 
 namespace NKikimr {
 
+namespace NColumnShard {
+class TBlobGroupSelector;
+}
+
 struct TEvColumnShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_COLUMNSHARD),
@@ -127,11 +131,39 @@ struct TEvColumnShard {
         }
     };
 
-    // Read small blobs from the tablet
+    // Fallback read BlobCache read to tablet (small blobs or S3)
     struct TEvReadBlobRanges : public TEventPB<TEvReadBlobRanges,
                                                 NKikimrTxColumnShard::TEvReadBlobRanges,
                                                 TEvColumnShard::EvReadBlobRanges>
     {
+        std::vector<NOlap::TBlobRange> BlobRanges;
+
+        TEvReadBlobRanges() = default;
+
+        TEvReadBlobRanges(const std::vector<NOlap::TBlobRange>& blobRanges)
+            : BlobRanges(blobRanges)
+        {
+            for (const auto& r : BlobRanges) {
+                auto* range = Record.AddBlobRanges();
+                range->SetBlobId(r.BlobId.ToStringNew());
+                range->SetOffset(r.Offset);
+                range->SetSize(r.Size);
+            }
+        }
+
+        void RestoreFromProto(NColumnShard::TBlobGroupSelector* dsGroupSelector, TString& errString) {
+            BlobRanges.clear();
+            BlobRanges.reserve(Record.BlobRangesSize());
+
+            for (const auto& range : Record.GetBlobRanges()) {
+                auto blobId = NColumnShard::TUnifiedBlobId::ParseFromString(range.GetBlobId(), dsGroupSelector,
+                                                                            errString);
+                if (!errString.empty()) {
+                    return;
+                }
+                BlobRanges.push_back(NOlap::TBlobRange{blobId, (ui32)range.GetOffset(), (ui32)range.GetSize()});
+            }
+        }
     };
 
     struct TEvReadBlobRangesResult : public TEventPB<TEvReadBlobRangesResult,

@@ -36,11 +36,13 @@ struct TEvBlobCache {
 
     struct TEvReadBlobRange : public NActors::TEventLocal<TEvReadBlobRange, EvReadBlobRange> {
         TBlobRange BlobRange;
-        bool Cache;
-        // TODO: pass some kind of priority?
-        explicit TEvReadBlobRange(const TBlobRange& blobRange, bool cache = true)
+        bool CacheAfterRead;
+        bool Fallback;
+
+        explicit TEvReadBlobRange(const TBlobRange& blobRange, bool cacheResult, bool fallback)
             : BlobRange(blobRange)
-            , Cache(cache)
+            , CacheAfterRead(cacheResult)
+            , Fallback(fallback)
         {}
     };
 
@@ -48,12 +50,20 @@ struct TEvBlobCache {
     // This is usefull to save IOPs when reading multiple columns from the same blob
     struct TEvReadBlobRangeBatch : public NActors::TEventLocal<TEvReadBlobRangeBatch, EvReadBlobRangeBatch> {
         std::vector<TBlobRange> BlobRanges;
-        bool Cache;
-        // TODO: pass some kind of priority?
-        explicit TEvReadBlobRangeBatch(std::vector<TBlobRange>&& blobRanges, bool cache = true)
-            : BlobRanges(blobRanges)
-            , Cache(cache)
-        {}
+        bool CacheAfterRead;
+        bool Fallback;
+
+        explicit TEvReadBlobRangeBatch(std::vector<TBlobRange>&& blobRanges, bool cacheResult, bool fallback)
+            : BlobRanges(std::move(blobRanges))
+            , CacheAfterRead(cacheResult)
+            , Fallback(fallback)
+        {
+            if (fallback) {
+                for (const auto& blobRange : BlobRanges) {
+                    Y_VERIFY(blobRange.BlobId == BlobRanges[0].BlobId);
+                }
+            }
+        }
     };
 
     struct TEvReadBlobRangeResult : public NActors::TEventLocal<TEvReadBlobRangeResult, EvReadBlobRangeResult> {

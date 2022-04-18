@@ -31,7 +31,6 @@ struct TReadStats {
 
 // Holds all metedata that is needed to perform read/scan
 struct TReadMetadataBase {
-    using TPtr = std::shared_ptr<TReadMetadataBase>;
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
 
     enum class ESorting {
@@ -48,6 +47,7 @@ struct TReadMetadataBase {
     std::shared_ptr<arrow::Schema> LoadSchema; // ResultSchema + required for intermediate operations
     std::shared_ptr<arrow::Schema> ResultSchema; // TODO: add Program modifications
     std::vector<std::shared_ptr<NArrow::TProgramStep>> Program;
+    std::shared_ptr<const THashMap<TUnifiedBlobId, TUnifiedBlobId>> ExternBlobs; // DS -> S3 map TODO: move out of base
     ESorting Sorting{ESorting::ASC}; // Sorting inside returned batches
     ui64 Limit{0}; // TODO
 
@@ -74,7 +74,6 @@ struct TReadMetadataBase {
 
 // Holds all metadata that is needed to perform read/scan
 struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadMetadata> {
-    using TPtr = std::shared_ptr<TReadMetadata>;
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
     TIndexInfo IndexInfo;
@@ -154,7 +153,6 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
 };
 
 struct TReadStatsMetadata : public TReadMetadataBase, public std::enable_shared_from_this<TReadStatsMetadata> {
-    using TPtr = std::shared_ptr<TReadStatsMetadata>;
     using TConstPtr = std::shared_ptr<const TReadStatsMetadata>;
 
     const ui64 TabletId;

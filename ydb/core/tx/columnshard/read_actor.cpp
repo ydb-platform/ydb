@@ -187,7 +187,10 @@ public:
     void SendReadRequest(const TActorContext& ctx, const NBlobCache::TBlobRange& blobRange) {
         Y_UNUSED(ctx);
         Y_VERIFY(blobRange.Size);
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange));
+
+        auto& externBlobs = ReadMetadata->ExternBlobs;
+        bool fallback = externBlobs && externBlobs->count(blobRange.BlobId);
+        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange, true, fallback));
     }
 
     STFUNC(StateWait) {

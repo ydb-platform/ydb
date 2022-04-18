@@ -161,6 +161,36 @@ public:
         return size;
     }
 
+    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
+    GroupedBlobRanges(const TVector<TPortionInfo>& portions) {
+        Y_VERIFY(portions.size());
+
+        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
+        for (auto& portionInfo : portions) {
+            Y_VERIFY(!portionInfo.Empty());
+
+            for (auto& rec : portionInfo.Records) {
+                sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
+            }
+        }
+        return sameBlobRanges;
+    }
+
+    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>>
+    GroupedBlobRanges(const TVector<std::pair<TPortionInfo, TString>>& portions) {
+        Y_VERIFY(portions.size());
+
+        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
+        for (auto& [portionInfo, _] : portions) {
+            Y_VERIFY(!portionInfo.Empty());
+
+            for (auto& rec : portionInfo.Records) {
+                sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
+            }
+        }
+        return sameBlobRanges;
+    }
+
     friend IOutputStream& operator << (IOutputStream& out, const TColumnEngineChanges& changes) {
         if (ui32 switched = changes.SwitchedPortions.size()) {
             out << "switch " << switched << " portions";

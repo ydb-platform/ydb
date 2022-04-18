@@ -330,6 +330,10 @@ struct TEvictedBlob {
     ui64 Hash() const noexcept {
         return Blob.Hash();
     }
+
+    bool IsExternal() const {
+        return ExternBlob.IsValid();
+    }
 };
 
 }

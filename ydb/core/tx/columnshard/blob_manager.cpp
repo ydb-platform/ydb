@@ -570,6 +570,15 @@ bool TBlobManager::LoadOneToOneExport(IBlobManagerDb& db) {
     return true;
 }
 
+TEvictedBlob TBlobManager::GetEvicted(const TUnifiedBlobId& blobId, TEvictMetadata& meta) {
+    auto it = EvictedBlobs.find(TEvictedBlob{.Blob = blobId});
+    if (it != EvictedBlobs.end()) {
+        meta = it->second;
+        return it->first;
+    }
+    return {};
+}
+
 TEvictedBlob TBlobManager::GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) {
     auto it = DroppedEvictedBlobs.find(TEvictedBlob{.Blob = blobId});
     if (it != DroppedEvictedBlobs.end()) {

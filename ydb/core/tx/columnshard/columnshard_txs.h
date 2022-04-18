@@ -23,6 +23,7 @@ struct TEvPrivate {
         EvS3Settings,
         EvExport,
         EvForget,
+        EvGetExported,
         EvEnd
     };
 
@@ -60,21 +61,52 @@ struct TEvPrivate {
 
     struct TEvCompaction : public TEventLocal<TEvCompaction, EvIndexing> {
         std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
+        THashSet<TUnifiedBlobId> Externals;
 
-        explicit TEvCompaction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent)
+        explicit TEvCompaction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, IBlobExporter& blobManager)
             : TxEvent(std::move(txEvent))
         {
             TxEvent->GranuleCompaction = true;
+            Y_VERIFY(TxEvent->IndexChanges);
+
+            GroupedBlobRanges = NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->SwitchedPortions);
+
+            if (blobManager.HasExternBlobs()) {
+                for (auto& [blobId, _] : GroupedBlobRanges) {
+                    TEvictMetadata meta;
+                    if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
+                        Externals.insert(blobId);
+                    }
+                }
+            }
         }
     };
 
     struct TEvEviction : public TEventLocal<TEvEviction, EvEviction> {
         std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
+        THashSet<TUnifiedBlobId> Externals;
 
-        explicit TEvEviction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, bool needWrites)
+        explicit TEvEviction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, IBlobExporter& blobManager,
+                             bool needWrites)
             : TxEvent(std::move(txEvent))
         {
-            if (!needWrites) {
+            Y_VERIFY(TxEvent->IndexChanges);
+
+            if (needWrites) {
+                GroupedBlobRanges =
+                    NOlap::TColumnEngineChanges::GroupedBlobRanges(TxEvent->IndexChanges->PortionsToEvict);
+
+                if (blobManager.HasExternBlobs()) {
+                    for (auto& [blobId, _] : GroupedBlobRanges) {
+                        TEvictMetadata meta;
+                        if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
+                            Externals.insert(blobId);
+                        }
+                    }
+                }
+            } else {
                 TxEvent->PutStatus = NKikimrProto::OK;
             }
         }
@@ -130,6 +162,13 @@ struct TEvPrivate {
         NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
         std::vector<NOlap::TEvictedBlob> Evicted;
         TString ErrorStr;
+    };
+
+    struct TEvGetExported : public TEventLocal<TEvGetExported, EvGetExported> {
+        TActorId DstActor; // It's a BlobCache actor. S3 actor sends TEvReadBlobRangesResult to it as result
+        ui64 DstCookie;
+        NOlap::TEvictedBlob Evicted;
+        std::vector<NOlap::TBlobRange> BlobRanges;
     };
 
     struct TEvScanStats : public TEventLocal<TEvScanStats, EvScanStats> {
@@ -209,7 +248,7 @@ protected:
         : TBase(self)
     {}
 
-    NOlap::TReadMetadata::TPtr PrepareReadMetadata(
+    std::shared_ptr<NOlap::TReadMetadata> PrepareReadMetadata(
                                     const TActorContext& ctx,
                                     const TReadDescription& readDescription,
                                     const std::unique_ptr<NOlap::TInsertTable>& insertTable,

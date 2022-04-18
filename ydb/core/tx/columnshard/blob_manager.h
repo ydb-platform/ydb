@@ -95,8 +95,9 @@ public:
     virtual bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) = 0;
     virtual bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) = 0;
     virtual bool LoadOneToOneExport(IBlobManagerDb& db) = 0;
-    //virtual TEvictedBlob GetEvicted(const TUnifiedBlobId& blob, TEvictMetadata& meta) = 0;
+    virtual TEvictedBlob GetEvicted(const TUnifiedBlobId& blob, TEvictMetadata& meta) = 0;
     virtual TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) = 0;
+    virtual bool HasExternBlobs() const = 0;
 };
 
 // Garbage Collection generation and step
@@ -236,7 +237,12 @@ public:
     bool UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) override;
     bool EraseOneToOne(const TEvictedBlob& evict, IBlobManagerDb& db) override;
     bool LoadOneToOneExport(IBlobManagerDb& db) override;
+    TEvictedBlob GetEvicted(const TUnifiedBlobId& blobId, TEvictMetadata& meta) override;
     TEvictedBlob GetDropped(const TUnifiedBlobId& blobId, TEvictMetadata& meta) override;
+
+    bool HasExternBlobs() const override {
+        return EvictedBlobs.size() || DroppedEvictedBlobs.size();
+    }
 
     // Implementation of IBlobInUseTracker
     void SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) override;

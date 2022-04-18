@@ -36,7 +36,7 @@ private:
 };
 
 
-NOlap::TReadMetadata::TPtr
+std::shared_ptr<NOlap::TReadMetadata>
 TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescription& read,
                                  const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index,
@@ -250,13 +250,16 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read,
         TIndexColumnResolver(Self->PrimaryIndex->GetIndexInfo()));
 
+    std::shared_ptr<NOlap::TReadMetadata> metadata;
     if (parseResult) {
-        ReadMetadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, ErrorDescription);
+        metadata = PrepareReadMetadata(ctx, read, Self->InsertTable, Self->PrimaryIndex, ErrorDescription);
     }
 
     ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR;
 
-    if (ReadMetadata) {
+    if (metadata) {
+        Self->MapExternBlobs(ctx, *metadata);
+        ReadMetadata = metadata;
         status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
     }
 

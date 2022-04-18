@@ -269,6 +269,8 @@ TestTiers(bool reboots, const std::vector<TString>& blobs, const std::vector<TTe
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
+    //runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,
                            CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::COLUMNSHARD),

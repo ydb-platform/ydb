@@ -698,13 +698,13 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     ActiveCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
         Settings.CacheDataAfterCompaction);
-    return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev));
+    return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);
 }
 
 std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiersInfo>& pathTtls,
                                                                bool force) {
     if (ActiveTtl) {
-        LOG_S_DEBUG("Ttl already in progress at tablet " << TabletID());
+        LOG_S_DEBUG("TTL already in progress at tablet " << TabletID());
         return {};
     }
     if (!PrimaryIndex) {
@@ -740,7 +740,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     ActiveTtl = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, false);
-    return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), needWrites);
+    return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
 }
 
 std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
@@ -789,7 +789,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         return {};
     }
 
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), changes , false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), changes, false);
     ev->PutStatus = NKikimrProto::OK; // No new blobs to write
 
     ActiveCleanup = true;
@@ -859,38 +859,79 @@ NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTabl
     return indexInfo;
 }
 
+void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMetadata& metadata) {
+    if (!metadata.SelectInfo) {
+        return;
+    }
+
+    if (!BlobManager->HasExternBlobs()) {
+        return;
+    }
+
+    THashSet<TUnifiedBlobId> uniqBlobs;
+    for (auto& portion : metadata.SelectInfo->Portions) {
+        for (auto& rec : portion.Records) {
+            uniqBlobs.insert(rec.BlobRange.BlobId);
+        }
+    }
+
+    THashMap<TUnifiedBlobId, TUnifiedBlobId> extMap;
+
+    for (auto& blobId : uniqBlobs) {
+        TEvictMetadata meta;
+        auto evicted = BlobManager->GetEvicted(blobId, meta);
+        if (evicted.ExternBlob.IsValid()) {
+            extMap[blobId] = evicted.ExternBlob;
+        }
+    }
+
+    if (!extMap.empty()) {
+        metadata.ExternBlobs = std::make_shared<const THashMap<TUnifiedBlobId, TUnifiedBlobId>>(std::move(extMap));
+    }
+}
+
+TActorId TColumnShard::GetS3ActorForTier(const TString& tierName, const TString& phase) {
+    if (!S3Actors.count(tierName)) {
+        LOG_S_ERROR("No S3 actor for tier '" << tierName << "' (on " << phase << ") at tablet " << TabletID());
+        return {};
+    }
+    auto s3 = S3Actors[tierName];
+    if (!s3) {
+        LOG_S_ERROR("Not started S3 actor for tier '" << tierName << "' (on " << phase << ") at tablet " << TabletID());
+        return {};
+    }
+    return s3;
+}
+
 void TColumnShard::ExportBlobs(const TActorContext& ctx, ui64 exportNo, const TString& tierName,
                                THashMap<TUnifiedBlobId, TString>&& blobsIds) {
-    if (!S3Actors.count(tierName)) {
-        TString tier(tierName);
-        LOG_S_ERROR("No S3 actor for tier '" << tier << "' (on export) at tablet " << TabletID());
-        return;
+    if (auto s3 = GetS3ActorForTier(tierName, "export")) {
+        auto event = std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, s3, std::move(blobsIds));
+        ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
     }
-    auto& s3 = S3Actors[tierName];
-    if (!s3) {
-        TString tier(tierName);
-        LOG_S_ERROR("Not started S3 actor for tier '" << tier << "' (on export) at tablet " << TabletID());
-        return;
-    }
-    auto event = std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, s3, std::move(blobsIds));
-    ctx.Register(CreateExportActor(TabletID(), ctx.SelfID, event.release()));
 }
 
 void TColumnShard::ForgetBlobs(const TActorContext& ctx, const TString& tierName,
                                std::vector<NOlap::TEvictedBlob>&& blobs) {
-    if (!S3Actors.count(tierName)) {
-        LOG_S_ERROR("No S3 actor for tier '" << tierName << "' (on forget) at tablet " << TabletID());
-        return;
+    if (auto s3 = GetS3ActorForTier(tierName, "forget")) {
+        auto forget = std::make_unique<TEvPrivate::TEvForget>();
+        forget->Evicted = std::move(blobs);
+        ctx.Send(s3, forget.release());
     }
-    auto& s3 = S3Actors[tierName];
-    if (!s3) {
-        LOG_S_ERROR("Not started S3 actor for tier '" << tierName << "' (on forget) at tablet " << TabletID());
-        return;
-    }
+}
 
-    auto forget = std::make_unique<TEvPrivate::TEvForget>();
-    forget->Evicted = std::move(blobs);
-    ctx.Send(s3, forget.release());
+bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
+                                   NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges) {
+    if (auto s3 = GetS3ActorForTier(tierName, "get exported")) {
+        auto get = std::make_unique<TEvPrivate::TEvGetExported>();
+        get->DstActor = dst;
+        get->DstCookie = cookie;
+        get->Evicted = std::move(evicted);
+        get->BlobRanges = std::move(ranges);
+        ctx.Send(s3, get.release());
+        return true;
+    }
+    return false;
 }
 
 ui32 TColumnShard::InitS3Actors(const TActorContext& ctx, bool init) {

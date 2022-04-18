@@ -18,7 +18,7 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     {}
 
-    void Handle(TEvPrivate::TEvCompaction::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvCompaction::TPtr& ev, const TActorContext& /*ctx*/) {
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
         Y_VERIFY(TxEvent);
@@ -30,23 +30,14 @@ public:
 
         LOG_S_DEBUG("Granules compaction: " << *indexChanges << " at tablet " << TabletId);
 
-        auto& switchedPortions = indexChanges->SwitchedPortions;
-        Y_VERIFY(switchedPortions.size());
+        for (auto& [blobId, ranges] : event.GroupedBlobRanges) {
+            Y_VERIFY(!ranges.empty());
 
-        for (auto& portionInfo : switchedPortions) {
-            Y_VERIFY(!portionInfo.Empty());
-            std::vector<NBlobCache::TBlobRange> ranges;
-            for (auto& rec : portionInfo.Records) {
-                auto& blobRange = rec.BlobRange;
+            for (const auto& blobRange : ranges) {
+                Y_VERIFY(blobId == blobRange.BlobId);
                 Blobs[blobRange] = {};
-                // Group only ranges from the same blob into one request
-                if (!ranges.empty() && ranges.back().BlobId != blobRange.BlobId) {
-                    SendReadRequest(ctx, std::move(ranges));
-                    ranges = {};
-                }
-                ranges.push_back(blobRange);
             }
-            SendReadRequest(ctx, std::move(ranges));
+            SendReadRequest(std::move(ranges), event.Externals.count(blobId));
         }
     }
 
@@ -110,11 +101,11 @@ private:
         NumRead = 0;
     }
 
-    void SendReadRequest(const TActorContext&, std::vector<NBlobCache::TBlobRange>&& ranges) {
-        if (ranges.empty())
-            return;
+    void SendReadRequest(std::vector<NBlobCache::TBlobRange>&& ranges, bool isExternal) {
+        Y_VERIFY(!ranges.empty());
 
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), false));
+        Send(BlobCacheActorId,
+             new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), false, isExternal));
     }
 
     void CompactGranules(const TActorContext& ctx) {

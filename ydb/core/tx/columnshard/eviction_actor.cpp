@@ -18,7 +18,7 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     {}
 
-    void Handle(TEvPrivate::TEvEviction::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvPrivate::TEvEviction::TPtr& ev, const TActorContext& /*ctx*/) {
         auto& event = *ev->Get();
         TxEvent = std::move(event.TxEvent);
         Y_VERIFY(TxEvent);
@@ -29,23 +29,14 @@ public:
 
         LOG_S_DEBUG("Portions eviction: " << *indexChanges << " at tablet " << TabletId);
 
-        auto& evictedPortions = indexChanges->PortionsToEvict;
-        Y_VERIFY(evictedPortions.size());
+        for (auto& [blobId, ranges] : event.GroupedBlobRanges) {
+            Y_VERIFY(!ranges.empty());
 
-        for (auto& [portionInfo, tierName] : evictedPortions) {
-            Y_VERIFY(!portionInfo.Empty());
-            std::vector<NBlobCache::TBlobRange> ranges;
-            for (auto& rec : portionInfo.Records) {
-                auto& blobRange = rec.BlobRange;
+            for (const auto& blobRange : ranges) {
+                Y_VERIFY(blobId == blobRange.BlobId);
                 Blobs[blobRange] = {};
-                // Group only ranges from the same blob into one request
-                if (!ranges.empty() && ranges.back().BlobId != blobRange.BlobId) {
-                    SendReadRequest(ctx, std::move(ranges));
-                    ranges = {};
-                }
-                ranges.push_back(blobRange);
             }
-            SendReadRequest(ctx, std::move(ranges));
+            SendReadRequest(std::move(ranges), event.Externals.count(blobId));
         }
     }
 
@@ -109,12 +100,11 @@ private:
         NumRead = 0;
     }
 
-    void SendReadRequest(const TActorContext&, std::vector<NBlobCache::TBlobRange>&& ranges) {
-        if (ranges.empty()) {
-            return;
-        }
+    void SendReadRequest(std::vector<NBlobCache::TBlobRange>&& ranges, bool isExternal) {
+        Y_VERIFY(!ranges.empty());
 
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), false));
+        Send(BlobCacheActorId,
+             new NBlobCache::TEvBlobCache::TEvReadBlobRangeBatch(std::move(ranges), false, isExternal));
     }
 
     void EvictPortions(const TActorContext& ctx) {

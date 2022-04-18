@@ -13,6 +13,10 @@ using NWrappers::TEvS3Wrapper;
 
 namespace {
 
+TString ExtractBlobPart(const NOlap::TBlobRange& blobRange, const TString& data) {
+    return TString(&data[blobRange.Offset], blobRange.Size);
+}
+
 struct TS3Export {
     std::unique_ptr<TEvPrivate::TEvExport> Event;
     THashSet<TString> KeysToWrite;
@@ -130,7 +134,7 @@ public:
         auto& forget = Forgets[forgetNo];
 
         for (auto& evict : forget.Event->Evicted) {
-            if (!evict.ExternBlob.IsValid()) {
+            if (!evict.ExternBlob.IsS3Blob()) {
                 LOG_S_ERROR("[S3] Forget not exported '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
                 continue;
             }
@@ -141,6 +145,26 @@ public:
             forget.KeysToDelete.emplace(key);
             ForgettingKeys[key] = forgetNo;
             SendDeleteObject(key);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvGetExported::TPtr& ev) {
+        auto& evict = ev->Get()->Evicted;
+        if (!evict.ExternBlob.IsS3Blob()) {
+            LOG_S_ERROR("[S3] Get not exported '" << evict.Blob.ToStringNew() << "' at tablet " << TabletId);
+            return;
+        }
+
+        TString key = evict.ExternBlob.GetS3Key();
+
+        bool reading = ReadingKeys.count(key);
+        ReadingKeys[key].emplace_back(ev->Release().Release());
+
+        if (!reading) {
+            ui64 blobSize = evict.ExternBlob.BlobSize();
+            SendGetObject(key, {0, blobSize});
+        } else {
+            LOG_S_DEBUG("[S3] Outstanding get key '" << key << "' at tablet " << TabletId);
         }
     }
 
@@ -233,29 +257,6 @@ public:
             Forgets.erase(forgetNo);
         }
     }
-#if 0
-    void Handle(TEvS3Wrapper::TEvHeadObjectResponse::TPtr& ev) {
-        Y_VERIFY(Initialized());
-
-        auto& msg = *ev->Get();
-        const auto& key = msg.Key;
-        const auto& resultOutcome = msg.Result;
-
-        TString errStr;
-        if (!resultOutcome.IsSuccess()) {
-            errStr = LogError("HeadObjectResponse", resultOutcome.GetError(), !!key);
-        }
-
-        if (!errStr.empty()) {
-            //Send(ShardActor, new TEvPrivate::TEvGetResponse(*key, {}, errStr));
-        }
-
-        Y_VERIFY(key);
-        ui64 contentLength = resultOutcome.GetResult().GetContentLength();
-        LOG_S_DEBUG("HeadObjectResponse '" << *key << "', size: " << contentLength << " at tablet " << TabletId);
-
-        //Send(ShardActor, new TEvPrivate::TEvGetResponse(*key, {}));
-    }
 
     void Handle(TEvS3Wrapper::TEvGetObjectResponse::TPtr& ev) {
         Y_VERIFY(Initialized());
@@ -270,18 +271,49 @@ public:
             errStr = LogError("GetObjectResponse", resultOutcome.GetError(), !!key);
         }
 
-        if (!errStr.empty()) {
-            //Send(ShardActor, new TEvPrivate::TEvGetResponse(*key, {}, errStr));
+        if (!key || key->empty()) {
+            LOG_S_ERROR("[S3] no key in GetObjectResponse at tablet " << TabletId << ": " << errStr);
+            return; // nothing to do without key
+        }
+
+        if (!ReadingKeys.count(*key)) {
+            LOG_S_ERROR("[S3] no reading keys for key " << *key << " at tablet " << TabletId);
+            return; // nothing to do without events
         }
 
         // TODO: CheckETag
 
-        Y_VERIFY(key);
         LOG_S_DEBUG("GetObjectResponse '" << *key << "', size: " << data.size() << " at tablet " << TabletId);
 
-        //Send(ShardActor, new TEvPrivate::TEvGetResponse(*key, data));
+        auto status = errStr.empty() ? NKikimrProto::OK : NKikimrProto::ERROR;
+
+        for (const auto& ev : ReadingKeys[*key]) {
+            auto result = std::make_unique<TEvColumnShard::TEvReadBlobRangesResult>(TabletId);
+
+            for (const auto& blobRange : ev->BlobRanges) {
+                if (data.size() < blobRange.Offset + blobRange.Size) {
+                    LOG_S_ERROR("GetObjectResponse '" << *key << "', data size: " << data.size()
+                        << " is too small for blob range {" << blobRange.Offset << "," << blobRange.Size << "}"
+                        << " at tablet " << TabletId);
+                    status = NKikimrProto::ERROR;
+                }
+
+                auto* res = result->Record.AddResults();
+                auto* resRange = res->MutableBlobRange();
+                resRange->SetBlobId(blobRange.BlobId.ToStringNew());
+                resRange->SetOffset(blobRange.Offset);
+                resRange->SetSize(blobRange.Size);
+                res->SetStatus(status);
+
+                if (status == NKikimrProto::OK) {
+                    res->SetData(ExtractBlobPart(blobRange, data));
+                }
+            }
+
+            Send(ev->DstActor, result.release(), 0, ev->DstCookie);
+        }
+        ReadingKeys.erase(*key);
     }
-#endif
 
 private:
     ui64 TabletId;
@@ -294,18 +326,20 @@ private:
     THashMap<ui64, TS3Forget> Forgets;
     THashMap<TString, ui64> ExportingKeys;
     THashMap<TString, ui64> ForgettingKeys;
+    THashMap<TString, std::vector<std::unique_ptr<TEvPrivate::TEvGetExported>>> ReadingKeys;
 
     STATEFN(StateWait) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvS3Settings, Handle);
             hFunc(TEvPrivate::TEvExport, Handle);
             hFunc(TEvPrivate::TEvForget, Handle);
+            hFunc(TEvPrivate::TEvGetExported, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             hFunc(TEvS3Wrapper::TEvPutObjectResponse, Handle);
             hFunc(TEvS3Wrapper::TEvDeleteObjectResponse, Handle);
+            hFunc(TEvS3Wrapper::TEvGetObjectResponse, Handle);
 #if 0
             hFunc(TEvS3Wrapper::TEvHeadObjectResponse, Handle);
-            hFunc(TEvS3Wrapper::TEvGetObjectResponse, Handle);
 #endif
             default:
                 break;
@@ -347,11 +381,11 @@ private:
         Send(S3Ctx.Client, new TEvS3Wrapper::TEvHeadObjectRequest(request));
     }
 
-    void SendGetObject(const TString& key) {
+    void SendGetObject(const TString& key, const std::pair<ui64, ui64>& range) {
         auto request = Aws::S3::Model::GetObjectRequest()
             .WithBucket(Bucket)
-            .WithKey(key);
-            //.WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second); // TODO
+            .WithKey(key)
+            .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
         LOG_S_DEBUG("[S3] GetObjectRequest key '" << key << "' at tablet " << TabletId);
         Send(S3Ctx.Client, new TEvS3Wrapper::TEvGetObjectRequest(request));

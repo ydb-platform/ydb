@@ -65,7 +65,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HTTP,
+        LOG_WARN_S(*TlsActivationContext, NActorsServices::HTTP,
                         Request.GetRemoteAddr()
                         << " " << GetMethod(Request.GetMethod())
                         << " " << Request.GetUri());
@@ -284,7 +284,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::HTTP,
+        LOG_WARN_S(*TlsActivationContext, NActorsServices::HTTP,
                         Request.GetRemoteAddr()
                         << " " << GetMethod(Request.GetMethod())
                         << " " << Request.GetUri());

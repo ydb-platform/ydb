@@ -247,6 +247,8 @@ protected:
         config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
         config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
             .StoreResult(&RunConfig.PathToConfigCacheFile);
+        config.Opts->AddLongOption("http-proxy-file", "Http prox config file").OptionalArgument("PATH");
+
         config.Opts->AddHelpOption('h');
 
         // add messagebus proxy options
@@ -430,6 +432,7 @@ protected:
         OPTION("key-file", KeyConfig);
         OPTION("pdisk-key-file", PDiskKeyConfig);
         OPTION("sqs-file", SqsConfig);
+        OPTION("http-proxy-file", HttpProxyConfig);
         OPTION("feature-flags-file", FeatureFlags);
         OPTION("rb-file", ResourceBrokerConfig);
         OPTION("metering-file", MeteringConfig);

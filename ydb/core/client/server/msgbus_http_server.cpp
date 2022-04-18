@@ -203,7 +203,7 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
                 }
             }
 
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::HTTP, "HttpRequest "
+            LOG_DEBUG_S(*ActorSystem, NActorsServices::HTTP, "HttpRequest "
                         << request.GetMethod()
                         << " "
                         << request.GetUri()

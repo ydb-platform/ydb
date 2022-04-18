@@ -67,6 +67,7 @@ private:
 public:
     NetClassifierUpdater(TActorId localConsole)
         : LocalConsole(localConsole)
+        , HttpSensors(std::make_shared<NMonitoring::TMetricRegistry>())
     {
     }
 
@@ -328,7 +329,7 @@ private:
 private:
     TActorId LocalConsole;
     TActorId HttpProxyId;
-    NMonitoring::TMetricRegistry HttpSensors;
+    std::shared_ptr<NMonitoring::TMetricRegistry> HttpSensors;
 
     TString PackedNetData;
     TString LastUpdateDatetimeUTC;

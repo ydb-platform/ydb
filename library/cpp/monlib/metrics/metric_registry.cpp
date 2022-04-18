@@ -46,6 +46,11 @@ namespace NMonitoring {
         return Singleton<TMetricRegistry>();
     }
 
+    std::shared_ptr<TMetricRegistry> TMetricRegistry::SharedInstance() {
+        static auto instance(std::make_shared<TMetricRegistry>());
+        return instance;
+    }
+
     TGauge* TMetricRegistry::Gauge(TLabels labels) {
         return Metric<TGauge, EMetricType::GAUGE>(std::move(labels));
     }

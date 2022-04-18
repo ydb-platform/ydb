@@ -197,7 +197,7 @@ enum EServiceKikimr {
 
     CMS = 523;
 
-    HTTP = 524;
+    HTTP_PROXY = 524; // HTTP is still awailable from actorsystem services
 
     NODE_BROKER = 525;
     TENANT_SLOT_BROKER = 526;

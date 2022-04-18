@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         TNetClassifierUpdaterConfig::EFormat format = TNetClassifierUpdaterConfig::TSV,
         const TVector<TString>& netBoxTags = {}
     ) {
-        NMonitoring::TMetricRegistry sensors;
+        auto sensors(std::make_shared<NMonitoring::TMetricRegistry>());
 
         TPortManager pm;
         const ui16 port = pm.GetPort(2134);

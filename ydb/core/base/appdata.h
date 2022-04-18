@@ -58,6 +58,10 @@ namespace NSQS {
     class IAuthFactory;
 }
 
+namespace NHttpProxy {
+    class IAuthFactory;
+}
+
 namespace NMsgBusProxy {
     class IPersQueueGetReadSessionsInfoWorkerFactory;
 }
@@ -85,6 +89,8 @@ struct TAppData {
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
+
+    NHttpProxy::IAuthFactory* DataStreamsAuthFactory = nullptr;
 
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 

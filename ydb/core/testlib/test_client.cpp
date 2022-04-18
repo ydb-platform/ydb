@@ -217,6 +217,8 @@ namespace Tests {
             Runtime->GetAppData(nodeIdx).EnforceUserTokenRequirement = Settings->AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
             Runtime->GetAppData(nodeIdx).DomainsConfig.MergeFrom(Settings->AppConfig.GetDomainsConfig());
             Runtime->GetAppData(nodeIdx).PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
+            Runtime->GetAppData(nodeIdx).DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
+
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
         }

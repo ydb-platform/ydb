@@ -17,6 +17,7 @@ RECURSE(
     grpc_services
     grpc_streaming
     health_check
+    http_proxy
     io_formats
     kesus
     keyvalue

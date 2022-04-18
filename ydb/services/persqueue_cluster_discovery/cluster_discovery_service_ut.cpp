@@ -250,6 +250,7 @@ public:
         , BusPort_(PortManager_.GetPort(2134))
         , GrpcPort_(PortManager_.GetPort(2135))
         , Settings_(NPersQueueTests::PQSettings(BusPort_, 1))
+        , Sensors_(std::make_shared<NMonitoring::TMetricRegistry>())
     {
         Settings_.PQConfig.SetClustersUpdateTimeoutSec(1);
 
@@ -379,7 +380,7 @@ private:
     ui16 GrpcPort_;
     TServerSettings Settings_;
 
-    NMonitoring::TMetricRegistry Sensors_;
+    std::shared_ptr<NMonitoring::TMetricRegistry> Sensors_;
     THolder<TServer> Server_;
     THolder<NPersQueueTests::TFlatMsgBusPQClient> PQClient_;
 

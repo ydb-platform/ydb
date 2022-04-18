@@ -66,6 +66,7 @@ namespace NMonitoring {
          * Get a global metrics registry instance.
          */
         static TMetricRegistry* Instance();
+        static std::shared_ptr<TMetricRegistry> SharedInstance();
 
         TGauge* Gauge(TLabels labels);
         TLazyGauge* LazyGauge(TLabels labels, std::function<double()> supplier);

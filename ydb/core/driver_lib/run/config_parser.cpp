@@ -72,6 +72,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("auth-token-file", "authorization token config file").OptionalArgument("PATH");
     opts.AddLongOption("key-file", "encryption key config file").OptionalArgument("PATH");
     opts.AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
+    opts.AddLongOption("http-proxy-file", "Http proxy config file").OptionalArgument("PATH");
     opts.AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
     opts.AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
     opts.AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
@@ -139,6 +140,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
 
     if (res.Has("sqs-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("sqs-file"), Config.AppConfig.MutableSqsConfig()));
+    }
+
+    if (res.Has("http-proxy-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("http-proxy-file"), Config.AppConfig.MutableHttpProxyConfig()));
     }
 
     if (res.Has("grpc-port")) {

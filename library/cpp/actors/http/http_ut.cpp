@@ -180,9 +180,8 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        NMonitoring::TMetricRegistry sensors;
 
-        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
         actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
         actorSystem.DispatchEvents();
@@ -213,7 +212,6 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        NMonitoring::TMetricRegistry sensors;
 
         TString certificateContent = R"___(-----BEGIN PRIVATE KEY-----
 MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCzRZjodO7Aqe1w
@@ -272,7 +270,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         certificateFile.Write(certificateContent.data(), certificateContent.size());
 
-        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
 
         THolder<NHttp::TEvHttpProxy::TEvAddListeningPort> add = MakeHolder<NHttp::TEvHttpProxy::TEvAddListeningPort>(port);
@@ -332,9 +330,8 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        NMonitoring::TMetricRegistry sensors;
 
-        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
         actorSystem.Send(new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
         actorSystem.DispatchEvents();

@@ -229,7 +229,7 @@ void Init(
         actorRegistrator(MakeYqlNodesManagerId(), nodesManager);
     }
 
-    auto httpProxy = NHttp::CreateHttpProxy(*NMonitoring::TMetricRegistry::Instance());
+    auto httpProxy = NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance());
     actorRegistrator(MakeYqlAnalyticsHttpProxyId(), httpProxy);
 
     if (protoConfig.GetPendingFetcher().GetEnabled()) {

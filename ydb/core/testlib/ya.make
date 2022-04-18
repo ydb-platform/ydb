@@ -102,6 +102,8 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/ydb
     ydb/services/yq
+
+    ydb/core/http_proxy
 )
 
 YQL_LAST_ABI_VERSION()

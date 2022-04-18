@@ -2116,6 +2116,19 @@ void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
     }
 }
 
+
+THttpProxyServiceInitializer::THttpProxyServiceInitializer(const TKikimrRunConfig& runConfig, const std::shared_ptr<TModuleFactories>& factories)
+    : IKikimrServicesInitializer(runConfig)
+    , Factories(factories)
+{
+}
+
+void THttpProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    Factories->DataStreamsAuthFactory->Initialize(
+        setup->LocalServices, *appData, Config.GetHttpProxyConfig(), Config.GetGRpcConfig());
+}
+
+
 TConfigsDispatcherInitializer::TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig)
    : IKikimrServicesInitializer(runConfig)
 {

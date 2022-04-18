@@ -83,6 +83,7 @@ PEERDIR(
     ydb/core/formats
     ydb/core/grpc_services
     ydb/core/health_check
+    ydb/core/http_proxy
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
@@ -148,6 +149,7 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/ydb
     ydb/services/yq
+
 )
 
 YQL_LAST_ABI_VERSION()

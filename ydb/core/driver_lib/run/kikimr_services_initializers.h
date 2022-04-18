@@ -417,6 +417,16 @@ private:
     std::shared_ptr<TModuleFactories> Factories;
 };
 
+class THttpProxyServiceInitializer : public IKikimrServicesInitializer {
+public:
+    THttpProxyServiceInitializer(const TKikimrRunConfig& runConfig, const std::shared_ptr<TModuleFactories>& factories);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+
+private:
+    std::shared_ptr<TModuleFactories> Factories;
+};
+
 class TConfigsDispatcherInitializer : public IKikimrServicesInitializer {
 public:
     TConfigsDispatcherInitializer(const TKikimrRunConfig& runConfig);

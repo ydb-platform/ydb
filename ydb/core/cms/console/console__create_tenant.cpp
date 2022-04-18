@@ -181,7 +181,7 @@ public:
 
                     auto poolName = Tenant->MakeStoragePoolName(kind);
                     auto &config = Self->Domain->StoragePoolTypes.at(kind);
-                    TStoragePool::TPtr pool = new TStoragePool(poolName, kind, size, config);
+                    TStoragePool::TPtr pool = new TStoragePool(poolName, size, kind, config, false);
                     Tenant->StoragePools.emplace(std::make_pair(kind, pool));
                 }
             }

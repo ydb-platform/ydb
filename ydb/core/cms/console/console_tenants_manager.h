@@ -280,18 +280,26 @@ public:
             DELETED,
         };
 
-        TStoragePool(const TString &kind, const NKikimrBlobStorage::TDefineStoragePool &config)
+        TStoragePool(
+                const TString &kind,
+                const NKikimrBlobStorage::TDefineStoragePool &config,
+                bool borrowed)
             : Kind(kind)
             , Config(config)
             , AllocatedNumGroups(0)
             , State(NOT_ALLOCATED)
+            , Borrowed(borrowed)
         {
             Config.SetKind(kind);
         }
 
-        TStoragePool(const TString &name, const TString &kind, ui64 size,
-                     const NKikimrBlobStorage::TDefineStoragePool &config)
-            : TStoragePool(kind, config)
+        TStoragePool(
+                const TString &name,
+                ui64 size,
+                const TString &kind,
+                const NKikimrBlobStorage::TDefineStoragePool &config,
+                bool borrowed)
+            : TStoragePool(kind, config, borrowed)
         {
             Config.SetName(name);
             Config.SetNumGroups(size);
@@ -337,6 +345,7 @@ public:
         NKikimrBlobStorage::TDefineStoragePool Config;
         ui64 AllocatedNumGroups;
         EState State;
+        bool Borrowed;
         TString Issue;
         TActorId Worker;
         size_t GroupFitErrors = 0;

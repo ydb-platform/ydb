@@ -121,9 +121,14 @@ public:
         for (auto &unit : rec.storage_units_to_add()) {
             auto &kind = unit.unit_kind();
 
-            if (Tenant->AreResourcesShared && !Tenant->StoragePools.contains(kind))
+            if (Tenant->StoragePools.contains(kind)) {
+                if (Tenant->StoragePools.at(kind)->Borrowed)
+                    return Error(Ydb::StatusIds::BAD_REQUEST,
+                                Sprintf("Pool '%s' is borrowed, cannot alter", kind.data()), ctx);
+            } else if (Tenant->AreResourcesShared) {
                 return Error(Ydb::StatusIds::UNSUPPORTED,
                             Sprintf("Database '%s' is shared, cannot add new storage units", path.data()), ctx);
+            }
 
             if (Tenant->SharedDomainId)
                 return Error(Ydb::StatusIds::BAD_REQUEST,
@@ -235,7 +240,9 @@ public:
             auto &kind = pr.first;
             auto size = pr.second;
             if (Tenant->StoragePools.contains(kind)) {
-                pool = new TStoragePool(*Tenant->StoragePools.at(kind));
+                auto cur = Tenant->StoragePools.at(kind);
+                Y_VERIFY(!cur->Borrowed);
+                pool = new TStoragePool(*cur);
                 pool->AddRequiredGroups(size);
                 pool->State = TStoragePool::NOT_UPDATED;
             } else {

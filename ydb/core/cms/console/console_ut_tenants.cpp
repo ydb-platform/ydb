@@ -385,8 +385,7 @@ void CheckTenantGeneration(TTenantTestRuntime &runtime,
     UNIT_ASSERT_VALUES_EQUAL(status.generation(), generation);
 }
 
-void CheckPoolScope(TTenantTestRuntime &runtime,
-                    const TString &name)
+NKikimrBlobStorage::TEvControllerConfigResponse ReadPoolState(TTenantTestRuntime &runtime, const TString &name)
 {
     auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto &read = *request->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
@@ -397,9 +396,14 @@ void CheckPoolScope(TTenantTestRuntime &runtime,
     pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
     runtime.SendToPipe(MakeBSControllerID(0), runtime.Sender, request.Release(), 0, pipeConfig);
 
-    TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
-    const auto &scope = reply->Record.GetResponse().GetStatus(0).GetStoragePool(0).GetScopeId();
+    auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(runtime.Sender);
+    return ev->Get()->Record;
+}
+
+void CheckPoolScope(TTenantTestRuntime &runtime, const TString &name)
+{
+    auto response = ReadPoolState(runtime, name);
+    const auto &scope = response.GetResponse().GetStatus(0).GetStoragePool(0).GetScopeId();
     UNIT_ASSERT(scope.GetX1() != 0);
     UNIT_ASSERT(scope.GetX2() != 0);
 }
@@ -438,6 +442,27 @@ void SendCaptured(TTenantTestRuntime &runtime, TVector<TAutoPtr<IEventHandle>> &
     for (auto &ev : events)
         runtime.Send(ev.Release());
     events.clear();
+}
+
+void LocalMiniKQL(TTenantTestRuntime& runtime, ui64 tabletId, const TString& query) {
+    auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+    request->Record.MutableProgram()->MutableProgram()->SetText(query);
+    ForwardToTablet(runtime, tabletId, runtime.Sender, request.Release());
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(runtime.Sender);
+    const auto& response = ev->Get()->Record;
+
+    UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrProto::OK);
+}
+
+void MakePoolBorrowed(TTenantTestRuntime& runtime, const TString& tenant, const TString& pool) {
+    LocalMiniKQL(runtime, MakeConsoleID(0), Sprintf(R"(
+        (
+            (let key '('('Tenant (Utf8 '"%s")) '('PoolType (Utf8 '"%s"))))
+            (let row '('('Borrowed (Bool '1))))
+            (return (AsList (UpdateRow 'TenantPools key row)))
+        )
+    )", tenant.c_str(), pool.c_str()));
 }
 
 } // anonymous namespace
@@ -1157,6 +1182,59 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
     Y_UNIT_TEST(TestAlterUnknownTenantExtSubdomain) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         RunTestAlterUnknownTenant(runtime);
+    }
+
+    Y_UNIT_TEST(TestAlterBorrowedStorage) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+
+        // create tenant
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithSlots(SLOT1_TYPE, ZONE1, 1));
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
+        // mark pool as borrowed
+        MakePoolBorrowed(runtime, TENANT1_1_NAME, "hdd");
+        // restart to changes take effect
+        RestartConsole(runtime);
+
+        // trying to extend pool
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST, {{"hdd", 1}}, {});
+    }
+
+    Y_UNIT_TEST(TestRemoveTenantWithBorrowedStorageUnits) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        runtime.SetLogPriority(NKikimrServices::CMS_TENANTS, NActors::NLog::PRI_DEBUG);
+
+        // create tenant
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
+                .WithPools({{"hdd", 1}})
+                .WithSlots(SLOT1_TYPE, ZONE1, 1));
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
+        // mark pool as borrowed
+        MakePoolBorrowed(runtime, TENANT1_1_NAME, "hdd");
+        // restart to changes take effect
+        RestartConsole(runtime);
+
+        // remove tenant
+        CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
+                          Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
+
+        // check pool (should be alive)
+        auto poolState = ReadPoolState(runtime, TENANT1_1_NAME + ":hdd");
+        UNIT_ASSERT_VALUES_EQUAL(poolState.GetResponse().GetStatus(0).StoragePoolSize(), 1);
     }
 
     Y_UNIT_TEST(TestAlterStorageUnitsOfSharedTenant) {

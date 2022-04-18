@@ -13,24 +13,24 @@ links:
   - title: Concepts
     description: How YDB works, its features and available usage modes
     href: concepts/
-  - title: Working with the CLI
-    description: YDB CLI reference
-    href: reference/ydb-cli/
-  - title: Working with the SDK
-    description: YDB SDK reference
-    href: reference/ydb-sdk/
-  - title: Step-by-step instructions
-    description: Instructions on how to perform standard operations
-    href: operations/
   - title: Recommendations
     description: A set of recommendations for practical service use
     href: best_practices/
-  - title: YQL reference guide
-    description: Description of YQL syntax and built-in functions
+  - title: YQL Reference
+    description: YDB Query Language reference, syntax and built-in functions
     href: yql/reference/
-  - title: YQL tutorial
-    description: YQL introductory tutorials
-    href: yql/tutorial/
+  - title: CLI Reference
+    description: YDB Command-Line Interface reference
+    href: reference/ydb-cli/
+  - title: SDK Reference
+    description: YDB Software Development Kits reference
+    href: reference/ydb-sdk/
+  - title: Manage databases
+    description: Configuration, maintenance, monitoring and troubleshooting of the YDB databases
+    href: db/
+  - title: Cluster management
+    description: Configuration, maintenance, monitoring and troubleshooting of the YDB clusters
+    href: cluster/
   - title: Useful links
     description: Links to various resources related to YDB
     href: getting_started/useful_links

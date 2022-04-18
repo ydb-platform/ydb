@@ -1,4 +1,4 @@
-# Questions and answers about {{ ydb-short-name }}
+# Frequently Asked Questions
 
 * [General](../common.md)
 {% if oss %}

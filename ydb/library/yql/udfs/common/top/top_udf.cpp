@@ -66,7 +66,7 @@ struct TGenericPairCompare {
 template <typename TValue, typename TCompare, typename TAllocator>
 class TTopKeeperContainer {
     TTopKeeper<TValue, TCompare, true, TAllocator> Keeper;
-    using TOrderedSet = TSet<TValue, TCompare, TAllocator>;
+    using TOrderedSet = TMultiSet<TValue, TCompare, TAllocator>;
     TMaybe<TOrderedSet> OrderedSet;
     size_t MaxSize = 0;
     bool Finalized = false;

@@ -457,7 +457,7 @@ using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache
 
 public:
     TWriteSessionActor(NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
-                       const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+                       const NActors::TActorId& schemeCache,
                        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
                        const NPersQueue::TTopicsListController& topicsController);
     ~TWriteSessionActor();
@@ -573,7 +573,6 @@ private:
 
     EState State;
     TActorId SchemeCache;
-    TActorId NewSchemeCache;
     TActorId Writer;
 
     TString PeerName;

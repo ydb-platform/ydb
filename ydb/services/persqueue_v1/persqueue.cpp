@@ -30,7 +30,7 @@ void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::
 
     if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
 
-        IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, NewSchemeCache,Counters, PersQueueWriteSessionsMaxCount);
+        IActor* writeSvc = NGRpcProxy::V1::CreatePQWriteService(SchemeCache, Counters, PersQueueWriteSessionsMaxCount);
         TActorId actorId = ActorSystem->Register(writeSvc, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
         ActorSystem->RegisterLocalService(NGRpcProxy::V1::GetPQWriteServiceActorID(), actorId);
 

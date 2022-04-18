@@ -21,12 +21,12 @@ inline TActorId GetPQWriteServiceActorID() {
     return TActorId(0, "PQWriteSvc");
 }
 
-IActor* CreatePQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+IActor* CreatePQWriteService(const NActors::TActorId& schemeCache,
                              TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
 class TPQWriteService : public NActors::TActorBootstrapped<TPQWriteService> {
 public:
-    TPQWriteService(const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+    TPQWriteService(const NActors::TActorId& schemeCache,
                     TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
     ~TPQWriteService()
@@ -60,7 +60,6 @@ private:
     void Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorContext& ctx);
 
     NActors::TActorId SchemeCache;
-    NActors::TActorId NewSchemeCache;
 
     TAtomic LastCookie = 0;
 

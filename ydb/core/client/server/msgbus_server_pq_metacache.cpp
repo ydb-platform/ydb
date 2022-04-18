@@ -216,7 +216,7 @@ private:
     void HandleDescribeTopics(TEvPqNewMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle describe topics");
 
-        SendSchemeCacheRequest(ev->Get()->Topics, !ev->Get()->PathPrefix.empty(), false, ctx);
+        SendSchemeCacheRequest(ev->Get()->Topics, !ev->Get()->PathPrefix.empty(), false, ev->Get()->SyncVersion, ctx);
         auto inserted = DescribeTopicsWaiters.insert(std::make_pair(
                 RequestId,
                 TWaiter{ev->Sender, std::move(ev->Get()->Topics)}
@@ -252,7 +252,7 @@ private:
         }
         if (DescribeAllTopicsWaiters.empty()) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Make full list SC request");
-            SendSchemeCacheRequest(CurrentTopics, true, true, ctx);
+            SendSchemeCacheRequest(CurrentTopics, true, true, false, ctx);
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Store waiter");
         DescribeAllTopicsWaiters.push(waiter);
@@ -298,7 +298,7 @@ private:
 
 
     void SendSchemeCacheRequest(
-            const TVector<TString>& topics, bool addDefaultPathPrefix, bool isFullListingRequest, const TActorContext& ctx
+            const TVector<TString>& topics, bool addDefaultPathPrefix, bool isFullListingRequest, bool syncVersion, const TActorContext& ctx
     ) {
         auto instant = isFullListingRequest ? 0 : ++RequestId;
         auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(instant);
@@ -310,7 +310,7 @@ private:
             }
 
             entry.Path.insert(entry.Path.end(), split.begin(), split.end());
-            entry.SyncVersion = !isFullListingRequest;
+            entry.SyncVersion = syncVersion;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTopic;
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }

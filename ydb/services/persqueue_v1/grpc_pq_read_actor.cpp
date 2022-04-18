@@ -288,9 +288,6 @@ void TReadSessionActor::Bootstrap(const TActorContext& ctx) {
         Die(ctx);
         return;
     }
-    //auto& pqConfig = AppData(ctx)->PQConfig;
-    //bool noDcMode = !pqConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration] - add multicluster mode
-    //ConverterFactory = MakeHolder<NPersQueue::TTopicNamesConverterFactory>(noDcMode, pqConfig.GetRoot());
     StartTime = ctx.Now();
 
     Become(&TThis::StateFunc);
@@ -738,6 +735,10 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         auto converter = TopicsHandler.GetConverterFactory()->MakeTopicNameConverter(
                 topic.topic(), TString(), Request->GetDatabaseName().GetOrElse(TString())
         );
+        if (!converter->IsValid()) {
+            CloseSession(TStringBuilder() << "invalid topic '" << topic.topic() << "' in init request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
+            return;
+        }
         const auto topicName = converter->GetModernName();
         if (topicName.empty()) {
             CloseSession("empty topic in init request", PersQueue::ErrorCode::BAD_REQUEST, ctx);
@@ -2646,7 +2647,7 @@ void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
         topicNames.emplace_back(topic.second.TopicNameConverter->GetPrimaryPath());
     }
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
-    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topicNames));
+    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topicNames, true));
 }
 
 void TReadInitAndAuthActor::Die(const TActorContext& ctx) {

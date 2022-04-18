@@ -89,14 +89,13 @@ static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 
 TWriteSessionActor::TWriteSessionActor(
         NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
-        const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+        const NActors::TActorId& schemeCache,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
         const NPersQueue::TTopicsListController& topicsController
 )
     : Request(request)
     , State(ES_CREATED)
     , SchemeCache(schemeCache)
-    , NewSchemeCache(newSchemeCache)
     , PeerName("")
     , Cookie(cookie)
     , TopicsController(topicsController)
@@ -112,7 +111,7 @@ TWriteSessionActor::TWriteSessionActor(
     , Token(nullptr)
     , UpdateTokenInProgress(false)
     , UpdateTokenAuthenticated(false)
-    , ACLCheckInProgress(false)
+    , ACLCheckInProgress(true)
     , FirstACLCheck(true)
     , RequestNotChecked(false)
     , LastACLCheckTimestamp(TInstant::Zero())
@@ -341,6 +340,10 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
 void TWriteSessionActor::SetupCounters()
 {
+    if (SessionsCreated) {
+        return;
+    }
+
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetServiceCounters(Counters, "pqproxy|writeSession");
     TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(TopicConverter->GetClientsideName());
@@ -357,6 +360,10 @@ void TWriteSessionActor::SetupCounters()
 
 void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId)
 {
+    if (SessionsCreated) {
+        return;
+    }
+
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters);
     TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(TopicConverter->GetClientsideName(), cloudId, dbId, folderId);
@@ -415,7 +422,7 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         SetupCounters();
     }
 
-    Y_VERIFY (entry.SecurityObject);
+    Y_VERIFY(entry.SecurityObject);
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " describe result for acl check");
 
@@ -432,68 +439,6 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         Y_VERIFY(Request->GetYdbToken());
         Auth = *Request->GetYdbToken();
 
-        Token = new NACLib::TUserToken(Request->GetInternalToken());
-        CheckACL(ctx);
-    }
-}
-
-void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-    TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
-    const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
-    Y_VERIFY(navigate->ResultSet.size() == 1);
-    if (navigate->ErrorCount > 0) {
-        const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
-        return CloseSession(
-                TStringBuilder() << "Failed to read ACL for '" << TopicConverter->GetClientsideName()
-                                 << "' Scheme cache error : " << status,
-                PersQueue::ErrorCode::ERROR, ctx
-        );
-    }
-    if (!navigate->ResultSet.front().PQGroupInfo) {
-        return CloseSession(
-                TStringBuilder() << "topic '" << TopicConverter->GetClientsideName() << "' describe error"
-                                 << ", reason: could not retrieve topic description",
-                PersQueue::ErrorCode::ERROR, ctx
-        );
-    }
-
-    const auto& pqDescription = navigate->ResultSet.front().PQGroupInfo->Description;
-
-    Y_VERIFY(pqDescription.PartitionsSize() > 0);
-    Y_VERIFY(pqDescription.HasPQTabletConfig());
-    InitialPQTabletConfig = pqDescription.GetPQTabletConfig();
-
-    if (!pqDescription.HasBalancerTabletID()) {
-        TString errorReason = Sprintf("topic '%s' has no balancer, Marker# PQ93", TopicConverter->GetClientsideName().c_str());
-        CloseSession(errorReason, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
-        return;
-    }
-
-    BalancerTabletId = pqDescription.GetBalancerTabletID();
-
-    for (ui32 i = 0; i < pqDescription.PartitionsSize(); ++i) {
-        const auto& pi = pqDescription.GetPartitions(i);
-        PartitionToTablet[pi.GetPartitionId()] = pi.GetTabletId();
-    }
-
-    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        const auto& tabletConfig = pqDescription.GetPQTabletConfig();
-        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
-                      tabletConfig.GetYcFolderId());
-    } else {
-        SetupCounters();
-    }
-
-    Y_VERIFY(!navigate->ResultSet.empty());
-    ACL.Reset(new TAclWrapper(navigate->ResultSet.front().SecurityObject));
-
-    if (Request->GetInternalToken().empty()) { // session without auth
-        // We've already checked authentication flag in init request. Here we should finish it
-        FirstACLCheck = false;
-        DiscoverPartition(ctx);
-    } else {
-        Y_VERIFY(Request->GetYdbToken());
-        Auth = *Request->GetYdbToken();
         Token = new NACLib::TUserToken(Request->GetInternalToken());
         CheckACL(ctx);
     }

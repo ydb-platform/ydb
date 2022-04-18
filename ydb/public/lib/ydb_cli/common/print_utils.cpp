@@ -13,6 +13,9 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     case NScheme::ESchemeEntryType::Table:
         o << colors.WhiteColor();
         break;
+    case NScheme::ESchemeEntryType::ColumnTable:
+        o << colors.WhiteColor();
+        break;
     case NScheme::ESchemeEntryType::PqGroup:
         o << colors.BrownColor();
         break;

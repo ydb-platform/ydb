@@ -7582,7 +7582,7 @@
         },
         "apphost": {
             "formula": {
-                "sandbox_id": 1279642763,
+                "sandbox_id": 1281607303,
                 "match": "app_host_launcher"
             },
             "executable": {
@@ -8326,7 +8326,7 @@
         },
         "caesar_lookup_profile": {
             "formula": {
-                "sandbox_id": 1279645011,
+                "sandbox_id": 1281609342,
                 "match": "lookup_profile"
             },
             "executable": {

@@ -29,3 +29,5 @@ default:
   ydb-cli: ydb
   k8s: Kubernetes
   oss: true
+
+  corporate-paste: https://www.paste.example.com

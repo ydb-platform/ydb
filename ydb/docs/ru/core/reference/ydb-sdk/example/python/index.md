@@ -1,6 +1,6 @@
 # Приложение на Python
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/basic_example_v1), доступного в составе [Python SDK](https://github.com/yandex-cloud/ydb-python-sdk) {{ ydb-short-name }}.
+На этой странице подробно разбирается код [тестового приложения](https://github.com/ydb-platform/ydb-python-sdk/tree/master/examples/basic_example_v1), доступного в составе [Python SDK](https://github.com/ydb-platform/ydb-python-sdk) {{ ydb-short-name }}.
 
 ## Скачивание и запуск {#download}
 

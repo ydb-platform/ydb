@@ -1,5 +1,6 @@
 #pragma once
 
+#include "datashard_s3_download.h"
 #include "datashard_s3_upload.h"
 
 #include <ydb/core/tx/tx.h>
@@ -857,24 +858,6 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvUnsafeUploadRowsRequest : public TEventPBWithArena<TEvUnsafeUploadRowsRequest,
-                                                        NKikimrTxDataShard::TEvUploadRowsRequest,
-                                                        TEvDataShard::EvUnsafeUploadRowsRequest,
-                                                        16200, 32500> {
-        TEvUnsafeUploadRowsRequest() = default;
-    };
-
-    struct TEvUnsafeUploadRowsResponse : public TEventPB<TEvUnsafeUploadRowsResponse,
-                                                        NKikimrTxDataShard::TEvUploadRowsResponse,
-                                                        TEvDataShard::EvUnsafeUploadRowsResponse> {
-        TEvUnsafeUploadRowsResponse() = default;
-
-        explicit TEvUnsafeUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
-            Record.SetTabletID(tabletId);
-            Record.SetStatus(status);
-        }
-    };
-
     // In most cases this event is local, thus users must
     // use Keys, Ranges and Program struct members instead of corresponding
     // protobuf members. In case of remote event these struct members will
@@ -1223,12 +1206,10 @@ struct TEvDataShard {
     struct TEvGetS3DownloadInfo
         : public TEventLocal<TEvGetS3DownloadInfo, TEvDataShard::EvGetS3DownloadInfo>
     {
-        TActorId ReplyTo;
         ui64 TxId;
 
-        explicit TEvGetS3DownloadInfo(const TActorId& replyTo, ui64 txId)
-            : ReplyTo(replyTo)
-            , TxId(txId)
+        explicit TEvGetS3DownloadInfo(ui64 txId)
+            : TxId(txId)
         {
         }
     };
@@ -1236,38 +1217,20 @@ struct TEvDataShard {
     struct TEvStoreS3DownloadInfo
         : public TEventLocal<TEvStoreS3DownloadInfo, TEvDataShard::EvStoreS3DownloadInfo>
     {
-        TActorId ReplyTo;
         ui64 TxId;
-        TString DataETag;
-        ui64 ProcessedBytes;
-        ui64 WrittenBytes;
-        ui64 WrittenRows;
+        NDataShard::TS3Download Info;
 
-        TEvStoreS3DownloadInfo() = default;
-
-        explicit TEvStoreS3DownloadInfo(
-                const TActorId& replyTo,
-                ui64 txId,
-                const TString& dataETag,
-                ui64 processedBytes,
-                ui64 writtenBytes,
-                ui64 writtenRows)
-            : ReplyTo(replyTo)
-            , TxId(txId)
-            , DataETag(dataETag)
-            , ProcessedBytes(processedBytes)
-            , WrittenBytes(writtenBytes)
-            , WrittenRows(writtenRows)
+        explicit TEvStoreS3DownloadInfo(ui64 txId, const NDataShard::TS3Download& info)
+            : TxId(txId)
+            , Info(info)
         {
+            Y_VERIFY(Info.DataETag);
         }
 
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
                 << " TxId: " << TxId
-                << " DataETag: " << DataETag
-                << " ProcessedBytes: " << ProcessedBytes
-                << " WrittenBytes: " << WrittenBytes
-                << " WrittenRows: " << WrittenRows
+                << " Info: " << Info
             << " }";
         }
     };
@@ -1275,33 +1238,66 @@ struct TEvDataShard {
     struct TEvS3DownloadInfo
         : public TEventLocal<TEvS3DownloadInfo, TEvDataShard::EvS3DownloadInfo>
     {
-        struct TInfo {
-            TMaybe<TString> DataETag;
-            ui64 ProcessedBytes = 0;
-            ui64 WrittenBytes = 0;
-            ui64 WrittenRows = 0;
-
-            TString ToString() const {
-                return TStringBuilder() << "{"
-                    << " DataETag: " << DataETag
-                    << " ProcessedBytes: " << ProcessedBytes
-                    << " WrittenBytes: " << WrittenBytes
-                    << " WrittenRows: " << WrittenRows
-                << " }";
-            }
-        };
-
-        TInfo Info;
+        NDataShard::TS3Download Info;
 
         TEvS3DownloadInfo() = default;
 
-        explicit TEvS3DownloadInfo(const TInfo& info)
+        explicit TEvS3DownloadInfo(const NDataShard::TS3Download& info)
             : Info(info)
         {
         }
 
         TString ToString() const override {
-            return TStringBuilder() << ToStringHeader() << " " << Info.ToString();
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " Info: " << Info
+            << " }";
+        }
+    };
+
+    struct TEvUnsafeUploadRowsRequest
+        : public TEventLocal<TEvUnsafeUploadRowsRequest, TEvDataShard::EvUnsafeUploadRowsRequest>
+    {
+        ui64 TxId;
+        std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest> RecordHolder;
+        const NKikimrTxDataShard::TEvUploadRowsRequest& Record;
+        NDataShard::TS3Download Info;
+
+        explicit TEvUnsafeUploadRowsRequest(
+                ui64 txId,
+                const std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest>& record,
+                const NDataShard::TS3Download& info)
+            : TxId(txId)
+            , RecordHolder(record)
+            , Record(*RecordHolder)
+            , Info(info)
+        {
+            Y_VERIFY(Info.DataETag);
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " TxId: " << TxId
+                << " Info: " << Info
+            << " }";
+        }
+    };
+
+    struct TEvUnsafeUploadRowsResponse
+        : public TEventLocal<TEvUnsafeUploadRowsResponse, TEvDataShard::EvUnsafeUploadRowsResponse>
+    {
+        NKikimrTxDataShard::TEvUploadRowsResponse Record;
+        NDataShard::TS3Download Info;
+
+        explicit TEvUnsafeUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
+            Record.SetTabletID(tabletId);
+            Record.SetStatus(status);
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " Record: " << Record.ShortDebugString()
+                << " Info: " << Info
+            << " }";
         }
     };
 

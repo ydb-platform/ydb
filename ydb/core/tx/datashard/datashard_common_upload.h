@@ -11,10 +11,10 @@ template <typename TEvRequest, typename TEvResponse>
 class TCommonUploadOps {
     using IChangeCollector = NMiniKQL::IChangeCollector;
 
+    typename TEvRequest::TPtr Ev;
     const bool BreakLocks;
     const bool CollectChanges;
 
-    typename TEvRequest::TPtr Ev;
     THolder<TEvResponse> Result;
     THolder<IChangeCollector> ChangeCollector;
 
@@ -24,7 +24,8 @@ public:
 protected:
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion);
     void GetResult(TDataShard* self, TActorId& target, THolder<IEventBase>& event, ui64& cookie);
-    void SendResult(TDataShard* self, const TActorContext& ctx);
+    const TEvRequest* GetRequest() const;
+    TEvResponse* GetResult();
     TVector<IChangeCollector::TChange> GetCollectedChanges() const;
 
 private:

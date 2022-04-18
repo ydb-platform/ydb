@@ -28,7 +28,7 @@ bool TDataShard::TTxGetS3DownloadInfo::Execute(TTransactionContext& txc, const T
 
 void TDataShard::TTxGetS3DownloadInfo::Complete(const TActorContext& ctx) {
     Y_VERIFY(Reply);
-    ctx.Send(Ev->Get()->ReplyTo, Reply.Release(), 0, Ev->Cookie);
+    ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
 }
 
 /// Store
@@ -40,12 +40,10 @@ TDataShard::TTxStoreS3DownloadInfo::TTxStoreS3DownloadInfo(
 { }
 
 bool TDataShard::TTxStoreS3DownloadInfo::Execute(TTransactionContext& txc, const TActorContext&) {
-    const auto& msg = *Ev->Get();
-
     txc.DB.NoMoreReadsForTx();
     NIceDb::TNiceDb db(txc.DB);
 
-    const auto& info = Self->S3Downloads.Store(db, msg);
+    const auto& info = Self->S3Downloads.Store(db, Ev->Get()->TxId, Ev->Get()->Info);
     Reply.Reset(new TEvDataShard::TEvS3DownloadInfo(info));
 
     return true;
@@ -53,7 +51,7 @@ bool TDataShard::TTxStoreS3DownloadInfo::Execute(TTransactionContext& txc, const
 
 void TDataShard::TTxStoreS3DownloadInfo::Complete(const TActorContext& ctx) {
     Y_VERIFY(Reply);
-    ctx.Send(Ev->Get()->ReplyTo, Reply.Release(), 0, Ev->Cookie);
+    ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
 }
 
 }   // namespace NDataShard

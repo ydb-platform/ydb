@@ -1,6 +1,6 @@
 #pragma once
 
-#include "datashard.h"
+#include "datashard_s3_download.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
@@ -10,19 +10,17 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TS3DownloadsManager {
-    using TInfo = TEvDataShard::TEvS3DownloadInfo::TInfo;
-
 public:
     bool Load(NIceDb::TNiceDb& db);
     void Reset();
 
-    const TInfo* Find(ui64 txId) const;
-    const TInfo& Store(NIceDb::TNiceDb& db, const TEvDataShard::TEvStoreS3DownloadInfo& msg);
+    const TS3Download* Find(ui64 txId) const;
+    const TS3Download& Store(NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo);
 
 private:
-    THashMap<ui64, TInfo> Downloads;
+    THashMap<ui64, TS3Download> Downloads;
 
 }; // TS3DownloadsManager
 
-}   // namespace NDataShard
-}   // namespace NKikimr
+} // namespace NDataShard
+} // namespace NKikimr

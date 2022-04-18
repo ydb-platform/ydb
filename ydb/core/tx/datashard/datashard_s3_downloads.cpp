@@ -40,25 +40,23 @@ void TS3DownloadsManager::Reset() {
     Downloads.clear();
 }
 
-const TS3DownloadsManager::TInfo* TS3DownloadsManager::Find(ui64 txId) const {
+const TS3Download* TS3DownloadsManager::Find(ui64 txId) const {
     return Downloads.FindPtr(txId);
 }
 
-const TS3DownloadsManager::TInfo& TS3DownloadsManager::Store(NIceDb::TNiceDb& db, const TEvDataShard::TEvStoreS3DownloadInfo& msg) {
-    auto& info = Downloads[msg.TxId];
+const TS3Download& TS3DownloadsManager::Store(NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo) {
+    auto& info = Downloads[txId];
 
-    Y_VERIFY(info.DataETag.GetOrElse(msg.DataETag) == msg.DataETag);
-    info.DataETag = msg.DataETag;
-    info.ProcessedBytes = msg.ProcessedBytes;
-    info.WrittenBytes = msg.WrittenBytes;
-    info.WrittenRows = msg.WrittenRows;
+    Y_VERIFY(newInfo.DataETag);
+    Y_VERIFY(info.DataETag.GetOrElse(*newInfo.DataETag) == *newInfo.DataETag);
+    info = newInfo;
 
     using Schema = TDataShard::Schema;
-    db.Table<Schema::S3Downloads>().Key(msg.TxId).Update(
-        NIceDb::TUpdate<Schema::S3Downloads::DataETag>(msg.DataETag),
-        NIceDb::TUpdate<Schema::S3Downloads::ProcessedBytes>(msg.ProcessedBytes),
-        NIceDb::TUpdate<Schema::S3Downloads::WrittenBytes>(msg.WrittenBytes),
-        NIceDb::TUpdate<Schema::S3Downloads::WrittenRows>(msg.WrittenRows));
+    db.Table<Schema::S3Downloads>().Key(txId).Update(
+        NIceDb::TUpdate<Schema::S3Downloads::DataETag>(*newInfo.DataETag),
+        NIceDb::TUpdate<Schema::S3Downloads::ProcessedBytes>(newInfo.ProcessedBytes),
+        NIceDb::TUpdate<Schema::S3Downloads::WrittenBytes>(newInfo.WrittenBytes),
+        NIceDb::TUpdate<Schema::S3Downloads::WrittenRows>(newInfo.WrittenRows));
 
     return info;
 }

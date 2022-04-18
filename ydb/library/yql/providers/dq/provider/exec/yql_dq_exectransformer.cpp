@@ -382,10 +382,18 @@ private:
                         switch (block->Type) {
                             case EUserDataType::URL:
                             case EUserDataType::PATH: {
-                                TString content = (name == TStringBuf("FilePath"))
-                                    ? fullFileName
-                                    : TFileInput(block->FrozenFile->GetPath()).ReadAll();
-                                result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
+                                TString content = fullFileName;
+                                if (name == TStringBuf("FileContent")) {
+                                    if (block->FrozenFile->GetSize() < MaxFileReadSize) {
+                                        content = TFileInput(block->FrozenFile->GetPath()).ReadAll();
+                                    } else {
+                                        TCallableBuilder builder(typeEnv, TStringBuf("FileContentJob"), callable.GetType()->GetReturnType(), false);
+                                        builder.Add(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(fullFileName));
+                                        result = TRuntimeNode(builder.Build(), false);
+                                    }
+                                }
+                                if (!result)
+                                    result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
                                 break;
                             }
                             case EUserDataType::RAW_INLINE_DATA: {
@@ -1258,6 +1266,8 @@ private:
     THolder<IGraphTransformer> DqTypeAnnotationTransformer;
     mutable THashMap<TString, TFileLinkPtr> FileLinks;
     mutable THashMap<TString, TString> ModulesMapping;
+
+    const ui64 MaxFileReadSize = 1_MB;
 };
 
 }

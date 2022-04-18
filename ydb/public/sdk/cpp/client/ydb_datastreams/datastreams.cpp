@@ -380,6 +380,10 @@ namespace NYdb::NDataStreams::V1 {
             : Impl_(new TImpl(CreateInternalInterface(driver), settings))
     {}
 
+    NThreading::TFuture<void> TDataStreamsClient::DiscoveryCompleted() {
+        return Impl_->DiscoveryCompleted();
+    }
+
     TAsyncCreateStreamResult TDataStreamsClient::CreateStream(const TString& path, TCreateStreamSettings settings) {
         return Impl_->CreateStream(path, settings);
     }
@@ -828,7 +832,5 @@ namespace NYdb::NDataStreams::V1 {
             decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary) method,
             TProtoRequestSettings settings
     );
-
-
 }
 

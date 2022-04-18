@@ -34,6 +34,10 @@ public:
         IInternalClient* client
     );
 
+    NThreading::TFuture<void> DiscoveryCompleted() const;
+
+    void SignalDiscoveryCompleted();
+
     void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override;
 
     void AddCb(TCb&& cb, ENotifyType type);
@@ -62,6 +66,7 @@ public:
     TPlainStatus LastDiscoveryStatus;
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
+    NThreading::TPromise<void> DiscoveryCompletedPromise;
 };
 
 // Tracker allows to get driver state by database and credentials

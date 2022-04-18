@@ -35,6 +35,7 @@ TDbDriverState::TDbDriverState(
     }, client)
     , StatCollector(database, client->GetMetricRegistry())
     , Log(Client->GetLog())
+    , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {
     EndpointPool.SetStatCollector(StatCollector);
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
@@ -71,6 +72,13 @@ EBalancingPolicy TDbDriverState::GetBalancingPolicy() const {
 
 TStringType TDbDriverState::GetEndpoint() const {
     return EndpointPool.GetEndpoint(TStringType()).Endpoint;
+}
+
+NThreading::TFuture<void> TDbDriverState::DiscoveryCompleted() const {
+    return DiscoveryCompletedPromise.GetFuture();
+}
+void TDbDriverState::SignalDiscoveryCompleted() {
+    DiscoveryCompletedPromise.TrySetValue();
 }
 
 TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
@@ -194,6 +202,12 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         }
     }
     auto updateResult = strongState->EndpointPool.UpdateAsync();
+    if (updateResult.second) {
+        auto cb = [strongState](const NThreading::TFuture<TEndpointUpdateResult>&) {
+            strongState->SignalDiscoveryCompleted();
+        };
+        updateResult.first.Subscribe(cb);
+    }
 
     if (strongState->DiscoveryMode == EDiscoveryMode::Sync) {
         const auto& discoveryStatus = updateResult.first.GetValueSync().DiscoveryStatus;

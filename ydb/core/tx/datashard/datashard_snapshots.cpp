@@ -283,7 +283,7 @@ bool TSnapshotManager::GetPerformedUnprotectedReads() const {
 }
 
 bool TSnapshotManager::IsPerformedUnprotectedReadsCommitted() const {
-    return PerformedUnprotectedReadsUncommitted != 0;
+    return PerformedUnprotectedReadsUncommitted == 0;
 }
 
 void TSnapshotManager::SetPerformedUnprotectedReads(bool performedUnprotectedReads, TTransactionContext& txc) {

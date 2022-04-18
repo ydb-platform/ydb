@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         { // add data for triger split
             int key = 0;
-            for (int i = 0 ; i < 100; ++i) {
+            for (int i = 0 ; i < 310; ++i) {
                 TValueBuilder rows;
                 rows.BeginList();
                 for (int j = 0; j < 500; ++j) {
@@ -550,7 +550,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
             Cerr << "partitions " << partitions << Endl;
 
         } while (partitions == 1);
-
 
         { // fail if shema has been broken
             TString readQuery =

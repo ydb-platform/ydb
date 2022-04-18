@@ -65,13 +65,13 @@ namespace NKikimr {
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // TDefragLocalSheduler
+    // TDefragLocalScheduler
     // We use statistics about free space share and numbe of used/canBeFreed chunks
     // from Huge Heap to decide if to run defragmentation.
     // TODO: think about running compaction in case of inactivity
     ////////////////////////////////////////////////////////////////////////////
-    class TDefragLocalSheduler : public TActorBootstrapped<TDefragLocalSheduler> {
-        friend class TActorBootstrapped<TDefragLocalSheduler>;
+    class TDefragLocalScheduler : public TActorBootstrapped<TDefragLocalScheduler> {
+        friend class TActorBootstrapped<TDefragLocalScheduler>;
         std::shared_ptr<TDefragCtx> DCtx;
         const TActorId DefragActorId;
         TActorId PlannerId;
@@ -85,7 +85,6 @@ namespace NKikimr {
         class TDefragPlannerActor : public TActorBootstrapped<TDefragPlannerActor> {
             std::shared_ptr<TDefragCtx> DCtx;
             TActorId ParentId;
-            std::optional<TDefragCalcStat> CalcStat;
 
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -104,35 +103,35 @@ namespace NKikimr {
             }
 
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
-                CalcStat.emplace(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
-                HandleResume();
-            }
-
-            void HandleResume() {
-                if (CalcStat->Scan(TDuration::MilliSeconds(10))) {
-                    TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), {}, nullptr, 0));
+                TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
+                std::unique_ptr<IEventBase> res;
+                if (calcStat.Scan(TDuration::Seconds(30))) {
+                    STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
                 } else {
-                    const ui32 totalChunks = CalcStat->GetTotalChunks();
-                    const ui32 usefulChunks = CalcStat->GetUsefulChunks();
+                    const ui32 totalChunks = calcStat.GetTotalChunks();
+                    const ui32 usefulChunks = calcStat.GetUsefulChunks();
                     const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
                     Y_VERIFY(usefulChunks <= totalChunks);
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
                     if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks)) {
-                        TChunksToDefrag chunksToDefrag = CalcStat->GetChunksToDefrag(DCtx->MaxChunksToDefrag);
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(DCtx->MaxChunksToDefrag);
                         Y_VERIFY(chunksToDefrag);
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
                             (ChunksToDefrag, chunksToDefrag.ToString()));
-                        Send(ParentId, new TEvDefragStartQuantum(std::move(chunksToDefrag)));
+                        res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
                     } else {
                         STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
                             (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
                             (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())));
-                        Send(ParentId, new TEvDefragStartQuantum(TChunksToDefrag()));
                     }
-                    PassAway();
                 }
+                if (!res) {
+                    res = std::make_unique<TEvDefragStartQuantum>(TChunksToDefrag());
+                }
+                Send(ParentId, res.release());
+                PassAway();
             }
 
             void PassAway() override {
@@ -142,7 +141,6 @@ namespace NKikimr {
 
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvTakeHullSnapshotResult, Handle);
-                cFunc(EvResume, HandleResume);
                 cFunc(TEvents::TSystem::Poison, PassAway);
             )
         };
@@ -190,8 +188,8 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_DEFRAG_SCHEDULER;
         }
 
-        TDefragLocalSheduler(const std::shared_ptr<TDefragCtx> &dCtx, const TActorId &defragActorId)
-            : TActorBootstrapped<TDefragLocalSheduler>()
+        TDefragLocalScheduler(const std::shared_ptr<TDefragCtx> &dCtx, const TActorId &defragActorId)
+            : TActorBootstrapped<TDefragLocalScheduler>()
             , DCtx(dCtx)
             , DefragActorId(defragActorId)
         {}
@@ -245,7 +243,7 @@ namespace NKikimr {
             Sublog.Log() << "Defrag quantum started\n";
             ++TotalDefragRuns;
             InProgress = true;
-            ActiveActors.Insert(RunInBatchPool(ctx, CreateDefragQuantumActor(DCtx,
+            ActiveActors.Insert(ctx.Register(CreateDefragQuantumActor(DCtx,
                 GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
                 std::visit([](auto& r) { return GetChunksToDefrag(r); }, task.Request))));
         }
@@ -261,7 +259,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             // create a local scheduler for defrag
             if (DCtx->RunDefragBySchedule) {
-                auto scheduler = std::make_unique<TDefragLocalSheduler>(DCtx, ctx.SelfID);
+                auto scheduler = std::make_unique<TDefragLocalScheduler>(DCtx, ctx.SelfID);
                 auto aid = ctx.Register(scheduler.release());
                 ActiveActors.Insert(aid);
             }

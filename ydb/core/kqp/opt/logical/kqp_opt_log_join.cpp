@@ -141,6 +141,36 @@ TVector<TExprBase> CreateRenames(const TMaybeNode<TCoFlatMap>& rightFlatmap, con
     return renames;
 }
 
+bool IsParameterToListOfStructsRepack(const TExprBase& expr) {
+    // Looking for next patterns:
+    //  - (FlatMap $in (lambda '($x) (Just (AsStruct '('"key" $x)))))
+    //  - (FlatMap $in (lambda '($x) (Just (AsStruct '('"key" (Nth $x '0)) '('"key2" (Nth $x '1))) ...)))
+
+    if (!expr.Maybe<TCoFlatMap>().Input().Maybe<TCoParameter>()) {
+        return false;
+    }
+    auto lambda = expr.Cast<TCoFlatMap>().Lambda();
+    if (lambda.Args().Size() != 1) {
+        return false;
+    }
+    if (!lambda.Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>()) {
+        return false;
+    }
+    auto lambdaArg = lambda.Args().Arg(0).Raw();
+    auto asStruct = lambda.Body().Cast<TCoJust>().Input().Cast<TCoAsStruct>();
+
+    for (const auto& member : asStruct.Args()) {
+        if (member->Child(1) == lambdaArg) {
+            continue;
+        }
+        if (member->Child(1)->IsCallable("Nth") && member->Child(1)->Child(0) == lambdaArg) {
+            continue;
+        }
+        return false;
+    }
+
+    return true;
+}
 
 //#define DBG(...) YQL_CLOG(DEBUG, ProviderKqp) << __VA_ARGS__
 #define DBG(...)
@@ -281,14 +311,18 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
-    TExprBase leftData = join.LeftInput().Maybe<TCoParameter>()
-        ? join.LeftInput()
-        : Build<TDqPrecompute>(ctx, join.Pos())
+    bool needPrecomputeLeft = !join.LeftInput().Maybe<TCoParameter>() &&
+                              !IsParameterToListOfStructsRepack(join.LeftInput());
+
+    TExprBase leftData = needPrecomputeLeft
+        ? Build<TDqPrecompute>(ctx, join.Pos())
             .Input(join.LeftInput())
-            .Done();
+            .Done()
+        : join.LeftInput();
+
     auto leftDataDeduplicated = DeduplicateByMembers(leftData, leftJoinKeys, ctx, join.Pos());
 
-    if (!equalLeftKeys.empty())    {
+    if (!equalLeftKeys.empty()) {
         auto row = Build<TCoArgument>(ctx, join.Pos())
             .Name("row")
             .Done();

@@ -1009,6 +1009,77 @@ Y_UNIT_TEST_SUITE(KqpSqlIn) {
             .ExpectedReads = UseNewEngine ? 1 : 6,
         });
     }
+
+    Y_UNIT_TEST_NEW_ENGINE(PhasesCount) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        // simple key
+        {
+            const auto query = Q1_(R"(
+                DECLARE $in AS List<Uint64>;
+                SELECT * FROM `/Root/KeyValue` WHERE Key IN $in
+            )");
+
+            const auto params = TParamsBuilder()
+                .AddParam("$in")
+                    .BeginList()
+                        .AddListItem().Uint64(1)
+                        .AddListItem().Uint64(1)
+                        .AddListItem().Uint64(100)
+                    .EndList().Build()
+                .Build();
+
+            const auto settings = TExecDataQuerySettings()
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
+        }
+
+        // complex (tuple) key
+        {
+            const auto query = Q1_(R"(
+                DECLARE $in AS List<Tuple<UInt32, String>>;
+
+                SELECT * FROM `/Root/Test` WHERE (Group, Name) IN $in
+            )");
+
+            const auto params = TParamsBuilder()
+                .AddParam("$in")
+                    .BeginList()
+                        .AddListItem().BeginTuple()
+                            .AddElement().Uint32(1)
+                            .AddElement().String("Anna")
+                        .EndTuple()
+                        .AddListItem().BeginTuple()
+                            .AddElement().Uint32(1)
+                            .AddElement().String("Anna")
+                        .EndTuple()
+                        .AddListItem().BeginTuple()
+                            .AddElement().Uint32(2)
+                            .AddElement().String("Bob")
+                        .EndTuple()
+                    .EndList().Build()
+                .Build();
+
+            const auto settings = TExecDataQuerySettings()
+                .CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[[3500u];["None"];[1u];["Anna"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+            const Ydb::TableStats::QueryStats stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_EQUAL_C(2, stats.query_phases_size(), stats.DebugString());
+        }
+    }
 }
 
 } // namespace NKqp

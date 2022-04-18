@@ -3111,6 +3111,36 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         readTypes.insert(reads[1]["type"].GetString());
         UNIT_ASSERT(readTypes.contains("Lookup"));
     }
+
+    Y_UNIT_TEST(DependentSelect) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            $data = (
+                SELECT Data FROM EightShard WHERE Key = 401
+            );
+
+            SELECT * FROM Join1 WHERE Key = $data;
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[101u];["One"];[1];["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        AssertTableStats(result, "/Root/EightShard", {
+            .ExpectedReads = 1,
+        });
+
+        AssertTableStats(result, "/Root/Join1", {
+            .ExpectedReads = 1,
+        });
+    }
 }
 
 } // namespace NKikimr::NKqp

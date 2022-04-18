@@ -43,7 +43,7 @@ public:
         AddHandler(0, &TCoTake::Match, HNDL(BuildTakeSkipStage<false>));
         AddHandler(0, &TCoSortBase::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoTake::Match, HNDL(BuildTakeStage<false>));
-        AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput));
+        AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<false>));
         AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
@@ -60,6 +60,9 @@ public:
         AddHandler(0, &TDqStage::Match, HNDL(FloatUpStage));
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
         AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute));
+        AddHandler(0, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<false>));
+        AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<false>));
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
@@ -69,11 +72,16 @@ public:
         AddHandler(1, &TCoTake::Match, HNDL(BuildTakeSkipStage<true>));
         AddHandler(1, &TCoSortBase::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoTake::Match, HNDL(BuildTakeStage<true>));
+        AddHandler(1, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(BuildJoin<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
+        AddHandler(1, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<true>));
+        AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
+        AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
 #undef HNDL
+
         SetGlobal(1u);
     }
 
@@ -198,8 +206,11 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        TExprBase output = DqRewriteLengthOfStageOutput(node, ctx, optCtx);
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> RewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqRewriteLengthOfStageOutput(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("RewriteLengthOfStageOutput", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -308,6 +319,33 @@ protected:
     TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
         TExprBase output = DqBuildScalarPrecompute(node, ctx, optCtx);
         DumpAppliedRule("BuildScalarPrecompute", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PropagatePrecomuteScalarRowset(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = KqpPropagatePrecomuteScalarRowset(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PropagatePrecomuteScalarRowset", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PropagatePrecomuteTake(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = KqpPropagatePrecomuteTake(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PropagatePrecomuteTake", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PropagatePrecomuteFlatmap(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = KqpPropagatePrecomuteFlatmap(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("PropagatePrecomuteFlatmap", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

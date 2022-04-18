@@ -9,6 +9,7 @@ SRCS(
     kqp_opt_phy_build_stage.cpp
     kqp_opt_phy_limit.cpp
     kqp_opt_phy_olap_filter.cpp
+    kqp_opt_phy_precompute.cpp
     kqp_opt_phy_sort.cpp
     kqp_opt_phy_helpers.cpp
     kqp_opt_phy_stage_float_up.cpp

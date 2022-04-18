@@ -52,12 +52,16 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
         }
     }
 
+    totalCpuTimeUs += kqpStats.GetWorkerCpuTimeUs();
+
     if (kqpStats.HasCompilation()) {
         auto& compilation = kqpStats.GetCompilation();
         auto& toCompilation = *queryStats.mutable_compilation();
         toCompilation.set_from_cache(compilation.GetFromCache());
         toCompilation.set_duration_us(compilation.GetDurationUs());
         toCompilation.set_cpu_time_us(compilation.GetCpuTimeUs());
+
+        totalCpuTimeUs += compilation.GetCpuTimeUs();
     }
 
     queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs());

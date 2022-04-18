@@ -2,6 +2,8 @@
 
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 NYql::NNodes::TExprBase BuildReadNode(NYql::TPositionHandle pos, NYql::TExprContext& ctx,

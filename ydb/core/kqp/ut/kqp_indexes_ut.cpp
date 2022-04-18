@@ -5255,7 +5255,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/SecondaryKeys", {
-            .ExpectedReads = UseNewEngine ? 2 : 1, // TODO: Looks like missing SkipNullMembers in NewEngine
+            .ExpectedReads = 1
         });
 
         AssertTableStats(result, "/Root/SecondaryKeys/Index/indexImplTable", {

@@ -2852,7 +2852,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
                     UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 1);
                     UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), stats.query_phases(0).cpu_time_us());
                     UNIT_ASSERT(stats.total_duration_us() > 0);
                 }
             }
@@ -2874,8 +2873,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 2);
                     UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 1);
                     UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(),
-                        stats.query_phases(0).cpu_time_us() + stats.query_phases(1).cpu_time_us());
                     UNIT_ASSERT(stats.total_duration_us() > 0);
                 }
             }
@@ -2897,7 +2894,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3);
                     UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 3);
                     UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), stats.query_phases(0).cpu_time_us());
                     UNIT_ASSERT(stats.total_duration_us() > 0);
                 }
             }
@@ -2919,7 +2915,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
                     UNIT_ASSERT(stats.query_phases(0).table_access(0).reads().bytes() > 1);
                     UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), stats.query_phases(0).cpu_time_us());
                     UNIT_ASSERT(stats.total_duration_us() > 0);
                 }
             }
@@ -2948,8 +2943,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
                     UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
                     // Totals
-                    UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(),
-                        stats.query_phases(0).cpu_time_us() + stats.query_phases(1).cpu_time_us());
                     UNIT_ASSERT(stats.total_duration_us() > 0);
                 }
             }

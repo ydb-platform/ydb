@@ -739,6 +739,10 @@ public:
         return TDuration::MilliSeconds(CurrentConfig.GetPostponeStartPeriod());
     }
 
+    bool GetCheckMoveExpediency() const {
+        return CurrentConfig.GetCheckMoveExpediency();
+    }
+
     const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& GetTabletLimit() const {
         return TabletLimit;
     }

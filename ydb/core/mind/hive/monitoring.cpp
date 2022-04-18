@@ -727,6 +727,7 @@ public:
         UpdateConfig(db, "MinNodeUsageToBalance");
         UpdateConfig(db, "MinPeriodBetweenReassign");
         UpdateConfig(db, "NodeSelectStrategy");
+        UpdateConfig(db, "CheckMoveExpediency");
 
         if (ChangeRequest) {
             Self->BuildCurrentConfig();
@@ -913,6 +914,7 @@ public:
         ShowConfig(out, "MinPeriodBetweenBalance");
         ShowConfig(out, "MaxMovementsOnAutoBalancer");
         ShowConfig(out, "ContinueAutoBalancer");
+        ShowConfig(out, "CheckMoveExpediency");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";

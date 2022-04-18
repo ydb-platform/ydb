@@ -1497,7 +1497,7 @@ TResourceNormalizedValues THive::GetStDevResourceValues() const {
 
 bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
     if (!tablet.IsAlive()) {
-        BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
+        BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " to " << node.Id
                    << " is expedient because the tablet is not alive");
         return true;
     }
@@ -1529,6 +1529,12 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
     if (tablet.Node->IsOverloaded() && !node.IsOverloaded()) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is forcefully expedient because source node is overloaded");
+        return true;
+    }
+
+    if (!GetCheckMoveExpediency()) {
+        BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
+                   << " is forcefully expedient because of the setting");
         return true;
     }
 

@@ -504,12 +504,15 @@ public:
                 }
             }
         }
+        ui64 foundGroups = 0;
+        ui64 totalGroups = 0;
         for (const auto& [poolName, poolInfo] : StoragePoolInfo) {
             if ((!FilterTenant.empty() || !FilterStoragePools.empty()) && FilterStoragePools.count(poolName) == 0) {
                 continue;
             }
             NKikimrViewer::TStoragePoolInfo* pool = StorageInfo.AddStoragePools();
             for (TString groupId : poolInfo.Groups) {
+                ++totalGroups;
                 if (!FilterGroupIds.empty() && !BinarySearch(FilterGroupIds.begin(), FilterGroupIds.end(), groupId)) {
                     continue;
                 }
@@ -527,6 +530,7 @@ public:
                     case EWith::Everything:
                         break;
                 }
+                ++foundGroups;
                 pool->AddGroups()->SetGroupId(groupId);
                 auto itHiveGroup = BSGroupHiveIndex.find(groupId);
                 if (itHiveGroup != BSGroupHiveIndex.end()) {
@@ -578,8 +582,10 @@ public:
                 RemapPDisk(json, protoFrom, jsonSettings);
             };
         }
+        StorageInfo.SetTotalGroups(totalGroups);
+        StorageInfo.SetFoundGroups(foundGroups);
         TProtoToJson::ProtoToJson(json, StorageInfo, JsonSettings);
-        Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get()) + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         PassAway();
     }
 

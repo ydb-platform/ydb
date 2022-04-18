@@ -799,7 +799,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         if (node->IsCallable("MrTableEach") || node->IsCallable("MrTableEachStrict")) {
             TExprNode::TListType keys;
             TStringBuf prefix;
-            if (node->TailPtr()->IsAtom()) {
+            if (node->ChildrenSize() != 0 && node->TailPtr()->IsAtom()) {
                 prefix = node->TailPtr()->Content();
             }
             for (const auto& eachKey : node->Children()) {

@@ -15,6 +15,8 @@
 
 #include <ydb/core/base/events.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr {
 namespace NWrappers {
 
@@ -34,6 +36,12 @@ struct TEvS3Wrapper {
         {
         }
 
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Request: " << Request
+            << " }";
+        }
+
         using TBase = TGenericRequest<TDerived, EventType, TRequest>;
     };
 
@@ -47,6 +55,13 @@ struct TEvS3Wrapper {
             : TGeneric(request)
             , Body(std::move(body))
         {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Request: " << this->Request
+                << " Body: " << Body.size() << "b"
+            << " }";
         }
 
         using TBase = TRequestWithBody<TDerived, EventType, T>;
@@ -68,6 +83,12 @@ struct TEvS3Wrapper {
             return outcome;
         }
 
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Result: " << Result
+            << " }";
+        }
+
         using TBase = TGenericResponse<TDerived, EventType, T, U>;
     };
 
@@ -86,6 +107,13 @@ struct TEvS3Wrapper {
             : TGeneric(outcome)
             , Body(std::move(body))
         {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {"
+                << " Result: " << this->Result
+                << " Body: " << Body.size() << "b"
+            << " }";
         }
 
         using TBase = TResponseWithBody<TDerived, EventType, T, U>;

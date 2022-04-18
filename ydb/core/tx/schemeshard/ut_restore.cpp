@@ -326,6 +326,23 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
+    Y_UNIT_TEST(ShouldExpandBuffer) {
+        TTestBasicRuntime runtime;
+
+        const auto data = GenerateTestData("a", 2);
+        const ui32 batchSize = 1;
+
+        Restore(runtime, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data}, batchSize);
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnSupportedDatatypes) {
         TTestBasicRuntime runtime;
 
@@ -596,7 +613,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    Y_UNIT_TEST(ShouldFailOnFileWithoutNewLines) {
+    void ShouldFailOnFileWithoutNewLines(ui32 batchSize) {
         TTestBasicRuntime runtime;
 
         const auto data = TTestData("\"a1\",\"value1\"", EmptyYsonStr);
@@ -606,10 +623,18 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             Columns { Name: "key" Type: "Utf8" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
-        )", {data});
+        )", {data}, batchSize);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
         NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    Y_UNIT_TEST(ShouldFailOnFileWithoutNewLinesStandardBatch) {
+        ShouldFailOnFileWithoutNewLines(128);
+    }
+
+    Y_UNIT_TEST(ShouldFailOnFileWithoutNewLinesSmallBatch) {
+        ShouldFailOnFileWithoutNewLines(1);
     }
 
     Y_UNIT_TEST(ShouldFailOnEmptyToken) {

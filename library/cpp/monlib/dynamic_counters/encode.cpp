@@ -95,7 +95,9 @@ namespace NMonitoring {
 
     }
 
-    THolder<ICountableConsumer> CreateEncoder(IOutputStream* out, EFormat format, TCountableBase::EVisibility vis) {
+    THolder<ICountableConsumer> CreateEncoder(IOutputStream* out, EFormat format,
+        TStringBuf nameLabel, TCountableBase::EVisibility vis)
+    {
         switch (format) {
             case EFormat::JSON:
                 return MakeHolder<TConsumer>(NMonitoring::EncoderJson(out), vis);
@@ -106,7 +108,7 @@ namespace NMonitoring {
                     NMonitoring::ECompression::ZSTD), vis);
             case EFormat::PROMETHEUS:
                 return MakeHolder<TConsumer>(NMonitoring::EncoderPrometheus(
-                    out), vis);
+                    out, nameLabel), vis);
             default:
                 ythrow yexception() << "unsupported metric encoding format: " << format;
                 break;

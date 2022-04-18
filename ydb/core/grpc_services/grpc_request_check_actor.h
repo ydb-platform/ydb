@@ -495,14 +495,14 @@ const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
 template <>
 inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordRequest>::GetPermissions() {
     //full list of permissions for compatility. remove old permissions later.
-    static const TVector<TString> permissions = {"yds.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
+    static const TVector<TString> permissions = {"ydb.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
     return permissions;
 }
 // yds behavior
 template <>
 inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordsRequest>::GetPermissions() {
     //full list of permissions for compatility. remove old permissions later.
-    static const TVector<TString> permissions = {"yds.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
+    static const TVector<TString> permissions = {"ydb.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
     return permissions;
 }
 

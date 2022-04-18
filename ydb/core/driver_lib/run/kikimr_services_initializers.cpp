@@ -1878,22 +1878,6 @@ void TPersQueueClusterTrackerInitializer::InitializeServices(NActors::TActorSyst
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-// TPersQueueLibSharedInstanceInitializer
-
-TPersQueueLibSharedInstanceInitializer::TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{}
-
-void TPersQueueLibSharedInstanceInitializer::InitializeServices(NActors::TActorSystemSetup*, const NKikimr::TAppData* appData) {
-    if (Config.HasPQConfig() && Config.GetPQConfig().GetEnabled()) {
-        if (Config.GetPQConfig().GetMirrorConfig().GetEnabled()) {
-            if (appData->PersQueueMirrorReaderFactory) {
-                appData->PersQueueMirrorReaderFactory->Initialize(Config.GetPQConfig().GetMirrorConfig().GetPQLibSettings());
-            }
-        }
-    }
-}
-
 // TMemProfMonitorInitializer
 
 TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig)

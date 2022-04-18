@@ -619,6 +619,8 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
         }
         Session = std::make_shared<TSingleClusterReadSessionImpl>(
             Settings,
+            "db",
+            "sessionid",
             ClusterName,
             Log,
             MockProcessorFactory,

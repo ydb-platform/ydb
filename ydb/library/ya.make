@@ -9,6 +9,7 @@ RECURSE(
     http_proxy
     keys
     login
+    logger
     mkql_proto
     naming_conventions
     pdisk_io

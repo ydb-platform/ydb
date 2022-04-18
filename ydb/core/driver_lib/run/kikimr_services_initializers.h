@@ -353,13 +353,6 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TPersQueueLibSharedInstanceInitializer : public IKikimrServicesInitializer {
-public:
-    TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
 class TMemProfMonitorInitializer : public IKikimrServicesInitializer {
 public:
     TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig);

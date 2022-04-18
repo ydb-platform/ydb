@@ -1128,6 +1128,18 @@ void TKikimrRunner::InitializeActorSystem(
     if (YqSharedResources) {
         YqSharedResources->Init(ActorSystem.Get());
     }
+
+    if (runConfig.AppConfig.HasPQConfig()) {
+        const auto& pqConfig = runConfig.AppConfig.GetPQConfig();
+        if (pqConfig.GetEnabled() && pqConfig.GetMirrorConfig().GetEnabled()) {
+            if (AppData->PersQueueMirrorReaderFactory) {
+                AppData->PersQueueMirrorReaderFactory->Initialize(
+                    ActorSystem.Get(),
+                    pqConfig.GetMirrorConfig().GetPQLibSettings()
+                );
+            }
+        }
+    }
 }
 
 TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializersList(
@@ -1262,8 +1274,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnablePersQueueClusterTracker) {
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
-
-    sil->AddServiceInitializer(new TPersQueueLibSharedInstanceInitializer(runConfig));
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
 

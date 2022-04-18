@@ -1296,6 +1296,8 @@ struct TReadSessionSettings : public TRequestSettings<TReadSessionSettings> {
     FLUENT_SETTING_VECTOR(TString, Clusters);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+
+    FLUENT_SETTING_OPTIONAL(TLog, Log);
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.

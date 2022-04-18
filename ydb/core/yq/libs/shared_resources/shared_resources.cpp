@@ -2,11 +2,9 @@
 
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
+#include <ydb/library/logger/actor.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
-#include <library/cpp/actors/core/log.h>
-#include <library/cpp/logger/backend.h>
-#include <library/cpp/logger/record.h>
 
 #include <util/generic/cast.h>
 #include <util/generic/strbuf.h>
@@ -23,64 +21,8 @@ namespace NYq {
 
 namespace {
 
-// Log backend that allows us to create shared YDB driver early (before actor system starts),
-// but log to actor system.
-class TDeferredActorSystemPtrInitActorLogBackend : public TLogBackend {
-public:
-    using TAtomicActorSystemPtr = std::atomic<NActors::TActorSystem*>;
-    using TSharedAtomicActorSystemPtr = std::shared_ptr<TAtomicActorSystemPtr>;
-
-    TDeferredActorSystemPtrInitActorLogBackend(TSharedAtomicActorSystemPtr actorSystem, int logComponent)
-        : ActorSystemPtr(std::move(actorSystem))
-        , LogComponent(logComponent)
-    {
-    }
-
-    NActors::NLog::EPriority GetActorLogPriority(ELogPriority priority) {
-        switch (priority) {
-        case TLOG_EMERG:
-            return NActors::NLog::PRI_EMERG;
-        case TLOG_ALERT:
-            return NActors::NLog::PRI_ALERT;
-        case TLOG_CRIT:
-            return NActors::NLog::PRI_CRIT;
-        case TLOG_ERR:
-            return NActors::NLog::PRI_ERROR;
-        case TLOG_WARNING:
-            return NActors::NLog::PRI_WARN;
-        case TLOG_NOTICE:
-            return NActors::NLog::PRI_NOTICE;
-        case TLOG_INFO:
-            return NActors::NLog::PRI_INFO;
-        case TLOG_DEBUG:
-            return NActors::NLog::PRI_DEBUG;
-        default:
-            return NActors::NLog::PRI_TRACE;
-        }
-    }
-
-    void WriteData(const TLogRecord& rec) override {
-        NActors::TActorSystem* actorSystem = ActorSystemPtr->load(std::memory_order_relaxed);
-        if (Y_LIKELY(actorSystem)) {
-            LOG_LOG(*actorSystem, GetActorLogPriority(rec.Priority), LogComponent, TString(rec.Data, rec.Len));
-        } else {
-            // Not inited. Temporary write to stderr.
-            TStringBuilder out;
-            out << TStringBuf(rec.Data, rec.Len) << Endl;
-            Cerr << out;
-        }
-    }
-
-    void ReopenLog() override {
-    }
-
-protected:
-    TSharedAtomicActorSystemPtr ActorSystemPtr;
-    const int LogComponent;
-};
-
 struct TActorSystemPtrMixin {
-    TDeferredActorSystemPtrInitActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<TDeferredActorSystemPtrInitActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
 };
 
 struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedResources {
@@ -114,7 +56,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
             cfg.SetGrpcMemoryQuota(config.GetGrpcMemoryQuota());
         }
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async); // We are in actor system!
-        cfg.SetLog(MakeHolder<TDeferredActorSystemPtrInitActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+        cfg.SetLog(MakeHolder<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         return cfg;
     }
 

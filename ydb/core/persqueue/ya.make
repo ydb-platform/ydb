@@ -46,6 +46,7 @@ PEERDIR(
     ydb/core/persqueue/partition_key_range
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/library/logger
     ydb/library/persqueue/counter_time_keeper
     ydb/library/persqueue/topic_parser
     ydb/public/lib/base

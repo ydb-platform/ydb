@@ -232,7 +232,7 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
                     if (newGroup.IsMatchesParameters(params)) {
                         if (currentGroup) {
                             return newGroup.Id != currentGroup->Id
-                                    && newGroup.GroupParameters.GetAvailableSize() >= currentGroup->GroupParameters.GetAvailableSize();
+                                    && newGroup.GroupParameters.GetAvailableSize() > currentGroup->GroupParameters.GetAvailableSize();
                         }
                         return true;
                     }
@@ -274,7 +274,7 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     TTabletInfo::ActualizeTabletStatistics(now);
     for (TTabletInfo& follower : Followers) {
         follower.ActualizeTabletStatistics(now);
-    }    
+    }
 }
 
 }

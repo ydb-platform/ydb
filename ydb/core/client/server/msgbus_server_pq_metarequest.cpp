@@ -440,11 +440,9 @@ void TPersQueueGetPartitionLocationsTopicWorker::Answer(
 
 TPersQueueGetReadSessionsInfoProcessor::TPersQueueGetReadSessionsInfoProcessor(
     const NKikimrClient::TPersQueueRequest& request,
-    const TActorId& schemeCache,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+    const TActorId& schemeCache
 )
     : TPersQueueBaseRequestProcessor(request, schemeCache, true)
-    , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
 {
     const auto& cmd = RequestProto->GetMetaRequest().GetCmdGetReadSessionsInfo();
     const auto& topics = cmd.GetTopic();
@@ -532,10 +530,12 @@ bool TPersQueueGetReadSessionsInfoTopicWorker::WaitAllPipeEvents(const TActorCon
 }
 
 THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateSessionsSubactor(
-    const THashMap<TString, TActorId>&& readSessions
+    const THashMap<TString, TActorId>&& readSessions,
+    const TActorContext& ctx
 ) {
-    if (PQReadSessionsInfoWorkerFactory) {
-        return PQReadSessionsInfoWorkerFactory->Create(SelfId(), std::move(readSessions), NodesInfo);
+    auto factory = AppData(ctx)->PersQueueGetReadSessionsInfoWorkerFactory;
+    if (factory) {
+        return factory->Create(SelfId(), std::move(readSessions), NodesInfo);
     }
     return MakeHolder<TPersQueueGetReadSessionsInfoWorker>(SelfId(), std::move(readSessions), NodesInfo);
 }

@@ -398,10 +398,7 @@ void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig)
     }
 }
 
-void TKikimrRunner::InitializeMessageBus(
-    const TKikimrRunConfig& runConfig,
-    std::shared_ptr<TModuleFactories> factories
-) {
+void TKikimrRunner::InitializeMessageBus(const TKikimrRunConfig& runConfig) {
     if (runConfig.AppConfig.HasMessageBusConfig() && runConfig.AppConfig.GetMessageBusConfig().GetStartBusProxy()) {
         const auto& msgbusConfig = runConfig.AppConfig.GetMessageBusConfig();
 
@@ -444,7 +441,6 @@ void TKikimrRunner::InitializeMessageBus(
                 Bus.Get(),
                 ProxyBusSessionConfig,
                 msgbusConfig.GetTracePath(),
-                factories ? factories->PQReadSessionsInfoWorkerFactory : nullptr,
                 msgbusConfig.GetBusProxyPort())
             );
         }
@@ -452,7 +448,6 @@ void TKikimrRunner::InitializeMessageBus(
             BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
                 Bus.Get(),
                 ProxyBusSessionConfig,
-                factories ? factories->PQReadSessionsInfoWorkerFactory : nullptr,
                 msgbusConfig.GetBusProxyPort()
             ));
         }
@@ -853,6 +848,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
     AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
+    AppData->PersQueueGetReadSessionsInfoWorkerFactory = ModuleFactories ? ModuleFactories->PQReadSessionsInfoWorkerFactory.get() : nullptr;
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
 
     AppData->SqsAuthFactory = ModuleFactories
@@ -1571,7 +1567,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeRegistries(runConfig);
     runner->InitializeMonitoring(runConfig);
     runner->InitializeControlBoard(runConfig);
-    runner->InitializeMessageBus(runConfig, factories);
+    runner->InitializeMessageBus(runConfig);
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, servicesMask));

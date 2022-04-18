@@ -136,7 +136,6 @@ class TMessageBusServer : public IMessageBusServer, public NBus::IBusServerHandl
     NBus::TBusServerSessionPtr Session;
     TActorId Proxy;
     TActorId Monitor;
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
 protected:
     TProtocol Protocol;
     TActorSystem *ActorSystem = nullptr;
@@ -145,8 +144,7 @@ public:
     TMessageBusServer(
         const NBus::TBusServerSessionConfig &sessionConfig,
         NBus::TBusMessageQueue *busQueue,
-        ui32 bindPort,
-        std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+        ui32 bindPort
     );
     ~TMessageBusServer();
 
@@ -272,12 +270,8 @@ void CopyProtobufsByFieldName(TProtoTo& protoTo, const TProtoFrom& protoFrom) {
     }
 }
 
-class IPersQueueGetReadSessionsInfoWorkerFactory;
 
-IActor* CreateMessageBusServerProxy(
-    TMessageBusServer *server,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-);
+IActor* CreateMessageBusServerProxy(TMessageBusServer *server);
 
 //IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);

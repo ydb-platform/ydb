@@ -10,10 +10,9 @@ TMessageBusTracingServer::TMessageBusTracingServer(
     const NBus::TBusServerSessionConfig &sessionConfig,
     NBus::TBusMessageQueue *busQueue,
     const TString& tracePath,
-    ui32 bindPort,
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+    ui32 bindPort
 )
-    : NKikimr::NMsgBusProxy::TMessageBusServer(sessionConfig, busQueue, bindPort, pqReadSessionsInfoWorkerFactory)
+    : NKikimr::NMsgBusProxy::TMessageBusServer(sessionConfig, busQueue, bindPort)
     , MessageBusTracerActorID(MakeMessageBusTraceServiceID())
     , TraceActive(false)
     , TracePath(tracePath)
@@ -243,15 +242,13 @@ IMessageBusServer* CreateMsgBusTracingServer(
     NBus::TBusMessageQueue *queue,
     const NBus::TBusServerSessionConfig &config,
     const TString &tracePath,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
     ui32 bindPort
 ) {
     return new NMessageBusTracer::TMessageBusTracingServer(
         config,
         queue,
         tracePath,
-        bindPort,
-        pqReadSessionsInfoWorkerFactory
+        bindPort
     );
 }
 

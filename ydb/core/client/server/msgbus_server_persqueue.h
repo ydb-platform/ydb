@@ -30,14 +30,12 @@ TProcessingResult ProcessMetaCacheSingleTopicsResponse(const NSchemeCache::TSche
 // Worker actor creation
 IActor* CreateMessageBusServerPersQueue(
     TBusMessageContext& msg,
-    const TActorId& schemeCache,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr
+    const TActorId& schemeCache
 );
 IActor* CreateActorServerPersQueue(
     const TActorId& parentId,
     const NKikimrClient::TPersQueueRequest& request,
-    const TActorId& schemeCache,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory = nullptr
+    const TActorId& schemeCache
 );
 
 

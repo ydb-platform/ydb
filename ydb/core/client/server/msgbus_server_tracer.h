@@ -21,8 +21,7 @@ public:
         const NBus::TBusServerSessionConfig &sessionConfig,
         NBus::TBusMessageQueue *busQueue,
         const TString &tracePath,
-        ui32 bindPort,
-        std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
+        ui32 bindPort
     );
     IActor* CreateMessageBusTraceService() override;
 protected:

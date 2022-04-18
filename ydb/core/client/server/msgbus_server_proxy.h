@@ -32,7 +32,6 @@ struct TMessageBusDbOpsCounters : TAtomicRefCount<TMessageBusDbOpsCounters> {
 
 class TMessageBusServerProxy : public TActorBootstrapped<TMessageBusServerProxy> {
     TMessageBusServer* const Server;
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> SchemeCacheCounters;
 
@@ -61,12 +60,8 @@ public:
         return NKikimrServices::TActivity::MSGBUS_PROXY_ACTOR;
     }
 
-    TMessageBusServerProxy(
-        TMessageBusServer* server,
-        std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-    )
+    TMessageBusServerProxy(TMessageBusServer* server)
         : Server(server)
-        , PQReadSessionsInfoWorkerFactory(pqReadSessionsInfoWorkerFactory)
     {
     }
 

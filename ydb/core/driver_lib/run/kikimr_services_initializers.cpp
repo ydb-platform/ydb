@@ -1502,10 +1502,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 {
     if (!IsServiceInitialized(setup, NMsgBusProxy::CreateMsgBusProxyId())
         && Config.HasGRpcConfig() && Config.GetGRpcConfig().GetStartGRpcProxy()) {
-        IActor * proxy = NMsgBusProxy::CreateMessageBusServerProxy(
-            nullptr,
-            Factories ? Factories->PQReadSessionsInfoWorkerFactory : nullptr
-        );
+        IActor * proxy = NMsgBusProxy::CreateMessageBusServerProxy(nullptr);
         Y_VERIFY(proxy);
         setup->LocalServices.emplace_back(
             NMsgBusProxy::CreateMsgBusProxyId(),
@@ -1778,7 +1775,7 @@ void TViewerInitializer::InitializeServices(
     const NKikimr::TAppData* appData
 ) {
     using namespace NViewer;
-    IActor* viewer = CreateViewer(KikimrRunConfig, Factories->PQReadSessionsInfoWorkerFactory);
+    IActor* viewer = CreateViewer(KikimrRunConfig);
     SetupPQVirtualHandlers(dynamic_cast<IViewer*>(viewer));
     SetupDBVirtualHandlers(dynamic_cast<IViewer*>(viewer));
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeViewerID(NodeId),

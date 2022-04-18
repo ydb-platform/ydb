@@ -57,6 +57,10 @@ namespace NSQS {
     class IAuthFactory;
 }
 
+namespace NMsgBusProxy {
+    class IPersQueueGetReadSessionsInfoWorkerFactory;
+}
+
 namespace NPQ {
     class IPersQueueMirrorReaderFactory;
 }
@@ -83,6 +87,7 @@ struct TAppData {
 
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
+    const NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory* PersQueueGetReadSessionsInfoWorkerFactory = nullptr;
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
     NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;

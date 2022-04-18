@@ -2907,8 +2907,7 @@ void TReadInfoActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorC
     ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(
         ctx.SelfID,
         proto,
-        SchemeCache,
-        std::make_shared<NMsgBusProxy::TPersQueueGetReadSessionsInfoWorkerFactory>()
+        SchemeCache
     ));
 
 }

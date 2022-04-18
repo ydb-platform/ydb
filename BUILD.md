@@ -1,7 +1,9 @@
-## Build YDB from source
+## Building YDB from sources
 
-##### Build requirements:
- The following packets is required to build ydbd.
+##### Build Requirements
+ We have tested YDB builds using Ubuntu 18.04 and Ubuntu 20.04. Other Linux distributions are likely to work, but additional effort may be needed. Only x86_64 Linux is currently supported.
+
+ Below is a list of packages that need to be installed before building YDB. 'How to Build' section contains step by step instructions to obtain these packages.
 
  - cmake 3.22+
  - clang-12
@@ -15,23 +17,23 @@
  - libidn11-dev
  - ninja 1.10+
 
-##### Runtime requirements:
- The following packets is required to run ydbd.
+ We run multiple clang instances in parallel to speed up the process by default. Each instance of clang may use up to 1GB of RAM, and linking the binary may use up to 16GB of RAM, please make sure your build host has enough resources.
+
+##### Runtime Requirements
+ The following packages are required to run ydbd server:
 
  - libidn11
  - libaio
 
-##### How to build:
- Currently x86_64 linux is supported. Building was tested on Ubuntu 18.04 and Ubuntu 20.04
- Note when multithreading build is on operation each instance of clang can use up to 1 GB of RAM. Linkage of binary file can use up to 16Gb ram. Please make sure system has enough memory.
+##### How to Build
 
-1. Add repositories to install dependencies
+1. Add repositories for dependencies
 
-    Note following repositories is required for **ubuntu 20.04**. If your GNU/Linux distributive already have required build dependencies you need to skip this step.
-    For more information look in to your distributive instruction and https://apt.llvm.org and https://apt.kitware.com/
+    Note: the following repositories are required for **Ubuntu 20.04**. You may skip this step if your GNU/Linux distribution has all required packages in their default repository.
+    For more information please read your distribution documentation and https://apt.llvm.org as well as https://apt.kitware.com/
      ```
-    wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
-    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc |sudo apt-key add -
+    wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc | sudo apt-key add -
     echo 'deb http://apt.kitware.com/ubuntu/ focal main' | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null
     echo 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal main' | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
 
@@ -45,13 +47,13 @@
     sudo pip3 install conan
      ```
 
- 1. Create work directory. Please make sure youre have at least 80Gb free space on the filesystem where your want to place this directory. Also we recomend to use SSD drive to reduce build time.
+ 1. Create the work directory. Please make sure you have at least 80Gb of free space. We also recommend placing this directory on SSD to reduce build times.
     ```
     mkdir ~/ydbwork && cd ~/ydbwork
     mkdir build
     ```
 
- 1. Checkout ydb repository.
+ 1. Clone the ydb repository.
     ```
     git clone https://github.com/ydb-platform/ydb.git
     ```
@@ -62,11 +64,11 @@
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
     ninja
     ```
-    The YDB server binary can be found at:
+    A YDB server binary can be found at:
     ```
     ydb/apps/ydbd/ydbd
     ```
-    The YDB CLI binart at:
+    A YDB CLI binary can be found at:
     ```
     ydb/apps/ydb/ydb
     ```

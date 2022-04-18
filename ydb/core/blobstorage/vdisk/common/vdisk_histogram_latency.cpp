@@ -11,15 +11,15 @@ namespace NKikimr {
                 const TString &value,
                 TPDiskCategory::EDeviceType type)
         {
-            auto throughput = counters->GetSubgroup(name, value);
-            ThroughputBytes = throughput->GetCounter("requestBytes", true);
+            auto group = counters->GetSubgroup(name, value);
+            ThroughputBytes = group->GetCounter("requestBytes", true);
 
             // Set up Histo
             TIntrusivePtr<NMonitoring::TDynamicCounters> histoGroup;
-            histoGroup = counters->GetSubgroup("subsystem", "latency_histo");
+            histoGroup = group->GetSubgroup("subsystem", "latency_histo");
 
             auto h = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(type));
-            Histo = histoGroup->GetNamedHistogram(name, value, std::move(h));
+            Histo = histoGroup->GetHistogram("LatencyMs", std::move(h));
         }
 
         void TLtcHisto::Collect(TDuration d, ui64 size) {

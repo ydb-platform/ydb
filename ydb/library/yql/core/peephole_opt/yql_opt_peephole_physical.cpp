@@ -2271,7 +2271,6 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
         .List()
             .Atom(0, "Hashed")
             .Atom(1, "Many")
-            .Atom(2, "Compact")
         .Seal()
         .Build();
 

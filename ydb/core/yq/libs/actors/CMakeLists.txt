@@ -72,6 +72,7 @@ target_link_libraries(yq-libs-actors PUBLIC
   providers-pq-task_meta
   providers-s3-provider
   providers-ydb-provider
+  library-yql-utils
 )
 target_sources(yq-libs-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/clusters_from_connections.cpp

@@ -3,7 +3,7 @@
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/common/cache.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-
+#include <ydb/library/yql/utils/url_builder.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/http/http.h>
 #include <library/cpp/actors/http/http_proxy.h>
@@ -311,9 +311,17 @@ private:
             }
 
             try {
-                TString url = IsIn({NYql::DatabaseType::Ydb, NYql::DatabaseType::DataStreams }, type) ?
-                    ev->Get()->YdbMvpEndpoint + "/database?databaseId=" + databaseId :
-                    ev->Get()->MdbGateway + "/managed-clickhouse/v1/clusters/" + databaseId + "/hosts";
+                TString url;
+                if (IsIn({NYql::DatabaseType::Ydb, NYql::DatabaseType::DataStreams }, type)) {
+                    url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
+                            .AddUrlParam("databaseId", databaseId)
+                            .Build();
+                } else {
+                    url = TUrlBuilder(ev->Get()->MdbGateway + "/managed-clickhouse/v1/clusters/")
+                            .AddPathComponent(databaseId)
+                            .AddPathComponent("hosts")
+                            .Build();
+                }
                 LOG_D("Get '" << url << "'");
 
                 NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);

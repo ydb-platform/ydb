@@ -49,8 +49,6 @@ TString MakeKqpProxyBoardPath(const TString& database) {
 
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(10);
-static constexpr TDuration DEFAULT_PUBLISH_BATCHING_INTERVAL = TDuration::MilliSeconds(1000);
-static constexpr TDuration DEFAUL_BOARD_LOOKUP_INTERVAL = TDuration::MilliSeconds(5000);
 
 
 std::optional<ui32> GetDefaultStateStorageGroupId(const TString& database) {
@@ -282,6 +280,7 @@ public:
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
+        RandomProvider = AppData()->RandomProvider;
         if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
             TStringStream errorStream;
             ModuleResolverState->ExprCtx.IssueManager.GetIssues().PrintTo(errorStream);
@@ -419,10 +418,12 @@ public:
             return;
         }
 
+        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
         auto now = TAppData::TimeProvider->Now();
-        if (LastPublishResourcesAt && now - *LastPublishResourcesAt < DEFAULT_PUBLISH_BATCHING_INTERVAL) {
+        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
+        if (LastPublishResourcesAt && now - *LastPublishResourcesAt < batchingInterval) {
             ResourcesPublishScheduled = true;
-            Schedule(DEFAULT_PUBLISH_BATCHING_INTERVAL, new TEvPrivate::TEvReadyToPublishResources());
+            Schedule(batchingInterval, new TEvPrivate::TEvReadyToPublishResources());
             return;
         }
 
@@ -739,7 +740,10 @@ public:
         Y_UNUSED(ev);
         LookupPeerProxyData();
         if (!ShutdownRequested) {
-            Schedule(DEFAUL_BOARD_LOOKUP_INTERVAL, new TEvPrivate::TEvCollectPeerProxyData());
+            const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+            ui64 millis = sbs.GetBoardLookupIntervalMs();
+            TDuration d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            Schedule(d, new TEvPrivate::TEvCollectPeerProxyData());
         }
     }
 
@@ -1296,6 +1300,7 @@ private:
 
     bool ServerWorkerBalancerComplete = false;
     std::optional<TString> SelfDataCenterId;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
     TVector<NKikimrKqp::TKqpProxyNodeResources> PeerProxyNodeResources;
     bool ResourcesPublishScheduled = false;
     TString PublishBoardPath;

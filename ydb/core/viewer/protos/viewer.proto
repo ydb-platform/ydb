@@ -397,6 +397,8 @@ message TNodeInfo {
 message TNodesInfo {
     EFlag Overall = 1;
     repeated TNodeInfo Nodes = 2;
+    uint64 TotalNodes = 3;
+    uint64 FoundNodes = 4;
 }
 
 enum ENodeType {

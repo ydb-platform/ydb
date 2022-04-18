@@ -32,10 +32,13 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unordered_map<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> SysInfo;
     std::unordered_map<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
+    std::unordered_map<ui32, const NKikimrBlobStorage::TBaseConfig::TGroup*> BaseConfigGroupIndex;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     TString FilterTenant;
-    std::vector<TNodeId> FilterNodeIds;
+    TString FilterStoragePool;
+    std::unordered_set<TNodeId> FilterNodeIds;
+    std::unordered_set<ui32> FilterGroupIds;
     std::unordered_set<TNodeId> NodeIds;
 
     enum class EWith {
@@ -62,7 +65,7 @@ public:
         InitConfig(params);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         FilterTenant = params.Get("tenant");
-        TString filterStoragePool = params.Get("pool");
+        FilterStoragePool = params.Get("pool");
         SplitIds(params.Get("node_id"), ',', FilterNodeIds);
         if (params.Get("with") == "missing") {
             With = EWith::MissingDisks;
@@ -72,26 +75,27 @@ public:
     }
 
     void Bootstrap() {
-        TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
-
+        RequestBSControllerConfig();
         if (!FilterTenant.empty()) {
             SendNavigate(FilterTenant);
-        }
-        std::replace(FilterNodeIds.begin(), FilterNodeIds.end(), (ui32)0, TlsActivationContext->ActorSystem()->NodeId);
-        if (FilterNodeIds.empty()) {
-            SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         } else {
-            for (ui32 nodeId : FilterNodeIds) {
-                SendNodeRequest(nodeId);
+            auto itZero = FilterNodeIds.find(0);
+            if (itZero != FilterNodeIds.end()) {
+                FilterNodeIds.erase(itZero);
+                FilterNodeIds.insert(TlsActivationContext->ActorSystem()->NodeId);
             }
-            if (Requests == 0) {
-                ReplyAndPassAway();
-                return;
+            if (FilterNodeIds.empty()) {
+                SendRequest(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+            } else {
+                for (ui32 nodeId : FilterNodeIds) {
+                    SendNodeRequest(nodeId);
+                }
             }
         }
-
-        RequestBSControllerConfig();
-
+        if (Requests == 0) {
+            ReplyAndPassAway();
+            return;
+        }
         TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
@@ -123,12 +127,25 @@ public:
         }
     }
 
+    void SendGroupNodeRequests(ui32 groupId) {
+        auto itBaseConfigGroupIndex = BaseConfigGroupIndex.find(groupId);
+        if (itBaseConfigGroupIndex != BaseConfigGroupIndex.end()) {
+            for (const NKikimrBlobStorage::TVSlotId& vslot : itBaseConfigGroupIndex->second->GetVSlotId()) {
+                FilterNodeIds.emplace(vslot.GetNodeId());
+                SendNodeRequest(vslot.GetNodeId());
+            }
+        }
+    }
+
     void Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
         for (const auto& matchingGroups : ev->Get()->Record.GetMatchingGroups()) {
             for (const auto& group : matchingGroups.GetGroups()) {
                 TString storagePoolName = group.GetStoragePoolName();
-                Y_UNUSED(storagePoolName);
-                //StoragePoolInfo[storagePoolName].Groups.emplace(ToString(group.GetGroupID()));
+                if (FilterStoragePool.empty() || FilterStoragePool == storagePoolName) {
+                    if (FilterGroupIds.emplace(group.GetGroupID()).second && BaseConfig) {
+                        SendGroupNodeRequests(group.GetGroupID());
+                    }
+                }
             }
         }
         RequestDone();
@@ -136,11 +153,19 @@ public:
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
-
         if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
                 BaseConfig.reset(ev->Release().Release());
+                const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
+                const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
+                const NKikimrBlobStorage::TBaseConfig& pbConfig(pbStatus.GetBaseConfig());
+                for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : pbConfig.GetGroup()) {
+                    BaseConfigGroupIndex[group.GetGroupId()] = &group;
+                }
+                for (ui32 groupId : FilterGroupIds) {
+                    SendGroupNodeRequests(groupId);
+                }
             }
         }
         RequestDone();
@@ -163,14 +188,8 @@ public:
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         TString path = ev->Get()->GetRecord().GetPath();
-
         const NKikimrSchemeOp::TPathDescription& pathDescription = ev->Get()->GetRecord().GetPathDescription();
-        TTabletId hiveId = pathDescription.GetDomainDescription().GetProcessingParams().GetHive();
-        if (hiveId != 0) {
-            RequestHiveStorageStats(hiveId);
-        }
-
-        for (const auto& storagePool : ev->Get()->GetRecord().GetPathDescription().GetDomainDescription().GetStoragePools()) {
+        for (const auto& storagePool : pathDescription.GetDomainDescription().GetStoragePools()) {
             TString storagePoolName = storagePool.GetName();
             THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
             request->Record.SetReturnAllMatchingGroups(true);
@@ -279,16 +298,36 @@ public:
         }
 
         for (TNodeId nodeId : NodeIds) {
+            if (!FilterNodeIds.empty() && FilterNodeIds.count(nodeId) == 0) {
+                continue;
+            }
             NKikimrViewer::TNodeInfo& nodeInfo = getNode(nodeId);
             auto itSystemState = SysInfo.find(nodeId);
             if (itSystemState != SysInfo.end() && itSystemState->second) {
                 *nodeInfo.MutableSystemState() = itSystemState->second->Record.GetSystemStateInfo(0);
+            } else {
+                auto* icNodeInfo = NodesInfo->GetNodeInfo(nodeId);
+                if (icNodeInfo != nullptr) {
+                    nodeInfo.MutableSystemState()->SetHost(icNodeInfo->Host);
+                }
             }
             auto itPDiskState = PDiskInfo.find(nodeId);
             if (itPDiskState != PDiskInfo.end() && itPDiskState->second) {
                 for (const auto& protoPDiskInfo : itPDiskState->second->Record.GetPDiskStateInfo()) {
                     NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo = getPDisk({nodeId, protoPDiskInfo.GetPDiskId()});
                     pDiskInfo.MergeFrom(protoPDiskInfo);
+                }
+            }
+        }
+
+        ui64 totalNodes = nodesInfo.NodesSize();
+
+        if (!FilterNodeIds.empty() || !FilterTenant.empty()) {
+            for (auto itNode = nodesInfo.MutableNodes()->begin(); itNode != nodesInfo.MutableNodes()->end();) {
+                if (FilterNodeIds.count(itNode->GetNodeId()) == 0) {
+                    itNode = nodesInfo.MutableNodes()->erase(itNode);
+                } else {
+                    ++itNode;
                 }
             }
         }
@@ -301,7 +340,7 @@ public:
                         ++disksNormal;
                     }
                 }
-                if (itNode->PDisksSize() == disksNormal) {
+                if (itNode->PDisksSize() == disksNormal && disksNormal != 0) {
                     itNode = nodesInfo.MutableNodes()->erase(itNode);
                 } else {
                     ++itNode;
@@ -318,6 +357,11 @@ public:
                 }
             }
         }
+
+        ui64 foundNodes = nodesInfo.NodesSize();
+
+        nodesInfo.SetTotalNodes(totalNodes);
+        nodesInfo.SetFoundNodes(foundNodes);
 
         TStringStream json;
         TProtoToJson::ProtoToJson(json, nodesInfo, JsonSettings);

@@ -170,6 +170,17 @@ void SplitIds(TStringBuf source, char delim, std::vector<ValueType>& values) {
     }
 }
 
+template <typename ValueType>
+void SplitIds(TStringBuf source, char delim, std::unordered_set<ValueType>& values) {
+    for (TStringBuf value = source.NextTok(delim); !value.empty(); value = source.NextTok(delim)) {
+        if (value == ".") {
+            values.emplace(ValueType());
+        } else {
+            values.emplace(FromStringWithDefault<ValueType>(value, ValueType()));
+        }
+    }
+}
+
 TString GetHTTPOKJSON();
 TString GetHTTPGATEWAYTIMEOUT();
 NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo::ETabletState state);

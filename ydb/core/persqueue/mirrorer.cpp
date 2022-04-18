@@ -289,6 +289,8 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         }
         ctx.Send(TabletActor, new TEvents::TEvPoisonPill());
     }
+
+    DoProcessNextReaderEvent(ctx, true);  // LOGBROKER-7430
 }
 
 void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangeConfig::TPtr& ev, const TActorContext& ctx) {
@@ -513,8 +515,18 @@ void TMirrorer::ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr& ev, c
         --ReadFuturesInFlight;
         ReadFeatures.erase(ev->Get()->Id);
     }
+    DoProcessNextReaderEvent(ctx);
+}
 
+void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) {
+    if (!WaitNextReaderEventInFlight) {
+        return;
+    }
     TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+
+    if (wakeup && !event) {
+        return;
+    }
 
     WaitNextReaderEventInFlight = false;
     if (!event) {

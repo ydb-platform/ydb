@@ -19,6 +19,32 @@ Despite the fact that the `age` field in the first object is of the `Number` typ
 
 To work with JSON, YQL implements a subset of the [SQL support for JavaScript Object Notation (JSON)](https://www.iso.org/standard/67367.html) standard, which is part of the common ANSI SQL standard.
 
+## Cookbook
+
+```
+$json = CAST(@@{
+    "friends": [
+        {
+            "name": "James Holden",
+            "age": 35
+        },
+        {
+            "name": "Naomi Nagata",
+            "age": 30
+        }
+    ]
+}@@ AS Json);
+
+SELECT
+    JSON_EXISTS($json, "$.friends[*].name"), -- True,
+    JSON_VALUE($json, "$.friends[0].age"), -- "35" (type Utf8?)
+    JSON_QUERY($json, "$.friends[0]"); -- {"name": "James Holden", "age": 35}
+```
+
+### Accessing a field in the database
+
+In tables, data can be stored in JSON format or as a string representation. JSON_* functions expect JSON as an input to run. To convert `String->JSON`, use the `CAST` function, such as `CAST (my_string AS JSON)`.
+
 ## JsonPath
 
 Values inside JSON objects are accessed using a query language called JsonPath. All functions for JSON accept a JsonPath query as an argument.
@@ -67,7 +93,7 @@ In this query:
 | Unary operations | `- 1` |
 | Binary operations | `(12 * 3) % 4 + 8` |
 | Accessing a variable | `$variable` |
-| Logical operations | `(1 > 2) || (3 <= 4) && ("string" == "another")` |
+| Logical operations | `(1 > 2) &#124;&#124; (3 <= 4) && ("string" == "another")&#124; |
 | Matching a regular expression | `$.name like_regex "^[A-Za-z]+$"` |
 | Checking the string prefix | `$.name starts with "Bobbie"` |
 | Checking if a path exists | `exists ($.profile.name)` |
@@ -910,7 +936,7 @@ JSON_VALUE(
 )
 ```
 
-## JSON_EXISTS
+## JSON_EXISTS {#json_exists}
 
 The `JSON_EXISTS` function checks if a JSON value meets the specified JsonPath.
 
@@ -967,7 +993,7 @@ SELECT
     JSON_EXISTS($json, "strict $.nonexistent" ERROR ON ERROR);
 ```
 
-## JSON_VALUE
+## JSON_VALUE {#json_value}
 
 The `JSON_VALUE` function retrieves a scalar value from JSON (anything that isn't an array or object).
 
@@ -1065,7 +1091,7 @@ SELECT
     );
 ```
 
-## JSON_QUERY
+## JSON_QUERY {#json_query}
 
 The `JSON_QUERY` function lets you retrieve arrays and objects from JSON.
 

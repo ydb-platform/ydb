@@ -384,6 +384,59 @@ FROM my_table;
 
 {% endif %}
 
+## ListFold, ListFold1 {#listfold}
+
+Folding a list.
+
+Arguments:
+
+1. List
+2. Initial state U for ListFold, initLambda(item:T)->U for ListFold1
+3. updateLambda(item:T, state:U)->U
+
+Type returned:
+U for ListFold, optional U for ListFold1.
+
+**Examples**
+
+```yql
+$l = [1, 4, 7, 2];
+$y = ($x, $y) -> { RETURN $x + $y; };
+$z = ($x) -> { RETURN 4 * $x; };
+
+SELECT
+    ListFold($l, 6, $y) AS fold,                       -- 20
+    ListFold([], 3, $y) AS fold_empty,                 -- 3
+    ListFold1($l, $z, $y) AS fold1,                    -- 17
+    ListFold1([], $z, $y) AS fold1_empty;              -- Null
+```
+
+## ListFoldMap, ListFold1Map {#listfoldmap}
+
+Converts each list item i by calling the handler(i, state).
+
+Arguments:
+
+1. List
+2. Initial state S for ListFoldMap, initLambda(item:T)->tuple (U S) for ListFold1Map
+3. handler(item:T, state:S)->tuple (U S)
+
+Type returned: List of U items.
+
+**Examples**
+
+```yql
+$l = [1, 4, 7, 2];
+$x = ($i, $s) -> { RETURN ($i * $s, $i + $s); };
+$t = ($i) -> { RETURN ($i + 1, $i + 2); };
+
+SELECT
+    ListFoldMap([], 1, $x),                -- []
+    ListFoldMap($l, 1, $x),                -- [1, 8, 42, 26]
+    ListFold1Map([], $t, $x),              -- []
+    ListFold1Map($l, $t, $x);              -- [2, 12, 49, 28]
+```
+
 ## ListFromRange {#listfromrange}
 
 Generate a sequence of numbers with the specified step. It's similar to `xrange` in Python 2, but additionally supports floats.

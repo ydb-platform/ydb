@@ -1,6 +1,6 @@
 # Secondary indexes
 
-[An index](https://en.wikipedia.org/wiki/Database_index) is an auxiliary data structure that lets you find data that meets certain criteria in a database, without having to search every row in a DB table, as well as obtain sorted samples without performing actual sorting that requires processing a complete set of all sorted data.
+[An index]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Индекс_(базы_данных)){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Database_index){% endif %} is an auxiliary data structure that lets you find data that meets certain criteria in a database, without having to search every row in a DB table, as well as obtain sorted samples without performing actual sorting that requires processing a complete set of all sorted data.
 
 Data in YDB tables is always indexed by primary key. This means that fetching any record from a table with the specified values of primary key fields will always take the minimum fixed time, regardless of the total number of records in the table. A primary key index also lets you get any consecutive range of records in ascending or descending order of primary key values. The execution time of this operation will only depend on the number of records received, regardless of the total number of records in the table.
 
@@ -20,16 +20,16 @@ Since an index contains its own data that is derived from table data, an initial
 
 Indexes can only be used in the order of their fields. If there are two index fields, `a` and `b`, this index can be effectively used for queries like:
 
-- `where a = $var1 and b = $var2`
-- `where a = $var1`
-- `where a > $var1`, and other comparison operators
-- `where a = $var1 and b > $var2`, and any other comparison operators, but the first field must be checked for equality
+* `where a = $var1 and b = $var2`.
+* `where a = $var1`.
+* `where a > $var1`, and other comparison operators.
+* `where a = $var1 and b > $var2`, and any other comparison operators, but the first field must be checked for equality.
 
 At the same time, you can't use this index for the following queries:
 
-- `where b = $var1`
-- `where a > $var1 and b > $var2`, to be more precise, this entry will be equivalent to `where a > $var1` in terms of using the index
-- `where b > $var1`
+* `where b = $var1`.
+* `where a > $var1 and b > $var2`, to be more precise, this entry will be equivalent to `where a > $var1` in terms of using the index.
+* `where b > $var1`.
 
 Considering the above specifics, it's useless to try to index all possible combinations of table columns in advance to speed up the execution of any query. An index is always a trade-off between the speed of searching and writing data and the storage space this data takes. Indexes are created for specific selects and criteria for a search that an application will make in the database.
 

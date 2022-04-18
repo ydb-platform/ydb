@@ -16,5 +16,9 @@ Below are examples of the code for setting the session pool limit in different {
 
   {% include [go.md](_includes/go.md) %}
 
+- Java
+
+  {% include [java.md](_includes/java.md) %}
+
 {% endlist %}
 

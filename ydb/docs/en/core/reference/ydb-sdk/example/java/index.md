@@ -1,36 +1,36 @@
-# Приложение на Java
+# App in Java
 
-На этой странице подробно разбирается код [тестового приложения](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/basic_example), доступного в составе [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk) {{ ydb-short-name }}.
+This page contains a detailed description of the code of a [test app](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/basic_example) that is available as part of the {{ ydb-short-name }} [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk).
 
-## Скачивание SDK Examples и запуск примера {#download}
+## Downloading SDK Examples and running an example {#download}
 
-Приведенный ниже сценарий запуска использует [git](https://git-scm.com/downloads) и [Maven](https://maven.apache.org/download.html). 
+The startup script below uses [Git](https://git-scm.com/downloads) and [Maven](https://maven.apache.org/download.html).
 
-Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с github.com:
+Create a working directory and use it to run from the command line the command to clone the GitHub repository:
 
-``` bash
+```bash
 git clone https://github.com/yandex-cloud/ydb-java-sdk
 ```
 
-Далее выполните сборку SDK Examples
+Next, build the SDK Examples
 
-``` bash
+```bash
 ( cd ydb-java-sdk/examples && mvn package )
 ```
 
-Далее из этой же рабочей директории выполните команду запуска тестового приложения, которая будет отличаться в зависимости от того, к какой базе данных необходимо подключиться.
+Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
 
 {% include [run_options.md](_includes/run_options.md) %}
 
-
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-Основные параметры инициализации драйвера
-* Cтрока подключения с информацией об [эндпоинте](../../../../concepts/connect.md#endpoint) и [базе данных](../../../../concepts/connect.md#database). Единственный обязательные параметр.
-* Провайдер [аутенфикации](../../auth.md#auth-provider). В случае отсутсвия прямого указания - будет использоваться [анонимное подключение](../../../../concepts/connect.md#auth-modes).
-* Настройки [пула сессий](../../recipes/session_pool_limit/index.md)
+Basic driver initialization parameters:
 
-Фрагмент кода приложения для инициализации драйвера:
+* A connection string with information about the [endpoint](../../../../concepts/connect.md#endpoint) and [database](../../../../concepts/connect.md#database). The only required parameter.
+* An [authentication provider](../../auth.md#auth-provider). If there is no direct indication, an [anonymous connection](../../../../concepts/connect.md#auth-modes) is used.
+* [Session pool](../../recipes/session_pool_limit/index.md) settings.
+
+App code snippet for driver initialization:
 
 ```java
 GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
@@ -40,7 +40,7 @@ GrpcTableRpc rpc = GrpcTableRpc.ownTransport(transport);
 this.tableClient = TableClient.newClient(rpc).build();
 ```
 
-Все операции с YDB рекомендуется выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повтороное выполнение операция в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
+We recommend performing all YDB operations using the `SessionRetryContext` helper class that ensures a correct operation retry in the event of partial unavailability. Code snippet for initializing the retry context:
 
 ```java
 this.retryCtx = SessionRetryContext.create(tableClient).build();
@@ -48,7 +48,7 @@ this.retryCtx = SessionRetryContext.create(tableClient).build();
 
 {% include [create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для создания таблиц используется метод `Session.createTable()`:
+To create tables, use the `Session.CreateTable()` method:
 
 ```java
 private void createTables() {
@@ -89,7 +89,7 @@ private void createTables() {
 }
 ```
 
-С помощью метода `Session.describeTable()` можно вывести информацию о структуре таблицы и убедиться, что она успешно создалась:
+You can use the `Session.DescribeTable()` method to output information about the table structure and make sure that it was properly created:
 
 ```java
 private void describeTables() {
@@ -101,7 +101,7 @@ private void describeTables() {
                 .join().expect("describe table problem");
 
         List<String> primaryKeys = tableDesc.getPrimaryKeys();
-        logger.info("  table {}", tableName);
+        logger.info(" table {}", tableName);
         for (TableColumn column : tableDesc.getColumns()) {
             boolean isPrimary = primaryKeys.contains(column.getName());
             logger.info("     {}: {} {}", column.getName(), column.getType(), isPrimary ? " (PK)" : "");
@@ -109,9 +109,10 @@ private void describeTables() {
     });
 }
 ```
+
 {% include [../steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
-Фрагмент кода, демонстрирующий выполнение запроса на запись/изменение данных:
+Code snippet for inserting and updating data:
 
 ```java
 private void upsertSimple() {
@@ -130,10 +131,10 @@ private void upsertSimple() {
 
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов используется метод `Session.executeDataQuery()`.
-SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью класса `TxControl`.
+To execute YQL queries, use the `Session.executeDataQuery()` method.
+The SDK lets you explicitly control the execution of transactions and configure the transaction execution mode using the `TxControl` class.
 
-В фрагменте кода, приведенного ниже, транзакция выполняется с помощью метода `session.executeDataQuery()`. Устанавливается режим выполнения транзакции `TxControl txControl = TxControl.serializableRw().setCommitTx(true);` и флаг автоматического завершения транзакции `setCommitTx(true)`. Тело запроса описано с помощью синтаксиса YQL и как параметр передается методу `executeDataQuery`.
+In the code snippet below, the transaction is executed using the `session.executeDataQuery()` method. The `TxControl txControl = TxControl.serializableRw().setCommitTx(true);` transaction execution mode and `setCommitTx(true)` transaction auto complete flag are set. The query body is described using YQL syntax and is passed to the `executeDataQuery` method as a parameter.
 
 ```java
 private void selectSimple() {
@@ -161,7 +162,7 @@ private void selectSimple() {
 }
 ```
 
-В результате исполнения запроса формируется объект класса `DataQueryResult`, который может содержать несколько выборок, получаемых методом `getResultSet( <index> )`. Так как запрос содержал только одну команду `SELECT`, то результат содержит только одну выборку под индексом `0`. Приведенный фрагмент кода при запуске выводит на консоль текст:
+As a result of executing the query, an object of the `DataQueryResult` class is generated. It may contain several sets obtained using the `getResultSet( <index> )` method. Since there was only one `SELECT` statement in the query, the result contains only one selection indexed as `0`. The given code snippet outputs the following text to the console at startup:
 
 ```bash
 12:06:36.548 INFO  App - --[ SelectSimple ]--
@@ -170,7 +171,7 @@ private void selectSimple() {
 
 {% include [param_queries.md](../_includes/steps/06_param_queries.md) %}
 
-Фрагмент кода, приведенный ниже, демонстрирует использование параметризованных запросов и класс `Params` для формирования параметров и передачи их методу `executeDataQuery`.
+The code snippet below shows the use of parameterized queries and the `Params` class to generate parameters and pass them to the `executeDataQuery` method.
 
 ```java
 private void selectWithParams(long seriesID, long seasonID) {
@@ -242,9 +243,10 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
 
 {% include [multistep_transactions.md](../_includes/steps/09_multistep_transactions.md) %}
 
-Для обеспечения корректности совместной работы транзакций и контекста ретраев - каждая транзация должна выполняться целиком внутри callback, передаваемого в `SessionRetryContext`. Возврат из callback должен происходить после полного завершения транзакции.
+To ensure that the retry context works properly while executing transactions, perform each transaction entirely inside the callback passed to `SessionRetryContext`. The callback should return a response after the transaction is fully completed.
 
-Шаблон кода по использовании сложных транзакций в `SessionRetryContext`
+Code template for using complex transactions in `SessionRetryContext`
+
 ```java
 private void multiStepTransaction(long seriesID, long seasonID) {
     retryCtx.supplyStatus(session -> {
@@ -255,10 +257,9 @@ private void multiStepTransaction(long seriesID, long seasonID) {
         return CompletableFuture.completedFuture(Status.SUCCESS);
     }).join().expect("multistep transaction problem");
 }
-
 ```
 
-Первый шаг — подготовка и выполнение первого запроса:
+The first step is to prepare and execute the first query:
 
 ```java
     String query1
@@ -277,7 +278,7 @@ private void multiStepTransaction(long seriesID, long seasonID) {
     )).join().expect("execute data query problem");
 ```
 
-Затем мы можем выполнить некоторую клиентскую обработку полученных данных:
+Next, we can perform some client processing of the data received:
 
 ```java
     // Perform some client logic on returned values
@@ -289,14 +290,14 @@ private void multiStepTransaction(long seriesID, long seasonID) {
     LocalDate toDate = fromDate.plusDays(15);
 ```
 
-И получить текущий `transaction id` для дальшейшей работы в рамках одной транзакции:
+And get the current `transaction id` for further work within a single transaction:
 
 ```java
     // Get active transaction id
     String txId = res1.getTxId();
 ```
 
-Следующий шаг — создание следующего запроса, использующего результаты выполнения кода на стороне клиентского приложения:
+The next step is to create the next query that uses the results of code execution on the client side:
 
 ```java
     // Construct next query based on the results of client logic
@@ -327,7 +328,7 @@ private void multiStepTransaction(long seriesID, long seasonID) {
     }
 ```
 
-Приведенные фрагменты кода при запуске выводят на консоль текст:
+The given code snippets output the following text to the console at startup:
 
 ```bash
 12:06:36.850 INFO  App - --[ MultiStep ]--
@@ -338,7 +339,7 @@ private void multiStepTransaction(long seriesID, long seasonID) {
 
 {% include [transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-Фрагмент кода, демонстрирующий явное использование вызовов `beginTransaction()` и `transaction.Commit()`:
+Code snippet for `beginTransaction()` and `transaction.Commit()` calls:
 
 ```java
 private void tclTransaction() {
@@ -365,5 +366,4 @@ private void tclTransaction() {
     }).join().expect("tcl transaction problem");
 }
 ```
-
 

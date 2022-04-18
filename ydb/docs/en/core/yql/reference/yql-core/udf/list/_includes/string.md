@@ -78,15 +78,15 @@ Functions for ASCII strings:
 
 * ```String::ReplaceAll(String{Flags:AutoMap}, String, String) -> String```: Arguments: input, find, replacement
 
-* ```String::ReplaceFirst(String{Flags:AutoMap}, String, String) -> String```: Arguments: input, find, replacement, the second argument is 1 character
+* ```String::ReplaceFirst(String{Flags:AutoMap}, String, String) -> String```: Arguments: input, find, replacement
 
-* ```String::ReplaceLast(String{Flags:AutoMap}, String, String) -> String```: Arguments: input, find, replacement, the second argument is 1 character
+* ```String::ReplaceLast(String{Flags:AutoMap}, String, String) -> String```: Arguments: input, find, replacement
 
 * ```String::RemoveAll(String{Flags:AutoMap}, String) -> String```: The second argument is interpreted as an unordered set of characters to delete
 
-* ```String::RemoveFirst(String{Flags:AutoMap}, String) -> String```: The character to delete in the second argument
+* ```String::RemoveFirst(String{Flags:AutoMap}, String) -> String```: An unordered set of characters in the second argument, only the first encountered character from set is deleted
 
-* ```String::RemoveLast(String{Flags:AutoMap}, String) -> String ```: The character to delete in the second argument
+* ```String::RemoveLast(String{Flags:AutoMap}, String) -> String```: An unordered set of characters in the second argument, only the last encountered character from the set is deleted
 
 * ```String::IsAscii(String{Flags:AutoMap}) -> Bool```
 

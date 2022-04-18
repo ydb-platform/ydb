@@ -21,6 +21,14 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
+### UseTablePrefixForEach {#use-table-prefix-for-each}
+
+| Value type | Default |
+| --- | --- |
+| Flag | false |
+
+EACH uses [TablePathPrefix](#table-path-prefix) for each list item.
+
 ### Warning {#warning}
 
 | Value type | Default |
@@ -119,6 +127,18 @@ Aligns the RANK/DENSE_RANK behavior with the standard if there are optional type
 * The result type is always Uint64 rather than Uint64?.
 * NULLs in keys are treated as equal to each other (the current implementation returns NULL).
 You can explicitly select the old behavior by using the `DisableAnsiRankForNullableKeys` pragma. If no pragma is set, then a warning is issued and the old version works.
+
+### AnsiCurrentRow
+
+| Value type | Default |
+| --- | --- |
+| Flag | false |
+
+Aligns the implicit setting of a window frame with the standard if there is ORDER BY.
+If AnsiCurrentRow is not set, then the `(ORDER BY key)` window is equivalent to `(ORDER BY key ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
+The standard also requires that this window behave as `(ORDER BY key RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`.
+The difference is in how `CURRENT ROW` is interpreted. In `ROWS` mode `CURRENT ROW` is interpreted literally: the current row in a partition.
+In `RANGE` mode, the end of the `CURRENT ROW` frame means "the last row in a partition with a sort key equal to the current row".
 
 ### AnsiOrderByLimitInUnionAll
 

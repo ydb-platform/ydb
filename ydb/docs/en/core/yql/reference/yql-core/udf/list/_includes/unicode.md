@@ -73,6 +73,15 @@ Functions for Unicode strings.
 
 * ```Unicode::JoinFromList(List<Utf8>{Flags:AutoMap}, Utf8) -> Utf8```
 
+* ```Unicode::ToUint64(Utf8{Flags:AutoMap}, [Uint16?]) -> Uint64```
+  The second optional argument specifies the number system, by default 0 — automatic detection by prefix.
+  Supported prefixes : 0x(0X) - base-16, 0 - base-8. The default system is base-10.
+  The '-' sign before the number is interpreted as in unsigned C arithmetic, for example -0x1 -> UI64_MAX.
+  If there are incorrect characters in the string or the number goes beyond the boundaries of ui64, the function terminates with an error.
+
+* ```Unicode::TryToUint64(Utf8{Flags:AutoMap}, [Uint16?]) -> Uint64?```
+  Similar to the Unicode::ToUint64() function, but returns Nothing instead of an error.
+
 **Examples**
 
 ```sql

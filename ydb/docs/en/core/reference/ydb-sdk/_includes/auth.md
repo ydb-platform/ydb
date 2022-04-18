@@ -1,19 +1,19 @@
-# Authentication when establishing a connection between an SDK and database
+# Authentication in the SDK
 
-As described in the article on [connecting the {{ ydb-short-name }} client to and authenticating with the server](../../../concepts/connect.md), for successful authentication, the client should add an authentication token that is verified by the server to its request.
+As described in the article on [connecting to the {{ ydb-short-name }} server](../../../concepts/connect.md), with each request, the client should send an [authentication token](../../../concepts/connect.md#auth). The server verifies the authentication token and, if the authentication is successful, the request is authorized and executed, otherwise the `Unauthenticated` error is returned.
 
 The {{ ydb-short-name }} SDK uses an object that is responsible for generating these tokens. The SDK provides built-in methods for obtaining this object:
 
-1. Ad-hoc methods for different [authentication modes](../../../concepts/connect.md#auth-modes) with explicit parameter transfer.
-2. A method that determines the authentication mode and the necessary parameters from the environment where the application is run.
+1. Methods with parameters passed explicitly, each of the methods implements a certain [authentication mode](../../../concepts/connect.md#auth-modes).
+2. A method that determines the authentication mode and the necessary parameters from environment variables.
 
 Usually, you create a token generation object before you initialize the {{ ydb-short-name }} driver, and you pass the object to the driver constructor as a parameter. The C++ and Go SDKs additionally let you work with multiple databases and token generation objects through a single driver.
 
-If a token generation object is not defined, the driver won't add any authentication information to requests. This may let you successfully connect to locally deployed {{ ydb-short-name }} clusters that require no authentication. For all databases available over the network, such requests will be rejected with an authentication error returned.
+If a token generation object is not defined, the driver won't add any authentication information to requests. This may let you successfully connect to locally deployed {{ ydb-short-name }} clusters with no mandatory authentication configured. If it is configured, DB requests without an authentication token will be rejected with an authentication error returned.
 
 ## Methods for creating token generation objects {#auth-provider}
 
-You can click on any of the methods described below to go to the source code of the relevant example on github.com. You can also learn about the [authentication code recipes](../recipes/auth/index.md).
+You can click on any of the methods described below to go to the source code of the relevant example in the repository. You can also learn about the [authentication code recipes](../recipes/auth/index.md).
 
 {% list tabs %}
 

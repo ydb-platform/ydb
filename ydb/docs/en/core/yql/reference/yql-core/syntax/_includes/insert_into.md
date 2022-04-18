@@ -27,17 +27,6 @@
   FROM my_table1;
   ```
 
-{% if feature_insert_with_truncate %} To clear the table of the prior data before writing to it, add the modifier: `INSERT INTO ... WITH TRUNCATE`.
-
-**Examples:**
-
-```yql
-INSERT INTO my_table WITH TRUNCATE
-SELECT key FROM my_table_source;
-```
-
-{% endif %}
-
 {% else %}
 
 Send the result of the [SELECT STREAM](../select_stream.md) calculation to the specified stream on the cluster specified by the [USE](../use.md) operator. The stream must exist and have a scheme matching the query result.

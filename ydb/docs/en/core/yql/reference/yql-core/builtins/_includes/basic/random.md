@@ -11,6 +11,12 @@ No arguments are used for random number generation: they are only needed to cont
 * If Random is called again within a **same query** and with a same set of arguments, the same set of random numbers is returned. Keep in mind that we mean the arguments themselves (i.e., the text between parentheses) rather than their values.
 * Calling of Random with the same set of arguments in **different queries** returns different sets of random numbers.
 
+{% note warning %}
+
+If Random is used in [named expressions](../../../syntax/expressions.md#named-nodes), its one-time calculation is not guaranteed. Depending on the optimizers and runtime environment, it can be counted both once and multiple times. To make sure it's only counted once, materialize a named expression into a table.
+
+{% endnote %}
+
 Use cases:
 
 * `SELECT RANDOM(1);`: Get one random value for the entire query and use it multiple times (to get multiple random values, you can pass various constants of any type).

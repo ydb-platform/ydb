@@ -60,6 +60,12 @@ def create_tables(session, path):
     )
 ```
 
+The absolute path from the root is passed in the path parameter:
+
+```python
+full_path = os.path.join(database, path)
+```
+
 You can use the `session.describe_table()` method to output information about the table structure and make sure that it was properly created:
 
 ```python

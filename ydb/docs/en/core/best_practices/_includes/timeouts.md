@@ -81,18 +81,19 @@ Timeout usage example:
 
   ```go
   import (
-      "context"
-      "a.yandex-team.ru/kikimr/public/sdk/go/ydb"
-      "a.yandex-team.ru/kikimr/public/sdk/go/ydb/table"
+    "context"
+  
+    ydb "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table"
   )
   
-  func executeInTx(ctx context.Context, s *table.Session, query string) {
-      newCtx, close := context.WithTimeout(ctx, time.Millisecond*300)         // client and by default operation timeout
-      newCtx2 := ydb.WithOperationTimeout(newCtx, time.Millisecond*400)       // operation timeout override
-      newCtx3 := ydb.WithOperationCancelAfter(newCtx2, time.Millisecond*300)  // cancel after timeout
-      defer close()
-      tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
-      _, res, err := session.Execute(newCtx3, tx, query)
+  func executeInTx(ctx context.Context, s table.Session, query string) {
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*300) // client and by default operation timeout
+	defer cancel()
+	ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout override
+	ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*300) // cancel after timeout
+	tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
+	_, res, err := s.Execute(ctx, tx, query, table.NewQueryParameters())
   }
   ```
 

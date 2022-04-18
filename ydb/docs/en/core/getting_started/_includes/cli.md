@@ -68,7 +68,7 @@ Check that the profile is OK with the `scheme ls` command:
 
 ## Executing an YQL script {#yql}
 
-The {{ ydb-short-name }} CLI `scripting yql` command lets you execute any command (both DDL and DML) in [YQL](../../yql/reference/index.md), an SQL dialect supported by {{ ydb-short-name }}:
+The {{ ydb-short-name }} CLI `yql` command lets you execute any command (both DDL and DML) in [YQL](../../yql/reference/index.md), an SQL dialect supported by {{ ydb-short-name }}:
 
 ```bash
 {{ ydb-cli }} -p <profile_name> yql -s <yql_request>

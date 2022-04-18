@@ -4,7 +4,8 @@ It's set after the data source in `FROM` and is used for additional hints for ta
 
 The following values are supported:
 
-* `INFER_SCHEMA`: Sets the flag for output of the table schema. The behavior is similar to the [yt.inferSchema pragma](../../pragma.md#inferschema), but for a specific data source and without the option to specify the number of rows to output.
+* `INFER_SCHEMA`: Sets the flag for output of the table schema. The behavior is similar to the [yt.inferSchema pragma](../../pragma.md#inferschema), but for a specific data source. You can specify the number of rows to output (from 1 to 1000).
+* `FORCE_INFER_SCHEMA`: Sets the flag for table schema output. The behavior is similar to the [yt.ForceInferSchema pragma](../../pragma.md#inferschema), but for a specific data source. You can specify the number of rows to output (from 1 to 1000).
 * `DIRECT_READ`: Suppresses certain optimizers and enforces accessing table contents as is. The behavior is similar to the debug [pragma DirectRead](../../pragma.md#debug), but for a specific data source.
 * `INLINE`: Hints that the table contents is small and you need to use its in-memory view to process the query. The actual size of the table is not controlled in this case, and if it's large, the query might fail with an out-of-memory error.
 * `UNORDERED`: Suppresses original table sorting.
@@ -20,6 +21,7 @@ If you use the `SCHEMA` hint, then with the table functions [EACH](#each), [RANG
 
 ```yql
 SELECT key FROM my_table WITH INFER_SCHEMA;
+SELECT key FROM my_table WITH FORCE_INFER_SCHEMA="42";
 ```
 
 ```yql

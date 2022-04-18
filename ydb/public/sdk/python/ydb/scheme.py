@@ -19,6 +19,7 @@ class SchemeEntryType(enum.IntEnum):
     RTMR_VOLUME = 5
     BLOCK_STORE_VOLUME = 6
     COORDINATION_NODE = 7
+    COLUMN_TABLE = 13
     SEQUENCE = 15
     REPLICATION = 16
 

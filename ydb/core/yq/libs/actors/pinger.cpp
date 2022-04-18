@@ -263,11 +263,11 @@ private:
     }
 
     static bool Retryable(TEvInternalService::TEvPingTaskResponse::TPtr& ev) {
-        if (ev->Get()->TransportError) {
+        if (ev->Get()->Status.IsTransportError()) {
             return true;
         }
 
-        const NYdb::EStatus status = ev->Get()->Status;
+        const NYdb::EStatus status = ev->Get()->Status.GetStatus();
         if (status == NYdb::EStatus::INTERNAL_ERROR
             || status == NYdb::EStatus::UNAVAILABLE
             || status == NYdb::EStatus::OVERLOADED
@@ -288,7 +288,7 @@ private:
         }
 
         const TInstant now = TActivationContext::Now();
-        const bool success = ev->Get()->Success;
+        const bool success = ev->Get()->Status.IsSuccess();
         const bool retryable = !success && Retryable(ev);
         const bool continueLeaseRequest = ev->Cookie == ContinueLeaseRequestCookie;
         TRetryState* retryState = nullptr;
@@ -337,15 +337,15 @@ private:
                 }
             }
         } else if (retryAfter) {
-            LOG_W("Ping response error: " << ev->Get()->Issues.ToOneLineString() << ". Retry after: " << *retryAfter);
+            LOG_W("Ping response error: " << ev->Get()->Status.GetIssues().ToOneLineString() << ". Retry after: " << *retryAfter);
             Schedule(*retryAfter, new NActors::TEvents::TEvWakeup(continueLeaseRequest ? RetryContinueLeaseWakeupTag : RetryForwardPingRequestWakeupTag));
         } else {
             TRetryState* retryStateForLogging = retryState;
             if (!retryStateForLogging) {
                 retryStateForLogging = continueLeaseRequest ? &RetryState : &ForwardRequests.front().RetryState;
             }
-            LOG_E("Ping response error: " << ev->Get()->Issues.ToOneLineString() << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
-            auto action = ev->Get()->Success ? ev->Get()->Result.action() : YandexQuery::QUERY_ACTION_UNSPECIFIED;
+            LOG_E("Ping response error: " << ev->Get()->Status.GetIssues().ToOneLineString() << ". Retried " << retryStateForLogging->GetRetriesCount() << " times during " << retryStateForLogging->GetRetryTime(now));
+            auto action = ev->Get()->Status.IsSuccess() ? ev->Get()->Result.action() : YandexQuery::QUERY_ACTION_UNSPECIFIED;
             Send(Parent, new TEvents::TEvForwardPingResponse(false, action), 0, ev->Cookie);
             FatalError = true;
             ForwardRequests.clear();

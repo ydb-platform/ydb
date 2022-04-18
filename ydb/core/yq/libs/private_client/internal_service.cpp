@@ -60,105 +60,52 @@ private:
 
     void Handle(TEvInternalService::TEvHealthCheckRequest::TPtr& ev) {
         EventLatency->Collect((TInstant::Now() - ev->Get()->SentAt).MilliSeconds());
-        const auto actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto senderId = ev->Sender;
         PrivateClient
             .NodesHealthCheck(std::move(ev->Get()->Request))
-            .Subscribe([actorSystem, senderId](const NThreading::TFuture<TNodesHealthCheckResult>& future) {
+            .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TNodesHealthCheckResult>& future) {
                 try {
-                    const auto& wrappedResult = future.GetValue();
-                    if (wrappedResult.IsResultSet()) {
-                        actorSystem->Send(senderId, new TEvInternalService::TEvHealthCheckResponse(
-                            wrappedResult.IsSuccess(), wrappedResult.GetStatus(), wrappedResult.GetIssues(), wrappedResult.GetResult())
-                        );
-                    } else {
-                        actorSystem->Send(senderId, new TEvInternalService::TEvHealthCheckResponse(
-                            false, wrappedResult.GetStatus(), NYql::TIssues{{NYql::TIssue{"grpc private api result is not set for health check call"}}}, Yq::Private::NodesHealthCheckResult{})
-                        );
-                    }
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvHealthCheckResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(senderId, new TEvInternalService::TEvHealthCheckResponse(
-                        false, NYdb::EStatus::STATUS_UNDEFINED, NYql::TIssues{{NYql::TIssue{CurrentExceptionMessage()}}}, Yq::Private::NodesHealthCheckResult{})
-                    );
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvHealthCheckResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
 
     void Handle(TEvInternalService::TEvGetTaskRequest::TPtr& ev) {
         EventLatency->Collect((TInstant::Now() - ev->Get()->SentAt).MilliSeconds());
-        const auto actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto senderId = ev->Sender;
         PrivateClient
             .GetTask(std::move(ev->Get()->Request))
-            .Subscribe([actorSystem, senderId](const NThreading::TFuture<TGetTaskResult>& future) {
+            .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TGetTaskResult>& future) {
                 try {
-                    const auto& wrappedResult = future.GetValue();
-                    if (wrappedResult.IsResultSet()) {
-                        actorSystem->Send(senderId, new TEvInternalService::TEvGetTaskResponse(
-                            wrappedResult.IsSuccess(), wrappedResult.GetStatus(), wrappedResult.GetIssues(), wrappedResult.GetResult())
-                        );
-                    } else {
-                        actorSystem->Send(senderId, new TEvInternalService::TEvGetTaskResponse(
-                            false, wrappedResult.GetStatus(), NYql::TIssues{{NYql::TIssue{"grpc private api result is not set for get task call"}}}, Yq::Private::GetTaskResult{})
-                        );
-                    }
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvGetTaskResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(senderId, new TEvInternalService::TEvGetTaskResponse(
-                        false, NYdb::EStatus::STATUS_UNDEFINED, NYql::TIssues{{NYql::TIssue{CurrentExceptionMessage()}}}, Yq::Private::GetTaskResult{})
-                    );
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvGetTaskResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
 
     void Handle(TEvInternalService::TEvPingTaskRequest::TPtr& ev) {
         EventLatency->Collect((TInstant::Now() - ev->Get()->SentAt).MilliSeconds());
-        const auto actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto senderId = ev->Sender;
-        const auto selfId = SelfId();
         PrivateClient
             .PingTask(std::move(ev->Get()->Request))
-            .Subscribe([actorSystem, senderId, selfId, cookie=ev->Cookie](const NThreading::TFuture<TPingTaskResult>& future) {
+            .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TPingTaskResult>& future) {
                 try {
-                    const auto& wrappedResult = future.GetValue();
-                    if (wrappedResult.IsResultSet()) {
-                        actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(
-                            wrappedResult.IsSuccess(), wrappedResult.GetStatus(), wrappedResult.GetIssues(), wrappedResult.GetResult(), wrappedResult.IsTransportError())
-                        , 0, cookie));
-                    } else {
-                        actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(
-                            false, wrappedResult.GetStatus(), NYql::TIssues{{NYql::TIssue{"grpc private api result is not set for ping task call"}}}, Yq::Private::PingTaskResult{})
-                        , 0, cookie));
-                    }
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(
-                        false, NYdb::EStatus::STATUS_UNDEFINED, NYql::TIssues{{NYql::TIssue{CurrentExceptionMessage()}}}, Yq::Private::PingTaskResult{})
-                    , 0, cookie));
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvPingTaskResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }
 
     void Handle(TEvInternalService::TEvWriteResultRequest::TPtr& ev) {
         EventLatency->Collect((TInstant::Now() - ev->Get()->SentAt).MilliSeconds());
-        const auto actorSystem = NActors::TActivationContext::ActorSystem();
-        const auto senderId = ev->Sender;
         PrivateClient
             .WriteTaskResult(std::move(ev->Get()->Request))
-            .Subscribe([actorSystem, senderId](const auto& future) {
+            .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const auto& future) {
                 try {
-                    const auto& wrappedResult = future.GetValue();
-                    if (wrappedResult.IsResultSet()) {
-                        actorSystem->Send(senderId, new TEvInternalService::TEvWriteResultResponse(
-                            wrappedResult.IsSuccess(), wrappedResult.GetStatus(), wrappedResult.GetIssues(), wrappedResult.GetResult())
-                        );
-                    } else {
-                        actorSystem->Send(senderId, new TEvInternalService::TEvWriteResultResponse(
-                            false, wrappedResult.GetStatus(), NYql::TIssues{{NYql::TIssue{"grpc private api result is not set for write result task call"}}}, Yq::Private::WriteTaskResultResult{})
-                        );
-                    }
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
-                    actorSystem->Send(senderId, new TEvInternalService::TEvWriteResultResponse(
-                        false, NYdb::EStatus::STATUS_UNDEFINED, NYql::TIssues{{NYql::TIssue{CurrentExceptionMessage()}}}, Yq::Private::WriteTaskResultResult{})
-                    );
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }

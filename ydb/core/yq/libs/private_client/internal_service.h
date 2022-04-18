@@ -1,5 +1,7 @@
 #pragma once
 
+#include "private_client.h"
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>
 
@@ -45,14 +47,17 @@ struct TEvInternalService {
 
     template <class TProtoResult, ui32 TEventType>
     struct TInternalServiceResponseEvent : public NActors::TEventLocal<TInternalServiceResponseEvent<TProtoResult, TEventType>, TEventType> {
-        bool Success = false;
-        NYdb::EStatus Status;
-        const NYql::TIssues Issues;
+        NYdb::TStatus Status;
         TProtoResult Result;
-        bool TransportError = false;
-        explicit TInternalServiceResponseEvent(bool success, NYdb::EStatus status, const NYql::TIssues& issues, const TProtoResult& result, bool transportError = false) 
-            : Success(success), Status(status), Issues(issues), Result(result), TransportError(transportError)
-        { }
+        TInternalServiceResponseEvent(const TProtoResultInternalWrapper<TProtoResult>& wrappedResult) : Status(wrappedResult)
+        { 
+            if (wrappedResult.IsResultSet()) {
+                Result = wrappedResult.GetResult();
+            }
+        }
+        TInternalServiceResponseEvent(const TString& errorMessage) : Status(NYdb::EStatus::INTERNAL_ERROR, {NYql::TIssue(errorMessage).SetCode(NYql::UNEXPECTED_ERROR, NYql::TSeverityIds::S_ERROR)})
+        { 
+        }
     };
 
     using TEvHealthCheckResponse = TInternalServiceResponseEvent<Yq::Private::NodesHealthCheckResult, EvHealthCheckResponse>;

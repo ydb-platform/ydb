@@ -175,10 +175,10 @@ private:
 
     void HandleResponse(TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
         try {
-            const auto& status = ev->Get()->Status;
+            const auto& status = ev->Get()->Status.GetStatus();
             THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo());
-            if (!ev->Get()->Success) {
-                ythrow yexception() <<  status << '\n' << ev->Get()->Issues.ToString();
+            if (!ev->Get()->Status.IsSuccess()) {
+                ythrow yexception() <<  status << '\n' << ev->Get()->Status.GetIssues().ToString();
             }
             const auto& res = ev->Get()->Result;
 

@@ -113,7 +113,7 @@ private:
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { }
 
     void HandleResponse(TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
-        const auto& issues = ev->Get()->Issues;
+        const auto& issues = ev->Get()->Status.GetIssues();
         if (issues) {
             SendIssuesAndSetErrorFlag(issues);
             return;

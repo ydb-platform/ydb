@@ -206,8 +206,8 @@ private:
     void Handle(TEvInternalService::TEvGetTaskResponse::TPtr& ev) {
         HasRunningRequest = false;
         LOG_D("Got GetTask response from PrivateApi");
-        if (!ev->Get()->Success) {
-            LOG_E("Error with GetTask: "<< ev->Get()->Issues.ToString());
+        if (!ev->Get()->Status.IsSuccess()) {
+            LOG_E("Error with GetTask: "<< ev->Get()->Status.GetIssues().ToString());
             return;
         }
 

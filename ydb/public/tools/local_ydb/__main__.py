@@ -85,10 +85,6 @@ To update cluster (stop + start):
             help='The directory with YDB udfs'
         )
         sub_parser.add_argument(
-            '--yql-config-path', default=None,
-            help='The path to YQL Analytics config'
-        )
-        sub_parser.add_argument(
             '--auth-config-path', default=None,
             help='The path to auth config'
         )

@@ -18,7 +18,6 @@ from .util import LogLevels
 import yaml
 from library.python import resource
 
-
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
@@ -53,7 +52,8 @@ def get_grpc_host():
     return "[::]"
 
 
-def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, n_to_select, state_storage_nodes, log_configs):
+def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, n_to_select, state_storage_nodes,
+                      log_configs):
     data = resource.find("harness/resources/default_yaml.yml")
     if isinstance(data, bytes):
         data = data.decode('utf-8')
@@ -74,6 +74,15 @@ def load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, 
     for log, level in six.iteritems(log_configs):
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
     return yaml_dict
+
+
+def _read_file(filename):
+    with open(filename, "r") as f:
+        return f.read()
+
+
+def _load_yaml_config(filename):
+    return yaml.safe_load(_read_file(filename))
 
 
 class KikimrConfigGenerator(object):
@@ -108,7 +117,7 @@ class KikimrConfigGenerator(object):
             enable_pqcd=False,
             enable_metering=False,
             grpc_tls_data_path=None,
-            yql_config_path=None,
+            yq_config_path=None,
             enable_datastreams=False,
             auth_config_path=None,
             disable_mvcc=False,
@@ -161,8 +170,6 @@ class KikimrConfigGenerator(object):
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
         self.__load_udfs = load_udfs
         self.__udfs_path = udfs_path
-        self.__yql_config_path = yql_config_path
-        self.__auth_config_path = auth_config_path
         self.__slot_count = slot_count
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
@@ -182,7 +189,8 @@ class KikimrConfigGenerator(object):
 
         self.__bs_cache_file_path = bs_cache_file_path
 
-        self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select, self.__node_ids, self.__additional_log_configs)
+        self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select,
+                                             self.__node_ids, self.__additional_log_configs)
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         self.yaml_config['pqconfig']['enabled'] = enable_pq
@@ -194,7 +202,8 @@ class KikimrConfigGenerator(object):
         self.yaml_config['pqconfig']['topics_are_first_class_citizen'] = enable_pq and enable_datastreams
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
         self.yaml_config['pqcluster_discovery_config']['enabled'] = enable_pqcd
-        self.yaml_config["net_classifier_config"]["net_data_file_path"] = os.path.join(self.__output_path, 'netData.tsv')
+        self.yaml_config["net_classifier_config"]["net_data_file_path"] = os.path.join(self.__output_path,
+                                                                                       'netData.tsv')
         with open(self.yaml_config["net_classifier_config"]["net_data_file_path"], "w") as net_data_file:
             net_data_file.write("")
 
@@ -231,6 +240,12 @@ class KikimrConfigGenerator(object):
                     )
                 )
             )
+
+        if auth_config_path:
+            self.yaml_config["auth_config"] = _load_yaml_config(auth_config_path)
+
+        if yq_config_path:
+            self.yaml_config["yandex_query_config"] = _load_yaml_config(yq_config_path)
 
         self.__build()
 
@@ -334,7 +349,9 @@ class KikimrConfigGenerator(object):
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:
-            for fpath, data in ((self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert), (self.grpc_tls_key_path, self.grpc_tls_key)):
+            for fpath, data in (
+            (self.grpc_tls_ca_path, self.grpc_tls_ca), (self.grpc_tls_cert_path, self.grpc_tls_cert),
+            (self.grpc_tls_key_path, self.grpc_tls_key)):
                 with open(fpath, 'wb') as f:
                     f.write(data)
 
@@ -342,18 +359,6 @@ class KikimrConfigGenerator(object):
         self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
             writer.write(yaml.safe_dump(self.yaml_config))
-
-        if self.__yql_config_path:
-            config_file_path = os.path.join(configs_path, "yql.txt")
-            with open(self.__yql_config_path, "r") as source_config:
-                with open(config_file_path, "w") as config_file:
-                    config_file.write(source_config.read())
-
-        if self.__auth_config_path:
-            config_file_path = os.path.join(configs_path, "auth.txt")
-            with open(self.__auth_config_path, "r") as source_config:
-                with open(config_file_path, "w") as config_file:
-                    config_file.write(source_config.read())
 
     def get_yql_udfs_to_load(self):
         if not self.__load_udfs:
@@ -374,17 +379,21 @@ class KikimrConfigGenerator(object):
         return self.__node_ids
 
     def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring):
-        domain_id = len(self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"])
+        domain_id = len(
+            self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"])
         self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(
-            {"node_id": node_id, "pdisk_id": pdisk_id, "path": path, "pdisk_guid": pdisk_id, "pdisk_category": pdisk_category})
+            {"node_id": node_id, "pdisk_id": pdisk_id, "path": path, "pdisk_guid": pdisk_id,
+             "pdisk_category": pdisk_category})
         self.yaml_config['blob_storage_config']["service_set"]["vdisks"].append(
             {
                 "vdisk_id": {"group_id": 0, "group_generation": 1, "ring": ring, "domain": domain_id, "vdisk": 0},
-                "vdisk_location": {"node_id": node_id, "pdisk_id": pdisk_id, "pdisk_guid": pdisk_id, 'vdisk_slot_id': 0},
+                "vdisk_location": {"node_id": node_id, "pdisk_id": pdisk_id, "pdisk_guid": pdisk_id,
+                                   'vdisk_slot_id': 0},
             }
         )
         self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"].append(
-            {"vdisk_locations": [{"node_id": node_id, "pdisk_id": pdisk_id, "pdisk_guid": pdisk_id, 'vdisk_slot_id': 0}]}
+            {"vdisk_locations": [
+                {"node_id": node_id, "pdisk_id": pdisk_id, "pdisk_guid": pdisk_id, 'vdisk_slot_id': 0}]}
         )
 
     def __build(self):
@@ -397,7 +406,8 @@ class KikimrConfigGenerator(object):
         self.yaml_config["blob_storage_config"]["service_set"]["availability_domains"] = 1
         self.yaml_config["blob_storage_config"]["service_set"]["pdisks"] = []
         self.yaml_config["blob_storage_config"]["service_set"]["vdisks"] = []
-        self.yaml_config["blob_storage_config"]["service_set"]["groups"] = [{"group_id": 0, 'group_generation': 0, 'erasure_species': int(self.static_erasure)}]
+        self.yaml_config["blob_storage_config"]["service_set"]["groups"] = [
+            {"group_id": 0, 'group_generation': 0, 'erasure_species': int(self.static_erasure)}]
         self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"] = []
 
         for dc in self._dcs:
@@ -407,19 +417,22 @@ class KikimrConfigGenerator(object):
             datacenter_id = next(datacenter_id_generator)
 
             for pdisk_id in range(1, self.__number_of_pdisks_per_node + 1):
-                disk_size = self.static_pdisk_size if pdisk_id <= 1 else self.__dynamic_pdisks[pdisk_id - 2].get('disk_size', self.dynamic_pdisk_size)
+                disk_size = self.static_pdisk_size if pdisk_id <= 1 else self.__dynamic_pdisks[pdisk_id - 2].get(
+                    'disk_size', self.dynamic_pdisk_size)
                 pdisk_user_kind = 0 if pdisk_id <= 1 else self.__dynamic_pdisks[pdisk_id - 2].get('user_kind', 0)
 
                 if self.__use_in_memory_pdisks:
-                    pdisk_size_gb = disk_size / (1024*1024*1024)
+                    pdisk_size_gb = disk_size / (1024 * 1024 * 1024)
                     pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb)
                 elif self.__pdisks_directory:
                     pdisk_path = os.path.join(self.__pdisks_directory, str(pdisk_id))
                 else:
-                    tmp_file = tempfile.NamedTemporaryFile(prefix="pdisk{}".format(pdisk_id), suffix=".data", dir=self._pdisk_store_path)
+                    tmp_file = tempfile.NamedTemporaryFile(prefix="pdisk{}".format(pdisk_id), suffix=".data",
+                                                           dir=self._pdisk_store_path)
                     pdisk_path = tmp_file.name
 
-                self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size, 'pdisk_user_kind': pdisk_user_kind})
+                self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size,
+                                          'pdisk_user_kind': pdisk_user_kind})
                 if pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
                     self._add_pdisk_to_static_group(
                         pdisk_id,

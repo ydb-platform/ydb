@@ -168,6 +168,11 @@ namespace NKikimr {
         HiveConfig.SetRequestSequenceSize(value);
     }
 
+    void TAppPrepare::SetHiveStoragePoolFreshPeriod(ui64 value)
+    {
+        HiveConfig.SetStoragePoolFreshPeriod(value);
+    }
+
     void TAppPrepare::AddSystemBackupSID(const TString& sid)
     {
         MeteringConfig.AddSystemBackupSIDs(sid);

@@ -145,7 +145,7 @@ bool TStoragePoolInfo::IsBalanceBySize() const {
 }
 
 bool TStoragePoolInfo::IsFresh() const {
-    return TInstant::Now() < LastUpdate + FreshPeriod;
+    return TInstant::Now() < LastUpdate + Settings->GetStoragePoolFreshPeriod();
 }
 
 void TStoragePoolInfo::SetAsFresh() {

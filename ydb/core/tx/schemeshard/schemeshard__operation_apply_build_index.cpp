@@ -41,6 +41,7 @@ TVector<ISubOperationBase::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxT
         op->SetTableName(table.LeafName());
         op->SetSnapshotTxId(config.GetSnaphotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
+        op->MutableOutcome()->MutableApply();
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }
@@ -92,6 +93,7 @@ TVector<ISubOperationBase::TPtr> CancelBuildIndex(TOperationId nextId, const TTx
         op->SetTableName(table.LeafName());
         op->SetSnapshotTxId(config.GetSnaphotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
+        PathIdFromPathId(index.Base()->PathId, op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
 
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }

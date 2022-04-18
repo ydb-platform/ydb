@@ -1950,6 +1950,11 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         Y_VERIFY(txState.SplitDescription, "Split Tx must have non-empty split description");
         bool serializeRes = txState.SplitDescription->SerializeToString(&extraData);
         Y_VERIFY(serializeRes);
+    } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
+        if (txState.BuildIndexOutcome) {
+            bool serializeRes = txState.BuildIndexOutcome->SerializeToString(&extraData);
+            Y_VERIFY(serializeRes);
+        }
     } else if (txState.TxType == TTxState::TxAlterTable) {
         TPathId pathId = txState.TargetPathId;
 

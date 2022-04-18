@@ -3173,6 +3173,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool deserializeRes = ParseFromStringNoSizeLimit(*txState.SplitDescription, extraData);
                     Y_VERIFY(deserializeRes);
                     splitOpIds.push_back(operationId);
+                } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
+                    if (!extraData.empty()) {
+                        txState.BuildIndexOutcome = std::make_shared<NKikimrSchemeOp::TBuildIndexOutcome>();
+                        bool deserializeRes = ParseFromStringNoSizeLimit(*txState.BuildIndexOutcome, extraData);
+                        Y_VERIFY(deserializeRes);
+                    }
                 } else if (txState.TxType == TTxState::TxAlterTable) {
                     if (txState.State <= TTxState::Propose) {
                         // If state is >=Propose then alter has already been applied to the table

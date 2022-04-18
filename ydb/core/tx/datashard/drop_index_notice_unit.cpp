@@ -30,18 +30,18 @@ public:
 
         const auto& params = schemeTx.GetDropIndexNotice();
 
-        auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
+        const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         TUserTable::TPtr tableInfo;
         if (params.HasIndexPathId()) {
-            auto indexPathId = TPathId(params.GetIndexPathId().GetOwnerId(), params.GetIndexPathId().GetLocalId());
-
             const auto& userTables = DataShard.GetUserTables();
             Y_VERIFY(userTables.contains(pathId.LocalPathId));
             const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
 
+            auto indexPathId = PathIdFromPathId(params.GetIndexPathId());
             auto it = indexes.find(indexPathId);
+
             if (it != indexes.end() && it->second.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
             }

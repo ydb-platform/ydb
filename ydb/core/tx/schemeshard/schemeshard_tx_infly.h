@@ -240,6 +240,7 @@ struct TTxState {
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SplitDescription;
     bool TxShardsListFinalized = false;
     TTxId BuildIndexId;
+    std::shared_ptr<NKikimrSchemeOp::TBuildIndexOutcome> BuildIndexOutcome;
     // fields below used for backup/restore
     bool Cancel = false;
     THashMap<TShardIdx, TShardStatus> ShardStatuses;

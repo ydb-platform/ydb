@@ -6,6 +6,8 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TFinalizeBuildIndexUnit : public TExecutionUnit {
+    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
+
 public:
     TFinalizeBuildIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::FinalizeBuildIndex, false, dataShard, pipeline)
@@ -28,17 +30,36 @@ public:
 
         const auto& params = schemeTx.GetFinalizeBuildIndex();
 
-        auto pathId = TPathId(params.GetPathId().GetOwnerId(), params.GetPathId().GetLocalId());
+        const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        auto tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion());
+        const auto version = params.GetTableSchemaVersion();
+        Y_VERIFY(version);
+
+        TUserTable::TPtr tableInfo;
+        if (params.HasOutcome() && params.GetOutcome().HasCancel()) {
+            const auto& userTables = DataShard.GetUserTables();
+            Y_VERIFY(userTables.contains(pathId.LocalPathId));
+            const auto& indexes = userTables.at(pathId.LocalPathId)->Indexes;
+
+            auto indexPathId = PathIdFromPathId(params.GetOutcome().GetCancel().GetIndexPathId());
+            auto it = indexes.find(indexPathId);
+
+            if (it != indexes.end() && it->second.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
+                RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
+            }
+
+            tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
+        } else {
+            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
+        }
+
+        Y_VERIFY(tableInfo);
         DataShard.AddUserTable(pathId, tableInfo);
 
         ui64 step = params.GetSnapshotStep();
         ui64 txId = params.GetSnapshotTxId();
         Y_VERIFY(step != 0);
-
-        const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, step, txId);
 
         if (DataShard.GetBuildIndexManager().Contains(params.GetBuildIndexId())) {
             auto  record = DataShard.GetBuildIndexManager().Get(params.GetBuildIndexId());
@@ -46,20 +67,19 @@ public:
             DataShard.GetBuildIndexManager().Drop(params.GetBuildIndexId());
         }
 
-        bool removed = DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+        const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, step, txId);
+        DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-        if (removed) {
-            return EExecutionStatus::ExecutedNoMoreRestarts;
-        } else {
-            return EExecutionStatus::Executed;
-        }
+        return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-        // nothing
+    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+        if (RemoveSender) {
+            ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
+        }
     }
 };
 

@@ -1656,6 +1656,23 @@ ui64 AsyncAlterAddIndex(
     return txId;
 }
 
+void CancelAddIndex(Tests::TServer::TPtr server, const TString& dbName, ui64 buildIndexId) {
+    auto &runtime = *server->GetRuntime();
+    auto &settings = server->GetSettings();
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, new TEvTxUserProxy::TEvAllocateTxId()));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvAllocateTxIdResult>(sender);
+    const auto txId = ev->Get()->TxId;
+
+    auto req = MakeHolder<TEvIndexBuilder::TEvCancelRequest>(txId, dbName, buildIndexId);
+    auto tabletId = ChangeStateStorage(SchemeRoot, settings.Domain);
+    runtime.SendToPipe(tabletId, sender, req.Release(), 0, GetPipeConfigWithRetries());
+
+    auto resp = runtime.GrabEdgeEventRethrow<TEvIndexBuilder::TEvCancelResponse>(sender);
+    UNIT_ASSERT_EQUAL(resp->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+}
+
 ui64 AsyncAlterDropIndex(
         Tests::TServer::TPtr server,
         const TString& workingDir,

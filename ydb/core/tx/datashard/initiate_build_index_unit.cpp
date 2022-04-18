@@ -57,20 +57,15 @@ public:
         Y_VERIFY(step != 0);
 
         const TSnapshotKey key(pathId.OwnerId, pathId.LocalPathId, step, txId);
+        const ui64 flags = TSnapshot::FlagScheme;
 
-        ui64 flags = TSnapshot::FlagScheme;
-
-        bool added = DataShard.GetSnapshotManager().AddSnapshot(
+        DataShard.GetSnapshotManager().AddSnapshot(
             txc.DB, key, params.GetSnapshotName(), flags, TDuration::Zero());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-        if (added) {
-            return EExecutionStatus::DelayCompleteNoMoreRestarts;
-        } else {
-            return EExecutionStatus::DelayComplete;
-        }
+        return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {

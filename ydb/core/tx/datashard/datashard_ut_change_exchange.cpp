@@ -332,6 +332,103 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
         UNIT_ASSERT_VALUES_EQUAL(enqueued.size(), removed.size());
     }
 
+    Y_UNIT_TEST(ShouldRemoveRecordsAfterCancelIndexBuild) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataColumnForIndexTable(true)
+            .SetEnableAsyncIndexes(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_DEBUG);
+        InitRoot(server, sender);
+
+        TVector<THolder<IEventHandle>> delayed;
+        bool inited = false;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvChangeExchange::EvEnqueueRecords:
+                delayed.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+
+            case TEvDataShard::EvBuildIndexCreateRequest:
+                inited = true;
+                return TTestActorRuntime::EEventAction::DROP;
+
+            default:
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        });
+
+        CreateShardedTable(server, sender, "/Root", "Table", TableWoIndexes());
+        ExecSQL(server, sender, R"(INSERT INTO `/Root/Table` (pkey, ikey) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        const auto buildIndexId = AsyncAlterAddIndex(server, "/Root", "/Root/Table", SimpleAsyncIndex());
+        if (!inited) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&inited](IEventHandle&) {
+                return inited;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        ExecSQL(server, sender, "INSERT INTO `/Root/Table` (pkey, ikey) VALUES (4, 40);");
+        if (delayed.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
+                return !delayed.empty();
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        CancelAddIndex(server, "/Root", buildIndexId);
+        WaitTxNotification(server, sender, buildIndexId);
+
+        THashSet<ui64> enqueued;
+        THashSet<ui64> removed;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvChangeExchange::EvEnqueueRecords:
+                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+                    enqueued.insert(record.Order);
+                }
+                break;
+
+            case TEvChangeExchange::EvRemoveRecords:
+                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+                    removed.insert(record);
+                }
+                break;
+
+            default:
+                break;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (auto& ev : std::exchange(delayed, TVector<THolder<IEventHandle>>())) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        if (removed.empty()) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&enqueued, &removed](IEventHandle&) {
+                return removed && enqueued == removed;
+            });
+            runtime.DispatchEvents(opts);
+        }
+    }
+
     void WaitForContent(TServer::TPtr server, const TString& tablePath, const TString& expected) {
         while (true) {
             auto content = ReadShardedTable(server, tablePath);

@@ -1265,6 +1265,22 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), recordsCount - 3);
         }
 
+        {
+            auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
+                YDS_V1::ShardIteratorType::AFTER_SEQUENCE_NUMBER,
+                NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("99999")
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            shardIterator = result.GetResult().shard_iterator();
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
+        }
 
         {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",

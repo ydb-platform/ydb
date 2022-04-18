@@ -2617,19 +2617,29 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         Counters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
         read->Offset = StartOffset;
         if (read->PartNo > 0) {
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "I was right, there could be rewinds and deletions at once! Topic " << TopicName << " partition " << Partition
-                            << " readOffset " << read->Offset << " readPartNo " << read->PartNo << " startOffset " << StartOffset);
-            ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET, "client requested not from first part, and this part is lost");
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+                        "I was right, there could be rewinds and deletions at once! Topic " << TopicName <<
+                        " partition " << Partition <<
+                        " readOffset " << read->Offset <<
+                        " readPartNo " << read->PartNo <<
+                        " startOffset " << StartOffset);
+            ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
+                       "client requested not from first part, and this part is lost");
             return;
         }
     }
     if (read->Offset > EndOffset || read->Offset == EndOffset && read->PartNo > 0) {
         Counters.Cumulative()[COUNTER_PQ_READ_ERROR_BIG_OFFSET].Increment(1);
         Counters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "reading from too big offset - topic " << TopicName << " partition " << Partition << " client "
-                                << read->ClientId << " EndOffset " << EndOffset << " offset " << read->Offset);
-        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
-            TStringBuilder() << "trying to read from future. ReadOffset " << read->Offset << ", " << read->PartNo << " EndOffset " << EndOffset);
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+                    "reading from too big offset - topic " << TopicName <<
+                    " partition " << Partition <<
+                    " client " << read->ClientId <<
+                    " EndOffset " << EndOffset <<
+                    " offset " << read->Offset);
+        ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
+                                      TStringBuilder() << "trying to read from future. ReadOffset " <<
+                                      read->Offset << ", " << read->PartNo << " EndOffset " << EndOffset);
         return;
     }
 

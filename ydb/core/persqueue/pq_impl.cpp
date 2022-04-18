@@ -313,8 +313,12 @@ public:
 
     bool HandleError(TEvPQ::TEvError *ev, const TActorContext& ctx)
     {
-        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Answer error topic: '" << TopicName << "' partition: " << Partition
-                        << " messageNo: " << MessageNo << " requestId: " << ReqId << " error: " << ev->Error);
+        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
+                   "Answer error topic: '" << TopicName << "'" <<
+                   " partition: " << Partition <<
+                   " messageNo: " << MessageNo <<
+                   " requestId: " << ReqId <<
+                   " error: " << ev->Error);
         Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         Response->Record.SetErrorCode(ev->ErrorCode);
         Response->Record.SetErrorReason(ev->Error);

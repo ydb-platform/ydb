@@ -23,6 +23,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_datastreams
     ydb/services/lib/actors
     ydb/services/lib/sharding
+    ydb/services/persqueue_v1
     ydb/services/ydb
 )
 

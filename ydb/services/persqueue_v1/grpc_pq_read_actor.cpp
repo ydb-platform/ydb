@@ -29,8 +29,7 @@ namespace NKikimr {
 
 using namespace NMsgBusProxy;
 
-namespace NGRpcProxy {
-namespace V1 {
+namespace NGRpcProxy::V1 {
 
 using namespace PersQueue::V1;
 
@@ -3015,55 +3014,5 @@ void TReadInfoActor::Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorC
     AnswerError(ev->Get()->Reason, ev->Get()->ErrorCode, ctx);
 }
 
-
-
-Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const PersQueue::ErrorCode::ErrorCode code) {
-
-    using namespace PersQueue::ErrorCode;
-
-    switch(code) {
-        case OK :
-            return Ydb::StatusIds::SUCCESS;
-        case INITIALIZING:
-        case CLUSTER_DISABLED:
-            return Ydb::StatusIds::UNAVAILABLE;
-        case PREFERRED_CLUSTER_MISMATCHED:
-            return Ydb::StatusIds::ABORTED;
-        case OVERLOAD:
-            return Ydb::StatusIds::OVERLOADED;
-        case BAD_REQUEST:
-            return Ydb::StatusIds::BAD_REQUEST;
-        case WRONG_COOKIE:
-        case CREATE_SESSION_ALREADY_LOCKED:
-        case DELETE_SESSION_NO_SESSION:
-        case READ_ERROR_NO_SESSION:
-            return Ydb::StatusIds::SESSION_EXPIRED;
-        case WRITE_ERROR_PARTITION_IS_FULL:
-        case WRITE_ERROR_DISK_IS_FULL:
-        case WRITE_ERROR_BAD_OFFSET:
-        case SOURCEID_DELETED:
-        case READ_ERROR_IN_PROGRESS:
-        case READ_ERROR_TOO_SMALL_OFFSET:
-        case READ_ERROR_TOO_BIG_OFFSET:
-        case SET_OFFSET_ERROR_COMMIT_TO_FUTURE:
-        case READ_NOT_DONE:
-            return Ydb::StatusIds::GENERIC_ERROR;
-        case TABLET_IS_DROPPED:
-        case UNKNOWN_TOPIC:
-        case WRONG_PARTITION_NUMBER:
-            return Ydb::StatusIds::SCHEME_ERROR;
-        case ACCESS_DENIED:
-            return Ydb::StatusIds::UNAUTHORIZED;
-        case ERROR:
-            return Ydb::StatusIds::GENERIC_ERROR;
-
-        default:
-            return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    }
-}
-
-
-
-}
-}
-}
+} // namespace NGRpcProxy::V1
+} // namespace NKikimr

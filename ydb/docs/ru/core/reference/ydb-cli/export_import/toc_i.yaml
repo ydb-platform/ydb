@@ -11,4 +11,5 @@ items:
   href: s3_export.md
 - name: Загрузка из S3
   href: s3_import.md
-
+- name: Импорт данных из файла в существующую таблицу
+  href: import-file.md

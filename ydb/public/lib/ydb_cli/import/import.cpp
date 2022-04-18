@@ -122,6 +122,7 @@ TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbP
         headerRow += '\n';
         buffer = headerRow;
         csvSettings.set_header(true);
+        special = true;
     }
 
     if (special) {

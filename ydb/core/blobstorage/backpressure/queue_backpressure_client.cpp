@@ -45,6 +45,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     std::optional<NKikimrBlobStorage::TGroupInfo> RecentGroup;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TBlobStorageGroupType GType;
+    TInstant ConnectionFailureTime;
 
     enum class EState {
         INITIAL,
@@ -472,17 +473,29 @@ private:
         }
     }
 
-    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr ev, const TActorContext& /*ctx*/) {
+    void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr ev, const TActorContext& ctx) {
         if (ev->Get()->NodeId == RemoteVDisk.NodeId()) {
             Y_VERIFY(!SessionId || SessionId == ev->Sender, "SessionId# %s Sender# %s", SessionId.ToString().data(),
                 ev->Sender.ToString().data());
             SessionId = ev->Sender;
+
+            if (ConnectionFailureTime) {
+                QLOG_WARN_S("BSQ20", "TEvNodeConnected NodeId# " << ev->Get()->NodeId
+                    << " ConnectionFailureTime# " << ConnectionFailureTime
+                    << " connection was recovered");
+                ConnectionFailureTime = TInstant();
+            }
         }
     }
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext &ctx) {
-        QLOG_INFO_S("BSQ13", "TEvNodeDisconnected NodeId# " << ev->Get()->NodeId);
         if (ev->Get()->NodeId == RemoteVDisk.NodeId()) {
+            if (!ConnectionFailureTime) {
+                ConnectionFailureTime = ctx.Now();
+                QLOG_WARN_S("BSQ13", "TEvNodeDisconnected NodeId# " << ev->Get()->NodeId
+                    << " ConnectionFailureTime# " << ConnectionFailureTime);
+            }
+
             ResetConnection(ctx, NKikimrProto::ERROR, "node disconnected", TDuration::Seconds(1));
             Y_VERIFY(!SessionId || SessionId == ev->Sender);
             SessionId = {};
@@ -501,7 +514,8 @@ private:
 
         QLOG_INFO_S("BSQ16", "called"
             << " CheckReadinessCookie# " << CheckReadinessCookie
-            << " State# " << GetStateName());
+            << " State# " << GetStateName()
+            << (ConnectionFailureTime ? " ConnectionFailureTime# " + ConnectionFailureTime.ToString() : ""));
 
         if (State != EState::INITIAL && State != EState::EXPECT_READY_NOTIFY) {
             return;
@@ -531,7 +545,7 @@ private:
     }
 
     void HandleCheckReadiness(TEvBlobStorage::TEvVCheckReadinessResult::TPtr& ev, const TActorContext& ctx) {
-        QLOG_INFO_S("BSQ17", "received TEvVCheckReadinessResult"
+        QLOG_INFO_S("BSQ17", "TEvVCheckReadinessResult"
             << " Cookie# " << ev->Cookie
             << " CheckReadinessCookie# " << CheckReadinessCookie
             << " State# " << GetStateName()
@@ -570,13 +584,19 @@ private:
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-        QLOG_INFO_S("BSQ02", "Sender# " << ev->Sender
+        if (!ConnectionFailureTime) {
+            ConnectionFailureTime = ctx.Now();
+        }
+
+        QLOG_INFO_S("BSQ02", "TEvUndelivered"
+            << " Sender# " << ev->Sender
             << " RemoteVDisk# " << RemoteVDisk
             << " SourceType# " << ev->Get()->SourceType
             << " Cookie# " << ev->Cookie
             << " CheckReadinessCookie# " << CheckReadinessCookie
             << " State# " << GetStateName()
-            << " Reason# " << ev->Get()->Reason);
+            << " Reason# " << ev->Get()->Reason
+            << " ConnectionFailureTime# " << ConnectionFailureTime);
 
         if (ev->Sender == RemoteVDisk) {
             ResetConnection(ctx, NKikimrProto::ERROR, "event undelivered", TDuration::Seconds(1));

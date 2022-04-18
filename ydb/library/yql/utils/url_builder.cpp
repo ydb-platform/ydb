@@ -1,5 +1,6 @@
 #include "url_builder.h"
 #include <library/cpp/string_utils/quote/quote.h>
+#include <util/generic/yexception.h>
 
 namespace NYql {
 
@@ -13,7 +14,26 @@ TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value)
     return *this;
 }
 
+TUrlBuilder& TUrlBuilder::AddPathComponent(const TString& value) {
+    if (!value) {
+        throw yexception() << "Empty path component is not allowed";
+    }
+    TStringBuilder res;
+    res << MainUri;
+    if (!MainUri.EndsWith('/')) {
+        res << '/';
+    }
+    res << UrlEscapeRet(value, true);
+
+    MainUri = std::move(res);
+    return *this;
+}
+
 TString TUrlBuilder::Build() const {
+    if (Params.empty()) {
+        return MainUri;
+    }
+
     TStringBuilder res;
     res << MainUri << "?";
     TStringBuf separator = ""sv;

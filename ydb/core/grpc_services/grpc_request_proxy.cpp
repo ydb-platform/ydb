@@ -1,6 +1,5 @@
-#include "grpc_proxy_counters.h"
-#include "grpc_request_check_actor.h"
 #include "grpc_request_proxy.h"
+#include "grpc_request_check_actor.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
 
@@ -8,6 +7,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 
@@ -293,7 +293,7 @@ private:
     TActorId SchemeCache;
     bool DynamicNode = false;
     TString RootDatabase;
-    TIntrusivePtr<TGrpcProxyCounters> Counters;
+    IGRpcProxyCounters::TPtr Counters;
 };
 
 void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
@@ -316,7 +316,8 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
             nodeID, (DynamicNode ? "dynamic" : "static"));
     }
 
-    Counters = MakeIntrusive<TGrpcProxyCounters>(AppData()->Counters);
+    Counters = CreateGRpcProxyCounters(AppData()->Counters);
+    InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
 
     RootDatabase = DatabaseFromDomain();
     TDatabaseInfo& database = Databases[RootDatabase];

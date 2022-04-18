@@ -2,7 +2,8 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/counters/counters.h>
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
@@ -156,6 +157,11 @@ static void AggregateCounters(NKikimr::NSysView::TDbServiceCounters* dst,
         auto* dstReq = dst->FindOrAddGRpcCounters(srcReq.GetGRpcService(), srcReq.GetGRpcRequest());
         TAggrSum::Apply(dstReq->MutableRequestCounters(), srcReq.GetRequestCounters());
     }
+
+    if (src.HasGRpcProxyCounters()) {
+        TAggrSum::Apply(dst->Proto().MutableGRpcProxyCounters()->MutableRequestCounters(),
+            src.GetGRpcProxyCounters().GetRequestCounters());
+    }
 }
 
 static void AggregateIncrementalCounters(NKikimr::NSysView::TDbServiceCounters* dst,
@@ -240,6 +246,9 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
     }
     case NKikimrSysView::GRPC:
         result = NGRpcService::CreateGRpcDbCounters(ExternalGroup, InternalGroup);
+        break;
+    case NKikimrSysView::GRPC_PROXY:
+        result = NGRpcService::CreateGRpcProxyDbCounters(ExternalGroup, InternalGroup);
         break;
     default:
         break;

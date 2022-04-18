@@ -8,6 +8,8 @@ OWNER(
 SRCS(
     counters.cpp
     counters.h
+    proxy_counters.cpp
+    proxy_counters.h
 )
 
 PEERDIR(

@@ -291,6 +291,17 @@ static void CalculateCountersDiff(NKikimrSysView::TDbServiceCounters* diff,
             CopyCounters(diffR->MutableRequestCounters(), currentR.GetRequestCounters());
         }
     }
+
+    if (current.Proto().HasGRpcProxyCounters()) {
+        if (prev.Proto().HasGRpcProxyCounters()) {
+            CalculateCountersDiff(diff->MutableGRpcProxyCounters()->MutableRequestCounters(),
+                current.Proto().GetGRpcProxyCounters().GetRequestCounters(),
+                *prev.Proto().MutableGRpcProxyCounters()->MutableRequestCounters());
+        } else {
+            CopyCounters(diff->MutableGRpcProxyCounters()->MutableRequestCounters(),
+                current.Proto().GetGRpcProxyCounters().GetRequestCounters());
+        }
+    }
 }
 
 class TSysViewService : public TActorBootstrapped<TSysViewService> {

@@ -12,22 +12,23 @@
 
 namespace NYql::NDq {
 #define CAMQ_LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
+    LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define CAMQ_LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
+    LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define CAMQ_LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
+    LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 
     class TDqMemoryQuota {
     public:
-        TDqMemoryQuota(ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, bool canAllocateExtraMemory)
+        TDqMemoryQuota(ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, bool canAllocateExtraMemory, NActors::TActorSystem* actorSystem)
             : InitialMkqlMemoryLimit(initialMkqlMemoryLimit)
             , MkqlMemoryLimit(initialMkqlMemoryLimit)
             , MemoryLimits(memoryLimits)
             , TxId(txId)
             , TaskId(taskId)
             , ProfileStats(profileStats ? MakeHolder<TProfileStats>() : nullptr)
-            , CanAllocateExtraMemory(canAllocateExtraMemory) {
+            , CanAllocateExtraMemory(canAllocateExtraMemory) 
+            , ActorSystem(actorSystem) {
         }
 
         ui64 GetMkqlMemoryLimit() const {
@@ -126,5 +127,6 @@ namespace NYql::NDq {
         const ui64 TaskId;
         THolder<TProfileStats> ProfileStats;
         const bool CanAllocateExtraMemory;
+        NActors::TActorSystem* ActorSystem;
     };
 } // namespace NYql::NDq

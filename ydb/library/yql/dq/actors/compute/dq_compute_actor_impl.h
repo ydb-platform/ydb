@@ -226,7 +226,8 @@ protected:
             TxId,
             Task.GetId(),
             RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE,
-            CanAllocateExtraMemory);
+            CanAllocateExtraMemory,
+            NActors::TActivationContext::ActorSystem());
     }
 
     virtual ui64 GetMkqlMemoryLimit() const {

@@ -32,7 +32,7 @@
 
 ## Как воспользоваться {#how-use}
 
-Как и другие виды запросов, *Scan Queries* доступны через {% if link-console-main %} [консоль управления]({{ link-console-main }})(в запросе требуется указать прагму `PRAGMA Kikimr.ScanQuery = "true";`), {% endif %} [CLI](../../reference/ydb-cli/commands/scan-query.md) и [SDK](../../reference/ydb-sdk/index.md).
+Как и другие виды запросов, *Scan Queries* доступны через {% if link-console-main %} [консоль управления]({{ link-console-main }}) (в запросе требуется указать прагму `PRAGMA Kikimr.ScanQuery = "true";`), {% endif %} [CLI](../../reference/ydb-cli/commands/scan-query.md) и [SDK](../../reference/ydb-sdk/index.md).
 
 {% if oss %}
 

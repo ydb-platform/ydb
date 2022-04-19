@@ -35,7 +35,7 @@ public:
 using TParsedTokenList = TVector<TParsedToken>;
 
 IOutputStream& OutputTokens(IOutputStream& out, TParsedTokenList::const_iterator begin, TParsedTokenList::const_iterator end);
-bool Tokenize(const ILexer::TPtr& lexer, const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors);
+bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TParsedTokenList& tokens, NYql::TIssues& issues, size_t maxErrors);
 
 }
 

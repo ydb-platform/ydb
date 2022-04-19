@@ -67,6 +67,14 @@ public:
                     GetError(e).Release(),
                     0,
                     ev->Cookie));
+        } catch (...) {
+            ctx.Send(
+                new IEventHandle(
+                    ev->Sender,
+                    SelfId(),
+                    GetError(CurrentExceptionMessage()).Release(),
+                    /*flags=*/0,
+                    ev->Cookie));
         }
     }
 
@@ -198,19 +206,7 @@ private:
     }
 
     void OnContinueRun(TEvContinueRun::TPtr& ev, const TActorContext& ctx) {
-        try {
-            DoContinueRun(ev, ctx);
-        } catch (const NKikimr::TMemoryLimitExceededException&) {
-            throw;
-        } catch (...) {
-            ctx.Send(
-                new IEventHandle(
-                    ev->Sender,
-                    SelfId(),
-                    GetError(CurrentExceptionMessage()).Release(),
-                    /*flags=*/0,
-                    ev->Cookie));
-        }
+        DoContinueRun(ev, ctx);
     }
 
     void OnChannelPush(TEvPush::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -382,31 +378,22 @@ private:
         if (MemoryQuota) {
             MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
         }
-        try {
-            TaskRunner->Prepare(ev->Get()->Task, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx, ev->Get()->ParameterProvider);
 
-            auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
-                TaskRunner->GetSecureParams(),
-                TaskRunner->GetTaskParams(),
-                TaskRunner->GetTypeEnv(),
-                TaskRunner->GetHolderFactory());
+        TaskRunner->Prepare(ev->Get()->Task, ev->Get()->MemoryLimits, *ev->Get()->ExecCtx, ev->Get()->ParameterProvider);
 
-            ctx.Send(
-                new IEventHandle(
-                    ev->Sender,
-                    SelfId(),
-                    event.Release(),
-                    /*flags=*/0,
-                    ev->Cookie));
-        } catch (...) {
-            ctx.Send(
-                new IEventHandle(
-                    ev->Sender,
-                    SelfId(),
-                    GetError(CurrentExceptionMessage()).Release(),
-                    0,
-                    ev->Cookie));
-        }
+        auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
+            TaskRunner->GetSecureParams(),
+            TaskRunner->GetTaskParams(),
+            TaskRunner->GetTypeEnv(),
+            TaskRunner->GetHolderFactory());
+
+        ctx.Send(
+            new IEventHandle(
+                ev->Sender,
+                SelfId(),
+                event.Release(),
+                /*flags=*/0,
+                ev->Cookie));
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException&) {

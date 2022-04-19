@@ -3178,7 +3178,7 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
 
     YQL_ENSURE(args->ChildrenSize() == constraints.size());
     size_t i = 0;
-    for (const auto constrList: constraints) {
+    for (const auto& constrList: constraints) {
         const auto arg = args->Child(i++);
         if (arg->GetState() == TExprNode::EState::TypeComplete || arg->GetState() == TExprNode::EState::ConstrPending) {
             for (const auto c: constrList) {
@@ -3197,7 +3197,7 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
         TExprNode::TListType argsChildren;
         argsChildren.reserve(constraints.size());
         i = 0;
-        for (const auto constrList: constraints) {
+        for (const auto& constrList: constraints) {
             const auto arg = args->Child(i++);
             const auto newArg = ctx.ShallowCopy(*arg);
             newArg->SetTypeAnn(arg->GetTypeAnn());

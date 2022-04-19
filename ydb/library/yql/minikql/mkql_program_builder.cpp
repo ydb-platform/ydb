@@ -5056,10 +5056,9 @@ TRuntimeNode TProgramBuilder::PgResolvedCall(bool useContext, const std::string_
     callableBuilder.Add(NewDataLiteral(useContext));
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
     callableBuilder.Add(NewDataLiteral(id));
-    for (const auto arg : args) {
+    for (const auto& arg : args) {
         callableBuilder.Add(arg);
     }
-
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

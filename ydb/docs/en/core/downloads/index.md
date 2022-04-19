@@ -2,7 +2,7 @@
 
 ## {{ ydb-short-name }} CLI
 
-[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is the command line utility for working with YDB databases.
+[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) is a client-side command line interface for YDB databases.
 
 {% list tabs %}
 
@@ -24,9 +24,9 @@
 
 {% endlist %}
 
-## {{ ydb-short-name }} server
+## {{ ydb-short-name }} Server
 
-{{ ydb-short-name }} Server is a build for running a node in a [YDB cluster](../concepts/databases.md#cluster).
+{{ ydb-short-name }} Server is a server-side [YDB cluster](../concepts/databases.md#cluster) node executable.
 
 {% list tabs %}
 
@@ -43,4 +43,3 @@
   {% include notitle [docker](_includes/server/source_code.md) %}
 
 {% endlist %}
-

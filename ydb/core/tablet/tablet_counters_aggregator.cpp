@@ -462,11 +462,12 @@ public:
         TCountersByTabletIDMap::insert_ctx insertCtx;
         auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
         if (it != CountersByTabletID[counterIndex].end()) {
-            const auto& oldValues = it->second;
+            auto& oldValues = it->second;
             if (newValues != oldValues) {
                 SubValues(counterIndex, oldValues);
                 AddValues(counterIndex, newValues);
             }
+            oldValues.swap(newValues);
         } else {
             AddValues(counterIndex, newValues);
             CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, std::move(newValues)), insertCtx);

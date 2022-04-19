@@ -474,6 +474,60 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         );
     }
 
+    Y_UNIT_TEST(IntegralPercentileAggregationRegularCheckSingleTablet) {
+        // test regular histogram, i.e. not named "HIST"
+        // check that when single tablet sends multiple count updates,
+        // the aggregated value is correct
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        TActorId edge = runtime.AllocateEdgeActor();
+
+        auto aggregator = CreateTabletCountersAggregator(false);
+        auto aggregatorId = runtime.Register(aggregator);
+        runtime.EnableScheduleForActor(aggregatorId);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(options);
+
+        TTabletWithHist tablet1(1);
+        tablet1.UpdatePercentile("MyHist", 1);
+        tablet1.SendUpdate(runtime, aggregatorId, edge);
+        tablet1.SendUpdate(runtime, aggregatorId, edge);
+
+        TTabletWithHist::CheckHistogram(
+            runtime,
+            "MyHist",
+            {0, 1, 0, 0},
+            {0, 1, 0, 0}
+        );
+
+        tablet1.UpdatePercentile("MyHist", 13);
+        tablet1.SendUpdate(runtime, aggregatorId, edge);
+        tablet1.SendUpdate(runtime, aggregatorId, edge);
+
+        TTabletWithHist::CheckHistogram(
+            runtime,
+            "MyHist",
+            {0, 1, 1, 0},
+            {0, 1, 1, 0}
+        );
+
+        tablet1.UpdatePercentile("MyHist", 1);
+        tablet1.UpdatePercentile("MyHist", 1);
+        tablet1.UpdatePercentile("MyHist", 100);
+        tablet1.SendUpdate(runtime, aggregatorId, edge);
+        tablet1.SendUpdate(runtime, aggregatorId, edge);
+
+        TTabletWithHist::CheckHistogram(
+            runtime,
+            "MyHist",
+            {0, 3, 1, 1},
+            {0, 3, 1, 1}
+        );
+    }
+
     // Regression test for KIKIMR-13457
     Y_UNIT_TEST(IntegralPercentileAggregationRegular) {
         // test regular histogram, i.e. not named "HIST"

@@ -1079,6 +1079,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
+    NTabletFlatExecutor::ITransaction* CreateTxSplitPartitioningChanged(THashMap<TActorId, THashSet<ui64>>&& waiters);
     NTabletFlatExecutor::ITransaction* CreateTxInitiateBorrowedPartsReturn();
     NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets();
     NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets();

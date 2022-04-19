@@ -134,8 +134,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     /// Write
 
     void Write(NKikimrClient::TPersQueueRequest&& request) {
-        auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>(++Cookie);
+        auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
         ev->Record = std::move(request);
+        ev->Record.MutablePartitionRequest()->SetCookie(++Cookie);
 
         Send(Writer, std::move(ev));
         Become(&TThis::StateWrite);

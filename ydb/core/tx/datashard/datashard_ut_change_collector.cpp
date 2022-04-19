@@ -3,7 +3,6 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {
@@ -105,31 +104,6 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
     }
 
     return result;
-}
-
-THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-    using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
-    using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
-
-    auto request = MakeHolder<TNavigate>();
-    auto& entry = request->ResultSet.emplace_back();
-    entry.Path = SplitPath(path);
-    entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
-    entry.Operation = TNavigate::EOp::OpTable;
-    entry.ShowPrivatePath = true;
-    runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvRequest(request.Release())));
-
-    auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
-    UNIT_ASSERT(ev);
-    UNIT_ASSERT(ev->Get());
-
-    auto* response = ev->Get()->Request.Release();
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(response->ErrorCount == 0);
-    UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
-
-    return THolder(response);
 }
 
 using TStructKey = TVector<std::pair<TString, ui32>>;

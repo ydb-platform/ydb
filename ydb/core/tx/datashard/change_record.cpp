@@ -263,6 +263,8 @@ void TChangeRecord::Out(IOutputStream& out) const {
         << " PathId: " << PathId
         << " Kind: " << Kind
         << " Body: " << Body.size() << "b"
+        << " TableId: " << TableId
+        << " SchemaVersion: " << SchemaVersion
     << " }";
 }
 

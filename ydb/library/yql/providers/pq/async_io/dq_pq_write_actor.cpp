@@ -88,7 +88,7 @@ struct TEvPrivate {
 
 } // namespace
 
-class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqSinkActor {
+class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput {
 public:
     TDqPqWriteActor(
         ui64 outputIndex,
@@ -96,7 +96,7 @@ public:
         NPq::NProto::TDqPqTopicSink&& sinkParams,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        IDqSinkActor::ICallbacks* callbacks,
+        IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         i64 freeSpace)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
@@ -208,7 +208,7 @@ private:
         SubscribeOnNextEvent();
     }
 
-    // IActor & IDqSinkActor
+    // IActor & IDqComputeActorAsyncOutput
     void PassAway() override { // Is called from Compute Actor
         if (WriteSession) {
             WriteSession->Close(TDuration::Zero());
@@ -371,7 +371,7 @@ private:
     const NPq::NProto::TDqPqTopicSink SinkParams;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    IDqSinkActor::ICallbacks* const Callbacks;
+    IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
     i64 FreeSpace = 0;
 
     NYdb::NPersQueue::TPersQueueClient PersQueueClient;
@@ -388,14 +388,14 @@ private:
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
 };
 
-std::pair<IDqSinkActor*, NActors::IActor*> CreateDqPqWriteActor(
+std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     NPq::NProto::TDqPqTopicSink&& settings,
     ui64 outputIndex,
     TTxId txId,
     const THashMap<TString, TString>& secureParams,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IDqSinkActor::ICallbacks* callbacks,
+    IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     i64 freeSpace)
 {
     const TString& tokenName = settings.GetToken().GetName();
@@ -417,7 +417,7 @@ void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver
     factory.Register<NPq::NProto::TDqPqTopicSink>("PqSink",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
             NPq::NProto::TDqPqTopicSink&& settings,
-            IDqSinkActorFactory::TArguments&& args)
+            IDqSinkFactory::TArguments&& args)
         {
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
             return CreateDqPqWriteActor(

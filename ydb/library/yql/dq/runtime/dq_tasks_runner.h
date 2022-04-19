@@ -195,7 +195,7 @@ public:
         , IsDefined(true) {
     }
 
-    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const TDqSinkStats*>&& sinkStats)
+    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats, THashMap<ui32, const TDqAsyncOutputBufferStats*>&& sinkStats)
         : StatsInplace()
         , StatsPtr(stats)
         , IsInplace(false)
@@ -214,7 +214,7 @@ public:
         return IsDefined;
     }
 
-    const TDqSinkStats* GetSinkStats(ui32 sinkId) const {
+    const TDqAsyncOutputBufferStats* GetSinkStats(ui32 sinkId) const {
         return SinkStats.at(sinkId);
     }
 
@@ -223,7 +223,7 @@ private:
     const TDqTaskRunnerStats* StatsPtr;
     bool IsInplace;
     bool IsDefined;
-    THashMap<ui32, const TDqSinkStats*> SinkStats;
+    THashMap<ui32, const TDqAsyncOutputBufferStats*> SinkStats;
 };
 
 struct TDqTaskRunnerContext {
@@ -300,7 +300,7 @@ public:
     virtual IDqInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
     virtual IDqSource::TPtr GetSource(ui64 inputIndex) = 0;
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
-    virtual IDqSink::TPtr GetSink(ui64 outputIndex) = 0;
+    virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
 
     // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any)
     // if memoryLimit = 0          then set unlimited

@@ -24,13 +24,13 @@ void TDqSourceFactory::Register(const TString& type, TCreatorFunction creator)
     Y_VERIFY(registered);
 }
 
-std::pair<IDqSinkActor*, NActors::IActor*> TDqSinkFactory::CreateDqSinkActor(IDqSinkActorFactory::TArguments&& args) const
+std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqSinkFactory::CreateDqSink(IDqSinkFactory::TArguments&& args) const
 {
     const TString& type = args.OutputDesc.GetSink().GetType();
-    YQL_ENSURE(!type.empty(), "Attempt to create sink actor of empty type");
+    YQL_ENSURE(!type.empty(), "Attempt to create sink of empty type");
     const TCreatorFunction* creatorFunc = CreatorsByType.FindPtr(type);
-    YQL_ENSURE(creatorFunc, "Unknown type of sink actor: \"" << type << "\"");
-    std::pair<IDqSinkActor*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
+    YQL_ENSURE(creatorFunc, "Unknown type of sink: \"" << type << "\"");
+    std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
     Y_VERIFY(actor.first);
     Y_VERIFY(actor.second);
     return actor;

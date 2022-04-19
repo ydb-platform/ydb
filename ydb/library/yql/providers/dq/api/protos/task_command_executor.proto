@@ -126,7 +126,7 @@ message TGetStatsSourceResponse {
 }
 
 message TSinkStatsResponse {
-    NDqProto.TDqSinkStats Stats = 1;
+    NDqProto.TDqAsyncOutputBufferStats Stats = 1;
 }
 
 message TPrepareRequest {

@@ -77,7 +77,7 @@ void ToProto(T* s1, const NDq::TDqOutputChannelStats* ss)
 }
 
 template<typename T>
-void ToProto(T* s1, const NDq::TDqSinkStats* ss)
+void ToProto(T* s1, const NDq::TDqAsyncOutputBufferStats* ss)
 {
     s1->SetChunks(ss->Chunks);
     s1->SetBytes(ss->Bytes);

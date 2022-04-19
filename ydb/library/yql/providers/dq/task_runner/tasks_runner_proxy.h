@@ -17,7 +17,7 @@ public:
     virtual void PushString(TVector<TString>&& batch, i64 space) = 0;
 };
 
-class IStringSink: public NDq::IDqSink {
+class IStringSink: public NDq::IDqAsyncOutputBuffer {
 public:
     virtual ~IStringSink() = default;
     virtual ui64 PopString(TVector<TString>& batch, ui64 bytes) = 0;
@@ -62,7 +62,7 @@ public:
     virtual IInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
     virtual IOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual NDq::IDqSource::TPtr GetSource(ui64 index) = 0;
-    virtual NDq::IDqSink::TPtr GetSink(ui64 index) = 0;
+    virtual NDq::IDqAsyncOutputBuffer::TPtr GetSink(ui64 index) = 0;
 
     virtual const THashMap<TString,TString>& GetTaskParams() const = 0;
     virtual const THashMap<TString,TString>& GetSecureParams() const = 0;

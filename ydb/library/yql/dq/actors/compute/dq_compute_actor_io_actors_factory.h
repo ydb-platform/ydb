@@ -49,23 +49,23 @@ private:
 };
 
 template <class T>
-concept TCastsToSinkActorPair =
-    std::is_convertible_v<T, std::pair<IDqSinkActor*, NActors::IActor*>>;
+concept TCastsToSinkPair =
+    std::is_convertible_v<T, std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>>;
 
 template <class T, class TProto>
-concept TSinkActorCreatorFunc = requires(T f, TProto&& settings, IDqSinkActorFactory::TArguments&& args) {
-    { f(std::move(settings), std::move(args)) } -> TCastsToSinkActorPair;
+concept TSinkCreatorFunc = requires(T f, TProto&& settings, IDqSinkFactory::TArguments&& args) {
+    { f(std::move(settings), std::move(args)) } -> TCastsToSinkPair;
 };
 
-class TDqSinkFactory : public IDqSinkActorFactory {
+class TDqSinkFactory : public IDqSinkFactory {
 public:
-    using TCreatorFunction = std::function<std::pair<IDqSinkActor*, NActors::IActor*>(TArguments&& args)>;
+    using TCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TArguments&& args)>;
 
-    std::pair<IDqSinkActor*, NActors::IActor*> CreateDqSinkActor(TArguments&& args) const override;
+    std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSink(TArguments&& args) const override;
 
     void Register(const TString& type, TCreatorFunction creator);
 
-    template <class TProtoMsg, TSinkActorCreatorFunc<TProtoMsg> TCreatorFunc>
+    template <class TProtoMsg, TSinkCreatorFunc<TProtoMsg> TCreatorFunc>
     void Register(const TString& type, TCreatorFunc creator) {
         Register(type,
             [creator = std::move(creator), type](TArguments&& args)

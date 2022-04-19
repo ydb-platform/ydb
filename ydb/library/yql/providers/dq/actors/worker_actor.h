@@ -26,6 +26,6 @@ namespace NYql::NDqs {
         const TString& traceId,
         const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const NDq::IDqSourceActorFactory::TPtr& sourceActorFactory,
-        const NDq::IDqSinkActorFactory::TPtr& sinkActorFactory);
+        const NDq::IDqSinkFactory::TPtr& sinkFactory);
 
 } // namespace NYql::NDqs

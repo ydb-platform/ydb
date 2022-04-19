@@ -35,7 +35,7 @@ namespace {
         return factory;
     }
 
-    NDq::IDqSinkActorFactory::TPtr CreateSinkActorFactory(const NYdb::TDriver& driver) {
+    NDq::IDqSinkFactory::TPtr CreateSinkFactory(const NYdb::TDriver& driver) {
         auto factory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
         RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
         return factory;
@@ -72,7 +72,7 @@ public:
         NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, true);
         lwmOptions.SourceActorFactory = CreateSourceActorFactory(driver, std::move(httpGateway));
-        lwmOptions.SinkActorFactory = CreateSinkActorFactory(driver);
+        lwmOptions.SinkFactory = CreateSinkFactory(driver);
         lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.TaskRunnerActorFactory = NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
             [=](const NDqProto::TDqTask& task, const NDq::TLogFunc& )

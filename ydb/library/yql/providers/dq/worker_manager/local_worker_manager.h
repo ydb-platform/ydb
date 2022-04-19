@@ -23,7 +23,7 @@ namespace NYql::NDqs {
         TWorkerManagerCounters Counters;
         NTaskRunnerProxy::IProxyFactory::TPtr Factory;
         NDq::IDqSourceActorFactory::TPtr SourceActorFactory;
-        NDq::IDqSinkActorFactory::TPtr SinkActorFactory;
+        NDq::IDqSinkFactory::TPtr SinkFactory;
         TWorkerRuntimeData* RuntimeData = nullptr;
         TTaskRunnerInvokerFactory::TPtr TaskRunnerInvokerFactory;
         NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;

@@ -99,7 +99,7 @@ public:
     NDqProto::TCheckpoint GetPendingCheckpoint() const;
     void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId);
 
-    // Sink actor support.
+    // Sink support.
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
 
     void TryToSavePendingCheckpoint();

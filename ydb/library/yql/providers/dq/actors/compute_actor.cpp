@@ -66,7 +66,7 @@ IActor* CreateComputeActor(
             operationId,
             std::move(task),
             std::move(options.SourceActorFactory),
-            std::move(options.SinkActorFactory),
+            std::move(options.SinkFactory),
             computeRuntimeSettings,
             memoryLimits,
             taskRunnerFactory);
@@ -76,7 +76,7 @@ IActor* CreateComputeActor(
             operationId,
             std::move(task),
             std::move(options.SourceActorFactory),
-            std::move(options.SinkActorFactory),
+            std::move(options.SinkFactory),
             computeRuntimeSettings,
             memoryLimits,
             taskRunnerActorFactory);

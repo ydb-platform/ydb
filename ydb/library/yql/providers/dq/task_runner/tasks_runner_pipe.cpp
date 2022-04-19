@@ -1127,7 +1127,7 @@ public:
         return OutputType;
     }
 
-    const TDqSinkStats* GetStats() const override {
+    const TDqAsyncOutputBufferStats* GetStats() const override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(5);
@@ -1181,7 +1181,7 @@ private:
     IInputStream& Input;
     IOutputStream& Output;
 
-    mutable TDqSinkStats Stats;
+    mutable TDqAsyncOutputBufferStats Stats;
     mutable NKikimr::NMiniKQL::TType* OutputType = nullptr;
 };
 
@@ -1489,7 +1489,7 @@ public:
         return channel;
     }
 
-    IDqSink::TPtr GetSink(ui64 outputIndex) override {
+    IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) override {
         auto& sink = Sinks[outputIndex];
         if (!sink) {
             sink = new TDqSink(
@@ -1565,7 +1565,7 @@ private:
     THashMap<ui64, IDqInputChannel::TPtr> InputChannels;
     THashMap<ui64, IDqSource::TPtr> Sources;
     THashMap<ui64, IDqOutputChannel::TPtr> OutputChannels;
-    THashMap<ui64, IDqSink::TPtr> Sinks;
+    THashMap<ui64, IDqAsyncOutputBuffer::TPtr> Sinks;
 };
 
 /*______________________________________________________________________________________________*/

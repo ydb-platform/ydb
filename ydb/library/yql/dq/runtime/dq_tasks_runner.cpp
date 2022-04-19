@@ -443,7 +443,7 @@ public:
 
             TVector<IDqOutput::TPtr> outputs{Reserve(std::max<ui64>(outputDesc.ChannelsSize(), 1))};
             if (outputDesc.HasSink()) {
-                auto sink = CreateDqSink(i, ProgramParsed.OutputItemTypes[i], memoryLimits.ChannelBufferSize,
+                auto sink = CreateDqAsyncOutputBuffer(i, ProgramParsed.OutputItemTypes[i], memoryLimits.ChannelBufferSize,
                     Settings.CollectProfileStats);
                 auto [_, inserted] = Sinks.emplace(i, sink);
                 Y_VERIFY(inserted);
@@ -578,7 +578,7 @@ public:
         return *ptr;
     }
 
-    IDqSink::TPtr GetSink(ui64 outputIndex) override {
+    IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) override {
         auto ptr = Sinks.FindPtr(outputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have output index: " << outputIndex);
         return *ptr;
@@ -713,7 +713,7 @@ private:
     THashMap<ui64, IDqInputChannel::TPtr> InputChannels; // Channel id -> Channel
     THashMap<ui64, IDqSource::TPtr> Sources; // Input index -> Source
     THashMap<ui64, IDqOutputChannel::TPtr> OutputChannels; // Channel id -> Channel
-    THashMap<ui64, IDqSink::TPtr> Sinks; // Output index -> Sink
+    THashMap<ui64, IDqAsyncOutputBuffer::TPtr> Sinks; // Output index -> Sink
     IDqOutputConsumer::TPtr Output;
     NUdf::TUnboxedValue ResultStream;
 

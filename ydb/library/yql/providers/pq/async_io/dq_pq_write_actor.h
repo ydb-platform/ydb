@@ -20,14 +20,14 @@ namespace NYql::NDq {
 
 constexpr i64 DqPqDefaultFreeSpace = 16_MB;
 
-std::pair<IDqSinkActor*, NActors::IActor*> CreateDqPqWriteActor(
+std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     NPq::NProto::TDqPqTopicSink&& settings,
     ui64 outputIndex,
     TTxId txId,
     const THashMap<TString, TString>& secureParams,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IDqSinkActor::ICallbacks* callbacks,
+    IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     i64 freeSpace = DqPqDefaultFreeSpace);
 
 void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);

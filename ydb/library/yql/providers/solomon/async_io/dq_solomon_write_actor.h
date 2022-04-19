@@ -18,11 +18,11 @@ namespace NYql::NDq {
 
 constexpr i64 DqSolomonDefaultFreeSpace = 16_MB;
 
-std::pair<NYql::NDq::IDqSinkActor*, NActors::IActor*> CreateDqSolomonWriteActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
     const THashMap<TString, TString>& secureParams,
-    NYql::NDq::IDqSinkActor::ICallbacks* callbacks,
+    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace = DqSolomonDefaultFreeSpace);

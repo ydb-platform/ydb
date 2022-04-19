@@ -47,7 +47,7 @@ message TDqInputChannelStats {
     google.protobuf.Any Extra = 100;
 }
 
-message TDqSinkStats {
+message TDqAsyncOutputBufferStats {
     // basic stats
     uint64 OutputIndex = 1;
     uint64 Chunks = 2;
@@ -138,7 +138,7 @@ message TDqTaskStats {
 
     repeated TDqSourceStats Sources = 150;
     repeated TDqInputChannelStats InputChannels = 151;
-    repeated TDqSinkStats Sinks = 152;
+    repeated TDqAsyncOutputBufferStats Sinks = 152;
     repeated TDqOutputChannelStats OutputChannels = 153;
 
     google.protobuf.Any Extra = 200;

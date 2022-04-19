@@ -59,14 +59,14 @@ struct TSourceInfo {
 };
 
 struct TSinkInfo {
-    IDqSinkActor* SinkActor = nullptr;
+    IDqComputeActorAsyncOutput* Sink = nullptr;
     NActors::IActor* Actor = nullptr;
     bool Finished = false;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
 };
 
 class TDqWorker: public TRichActor<TDqWorker>
-               , IDqSinkActor::ICallbacks
+               , IDqComputeActorAsyncOutput::ICallbacks
                , ITaskRunnerActor::ICallbacks
 {
     static constexpr ui32 INPUT_SIZE = 100000;
@@ -77,12 +77,12 @@ public:
     explicit TDqWorker(
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
         const IDqSourceActorFactory::TPtr& sourceActorFactory,
-        const IDqSinkActorFactory::TPtr& sinkActorFactory,
+        const IDqSinkFactory::TPtr& sinkFactory,
         TWorkerRuntimeData* runtimeData,
         const TString& traceId)
         : TRichActor<TDqWorker>(&TDqWorker::Handler)
         , SourceActorFactory(sourceActorFactory)
-        , SinkActorFactory(sinkActorFactory)
+        , SinkFactory(sinkFactory)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
         , TraceId(traceId)
@@ -119,7 +119,7 @@ public:
             v.SourceActor->PassAway();
         }
         for (const auto& [_, v] : SinksMap) {
-            v.SinkActor->PassAway();
+            v.Sink->PassAway();
         }
         Dump();
     }
@@ -140,7 +140,7 @@ private:
         HFunc(TEvSourcePushFinished, OnSourcePushFinished);
 
         // weird to have two events for error handling, but we need to use TEvDqFailure
-        // between worker_actor <-> executer_actor, cause it transmits statistics in 'Metric' field 
+        // between worker_actor <-> executer_actor, cause it transmits statistics in 'Metric' field
         HFunc(NDq::TEvDq::TEvAbortExecution, OnErrorFromPipe);  // received from task_runner_actor
         HFunc(TEvDqFailure, OnError); // received from this actor itself
         HFunc(TEvContinueRun, OnContinueRun);
@@ -306,8 +306,8 @@ private:
                     if (output.HasSink()) {
                         auto& sink = SinksMap[outputId];
                         sink.TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
-                        std::tie(sink.SinkActor, sink.Actor) = SinkActorFactory->CreateDqSinkActor(
-                            IDqSinkActorFactory::TArguments {
+                        std::tie(sink.Sink, sink.Actor) = SinkFactory->CreateDqSink(
+                            IDqSinkFactory::TArguments {
                                 .OutputDesc = output,
                                 .OutputIndex = static_cast<ui64>(outputId),
                                 .TxId = TraceId,
@@ -591,9 +591,9 @@ private:
             }
             case ERunStatus::PendingOutput: {
                 for (auto& [index, sink] : SinksMap) {
-                    const i64 sinkActorFreeSpaceBeforeSend = sink.SinkActor->GetFreeSpace();
-                    if (sinkActorFreeSpaceBeforeSend > 0 && !sink.Finished) {
-                        Send(TaskRunnerActor, new TEvSinkPop(index, sinkActorFreeSpaceBeforeSend));
+                    const i64 sinkFreeSpaceBeforeSend = sink.Sink->GetFreeSpace();
+                    if (sinkFreeSpaceBeforeSend > 0 && !sink.Finished) {
+                        Send(TaskRunnerActor, new TEvSinkPop(index, sinkFreeSpaceBeforeSend));
                     }
                 }
                 break;
@@ -691,7 +691,7 @@ private:
         Run(ctx);
     }
     /*_________________________________________________________*/
-    /*______________________ SinkActorEvents __________________*/
+    /*______________________ Sink Events ----__________________*/
     void ResumeExecution() override {
         Send(SelfId(), new TEvContinueRun());
     }
@@ -720,13 +720,13 @@ private:
         Y_UNUSED(checkpointSize); Y_UNUSED(checkpoint); Y_UNUSED(changed);
         auto& sink = SinksMap[index];
         sink.Finished = finished;
-        sink.SinkActor->SendData(std::move(batch), size, {}, finished);
+        sink.Sink->SendData(std::move(batch), size, {}, finished);
     }
 
     /*_________________________________________________________*/
 
     IDqSourceActorFactory::TPtr SourceActorFactory;
-    IDqSinkActorFactory::TPtr SinkActorFactory;
+    IDqSinkFactory::TPtr SinkFactory;
     ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
     NTaskRunnerActor::ITaskRunnerActor* Actor = nullptr;
     TActorId TaskRunnerActor;
@@ -765,14 +765,14 @@ NActors::IActor* CreateWorkerActor(
     const TString& traceId,
     const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
     const IDqSourceActorFactory::TPtr& sourceActorFactory,
-    const IDqSinkActorFactory::TPtr& sinkActorFactory)
+    const IDqSinkFactory::TPtr& sinkFactory)
 {
     Y_VERIFY(taskRunnerActorFactory);
     return new TLogWrapReceive(
         new TDqWorker(
             taskRunnerActorFactory,
             sourceActorFactory,
-            sinkActorFactory,
+            sinkFactory,
             runtimeData,
             traceId), traceId);
 }

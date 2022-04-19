@@ -159,7 +159,7 @@ public:
         return Runner->GetSource(index);
     }
 
-    IDqSink::TPtr GetSink(ui64 index) override {
+    IDqAsyncOutputBuffer::TPtr GetSink(ui64 index) override {
         return Runner->GetSink(index);
     }
 

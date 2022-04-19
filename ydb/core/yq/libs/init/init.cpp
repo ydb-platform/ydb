@@ -119,7 +119,7 @@ void Init(
     });
 
     auto sourceActorFactory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
-    auto sinkActorFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
+    auto sinkFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
 
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
     const auto httpGateway = NYql::IHTTPGateway::Make(
@@ -141,8 +141,8 @@ void Init(
             httpGateway, std::make_shared<NYql::NS3::TRetryConfig>(protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetRetryConfig()));
         RegisterClickHouseReadActorFactory(*sourceActorFactory, credentialsFactory, httpGateway);
 
-        RegisterDqPqWriteActorFactory(*sinkActorFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
-        RegisterDQSolomonWriteActorFactory(*sinkActorFactory, credentialsFactory);
+        RegisterDqPqWriteActorFactory(*sinkFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
+        RegisterDQSolomonWriteActorFactory(*sinkFactory, credentialsFactory);
     }
 
     ui64 mkqlInitialMemoryLimit = 8_GB;
@@ -161,7 +161,7 @@ void Init(
         lwmOptions.Counters = workerManagerCounters;
         lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false);
         lwmOptions.SourceActorFactory = sourceActorFactory;
-        lwmOptions.SinkActorFactory = sinkActorFactory;
+        lwmOptions.SinkFactory = sinkFactory;
         lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit;
         lwmOptions.MkqlTotalMemoryLimit = mkqlTotalMemoryLimit;

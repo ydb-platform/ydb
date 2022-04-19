@@ -85,7 +85,7 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
         TFakeActor& Parent;
     };
 
-    struct TSinkCallbacks : public IDqSinkActor::ICallbacks {
+    struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
         explicit TSinkCallbacks(TFakeActor& parent) : Parent(parent) {}
 
         void ResumeExecution() override {
@@ -112,7 +112,7 @@ public:
     TFakeActor(TSourcePromises& sourcePromises, TSinkPromises& sinkPromises);
     ~TFakeActor();
 
-    void InitSink(IDqSinkActor* dqSink, IActor* dqSinkAsActor);
+    void InitSink(IDqComputeActorAsyncOutput* dqSink, IActor* dqSinkAsActor);
     void InitSource(IDqSourceActor* dqSource, IActor* dqSourceAsActor);
     void Terminate();
 
@@ -121,7 +121,7 @@ public:
 
 public:
     IDqSourceActor* DqSourceActor = nullptr;
-    IDqSinkActor* DqSinkActor = nullptr;
+    IDqComputeActorAsyncOutput* DqSink = nullptr;
 
 private:
     STRICT_STFUNC(StateFunc,
@@ -156,7 +156,7 @@ private:
     IActor* DqSourceActorAsActor = nullptr;
 
     std::optional<NActors::TActorId> DqSinkActorId;
-    IActor* DqSinkActorAsActor = nullptr;
+    IActor* DqSinkAsActor = nullptr;
 
     TSourceEvents SourceEvents;
     TSinkCallbacks SinkCallbacks;

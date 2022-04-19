@@ -73,7 +73,7 @@ public:
 private:
     void OnStatisticsRequest(TEvStatistics::TPtr& ev, const TActorContext& ctx) {
         TaskRunner->UpdateStats();
-        THashMap<ui32, const TDqSinkStats*> sinkStats;
+        THashMap<ui32, const TDqAsyncOutputBufferStats*> sinkStats;
         for (const auto sinkId : ev->Get()->SinkIds) {
             sinkStats[sinkId] = TaskRunner->GetSink(sinkId)->GetStats();
         }
@@ -410,13 +410,13 @@ private:
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException&) {
-        const auto err = TStringBuilder() << "Mkql memory limit exceeded" 
+        const auto err = TStringBuilder() << "Mkql memory limit exceeded"
             << ", limit: " << (MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : -1)
             << ", canAllocateExtraMemory: " << (MemoryQuota ? MemoryQuota->GetCanAllocateExtraMemory() : 0);
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Sprintf("TMemoryLimitExceededException: %s", err.c_str()));
         TIssue issue(err);
         SetIssueCode(TIssuesIds::KIKIMR_PRECONDITION_FAILED, issue);
-        return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue}); 
+        return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue});
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {

@@ -20,26 +20,26 @@ class IActor;
 
 namespace NYql::NDq {
 
-// Sink actor.
+// Sink.
 // Must be IActor.
 //
 // Protocol:
-// 1. CA starts sink actor.
+// 1. CA starts sink.
 // 2. CA runs program and gets results.
-// 3. CA calls IDqSinkActor::SendData().
+// 3. CA calls IDqComputeActorAsyncOutput::SendData().
 // 4. If SendData() returns value less than 0, loop stops running until free space appears.
-// 5. When free space appears, sink actor calls ICallbacks::ResumeExecution() to start processing again.
+// 5. When free space appears, sink calls ICallbacks::ResumeExecution() to start processing again.
 //
 // Checkpointing:
 // 1. InjectCheckpoint event arrives to CA.
 // 2. CA saves its state and injects special checkpoint event to all outputs (TDqComputeActorCheckpoints::ICallbacks::InjectBarrierToOutputs()).
-// 3. Sink actor writes all data before checkpoint.
-// 4. Sink actor waits all external sink's acks for written data.
-// 5. Sink actor gathers its state and passes it into callback ICallbacks::OnSinkStateSaved(state, outputIndex).
+// 3. Sink writes all data before checkpoint.
+// 4. Sink waits all external sink's acks for written data.
+// 5. Sink gathers its state and passes it into callback ICallbacks::OnSinkStateSaved(state, outputIndex).
 // 6. Checkpoints actor builds state for all task node as sum of the state of CA and all its sinks and saves it.
 // 7. ...
-// 8. When checkpoint is written into database, checkpoints actor calls IDqSinkActor::CommitState() to apply all side effects.
-struct IDqSinkActor {
+// 8. When checkpoint is written into database, checkpoints actor calls IDqComputeActorAsyncOutput::CommitState() to apply all side effects.
+struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
         virtual void ResumeExecution() = 0;
         virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
@@ -68,26 +68,26 @@ struct IDqSinkActor {
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
-    virtual ~IDqSinkActor() = default;
+    virtual ~IDqComputeActorAsyncOutput() = default;
 };
 
-struct IDqSinkActorFactory : public TThrRefBase {
-    using TPtr = TIntrusivePtr<IDqSinkActorFactory>;
+struct IDqSinkFactory : public TThrRefBase {
+    using TPtr = TIntrusivePtr<IDqSinkFactory>;
 
     struct TArguments {
         const NDqProto::TTaskOutput& OutputDesc;
         ui64 OutputIndex;
         TTxId TxId;
         const THashMap<TString, TString>& SecureParams;
-        IDqSinkActor::ICallbacks* Callback;
+        IDqComputeActorAsyncOutput::ICallbacks* Callback;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     };
 
-    // Creates sink actor.
+    // Creates sink.
     // Could throw YQL errors.
-    // IActor* and IDqSinkActor* returned by method must point to the objects with consistent lifetime.
-    virtual std::pair<IDqSinkActor*, NActors::IActor*> CreateDqSinkActor(TArguments&& args) const = 0;
+    // IActor* and IDqComputeActorAsyncOutput* returned by method must point to the objects with consistent lifetime.
+    virtual std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSink(TArguments&& args) const = 0;
 };
 
 } // namespace NYql::NDq

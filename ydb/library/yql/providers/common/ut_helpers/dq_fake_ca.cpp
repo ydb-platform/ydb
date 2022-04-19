@@ -36,10 +36,10 @@ TFakeActor::~TFakeActor() {
     Alloc.Acquire();
 }
 
-void TFakeActor::InitSink(IDqSinkActor* dqSink, IActor* dqSinkAsActor) {
+void TFakeActor::InitSink(IDqComputeActorAsyncOutput* dqSink, IActor* dqSinkAsActor) {
     DqSinkActorId = RegisterWithSameMailbox(dqSinkAsActor),
-    DqSinkActor = dqSink;
-    DqSinkActorAsActor = dqSinkAsActor;
+    DqSink = dqSink;
+    DqSinkAsActor = dqSinkAsActor;
 }
 
 void TFakeActor::InitSource(IDqSourceActor* dqSource, IActor* dqSourceAsActor) {
@@ -58,11 +58,11 @@ void TFakeActor::Terminate() {
     }
 
     if (DqSinkActorId) {
-        DqSinkActor->PassAway();
+        DqSink->PassAway();
 
         DqSinkActorId = std::nullopt;
-        DqSinkActor = nullptr;
-        DqSinkActorAsActor = nullptr;
+        DqSink = nullptr;
+        DqSinkAsActor = nullptr;
     }
 }
 
@@ -98,8 +98,8 @@ TFakeCASetup::~TFakeCASetup() {
 void TFakeCASetup::SinkWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint) {
     Execute([&valueProducer, checkpoint](TFakeActor& actor) {
         auto batch = valueProducer(actor.GetHolderFactory());
-        Y_ASSERT(actor.DqSinkActor);
-        actor.DqSinkActor->SendData(std::move(batch), 0, checkpoint, false);
+        Y_ASSERT(actor.DqSink);
+        actor.DqSink->SendData(std::move(batch), 0, checkpoint, false);
     });
 }
 
@@ -119,8 +119,8 @@ void TFakeCASetup::LoadSource(const NDqProto::TSourceState& state) {
 
 void TFakeCASetup::LoadSink(const NDqProto::TSinkState& state) {
     Execute([&state](TFakeActor& actor) {
-        Y_ASSERT(actor.DqSinkActor);
-        actor.DqSinkActor->LoadState(state);
+        Y_ASSERT(actor.DqSink);
+        actor.DqSink->LoadState(state);
     });
 }
 

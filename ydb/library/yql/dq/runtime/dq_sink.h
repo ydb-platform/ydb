@@ -7,10 +7,10 @@
 
 namespace NYql::NDq {
 
-struct TDqSinkStats : TDqOutputStats {
+struct TDqAsyncOutputBufferStats : TDqOutputStats {
     const ui64 OutputIndex;
 
-    explicit TDqSinkStats(ui64 outputIndex)
+    explicit TDqAsyncOutputBufferStats(ui64 outputIndex)
         : OutputIndex(outputIndex) {}
 
     template<typename T>
@@ -24,9 +24,9 @@ struct TDqSinkStats : TDqOutputStats {
     }
 };
 
-class IDqSink : public IDqOutput {
+class IDqAsyncOutputBuffer : public IDqOutput {
 public:
-    using TPtr = TIntrusivePtr<IDqSink>;
+    using TPtr = TIntrusivePtr<IDqAsyncOutputBuffer>;
 
     virtual ui64 GetOutputIndex() const = 0;
 
@@ -37,10 +37,10 @@ public:
     [[nodiscard]]
     virtual bool Pop(NDqProto::TCheckpoint& checkpoint) = 0;
 
-    virtual const TDqSinkStats* GetStats() const = 0;
+    virtual const TDqAsyncOutputBufferStats* GetStats() const = 0;
 };
 
-IDqSink::TPtr CreateDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
+IDqAsyncOutputBuffer::TPtr CreateDqAsyncOutputBuffer(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
     bool collectProfileStats);
 
 } // namespace NYql::NDq

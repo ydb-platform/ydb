@@ -9,7 +9,7 @@
 namespace NYql::NDq {
 namespace {
 
-class TDqSink : public IDqSink {
+class TDqAsyncOutputBuffer : public IDqAsyncOutputBuffer {
     struct TValueDesc {
         std::variant<NUdf::TUnboxedValue, NDqProto::TCheckpoint> Value;
         ui64 EstimatedSize;
@@ -31,7 +31,7 @@ class TDqSink : public IDqSink {
     };
 
 public:
-    TDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes, bool collectProfileStats)
+    TDqAsyncOutputBuffer(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes, bool collectProfileStats)
         : OutputIndex(outputIndex)
         , MaxStoredBytes(maxStoredBytes)
         , OutputType(outputType)
@@ -141,7 +141,7 @@ public:
         return OutputType;
     }
 
-    const TDqSinkStats* GetStats() const override {
+    const TDqAsyncOutputBufferStats* GetStats() const override {
         return &BasicStats;
     }
 
@@ -181,16 +181,16 @@ private:
     bool Finished = false;
     std::deque<TValueDesc> Values;
     ui64 EstimatedRowBytes = 0;
-    TDqSinkStats BasicStats;
-    TDqSinkStats* ProfileStats = nullptr;
+    TDqAsyncOutputBufferStats BasicStats;
+    TDqAsyncOutputBufferStats* ProfileStats = nullptr;
 };
 
 } // namespace
 
-IDqSink::TPtr CreateDqSink(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
+IDqAsyncOutputBuffer::TPtr CreateDqAsyncOutputBuffer(ui64 outputIndex, NKikimr::NMiniKQL::TType* outputType, ui64 maxStoredBytes,
     bool collectProfileStats)
 {
-    return MakeIntrusive<TDqSink>(outputIndex, outputType, maxStoredBytes, collectProfileStats);
+    return MakeIntrusive<TDqAsyncOutputBuffer>(outputIndex, outputType, maxStoredBytes, collectProfileStats);
 }
 
 } // namespace NYql::NDq

@@ -75,14 +75,14 @@ struct TMetricsInflight {
 
 } // namespace
 
-class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, public IDqSinkActor {
+class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, public IDqComputeActorAsyncOutput {
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR";
 
     TDqSolomonWriteActor(
         ui64 outputIndex,
         TDqSolomonWriteParams&& writeParams,
-        NYql::NDq::IDqSinkActor::ICallbacks* callbacks,
+        NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
         i64 freeSpace)
@@ -229,7 +229,7 @@ private:
         while (TryToSendNextBatch()) {}
     }
 
-    // IActor & IDqSinkActor
+    // IActor & IDqComputeActorAsyncOutput
     void PassAway() override { // Is called from Compute Actor
         for (const auto& [_, metricsInflight] : InflightBuffer) {
             Send(metricsInflight.HttpSenderId, new TEvents::TEvPoison());
@@ -424,7 +424,7 @@ private:
     const ui64 OutputIndex;
     const TDqSolomonWriteParams WriteParams;
     const TString Url;
-    NYql::NDq::IDqSinkActor::ICallbacks* const Callbacks;
+    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
     TDqSolomonWriteActorMetrics Metrics;
     i64 FreeSpace = 0;
     TActorId HttpProxyId;
@@ -440,11 +440,11 @@ private:
     ui64 Cookie = 0;
 };
 
-std::pair<NYql::NDq::IDqSinkActor*, NActors::IActor*> CreateDqSolomonWriteActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
     const THashMap<TString, TString>& secureParams,
-    NYql::NDq::IDqSinkActor::ICallbacks* callbacks,
+    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace)
@@ -473,7 +473,7 @@ void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredService
     factory.Register<NSo::NProto::TDqSolomonShard>("SolomonSink",
         [credentialsFactory](
             NYql::NSo::NProto::TDqSolomonShard&& settings,
-            IDqSinkActorFactory::TArguments&& args)
+            IDqSinkFactory::TArguments&& args)
         {
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
 

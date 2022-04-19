@@ -13,7 +13,7 @@
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_io_actors_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/utils/range_walker.h>
 #include <ydb/library/yql/utils/bind_in_range.h>
 

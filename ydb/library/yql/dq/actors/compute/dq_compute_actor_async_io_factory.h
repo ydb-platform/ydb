@@ -1,6 +1,6 @@
 #pragma once
 #include "dq_compute_actor_sources.h"
-#include "dq_compute_actor_sinks.h"
+#include "dq_compute_actor_async_output.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>

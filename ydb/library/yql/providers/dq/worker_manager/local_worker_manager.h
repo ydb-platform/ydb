@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
 
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>

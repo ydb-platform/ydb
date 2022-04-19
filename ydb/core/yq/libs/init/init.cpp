@@ -18,7 +18,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_io_actors_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_transform.h>
 #include <ydb/library/yql/utils/actor_log/log.h>

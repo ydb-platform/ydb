@@ -1,7 +1,7 @@
 #include "dq_pq_read_actor.h"
 #include "probes.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_io_actors_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>

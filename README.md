@@ -14,7 +14,7 @@
 YDB is an open-source Distributed SQL Database that combines high availability and scalability with strict consistency and ACID transactions.
 
 <p align="center">
-  <a href=""><img src="ydb/docs/_assets/ydb-promo-video.png" width="70%"/></a>
+  <a href="https://youtu.be/bxZRUtMAlFI"><img src="ydb/docs/_assets/ydb-promo-video.png" width="70%"/></a>
 </p>
 
 ## Main YDB Advantages

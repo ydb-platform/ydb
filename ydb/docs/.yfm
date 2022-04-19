@@ -4,7 +4,7 @@ apply-presets: true
 
 docs-viewer:
   project-name: ydb
-  no-index: true # Remove this after the public release
+  # no-index: true # Remove this after the public release
   langs: ['en','ru']
   themes: ['light']
 

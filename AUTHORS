@@ -3,62 +3,62 @@ The following authors have created the source code of «YDB» published and dist
 Note: This list does not necessarily include everyone who has contributed code, especially since many employees of
 one corporation may be contributing. The revision history in source control gives the full list of contributors.
 
-The project was started by Andrey Fomichev <fomichev@yandex-team.ru> and Denis Podluzhny <ddoarn@gmail.com>
+The project was started by Andrey Fomichev <andrey.fomichev@gmail.com> and Denis Podluzhny <ddoarn@gmail.com>
 in the end of 2013, first commit was made on 2014-01-10.
 
 It's hard to imagine YDB project without these people even if they didn't contribute to the code much:
-    Alexander Chubinskiy <chubinskiy@yandex-team.ru>
-    Oleg Bondar <olegbondar@yandex-team.ru>
-    Anton Kovalenko <kovalad@yandex-team.ru>
+    Alexander Chubinskiy <chubinskiy@gmail.com>
+    Oleg Bondar <oleshiy@gmail.com>
+    Anton Kovalenko <robocomp2@gmail.com>
 
 List of most significant contributors:
-    Alexander Gololobov <davenger@yandex-team.ru>
-    Aleksey Stankevichus <cthulhu@yandex-team.ru>
-    Vitaly Stoyan <vvvv@yandex-team.ru>
-    Sergey Puchin <spuchin@yandex-team.ru>
-    Alexey Borzenkov <snaury@yandex-team.ru>
-    Vitalii Gridnev <gvit@yandex-team.ru>
-    Alexander Rutkovsky <alexvru@yandex-team.ru>
-    Alexey Efimov <xenoxeno@yandex-team.ru>
-    Maxim Gorbunov <stunder@yandex-team.ru>
-    Semen Checherinda <svc@yandex-team.ru>
-    Ilnaz Nizametdinov <ilnaz@yandex-team.ru>
-    Igor Makunin <imakunin@yandex-team.ru>
-    Anton Romanov <a-romanov@yandex-team.ru>
+    Alexander Gololobov <agololobov@gmail.com>
+    Aleksey Stankevichus <the_ancient_one@aol.com>
+    Vitaly Stoyan <vitstn@gmail.com>
+    Sergey Puchin <s.puchin@gmail.com>
+    Alexey Borzenkov <snaury@gmail.com>
+    Vitalii Gridnev <gridnevvvit@gmail.com>
+    Alexander Rutkovsky <alexander.rutkovsky@gmail.com>
+    Alexey Efimov <xeno@prnwatch.com>
+    Maxim Gorbunov <m.v.gorbunov@gmail.com>
+    Semen Checherinda <checherinda@gmail.com>
+    Ilnaz Nizametdinov <i.nizametdinov@gmail.com>
+    Igor Makunin <igor.makunin@gmail.com>
+    Anton Romanov <anton.romanoff@gmail.com>
     Roman Udovichenko <udovichenko-r@yandex-team.ru>
-    Artem Zuikov <chertus@yandex-team.ru>
-    Vladislav Kuznecov <va-kuznecov@yandex-team.ru>
+    Artem Zuikov <chertus@gmail.com>
+    Vladislav Kuznecov <va.kuznecov@physics.msu.ru>
     Aleksei Nikolaevskii <alexnick@yandex-team.ru>
-    Sergey Ierusalimov <wint@yandex-team.ru>
-    Daniil Cherednik <dcherednik@yandex-team.ru>
-    Andrey Neporada <aneporada@yandex-team.ru>
-    Ilya Enkovich <ienkovich@yandex-team.ru>
-    Andrey Satarin <asatarin@yandex.ru>
-    Vadim Skipin <vskipin@yandex-team.ru>
+    Sergey Ierusalimov <wintchester@gmail.com>
+    Daniil Cherednik <dan.cherednik@gmail.com>
+    Andrey Neporada <neporada@gmail.com>
+    Ilya Enkovich <enkovich@gmail.com>
+    Andrey Satarin <andrew.satarin@gmail.com>
+    Vadim Skipin <vadim.skipin@gmail.com>
     Alexander Soloviev <single@yandex-team.ru>
-    Vasily Gerasimov <galaxycrab@yandex-team.ru>
-    Sergey Trifonov <serxa@yandex-team.ru>
-    Alexander Dmitriev <monster@yandex-team.ru>
-    Nikolay Perfilov <pnv1@yandex-team.ru>
-    Alexander Kryukov <kruall@yandex-team.ru>
+    Vasily Gerasimov <UgnineSirdis@gmail.com>
+    Sergey Trifonov <svtrifonov@gmail.com>
+    Alexander Dmitriev <alexd.65536@gmail.com>
+    Nikolay Perfilov <pnv902@gmail.com>
+    Alexander Kryukov <kru.bash.all@gmail.com>
     Alexander Smirnov <alexv-smirnov@yandex-team.ru>
     Alexey Ozeritskiy <aozeritsky@yandex-team.ru>
     Sergey Polovko <http://www.jamel.org>
-    Igor Seliverstov <gvvinblade@yandex-team.ru>
-    Iuliia Sidorina <ulya-sidorina@yandex-team.ru>
-    Evgeniy Ivanov <eivanov89@yandex-team.ru>
-    Nikita Lapkov <laplab@yandex-team.ru>
-    Sergey Uzhakov <uzhas@yandex-team.ru>
-    Oleg Doronin <hcpp@yandex-team.ru>
-    Alexey Bogolyubskiy <alexbogo@yandex-team.ru>
-    Konstantin Melekhov <komels@yandex-team.ru>
-    Anton Zelenov <pcwur@yandex-team.ru>
+    Igor Seliverstov <gvvinblade@gmail.com>
+    Iuliia Sidorina <ulya.sidorina@gmail.com>
+    Evgeniy Ivanov <i@eivanov.com>
+    Nikita Lapkov <nikita.lapkov@gmail.com>
+    Sergey Uzhakov <uzhastik@gmail.com>
+    Oleg Doronin <fortan57@gmail.com>
+    Alexey Bogolyubskiy <i@bogolyubskiyalexey.ru>
+    Konstantin Melekhov <mekose2304@gmail.com>
+    Anton Zelenov <zelenoff@gmail.com>
     Ivan Blinkov <yandex@blinkov.ru>
     Stas Kelvich <stas.kelvich@gmail.com>
-    Dmitrii Mokhnatkin <d-mokhnatkin@yandex-team.ru>
-    Aleksandr Khoroshilov <hor911@yandex-team.ru>
-    Evgenii Beloshabskii <beloshabskiy@yandex-team.ru>
-    Aidar Samerkhanov <aidarsamer@yandex-team.ru>
+    Dmitrii Mokhnatkin <dmitriy.mokhnatkin@gmail.com>
+    Aleksandr Khoroshilov <hor911@gmail.com>
+    Evgenii Beloshabskii <beloshabskiy@gmail.com>
+    Aidar Samerkhanov <darych90@gmail.com>
 
 You can be added to this list by a request to Andrey Fomichev.
 

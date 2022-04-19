@@ -849,6 +849,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         return 0; // unreachable
     }
 
+    void CheckSimpleCounter(TTestBasicRuntime& runtime, const TString& name, ui64 value) {
+        UNIT_ASSERT_VALUES_EQUAL(value, GetSimpleCounter(runtime, name));
+    }
+
     ui64 GetPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const TString& range) {
         const auto counters = GetCounters(runtime);
         for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetPercentileCounters()) {
@@ -872,6 +876,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         return 0; // unreachable
     }
 
+    void CheckPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const THashMap<TString, ui64>& rangeValues) {
+        for (const auto& [range, value] : rangeValues) {
+            const auto v = GetPercentileCounter(runtime, name, range);
+            UNIT_ASSERT_VALUES_EQUAL_C(v, value, "Unexpected value in range"
+                << ": range# " << range
+                << ", expected# " << value
+                << ", got# " << v);
+        }
+    }
+
     void WaitForStats(TTestActorRuntimeBase& runtime, ui32 count) {
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back(TEvDataShard::EvPeriodicTableStats, count);
@@ -882,6 +896,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+
+        runtime.UpdateCurrentTime(TInstant::Now());
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 0);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 0}, {"inf", 0}});
 
         // create
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -896,31 +914,36 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(1, GetSimpleCounter(runtime, "SchemeShard/TTLEnabledTables"));
 
-        // check lag
+        // just after create
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 0}, {"inf", 1}});
+
+        // after erase
         WaitForCondErase(runtime);
         WaitForStats(runtime, 1);
-        UNIT_ASSERT_VALUES_EQUAL(1, GetPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", "0"));
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 1}, {"900", 0}, {"inf", 0}});
 
-        // check lag
+        // after a little more time
         runtime.AdvanceCurrentTime(TDuration::Minutes(20));
         WaitForStats(runtime, 1);
-        UNIT_ASSERT_VALUES_EQUAL(0, GetPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", "0"));
-        UNIT_ASSERT_VALUES_EQUAL(1, GetPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", "900"));
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 1}, {"inf", 0}});
 
-        // check copy table
+        // copy table
         TestCopyTable(runtime, ++txId, "/MyRoot", "TTLEnabledTableCopy", "/MyRoot/TTLEnabledTable");
         env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(2, GetSimpleCounter(runtime, "SchemeShard/TTLEnabledTables"));
 
-        // check lag
+        // just after copy
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 2}, {"inf", 0}});
+
+        // after erase
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         WaitForCondErase(runtime);
         WaitForStats(runtime, 2);
-        UNIT_ASSERT_VALUES_EQUAL(2, GetPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", "0"));
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"inf", 0}});
 
-        // check alter (disable ttl)
+        // alter (disable ttl)
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
             TTLSettings {
@@ -929,14 +952,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(1, GetSimpleCounter(runtime, "SchemeShard/TTLEnabledTables"));
 
-        // check drop
+        // just after alter
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 1}, {"900", 0}, {"inf", 0}});
+
+        // drop
         TestDropTable(runtime, ++txId, "/MyRoot", "TTLEnabledTableCopy");
         env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(0, GetSimpleCounter(runtime, "SchemeShard/TTLEnabledTables"));
 
-        // check alter (enable ttl)
+        // just after drop
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 0);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 0}, {"inf", 0}});
+
+        // alter (enable ttl)
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
             TTLSettings {
@@ -946,7 +975,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        UNIT_ASSERT_VALUES_EQUAL(1, GetSimpleCounter(runtime, "SchemeShard/TTLEnabledTables"));
+
+        // just after alter
+        CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 1}, {"900", 0}, {"inf", 0}});
+
+        // after a little more time
+        runtime.AdvanceCurrentTime(TDuration::Minutes(20));
+        WaitForStats(runtime, 1);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 1}, {"inf", 0}});
+
+        // split
+        TestSplitTable(runtime, ++txId, "/MyRoot/TTLEnabledTable", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary {
+              KeyPrefix {
+                Tuple { Optional { Uint64: 100 } }
+              }
+            }
+        )", TTestTxConfig::FakeHiveTablets));
+        env.TestWaitNotification(runtime, txId);
+
+        // after erase
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        WaitForCondErase(runtime);
+        WaitForStats(runtime, 2);
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"inf", 0}});
     }
 }
 
@@ -1003,6 +1057,66 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 CheckTTLSettings(runtime);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(CopyTable) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "TTLEnabledTable"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "modified_at" Type: "Timestamp" }
+                    KeyColumnNames: ["key"]
+                    TTLSettings {
+                      Enabled {
+                        ColumnName: "modified_at"
+                        ExpireAfterSeconds: 3600
+                      }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCopyTable(runtime, ++t.TxId, "/MyRoot", "TTLEnabledTableCopy", "/MyRoot/TTLEnabledTable");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                CheckTTLSettings(runtime, "TTLEnabledTableCopy");
+            }
+        });
+    }
+
+    Y_UNIT_TEST(MoveTable) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "TTLEnabledTable"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "modified_at" Type: "Timestamp" }
+                    KeyColumnNames: ["key"]
+                    TTLSettings {
+                      Enabled {
+                        ColumnName: "modified_at"
+                        ExpireAfterSeconds: 3600
+                      }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestMoveTable(runtime, ++t.TxId, "/MyRoot/TTLEnabledTable", "/MyRoot/TTLEnabledTableMoved");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                CheckTTLSettings(runtime, "TTLEnabledTableMoved");
             }
         });
     }

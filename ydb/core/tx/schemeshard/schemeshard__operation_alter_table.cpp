@@ -343,15 +343,25 @@ public:
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables[pathId] = table;
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+
+            const auto now = context.Ctx.Now();
+            for (auto& shard : table->GetPartitions()) {
+                auto& lag = shard.LastCondEraseLag;
+                Y_VERIFY_DEBUG(!lag.Defined());
+
+                lag = now - shard.LastCondErase;
+                context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+            }
         } else if (!table->IsTTLEnabled() && ttlIt != context.SS->TTLEnabledTables.end()) {
             context.SS->TTLEnabledTables.erase(ttlIt);
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Sub(1);
 
-            for (ui32 i = 0; i < table->GetPartitions().size(); ++i) {
-                auto& shardInfo = table->GetPartitions().at(i);
-                if (auto& lag = shardInfo.LastCondEraseLag) {
+            for (auto& shard : table->GetPartitions()) {
+                if (auto& lag = shard.LastCondEraseLag) {
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                     lag.Clear();
+                } else {
+                    Y_VERIFY_DEBUG(false);
                 }
             }
         }

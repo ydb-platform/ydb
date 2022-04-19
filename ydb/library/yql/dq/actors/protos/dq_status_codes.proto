@@ -15,5 +15,7 @@ message StatusIds {
         PRECONDITION_FAILED = 7;
         CANCELLED      = 8;
         OVERLOADED     = 9;
+        LIMIT_EXCEEDED = 10;
+        UNSUPPORTED    = 11;
     }
 }

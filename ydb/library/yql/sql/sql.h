@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/parser/lexer_common/hints.h>
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
 #include <ydb/library/yql/parser/proto_ast/proto_ast.h>
 #include <ydb/library/yql/public/issue/yql_warning.h>
@@ -19,6 +20,6 @@ namespace NSQLTranslation {
     google::protobuf::Message* SqlAST(const TString& query, const TString& queryName, NYql::TIssues& issues, size_t maxErrors,
         const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
     ILexer::TPtr SqlLexer(const TString& query, NYql::TIssues& issues, const TTranslationSettings& settings = {}, ui16* actualSyntaxVersion = nullptr);
-    NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TTranslationSettings& settings);
+    NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst, const TSQLHints& hints, const TTranslationSettings& settings);
 
 }  // namespace NSQLTranslationV0

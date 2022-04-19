@@ -67,10 +67,12 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 } // namespace
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
+                   const NSQLTranslation::TSQLHints& hints,
                    TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
+    , SQLHints(hints)
     , Settings(settings)
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
@@ -161,6 +163,21 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
     auto parseResult = TWarningRule::ParseFrom(codePattern, actionString, rule, parseError);
     YQL_ENSURE(parseResult == TWarningRule::EParseResult::PARSE_OK);
     WarningPolicy.AddRule(rule);
+}
+
+TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
+    TVector<NSQLTranslation::TSQLHint> result;
+    auto it = SQLHints.find(tokenPos);
+    if (it == SQLHints.end()) {
+        return result;
+    }
+    result = std::move(it->second);
+    SQLHints.erase(it);
+    return result;
+}
+
+void TContext::WarnUnusedHints() {
+    // TODO
 }
 
 IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) {

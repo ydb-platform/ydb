@@ -4,12 +4,14 @@
 #include "node.h"
 #include "sql_call_param.h"
 #include "ydb/library/yql/ast/yql_ast.h"
+#include <ydb/library/yql/parser/lexer_common/hints.h>
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Parser.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h>
 
+#include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -5586,9 +5588,9 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                 return false;
             }
             TString joinOp("Inner");
-            // TODO: custom join hints/settings should be here
+            auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(alt.GetToken3()));
             TJoinLinkSettings linkSettings;
-            linkSettings.ForceSortedMerge = false;
+            linkSettings.ForceSortedMerge = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "merge"; });
             switch (alt.GetBlock2().Alt_case()) {
                 case TRule_join_op::TAlt2::TBlock2::kAlt1:
                     if (alt.GetBlock2().GetAlt1().HasBlock1()) {
@@ -10155,15 +10157,18 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
             ctx.Error() << "Error occurred on parse SQL query, but no error is collected" <<
                 ", please send this request over bug report into YQL interface or write on yql@ maillist";
         }
+    } else {
+        ctx.WarnUnusedHints();
     }
 }
 
 NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
+    const NSQLTranslation::TSQLHints& hints,
     const NSQLTranslation::TTranslationSettings& settings)
 {
     YQL_ENSURE(IsQueryMode(settings.Mode));
     TAstParseResult res;
-    TContext ctx(settings, res.Issues);
+    TContext ctx(settings, hints, res.Issues);
     SqlASTToYqlImpl(res, protoAst, ctx);
     return res;
 }
@@ -10171,10 +10176,19 @@ NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
 NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
 {
     TAstParseResult res;
-    TContext ctx(settings, res.Issues);
+    const TString queryName = "query";
+
+    NSQLTranslation::TSQLHints hints;
+    auto lexer = MakeLexer(settings.AnsiLexer);
+    YQL_ENSURE(lexer);
+    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors)) {
+        return res;
+    }
+
+    TContext ctx(settings, hints, res.Issues);
     NSQLTranslation::TErrorCollectorOverIssues collector(res.Issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* ast(SqlAST(query, "query", collector, settings.AnsiLexer, settings.Arena));
+    google::protobuf::Message* ast(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Arena));
     if (ast) {
         SqlASTToYqlImpl(res, *ast, ctx);
     } else {

@@ -4,6 +4,12 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_id.h>
 
+#ifdef _win_
+#ifdef GetMessage
+#undef GetMessage
+#endif
+#endif
+
 namespace NYql {
 
 extern const char IssueMapResource[14];

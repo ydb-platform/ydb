@@ -24,12 +24,14 @@ target_link_libraries(yql-sql-v1 PUBLIC
   library-yql-core
   yql-core-issue
   core-issue-protos
+  yql-parser-lexer_common
   yql-parser-proto_ast
   parser-proto_ast-collect_issues
   proto_ast-gen-v1
   proto_ast-gen-v1_ansi
   proto_ast-gen-v1_proto
   yql-parser-pg_catalog
+  sql-v1-lexer
   sql-v1-proto_parser
   tools-enum_parser-enum_serialization_runtime
 )

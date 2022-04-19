@@ -80,6 +80,7 @@ namespace NSQLTranslationV1 {
     class TContext {
     public:
         TContext(const NSQLTranslation::TTranslationSettings& settings,
+                 const NSQLTranslation::TSQLHints& hints,
                  NYql::TIssues& issues);
 
         virtual ~TContext();
@@ -184,6 +185,9 @@ namespace NSQLTranslationV1 {
             return TopLevelColumnReferenceState;
         }
 
+        TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
+        void WarnUnusedHints();
+
     private:
         IOutputStream& MakeIssue(NYql::ESeverity severity, NYql::TIssueCode code, NYql::TPosition pos);
 
@@ -195,6 +199,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TString> ProviderPathPrefixes;
         THashMap<TString, TString> ClusterPathPrefixes;
         bool IntoHeading = true;
+        NSQLTranslation::TSQLHints SQLHints;
 
         friend class TColumnRefScope;
 

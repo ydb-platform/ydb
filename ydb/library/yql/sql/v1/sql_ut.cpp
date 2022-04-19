@@ -1735,10 +1735,8 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res1.Root);
         UNIT_ASSERT(!res2.Root);
 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res1), "<main>:1:15: Error: Unexpected character : syntax error...\n\n"
-                                           "<main>:1:12: Error: Unexpected token 'b' : cannot match to any predicted input...\n\n");
-        UNIT_ASSERT_NO_DIFF(Err2Str(res2), "<main>:1:15: Error: Unexpected character : syntax error...\n\n"
-                                           "<main>:1:12: Error: Unexpected token 'b' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res1), "<main>:1:15: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res2), "<main>:1:15: Error: Unexpected character : syntax error...\n\n");
     }
 
     Y_UNIT_TEST(InvalidHexInStringLiteral) {
@@ -1764,8 +1762,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvalidDoubleAtString) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unexpected character : syntax error...\n\n"
-                                          "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unexpected character : syntax error...\n\n");
     }
 
     Y_UNIT_TEST(InvalidDoubleAtStringWhichWasAcceptedEarlier) {
@@ -1783,8 +1780,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvalidDoubleAtStringFromTable) {
         NYql::TAstParseResult res = SqlToYql("select @@@@@@ from plato.foo");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected character : syntax error...\n\n"
-                                          "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected character : syntax error...\n\n");
     }
 
     Y_UNIT_TEST(SelectInvalidSyntax) {
@@ -3959,8 +3955,7 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
         UNIT_ASSERT(res.Root);
         res = SqlToYqlWithAnsiLexer(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:16: Error: Unexpected character : syntax error...\n\n"
-                                          "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:16: Error: Unexpected character : syntax error...\n\n");
 
         req = "/*\n"
               "--/*\n"
@@ -3969,8 +3964,7 @@ Y_UNIT_TEST_SUITE(AnsiIdentsNegative) {
         UNIT_ASSERT(res.Root);
         res = SqlToYqlWithAnsiLexer(req);
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:12: Error: Unexpected character : syntax error...\n\n"
-                                          "<main>:3:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:12: Error: Unexpected character : syntax error...\n\n");
 
         req = "/*\n"
               "/*\n"

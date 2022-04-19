@@ -13,6 +13,12 @@
 #include <util/generic/yexception.h>
 #include <util/string/subst.h>
 
+#ifdef _win_
+#ifdef GetMessage
+#undef GetMessage
+#endif
+#endif
+
 namespace NYql {
 
 using TIssueCode = ui32;

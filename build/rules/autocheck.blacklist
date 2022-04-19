@@ -870,7 +870,6 @@ taxi/github/react-yandex-maps
 portal/tap-formatter-html
 intranet/idm_backend
 market/market-tpl/sc-app
-weather/frontend
 taxi/mobile/infra/dart-codegen
 taxi/github/rida/php
 alice/alice4business
@@ -1335,3 +1334,5 @@ classifieds/infra/goLB
 classifieds/infra/shiva-conf
 haas/einebox
 classifieds/nginx-tests
+practicum/services/jrunner
+classifieds/sphinx-configs

@@ -7439,7 +7439,7 @@
         },
         "horadric": {
             "formula": {
-                "sandbox_id": 1279645264,
+                "sandbox_id": 1281611333,
                 "match": "horadric"
             },
             "executable": {
@@ -8337,7 +8337,7 @@
         },
         "exp_stats": {
             "formula": {
-                "sandbox_id": 1278442087,
+                "sandbox_id": 1281609928,
                 "match": "exp_stats"
             },
             "executable": {
@@ -8348,7 +8348,7 @@
         },
         "lama": {
             "formula": {
-                "sandbox_id": 1277955834,
+                "sandbox_id": 1281928412,
                 "match": "lama"
             },
             "executable": {

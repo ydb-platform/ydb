@@ -372,14 +372,15 @@ namespace {
 
     struct THistogramIndexes {
         static constexpr ui32 BinFieldsCount = 2U;
-        static constexpr ui32 ResultFieldsCount = 4U;
+        static constexpr ui32 ResultFieldsCount = 5U;
 
         THistogramIndexes(IFunctionTypeInfoBuilder& builder) {
             const auto binStructType = builder.Struct(BinFieldsCount)->AddField<double>("Position", &Position).AddField<double>("Frequency", &Frequency).Build();
             const auto binsList = builder.List()->Item(binStructType).Build();
-            ResultStructType = builder.Struct(ResultFieldsCount)->AddField<double>("Min", &Min).AddField<double>("Max", &Max).AddField<double>("WeightsSum", &WeightsSum).AddField("Bins", binsList, &Bins).Build();
+            ResultStructType = builder.Struct(ResultFieldsCount)->AddField<char*>("Kind", &Kind).AddField<double>("Min", &Min).AddField<double>("Max", &Max).AddField<double>("WeightsSum", &WeightsSum).AddField("Bins", binsList, &Bins).Build();
         }
 
+        ui32 Kind;
         ui32 Min;
         ui32 Max;
         ui32 WeightsSum;
@@ -419,6 +420,7 @@ namespace {
             ui32 size = proto.FreqSize();
             TUnboxedValue* fields = nullptr;
             auto result = valueBuilder->NewArray(HistogramIndexes.ResultFieldsCount, fields);
+            fields[HistogramIndexes.Kind] = valueBuilder->NewString(TStringBuf(ResourceName).Skip(10));
             if (size) {
                 TUnboxedValue* items = nullptr;
                 fields[HistogramIndexes.Bins] = valueBuilder->NewArray(size, items);
@@ -624,6 +626,7 @@ namespace {
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const override {
+            auto kind = args[0].GetElement(HistogramIndexes.Kind);
             auto bins = args[0].GetElement(HistogramIndexes.Bins);
             double min = args[0].GetElement(HistogramIndexes.Min).Get<double>();
             double max = args[0].GetElement(HistogramIndexes.Max).Get<double>();
@@ -631,6 +634,7 @@ namespace {
             auto binsIterator = bins.GetListIterator();
 
             TStringBuilder result;
+            result << "Kind: " << (TStringBuf)kind.AsStringRef() << ' ';
             result << Sprintf("Bins: %" PRIu64 " WeightsSum: %.3f Min: %.3f Max: %.3f",
                               bins.GetListLength(), weightsSum, min, max);
             double maxFrequency = 0.0;
@@ -739,6 +743,7 @@ namespace {
                 binFields[HistogramIndexes.Position] = current.GetElement(HistogramIndexes.Position);
                 resultBins.emplace_back(std::move(resultCurrent));
             }
+            fields[HistogramIndexes.Kind] = args[0].GetElement(HistogramIndexes.Kind);
             fields[HistogramIndexes.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
             fields[HistogramIndexes.Max] = TUnboxedValuePod(maxValue);
             fields[HistogramIndexes.Min] = TUnboxedValuePod(minValue);
@@ -819,6 +824,7 @@ namespace {
                 resultBins.emplace_back(std::move(resultCurrent));
             }
 
+            fields[HistogramIndexes.Kind] = args[0].GetElement(HistogramIndexes.Kind);
             fields[HistogramIndexes.Bins] = valueBuilder->NewList(resultBins.data(), resultBins.size());
             fields[HistogramIndexes.Max] = TUnboxedValuePod(maxValue);
             fields[HistogramIndexes.Min] = TUnboxedValuePod(minValue);

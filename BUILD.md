@@ -1,6 +1,6 @@
 ## Building YDB from sources
 
-##### Build Requirements
+#### Build Requirements
  We have tested YDB builds using Ubuntu 18.04 and Ubuntu 20.04. Other Linux distributions are likely to work, but additional effort may be needed. Only x86_64 Linux is currently supported.
 
  Below is a list of packages that need to be installed before building YDB. 'How to Build' section contains step by step instructions to obtain these packages.
@@ -19,13 +19,13 @@
 
  We run multiple clang instances in parallel to speed up the process by default. Each instance of clang may use up to 1GB of RAM, and linking the binary may use up to 16GB of RAM, please make sure your build host has enough resources.
 
-##### Runtime Requirements
+#### Runtime Requirements
  The following packages are required to run ydbd server:
 
  - libidn11
  - libaio
 
-##### How to Build
+#### How to Build
 
 1. Add repositories for dependencies
 

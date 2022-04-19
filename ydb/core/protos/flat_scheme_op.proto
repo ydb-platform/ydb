@@ -301,7 +301,7 @@ message TTTLSettings {
         optional uint32 BatchMaxBytes = 3 [default = 512000];
         optional uint32 BatchMinKeys = 4 [default = 1];
         optional uint32 BatchMaxKeys = 5 [default = 256];
-        optional uint32 MaxShardsInFlight = 6 [default = 1]; // zero means no limit
+        optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
     }
 
     message TEnabled {

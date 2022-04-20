@@ -716,6 +716,11 @@ namespace NKikimr::NYaml {
                 hostCopy.EraseValue("host_config_id");
             }
 
+            if (!hostCopy.Has("interconnect_host")) {
+                auto hostjs = hostCopy["host"];
+                hostCopy.InsertValue("interconnect_host", hostjs);
+            }
+
             nodes.AppendValue(hostCopy);
         }
     }

@@ -1959,6 +1959,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
         for (auto& xpair : change->RemovedRowVersions) {
             const auto tableId = xpair.first;
 
+            CompactionLogic->ReflectRemovedRowVersions(tableId);
+
             NKikimrExecutorFlat::TTablePartSwitch proto;
             proto.SetTableId(tableId);
 

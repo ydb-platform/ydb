@@ -559,6 +559,7 @@ namespace NCompShard {
         void Start(TCompactionState state) override;
         void Stop() override;
         void ReflectSchema() override;
+        void ReflectRemovedRowVersions() override;
         void UpdateCompactions() override;
         float GetOverloadFactor() override;
         ui64 GetBackingSize() override;

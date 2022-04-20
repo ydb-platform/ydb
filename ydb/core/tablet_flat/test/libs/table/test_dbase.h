@@ -197,7 +197,9 @@ namespace NTest {
 
             TAutoPtr<IPages> env = new TForwardEnv(128, 256, keys, Max<ui32>());
 
-            auto eggs = TCompaction(env, conf).Do(*subset, logo);
+            auto eggs = TCompaction(env, conf)
+                    .WithRemovedRowVersions(Base->GetRemovedRowVersions(table))
+                    .Do(*subset, logo);
 
             Y_VERIFY(!eggs.NoResult(), "Unexpected early termination");
 

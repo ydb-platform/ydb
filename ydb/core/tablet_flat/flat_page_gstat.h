@@ -62,8 +62,16 @@ namespace NPage {
             Items = { ptr, ptr + header->Items };
         }
 
-        ui64 Count() const {
+        size_t Count() const {
             return Items.size();
+        }
+
+        TRowVersion GetRowVersionAtIndex(size_t index) const {
+            return Items[index].GetRowVersion();
+        }
+
+        ui64 GetGarbageBytesAtIndex(size_t index) const {
+            return Items[index].GetBytes();
         }
 
         /**
@@ -231,6 +239,152 @@ namespace NPage {
     private:
         TEntries Entries;
         THeapByBytes ByBytes;
+    };
+
+    /**
+     * An aggregate across multiple TGarbageStats pages, reads are O(log N)
+     */
+    class TGarbageStatsAgg {
+    private:
+        friend class TGarbageStatsAggBuilder;
+
+        struct TItem {
+            ui64 Step;
+            ui64 TxId;
+            ui64 Bytes;
+
+            TRowVersion GetRowVersion() const {
+                return TRowVersion(Step, TxId);
+            }
+
+            ui64 GetBytes() const {
+                return Bytes;
+            }
+        };
+
+    public:
+        TGarbageStatsAgg() = default;
+
+        TGarbageStatsAgg(const TGarbageStatsAgg&) = delete;
+        TGarbageStatsAgg& operator=(const TGarbageStatsAgg&) = delete;
+
+        TGarbageStatsAgg(TGarbageStatsAgg&&) noexcept = default;
+        TGarbageStatsAgg& operator=(TGarbageStatsAgg&&) noexcept = default;
+
+    private:
+        TGarbageStatsAgg(TVector<TItem>&& items)
+            : Items(std::move(items))
+        { }
+
+    public:
+        /**
+         * Returns number of bytes that are guaranteed to be freed
+         * if everything up to rowVersion is marked as removed.
+         */
+        ui64 GetGarbageBytes(const TRowVersion& rowVersion) const {
+            if (Items.empty()) {
+                return 0;
+            }
+
+            auto cmp = [](const TRowVersion& rowVersion, const TItem& item) -> bool {
+                return rowVersion < item.GetRowVersion();
+            };
+
+            // First item with version > rowVersion
+            auto it = std::upper_bound(Items.begin(), Items.end(), rowVersion, cmp);
+            if (it == Items.begin()) {
+                return 0;
+            }
+
+            // First item with version <= rowVersion
+            return (--it)->GetBytes();
+        }
+
+    private:
+        TVector<TItem> Items;
+    };
+
+    class TGarbageStatsAggBuilder {
+    private:
+        using TItem = TGarbageStatsAgg::TItem;
+
+    public:
+        TGarbageStatsAggBuilder() = default;
+
+        /**
+         * Adds a delta bytes that is guaranteed to be freed when everything
+         * up to rowVersion is marked as removed.
+         */
+        void Add(const TRowVersion& rowVersion, ui64 bytes) {
+            Items.push_back(TItem{ rowVersion.Step, rowVersion.TxId, bytes });
+        }
+
+        /**
+         * Adds all data in the given garbage stats page to the aggregate.
+         */
+        void Add(const TGarbageStats* stats) {
+            ui64 prev = 0;
+            size_t count = stats->Count();
+            for (size_t index = 0; index < count; ++index) {
+                TRowVersion rowVersion = stats->GetRowVersionAtIndex(index);
+                ui64 bytes = stats->GetGarbageBytesAtIndex(index);
+                Add(rowVersion, bytes - prev);
+                prev = bytes;
+            }
+        }
+
+        /**
+         * Adds all data in the given garbage stats page to the aggregate.
+         */
+        void Add(const TIntrusiveConstPtr<TGarbageStats>& stats) {
+            Add(stats.Get());
+        }
+
+        /**
+         * Builds an aggregate object, destroying builder in the process
+         */
+        TGarbageStatsAgg Build() {
+            if (!Items.empty()) {
+                auto cmp = [](const TItem& a, const TItem& b) -> bool {
+                    return a.GetRowVersion() < b.GetRowVersion();
+                };
+
+                // Sort data by row version
+                std::sort(Items.begin(), Items.end(), cmp);
+
+                // Compute aggregate bytes
+                ui64 bytes = 0;
+                auto dst = Items.begin();
+                for (auto src = Items.begin(); src != Items.end(); ++src) {
+                    bytes += src->GetBytes();
+                    if (dst != Items.begin()) {
+                        auto last = std::prev(dst);
+                        if (last->GetRowVersion() == src->GetRowVersion()) {
+                            last->Bytes = bytes;
+                            continue;
+                        }
+                    }
+                    if (dst != src) {
+                        *dst = *src;
+                    }
+                    dst->Bytes = bytes;
+                    ++dst;
+                }
+
+                if (dst != Items.end()) {
+                    Items.erase(dst, Items.end());
+                }
+
+                Items.shrink_to_fit();
+            }
+
+            TGarbageStatsAgg agg(std::move(Items));
+            Items.clear();
+            return agg;
+        }
+
+    private:
+        TVector<TItem> Items;
     };
 
 }   // namespace NPage

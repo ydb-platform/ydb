@@ -1971,6 +1971,22 @@ struct Schema {
             void Delete() {
                 Database->Update(TableId, NTable::ERowOp::Erase, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), { });
             }
+
+            template <typename... ColumnTypes>
+            KeyOperations& UpdateV(const TRowVersion& rowVersion, const typename ColumnTypes::Type&... value) {
+                return UpdateV(rowVersion, TUpdate<ColumnTypes>(value)...);
+            }
+
+            template <typename... UpdateTypes>
+            KeyOperations& UpdateV(const TRowVersion& rowVersion, const UpdateTypes&... updates) {
+                std::array<TUpdateOp, sizeof...(UpdateTypes)> update_ops = {{updates...}};
+                Database->Update(TableId, NTable::ERowOp::Upsert, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), update_ops, rowVersion);
+                return *this;
+            }
+
+            void DeleteV(const TRowVersion& rowVersion) {
+                Database->Update(TableId, NTable::ERowOp::Erase, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), { }, rowVersion);
+            }
         };
     };
 

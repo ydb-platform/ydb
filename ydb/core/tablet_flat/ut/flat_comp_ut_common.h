@@ -40,7 +40,7 @@ public:
     }
 
     ui64 OwnerTabletId() const override {
-        return 123;
+        return TabletId;
     }
 
     const TScheme& DatabaseScheme() override {
@@ -181,9 +181,11 @@ public:
         TAutoPtr<IPages> env = new TTestEnv;
 
         // Template for new blobs
-        TLogoBlobID logo(123, Gen, ++Step, 0, 0, 0);
+        TLogoBlobID logo(TabletId, Gen, ++Step, 0, 0, 0);
 
-        auto eggs = TCompaction(env, conf).Do(*subset, logo);
+        auto eggs = TCompaction(env, conf)
+                .WithRemovedRowVersions(DB.GetRemovedRowVersions(params->Table))
+                .Do(*subset, logo);
 
         TVector<TPartView> parts(Reserve(eggs.Parts.size()));
         for (auto& part : eggs.Parts) {
@@ -312,7 +314,7 @@ private:
     void SwitchGen() {
         ++Gen;
         Step = 0;
-        Annex.Reset(new NPageCollection::TSteppedCookieAllocator(123, ui64(Gen) << 32, { 0, 999 }, {{ 1, 7 }}));
+        Annex.Reset(new NPageCollection::TSteppedCookieAllocator(TabletId, ui64(Gen) << 32, { 0, 999 }, {{ 1, 7 }}));
     }
 
 public:
@@ -321,6 +323,7 @@ public:
     THashMap<ui64, THolder<ICompactionRead>> PendingReads;
     THashMap<ui64, THolder<TCompactionParams>> StartedCompactions;
     THashMap<ui32, THashMap<ui64, TString>> TableState;
+    ui64 TabletId = 123;
 
 private:
     THolder<NPageCollection::TSteppedCookieAllocator> Annex;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "flat_comp.h"
+#include "flat_page_gstat.h"
 
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -33,6 +34,7 @@ namespace NCompGen {
         void Stop() override;
 
         void ReflectSchema() override;
+        void ReflectRemovedRowVersions() override;
         void UpdateCompactions() override;
         float GetOverloadFactor() override;
         ui64 GetBackingSize() override;
@@ -158,7 +160,6 @@ namespace NCompGen {
             const TLogoBlobID Label;
             const TEpoch Epoch;
             const TStats Stats;
-            ui64 GarbageBytes = 0;
 
             inline bool operator<(const TPartInfo& other) const {
                 if (other.Epoch != Epoch) {
@@ -243,6 +244,10 @@ namespace NCompGen {
             return (ForcedState == EForcedState::Pending && ForcedGeneration == generation);
         }
 
+        ui32 DroppedBytesPercent() const;
+        bool NeedToStartForceCompaction() const;
+        bool MaybeAutoStartForceCompaction();
+
     private:
         ui32 const Table;
         ICompactionBackend* const Backend;
@@ -273,10 +278,7 @@ namespace NCompGen {
         THashMap<TLogoBlobID, ui32> KnownParts;
         TStats Stats;
         THashMap<ui64, TStats> StatsPerTablet;
-
-        TRowVersion CachedGarbageRowVersion = TRowVersion::Min();
-        ui64 CachedGarbageBytes = 0;
-        ui32 CachedDroppedBytesPercent = 0;
+        NPage::TGarbageStatsAgg GarbageStatsAgg;
     };
 
 }

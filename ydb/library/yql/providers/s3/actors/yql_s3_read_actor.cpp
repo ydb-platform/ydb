@@ -296,9 +296,12 @@ public:
         if (Finished)
             return false;
 
+        TAllocState *const allocState = TlsAllocState;
+        Y_VERIFY(allocState == AllocState, "Wrong TLS alloc state pre check.");
         TypeEnv.GetAllocator().Release();
         const auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadResult, TEvPrivate::TEvReadError, TEvPrivate::TEvReadFinished>();
         TypeEnv.GetAllocator().Acquire();
+        Y_VERIFY(allocState == AllocState, "Wrong TLS alloc state post check.");
         switch (const auto etype = ev->GetTypeRewrite()) {
             case TEvPrivate::TEvReadFinished::EventType:
                 Finished = true;
@@ -320,6 +323,7 @@ private:
         const auto timeStub = CreateDeterministicTimeProvider(10000000);
 
         const auto alloc = TypeEnv.BindAllocator();
+        AllocState = TlsAllocState;
         const auto pb = std::make_unique<TProgramBuilder>(TypeEnv, FunctionRegistry);
 
         TCallableBuilder callableBuilder(TypeEnv, "CoroStream", pb->NewStreamType(pb->NewDataType(NUdf::EDataSlot::String)));
@@ -364,6 +368,7 @@ private:
     const TString Format, RowType, Compression;
     const NActors::TActorId ComputeActorId;
     TOutput::TPtr Outputs;
+    TAllocState * AllocState = nullptr;
     bool Finished = false;
 };
 

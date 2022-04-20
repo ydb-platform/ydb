@@ -27,7 +27,13 @@ class TPurgeActor : public TActorBootstrapped<TPurgeActor> {
     };
 
 public:
-    TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounters> counters, const TActorId& queueLeader, bool isFifo);
+    TPurgeActor(
+        const TQueuePath& queuePath,
+        ui32 tablesFormat,
+        TIntrusivePtr<TQueueCounters> counters,
+        const TActorId& queueLeader,
+        bool isFifo
+    );
     ~TPurgeActor();
 
     void Bootstrap();
@@ -56,6 +62,7 @@ private:
 
 private:
     const TQueuePath QueuePath_;
+    const ui32 TablesFormat_;
     /// A state of shard processing
     TMap<ui64, TShard> Shards_;
     const TString RequestId_;

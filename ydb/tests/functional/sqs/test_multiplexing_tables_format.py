@@ -10,14 +10,6 @@ from sqs_matchers import ReadResponseMatcher
 
 
 class MultiplexingTablesFormatTest(KikimrSqsTestBase):
-    def _set_new_format_settings(self, username=None, tables_format=1):
-        if username is None:
-            username = self._username
-        self._execute_yql_query(
-            f'UPSERT INTO `{self.sqs_root}/.Settings` (Account, Name, Value) \
-                VALUES ("{username}", "CreateQueuesWithTabletFormat", "{tables_format}")'
-        )
-
     def create_queue(self, is_fifo):
         if is_fifo and not self.queue_name.endswith('.fifo'):
             self.queue_name = self.queue_name + '.fifo'
@@ -31,13 +23,13 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
         assert(False)
 
     def create_queue_with_wrong_tables_format(self, tables_format):
-        self._set_new_format_settings(tables_format='qwerty')
+        self._set_tables_format(tables_format='qwerty')
         self.create_queue_must_fail(True)
         self.create_queue_must_fail(False)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_create_queue(self, is_fifo):
-        self._set_new_format_settings()
+        self._set_tables_format()
         self.create_queue(is_fifo)
 
     def test_create_queue_with_incorrect_tables_format(self):
@@ -51,7 +43,7 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_send_message(self, is_fifo):
-        self._set_new_format_settings()
+        self._set_tables_format()
         created_queue_url = self.create_queue(is_fifo)
         self._send_message_and_assert(
             created_queue_url,
@@ -62,7 +54,7 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_read_message(self, is_fifo):
-        self._set_new_format_settings()
+        self._set_tables_format()
         created_queue_url = self.create_queue(is_fifo)
         self.seq_no += 1
         message_id = self._send_message_and_assert(
@@ -79,7 +71,7 @@ class MultiplexingTablesFormatTest(KikimrSqsTestBase):
         )
 
     def do_test_double_create(self, is_fifo, tables_format):
-        self._set_new_format_settings(tables_format=tables_format)
+        self._set_tables_format(tables_format=tables_format)
         self.create_queue(is_fifo)
         self.create_queue(is_fifo)
 

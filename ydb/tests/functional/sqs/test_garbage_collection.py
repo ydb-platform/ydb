@@ -13,7 +13,7 @@ from sqs_requests_client import SqsHttpApi
 from sqs_matchers import ReadResponseMatcher
 
 from sqs_test_base import to_bytes
-from sqs_test_base import KikimrSqsTestBase, VISIBILITY_CHANGE_METHOD_PARAMS, IS_FIFO_PARAMS
+from sqs_test_base import KikimrSqsTestBase, VISIBILITY_CHANGE_METHOD_PARAMS, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 
 def send_message(server, username, queue_url, sqs_port, body, seq_no, group_id):
@@ -113,9 +113,10 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
             break
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_removes_messages_by_retention_time(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_removes_messages_by_retention_time(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
+
         self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
 
         number_of_mesages_to_write = 110 if is_fifo else 220
@@ -166,8 +167,9 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
         assert_that(number_of_messages, equal_to(0))
         self._check_queue_tables_are_empty()
 
-    def test_cleanups_deduplication_table(self):
-        self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_cleanups_deduplication_table(self, tables_format):
+        self._init_with_params(is_fifo=True, tables_format=tables_format)
         self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         # do the same again to ensure that this process will not stop
@@ -177,8 +179,9 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
             self.wait_fifo_table_empty('Deduplication')
 
     @pytest.mark.parametrize('random_groups_max_count', [30, 200])
-    def test_cleanups_reads_table(self, random_groups_max_count):
-        self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_cleanups_reads_table(self, random_groups_max_count, tables_format):
+        self._init_with_params(is_fifo=True, tables_format=tables_format)
         self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         # do the same again to ensure that this process will not stop
@@ -194,8 +197,9 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
             self.delete_messages(self.queue_url, [r['ReceiptHandle'] for r in read_result])
 
     @pytest.mark.parametrize(**VISIBILITY_CHANGE_METHOD_PARAMS)
-    def test_visibility_change_cleanups_proper_receive_attempt_id(self, delete_message):
-        self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_visibility_change_cleanups_proper_receive_attempt_id(self, delete_message, tables_format):
+        self._init_with_params(is_fifo=True, tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         groups_count = 5
         for group_number in range(groups_count):

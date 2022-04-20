@@ -6,14 +6,16 @@
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ymq/base/debug_info.h>
+#include <ydb/core/ymq/queues/common/key_hashes.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <util/random/random.h>
 
 namespace NKikimr::NSQS {
 
-TRetentionActor::TRetentionActor(const TQueuePath& queuePath, const TActorId& queueLeader)
+TRetentionActor::TRetentionActor(const TQueuePath& queuePath, ui32 tablesFormat, const TActorId& queueLeader)
     : QueuePath_(queuePath)
+    , TablesFormat_(tablesFormat)
     , RequestId_(CreateGuidAsString())
     , QueueLeader_(queueLeader)
 {
@@ -49,8 +51,11 @@ void TRetentionActor::SetRetentionBoundary() {
                 auto req = MakeHolder<TSqsEvents::TEvPurgeQueue>();
                 req->QueuePath = QueuePath_;
                 req->Boundary = TInstant::MilliSeconds(ui64(list[i]["RetentionBoundary"]));
-                req->Shard = ui64(list[i]["Shard"]);
-
+                if (TablesFormat_ == 0) {
+                    req->Shard = list[i]["Shard"];
+                } else {
+                    req->Shard = static_cast<ui32>(list[i]["Shard"]);
+                }
                 RLOG_SQS_INFO("Set retention boundary for queue " << TLogQueueName(QueuePath_, req->Shard) << " to " << req->Boundary.MilliSeconds() << " (" << req->Boundary << ")");
 
                 Send(QueueLeader_, std::move(req));
@@ -66,10 +71,13 @@ void TRetentionActor::SetRetentionBoundary() {
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)
         .QueueLeader(QueueLeader_)
+        .TablesFormat(TablesFormat_)
         .QueryId(SET_RETENTION_ID)
         .RetryOnTimeout()
         .OnExecuted(onExecuted)
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
             .Uint64("NOW", Now().MilliSeconds())
             .Bool("PURGE", false)
         .ParentBuilder().Start();

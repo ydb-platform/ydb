@@ -35,6 +35,12 @@ IS_FIFO_PARAMS = {
     'ids': ['fifo', 'std'],
 }
 
+TABLES_FORMAT_PARAMS = {
+    'argnames': 'tables_format',
+    'argvalues': [0, 1],
+    'ids': ['tables_format_v0', 'tables_format_v1'],
+}
+
 POLLING_PARAMS = {
     'argnames': 'polling_wait_timeout',
     'argvalues': [0, 1],
@@ -144,6 +150,7 @@ class KikimrSqsTestBase(object):
     database = '/Root'
     sqs_root = '/Root/SQS'
     use_in_memory_pdisks = True
+    tables_format_per_user = {}
 
     @classmethod
     def setup_class(cls):
@@ -627,14 +634,18 @@ class KikimrSqsTestBase(object):
                 time.sleep(1)  # wait node to start
 
     def _smart_make_table_path(self, user_name, queue_name, queue_version, shard, table_name):
-        table_path = '{}/{}'.format(self.sqs_root, user_name)
-        if queue_name is not None:
-            table_path += '/{}'.format(queue_name)
-        if queue_version is not None and queue_version != 0:
-            table_path += '/v{}'.format(queue_version)
-        if shard is not None:
-            table_path += '/{}'.format(shard)
-
+        tables_format = self.tables_format_per_user.get(user_name, 0)
+        table_path = self.sqs_root
+        if tables_format == 0:
+            table_path += '/{}'.format(user_name)
+            if queue_name is not None:
+                table_path += '/{}'.format(queue_name)
+            if queue_version is not None and queue_version != 0:
+                table_path += '/v{}'.format(queue_version)
+            if shard is not None:
+                table_path += '/{}'.format(shard)
+        else:
+            table_path += '/{}'.format('.FIFO' if queue_name.endswith('.fifo') else '.STD')
         return table_path + '/{}'.format(table_name)
 
     def _get_queue_version_number(self, user_name, queue_name):
@@ -751,3 +762,18 @@ class KikimrSqsTestBase(object):
             for shard in range(shards):
                 session.drop_table(self._smart_make_table_path(username, queuename, version, shard, 'Messages'))
                 session.drop_table(self._smart_make_table_path(username, queuename, version, shard, 'MessageData'))
+
+    def _set_tables_format(self, username=None, tables_format=1):
+        if username is None:
+            username = self._username
+        self._execute_yql_query(
+            f'UPSERT INTO `{self.sqs_root}/.Settings` (Account, Name, Value) \
+                VALUES ("{username}", "CreateQueuesWithTabletFormat", "{tables_format}")'
+        )
+        self.tables_format_per_user[username] = tables_format
+
+    def _init_with_params(self, is_fifo=None, tables_format=None):
+        if is_fifo and not self.queue_name.endswith('.fifo'):
+            self.queue_name += '.fifo'
+        if tables_format is not None:
+            self._set_tables_format(tables_format=tables_format)

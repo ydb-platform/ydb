@@ -8,6 +8,7 @@ struct TQueuePath {
     TString Root;
     TString UserName;
     TString QueueName;
+    ui64 Version;
     TString VersionSuffix;
 
     TQueuePath()
@@ -20,6 +21,7 @@ struct TQueuePath {
         : Root(root)
         , UserName(userName)
         , QueueName(queueName)
+        , Version(version)
     {
         if (version) {
             VersionSuffix = TString::Join("v", ToString(version));

@@ -5,6 +5,14 @@
 
 namespace NKikimr::NSQS {
 
+    const char* TDbQueriesMaker::GetSelectQueueAndShardHash() const {
+        return TablesFormat_ == 1 ? "'QueueIdNumberAndShardHash" : "";
+    }
+
+    const char* TDbQueriesMaker::GetLoadQueueAndShardHashOrZero() const {
+        return TablesFormat_ == 1 ? "Member item 'QueueIdNumberAndShardHash" : "Uint64 '0";
+    }
+
     TString TDbQueriesMaker::FillQuery(const char* query) const {
         return Sprintf(
             query,
@@ -29,7 +37,10 @@ namespace NKikimr::NSQS {
             GetDlqIdKeys(),                         // 16
             GetDlqIdAndShardKeys(),                 // 17
             GetShardColumnType(DlqTablesFormat_),   // 18
-            GetDlqStateKeys()                       // 19
+            GetDlqStateKeys(),                      // 19
+
+            GetSelectQueueAndShardHash(),           // 20
+            GetLoadQueueAndShardHashOrZero()        // 21
         );
     }
     

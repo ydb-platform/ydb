@@ -1253,7 +1253,10 @@ static const char* const DeduplicationCleanupQuery = R"__(
 
             (Map dedupToErase (lambda '(item) (block '(
                 (return (EraseRow dedupTable '(
-                    '('DedupId (Member item 'DedupId)))))))))
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
+                    '('DedupId (Member item 'DedupId)))
+                ))
+            ))))
         ))
     )
 )__";
@@ -1290,7 +1293,10 @@ static const char* const ReadsCleanupQuery = R"__(
 
             (Map readsToErase (lambda '(item) (block '(
                 (return (EraseRow readsTable '(
-                    '('ReceiveAttemptId (Member item 'ReceiveAttemptId)))))))))
+                    )__" QUEUE_ID_KEYS_PARAM  R"__(
+                    '('ReceiveAttemptId (Member item 'ReceiveAttemptId))
+                )))
+            ))))
         ))
     )
 )__";
@@ -1331,7 +1337,7 @@ const char* const SetRetentionQuery = R"__(
                         (Bool 'false)))
 
                 (return (AsStruct
-                    '('Shard (Uint64 '0))
+                    '('Shard ()__" SHARD_TYPE_PARAM R"__( '0))
                     '('RetentionBoundary (Max boundary (Member item 'RetentionBoundary)))
                     '('Updated updated))))))))
 

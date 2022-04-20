@@ -185,6 +185,11 @@ protected:
         return *IsFifo_;
     }
 
+    virtual bool TablesFormat() const {
+        Y_VERIFY(TablesFormat_);
+        return *TablesFormat_;
+    }
+
     virtual void DoStart() { }
 
     virtual void DoFinish() { }

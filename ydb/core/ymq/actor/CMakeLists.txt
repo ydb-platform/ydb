@@ -110,3 +110,8 @@ generate_enum_serilization(core-ymq-actor
   INCLUDE_HEADERS
   ydb/core/ymq/actor/metering.h
 )
+generate_enum_serilization(core-ymq-actor
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/fifo_cleanup.h
+  INCLUDE_HEADERS
+  ydb/core/ymq/actor/fifo_cleanup.h
+)

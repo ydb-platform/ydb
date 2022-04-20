@@ -1135,6 +1135,10 @@ void TQueueLeader::ProcessChangeMessageVisibilityBatch(TChangeMessageVisibilityB
         .OnExecuted([this, requestId = req.RequestId, shard = req.Shard](const TSqsEvents::TEvExecuted::TRecord& ev) { OnVisibilityChanged(requestId, shard, ev); });
 
     builder.Params()
+        .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+        .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+        .AddWithType("SHARD", req.Shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
+        .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, req.Shard))
         .Uint64("NOW", req.NowTimestamp.MilliSeconds())
         .Uint64("GROUPS_READ_ATTEMPT_IDS_PERIOD", Cfg().GetGroupsReadAttemptIdsPeriodMs());
     NClient::TWriteValue params = builder.ParamsValue();
@@ -1515,6 +1519,7 @@ void TQueueLeader::RequestMessagesCountMetrics(ui64 shard) {
         .Params()
             .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
             .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
             .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
         .ParentBuilder().Start();
     ++MetricsQueriesInfly_;
@@ -1540,8 +1545,10 @@ void TQueueLeader::RequestOldestTimestampMetrics(ui64 shard) {
         .OnExecuted([this, shard](const TSqsEvents::TEvExecuted::TRecord& ev) { ReceiveOldestTimestampMetrics(shard, ev); })
         .Counters(Counters_)
         .Params()
-            .Uint64("QUEUE_ID_QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
             .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
+            .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
             .Uint64("TIME_FROM", Shards_[shard].LastSuccessfulOldestMessageTimestampValueMs) // optimization for accurate range selection // timestamp is always nondecreasing
         .ParentBuilder().Start();
     ++MetricsQueriesInfly_;
@@ -1665,21 +1672,27 @@ void TQueueLeader::CreateBackgroundActors() {
     }
 
     if (IsFifoQueue_) {
+        auto createCleaner = [&](TCleanupActor::ECleanupType type) {
+            auto actor = Register(new TCleanupActor(GetQueuePath(), TablesFormat_, SelfId(), type));
+            LOG_SQS_DEBUG(
+                "Created new " << type << " cleanup actor for queue " << TLogQueueName(UserName_, QueueName_)
+                    << ". Actor id: " << actor
+            );
+            return actor;
+        };
         if (!DeduplicationCleanupActor_) {
-            DeduplicationCleanupActor_ = Register(new TCleanupActor(GetQueuePath(), SelfId(), TCleanupActor::ECleanupType::Deduplication));
-            LOG_SQS_DEBUG("Created new deduplication cleanup actor for queue " << TLogQueueName(UserName_, QueueName_) << ". Actor id: " << DeduplicationCleanupActor_);
+            DeduplicationCleanupActor_ = createCleaner(TCleanupActor::ECleanupType::Deduplication);
         }
         if (!ReadsCleanupActor_) {
-            ReadsCleanupActor_ = Register(new TCleanupActor(GetQueuePath(), SelfId(), TCleanupActor::ECleanupType::Reads));
-            LOG_SQS_DEBUG("Created new reads cleanup actor for queue " << TLogQueueName(UserName_, QueueName_) << ". Actor id: " << ReadsCleanupActor_);
+            ReadsCleanupActor_ = createCleaner(TCleanupActor::ECleanupType::Reads);
         }
     }
     if (!RetentionActor_) {
-        RetentionActor_ = Register(new TRetentionActor(GetQueuePath(), SelfId()));
+        RetentionActor_ = Register(new TRetentionActor(GetQueuePath(), TablesFormat_, SelfId()));
         LOG_SQS_DEBUG("Created new retention actor for queue " << TLogQueueName(UserName_, QueueName_) << ". Actor id: " << RetentionActor_);
     }
     if (!PurgeActor_) {
-        PurgeActor_ = Register(new TPurgeActor(GetQueuePath(), Counters_, SelfId(), IsFifoQueue_));
+        PurgeActor_ = Register(new TPurgeActor(GetQueuePath(), TablesFormat_, Counters_, SelfId(), IsFifoQueue_));
         LOG_SQS_DEBUG("Created new purge actor for queue " << TLogQueueName(UserName_, QueueName_) << ". Actor id: " << PurgeActor_);
     }
 }

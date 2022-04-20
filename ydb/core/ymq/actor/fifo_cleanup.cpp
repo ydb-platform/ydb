@@ -6,6 +6,7 @@
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/ymq/base/debug_info.h>
+#include <ydb/core/ymq/queues/common/key_hashes.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -13,8 +14,14 @@
 
 namespace NKikimr::NSQS {
 
-TCleanupActor::TCleanupActor(const TQueuePath& queuePath, const TActorId& queueLeader, ECleanupType cleanupType)
+TCleanupActor::TCleanupActor(
+    const TQueuePath& queuePath,
+    ui32 tablesFormat,
+    const TActorId& queueLeader,
+    ECleanupType cleanupType
+)
     : QueuePath_(queuePath)
+    , TablesFormat_(tablesFormat)
     , RequestId_(CreateGuidAsString())
     , QueueLeader_(queueLeader)
     , CleanupType(cleanupType)
@@ -77,9 +84,12 @@ void TCleanupActor::RunCleanupQuery() {
         .User(QueuePath_.UserName)
         .Queue(QueuePath_.QueueName)
         .QueueLeader(QueueLeader_)
+        .TablesFormat(TablesFormat_)
         .QueryId(GetCleanupQueryId())
         .RetryOnTimeout()
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
             .Uint64("NOW", Now().MilliSeconds())
             .Uint64("BATCH_SIZE", Cfg().GetCleanupBatchSize());
 

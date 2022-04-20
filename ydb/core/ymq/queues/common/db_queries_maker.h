@@ -97,7 +97,17 @@ private:
 
     const char* GetAllShardsRange() const {
         if (TablesFormat_ == 1) {
-            return "'('QueueIdNumber queueIdNumber queueIdNumber)";
+            if (IsFifo_) {
+                return R"__(
+                    '('QueueIdNumberHash (Uint64 '0) (Uint64 '18446744073709551615))
+                    '('QueueIdNumber queueIdNumber queueIdNumber)
+                )__";
+            }
+            return R"__(
+                '('QueueIdNumberAndShardHash (Uint64 '0) (Uint64 '18446744073709551615))
+                '('QueueIdNumber queueIdNumber queueIdNumber)
+                '('Shard (Uint32 '0) (Uint32 '4294967295))
+            )__";
         }
         return "'('State (Uint64 '0) (Uint64 '18446744073709551615))";
     }
@@ -128,6 +138,9 @@ private:
     const char* GetShardColumnType(bool tablesFormat) const {
         return tablesFormat == 1 ? "Uint32" : "Uint64";
     }
+
+    const char* GetSelectQueueAndShardHash() const;
+    const char* GetLoadQueueAndShardHashOrZero() const;
 
     void FillQueueVars(
         const TString& userName,

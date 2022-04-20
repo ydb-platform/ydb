@@ -8,13 +8,21 @@
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/query_id.h>
+#include <ydb/core/ymq/queues/common/key_hashes.h>
 
 using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {
 
-TPurgeActor::TPurgeActor(const TQueuePath& queuePath, TIntrusivePtr<TQueueCounters> counters, const TActorId& queueLeader, bool isFifo)
+TPurgeActor::TPurgeActor(
+    const TQueuePath& queuePath,
+    ui32 tablesFormat,
+    TIntrusivePtr<TQueueCounters> counters,
+    const TActorId& queueLeader,
+    bool isFifo
+)
     : QueuePath_(queuePath)
+    , TablesFormat_(tablesFormat)
     , RequestId_(CreateGuidAsString())
     , Counters_(std::move(counters))
     , QueueLeader_(queueLeader)
@@ -63,11 +71,16 @@ void TPurgeActor::MakeGetRetentionOffsetRequest(const ui64 shardId, TShard* shar
         .Queue(QueuePath_.QueueName)
         .Shard(shardId)
         .QueueLeader(QueueLeader_)
+        .TablesFormat(TablesFormat_)
         .QueryId(GET_RETENTION_OFFSET_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
         .OnExecuted(onExecuted)
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
+            .AddWithType("SHARD", shardId, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueuePath_.Version, shardId))
             .Uint64("OFFSET_FROM", shard->PreviousSuccessfullyProcessedLastMessage.Offset)
             .Uint64("TIME_FROM", shard->PreviousSuccessfullyProcessedLastMessage.SentTimestamp.MilliSeconds())
             .Uint64("TIME_TO", boundary.MilliSeconds())
@@ -107,15 +120,19 @@ void TPurgeActor::MakeStage1Request(const ui64 shardId, TShard* shard, const std
         .Queue(QueuePath_.QueueName)
         .Shard(shardId)
         .QueueLeader(QueueLeader_)
+        .TablesFormat(TablesFormat_)
         .QueryId(PURGE_QUEUE_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
         .OnExecuted(onExecuted)
         .Params()
+            .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
+            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueuePath_.Version, shardId))
             .Uint64("OFFSET_FROM", offsets.first)
             .Uint64("OFFSET_TO", offsets.second)
             .Uint64("NOW", Now().MilliSeconds())
-            .Uint64("SHARD", shardId)
+            .AddWithType("SHARD", shardId, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("BATCH_SIZE", Cfg().GetCleanupBatchSize())
         .ParentBuilder().Start();
 }
@@ -180,15 +197,24 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
         .Queue(QueuePath_.QueueName)
         .Shard(shardId)
         .QueueLeader(QueueLeader_)
+        .TablesFormat(TablesFormat_)
         .QueryId(PURGE_QUEUE_STAGE2_ID)
         .Counters(Counters_)
         .RetryOnTimeout()
         .OnExecuted(onExecuted);
 
     NClient::TWriteValue params = builder.ParamsValue();
+    
+    params["QUEUE_ID_NUMBER"] = QueuePath_.Version;
+    params["QUEUE_ID_NUMBER_HASH"] = GetKeysHash(QueuePath_.Version);
+    params["QUEUE_ID_NUMBER_AND_SHARD_HASH"] = GetKeysHash(QueuePath_.Version, shardId);
     params["CLEANUP_VERSION"] = cleanupVersion;
-    params["SHARD"] = shardId;
     params["NOW"] = TActivationContext::Now().MilliSeconds();
+    if (TablesFormat_ == 0) {
+        params["SHARD"] = shardId;
+    } else {
+        params["SHARD"] = static_cast<ui32>(shardId);
+    }
 
     auto messagesParam = params["MESSAGES"];
     FillMessagesParam(messagesParam, messages, shard->CurrentLastMessage.Offset, shard->CurrentLastMessage.SentTimestamp);

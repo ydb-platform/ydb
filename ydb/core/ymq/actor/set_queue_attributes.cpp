@@ -8,6 +8,7 @@
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
+#include <ydb/core/ymq/queues/common/key_hashes.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/scheme/scheme.h>
@@ -71,9 +72,13 @@ private:
             .User(UserName_)
             .Queue(GetQueueName())
             .QueueLeader(QueueLeader_)
+            .TablesFormat(TablesFormat())
             .QueryId(SET_QUEUE_ATTRIBUTES_ID)
             .Counters(QueueCounters_)
             .RetryOnTimeout();
+
+        builder.Params().Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef());
+        builder.Params().Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_.GetRef()));
 
         builder.Params().OptionalUint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
         builder.Params().OptionalUtf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn);

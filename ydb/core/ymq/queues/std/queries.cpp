@@ -201,9 +201,13 @@ const char* const PurgeQueueQuery = R"__(
         (let modifiedTimestamp (Max now (Member stateRead 'LastModifiedTimestamp)))
 
         (let messageRange '(
-            '('Offset offsetFrom offsetTo)))
+            )__" QUEUE_ID_AND_SHARD_KEYS_RANGE_PARAM R"__(
+            '('Offset offsetFrom offsetTo)
+        ))
         (let inflyRange '(
-            '('Offset offsetFrom offsetTo)))
+            )__" QUEUE_ID_AND_SHARD_KEYS_RANGE_PARAM R"__(
+            '('Offset offsetFrom offsetTo)
+        ))
         (let messageSelect '(
             'SentTimestamp
             'Offset
@@ -239,7 +243,6 @@ const char* const PurgeQueueStage2Query = R"__(
         (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
         (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
-        (let shard (Parameter 'SHARD    (DataType 'Uint64)))
         (let cleanupVersion (Parameter 'CLEANUP_VERSION (DataType 'Uint64)))
         (let now (Parameter 'NOW (DataType 'Uint64)))
         (let messages (Parameter 'MESSAGES
@@ -271,6 +274,7 @@ const char* const PurgeQueueStage2Query = R"__(
         (let inflyRecords
             (MapParameter messages (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (let fields '(
                     'Offset
@@ -285,6 +289,7 @@ const char* const PurgeQueueStage2Query = R"__(
         (let messageRecords
             (MapParameter messages (lambda '(item) (block '(
                 (let row '(
+                    )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                     '('Offset (Member item 'Offset))))
                 (let fields '(
                     'Offset
@@ -332,27 +337,39 @@ const char* const PurgeQueueStage2Query = R"__(
             (If versionIsSame
                 (Map inflyRecordsExisted (lambda '(item) (block '(
                     (return (EraseRow inflyTable '(
-                        '('Offset (Member item 'Offset)))))))))
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
+                        '('Offset (Member item 'Offset))
+                    )))
+                ))))
                 (AsList (Void)))
 
             (If versionIsSame
                 (Map messages (lambda '(item) (block '(
                     (return (EraseRow dataTable '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('RandomId (Member item 'RandomId))
-                        '('Offset   (Member item 'Offset)))))))))
+                        '('Offset   (Member item 'Offset))
+                    )))
+                ))))
                 (AsList (Void)))
 
             (If versionIsSame
                 (Map messageRecordsExisted (lambda '(item) (block '(
                     (return (EraseRow msgTable '(
-                        '('Offset (Member item 'Offset)))))))))
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
+                        '('Offset (Member item 'Offset))
+                    )))
+                ))))
                 (AsList (Void)))
 
             (If versionIsSame
                 (Map messages (lambda '(item) (block '(
                     (return (EraseRow sentTsIdx '(
+                        )__" QUEUE_ID_AND_SHARD_KEYS_PARAM R"__(
                         '('SentTimestamp (Member item 'SentTimestamp))
-                        '('Offset        (Member item 'Offset)))))))))
+                        '('Offset        (Member item 'Offset))
+                    )))
+                ))))
                 (AsList (Void)))
         ))
     )
@@ -999,11 +1016,10 @@ const char* const WriteMessageQuery = R"__(
     )
 )__";
 
-//  range more slow???
-// check column renames test
 const char* const SetRetentionQuery = R"__(
     (
-        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let now   (Parameter 'NOW   (DataType 'Uint64)))
         (let purge (Parameter 'PURGE (DataType 'Bool)))
 
@@ -1025,7 +1041,9 @@ const char* const SetRetentionQuery = R"__(
         ))
         (let fields '(
             ')__" SHARD_COLUMN_NAME_PARAM R"__(
-            'RetentionBoundary))
+            )__" SELECT_QUEUE_AND_SHARD_HASH_PARAM R"__(
+            'RetentionBoundary
+        ))
         (let records (Member (SelectRange stateTable range fields '()) 'List))
 
         (let result
@@ -1039,6 +1057,9 @@ const char* const SetRetentionQuery = R"__(
                     '('Shard (
                         Member item ')__" SHARD_COLUMN_NAME_PARAM R"__(
                     ))
+                    '('QueueIdNumberAndShardHash (
+                        )__" LOAD_QUEUE_AND_SHARD_HASH_OR_ZERO_PARAM R"__(
+                    ))
                     '('RetentionBoundary (Max boundary (Member item 'RetentionBoundary)))
                     '('Updated updated))))))))
 
@@ -1051,6 +1072,7 @@ const char* const SetRetentionQuery = R"__(
 
             (Map updated (lambda '(item) (block '(
                 (let shard (Member item 'Shard))
+                (let queueIdNumberAndShardHash (Member item 'QueueIdNumberAndShardHash))
                 (let row '(
                     )__" STATE_KEYS_PARAM R"__(
                 ))

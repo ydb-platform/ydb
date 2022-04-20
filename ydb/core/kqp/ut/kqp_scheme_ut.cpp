@@ -241,15 +241,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }, 0, Inflight + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatch) {
+    template <bool UseNewEngine>
+    void SchemaVersionMissmatchWithTest(bool write) {
         TKikimrRunner kikimr;
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        const TString query = Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
-        )");
+        TString query;
+        if (write) {
+            query = Q_(R"(
+                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            )");
+        } else {
+            query = Q_(R"(
+                SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            )");
+        }
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.KeepInQueryCache(true);
@@ -257,9 +265,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
-                TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+                execSettings).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
         }
 
         {
@@ -291,6 +302,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
         }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithRead) {
+        SchemaVersionMissmatchWithTest<UseNewEngine>(false);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithWrite) {
+        SchemaVersionMissmatchWithTest<UseNewEngine>(true);
     }
 
     void CheckInvalidationAfterDropCreateTable(bool withCompatSchema) {

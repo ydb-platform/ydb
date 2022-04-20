@@ -574,7 +574,9 @@ public:
     TRope(TString s) {
         if (s) {
             Size = s.size();
-            s.reserve(32);
+            if (s.capacity() < 32) {
+                s.reserve(32);
+            }
             Chain.PutToEnd(std::move(s));
         }
     }

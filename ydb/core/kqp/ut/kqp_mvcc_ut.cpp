@@ -240,6 +240,11 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRead) {
             [[4000000001u];["BigOne"];[-1]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
 
+        // We need to sleep before the upsert below, otherwise writes
+        // might happen in the same step as the snapshot, which would be
+        // treated as happening before snapshot and will not break any locks.
+        Sleep(TDuration::Seconds(2));
+
         result = session2.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/EightShard` (Key, Text) VALUES (101u, "SomeText");
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();

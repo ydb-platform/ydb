@@ -46,9 +46,17 @@
 
 {% include [x](_includes/select/from_select.md) %}
 
-{% include [x](_includes/select/view.md) %}
+{% if feature_map_reduce %}
 
-{% include [x](_includes/select/temporary_table.md) %}
+  {% include [x](_includes/select/view.md) %}
+
+{% endif %}
+
+{% if feature_temp_table %}
+
+  {% include [x](_includes/select/temporary_table.md) %}
+
+{% endif %}
 
 {% include [x](_includes/select/from_as_table.md) %}
 

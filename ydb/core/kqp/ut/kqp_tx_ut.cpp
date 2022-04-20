@@ -203,6 +203,59 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(HasIssue(rollbackResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
     }
 
+    Y_UNIT_TEST(RollbackManyTx) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_KqpMaxActiveTxPerSession");
+        setting.SetValue("10");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+
+        auto query = R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+
+            DECLARE $key AS Uint64;
+
+            UPDATE `/Root/TwoShard` SET Value1 = "Updated" WHERE Key = $key;
+        )";
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto beginTx = [&](ui32 idx) {
+            auto params = kikimr.GetTableClient().GetParamsBuilder()
+                .AddParam("$key").Uint64(302 + idx).Build()
+                .Build();
+
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return result;
+        };
+
+        // Explicit rollback
+        for (ui32 i = 0; i < 10; ++i) {
+            auto result = beginTx(i);
+
+            auto tx = result.GetTransaction();
+            UNIT_ASSERT(tx);
+            UNIT_ASSERT(tx->IsActive());
+
+            auto rollbackResult = tx->Rollback().ExtractValueSync();
+            UNIT_ASSERT(rollbackResult.IsSuccess());
+        }
+        session.Close();
+
+        // Implicit rollback
+        session = db.CreateSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < 10; ++i) {
+            beginTx(i);
+        }
+        session.Close();
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(RollbackRoTx) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

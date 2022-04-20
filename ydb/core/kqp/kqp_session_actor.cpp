@@ -1265,6 +1265,10 @@ public:
         auto *record = &resEv->Record.GetRef();
         auto *response = record->MutableResponse();
 
+        if (QueryState->CompileResult) {
+            AddQueryIssues(*response, QueryState->CompileResult->Issues);
+        }
+
         FillStats(record);
 
         YQL_ENSURE(QueryState);
@@ -1637,6 +1641,10 @@ public:
         QueryResponse->Record.GetRef().SetYdbStatus(ydbStatus);
 
         auto* response = QueryResponse->Record.GetRef().MutableResponse();
+
+        if (QueryState->CompileResult) {
+            AddQueryIssues(*response, QueryState->CompileResult->Issues);
+        }
 
         auto *queryIssue = response->AddQueryIssues();
         if (issues) {

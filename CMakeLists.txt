@@ -138,7 +138,7 @@ conan_cmake_configure(
     openssl/1.1.1l
     ragel/6.10
     yasm/1.3.0
-    zlib/1.2.11
+    zlib/1.2.12
   IMPORTS
     "bin, *yasm* -> ./bin"
     "bin, bison* -> ./bin/bison/bin"

@@ -56,6 +56,8 @@ namespace NActors {
 
         ui16 GetMonPort(ui32 nodeIndex = 0) const;
 
+        void SimulateSleep(TDuration duration);
+
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,
             const NKikimr::NTabletPipe::TClientConfig& pipeConfig = NKikimr::NTabletPipe::TClientConfig(), TActorId clientId = TActorId(), ui64 cookie = 0);
         void SendToPipe(TActorId clientId, const TActorId& sender, IEventBase* payload,
@@ -89,5 +91,6 @@ namespace NActors {
         TKeyConfigGenerator KeyConfigGenerator;
         THolder<IDestructable> Opaque;
         TVector<ui16> MonPorts;
+        TActorId SleepEdgeActor;
     };
 } // namespace NActors

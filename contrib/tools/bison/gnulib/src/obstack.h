@@ -511,7 +511,7 @@ __extension__                                                           \
 }       /* C++ */
 #endif
 
-#if defined(_WIN32)
+#if !defined(obstack_printf)
 int obstack_printf(struct obstack *obs, const char *format, ...);
 #endif
 

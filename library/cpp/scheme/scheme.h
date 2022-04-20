@@ -4,6 +4,8 @@
 
 #include "fwd.h"
 
+#include <util/generic/maybe.h>
+
 #include <iterator>
 #include <utility>
 
@@ -11,6 +13,14 @@ namespace NSc {
 #ifdef _MSC_VER
 #pragma warning(disable : 4521 4522)
 #endif
+
+    struct TMergeOptions {
+        enum class EArrayMergeMode {
+            Replace,
+            Merge
+        };
+        EArrayMergeMode ArrayMergeMode = EArrayMergeMode::Replace;
+    };
 
     // todo: try to remove some rarely used methods
     class TValue {
@@ -341,14 +351,14 @@ namespace NSc {
      *            - Do nothing.
      */
 
-        TValue& MergeUpdateJson(TStringBuf json);  // returns self
-        TValue& ReverseMergeJson(TStringBuf json); // returns self
+        TValue& MergeUpdateJson(TStringBuf json, TMaybe<TMergeOptions> mergeOptions = {});  // returns self
+        TValue& ReverseMergeJson(TStringBuf json, TMaybe<TMergeOptions> mergeOptions = {}); // returns self
 
-        static bool MergeUpdateJson(TValue&, TStringBuf json);  // returns true unless failed to parse the json
-        static bool ReverseMergeJson(TValue&, TStringBuf json); // returns true unless failed to parse the json
+        static bool MergeUpdateJson(TValue&, TStringBuf json, TMaybe<TMergeOptions> mergeOptions = {});  // returns true unless failed to parse the json
+        static bool ReverseMergeJson(TValue&, TStringBuf json, TMaybe<TMergeOptions> mergeOptions = {}); // returns true unless failed to parse the json
 
-        TValue& MergeUpdate(const TValue& delta);  // return self
-        TValue& ReverseMerge(const TValue& delta); // return self
+        TValue& MergeUpdate(const TValue& delta, TMaybe<TMergeOptions> mergeOptions = {});  // return self
+        TValue& ReverseMerge(const TValue& delta, TMaybe<TMergeOptions> mergeOptions = {}); // return self
 
     public: // Path methods /////////////////////////////////////////////////////////
         // TODO: add throwing variants
@@ -405,8 +415,8 @@ namespace NSc {
         bool IsSameOrAncestorOf(const TValue& other) const;
 
     private:
-        TValue& DoMerge(const TValue& delta, bool olddelta);
-        TValue& DoMergeImpl(const TValue& delta, bool olddelta, NImpl::TSelfLoopContext&, NImpl::TSelfOverrideContext&);
+        TValue& DoMerge(const TValue& delta, bool olddelta, TMaybe<TMergeOptions> mergeOptions);
+        TValue& DoMergeImpl(const TValue& delta, bool olddelta, TMaybe<TMergeOptions> mergeOptions, NImpl::TSelfLoopContext&, NImpl::TSelfOverrideContext&);
         TValue& DoCopyFromImpl(const TValue& other, NImpl::TSelfLoopContext&, NImpl::TSelfOverrideContext&);
         NJson::TJsonValue ToJsonValueImpl(NImpl::TSelfLoopContext&) const;
 

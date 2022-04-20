@@ -169,4 +169,67 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
         UNIT_ASSERT_JSON_EQ_JSON(a, "[1,2,3]");
         UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[1,2,3]}");
     }
+
+    Y_UNIT_TEST(TestMerge8) {
+        NSc::TValue v;
+        v["a"] = NSc::TValue::FromJson("[0.125,0.12,0.1,0.08,0.06]");
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[0.125,0.12,0.1,0.08,0.06]}");
+
+        NSc::TMergeOptions options = {.ArrayMergeMode = NSc::TMergeOptions::EArrayMergeMode::Merge};
+        NSc::TValue a = v.TrySelectOrAdd("a")->MergeUpdateJson("[1,2,3]", options);
+
+        UNIT_ASSERT_JSON_EQ_JSON(a, "[1,2,3,0.08,0.06]");
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[1,2,3,0.08,0.06]}");
+    }
+
+    Y_UNIT_TEST(TestMerge9) {
+        NSc::TValue v;
+        v["a"] = NSc::TValue::FromJson("[{a:1},{b:2,d:2}]");
+
+        NSc::TValue update;
+        update["a"] = NSc::TValue::FromJson("[{},{a:1,d:1},{b:2}]");
+
+        NSc::TMergeOptions options = {.ArrayMergeMode = NSc::TMergeOptions::EArrayMergeMode::Merge};
+        v.MergeUpdate(update, options);
+
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[{a:1},{a:1,b:2,d:1},{b:2}]}");
+
+        //no uncontrolled grow
+        v.MergeUpdate(update, options);
+        v.MergeUpdate(update, options);
+
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[{a:1},{a:1,b:2,d:1},{b:2}]}");
+    }
+
+    Y_UNIT_TEST(TestMerge10) {
+        NSc::TValue v;
+        v["a"] = NSc::TValue::FromJson("[0.125,0.12,0.1,0.08,0.06]");
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[0.125,0.12,0.1,0.08,0.06]}");
+
+        NSc::TMergeOptions options = {.ArrayMergeMode = NSc::TMergeOptions::EArrayMergeMode::Merge};
+        NSc::TValue delta = NSc::TValue::FromJson("{a:[1,2,3,4,5,6]}");
+        v.ReverseMerge(delta, options);
+
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[0.125,0.12,0.1,0.08,0.06,6]}");
+    }
+
+    Y_UNIT_TEST(TestMerge11) {
+        NSc::TValue v;
+        v["a"] = NSc::TValue::FromJson("[{a:1},{b:2,d:2}]");
+
+        NSc::TValue update;
+        update["a"] = NSc::TValue::FromJson("[{},{a:1,d:1},{b:2}]");
+
+        NSc::TMergeOptions options = {.ArrayMergeMode = NSc::TMergeOptions::EArrayMergeMode::Merge};
+        v.ReverseMerge(update, options);
+
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[{a:1},{a:1,b:2,d:2},{b:2}]}");
+
+        //no uncontrolled grow
+        v.ReverseMerge(update, options);
+        v.ReverseMerge(update, options);
+
+        UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[{a:1},{a:1,b:2,d:2},{b:2}]}");
+    }
+
 };

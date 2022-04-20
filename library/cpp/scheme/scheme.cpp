@@ -28,39 +28,39 @@ namespace NSc {
         return bufs;
     }
 
-    TValue& TValue::MergeUpdate(const TValue& delta) {
-        return DoMerge(delta, false);
+    TValue& TValue::MergeUpdate(const TValue& delta, TMaybe<TMergeOptions> mergeOptions) {
+        return DoMerge(delta, false, mergeOptions);
     }
 
-    TValue& TValue::ReverseMerge(const TValue& delta) {
-        return DoMerge(delta, true);
+    TValue& TValue::ReverseMerge(const TValue& delta, TMaybe<TMergeOptions> mergeOptions) {
+        return DoMerge(delta, true, mergeOptions);
     }
 
-    TValue& TValue::MergeUpdateJson(TStringBuf data) {
-        return MergeUpdate(FromJson(data));
+    TValue& TValue::MergeUpdateJson(TStringBuf data, TMaybe<TMergeOptions> mergeOptions) {
+        return MergeUpdate(FromJson(data), mergeOptions);
     }
 
-    TValue& TValue::ReverseMergeJson(TStringBuf data) {
-        return ReverseMerge(FromJson(data));
+    TValue& TValue::ReverseMergeJson(TStringBuf data, TMaybe<TMergeOptions> mergeOptions) {
+        return ReverseMerge(FromJson(data), mergeOptions);
     }
 
-    bool TValue::MergeUpdateJson(TValue& v, TStringBuf data) {
+    bool TValue::MergeUpdateJson(TValue& v, TStringBuf data, TMaybe<TMergeOptions> mergeOptions) {
         NSc::TValue m;
         if (!FromJson(m, data)) {
             return false;
         }
 
-        v.MergeUpdate(m);
+        v.MergeUpdate(m, mergeOptions);
         return true;
     }
 
-    bool TValue::ReverseMergeJson(TValue& v, TStringBuf data) {
+    bool TValue::ReverseMergeJson(TValue& v, TStringBuf data, TMaybe<TMergeOptions> mergeOptions) {
         NSc::TValue m;
         if (!FromJson(m, data)) {
             return false;
         }
 
-        v.ReverseMerge(m);
+        v.ReverseMerge(m, mergeOptions);
         return true;
     }
 
@@ -290,21 +290,23 @@ namespace NSc {
         return true;
     }
 
-    TValue& TValue::DoMerge(const TValue& delta, bool lowPriorityDelta) {
+    TValue& TValue::DoMerge(const TValue& delta, bool lowPriorityDelta, TMaybe<TMergeOptions> mergeOptions) {
         if (Same(*this, delta)) {
             return *this;
         }
 
         using namespace NImpl;
-        return DoMergeImpl(delta, lowPriorityDelta, GetTlsInstance<TSelfLoopContext>(), GetTlsInstance<TSelfOverrideContext>());
+        return DoMergeImpl(delta, lowPriorityDelta, mergeOptions, GetTlsInstance<TSelfLoopContext>(), GetTlsInstance<TSelfOverrideContext>());
     }
 
-    TValue& TValue::DoMergeImpl(const TValue& delta, bool lowPriorityDelta,
+    TValue& TValue::DoMergeImpl(const TValue& delta, bool lowPriorityDelta, TMaybe<TMergeOptions> mergeOptions,
                                 NImpl::TSelfLoopContext& otherLoopCtx,
                                 NImpl::TSelfOverrideContext& selfOverrideGuard) {
         if (Same(*this, delta)) {
             return *this;
         }
+
+        bool allowMergeArray = mergeOptions.Defined() && mergeOptions->ArrayMergeMode == TMergeOptions::EArrayMergeMode::Merge;
 
         if (delta.IsDict() && (!lowPriorityDelta || IsDict() || IsNull())) {
             TScCore& core = CoreMutable();
@@ -323,7 +325,30 @@ namespace NSc {
             const TDict& ddelta = deltaCore.Dict;
 
             for (const auto& dit : ddelta) {
-                core.GetOrAdd(dit.first).DoMergeImpl(dit.second, lowPriorityDelta, otherLoopCtx, selfOverrideGuard);
+                core.GetOrAdd(dit.first).DoMergeImpl(dit.second, lowPriorityDelta, mergeOptions, otherLoopCtx, selfOverrideGuard);
+            }
+        } else if (delta.IsArray() && allowMergeArray && (!lowPriorityDelta || IsArray() || IsNull())) {
+            TScCore& core = CoreMutable();
+            const TScCore& deltaCore = delta.Core();
+
+            NImpl::TSelfLoopContext::TGuard loopCheck(otherLoopCtx, deltaCore);
+
+            if (!loopCheck.Ok) {
+                return *this; // a loop encountered (and asserted), skip the back reference
+            }
+
+            if (!lowPriorityDelta || IsNull()) {
+                SetArray();
+            }
+
+            Y_ASSERT(IsArray());
+
+            const TArray& adelta = deltaCore.Array;
+            if (adelta.size() > core.Array.size()) {
+                core.Array.resize(adelta.size());
+            }
+            for (size_t i = 0; i < adelta.size(); ++i) {
+                core.Array[i].DoMergeImpl(adelta[i], lowPriorityDelta, mergeOptions, otherLoopCtx, selfOverrideGuard);
             }
         } else if (!delta.IsNull() && (!lowPriorityDelta || IsNull())) {
             DoCopyFromImpl(delta, otherLoopCtx, selfOverrideGuard);

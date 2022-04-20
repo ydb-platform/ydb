@@ -43,18 +43,20 @@ Apply the manifest for creating a {{ ydb-short-name }} cluster:
   kubectl create -f - <<EOF
   apiVersion: ydb.tech/v1alpha1
   kind: Storage
-  metadata:
+  metadata: 
     name: storage-sample
-  spec:
-    dataStore:
-      volumeMode: Block
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 80Gi
-    version: 21.4.30
+  spec: 
+    dataStore: 
+      - 
+        accessModes: 
+          - ReadWriteOnce
+        resources: 
+          requests: 
+            storage: 80Gi
+        volumeMode: Block
+    erasure: block-4-2
     nodes: 8
+    version: "21.4.30"
   EOF
   ```
 

@@ -41,8 +41,6 @@ public:
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
-        // (Apply (SqlExternalFunction ..) ..) to stage
-        AddHandler(0, &TCoApply::Match, HNDL(BuildExtFunctionStage<false>));
 #if 0
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
         AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute));
@@ -60,7 +58,6 @@ public:
         AddHandler(1, &TCoAssumeSorted::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
-        AddHandler(1, &TCoApply::Match, HNDL(BuildExtFunctionStage<true>));
 #undef HNDL
 
         SetGlobal(1u);
@@ -229,11 +226,6 @@ protected:
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqPushLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
-    }
-
-    template <bool IsGlobal>
-    TMaybeNode<TExprBase> BuildExtFunctionStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqBuildExtFunctionStage(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
     template <bool IsGlobal>

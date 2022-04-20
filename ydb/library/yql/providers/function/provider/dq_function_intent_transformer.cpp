@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/transform/yql_visit.h>
 #include <ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 namespace NYql::NDqFunction {
 namespace {
@@ -14,21 +15,28 @@ public:
         : TVisitorTransformerBase(false)
         , State(state)
     {
-        AddHandler({TFunctionDataSource::CallableName()}, Hndl(&TDqFunctionIntentTransformer::HandleDataSource));
+        AddHandler({TDqSqlExternalFunction::CallableName()}, Hndl(&TDqFunctionIntentTransformer::ExtractFunctionsName));
     }
 
-    TStatus HandleDataSource(TExprBase input, TExprContext& ctx) {
-        Y_UNUSED(ctx);
+    TStatus ExtractFunctionsName(TExprBase input, TExprContext& ctx) {
+        auto sqlFunction = input.Cast<TDqSqlExternalFunction>();
+        auto functionType = TString{sqlFunction.TransformType().Ref().Tail().Content()};
+        auto functionName = TString{sqlFunction.TransformName().Ref().Tail().Content()};
+        TString connection;
+        for (const auto &tuple: sqlFunction.Settings().Ref().Children()) {
+            const auto paramName = tuple->Head().Content();
+            if (paramName == "connection") {
+                connection = TString{tuple->Tail().Tail().Content()};
+            }
+        }
 
-        if (!TFunctionDataSource::Match(input.Raw()))
-            return TStatus::Ok;
+        if (connection.empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
+                << "Empty CONNECTION name for EXTERNAL FUNCTION '" << functionName << "'"));
+            return TStatus::Error;
+        }
 
-        auto source = input.Cast<TFunctionDataSource>();
-        TDqFunctionType functionType{source.Type().Value()};
-        TString functionName{source.FunctionName().Value()};
-        TString connection{source.Connection().Value()};
         State->FunctionsResolver->AddFunction(functionType, functionName, connection);
-
         return TStatus::Ok;
     }
 

@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 
 #include <library/cpp/yson/writer.h>
 
@@ -36,6 +37,7 @@ public:
     virtual bool CanFallback() = 0;
     virtual void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) = 0;
     virtual void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) = 0;
+    virtual void FillTransformSettings(const TExprNode& node, ::google::protobuf::Any& settings) = 0;
     virtual void Annotate(const TExprNode& node, THashMap<TString, TString>& params) = 0;
     virtual bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) = 0;
     virtual void WriteFullResultTableRef(NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) = 0;

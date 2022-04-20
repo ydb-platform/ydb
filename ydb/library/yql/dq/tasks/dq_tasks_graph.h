@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/actors/core/actorid.h>
 
@@ -43,23 +44,8 @@ struct TStageInfo : private TMoveOnly {
         , InputsCount(stage.Inputs().Size())
         , Meta(std::move(meta))
     {
-        auto result = stage.Program().Body();
-        auto resultType = result.Ref().GetTypeAnn();
-
-        if (resultType->GetKind() == ETypeAnnotationKind::Stream) {
-            auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
-            if (resultItemType->GetKind() == ETypeAnnotationKind::Variant) {
-                auto underlyingType = resultItemType->Cast<TVariantExprType>()->GetUnderlyingType();
-                YQL_ENSURE(underlyingType->GetKind() == ETypeAnnotationKind::Tuple);
-                OutputsCount = underlyingType->Cast<TTupleExprType>()->GetSize();
-                YQL_ENSURE(OutputsCount > 1);
-            } else {
-                OutputsCount = 1;
-            }
-        } else {
-            YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Void, "got " << *resultType);
-            OutputsCount = 0;
-        }
+        auto stageResultTuple = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+        OutputsCount = stageResultTuple->GetSize();
     }
 
     TStageInfo(const NNodes::TDqPhyStage& stage, TStageInfoMeta&& meta)
@@ -141,6 +127,15 @@ struct TTaskOutputType {
     };
 };
 
+struct TTransform {
+    TString Type;
+
+    TString InputType;
+    TString OutputType;
+
+    ::google::protobuf::Any Settings;
+};
+
 template <class TOutputMeta>
 struct TTaskOutput {
     ui32 Type = TTaskOutputType::Undefined;
@@ -150,11 +145,7 @@ struct TTaskOutput {
     TMaybe<::google::protobuf::Any> SinkSettings;
     TString SinkType;
     TOutputMeta Meta;
-};
-
-struct TTransform {
-    TString Type;
-    ::google::protobuf::Any TransformSettings;
+    TMaybe<TTransform> Transform;
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
@@ -175,7 +166,6 @@ struct TTask {
     NActors::TActorId ComputeActorId;
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
-    TTransform OutputTransform;
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>

@@ -16,13 +16,17 @@ struct TDqFunctionState : public TThrRefBase {
     TString SessionId;
     TString ScopeFolderId;
 
+    TTypeAnnotationContext* Types = nullptr;
+
     TDqFunctionResolver::TPtr FunctionsResolver = MakeIntrusive<TDqFunctionResolver>();
     TDqFunctionGatewayFactory::TPtr GatewayFactory;
     TDqFunctionsSet FunctionsDescription;
+
+    THashMap<TString, TString> SecureParams;
 };
 
 TIntrusivePtr<IDataProvider> CreateDqFunctionDataSource(TDqFunctionState::TPtr state);
-//TIntrusivePtr<IDataProvider> CreateDqFunctionDataSink(TDqFunctionState::TPtr state);
+TIntrusivePtr<IDataProvider> CreateDqFunctionDataSink(TDqFunctionState::TPtr state);
 }
 
 namespace NYql {
@@ -30,6 +34,7 @@ namespace NYql {
 TDataProviderInitializer GetDqFunctionDataProviderInitializer(
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         TDqFunctionGatewayFactory::TPtr gatewayFactory,
-        const TString& scopeFolderId = {});
+        const TString& scopeFolderId = {},
+        const THashMap<TString, TString>& secureParams = {});
 
 }

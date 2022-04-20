@@ -617,7 +617,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
         buildNewStage = IsDqDependsOnStage(join.RightInput(), leftCn.Output().Stage());
         if (!buildNewStage) {
             // NOTE: Do not push join to stage with multiple outputs, reduce memory footprint.
-            buildNewStage = GetStageOutputsCount(leftCn.Output().Stage(), true) > 1;
+            buildNewStage = GetStageOutputsCount(leftCn.Output().Stage()) > 1;
         }
     }
 

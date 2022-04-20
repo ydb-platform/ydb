@@ -15,6 +15,7 @@ public:
     bool CanFallback() override;
     void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override;
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) override;
+    void FillTransformSettings(const TExprNode& node, ::google::protobuf::Any& settings) override;
     void Annotate(const TExprNode& node, THashMap<TString, TString>& params) override;
     bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) override;
     void WriteFullResultTableRef(NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) override;

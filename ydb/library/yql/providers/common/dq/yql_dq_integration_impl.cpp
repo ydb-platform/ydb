@@ -54,6 +54,11 @@ void TDqIntegrationBase::FillSinkSettings(const TExprNode& node, ::google::proto
     Y_UNUSED(sinkType);
 }
 
+void TDqIntegrationBase::FillTransformSettings(const TExprNode& node, ::google::protobuf::Any& settings) {
+    Y_UNUSED(node);
+    Y_UNUSED(settings);
+}
+
 void TDqIntegrationBase::Annotate(const TExprNode& node, THashMap<TString, TString>& params) {
     Y_UNUSED(node);
     Y_UNUSED(params);

@@ -34,6 +34,32 @@ public:
     }
 };
 
+class TFunctionDataSink: public NGenerated::TFunctionDataSinkStub<TExprBase, TCallable, TCoAtom> {
+public:
+    explicit TFunctionDataSink(const TExprNode* node)
+        : TFunctionDataSinkStub(node)
+    {
+    }
+
+    explicit TFunctionDataSink(const TExprNode::TPtr& node)
+        : TFunctionDataSinkStub(node)
+    {
+    }
+
+    static bool Match(const TExprNode* node) {
+        if (!TFunctionDataSinkStub::Match(node)) {
+            return false;
+        }
+
+        if (node->Child(0)->Content() != FunctionProviderName) {
+            return false;
+        }
+
+        return true;
+    }
+};
+
+
 #include <ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.defs.inl.h>
 
 } // namespace NNodes

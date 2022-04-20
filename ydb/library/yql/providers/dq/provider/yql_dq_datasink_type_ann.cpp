@@ -34,6 +34,7 @@ public:
         AddHandler({TDqSink::CallableName()}, Hndl(&NDq::AnnotateDqSink));
         AddHandler({TDqWrite::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqWrite));
         AddHandler({TDqQuery::CallableName()}, Hndl(&NDq::AnnotateDqQuery));
+        AddHandler({TTransformSettings::CallableName()}, Hndl(&NDq::AnnotateTransformSettings));
     }
 
 private:

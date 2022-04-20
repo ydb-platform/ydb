@@ -1341,6 +1341,7 @@ private:
             const auto& outputDesc = Task.GetOutputs(i);
             Y_VERIFY(!outputDesc.HasSink() || outputDesc.ChannelsSize() == 0); // HasSink => no channels
             Y_VERIFY(outputDesc.HasSink() || outputDesc.ChannelsSize() > 0);
+
             if (outputDesc.HasSink()) {
                 auto result = SinksMap.emplace(i, TSinkInfo());
                 YQL_ENSURE(result.second);

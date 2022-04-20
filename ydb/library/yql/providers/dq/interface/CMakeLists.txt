@@ -18,6 +18,7 @@ target_link_libraries(providers-dq-interface PUBLIC
   library-cpp-yson
   library-yql-ast
   library-yql-core
+  yql-dq-tasks
 )
 target_sources(providers-dq-interface PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_integration.cpp

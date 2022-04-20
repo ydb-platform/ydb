@@ -22,6 +22,7 @@ IGraphTransformer::TStatus AnnotateDqCrossJoin(const TExprNode::TPtr& input, TEx
 IGraphTransformer::TStatus AnnotateDqSource(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqSink(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateTransformSettings(const TExprNode::TPtr& input, TExprContext& ctx);
 
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(NYql::TTypeAnnotationContext& typesCtx);
 

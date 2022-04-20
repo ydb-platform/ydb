@@ -134,8 +134,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         return TStatus::Repeat;
     }
 
-    TVector<const TTypeAnnotationNode*> resultTypesTuple;
-
+    TVector<const TTypeAnnotationNode*> programResultTypesTuple;
     if (resultType->GetKind() == ETypeAnnotationKind::Void) {
         // do nothing, return empty tuple as program result
     } else {
@@ -150,26 +149,81 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
                 auto variantType = itemType->Cast<TVariantExprType>()->GetUnderlyingType();
                 YQL_ENSURE(variantType->GetKind() == ETypeAnnotationKind::Tuple);
                 const auto& items = variantType->Cast<TTupleExprType>()->GetItems();
-                resultTypesTuple.reserve(items.size());
+                programResultTypesTuple.reserve(items.size());
                 for (const auto* branchType : items) {
-                    resultTypesTuple.emplace_back(ctx.MakeType<TListExprType>(branchType));
+                    programResultTypesTuple.emplace_back(ctx.MakeType<TListExprType>(branchType));
                 }
             } else {
-                resultTypesTuple.emplace_back(ctx.MakeType<TListExprType>(itemType));
+                programResultTypesTuple.emplace_back(ctx.MakeType<TListExprType>(itemType));
             }
         } else {
             YQL_ENSURE(resultType->GetKind() != ETypeAnnotationKind::List, "stage: " << stage->Dump());
-            resultTypesTuple.emplace_back(resultType);
+            programResultTypesTuple.emplace_back(resultType);
         }
     }
 
+    TVector<const TTypeAnnotationNode*> stageResultTypes;
     if (TDqStageBase::idx_Sinks < stage->ChildrenSize()) {
+        YQL_ENSURE(stage->Child(TDqStageBase::idx_Sinks)->ChildrenSize() != 0, "Sink list exists but empty, stage: " << stage->Dump());
+
+        auto outputsNumber = programResultTypesTuple.size();
+        TVector<TExprNode::TPtr> transformSinks;
+        TVector<TExprNode::TPtr> pureSinks;
+        transformSinks.reserve(outputsNumber);
+        pureSinks.reserve(outputsNumber);
         for (const auto& sink: stage->Child(TDqStageBase::idx_Sinks)->Children()) {
-            sink->SetTypeAnn(resultType);
+            const ui64 index = FromString(sink->Child(TDqSink::idx_Index)->Content());
+            if (index >= outputsNumber) {
+                ctx.AddError(TIssue(ctx.GetPosition(stage->Pos()), TStringBuilder()
+                    << "Sink/Transform try to process un-existing lambda's output"));
+                return TStatus::Error;
+            }
+
+            auto transformSettings = sink->Child(TDqSink::idx_Settings)->IsCallable(TTransformSettings::CallableName());
+            if (transformSettings) {
+                transformSinks.push_back(sink);
+            } else {
+                pureSinks.push_back(sink);
+            }
         }
+
+        if (!transformSinks.empty() && !pureSinks.empty()
+            && transformSinks.size() != pureSinks.size()) {
+
+            ctx.AddError(TIssue(ctx.GetPosition(stage->Pos()), TStringBuilder()
+                << "Not every transform has a corresponding sink"));
+            return TStatus::Error;
+        }
+
+        if (!pureSinks.empty()) {
+            for (auto sink : pureSinks) {
+                sink->SetTypeAnn(resultType);
+            }
+            stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
+        } else {
+            for (auto sink : transformSinks) {
+                auto* sinkType = sink->GetTypeAnn();
+                if (sinkType->GetKind() != ETypeAnnotationKind::List
+                    && sinkType->GetKind() != ETypeAnnotationKind::Void) {
+
+                    ctx.AddError(TIssue(ctx.GetPosition(sink->Pos()), TStringBuilder()
+                        << "Expected List or Void type, but got: " << *sinkType));
+                    return TStatus::Error;
+                }
+                /* auto* itemType = sinkType->Cast<TListExprType>()->GetItemType();
+                if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+                    ctx.AddError(TIssue(ctx.GetPosition(sink->Pos()), TStringBuilder()
+                        << "Expected List<Struct<...>> type, but got: List<" << *itemType << ">"));
+                    return TStatus::Error;
+                } */
+                stageResultTypes.emplace_back(sinkType);
+            }
+        }
+    } else {
+        stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
     }
 
-    stage->SetTypeAnn(ctx.MakeType<TTupleExprType>(resultTypesTuple));
+    stage->SetTypeAnn(ctx.MakeType<TTupleExprType>(stageResultTypes));
     return TStatus::Ok;
 }
 
@@ -783,6 +837,26 @@ TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateTransformSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 4U, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TExprNode* outputArg = input->Child(TTransformSettings::idx_OutputType);
+    if (!EnsureTypeWithStructType(*outputArg, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const TTypeAnnotationNode* outputType = outputArg->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+    const TExprNode* inputType = input->Child(TTransformSettings::idx_InputType);
+    if (!EnsureTypeWithStructType(*inputType, ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.MakeType<TListExprType>(outputType));
+    return TStatus::Ok;
+}
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -860,6 +934,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqSink::Match(input.Get())) {
                 return AnnotateDqSink(input, ctx);
+            }
+
+            if (TTransformSettings::Match(input.Get())) {
+                return AnnotateTransformSettings (input, ctx);
             }
 
             if (TDqQuery::Match(input.Get())) {

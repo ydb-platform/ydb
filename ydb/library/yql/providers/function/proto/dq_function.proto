@@ -1,0 +1,8 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NProto;
+
+message TFunctionTransform {
+  string InvokeUrl = 1;
+}

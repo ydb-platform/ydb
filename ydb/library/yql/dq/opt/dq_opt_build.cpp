@@ -235,8 +235,9 @@ public:
 
                     if (output.Stage().Maybe<TDqStage>()) {
                         auto& info = consumersMap[output.Stage().Raw()];
+
                         if (info.Consumers.empty()) {
-                            info.Consumers.resize(GetStageOutputsCount(output.Stage(), false));
+                            info.Consumers.resize(GetStageOutputsCount(output.Stage()));
                         }
 
                         YQL_ENSURE(index <= info.Consumers.size());

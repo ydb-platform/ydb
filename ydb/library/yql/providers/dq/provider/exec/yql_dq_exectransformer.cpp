@@ -1051,7 +1051,6 @@ private:
         executionPlanner.Destroy();
 
         int level = 0;
-
         // TODO: remove copy-paste
         return WrapFutureCallback(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             YQL_LOG(DEBUG) << state->SessionId <<  " WrapFutureCallback";

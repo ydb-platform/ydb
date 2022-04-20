@@ -9,10 +9,13 @@
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
+#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/core/user_data/yql_user_data.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <util/generic/scope.h>
 
@@ -404,6 +407,7 @@ public:
         TBindTerminator term(ProgramParsed.CompGraph->GetTerminator());
 
         auto& typeEnv = TypeEnv();
+        const auto pb = std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(typeEnv, *(holderFactory.GetFunctionRegistry()));
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -439,6 +443,15 @@ public:
 
             if (outputDesc.GetTypeCase() == NDqProto::TTaskOutput::kEffects) {
                 TaskHasEffects = true;
+            }
+
+            if (outputDesc.HasTransform()) {
+                auto transform = outputDesc.GetTransform();
+                auto outputType = NCommon::ParseTypeFromYson(TStringBuf{transform.GetOutputType()}, *pb, Cerr);
+                auto inputType = NCommon::ParseTypeFromYson(TStringBuf{transform.GetInputType()}, *pb, Cerr);
+                LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
+                    << transform.GetType() << " with input type: " << *inputType
+                    << " , output type: " << *outputType);
             }
 
             TVector<IDqOutput::TPtr> outputs{Reserve(std::max<ui64>(outputDesc.ChannelsSize(), 1))};

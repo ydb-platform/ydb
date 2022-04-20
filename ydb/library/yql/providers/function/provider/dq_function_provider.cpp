@@ -12,9 +12,10 @@ TDataProviderInitializer GetDqFunctionDataProviderInitializer(
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         TDqFunctionGatewayFactory::TPtr gatewayFactory,
         // TRunActorParams.TScope
-        const TString& scopeFolderId) {
+        const TString& scopeFolderId,
+        const THashMap<TString, TString>& secureParams) {
 
-    return [credentialsFactory, gatewayFactory, scopeFolderId] (
+    return [credentialsFactory, gatewayFactory, scopeFolderId, secureParams] (
                 const TString& userName,
                 const TString& sessionId,
                 const TGatewaysConfig* gatewaysConfig,
@@ -29,19 +30,20 @@ TDataProviderInitializer GetDqFunctionDataProviderInitializer(
             Y_UNUSED(gatewaysConfig);
             Y_UNUSED(functionRegistry);
             Y_UNUSED(randomProvider);
-            Y_UNUSED(typeCtx);
             Y_UNUSED(progressWriter);
             Y_UNUSED(operationOptions);
 
             auto state = MakeIntrusive<TDqFunctionState>();
             state->SessionId = sessionId;
+            state->Types = typeCtx.Get();
             state->GatewayFactory = gatewayFactory;
             state->ScopeFolderId = scopeFolderId;
+            state->SecureParams = secureParams;
 
             TDataProviderInfo provider;
             provider.Names.insert({TString{FunctionProviderName}});
             provider.Source = CreateDqFunctionDataSource(state);
-            // TODO Sink
+            provider.Sink = CreateDqFunctionDataSink(state);
             return provider;
         };
 }

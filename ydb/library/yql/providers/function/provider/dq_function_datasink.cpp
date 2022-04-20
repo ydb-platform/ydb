@@ -4,6 +4,8 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.h>
 
 namespace NYql::NDqFunction {
 
@@ -11,11 +13,14 @@ namespace {
 
 using namespace NNodes;
 
-class TDqFunctionDataSource : public TDataProviderBase {
+class TDqFunctionDataSink : public TDataProviderBase {
 public:
-    TDqFunctionDataSource(TDqFunctionState::TPtr state)
+    TDqFunctionDataSink(TDqFunctionState::TPtr state)
         : State(std::move(state))
+        , PhysicalOptTransformer(CreateDqFunctionPhysicalOptTransformer(State))
         , LoadMetaDataTransformer(CreateDqFunctionMetaLoader(State))
+        , IntentDeterminationTransformer(CreateDqFunctionIntentTransformer(State))
+        , DqIntegration(CreateDqFunctionDqIntegration(State))
     {}
 
     TStringBuf GetName() const override {
@@ -23,7 +28,8 @@ public:
     }
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
-        if (node.IsCallable(TCoDataSource::CallableName())) {
+        if (node.IsCallable(TCoDataSink::CallableName())) {
+            // (DataSink 'Function 'CloudFunction 'connection_name)
             if (!EnsureArgsCount(node, 3, ctx)) {
                 return false;
             }
@@ -39,25 +45,41 @@ public:
             }
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid ExternalFunction DataSource parameters"));
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid ExternalFunction DataSink parameters"));
         return false;
+    }
+
+    bool CanParse(const TExprNode& node) override {
+        return node.IsCallable(TDqSqlExternalFunction::CallableName());
+    }
+
+    IGraphTransformer& GetPhysicalOptProposalTransformer() override {
+        return *PhysicalOptTransformer;
     }
 
     IGraphTransformer& GetLoadTableMetadataTransformer() override {
         return *LoadMetaDataTransformer;
     }
 
+    IGraphTransformer& GetIntentDeterminationTransformer() override {
+        return *IntentDeterminationTransformer;
+    }
+
+    IDqIntegration* GetDqIntegration() override {
+        return DqIntegration.Get();
+    }
+
 private:
     const TDqFunctionState::TPtr State;
+    const THolder<IGraphTransformer> PhysicalOptTransformer;
     const THolder<IGraphTransformer> LoadMetaDataTransformer;
+    const THolder<TVisitorTransformerBase> IntentDeterminationTransformer;
+    const THolder<IDqIntegration> DqIntegration;
 };
+} // namespace
+
+TIntrusivePtr<IDataProvider> CreateDqFunctionDataSink(TDqFunctionState::TPtr state) {
+    return new TDqFunctionDataSink(std::move(state));
 }
-
-
-TIntrusivePtr<IDataProvider> CreateDqFunctionDataSource(TDqFunctionState::TPtr state) {
-    return new TDqFunctionDataSource(std::move(state));
-}
-
-
 
 }

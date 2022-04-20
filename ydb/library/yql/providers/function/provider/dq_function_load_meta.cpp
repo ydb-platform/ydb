@@ -35,16 +35,18 @@ public:
         std::vector<NThreading::TFuture<void>> resolverHandles;
         resolverHandles.reserve(functions.size());
         auto resolverContext = ResolverContext;
+        const auto position = ctx.GetPosition(input->Pos());
         for (auto functionDesc : functions) {
             auto gateway = State->GatewayFactory->CreateDqFunctionGateway(
-                    functionDesc.Type, {}, functionDesc.Connection);
+                    functionDesc.Type, State->SecureParams, functionDesc.Connection);
+
             auto future = gateway->ResolveFunction(State->ScopeFolderId, functionDesc.FunctionName);
-            resolverHandles.push_back(future.Apply([resolverContext]
+            resolverHandles.push_back(future.Apply([resolverContext, position]
                 (const NThreading::TFuture<TDqFunctionDescription>& future) {
                     try {
                         resolverContext->FunctionsDescription.emplace(future.GetValue());
                     } catch (const std::exception& e) {
-                        resolverContext->ResolveIssues.push_back(ExceptionToIssue(e));
+                        resolverContext->ResolveIssues.push_back(ExceptionToIssue(e, position));
                     }
                 }));
         }
@@ -63,6 +65,7 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+
         Y_UNUSED(ctx);
         YQL_ENSURE(AllFutures.HasValue());
         output = input;

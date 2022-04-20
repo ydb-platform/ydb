@@ -80,6 +80,17 @@
         "ListBase": "TDqSink"
     },
     {
+        "Name": "TTransformSettings",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "TransformSettings"},
+        "Children": [
+            {"Index": 0, "Name": "Type", "Type": "TCoAtom"},
+            {"Index": 1, "Name": "InputType", "Type": "TExprBase"},
+            {"Index": 2, "Name": "OutputType", "Type": "TExprBase"},
+            {"Index": 3, "Name": "Other", "Type": "TCoNameValueTupleList"}
+        ]
+    },
+    {
         "Name": "TDqStageBase",
         "Base": "TCallable",
         "Match": {"Type": "CallableBase"},
@@ -224,7 +235,7 @@
         "Children": [
             {"Index": 0, "Name": "TransformType", "Type": "TExprBase"},
             {"Index": 1, "Name": "TransformName", "Type": "TExprBase"},
-            {"Index": 2, "Name": "Settings", "Type": "TExprBase"}
+            {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
         ]
     }
     ]

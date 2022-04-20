@@ -14,7 +14,7 @@ class IDqFunctionGateway {
 public:
     using TPtr = std::shared_ptr<IDqFunctionGateway>;
 
-    virtual NThreading::TFuture<TDqFunctionDescription> ResolveFunction(const TString& folderId, const TString& functionName);
+    virtual NThreading::TFuture<TDqFunctionDescription> ResolveFunction(const TString& folderId, const TString& functionName) = 0;
     virtual ~IDqFunctionGateway() = default;
 };
 

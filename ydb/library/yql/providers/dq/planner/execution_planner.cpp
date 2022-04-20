@@ -10,6 +10,8 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
@@ -166,19 +168,46 @@ namespace NYql::NDqs {
                     YQL_ENSURE(datasink);
                     auto dqIntegration = (*datasink)->GetDqIntegration();
                     YQL_ENSURE(dqIntegration, "DqSink assumes that datasink has a dq integration impl");
+
+                    TTransform stageTransform;
                     TString sinkType;
                     ::google::protobuf::Any sinkSettings;
-                    dqIntegration->FillSinkSettings(sink.Ref(), sinkSettings, sinkType);
-                    YQL_ENSURE(!sinkSettings.type_url().empty(), "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings for its dq sink node");
-                    YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings type for its dq sink node");
+
+                    auto transformSettings = sink.Settings().Maybe<TTransformSettings>();
+                    if (transformSettings) {
+                        auto settings = transformSettings.Cast();
+
+                        stageTransform.Type = settings.Type();
+                        const auto inputType = settings.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                        stageTransform.InputType = NCommon::WriteTypeToYson(inputType);
+                        const auto outputType = settings.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                        stageTransform.OutputType = NCommon::WriteTypeToYson(outputType);
+
+                        dqIntegration->FillTransformSettings(sink.Ref(), stageTransform.Settings);
+                    } else {
+                        dqIntegration->FillSinkSettings(sink.Ref(), sinkSettings, sinkType);
+                        YQL_ENSURE(!sinkSettings.type_url().empty(), "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings for its dq sink node");
+                        YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings type for its dq sink node");
+                    }
 
                     for (ui64 taskId : stageInfo.Tasks) {
                         auto& task = TasksGraph.GetTask(taskId);
                         YQL_ENSURE(index < task.Outputs.size());
                         auto& output = task.Outputs[index];
-                        output.SinkType = sinkType;
-                        output.SinkSettings = sinkSettings;
-                        output.Type = NDq::TTaskOutputType::Sink;
+                        if (transformSettings) {
+
+                            output.Transform.ConstructInPlace();
+
+                            auto& transform = output.Transform;
+                            transform->Type = stageTransform.Type;
+                            transform->InputType = stageTransform.InputType;
+                            transform->OutputType = stageTransform.OutputType;
+                            //transform->Settings = stageTransform.Settings;
+                        } else {
+                            output.SinkType = sinkType;
+                            output.SinkSettings = sinkSettings;
+                            output.Type = NDq::TTaskOutputType::Sink;
+                        }
                     }
                 }
             }
@@ -475,11 +504,6 @@ namespace NYql::NDqs {
                     task.Inputs[dqSourceInputIndex].SourceSettings = sourceSettings;
                     task.Inputs[dqSourceInputIndex].SourceType = sourceType;
                 }
-                if (stageSettings.IsExternalFunction) {
-                    auto& transform = task.OutputTransform;
-                    transform.Type = stageSettings.TransformType;
-                    //transform.FunctionName = stageSettings.TransformName;
-                }
             }
         }
         return !parts.empty();
@@ -642,13 +666,23 @@ namespace NYql::NDqs {
             }
 
             case TTaskOutputType::Undefined: {
-                YQL_ENSURE(false, "Unexpected task output type `TTaskOutputType::Undefined`");
+                YQL_ENSURE(output.Transform, "Unexpected task output type `TTaskOutputType::Undefined`");
             }
         }
 
         for (auto& channel : output.Channels) {
             auto& channelDesc = *outputDesc.AddChannels();
             FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
+        }
+
+        if (output.Transform) {
+            auto* transformDesc = outputDesc.MutableTransform();
+            auto& transform = output.Transform;
+
+            transformDesc->SetType(transform->Type);
+            transformDesc->SetInputType(transform->InputType);
+            transformDesc->SetOutputType(transform->OutputType);
+            *transformDesc->MutableSettings() = transform->Settings;
         }
     }
 

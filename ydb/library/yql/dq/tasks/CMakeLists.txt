@@ -17,6 +17,7 @@ target_link_libraries(yql-dq-tasks PUBLIC
   library-yql-core
   yql-dq-expr_nodes
   yql-dq-proto
+  library-yql-ast
 )
 target_sources(yql-dq-tasks PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/tasks/dq_task_program.cpp

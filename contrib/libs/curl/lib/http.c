@@ -1153,7 +1153,6 @@ static bool http_should_fail(struct Curl_easy *data)
   return data->state.authproblem;
 }
 
-#ifndef USE_HYPER
 /*
  * readmoredata() is a "fread() emulation" to provide POST and/or request
  * data. It is used when a huge POST is to be made and the entire chunk wasn't
@@ -1411,8 +1410,6 @@ CURLcode Curl_buffer_send(struct dynbuf *in,
   data->req.pendingheader = 0;
   return result;
 }
-
-#endif
 
 /* end of the add_buffer functions */
 /* ------------------------------------------------------------------------- */
@@ -2375,6 +2372,9 @@ CURLcode Curl_http_bodysend(struct Curl_easy *data, struct connectdata *conn,
 #ifndef USE_HYPER
   /* Hyper always handles the body separately */
   curl_off_t included_body = 0;
+#else
+  /* from this point down, this function should not be used */
+#define Curl_buffer_send(a,b,c,d,e) CURLE_OK
 #endif
   CURLcode result = CURLE_OK;
   struct HTTP *http = data->req.p.http;
@@ -2685,7 +2685,6 @@ CURLcode Curl_http_bodysend(struct Curl_easy *data, struct connectdata *conn,
     /* issue the request */
     result = Curl_buffer_send(r, data, &data->info.request_size, 0,
                               FIRSTSOCKET);
-
     if(result)
       failf(data, "Failed sending HTTP request");
     else
@@ -3312,7 +3311,7 @@ checkhttpprefix(struct Curl_easy *data,
 #ifdef CURL_DOES_CONVERSIONS
   /* convert from the network encoding using a scratch area */
   char *scratch = strdup(s);
-  if(NULL == scratch) {
+  if(!scratch) {
     failf(data, "Failed to allocate memory for conversion!");
     return FALSE; /* can't return CURLE_OUT_OF_MEMORY so return FALSE */
   }
@@ -3352,7 +3351,7 @@ checkrtspprefix(struct Curl_easy *data,
 #ifdef CURL_DOES_CONVERSIONS
   /* convert from the network encoding using a scratch area */
   char *scratch = strdup(s);
-  if(NULL == scratch) {
+  if(!scratch) {
     failf(data, "Failed to allocate memory for conversion!");
     return FALSE; /* can't return CURLE_OUT_OF_MEMORY so return FALSE */
   }
@@ -4245,7 +4244,7 @@ CURLcode Curl_http_readwrite_headers(struct Curl_easy *data,
            The sscanf() line above will also allow zero-prefixed and negative
            numbers, so we check for that too here.
         */
-        else if(ISDIGIT(digit4) || (k->httpcode < 100)) {
+        else if(ISDIGIT(digit4) || (nc >= 4 && k->httpcode < 100)) {
           failf(data, "Unsupported response code in HTTP response");
           return CURLE_UNSUPPORTED_PROTOCOL;
         }

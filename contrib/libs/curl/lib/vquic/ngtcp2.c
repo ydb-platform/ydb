@@ -29,8 +29,10 @@
 #ifdef USE_OPENSSL
 #include <openssl/err.h>
 #error #include <ngtcp2/ngtcp2_crypto_openssl.h>
+#include "vtls/openssl.h"
 #elif defined(USE_GNUTLS)
 #error #include <ngtcp2/ngtcp2_crypto_gnutls.h>
+#include "vtls/gtls.h"
 #endif
 #include "urldata.h"
 #include "sendf.h"
@@ -287,6 +289,27 @@ static SSL_CTX *quic_ssl_ctx(struct Curl_easy *data)
     SSL_CTX_set_keylog_callback(ssl_ctx, keylog_callback);
   }
 
+  {
+    struct connectdata *conn = data->conn;
+    const char * const ssl_cafile = conn->ssl_config.CAfile;
+    const char * const ssl_capath = conn->ssl_config.CApath;
+
+    if(conn->ssl_config.verifypeer) {
+      SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, NULL);
+      /* tell OpenSSL where to find CA certificates that are used to verify
+         the server's certificate. */
+      if(!SSL_CTX_load_verify_locations(ssl_ctx, ssl_cafile, ssl_capath)) {
+        /* Fail if we insist on successfully verifying the server. */
+        failf(data, "error setting certificate verify locations:"
+              "  CAfile: %s CApath: %s",
+              ssl_cafile ? ssl_cafile : "none",
+              ssl_capath ? ssl_capath : "none");
+        return NULL;
+      }
+      infof(data, " CAfile: %s", ssl_cafile ? ssl_cafile : "none");
+      infof(data, " CApath: %s", ssl_capath ? ssl_capath : "none");
+    }
+  }
   return ssl_ctx;
 }
 
@@ -1638,8 +1661,10 @@ static ssize_t ngh3_stream_send(struct Curl_easy *data,
   return sent;
 }
 
-static void ng_has_connected(struct connectdata *conn, int tempindex)
+static CURLcode ng_has_connected(struct Curl_easy *data,
+                                 struct connectdata *conn, int tempindex)
 {
+  CURLcode result = CURLE_OK;
   conn->recv[FIRSTSOCKET] = ngh3_stream_recv;
   conn->send[FIRSTSOCKET] = ngh3_stream_send;
   conn->handler = &Curl_handler_http3;
@@ -1647,6 +1672,27 @@ static void ng_has_connected(struct connectdata *conn, int tempindex)
   conn->httpversion = 30;
   conn->bundle->multiuse = BUNDLE_MULTIPLEX;
   conn->quic = &conn->hequic[tempindex];
+
+  if(conn->ssl_config.verifyhost) {
+#ifdef USE_OPENSSL
+    X509 *server_cert;
+    CURLcode result;
+    server_cert = SSL_get_peer_certificate(conn->quic->ssl);
+    if(!server_cert) {
+      return CURLE_PEER_FAILED_VERIFICATION;
+    }
+    result = Curl_ossl_verifyhost(data, conn, server_cert);
+    X509_free(server_cert);
+    if(result)
+      return result;
+    infof(data, "Verified certificate just fine");
+#else
+    result = Curl_gtls_verifyserver(data, conn, conn->quic->ssl, FIRSTSOCKET);
+#endif
+  }
+  else
+    infof(data, "Skipped certificate verification");
+  return result;
 }
 
 /*
@@ -1670,8 +1716,9 @@ CURLcode Curl_quic_is_connected(struct Curl_easy *data,
     goto error;
 
   if(ngtcp2_conn_get_handshake_completed(qs->qconn)) {
-    *done = TRUE;
-    ng_has_connected(conn, sockindex);
+    result = ng_has_connected(data, conn, sockindex);
+    if(!result)
+      *done = TRUE;
   }
 
   return result;
@@ -1718,6 +1765,10 @@ static CURLcode ng_process_ingress(struct Curl_easy *data,
     rv = ngtcp2_conn_read_pkt(qs->qconn, &path, &pi, buf, recvd, ts);
     if(rv) {
       /* TODO Send CONNECTION_CLOSE if possible */
+      if(rv == NGTCP2_ERR_CRYPTO)
+        /* this is a "TLS problem", but a failed certificate verification
+           is a common reason for this */
+        return CURLE_PEER_FAILED_VERIFICATION;
       return CURLE_RECV_ERROR;
     }
   }

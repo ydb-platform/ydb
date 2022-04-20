@@ -744,15 +744,17 @@ void Curl_conninfo_local(struct Curl_easy *data, curl_socket_t sockfd,
 void Curl_updateconninfo(struct Curl_easy *data, struct connectdata *conn,
                          curl_socket_t sockfd)
 {
-  /* 'local_ip' and 'local_port' get filled with local's numerical ip address
-     and port number whenever an outgoing connection is **established** from
-     the primary socket to a remote address. */
+  /* 'local_ip' and 'local_port' get filled with local's numerical
+     ip address and port number whenever an outgoing connection is
+     **established** from the primary socket to a remote address. */
   char local_ip[MAX_IPADR_LEN] = "";
   int local_port = -1;
 
-  if(!conn->bits.reuse && !conn->bits.tcp_fastopen)
-    Curl_conninfo_remote(data, conn, sockfd);
-  Curl_conninfo_local(data, sockfd, local_ip, &local_port);
+  if(conn->transport == TRNSPRT_TCP) {
+    if(!conn->bits.reuse && !conn->bits.tcp_fastopen)
+      Curl_conninfo_remote(data, conn, sockfd);
+    Curl_conninfo_local(data, sockfd, local_ip, &local_port);
+  } /* end of TCP-only section */
 
   /* persist connection info in session handle */
   Curl_persistconninfo(data, conn, local_ip, local_port);
@@ -892,6 +894,8 @@ CURLcode Curl_is_connected(struct Curl_easy *data,
         connkeep(conn, "HTTP/3 default");
         return CURLE_OK;
       }
+      /* When a QUIC connect attempt fails, the better error explanation is in
+         'result' and not in errno */
       if(result) {
         conn->tempsock[i] = CURL_SOCKET_BAD;
         error = SOCKERRNO;
@@ -975,6 +979,13 @@ CURLcode Curl_is_connected(struct Curl_easy *data,
         char buffer[STRERROR_LEN];
         Curl_printable_address(conn->tempaddr[i], ipaddress,
                                sizeof(ipaddress));
+#ifdef ENABLE_QUIC
+        if(conn->transport == TRNSPRT_QUIC) {
+          infof(data, "connect to %s port %u failed: %s",
+                ipaddress, conn->port, curl_easy_strerror(result));
+        }
+        else
+#endif
         infof(data, "connect to %s port %u failed: %s",
               ipaddress, conn->port,
               Curl_strerror(error, buffer, sizeof(buffer)));
@@ -986,9 +997,11 @@ CURLcode Curl_is_connected(struct Curl_easy *data,
         ainext(conn, i, TRUE);
         status = trynextip(data, conn, sockindex, i);
         if((status != CURLE_COULDNT_CONNECT) ||
-           conn->tempsock[other] == CURL_SOCKET_BAD)
+           conn->tempsock[other] == CURL_SOCKET_BAD) {
           /* the last attempt failed and no other sockets remain open */
-          result = status;
+          if(!result)
+            result = status;
+        }
       }
     }
   }
@@ -1014,12 +1027,15 @@ CURLcode Curl_is_connected(struct Curl_easy *data,
     /* no more addresses to try */
     const char *hostname;
     char buffer[STRERROR_LEN];
+    CURLcode failreason = result;
 
     /* if the first address family runs out of addresses to try before the
        happy eyeball timeout, go ahead and try the next family now */
     result = trynextip(data, conn, sockindex, 1);
     if(!result)
       return result;
+
+    result = failreason;
 
 #ifndef CURL_DISABLE_PROXY
     if(conn->bits.socksproxy)
@@ -1034,10 +1050,14 @@ CURLcode Curl_is_connected(struct Curl_easy *data,
       hostname = conn->host.name;
 
     failf(data, "Failed to connect to %s port %u after "
-                "%" CURL_FORMAT_TIMEDIFF_T " ms: %s",
-        hostname, conn->port,
-        Curl_timediff(now, data->progress.t_startsingle),
-        Curl_strerror(error, buffer, sizeof(buffer)));
+          "%" CURL_FORMAT_TIMEDIFF_T " ms: %s",
+          hostname, conn->port,
+          Curl_timediff(now, data->progress.t_startsingle),
+#ifdef ENABLE_QUIC
+          (conn->transport == TRNSPRT_QUIC) ?
+          curl_easy_strerror(result) :
+#endif
+          Curl_strerror(error, buffer, sizeof(buffer)));
 
     Curl_quic_disconnect(data, conn, 0);
     Curl_quic_disconnect(data, conn, 1);
@@ -1125,7 +1145,7 @@ void Curl_sndbufset(curl_socket_t sockfd)
   static int detectOsState = DETECT_OS_NONE;
 
   if(detectOsState == DETECT_OS_NONE) {
-    if(curlx_verify_windows_version(6, 0, PLATFORM_WINNT,
+    if(curlx_verify_windows_version(6, 0, 0, PLATFORM_WINNT,
                                     VERSION_GREATER_THAN_EQUAL))
       detectOsState = DETECT_OS_VISTA_OR_LATER;
     else

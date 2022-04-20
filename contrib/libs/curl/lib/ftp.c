@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -1004,7 +1004,7 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
       }
 
     /* parse the port */
-    if(ip_end != NULL) {
+    if(ip_end) {
       port_start = strchr(ip_end, ':');
       if(port_start) {
         port_min = curlx_ultous(strtoul(port_start + 1, NULL, 10));
@@ -4102,6 +4102,11 @@ static CURLcode ftp_disconnect(struct Curl_easy *data,
   return CURLE_OK;
 }
 
+#ifdef _MSC_VER
+/* warning C4706: assignment within conditional expression */
+#pragma warning(disable:4706)
+#endif
+
 /***********************************************************************
  *
  * ftp_parse_url_path()
@@ -4190,7 +4195,7 @@ CURLcode ftp_parse_url_path(struct Curl_easy *data)
         }
 
         /* parse the URL path into separate path components */
-        while((slashPos = strchr(curPos, '/')) != NULL) {
+        while((slashPos = strchr(curPos, '/'))) {
           size_t compLen = slashPos - curPos;
 
           /* path starts with a slash: add that as a directory */
@@ -4357,7 +4362,7 @@ static CURLcode ftp_setup_connection(struct Curl_easy *data,
   struct FTP *ftp;
 
   data->req.p.ftp = ftp = calloc(sizeof(struct FTP), 1);
-  if(NULL == ftp)
+  if(!ftp)
     return CURLE_OUT_OF_MEMORY;
 
   ftp->path = &data->state.up.path[1]; /* don't include the initial slash */

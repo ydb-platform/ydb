@@ -60,6 +60,10 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+
+
+====================COPYRIGHT====================
  * Copyright (C) 1999 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
@@ -119,11 +123,6 @@
 
 ====================COPYRIGHT====================
  * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
- * Copyright (C) 2010 - 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
-
-
-====================COPYRIGHT====================
- * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2010, Howard Chu, <hyc@highlandsun.com>
 
 
@@ -136,6 +135,11 @@
 ====================COPYRIGHT====================
  * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2012 - 2017, Nick Zitzmann, <nickzman@gmail.com>.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2012 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2010 - 2011, Hoi-Ho Chan, <hoiho.chan@gmail.com>
 
 
 ====================COPYRIGHT====================
@@ -281,7 +285,7 @@
 
 
 ====================COPYRIGHT====================
-/* Copyright (c) 1996 - 2020 by Internet Software Consortium.
+/* Copyright (c) 1996 - 2021 by Internet Software Consortium.
 
 
 ====================COPYRIGHT====================

@@ -102,6 +102,8 @@ In ASNI SQL compatibility mode, double quotes are used for IDs, and the only esc
 SELECT 'string with '' quote'; -- result: a string with a ' quote
 ```
 
+String literals can be used to produce [primitive type literals](../../builtins/basic#data-type-literals).
+
 ### Multi-line string literals {#multiline-string-literals}
 
 A multiline string literal is expressed as an arbitrary set of characters enclosed in double at signs `@@`:

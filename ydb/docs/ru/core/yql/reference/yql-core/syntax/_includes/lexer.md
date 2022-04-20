@@ -96,6 +96,8 @@ SELECT "string with\n newline, \x0a newline and \" backtick ";
 SELECT 'string with '' quote'; -- результат: string with ' quote
 ```
 
+На основании строковых литералов могут быть получены [литералы простых типов](../../builtins/basic#data-type-literals).
+
 ### Многострочные строковые литералы {#multiline-string-literals}
 
 Многострочный строковой литерал записывается в виде произвольного набора символов между двойными собачками `@@`:

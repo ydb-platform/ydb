@@ -4,7 +4,7 @@ For primitive types, you can create literals based on string literals.
 
 **Syntax**
 
-<Primitive type>(<string>[, <additional attributes>])
+`<Primitive type>( <string>[, <additional attributes>] )`
 
 Unlike `CAST("myString" AS MyType)`:
 

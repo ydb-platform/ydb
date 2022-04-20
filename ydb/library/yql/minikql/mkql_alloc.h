@@ -293,6 +293,13 @@ private:
 void* MKQLAllocSlow(size_t sz, TAllocState* state);
 inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state) {
     Y_VERIFY_DEBUG(state);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
+    ret->Link(&state->OffloadedBlocksRoot);
+    return ret + 1;
+#endif
+
     auto currPage = state->CurrentPage;
     if (Y_LIKELY(currPage->Offset + sz <= currPage->Capacity)) {
         void* ret = (char*)currPage + currPage->Offset;
@@ -306,7 +313,14 @@ inline void* MKQLAllocFastDeprecated(size_t sz, TAllocState* state) {
 
 inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state) {
     Y_VERIFY_DEBUG(state);
-    if (state->SupportsSizedAllocators && sz > MaxPageUserData) {
+
+    bool useMemalloc = state->SupportsSizedAllocators && sz > MaxPageUserData;
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    useMemalloc = true;
+#endif
+
+    if (useMemalloc) {
         state->OffloadAlloc(sizeof(TAllocState::TListEntry) + sz);
         auto ret = (TAllocState::TListEntry*)malloc(sizeof(TAllocState::TListEntry) + sz);
         ret->Link(&state->OffloadedBlocksRoot);
@@ -331,6 +345,16 @@ inline void MKQLFreeDeprecated(const void* p) noexcept {
         return;
     }
 
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    TAllocState *state = TlsAllocState;
+    Y_VERIFY_DEBUG(state);
+
+    auto entry = (TAllocState::TListEntry*)(mem) - 1;
+    entry->Unlink();
+    free(entry);
+    return;
+#endif
+
     TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(p);
     if (Y_LIKELY(--header->UseCount != 0)) {
         return;
@@ -345,7 +369,14 @@ inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state)
     }
 
     Y_VERIFY_DEBUG(state);
-    if (state->SupportsSizedAllocators && sz > MaxPageUserData) {
+
+    bool useFree = state->SupportsSizedAllocators && sz > MaxPageUserData;
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    useFree = true;
+#endif
+
+    if (useFree) {
         auto entry = (TAllocState::TListEntry*)(mem) - 1;
         entry->Unlink();
         free(entry);

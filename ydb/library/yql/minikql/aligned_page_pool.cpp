@@ -35,11 +35,7 @@ public:
     ~TGlobalPagePool() {
         void* addr = nullptr;
         while (Pages.Dequeue(&addr)) {
-#ifdef _win_
-            Y_VERIFY_DEBUG(::VirtualFree(addr, 0, MEM_RELEASE), "VirtualFree failed: %s", LastSystemErrorText());
-#else
-            Y_VERIFY_DEBUG(0 == ::munmap(addr, PageSize), "munmap failed: %s", LastSystemErrorText());
-#endif
+            FreePage(addr);
         }
     }
 
@@ -54,8 +50,12 @@ public:
     }
 
     void PushPage(void* addr) {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        FreePage(addr);
+#else
         AtomicIncrement(Count);
         Pages.Enqueue(addr);
+#endif
     }
 
     ui64 GetPageCount() const {
@@ -68,6 +68,15 @@ public:
 
     size_t GetSize() const {
         return GetPageCount() * GetPageSize();
+    }
+
+private:
+    void FreePage(void* addr) {
+#ifdef _win_
+        Y_VERIFY_DEBUG(::VirtualFree(addr, 0, MEM_RELEASE), "VirtualFree failed: %s", LastSystemErrorText());
+#else
+        Y_VERIFY_DEBUG(0 == ::munmap(addr, PageSize), "munmap failed: %s", LastSystemErrorText());
+#endif
     }
 
 private:
@@ -121,7 +130,11 @@ TAlignedPagePool::~TAlignedPagePool() {
     size_t activeBlocksSize = 0;
     for (auto it = ActiveBlocks.cbegin(); ActiveBlocks.cend() != it; ActiveBlocks.erase(it++)) {
         activeBlocksSize += it->second;
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        ReturnBlock(it->first, it->second);
+#else
         Free(it->first, it->second);
+#endif
     }
 
     if (activeBlocksSize > 0 || FreePages.size() != AllPages.size() || OffloadedActiveBytes) {
@@ -226,18 +239,33 @@ void* TAlignedPagePool::GetPage() {
     }
 
     ++PageMissCount;
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    const auto res = GetBlock(POOL_PAGE_SIZE);
+#else
     const auto res = Alloc(POOL_PAGE_SIZE);
+#endif
+
     AllPages.emplace(res);
     return res;
 }
 
 void TAlignedPagePool::ReturnPage(void* addr) noexcept {
     Y_VERIFY_DEBUG(AllPages.find(addr) != AllPages.end());
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    ReturnBlock(addr, POOL_PAGE_SIZE);
+#else
     FreePages.emplace(addr);
+#endif
 }
 
 void* TAlignedPagePool::GetBlock(size_t size) {
     Y_VERIFY_DEBUG(size >= POOL_PAGE_SIZE);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    OffloadAlloc(size);
+    return malloc(size);
+#else
     if (size == POOL_PAGE_SIZE) {
         return GetPage();
     } else {
@@ -245,16 +273,23 @@ void* TAlignedPagePool::GetBlock(size_t size) {
         Y_VERIFY_DEBUG(ActiveBlocks.emplace(ptr, size).second);
         return ptr;
     }
+#endif
 }
 
 void TAlignedPagePool::ReturnBlock(void* ptr, size_t size) noexcept {
     Y_VERIFY_DEBUG(size >= POOL_PAGE_SIZE);
+
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    OffloadFree(size);
+    free(ptr);
+#else
     if (size == POOL_PAGE_SIZE) {
         ReturnPage(ptr);
     } else {
         Free(ptr, size);
         Y_VERIFY_DEBUG(ActiveBlocks.erase(ptr));
     }
+#endif
 }
 
 void* TAlignedPagePool::Alloc(size_t size) {

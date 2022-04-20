@@ -1072,6 +1072,39 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
         }
     }
+
+    Y_UNIT_TEST_QUAD(DuplicateUpsert, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTableWithMultishardIndexAndDataColumn(kikimr.GetTestClient());
+
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, ext_value) VALUES
+                (3u, 3000000000u, "Something"),
+                (3u, 3000000001u, "Something1"),
+                (3u, 3000000002u, "Something2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const auto& yson = ReadTableToYson(session, "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
+            const TString expected = R"([[[3000000002u];[3u];#]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
 }
 
 }

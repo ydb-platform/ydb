@@ -104,13 +104,13 @@ namespace NKikimr::NYaml {
             {"FLAT_HIVE", 1},
             {"FLAT_BS_CONTROLLER", 1},
             {"FLAT_SCHEMESHARD", 1},
+            {"FLAT_TX_COORDINATOR", 3},
+            {"TX_MEDIATOR", 3},
+            {"TX_ALLOCATOR", 3},
+            {"CMS", 1},
             {"NODE_BROKER", 1},
             {"TENANT_SLOT_BROKER", 1},
             {"CONSOLE", 1},
-            {"CMS", 1},
-            {"TX_MEDIATOR", 3},
-            {"FLAT_TX_COORDINATOR", 3},
-            {"TX_ALLOCATOR", 3},
         };
     }
 
@@ -445,6 +445,7 @@ namespace NKikimr::NYaml {
                             vdiskID.InsertValue("group_id", NJson::TJsonValue(groupID));
                             vdiskID.InsertValue("group_generation", NJson::TJsonValue(groupGeneration));
                             myVdisk.InsertValue("vdisk_id", vdiskID);
+                            myVdisk.InsertValue("vdisk_kind", NJson::TJsonValue("Default"));
                             vdisksServiceSet.AppendValue(myVdisk);
                         }
                     }
@@ -567,7 +568,13 @@ namespace NKikimr::NYaml {
         Y_ENSURE(json.Has("domains_config"));
         Y_ENSURE(json["domains_config"].IsMap());
 
+        bool disabledDefaultSecurity = false;
         NJson::TJsonValue& domainsConfig = json["domains_config"];
+        if (domainsConfig.Has("disable_builtin_security")) {
+            disabledDefaultSecurity = domainsConfig["disable_builtin_security"].GetBooleanSafe();
+            domainsConfig.EraseValue("disable_builtin_security");
+        }
+
         NJson::TJsonValue& securityConfig = domainsConfig["security_config"];
         TString defaultUserName;
 
@@ -578,13 +585,13 @@ namespace NKikimr::NYaml {
             NJson::TJsonValue& defaultUser = defaultUsers.GetArraySafe()[0];
             Y_ENSURE(defaultUser.IsMap());
             defaultUserName = defaultUser["password"].GetStringRobust();
-        } else {
+        } else if (!disabledDefaultSecurity) {
             NJson::TJsonValue& defaultUser = securityConfig["default_users"].AppendValue({});
             defaultUser["name"] = defaultUserName = "root";
             defaultUser["password"] = "";
         }
 
-        if (!securityConfig.Has("default_groups")) {
+        if (!securityConfig.Has("default_groups") && !disabledDefaultSecurity) {
             NJson::TJsonValue& defaultGroups = securityConfig["default_groups"];
 
             {
@@ -644,11 +651,11 @@ namespace NKikimr::NYaml {
             }
         }
 
-        if (!securityConfig.Has("all_users_group")) {
+        if (!securityConfig.Has("all_users_group") && !disabledDefaultSecurity) {
             securityConfig["all_users_group"] = "USERS";
         }
 
-        if (!securityConfig.Has("default_access")) {
+        if (!securityConfig.Has("default_access") && !disabledDefaultSecurity) {
             NJson::TJsonValue& defaultAccess = securityConfig["default_access"];
             defaultAccess.AppendValue("+(ConnDB):USERS"); // ConnectDatabase
             defaultAccess.AppendValue("+(DS|RA):METADATA-READERS"); // DescribeSchema | ReadAttributes

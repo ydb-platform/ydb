@@ -9,6 +9,8 @@
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/cluster_mapping.h>
 
+#include <ydb/library/yql/parser/proto_ast/gen/v1_proto/SQLv1Parser.pb.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -97,15 +99,13 @@ namespace NSQLTranslationV1 {
 
         void SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action);
 
-        template <typename TToken>
-        const TString& Token(const TToken& token) {
+        const TString& Token(const NSQLv1Generated::TToken& token) {
             Position.Row = token.GetLine();
             Position.Column = token.GetColumn() + 1;
             return token.GetValue();
         }
 
-        template <typename TToken>
-        TPosition TokenPosition(const TToken& token) {
+        TPosition TokenPosition(const NSQLv1Generated::TToken& token) {
             TPosition pos = Position;
             pos.Row = token.GetLine();
             pos.Column = token.GetColumn() + 1;
@@ -314,13 +314,11 @@ namespace NSQLTranslationV1 {
         TContext& Context();
         IOutputStream& Error();
 
-        template <typename TToken>
-        const TString& Token(const TToken& token) {
+        const TString& Token(const NSQLv1Generated::TToken& token) {
             return Ctx.Token(token);
         }
 
-        template <typename TToken>
-        TString Identifier(const TToken& token) {
+        TString Identifier(const NSQLv1Generated::TToken& token) {
             return IdContent(Ctx, Token(token));
         }
 

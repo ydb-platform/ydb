@@ -433,6 +433,10 @@ namespace NKikimr::NYaml {
                             vdiskLocation.EraseValue("pdisk_category");
                         }
 
+                        if (vdiskLocation.Has("pdisk_config")) {
+                            vdiskLocation.EraseValue("pdisk_config");
+                        }
+
                         if (shouldFillVdisks) {
 
                             NJson::TJsonValue myVdisk;

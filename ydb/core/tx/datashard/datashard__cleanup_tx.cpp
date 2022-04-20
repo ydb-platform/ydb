@@ -45,7 +45,7 @@ public:
                 Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
                 Self->State == TShardState::SplitSrcMakeSnapshot);
 
-        if (expireSnapshotsAllowed && Self->GetSnapshotManager().RemoveExpiredSnapshots(txc.DB, ctx.Now())) {
+        if (expireSnapshotsAllowed && Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Removed expired snapshots at " << Self->TabletID());
         }

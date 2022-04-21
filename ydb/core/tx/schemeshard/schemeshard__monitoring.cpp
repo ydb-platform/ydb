@@ -1060,7 +1060,7 @@ private:
 
                 TPath path_ = TPath::Init(pathId, Self);
 
-                for (const auto shardIdx: shards) {
+                for (const auto& shardIdx: shards) {
                     TABLER() {
                         TABLED() {
                             str << LinkToShardInfo(shardIdx);

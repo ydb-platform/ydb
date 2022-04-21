@@ -140,7 +140,7 @@ public:
 
         TNodeOnNodeOwnedMap replaces(reads.size());
         bool bad = false;
-        for (const auto r : reads) {
+        for (const auto& r : reads) {
             const TClRead read(r);
             const auto cluster = read.DataSource().Cluster().StringValue();
             const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();

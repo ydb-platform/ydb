@@ -1651,6 +1651,10 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         ExpectFailWithError("USE plato; SELECT TableName(), count(*) FROM plato.Input;",
             "<main>:1:19: Error: Expression has to be an aggregation function or key column, because aggregation is used elsewhere in this subquery\n");
     }
+
+    Y_UNIT_TEST(UseShouldWorkAsColumnName) {
+        UNIT_ASSERT(SqlToYql("select use from (select 1 as use);").IsOk());
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

@@ -993,6 +993,7 @@ keyword_compat: (
   | UNKNOWN
   | UPDATE
   | UPSERT
+  | USE
   | USER
   | USING
   | VACUUM

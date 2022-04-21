@@ -1356,3 +1356,5 @@ noc/megaping
 classifieds/randomlunchbot
 data-ui/renovate-bot
 classifieds/vsdwh/mono
+noc/traffic/l3lb/check-tun
+classifieds/autoru-expert-auction-bot

@@ -21,9 +21,9 @@ There are several ways to enable logs in an application that uses `ydb-go-sdk`:
         ctx, cancel := context.WithCancel(context.Background())
         defer cancel()
         var log *zap.Logger // zap-logger with init out of this scope
-        db, err := ydb.New(
+        db, err := ydb.Open(
             ctx,
-            ...
+            os.Getenv("YDB_CONNECTION_STRING"),
             ydbZap.WithTraces(
                 log,
                 ydbZap.WithDetails(trace.DetailsAll),
@@ -59,9 +59,9 @@ There are several ways to enable logs in an application that uses `ydb-go-sdk`:
         ctx, cancel := context.WithCancel(context.Background())
         defer cancel()
         var log zerolog.Logger // zap-logger with init out of this scope
-        db, err := ydb.New(
+        db, err := ydb.Open(
             ctx,
-            ydb.WithConnectionString(os.Getenv("YDB_CONNECTION_STRING")),
+            os.Getenv("YDB_CONNECTION_STRING"),
             ydbZerolog.WithTraces(
                 log,
                 ydbZerolog.WithDetails(trace.DetailsAll),
@@ -95,9 +95,9 @@ There are several ways to enable logs in an application that uses `ydb-go-sdk`:
         ctx, cancel := context.WithCancel(context.Background())
         defer cancel()
         var logger log.Logger // logger implementation with init out of this scope
-        db, err := ydb.New(
+        db, err := ydb.Open(
             ctx,
-            ydb.WithConnectionString(os.Getenv("YDB_CONNECTION_STRING")),
+            os.Getenv("YDB_CONNECTION_STRING"),
             ydb.WithLogger(
                 trace.DetailsAll,
     			    ydb.WithExternalLogger(logger),

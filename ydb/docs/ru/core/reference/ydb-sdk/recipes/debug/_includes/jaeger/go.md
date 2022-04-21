@@ -44,13 +44,10 @@ func main() {
 	span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
 	defer span.Finish()
 
-	db, err := ydb.New(
+	db, err := ydb.Open(
 		ctx,
-		...
-		ydb.WithTraceDriver(tracing.Driver(
-			tracing.WithDetails(trace.DetailsAll),
-		)),
-		ydb.WithTraceTable(tracing.Table(
+		os.Getenv("YDB_CONNECTION_STRING"),
+		tracing.WithTraces(
 			tracing.WithDetails(trace.DetailsAll),
 		)),
 	)

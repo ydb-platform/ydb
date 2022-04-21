@@ -8,9 +8,9 @@ import (
 )
 
 func main() {
-	db, err := ydb.New(
+	db, err := ydb.Open(
 		ctx,
-		...
+		os.Getenv("YDB_CONNECTION_STRING"),
 		ydb.WithSessionPoolSizeLimit(500),
 	)
 	if err != nil {

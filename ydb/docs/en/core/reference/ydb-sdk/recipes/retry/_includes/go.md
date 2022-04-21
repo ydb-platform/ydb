@@ -24,9 +24,9 @@ If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries t
     )
     
     func main() {
-        db, err := ydb.New(
+        db, err := ydb.Open(
             ctx,
-            ...
+            os.Getenv("YDB_CONNECTION_STRING"),
         )
         if err != nil {
             panic(err)
@@ -47,8 +47,6 @@ If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries t
                 fmt.Println(whoAmI)
             },
             retry.WithIdempotent(),
-            retry.WithTrace(trace.Trace{}),
-            retry.WithID("my high-level call"),
         )
         if err != nil {
             panic(err)

@@ -50,6 +50,8 @@ domains_config:
       node: [1, 2, 3]
       nto_select: 3
     ssid: 1
+table_service_config:
+  sql_version: 1
 actor_system_config:
   executor:
   - name: System

@@ -9246,7 +9246,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         }
         else if (pragmaValue->HasAlt_pragma_value2()
             && pragmaValue->GetAlt_pragma_value2().GetRule_id1().HasAlt_id2()
-            && "default" == Id(pragmaValue->GetAlt_pragma_value2().GetRule_id1(), *this))
+            && "default" == to_lower(Id(pragmaValue->GetAlt_pragma_value2().GetRule_id1(), *this)))
         {
             pragmaValueDefault = true;
         }

@@ -1369,3 +1369,13 @@ classifieds/nodejs/luster-bunker
 classifieds/nodejs/luster-prometheus
 classifieds/nodejs/luster-guard
 classifieds/nodejs/luster-graceful-dns
+classifieds/nodejs/luster-billing-keys
+classifieds/nodejs/luster-log-file
+classifieds/nodejs/nodejs-nodules-user-oauth
+classifieds/nodejs/nodejs-nodules-controllers
+classifieds/nodejs/nodejs-nodules-user
+classifieds/nodejs/nodejs-nodules-libs
+classifieds/nodejs/nodejs-nodules-blackbox
+classifieds/nodejs/nodejs-nodules-cache
+classifieds/nodejs/node-monrun
+classifieds/nodejs/nodejs-nodules-filters

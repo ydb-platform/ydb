@@ -70,7 +70,6 @@ public:
         TString url,
         THeaders headers,
         std::size_t offset,
-        std::size_t expectedSize,
         TOnNewDataPart onNewData,
         TOnDowloadFinsh onFinish) = 0;
 };

@@ -391,14 +391,14 @@ private:
         TString url,
         THeaders headers,
         std::size_t offset,
-        std::size_t expectedSize,
         TOnNewDataPart onNewData,
         TOnDowloadFinsh onFinish) final
     {
-        auto easy = TEasyCurlStream::Make(InFlight, std::move(url), std::move(headers), offset, expectedSize, std::move(onNewData), std::move(onFinish));
+        constexpr auto buffersSize = CURL_MAX_WRITE_SIZE << 4U;
+        auto easy = TEasyCurlStream::Make(InFlight, std::move(url), std::move(headers), offset, buffersSize, std::move(onNewData), std::move(onFinish));
         const std::unique_lock lock(Sync);
         Await.emplace(std::move(easy));
-        Wakeup(expectedSize);
+        Wakeup(buffersSize);
     }
 
     void OnRetry(TEasyCurl::TPtr easy) {

@@ -60,7 +60,6 @@ public:
             TString ,
             IHTTPGateway::THeaders ,
             std::size_t ,
-            std::size_t ,
             IHTTPGateway::TOnNewDataPart ,
             IHTTPGateway::TOnDowloadFinsh ) {
     }

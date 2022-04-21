@@ -425,7 +425,7 @@ private:
 
     static void DownloadStart(const TRetryStuff::TPtr& retryStuff, const TActorId& self, const TActorId& parent) {
         retryStuff->Gateway->Download(retryStuff->Url,
-            retryStuff->Headers, retryStuff->Offset, retryStuff->ExpectedSize > retryStuff->Offset ? retryStuff->ExpectedSize - retryStuff->Offset : 0U,
+            retryStuff->Headers, retryStuff->Offset,
             std::bind(&TS3ReadCoroActor::OnNewData, TActivationContext::ActorSystem(), self, parent, retryStuff, std::placeholders::_1),
             std::bind(&TS3ReadCoroActor::OnDownloadFinished, TActivationContext::ActorSystem(), self, parent, retryStuff, std::placeholders::_1));
     }

@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 
         double positive = 0.0, negative = 0.0;
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             (sample.second > 0.0 ? positive : negative) += sample.second;
         }
         const auto cppTime = TInstant::Now() - t;
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 
         double pSum = 0.0, nSum = 0.0, pMax = 0.0, nMax = -1000.0, pMin = 1000.0, nMin = 0.0;
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             if (sample.second > 0.0) {
                 pSum += sample.second;
                 pMax = std::max(pMax, sample.second);
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 
         std::unordered_map<i8, double> expects(201);
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             expects.emplace(sample.first, 0.0).first->second += sample.second;
         }
         const auto cppTime = TInstant::Now() - t;
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
         const auto graph = setup.BuildGraph(pgmReturn, {list});
         NUdf::TUnboxedValue* items = nullptr;
         graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             NUdf::TUnboxedValue* pair = nullptr;
             *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
             pair[0] = NUdf::TUnboxedValuePod(sample.first);
@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 
         std::unordered_map<i8, std::array<double, 3U>> expects(201);
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             auto& item = expects.emplace(sample.first, std::array<double, 3U>{0.0, std::numeric_limits<double>::max(), std::numeric_limits<double>::min()}).first->second;
             std::get<0U>(item) += sample.second;
             std::get<1U>(item) = std::min(std::get<1U>(item), sample.second);
@@ -532,7 +532,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
         const auto graph = setup.BuildGraph(pgmReturn, {list});
         NUdf::TUnboxedValue* items = nullptr;
         graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             NUdf::TUnboxedValue* pair = nullptr;
             *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
             pair[0] = NUdf::TUnboxedValuePod(sample.first);
@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerPerfTest) {
 
         std::unordered_map<std::string, double> expects(201);
         const auto t = TInstant::Now();
-        for (const auto sample : stringI8Samples) {
+        for (const auto& sample : stringI8Samples) {
             expects.emplace(sample.first, 0.0).first->second += sample.second;
         }
         const auto cppTime = TInstant::Now() - t;
@@ -1170,7 +1170,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {
 
         double positive = 0.0, negative = 0.0;
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             (sample.second > 0.0 ? positive : negative) += sample.second;
         }
         const auto cppTime = TInstant::Now() - t;
@@ -1216,7 +1216,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {
 
         double pSum = 0.0, nSum = 0.0, pMax = 0.0, nMax = -1000.0, pMin = 1000.0, nMin = 0.0;
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             if (sample.second > 0.0) {
                 pSum += sample.second;
                 pMax = std::max(pMax, sample.second);
@@ -1283,7 +1283,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {
 
         std::unordered_map<i8, double> expects(201);
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             expects.emplace(sample.first, 0.0).first->second += sample.second;
         }
         const auto cppTime = TInstant::Now() - t;
@@ -1312,7 +1312,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {
         const auto graph = setup.BuildGraph(pgmReturn, {list});
         NUdf::TUnboxedValue* items = nullptr;
         graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             NUdf::TUnboxedValue* pair = nullptr;
             *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
             pair[0] = NUdf::TUnboxedValuePod(sample.first);
@@ -1341,7 +1341,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {
 
         std::unordered_map<i8, std::array<double, 3U>> expects(201);
         const auto t = TInstant::Now();
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             auto& item = expects.emplace(sample.first, std::array<double, 3U>{0.0, std::numeric_limits<double>::max(), std::numeric_limits<double>::min()}).first->second;
             std::get<0U>(item) += sample.second;
             std::get<1U>(item) = std::min(std::get<1U>(item), sample.second);
@@ -1373,7 +1373,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {
         const auto graph = setup.BuildGraph(pgmReturn, {list});
         NUdf::TUnboxedValue* items = nullptr;
         graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(I8Samples.size(), items));
-        for (const auto sample : I8Samples) {
+        for (const auto& sample : I8Samples) {
             NUdf::TUnboxedValue* pair = nullptr;
             *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
             pair[0] = NUdf::TUnboxedValuePod(sample.first);

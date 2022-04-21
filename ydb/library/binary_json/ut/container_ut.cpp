@@ -34,7 +34,7 @@ public:
             {R"({"key": 1, "another": null})", EContainerType::Object},
         };
 
-        for (const auto testCase : testCases) {
+        for (const auto& testCase : testCases) {
             const auto binaryJson = *SerializeToBinaryJson(testCase.first);
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
@@ -51,7 +51,7 @@ public:
             {R"({"key": true, "another_key": 2.34})", 2},
         };
 
-        for (const auto testCase : testCases) {
+        for (const auto& testCase : testCases) {
             const auto binaryJson = *SerializeToBinaryJson(testCase.first);
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
@@ -77,7 +77,7 @@ public:
             {R"([1, {}, [], true, false, "string", null])", 6, "null"},
         };
 
-        for (const auto testCase : testCases) {
+        for (const auto& testCase : testCases) {
             const auto binaryJson = *SerializeToBinaryJson(testCase.Json);
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
@@ -99,7 +99,7 @@ public:
             {R"([1, {}, [], true, false, "string", null])", {"1", "{}", "[]", "true", "false", "\"string\"", "null"}},
         };
 
-        for (const auto testCase : testCases) {
+        for (const auto& testCase : testCases) {
             const auto binaryJson = *SerializeToBinaryJson(testCase.Json);
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
@@ -144,7 +144,7 @@ public:
             {R"({"one": 1, "two": 2, "three": 3, "four": 4})", "four", {"4"}},
         };
 
-        for (const auto testCase : testCases) {
+        for (const auto& testCase : testCases) {
             const auto binaryJson = *SerializeToBinaryJson(testCase.Json);
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
@@ -185,7 +185,7 @@ public:
             }},
         };
 
-        for (const auto testCase : testCases) {
+        for (const auto& testCase : testCases) {
             const auto binaryJson = *SerializeToBinaryJson(testCase.Json);
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
@@ -199,7 +199,7 @@ public:
 
             UNIT_ASSERT_VALUES_EQUAL(testCase.Result.size(), result.size());
 
-            for (const auto it : testCase.Result) {
+            for (const auto& it : testCase.Result) {
                 UNIT_ASSERT(result.contains(it.first));
                 UNIT_ASSERT_VALUES_EQUAL(result.at(it.first), it.second);
             }

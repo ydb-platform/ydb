@@ -328,7 +328,7 @@ private:
 
             TVector<NYdb::TValue> values;
             TVector<TString> paramNames;
-            for (const auto col : p.second) {
+            for (const auto& col : p.second) {
                 const auto val = ::NIdxTest::CreateValue(col.first, *this);
 
                 checked.insert({col.first.Name, val});
@@ -488,7 +488,7 @@ public:
 
         TVector<NYdb::TValue> values;
         TVector<TString> paramNames;
-        for (const auto col : program.second) {
+        for (const auto& col : program.second) {
             values.push_back(::NIdxTest::CreateOptionalValue(col.first, *this));
             paramNames.push_back(col.second);
         }
@@ -570,7 +570,7 @@ private:
 
             TVector<NYdb::TValue> val;
             TVector<TString> parNames;
-            for (const auto col : p.second) {
+            for (const auto& col : p.second) {
                 val.push_back(rsParser.GetValue(col.first.Name));
                 auto vp = TValueParser(val.back());
                 vp.OpenOptional();
@@ -728,7 +728,7 @@ public:
 
         TVector<NYdb::TValue> values;
         TVector<TString> paramNames;
-        for (const auto col : program.second) {
+        for (const auto& col : program.second) {
             values.push_back(::NIdxTest::CreateOptionalValue(col.first, *this));
             paramNames.push_back(col.second);
         }

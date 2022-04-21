@@ -80,7 +80,7 @@ namespace NUrlUdf {
                                           const TUnboxedValuePod* args) const {
         const auto pairs = RunImpl(args);
         std::vector<TUnboxedValue> ret;
-        for (const auto nvPair : pairs) {
+        for (const auto& nvPair : pairs) {
             TUnboxedValue* pair = nullptr;
             auto item = valueBuilder->NewArray(2U, pair);
             pair[0] = valueBuilder->NewString(nvPair.first);
@@ -110,7 +110,7 @@ namespace NUrlUdf {
                                           const TUnboxedValuePod* args) const {
         const auto pairs = RunImpl(args);
         auto ret = valueBuilder->NewDict(DictType_, TDictFlags::Hashed | TDictFlags::Multi);
-        for (const auto nvPair : pairs) {
+        for (const auto& nvPair : pairs) {
             ret->Add(valueBuilder->NewString(nvPair.first),
                      valueBuilder->NewString(nvPair.second));
         }

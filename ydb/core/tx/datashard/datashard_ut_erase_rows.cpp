@@ -281,7 +281,7 @@ void ConditionalEraseRows(
                 index.SetPathId(indexId.PathId.LocalPathId);
                 index.SetSchemaVersion(indexId.SchemaVersion);
 
-                for (const auto [indexColumnId, mainColumnId] : columnIds) {
+                for (const auto& [indexColumnId, mainColumnId] : columnIds) {
                     auto& keyMap = *index.MutableKeyMap()->Add();
                     keyMap.SetIndexColumnId(indexColumnId);
                     keyMap.SetMainColumnId(mainColumnId);
@@ -1714,7 +1714,7 @@ tkey = 100, key = 4
             auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
 
-            for (const auto index : opts.Indexes_) {
+            for (const auto& index : opts.Indexes_) {
                 do {
                     auto content = ReadShardedTable(server, Sprintf("/Root/%s/%s/indexImplTable", table, index.Name.c_str()));
 

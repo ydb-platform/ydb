@@ -165,7 +165,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
 
     // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
     THashSet<TGenStep> genStepsWithBlobsToKeep;
-    for (const auto unifiedBlobId : blobsToKeep) {
+    for (const auto& unifiedBlobId : blobsToKeep) {
         Y_VERIFY(unifiedBlobId.IsDsBlob(), "Not a DS blob id in Keep table: %s", unifiedBlobId.ToStringNew().c_str());
 
         TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
@@ -179,7 +179,7 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
         BlobsToKeep.insert(blobId);
     }
 
-    for (const auto unifiedBlobId : blobsToDelete) {
+    for (const auto& unifiedBlobId : blobsToDelete) {
         if (unifiedBlobId.IsSmallBlob()) {
             SmallBlobsToDelete.insert(unifiedBlobId);
         } else if (unifiedBlobId.IsDsBlob()) {

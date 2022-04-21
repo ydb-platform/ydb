@@ -3757,9 +3757,9 @@ Y_UNIT_TEST_SUITE(JsonQuery) {
             {"EMPTY OBJECT", "'EmptyObject"},
         };
 
-        for (const auto wrap : wrapCases) {
-            for (const auto onError : handlerCases) {
-                for (const auto onEmpty : handlerCases) {
+        for (const auto& wrap : wrapCases) {
+            for (const auto& onError : handlerCases) {
+                for (const auto& onEmpty : handlerCases) {
                     TStringBuilder query;
                     query << R"($json = CAST(@@{"key": [123]}@@ as Json);
                     SELECT JSON_QUERY($json, "strict $.key" )" << wrap.first;

@@ -255,7 +255,7 @@ namespace NKikimr {
         }
 
         void TBlobStorageController::FitPDisksForNode(TConfigState& state, ui32 nodeId, const std::vector<TSerial>& serials) {
-            for (TString serial : serials) {
+            for (const auto& serial : serials) {
                 if (const TDriveSerialInfo *driveInfo = state.DrivesSerials.Find(serial)) {
                     switch (driveInfo->LifeStage) {
                         case NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN:

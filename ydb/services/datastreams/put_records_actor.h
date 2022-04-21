@@ -216,7 +216,7 @@ namespace NKikimr::NDataStreams::V1 {
         using TBase = NGRpcProxy::V1::TPQGrpcSchemaBase<TPutRecordsActorBase<TDerived, TProto>, TProto>;
 
     public:
-        TPutRecordsActorBase(TProto* request, NActors::TActorId newSchemeCache);
+        TPutRecordsActorBase(NGRpcService::IRequestOpCtx* request);
         ~TPutRecordsActorBase() = default;
 
         void Bootstrap(const NActors::TActorContext &ctx);
@@ -233,7 +233,6 @@ namespace NKikimr::NDataStreams::V1 {
         };
 
         THashMap<ui32, TPartitionTask> PartitionToActor;
-        NActors::TActorId NewSchemeCache;
         Ydb::DataStreams::V1::PutRecordsResult PutRecordsResult;
 
         TString Ip;
@@ -254,9 +253,8 @@ namespace NKikimr::NDataStreams::V1 {
     };
 
     template<class TDerived, class TProto>
-    TPutRecordsActorBase<TDerived, TProto>::TPutRecordsActorBase(TProto* request, NActors::TActorId newSchemeCache)
-            : TBase(request, request->GetProtoRequest()->stream_name())
-            , NewSchemeCache(std::move(newSchemeCache))
+    TPutRecordsActorBase<TDerived, TProto>::TPutRecordsActorBase(NGRpcService::IRequestOpCtx* request)
+            : TBase(request, dynamic_cast<const typename TProto::TRequest*>(request->GetRequest())->stream_name())
             , Ip(request->GetPeerName())
     {
         Y_ENSURE(request);
@@ -300,7 +298,7 @@ namespace NKikimr::NDataStreams::V1 {
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         entry.SyncVersion = true;
         schemeCacheRequest->ResultSet.emplace_back(entry);
-        ctx.Send(NewSchemeCache, MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
+        ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
     }
 
     template<class TDerived, class TProto>
@@ -400,8 +398,8 @@ namespace NKikimr::NDataStreams::V1 {
     public:
         using TBase = TPutRecordsActorBase<TPutRecordsActor, NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest>;
 
-        TPutRecordsActor(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest* request, TActorId newSchemeCache)
-            : TBase(request, newSchemeCache)
+        TPutRecordsActor(NGRpcService::IRequestOpCtx* request)
+            : TBase(request)
         {}
 
         const Ydb::DataStreams::V1::PutRecordsRequest& GetPutRecordsRequest() const;
@@ -422,15 +420,15 @@ namespace NKikimr::NDataStreams::V1 {
     public:
         using TBase = TPutRecordsActorBase<TPutRecordActor, NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest>;
 
-        TPutRecordActor(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest* request, TActorId newSchemeCache)
-                : TBase(request, newSchemeCache)
+        TPutRecordActor(NGRpcService::IRequestOpCtx* request)
+                : TBase(request)
         {
-            PutRecordsRequest.set_stream_name(request->GetProtoRequest()->stream_name());
+            PutRecordsRequest.set_stream_name(GetProtoRequest()->stream_name());
             auto& record = *PutRecordsRequest.add_records();
 
-            record.set_data(request->GetProtoRequest()->data());
-            record.set_explicit_hash_key(request->GetProtoRequest()->explicit_hash_key());
-            record.set_partition_key(request->GetProtoRequest()->partition_key());
+            record.set_data(GetProtoRequest()->data());
+            record.set_explicit_hash_key(GetProtoRequest()->explicit_hash_key());
+            record.set_partition_key(GetProtoRequest()->partition_key());
         }
 
         const Ydb::DataStreams::V1::PutRecordsRequest& GetPutRecordsRequest() const;

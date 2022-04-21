@@ -18,15 +18,17 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   cpp-actors-core
   ydb-core-base
   ydb-core-protos
+  core-grpc_services-local_rpc
+  yql-public-issue
   library-http_proxy-authorization
   library-http_proxy-error
   ydb-library-naming_conventions
   cpp-client-ydb_datastreams
   cpp-client-ydb_persqueue_core
   client-ydb_persqueue_public-codecs
+  ydb-services-datastreams
 )
 target_sources(ydb-core-http_proxy PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/driver_cache_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/http_req.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/metrics_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.cpp

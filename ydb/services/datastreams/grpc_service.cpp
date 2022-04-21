@@ -50,8 +50,6 @@ void TGRpcDataStreamsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc
 {
     CQ_ = cq;
 
-    InitNewSchemeCache();
-
     SetupIncomingRequests(logger);
 }
 
@@ -66,14 +64,6 @@ bool TGRpcDataStreamsService::IncRequest() {
 void TGRpcDataStreamsService::DecRequest() {
     Limiter_->Dec();
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
-void TGRpcDataStreamsService::InitNewSchemeCache() {
-    auto appData = ActorSystem_->AppData<TAppData>();
-    auto cacheCounters = GetServiceCounters(Counters_, "pqproxy|schemecache");
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
-    NewSchemeCache = ActorSystem_->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
-        TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
 }
 
 
@@ -98,14 +88,14 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
             #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 
     ADD_REQUEST(DescribeStream, DoDataStreamsDescribeStreamRequest, nullptr)
-    ADD_REQUEST(CreateStream, std::bind(DoDataStreamsCreateStreamRequest, _1, _2, NewSchemeCache), nullptr)
-    ADD_REQUEST(ListStreams, std::bind(DoDataStreamsListStreamsRequest, _1, _2, NewSchemeCache), nullptr)
+    ADD_REQUEST(CreateStream, DoDataStreamsCreateStreamRequest, nullptr)
+    ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr)
     ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr)
-    ADD_REQUEST(ListShards, std::bind(DoDataStreamsListShardsRequest, _1, _2, NewSchemeCache), nullptr)
-    ADD_REQUEST(PutRecord, std::bind(DoDataStreamsPutRecordRequest, _1, _2, NewSchemeCache), YdsProcessAttr)
-    ADD_REQUEST(PutRecords, std::bind(DoDataStreamsPutRecordsRequest, _1, _2, NewSchemeCache), YdsProcessAttr)
-    ADD_REQUEST(GetRecords, std::bind(DoDataStreamsGetRecordsRequest, _1, _2, NewSchemeCache), nullptr)
-    ADD_REQUEST(GetShardIterator, std::bind(DoDataStreamsGetShardIteratorRequest, _1, _2, NewSchemeCache), nullptr)
+    ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr)
+    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr)
+    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr)
+    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr)
+    ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr)
     ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr)
     ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr)
     ADD_REQUEST(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, nullptr)

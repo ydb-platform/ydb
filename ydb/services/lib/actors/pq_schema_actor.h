@@ -66,8 +66,11 @@ namespace NKikimr::NGRpcProxy::V1 {
     protected:
         using TBase = NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest>;
 
+        using TProtoRequest = typename TRequest::TRequest;
+
     public:
-        TPQGrpcSchemaBase(TRequest *request, const TString& topicPath)
+
+        TPQGrpcSchemaBase(NGRpcService::IRequestOpCtx *request, const TString& topicPath)
             : TBase(request)
             , TopicPath(topicPath)
         {
@@ -286,7 +289,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         using TBase = TPQGrpcSchemaBase<TDerived, TRequest>;
 
     public:
-        TUpdateSchemeActor(TRequest* request, const TString& topicPath)
+        TUpdateSchemeActor(NGRpcService::IRequestOpCtx* request, const TString& topicPath)
             : TBase(request, topicPath)
         {}
         ~TUpdateSchemeActor() = default;

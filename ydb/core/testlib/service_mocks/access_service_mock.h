@@ -39,6 +39,7 @@ public:
         } else {
             key = request->iam_token();
         }
+
         auto it = AuthenticateData.find(key);
         if (it != AuthenticateData.end()) {
             response->CopyFrom(it->second.Response);
@@ -52,8 +53,9 @@ public:
     virtual grpc::Status Authorize(
             grpc::ServerContext* ctx,
             const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
-            yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
-        const TString& token = request->subject().user_account().id() + "-" + request->permission() + "-" + request->resource_path(0).id();
+            yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override
+    {
+        const TString& token = request->signature().access_key_id() + request->iam_token() + "-" + request->permission() + "-" + request->resource_path(0).id();
         auto it = AuthorizeData.find(token);
         if (it != AuthorizeData.end()) {
             response->CopyFrom(it->second.Response);

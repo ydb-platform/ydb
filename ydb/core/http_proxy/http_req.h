@@ -77,6 +77,7 @@ struct THttpRequestContext {
     NActors::TActorId Sender;
 
     TString IamToken;
+    TString SerializedUserToken;
     const NKikimrConfig::TServerlessProxyConfig& ServiceConfig;
     NYdb::TDriver* Driver;
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;

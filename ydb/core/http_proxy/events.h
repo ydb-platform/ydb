@@ -117,9 +117,12 @@ namespace NKikimr::NHttpProxy {
             TString ServiceAccountId;
             TString IamToken;
 
-            TEvToken(const TString& serviceAccountId, const TString& iamToken)
+            TString SerializedUserToken;
+
+            TEvToken(const TString& serviceAccountId, const TString& iamToken, const TString& serializedUserToken = "")
             : ServiceAccountId(serviceAccountId)
             , IamToken(iamToken)
+            , SerializedUserToken(serializedUserToken)
             {}
         };
 

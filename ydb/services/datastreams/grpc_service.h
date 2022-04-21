@@ -21,14 +21,12 @@ namespace NKikimr::NGRpcService {
 
     private:
         void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
-        void InitNewSchemeCache();
 
         NActors::TActorSystem* ActorSystem_;
         grpc::ServerCompletionQueue* CQ_ = nullptr;
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
         NActors::TActorId GRpcRequestProxyId_;
-        NActors::TActorId NewSchemeCache;
         NGrpc::TGlobalLimiter* Limiter_ = nullptr;
     };
 

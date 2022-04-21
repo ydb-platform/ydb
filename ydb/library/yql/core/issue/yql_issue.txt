@@ -597,6 +597,10 @@ ids {
   severity: S_WARNING
 }
 ids {
+  code: YQL_UNUSED_HINT
+  severity: S_WARNING
+}
+ids {
   code: DQ_GATEWAY_ERROR
   severity: S_ERROR
 }

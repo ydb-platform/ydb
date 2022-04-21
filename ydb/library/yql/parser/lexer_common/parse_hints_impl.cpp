@@ -15,12 +15,13 @@ enum EParseState {
     WANT_WS,
 };
 
-TVector<TSQLHint> ParseSqlHints(const TStringBuf& comment) {
+TVector<TSQLHint> ParseSqlHints(NYql::TPosition commentPos, const TStringBuf& comment) {
     TVector<TSQLHint> result;
     if (!comment.StartsWith("/*+") && !comment.StartsWith("--+")) {
         return result;
     }
     TSQLHint hint;
+    NYql::TTextWalker commentWalker(commentPos);
     const size_t len = comment.size();
     EParseState state = EParseState::INITIAL;
     for (size_t i = 0; i < len; ++i) {
@@ -28,6 +29,7 @@ TVector<TSQLHint> ParseSqlHints(const TStringBuf& comment) {
         switch (state) {
             case EParseState::INITIAL: {
                 if (std::isalpha(c)) {
+                    hint.Pos = commentPos;
                     hint.Name.push_back(c);
                     state = EParseState::NAME;
                 }
@@ -64,6 +66,7 @@ TVector<TSQLHint> ParseSqlHints(const TStringBuf& comment) {
                 if (c == '\'') {
                     if (i + 1 < len && comment[i + 1] == '\'') {
                         ++i;
+                        commentWalker.Advance(c);
                         hint.Values.back().push_back(c);
                     } else {
                         state = EParseState::IN_PARENS;
@@ -92,6 +95,7 @@ TVector<TSQLHint> ParseSqlHints(const TStringBuf& comment) {
                 break;
             }
         }
+        commentWalker.Advance(c);
     }
     return result;
 }

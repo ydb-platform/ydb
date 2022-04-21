@@ -18,6 +18,7 @@ struct TSQLHint {
     // --+ Name(Value1 Value2 Value3) ... Name2(Value1 Value2 Value3)
     TString Name;
     TVector<TString> Values;
+    NYql::TPosition Pos;
 
     TString ToString() const;
     void Out(IOutputStream& o) const;

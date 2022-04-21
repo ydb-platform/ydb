@@ -3267,6 +3267,14 @@ select FormatType($f());
     Y_UNIT_TEST(AggregationOfAgrregatedDistinctExpr) {
         ExpectFailWithError("select sum(sum(distinct x + 1)) from plato.Input", "<main>:1:12: Error: Aggregation of aggregated values is forbidden\n");
     }
+
+    Y_UNIT_TEST(WarnForUnusedSqlHint) {
+        NYql::TAstParseResult res = SqlToYql("select * from plato.Input1 as a join /*+ merge() */ plato.Input2 as b using(key);\n"
+                                             "select --+            foo(bar)\n"
+                                             "       1;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:23: Warning: Hint foo will not be used, code: 4534\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

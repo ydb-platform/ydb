@@ -57,7 +57,7 @@ public:
             // skip leading comments
             return;
         }
-        TVector<TSQLHint> currentHints = NDetail::ParseSqlHints(token.Content);
+        TVector<TSQLHint> currentHints = NDetail::ParseSqlHints(pos, token.Content);
         if (currentHints.empty()) {
             // no hints here
             return;

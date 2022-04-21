@@ -177,7 +177,13 @@ TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition to
 }
 
 void TContext::WarnUnusedHints() {
-    // TODO
+    if (!SQLHints.empty()) {
+        // warn about first unused hint
+        auto firstUnused = SQLHints.begin();
+        YQL_ENSURE(!firstUnused->second.empty());
+        const NSQLTranslation::TSQLHint& hint = firstUnused->second.front();
+        Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Hint " << hint.Name << " will not be used";
+    }
 }
 
 IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) {

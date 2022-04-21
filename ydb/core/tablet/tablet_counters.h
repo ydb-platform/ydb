@@ -1,12 +1,17 @@
 #pragma once
 #include "defs.h"
-#include <util/generic/singleton.h>
-#include <util/generic/vector.h>
-#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
-#include <library/cpp/monlib/service/pages/templates.h>
-#include <google/protobuf/descriptor.pb.h>
+
 #include <ydb/core/protos/counters.pb.h>
 #include <ydb/core/protos/tablet_counters.pb.h>
+
+#include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <library/cpp/monlib/service/pages/templates.h>
+
+#include <google/protobuf/descriptor.pb.h>
+
+#include <util/generic/singleton.h>
+#include <util/generic/vector.h>
+#include <util/generic/xrange.h>
 
 ////////////////////////////////////////////
 namespace NKikimr {
@@ -138,6 +143,15 @@ private:
 ////////////////////////////////////////////
 /// The TTabletPercentileCounter class
 ////////////////////////////////////////////
+///
+/// 1. Buckets are right inclusive, i.e. (from; to].
+/// 2. Bucket bounds are non-negative integers.
+/// 3. Extra inf bucket is added implicitly.
+/// 4. Soon we will migrate to new solomon histograms, thus RangeName
+/// will be ignored. In solomon/monitoring we will see only RangeVal bins.
+///
+/// E.g. for ranges 10, 20, 30 buckets will be: [0; 10], (10; 20], (20; 30], (30; +inf).
+/// For ranges 0, 10, 20: [0; 0], (0; 10], (10; 20], (20; +inf)
 class TTabletPercentileCounter : TNonCopyable {
     friend class TCountersArray<TTabletPercentileCounter>;
 public:
@@ -147,7 +161,8 @@ public:
         const char* RangeName;
 
         friend bool operator <(const TRangeDef& x, const TRangeDef& y) { return x.RangeVal < y.RangeVal; }
-        friend bool operator <(const ui64 x, const TRangeDef& y) { return x < y.RangeVal; }
+        friend bool operator <(ui64 x, const TRangeDef& y) { return x < y.RangeVal; }
+        friend bool operator <(const TRangeDef& x, ui64 y) { return x.RangeVal < y; }
     };
 
     template <ui32 rangeCount>
@@ -157,6 +172,26 @@ public:
 
     void Initialize(const TRangeDef* ranges, size_t rangeCount, bool integral) {
         Initialize(rangeCount, ranges, integral);
+    }
+
+    void Initialize(ui32 rangeCount, const TRangeDef* ranges, bool integral) {
+        Y_VERIFY_DEBUG(Ranges.empty());
+        Y_VERIFY_DEBUG(Values.empty());
+        Y_VERIFY_DEBUG(rangeCount > 0);
+
+        Ranges.resize(rangeCount + 1);
+        for (auto i: xrange(rangeCount)) {
+            Ranges[i].RangeName = ranges[i].RangeName;
+            Ranges[i].RangeVal = ranges[i].RangeVal;
+        }
+        Ranges[rangeCount].RangeName = InfName;
+        Ranges[rangeCount].RangeVal = Max<ui64>();
+
+        Integral = integral;
+
+        Y_VERIFY_DEBUG(IsSorted());
+
+        Values.resize(Ranges.size());
     }
 
     // mainly for use in tests
@@ -186,7 +221,7 @@ public:
     }
 
     ui32 GetRangeCount() const {
-        return RangeCount;
+        return Ranges.size();
     }
 
     const char* GetRangeName(ui32 index) const {
@@ -202,7 +237,7 @@ public:
     }
 
     TVector<TRangeDef> GetRanges() const {
-        return TVector<TRangeDef>(Ranges, Ranges + RangeCount);
+        return Ranges;
     }
 
     bool GetIntegral() const {
@@ -219,12 +254,12 @@ private:
     //
     void AdjustToBaseLine(const TTabletPercentileCounter& baseLine) {
         //
-        Y_VERIFY_DEBUG(RangeCount == baseLine.RangeCount);
+        Y_VERIFY_DEBUG(Ranges.size() == baseLine.Ranges.size());
         if (Integral) {
             return;
         }
 
-        for (ui32 i = 0; i < RangeCount; ++i) {
+        for (auto i: xrange(Ranges.size())) {
             Y_VERIFY_DEBUG(Values[i] >= baseLine.Values[i]);
             Values[i] -= baseLine.Values[i];
         }
@@ -233,7 +268,8 @@ private:
     void Initialize(const TTabletPercentileCounter& rp) {
         //
         if (rp.IsInitialized()) {
-            Initialize(rp.RangeCount, rp.Ranges, rp.Integral);
+            Ranges = rp.Ranges;
+            Integral = rp.Integral;
             SetTo(rp);
         }
     }
@@ -241,52 +277,35 @@ private:
     //
     void SetTo(const TTabletPercentileCounter& rp) {
         //
-        Y_VERIFY_DEBUG(RangeCount == rp.RangeCount);
-        for (ui32 i = 0; i < RangeCount; ++i) {
-            Values[i] = rp.Values[i];
-        }
+        Y_VERIFY_DEBUG(Ranges.size() == rp.Ranges.size());
+        Values = rp.Values;
     }
 
 public:
-    void Initialize(ui32 rangeCount, const TRangeDef* ranges, bool integral) {
-        Y_VERIFY_DEBUG(!Ranges);
-        Y_VERIFY_DEBUG(!Values);
-        Y_VERIFY_DEBUG(rangeCount > 0);
-        Y_VERIFY_DEBUG(ranges[0].RangeVal == 0);
-
-        RangeCount = rangeCount;
-        Ranges = ranges;
-        Integral = integral;
-
-        Y_VERIFY_DEBUG(IsSorted());
-
-        Values = TArrayHolder<ui64>(new ui64[RangeCount]());
-    }
-
     void Clear() {
         if (IsInitialized()) {
-            std::fill(&Values[0], &Values[RangeCount], 0);
+            std::fill(Values.begin(), Values.end(), 0);
         }
     }
 
 private:
     //
     ui32 FindSlot(ui64 what) const {
-        return Max<ssize_t>(0, std::upper_bound(Ranges, Ranges + RangeCount, what) - Ranges - 1);
+        return std::lower_bound(Ranges.begin(), Ranges.end(), what) - Ranges.begin();
     }
 
     bool IsSorted() const {
-        return std::is_sorted(Ranges, Ranges + RangeCount);
+        return std::is_sorted(Ranges.begin(), Ranges.end());
     }
 
     bool IsInitialized() const {
-        return RangeCount != 0;
+        return Ranges.size() != 0;
     }
 
     void Populate(const TTabletPercentileCounter& rp) {
         if (IsInitialized()) {
-            Y_VERIFY_DEBUG(RangeCount == rp.RangeCount);
-            for (ui32 i = 0; i < RangeCount; ++i) {
+            Y_VERIFY_DEBUG(Ranges.size() == rp.Ranges.size());
+            for (auto i: xrange(Ranges.size())) {
                 Values[i] += rp.Values[i];
             }
         } else {
@@ -294,12 +313,11 @@ private:
         }
     }
 
-    //
-    ui32 RangeCount = 0;
-    const TRangeDef* Ranges = nullptr;
+    TVector<TRangeDef> Ranges;
+    TVector<ui64> Values;
     bool Integral = false;
 
-    TArrayHolder<ui64> Values;
+    static constexpr const char* InfName = "inf";
 };
 
 ////////////////////////////////////////////

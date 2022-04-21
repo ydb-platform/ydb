@@ -36,6 +36,7 @@ target_link_options(ydb-core-tablet-ut PRIVATE
 target_sources(ydb-core-tablet-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/pipe_tracker_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/resource_broker_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_counters_aggregator_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_metrics_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet/tablet_pipe_ut.cpp

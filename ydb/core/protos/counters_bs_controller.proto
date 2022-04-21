@@ -77,27 +77,28 @@ enum ECumulativeCounters {
 
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
-        Ranges { Value: 0           Name: "(1) < 500 us"        }
-        Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
-        Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
-        Ranges { Value: 2000        Name: "(4) 2-4 ms"          }
-        Ranges { Value: 4000        Name: "(5) 4-8 ms"          }
-        Ranges { Value: 8000        Name: "(6) 8-16 ms"         }
-        Ranges { Value: 16000       Name: "(7) 16-32 ms"        }
-        Ranges { Value: 32000       Name: "(8) 32-64 ms"        }
-        Ranges { Value: 64000       Name: "(9) 64-128 ms"       }
-        Ranges { Value: 128000      Name: "(10) 128-256 ms"     }
-        Ranges { Value: 256000      Name: "(11) 256-512 ms"     }
-        Ranges { Value: 512000      Name: "(12) 512-1024 ms"    }
-        Ranges { Value: 1024000     Name: "(13) 1024-2000 ms"   }
-        Ranges { Value: 2000000     Name: "(14) 2-4 s"          }
-        Ranges { Value: 4000000     Name: "(15) 4-8 s"          }
-        Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
-        Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
-        Ranges { Value: 32000000    Name: "(18) 32 < s"         }
+        Ranges: { Value: 500         Name: "(1) < 500 us"      }
+        Ranges: { Value: 1000        Name: "(2) 0.5-1 ms"      }
+        Ranges: { Value: 2000        Name: "(3) 1-2 ms"        }
+        Ranges: { Value: 4000        Name: "(4) 2-4 ms"        }
+        Ranges: { Value: 8000        Name: "(5) 4-8 ms"        }
+        Ranges: { Value: 16000       Name: "(6) 8-16 ms"       }
+        Ranges: { Value: 32000       Name: "(7) 16-32 ms"      }
+        Ranges: { Value: 64000       Name: "(8) 32-64 ms"      }
+        Ranges: { Value: 128000      Name: "(9) 64-128 ms"     }
+        Ranges: { Value: 256000      Name: "(10) 128-256 ms"   }
+        Ranges: { Value: 512000      Name: "(11) 256-512 ms"   }
+        Ranges: { Value: 1024000     Name: "(12) 512-1024 ms"  }
+        Ranges: { Value: 2000000     Name: "(13) 1024-2000 ms" }
+        Ranges: { Value: 4000000     Name: "(14) 2-4 s"        }
+        Ranges: { Value: 8000000     Name: "(15) 4-8 s"        }
+        Ranges: { Value: 16000000    Name: "(16) 8-16 s"       }
+        Ranges: { Value: 32000000    Name: "(17) 16-32 s"      }
     };
 
-    COUNTER_PERCENTILE_SELECT_GROUPS = 0 [(CounterOpts) = {Name: "SelectGroups"}];
+    COUNTER_PERCENTILE_SELECT_GROUPS = 0 [(CounterOpts) = {
+        Name: "SelectGroups"
+    }];
 
     COUNTER_FAULTY_USETTLED_PDISKS = 1 [(CounterOpts) = {
         Name: "FaultyUnsettledPDisks"
@@ -130,7 +131,6 @@ enum EPercentileCounters {
         Ranges { Value: 14400 Name: "14400" }
         Ranges { Value: 18000 Name: "18000" }
         Ranges { Value: 21600 Name: "21600" }
-        Ranges { Value: 86400 Name: "inf"   }
     }];
 
     COUNTER_TO_BE_REMOVED_USETTLED_PDISKS = 2 [(CounterOpts) = {
@@ -164,7 +164,6 @@ enum EPercentileCounters {
         Ranges { Value: 14400 Name: "14400" }
         Ranges { Value: 18000 Name: "18000" }
         Ranges { Value: 21600 Name: "21600" }
-        Ranges { Value: 86400 Name: "inf"   }
     }];
 
     COUNTER_NUM_NOT_READY_VDISKS = 3 [(CounterOpts) = {
@@ -186,7 +185,6 @@ enum EPercentileCounters {
         Ranges { Value: 14400 Name: "14400" }
         Ranges { Value: 18000 Name: "18000" }
         Ranges { Value: 21600 Name: "21600" }
-        Ranges { Value: 86400 Name: "inf"   }
     }];
 }
 

@@ -250,24 +250,23 @@ enum ECumulativeCounters {
 
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
-        Ranges { Value: 0           Name: "(1) < 500 us"        }
-        Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
-        Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
-        Ranges { Value: 2000        Name: "(4) 2-4 ms"          }
-        Ranges { Value: 4000        Name: "(5) 4-8 ms"          }
-        Ranges { Value: 8000        Name: "(6) 8-16 ms"         }
-        Ranges { Value: 16000       Name: "(7) 16-32 ms"        }
-        Ranges { Value: 32000       Name: "(8) 32-64 ms"        }
-        Ranges { Value: 64000       Name: "(9) 64-128 ms"       }
-        Ranges { Value: 128000      Name: "(10) 128-256 ms"     }
-        Ranges { Value: 256000      Name: "(11) 256-512 ms"     }
-        Ranges { Value: 512000      Name: "(12) 512-1024 ms"    }
-        Ranges { Value: 1024000     Name: "(13) 1024-2000 ms"   }
-        Ranges { Value: 2000000     Name: "(14) 2-4 s"          }
-        Ranges { Value: 4000000     Name: "(15) 4-8 s"          }
-        Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
-        Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
-        Ranges { Value: 32000000    Name: "(18) 32 < s"         }
+        Ranges: { Value: 500         Name: "(1) < 500 us"      }
+        Ranges: { Value: 1000        Name: "(2) 0.5-1 ms"      }
+        Ranges: { Value: 2000        Name: "(3) 1-2 ms"        }
+        Ranges: { Value: 4000        Name: "(4) 2-4 ms"        }
+        Ranges: { Value: 8000        Name: "(5) 4-8 ms"        }
+        Ranges: { Value: 16000       Name: "(6) 8-16 ms"       }
+        Ranges: { Value: 32000       Name: "(7) 16-32 ms"      }
+        Ranges: { Value: 64000       Name: "(8) 32-64 ms"      }
+        Ranges: { Value: 128000      Name: "(9) 64-128 ms"     }
+        Ranges: { Value: 256000      Name: "(10) 128-256 ms"   }
+        Ranges: { Value: 512000      Name: "(11) 256-512 ms"   }
+        Ranges: { Value: 1024000     Name: "(12) 512-1024 ms"  }
+        Ranges: { Value: 2000000     Name: "(13) 1024-2000 ms" }
+        Ranges: { Value: 4000000     Name: "(14) 2-4 s"        }
+        Ranges: { Value: 8000000     Name: "(15) 4-8 s"        }
+        Ranges: { Value: 16000000    Name: "(16) 8-16 s"       }
+        Ranges: { Value: 32000000    Name: "(17) 16-32 s"      }
     };
 
     COUNTER_BACKGROUND_COMPACTION_OK_LATENCY = 0 [(CounterOpts) = {
@@ -277,15 +276,15 @@ enum EPercentileCounters {
     COUNTER_NUM_SHARDS_BY_TTL_LAG = 1 [(CounterOpts) = {
         Name: "NumShardsByTtlLag"
         Integral: true
-        Ranges { Value: 0     Name: "0"     }
-        Ranges { Value: 900   Name: "900"   }
-        Ranges { Value: 1800  Name: "1800"  }
-        Ranges { Value: 3600  Name: "3600"  }
-        Ranges { Value: 7200  Name: "7200"  }
-        Ranges { Value: 14400 Name: "14400" }
-        Ranges { Value: 28800 Name: "28800" }
-        Ranges { Value: 57600 Name: "57600" }
-        Ranges { Value: 86400 Name: "inf"   }
+        Ranges: { Value: 0        Name: "0"     }
+        Ranges: { Value: 900      Name: "900"   }
+        Ranges: { Value: 1800     Name: "1800"  }
+        Ranges: { Value: 3600     Name: "3600"  }
+        Ranges: { Value: 7200     Name: "7200"  }
+        Ranges: { Value: 14400    Name: "14400" }
+        Ranges: { Value: 28800    Name: "28800" }
+        Ranges: { Value: 57600    Name: "57600" }
+        Ranges: { Value: 86400    Name: "86400" }
     }];
 
     COUNTER_SHARDS_WITH_SEARCH_HEIGHT = 2 [(CounterOpts) = {
@@ -322,21 +321,21 @@ enum EPercentileCounters {
         Ranges: { Value: 24       Name: "24"  },
         Ranges: { Value: 48       Name: "48"  },
         Ranges: { Value: 72       Name: "72"  },
-        Ranges: { Value: 168      Name: "inf" },
+        Ranges: { Value: 168      Name: "168" },
     }];
 
     COUNTER_SHARDS_WITH_ROW_DELETES = 4 [(CounterOpts) = {
         Name: "ShardsWithRowDeletes",
         Integral: true,
-        Ranges: { Value: 0            Name: "0"         },
-        Ranges: { Value: 100          Name: "100"       },
-        Ranges: { Value: 1000         Name: "1000"      },
-        Ranges: { Value: 10000        Name: "10000"     },
-        Ranges: { Value: 100000       Name: "100000"    },
-        Ranges: { Value: 1000000      Name: "1000000"   },
-        Ranges: { Value: 10000000     Name: "10000000"  },
-        Ranges: { Value: 100000000    Name: "100000000" },
-        Ranges: { Value: 1000000000   Name: "inf"       },
+        Ranges: { Value: 0            Name: "0"          },
+        Ranges: { Value: 100          Name: "100"        },
+        Ranges: { Value: 1000         Name: "1000"       },
+        Ranges: { Value: 10000        Name: "10000"      },
+        Ranges: { Value: 100000       Name: "100000"     },
+        Ranges: { Value: 1000000      Name: "1000000"    },
+        Ranges: { Value: 10000000     Name: "10000000"   },
+        Ranges: { Value: 100000000    Name: "100000000"  },
+        Ranges: { Value: 1000000000   Name: "1000000000" },
     }];
 }
 

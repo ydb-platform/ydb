@@ -726,6 +726,7 @@ struct Schema : NIceDb::Schema {
         struct StateVersion : Column<24, NScheme::NTypeIds::Uint64> {};
         struct DiskQuotaExceeded : Column<25, NScheme::NTypeIds::Bool> {};
         struct SecurityStateVersion : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct TableCdcStreamsLimit : Column<27, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -754,7 +755,8 @@ struct Schema : NIceDb::Schema {
             DatabaseQuotas,
             StateVersion,
             DiskQuotaExceeded,
-            SecurityStateVersion
+            SecurityStateVersion,
+            TableCdcStreamsLimit
         >;
     };
 

@@ -1371,17 +1371,19 @@ namespace NSchemeShardUT_Private {
                                         (let colName '('TableColumnNameLengthLimit (Uint64 '%lu)))
                                         (let keyCols '('TableKeyColumnsLimit (Uint64 '%lu)))
                                         (let indices '('TableIndicesLimit (Uint64 '%lu)))
+                                        (let streams '('TableCdcStreamsLimit (Uint64 '%lu)))
                                         (let shards '('ShardsLimit (Uint64 '%lu)))
                                         (let pathShards '('PathShardsLimit (Uint64 '%lu)))
                                         (let consCopy '('ConsistentCopyingTargetsLimit (Uint64 '%lu)))
                                         (let maxPathLength '('PathElementLength (Uint64 '%lu)))
                                         (let extraSymbols '('ExtraPathSymbolsAllowed (Utf8 '"%s")))
                                         (let pqPartitions '('PQPartitionsLimit (Uint64 '%lu)))
-                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns colName keyCols indices shards pathShards consCopy maxPathLength extraSymbols pqPartitions))))
+                                        (let ret (AsList (UpdateRow 'SubDomains key '(depth paths child acl columns colName keyCols indices streams shards pathShards consCopy maxPathLength extraSymbols pqPartitions))))
                                         (return ret)
                                     )
                                  )", domainId, limits.MaxDepth, limits.MaxPaths, limits.MaxChildrenInDir, limits.MaxAclBytesSize,
-                               limits.MaxTableColumns, limits.MaxTableColumnNameLength, limits.MaxTableKeyColumns, limits.MaxTableIndices,
+                               limits.MaxTableColumns, limits.MaxTableColumnNameLength, limits.MaxTableKeyColumns,
+                               limits.MaxTableIndices, limits.MaxTableCdcStreams,
                                limits.MaxShards, limits.MaxShardsInPath, limits.MaxConsistentCopyTargets,
                                limits.MaxPathElementLength, escapedStr.c_str(), limits.MaxPQPartitions);
         Cdbg << prog << "\n";

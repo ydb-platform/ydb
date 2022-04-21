@@ -24,6 +24,7 @@ struct TSchemeLimits {
     ui64 MaxTableColumnNameLength = 255;
     ui64 MaxTableKeyColumns = 20;
     ui64 MaxTableIndices = 20;
+    ui64 MaxTableCdcStreams = 5;
     ui64 MaxShards = 200*1000; // In each database
     ui64 MaxShardsInPath = 35*1000; // In each path in database
     ui64 MaxConsistentCopyTargets = 1000;

@@ -370,6 +370,7 @@ public:
     void ClearDescribePathCaches(const TPathElement::TPtr node);
     TString PathToString(TPathElement::TPtr item);
     NKikimrSchemeOp::TPathVersion  GetPathVersion(const TPath& pathEl) const;
+    ui64 GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type = std::nullopt) const;
 
     const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const;
 

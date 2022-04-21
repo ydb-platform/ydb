@@ -591,6 +591,14 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
             << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()))};
     }
 
+    const ui64 aliveStreams = context.SS->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeCdcStream);
+    if (aliveStreams + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusResourceExhausted, TStringBuilder()
+            << "cdc streams count has reached maximum value in the table"
+            << ", children limit for dir in domain: " << tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams
+            << ", intention to create new children: " << aliveStreams + 1)};
+    }
+
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
         return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};

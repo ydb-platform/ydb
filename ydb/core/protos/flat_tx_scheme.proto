@@ -143,6 +143,7 @@ message TSchemeLimits {
     optional string ExtraPathSymbolsAllowed = 13;
 
     optional uint64 MaxPQPartitions = 14;
+    optional uint64 MaxTableCdcStreams = 15;
 }
 
 message TEvInitTenantSchemeShard {

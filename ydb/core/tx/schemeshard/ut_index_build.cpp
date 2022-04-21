@@ -585,7 +585,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
     Y_UNIT_TEST(RejectsCreate) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
         ui64 txId = 100;
 
         TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/NotExist", "index1", {"index"}, Ydb::StatusIds::BAD_REQUEST);
@@ -617,6 +617,17 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        // should not affect index limits
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
         TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "UserDefinedIndexByValue0", {"value0"}, Ydb::StatusIds::BAD_REQUEST);
         env.TestWaitNotification(runtime, txId);
 
@@ -643,13 +654,13 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 3;
-        lowLimits.MaxChildrenInDir = 2;
+        lowLimits.MaxChildrenInDir = 3;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
         lowLimits.MaxTableIndices = 3;
-        lowLimits.MaxChildrenInDir = 3;
+        lowLimits.MaxChildrenInDir = 4;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::SUCCESS);
         TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "nameOK", {"value0", "value1"}, Ydb::StatusIds::OVERLOADED);

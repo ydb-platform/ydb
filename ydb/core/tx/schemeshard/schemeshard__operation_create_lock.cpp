@@ -195,10 +195,11 @@ public:
             }
         }
 
-        if (tablePath.Base()->GetAliveChildren() + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableIndices) {
+        const ui64 aliveIndices = context.SS->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
+        if (aliveIndices + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableIndices) {
             auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
                                         << ", children limit for dir in domain: " << tablePath.DomainInfo()->GetSchemeLimits().MaxTableIndices
-                                        << ", intention to create new children: " << tablePath.Base()->GetAliveChildren() + 1;
+                                        << ", intention to create new children: " << aliveIndices + 1;
             result->SetError(NKikimrScheme::StatusPreconditionFailed, msg);
             return result;
         }

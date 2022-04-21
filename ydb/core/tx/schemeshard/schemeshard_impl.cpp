@@ -1652,6 +1652,7 @@ void TSchemeShard::PersistSchemeLimit(NIceDb::TNiceDb &db, const TPathId &pathId
         NIceDb::TUpdate<Schema::SubDomains::TableColumnNameLengthLimit>    (subDomain.GetSchemeLimits().MaxTableColumnNameLength),
         NIceDb::TUpdate<Schema::SubDomains::TableKeyColumnsLimit> (subDomain.GetSchemeLimits().MaxTableKeyColumns),
         NIceDb::TUpdate<Schema::SubDomains::TableIndicesLimit>    (subDomain.GetSchemeLimits().MaxTableIndices),
+        NIceDb::TUpdate<Schema::SubDomains::TableCdcStreamsLimit>    (subDomain.GetSchemeLimits().MaxTableCdcStreams),
         NIceDb::TUpdate<Schema::SubDomains::AclByteSizeLimit>     (subDomain.GetSchemeLimits().MaxAclBytesSize),
         NIceDb::TUpdate<Schema::SubDomains::ConsistentCopyingTargetsLimit> (subDomain.GetSchemeLimits().MaxConsistentCopyTargets),
         NIceDb::TUpdate<Schema::SubDomains::PathElementLength>             (subDomain.GetSchemeLimits().MaxPathElementLength),
@@ -3622,6 +3623,22 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
     result.SetGeneralVersion(generalVersion);
 
     return result;
+}
+
+ui64 TSchemeShard::GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type) const {
+    if (!type) {
+        return pathEl->GetAliveChildren();
+    }
+
+    ui64 count = 0;
+    for (const auto& [_, pathId] : pathEl->GetChildren()) {
+        Y_VERIFY(PathsById.contains(pathId));
+        auto childPath = PathsById.at(pathId);
+
+        count += ui64(childPath->PathType == *type);
+    }
+
+    return count;
 }
 
 TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx, ui64 tabletId, const NTabletPipe::TClientConfig& pipeConfig){

@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/maybe.h>
+#include <util/string/vector.h>
 
 namespace NYql {
 namespace NCommon {
@@ -13,16 +14,21 @@ namespace NCommon {
 using namespace NNodes;
 
 TProviderConfigurationTransformer::TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,
-    const TTypeAnnotationContext& types, const TString& provider, const THashSet<TStringBuf>& configureCallables)
+    const TTypeAnnotationContext& types, const THashSet<TString>& providerNames,
+    const THashSet<TStringBuf>& configureCallables)
     : Dispatcher(dispatcher)
     , Types(types)
-    , Provider(provider)
+    , ProviderNames(providerNames)
     , ConfigureCallables(configureCallables)
 {
     if (ConfigureCallables.empty()) {
         ConfigureCallables.insert(TCoConfigure::CallableName());
     }
 }
+
+TProviderConfigurationTransformer::TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,
+    const TTypeAnnotationContext& types, const TString& provider, const THashSet<TStringBuf>& configureCallables)
+    : TProviderConfigurationTransformer(dispatcher, types, THashSet<TString>{provider}, configureCallables) {}
 
 IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprNode::TPtr input,
     TExprNode::TPtr& output, TExprContext& ctx)
@@ -44,7 +50,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                 return node;
             }
             auto ds = node->Child(TCoConfigure::idx_DataSource);
-            if (ds->Child(TCoDataSource::idx_Category)->Content() != Provider) {
+            if (!ProviderNames.contains(ds->Child(TCoDataSource::idx_Category)->Content())) {
                 return node;
             }
             if (!EnsureMinArgsCount(*ds, 2, ctx)) {
@@ -143,10 +149,11 @@ bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TS
         return false;
     }
 
-    if (cred->Category != Provider) {
+    if (!ProviderNames.contains(cred->Category)) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-            << "Mismatch credential category, expected: "
-            << Provider << ", but found: " << cred->Category));
+            << "Mismatch credential category, expected one of: ("
+            << JoinStrings(ProviderNames.begin(), ProviderNames.end(), ",")
+            << "), but found: " << cred->Category));
         return false;
     }
 

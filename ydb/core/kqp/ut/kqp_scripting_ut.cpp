@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             .Build();
 
         auto result = client.ExecuteYqlScript(R"(
-            PRAGMA kikimr.ScanQuery = "true";
+            PRAGMA db.ScanQuery = "true";
             DECLARE $text AS String;
             SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = $text;
         )", params).GetValueSync();
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
-            PRAGMA kikimr.ScanQuery = "true";
+            PRAGMA ydb.ScanQuery = "true";
             SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value1";
             COMMIT;
 
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
-            PRAGMA kikimr.ScanQuery = "true";
+            PRAGMA ydb.ScanQuery = "true";
             SELECT * FROM [/Root/EightShard];
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

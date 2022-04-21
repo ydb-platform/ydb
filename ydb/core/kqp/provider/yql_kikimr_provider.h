@@ -384,7 +384,8 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const THashSet<TString>& configAliases);
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

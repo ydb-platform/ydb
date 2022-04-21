@@ -29,6 +29,8 @@ using namespace NThreading;
 
 using TSqlVersion = ui16;
 
+constexpr TStringBuf KikimrPublicProviderName = "ydb";
+
 namespace {
 
 void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&& stats) {
@@ -790,9 +792,10 @@ IKqpHost::TQueryResult CheckedSyncProcessQuery(TLambda&& getResultFunc) {
 
 class TKqpQueryExecutor : public IKikimrQueryExecutor {
 public:
-    TKqpQueryExecutor(const TIntrusivePtr<IKqpGateway>& gateway, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
-        const TIntrusivePtr<IKqpRunner>& kqpRunner)
+    TKqpQueryExecutor(const TIntrusivePtr<IKqpGateway>& gateway, const TString& cluster,
+        const TIntrusivePtr<TKikimrSessionContext>& sessionCtx, const TIntrusivePtr<IKqpRunner>& kqpRunner)
         : Gateway(gateway)
+        , Cluster(cluster)
         , SessionCtx(sessionCtx)
         , KqpRunner(kqpRunner) {}
 
@@ -1035,9 +1038,14 @@ public:
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
         ExprCtx->StringsAllocationLimit = SessionCtx->Config()._KqpExprStringsAllocationLimit.Get().GetRef();
 
+        THashSet<TString> configAliases {
+            TString(KikimrProviderName),
+            TString(KikimrPublicProviderName),
+        };
+
         // Kikimr provider
-        auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, SessionCtx, KqpRunner);
-        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx);
+        auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
+        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, configAliases);
         auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, queryExecutor);
 
         FillSettings.AllResultsBytesLimit = Nothing();
@@ -1045,7 +1053,7 @@ public:
         FillSettings.Format = IDataProvider::EResultFormat::Custom;
         FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
 
-        TypesCtx->AddDataSource(KikimrProviderName, kikimrDataSource);
+        TypesCtx->AddDataSource(configAliases, kikimrDataSource);
         TypesCtx->AddDataSink(KikimrProviderName, kikimrDataSink);
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;

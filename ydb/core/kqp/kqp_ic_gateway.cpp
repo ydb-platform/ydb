@@ -1662,6 +1662,8 @@ public:
     TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, ui64 rowsLimit) override
     {
+        YQL_ENSURE(cluster == Cluster);
+
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
@@ -1671,7 +1673,6 @@ public:
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetCluster(cluster);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
@@ -1695,6 +1696,8 @@ public:
         TKqpParamsMap&& params, const TAstQuerySettings& settings,
         const Ydb::Table::TransactionSettings& txSettings, const NActors::TActorId& target) override
     {
+        YQL_ENSURE(cluster == Cluster);
+
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
@@ -1704,7 +1707,6 @@ public:
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetCluster(cluster);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
@@ -1734,6 +1736,8 @@ public:
     TFuture<TQueryResult> StreamExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, const NActors::TActorId& target) override
     {
+        YQL_ENSURE(cluster == Cluster);
+
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
@@ -1743,7 +1747,6 @@ public:
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetCluster(cluster);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
@@ -1765,6 +1768,8 @@ public:
 
     TFuture<TQueryResult> ExplainScanQueryAst(const TString& cluster, const TString& query) override
     {
+        YQL_ENSURE(cluster == Cluster);
+
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
@@ -1774,7 +1779,6 @@ public:
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetCluster(cluster);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
@@ -1792,6 +1796,8 @@ public:
     TFuture<TQueryResult> ExecDataQueryAst(const TString& cluster, const TString& query, TKqpParamsMap&& params,
         const TAstQuerySettings& settings, const Ydb::Table::TransactionSettings& txSettings) override
     {
+        YQL_ENSURE(cluster == Cluster);
+
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
@@ -1801,7 +1807,6 @@ public:
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetCluster(cluster);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
@@ -1829,6 +1834,8 @@ public:
     }
 
     TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) override {
+        YQL_ENSURE(cluster == Cluster);
+
         using TRequest = NKqp::TEvKqp::TEvQueryRequest;
         using TResponse = NKqp::TEvKqp::TEvQueryResponse;
 
@@ -1838,7 +1845,6 @@ public:
         }
 
         ev->Record.MutableRequest()->SetDatabase(Database);
-        ev->Record.MutableRequest()->SetCluster(cluster);
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);

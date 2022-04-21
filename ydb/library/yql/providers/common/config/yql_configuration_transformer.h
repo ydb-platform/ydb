@@ -15,6 +15,9 @@ namespace NCommon {
 class TProviderConfigurationTransformer : public TSyncTransformerBase {
 public:
     TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,const TTypeAnnotationContext& types,
+        const THashSet<TString>& providerNames, const THashSet<TStringBuf>& configureCallables = {});
+
+    TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,const TTypeAnnotationContext& types,
         const TString& provider, const THashSet<TStringBuf>& configureCallables = {});
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -27,7 +30,7 @@ protected:
 protected:
     TSettingDispatcher::TPtr Dispatcher;
     const TTypeAnnotationContext& Types;
-    TString Provider;
+    THashSet<TString> ProviderNames;
     THashSet<TStringBuf> ConfigureCallables;
 };
 

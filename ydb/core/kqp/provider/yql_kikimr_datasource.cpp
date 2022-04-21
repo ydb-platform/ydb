@@ -55,7 +55,8 @@ private:
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
-                auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(),
+                    key.GetTablePath());
 
                 if (key.GetKeyType() == TKikimrKey::Type::TableScheme) {
                     table.RequireStats();
@@ -208,8 +209,8 @@ private:
 class TKikimrConfigurationTransformer : public NCommon::TProviderConfigurationTransformer {
 public:
     TKikimrConfigurationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        const TTypeAnnotationContext& types)
-        : TProviderConfigurationTransformer(sessionCtx->ConfigPtr(), types, TString(KikimrProviderName))
+        const TTypeAnnotationContext& types, const THashSet<TString>& providerNames)
+        : TProviderConfigurationTransformer(sessionCtx->ConfigPtr(), types, providerNames)
         , SessionCtx(sessionCtx) {}
 
 protected:
@@ -273,12 +274,14 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
         TTypeAnnotationContext& types,
         TIntrusivePtr<IKikimrGateway> gateway,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        const THashSet<TString>& configAliases)
         : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
-        , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
+        , ConfigAliases(configAliases)
+        , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types, configAliases))
         , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
@@ -288,8 +291,10 @@ public:
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
 
-        Y_VERIFY_DEBUG(gateway);
-        Y_VERIFY_DEBUG(sessionCtx);
+        YQL_ENSURE(gateway);
+        YQL_ENSURE(sessionCtx);
+
+        YQL_ENSURE(configAliases.contains(KikimrProviderName));
     }
 
     ~TKikimrDataSource() {}
@@ -363,7 +368,7 @@ public:
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
-            if (node.Child(0)->Content() == KikimrProviderName) {
+            if (ConfigAliases.contains(node.Child(0)->Content())) {
                 if (node.Child(1)->Content().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
                     return false;
@@ -383,7 +388,10 @@ public:
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
-        if (node.IsCallable(TKiReadTable::CallableName()) || node.IsCallable(TKiReadTableScheme::CallableName()) || node.IsCallable(TKiReadTableList::CallableName())) {
+        if (node.IsCallable(TKiReadTable::CallableName()) ||
+            node.IsCallable(TKiReadTableScheme::CallableName()) ||
+            node.IsCallable(TKiReadTableList::CallableName()))
+        {
             return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
         }
 
@@ -588,6 +596,7 @@ private:
     TTypeAnnotationContext& Types;
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    THashSet<TString> ConfigAliases;
 
     TAutoPtr<IGraphTransformer> ConfigurationTransformer;
     TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
@@ -616,7 +625,8 @@ IGraphTransformer::TStatus TKiSourceVisitorTransformer::DoTransform(TExprNode::T
         return HandleConfigure(TExprBase(input), ctx);
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSource) Unsupported function: " << input->Content()));
+    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSource) Unsupported function: "
+        << input->Content()));
     return TStatus::Error;
 }
 
@@ -624,9 +634,10 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    const THashSet<TString>& configAliases)
 {
-    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx);
+    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx, configAliases);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,

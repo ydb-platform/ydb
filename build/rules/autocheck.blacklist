@@ -1359,3 +1359,13 @@ classifieds/vsdwh/mono
 noc/traffic/l3lb/check-tun
 classifieds/autoru-expert-auction-bot
 noc/traffic/l3lb/snmp-lvs-module
+classifieds/auto-tests
+classifieds/auto-canonical-tests
+classifieds/auto-redirect-tests
+classifieds/randomlunchbot
+classifieds/nodejs/luster-vertislogs
+classifieds/nodejs/luster-tvm
+classifieds/nodejs/luster-bunker
+classifieds/nodejs/luster-prometheus
+classifieds/nodejs/luster-guard
+classifieds/nodejs/luster-graceful-dns

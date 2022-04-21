@@ -282,7 +282,7 @@ public:
                     for (const auto& item : items) {
                         if (const re2::StringPiece piece(item.first); re.Match(piece, 0, item.first.size(), RE2::ANCHOR_BOTH, nullptr, 0)) {
                             if (item.second > State_->Configuration->FileSizeLimit) {
-                                ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  item.first << " size " << item.second << " is too large."));
+                                ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  item.first << " size " << item.second << " is too large, but limit is " << State_->Configuration->FileSizeLimit));
                                 return TStatus::Error;
                             }
 
@@ -310,7 +310,7 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  path << " doesn't exist."));
                     return TStatus::Error;
                 } else if (const auto size = f->second; size > State_->Configuration->FileSizeLimit) {
-                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  path << " size " << size << " is too large."));
+                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  path << " size " << size << " is too large, but limit is " << State_->Configuration->FileSizeLimit));
                     return TStatus::Error;
                 } else {
                     YQL_CLOG(INFO, ProviderS3) << "Object " << path << " size is " <<  size;

@@ -65,6 +65,7 @@ public:
 
 Y_UNIT_TEST_SUITE(TPQCompatTest) {
     Y_UNIT_TEST(DiscoverTopics) {
+        return; // LOGBROKER-7445
         TPQv1CompatTestBase testServer;
         Cerr << "Create write session\n";
         auto ws = testServer.CreateWriteSession("account/topic2");
@@ -111,6 +112,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
     }
 
     Y_UNIT_TEST(SetupLockSession) {
+        return; // LOGBROKER-7445
         TPQv1CompatTestBase testServer;
         {
             auto rs = testServer.CreateReadSession({"account/topic2"});

@@ -43,9 +43,9 @@ YDB CLI определяет значения этих параметров из
 
 ### {{ yandex-cloud }}
 
-Ниже описан сценарий получения ключей доступа к [{{ yandex-cloud }} Object Storage](https://cloud.yandex.com/ru-ru/docs/storage/) с применением {{ yandex-cloud }} CLI.
+Ниже описан сценарий получения ключей доступа к [{{ yandex-cloud }} Object Storage]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/storage/){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/storage/){% endif %} с применением {{ yandex-cloud }} CLI.
 
-1. [Установите и сконфигурируйте](https://cloud.yandex.com/ru-ru/docs/cli/quickstart) {{ yandex-cloud }} CLI.
+1. [Установите и сконфигурируйте]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/cli/quickstart){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/cli/quickstart){% endif %} {{ yandex-cloud }} CLI.
 
 2. Получите ID вашего каталога в облаке следующей командой, его понадобится указывать в командах ниже:
 
@@ -60,7 +60,7 @@ YDB CLI определяет значения этих параметров из
    ```
    
 
-3. [Создайте сервисный аккаунт](https://cloud.yandex.com/ru-ru/docs/iam/operations/sa/create), выполнив следующую команду:
+3. [Создайте сервисный аккаунт]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create){% endif %}, выполнив следующую команду:
 
    ``` bash
    yc iam service-account create --name s3account
@@ -68,7 +68,7 @@ YDB CLI определяет значения этих параметров из
 
    Вы можете указать любое имя аккаунта кроме `s3account` или использовать существующий, тогда вам понадобится его также заменять при копировании команд ниже через буфер обмена.
 
-3. [Назначьте сервисному аккаунту](https://cloud.yandex.com/ru-ru/docs/iam/operations/sa/assign-role-for-sa) роли в соответствии с необходимым уровнем доступа к S3, выполнив команду:
+3. [Назначьте сервисному аккаунту]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/assign-role-for-sa){% endif %} роли в соответствии с необходимым уровнем доступа к S3, выполнив команду:
 
    {% list tabs %}
 
@@ -90,9 +90,9 @@ YDB CLI определяет значения этих параметров из
 
    , где `<folder-id>` - это идентификатор каталога в облаке, полученный на шаге 2.
 
-   Вы можете также ознакомиться с [полным перечнем](https://cloud.yandex.com/ru-ru/docs/iam/concepts/access-control/roles#object-storage) ролей {{ yandex-cloud }}.
+   Вы можете также ознакомиться с [полным перечнем]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/concepts/access-control/roles#object-storage){% endif %} ролей {{ yandex-cloud }}.
 
-4. Получите [статические ключи доступа](https://cloud.yandex.com/ru-ru/docs/iam/operations/sa/create-access-key), выполнив следующую команду:
+4. Получите [статические ключи доступа]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create-access-key){% endif %}, выполнив следующую команду:
 
    ``` bash
    yc iam access-key create --service-account-name s3account

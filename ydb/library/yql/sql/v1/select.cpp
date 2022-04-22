@@ -1784,6 +1784,7 @@ private:
                 if (!partitionNode->GetLabel() && !partitionNode->GetColumnName()) {
                     TString label = TStringBuilder() << "group_" << name << "_" << i;
                     partitionNode->SetLabel(label);
+                    src->AddTmpWindowColumn(label);
                 }
             }
             if (!src->AddExpressions(ctx, winSpec->Partitions, EExprSeat::WindowPartitionBy)) {

@@ -874,12 +874,18 @@ void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorCon
             THolder<TEvKeyValue::TEvExecuteTransactionResponse> response(new TEvKeyValue::TEvExecuteTransactionResponse);
             response->Record = intermediate->ExecuteTransactionResponse;
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
+            if (intermediate->RespondTo.NodeId() != ctx.SelfID.NodeId()) {
+                response->Record.set_node_id(ctx.SelfID.NodeId());
+            }
             ctx.Send(intermediate->RespondTo, response.Release());
         }
         if (intermediate->EvType == TEvKeyValue::TEvGetStorageChannelStatus::EventType) {
             THolder<TEvKeyValue::TEvGetStorageChannelStatusResponse> response(new TEvKeyValue::TEvGetStorageChannelStatusResponse);
             response->Record = intermediate->GetStorageChannelStatusResponse;
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
+            if (intermediate->RespondTo.NodeId() != ctx.SelfID.NodeId()) {
+                response->Record.set_node_id(ctx.SelfID.NodeId());
+            }
             ctx.Send(intermediate->RespondTo, response.Release());
         }
         if (intermediate->EvType == TEvKeyValue::TEvAcquireLock::EventType) {
@@ -887,6 +893,9 @@ void TKeyValueState::Reply(THolder<TIntermediate> &intermediate, const TActorCon
             response->Record.set_lock_generation(StoredState.GetUserGeneration());
             response->Record.set_cookie(intermediate->Cookie);
             ResourceMetrics->Network.Increment(response->Record.ByteSize());
+            if (intermediate->RespondTo.NodeId() != ctx.SelfID.NodeId()) {
+                response->Record.set_node_id(ctx.SelfID.NodeId());
+            }
             ctx.Send(intermediate->RespondTo, response.Release());
         }
         intermediate->IsReplied = true;
@@ -998,28 +1007,14 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRangeRead &request,
 }
 
 
-void SetStatusFlags(NKikimrKeyValue::Flags *flags, const TStorageStatusFlags &statusFlags) {
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan)) {
-        flags->set_disk_space_cyan(true);
-    }
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
-        flags->set_disk_space_light_yellow_move(true);
-    }
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
-        flags->set_disk_space_yellow_stop(true);
-    }
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightOrange)) {
-        flags->set_disk_space_light_orange(true);
+NKikimrKeyValue::StorageChannel::StatusFlag GetStatusFlag(const TStorageStatusFlags &statusFlags) {
+    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceOrange)) {
+        return NKikimrKeyValue::StorageChannel::STATUS_FLAG_ORANGE_OUT_SPACE;
     }
     if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceOrange)) {
-        flags->set_disk_space_orange(true);
+        return NKikimrKeyValue::StorageChannel::STATUS_FLAG_YELLOW_STOP;
     }
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceRed)) {
-        flags->set_disk_space_red(true);
-    }
-    if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceBlack)) {
-        flags->set_disk_space_black(true);
-    }
+    return NKikimrKeyValue::StorageChannel::STATUS_FLAG_GREEN;
 }
 
 void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
@@ -1068,8 +1063,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
     }
     if (response) {
         response->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
-        auto *flags = response->mutable_status_flags();
-        SetStatusFlags(flags, request.StatusFlags);
+        response->set_status_flag(GetStatusFlag(request.StatusFlags));
         response->set_storage_channel(storage_channel);
     }
 }
@@ -1281,7 +1275,7 @@ void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleD
                 response->set_storage_channel(request.StorageChannel - BLOB_CHANNEL + MainStorageChannelInPublicApi);
             }
 
-            SetStatusFlags(response->mutable_status_flags(), request.StatusFlags);
+            response->set_status_flag(GetStatusFlag(request.StatusFlags));
         }
     }
     intermediate->GetStorageChannelStatusResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
@@ -2605,7 +2599,7 @@ bool TKeyValueState::PrepareReadRequest(const TActorContext &ctx, TEvKeyValue::T
         response.Status = NKikimrProto::NODATA;
         response.Message = "No such key Marker# KV55";
         ReplyError<TEvKeyValue::TEvReadResponse>(ctx, response.Message,
-                NKikimrKeyValue::Statuses::RSTATUS_NO_DATA, intermediate);
+                NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, intermediate);
         return false;
     }
     bool isOverRun = PrepareOneRead<NKikimrKeyValue::Priorities, true, ReadResultSizeEstimationNewApi>(

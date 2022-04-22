@@ -450,7 +450,7 @@ Y_UNIT_TEST(ReadRangeNoData) {
 
     TRangeReadRequestBuilder builder;
 
-    RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_NO_DATA);
+    RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_OK);
 }
 
 } // Y_UNIT_TEST_SUITE(KeyValueReadStorage)

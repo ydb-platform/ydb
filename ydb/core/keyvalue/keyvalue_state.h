@@ -485,14 +485,14 @@ public:
         auto &record = kvRequest->Record;
         intermediate->HasGeneration = true;
         intermediate->Generation = record.lock_generation();
-        if (record.lock_generation() != StoredState.GetUserGeneration()) {
+        if (record.has_lock_generation() && record.lock_generation() != StoredState.GetUserGeneration()) {
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Generation mismatch! Requested# " << record.lock_generation();
             str << " Actual# " << StoredState.GetUserGeneration();
             str << " Marker# KV05";
             ReplyError<typename TGrpcRequestWithLockGeneration::TResponse>(ctx, str.Str(),
-                    NKikimrKeyValue::Statuses::RSTATUS_ERROR, intermediate);
+                    NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION, intermediate);
             return true;
         }
         return false;

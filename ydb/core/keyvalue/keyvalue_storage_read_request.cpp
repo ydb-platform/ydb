@@ -131,11 +131,12 @@ public:
                 STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE, KV322,
                     "Expected OK or UNKNOWN and given " << NKikimrProto::EReplyStatus_Name(status)
                     << " readCount# " << readCount);
-                NKikimrKeyValue::Statuses::ReplyStatus replyStatus = ConvertStatus(status);
-                if (!readCount) {
-                    replyStatus = NKikimrKeyValue::Statuses::RSTATUS_NO_DATA;
-                } else if (status == NKikimrProto::UNKNOWN) {
+
+                NKikimrKeyValue::Statuses::ReplyStatus replyStatus;
+                if (status == NKikimrProto::UNKNOWN || status == NKikimrProto::NODATA) {
                     replyStatus = NKikimrKeyValue::Statuses::RSTATUS_OK;
+                } else {
+                    replyStatus = ConvertStatus(status);
                 }
 
                 SendResponseAndPassAway(replyStatus);
@@ -381,6 +382,10 @@ public:
         response->Record.set_requested_size(interRead.RequestedSize);
         response->Record.set_value(interRead.Value);
 
+        if (IntermediateResult->RespondTo.NodeId() != SelfId().NodeId()) {
+            response->Record.set_node_id(SelfId().NodeId());
+        }
+
         return response;
     }
 
@@ -389,8 +394,6 @@ public:
             return NKikimrKeyValue::Statuses::RSTATUS_OK;
         } else if (status == NKikimrProto::OVERRUN) {
             return NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
-        } else if (status == NKikimrProto::NODATA) {
-            return NKikimrKeyValue::Statuses::RSTATUS_NO_DATA;
         } else {
             return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
         }
@@ -431,6 +434,10 @@ public:
             kvp->set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
         }
         readRangeResult.set_status(status);
+
+        if (IntermediateResult->RespondTo.NodeId() != SelfId().NodeId()) {
+            readRangeResult.set_node_id(SelfId().NodeId());
+        }
 
         return response;
     }

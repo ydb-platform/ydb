@@ -227,7 +227,6 @@ namespace NKikimr::NTestShard {
             }
 
             Y_VERIFY_S(status == NKikimrKeyValue::Statuses::RSTATUS_OK
-                || status ==  NKikimrKeyValue::Statuses::RSTATUS_NO_DATA
                 || status == NKikimrKeyValue::Statuses::RSTATUS_OVERRUN,
                 "TabletId# " << TabletId << " CmdReadRange failed"
                 << " Status# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(status));

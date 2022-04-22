@@ -26,9 +26,13 @@ message Statuses {
         RSTATUS_ERROR = 2;
         RSTATUS_TIMEOUT = 3;
         RSTATUS_INTERNAL_ERROR = 4;
-        RSTATUS_NO_DATA = 5;
+        RSTATUS_NOT_FOUND = 5;
         RSTATUS_OVERRUN = 6;
+        RSTATUS_WRONG_LOCK_GENERATION = 7;
     }
+}
+
+message StorageStatusFlags {
 }
 
 message Flags {
@@ -42,9 +46,15 @@ message Flags {
 }
 
 message StorageChannel {
+    enum StatusFlag {
+        STATUS_FLAG_UNSPECIFIED = 0;
+        STATUS_FLAG_GREEN = 10;
+        STATUS_FLAG_YELLOW_STOP = 20;
+        STATUS_FLAG_ORANGE_OUT_SPACE = 30;
+    }
     Statuses.ReplyStatus status = 1;
     uint32 storage_channel = 2;
-    optional Flags status_flags = 3;
+    StatusFlag status_flag = 3;
 }
 
 message KVRange {
@@ -61,7 +71,7 @@ message KVRange {
 
 message ReadRequest {
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
+    optional uint64 lock_generation = 2;
     string key = 3;
     uint64 offset = 4;
     uint64 size = 5;
@@ -79,11 +89,12 @@ message ReadResult {
     string msg = 5;
     Statuses.ReplyStatus status = 6;
     uint64 cookie = 7;
+    uint64 node_id = 8;
 }
 
 message ReadRangeRequest {
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
+    optional uint64 lock_generation = 2;
 
     KVRange range = 3;
 
@@ -109,6 +120,7 @@ message ReadRangeResult {
     string msg = 2;
     repeated KeyValuePair pair = 3;
     uint64 cookie = 4;
+    uint64 node_id = 5;
 }
 
 message ExecuteTransactionRequest {
@@ -153,7 +165,7 @@ message ExecuteTransactionRequest {
     }
 
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
+    optional uint64 lock_generation = 2;
     repeated Command commands = 3;
     uint64 cookie = 4;
     uint64 deadline_instant_ms = 5;
@@ -164,11 +176,12 @@ message ExecuteTransactionResult {
     Statuses.ReplyStatus status = 2;
     string msg = 3;
     uint64 cookie = 4;
+    uint64 node_id = 5;
 }
 
 message GetStorageChannelStatusRequest {
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
+    optional uint64 lock_generation = 2;
     repeated uint32 storage_channel = 3;
     uint64 deadline_instant_ms = 4;
 }
@@ -177,6 +190,7 @@ message GetStorageChannelStatusResult {
     repeated StorageChannel storage_channel = 1;
     Statuses.ReplyStatus status = 2;
     string msg = 3;
+    uint64 node_id = 4;
 }
 
 message AcquireLockRequest {
@@ -187,4 +201,5 @@ message AcquireLockRequest {
 message AcquireLockResult {
     uint64 lock_generation = 1;
     uint64 cookie = 2;
+    uint64 node_id = 3;
 }

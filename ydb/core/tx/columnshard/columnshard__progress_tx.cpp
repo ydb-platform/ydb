@@ -91,7 +91,7 @@ public:
 
                     if (meta.MetaShard == 0) {
                         for (TWriteId writeId : meta.WriteIds) {
-                            Self->RemoveLongTxWrite(db, writeId);
+                            Self->RemoveLongTxWrite(db, writeId, txId);
                         }
                     }
                     Self->CommitsInFlight.erase(txId);

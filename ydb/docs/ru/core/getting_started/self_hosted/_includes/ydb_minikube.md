@@ -8,7 +8,7 @@
 1. Установите {{ k8s }} CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl).
 1. Установите и запустите [Minikube](https://kubernetes.io/ru/docs/tasks/tools/install-minikube/).
 1. Установите менеджер пакетов {{ k8s }} [Нelm 3](https://helm.sh/docs/intro/install/).
-1. Склонируйте репозиторий с ```ydb-kubernetes-operator```
+1. Склонируйте репозиторий с [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator).
 
       ```bash
       git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator

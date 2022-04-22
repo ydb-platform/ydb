@@ -17,6 +17,11 @@
 1. Установите {{ k8s }} CLI [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl).
 1. [Настройте]{% if lang == "en" %}(https://cloud.yandex.com/en/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials){% endif %}{% if lang == "ru" %}(https://cloud.yandex.ru/docs/managed-kubernetes/operations/kubernetes-cluster/kubernetes-cluster-get-credetials){% endif %} конфигурацию kubectl.
 1. Установите менеджер пакетов {{ k8s }} [Нelm 3](https://helm.sh/docs/intro/install/).
+1. Склонируйте репозиторий с [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator)
+
+      ```bash
+      git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
+      ```
 1. Добавьте в Helm репозиторий для {{ yandex-cloud }}:
 
     {% list tabs %}

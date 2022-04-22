@@ -41,22 +41,7 @@
   Выполните команду:
 
   ```bash
-  kubectl create -f - <<EOF
-  apiVersion: ydb.tech/v1alpha1
-  kind: Storage
-  metadata:
-    name: storage-sample
-  spec:
-    dataStore:
-      volumeMode: Block
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 80Gi
-    version: 21.4.30
-    nodes: 8
-  EOF
+  kubectl apply -f samples/storage.yaml
   ```
 
   Эта команда создаст объект StatefulSet, который описывает набор контейнеров с предсказуемыми сетевыми именами и закрепленными за ними дисками, а также необходимые для работы кластера объекты Service и ConfigMap.
@@ -78,7 +63,7 @@
 
 {% endnote %}
 
-Стандартная конфигурация включает минимально необходимые 8 нод хранения, каждая с диском размером 80 ГБ. Мы рекомендуем использовать диски не менее 80 ГБ для стабильной работы кластера {{ ydb-short-name }}.
+Стандартная конфигурация включает минимально необходимые 9 нод хранения, каждая с диском размером 80 ГБ. Мы рекомендуем использовать диски не менее 80 ГБ для стабильной работы кластера {{ ydb-short-name }}.
 
 ## Создайте базу данных {#create-database}
 
@@ -91,18 +76,9 @@
   Выполните команду:
 
   ```bash
-  kubectl create -f - <<EOF
-  apiVersion: ydb.tech/v1alpha1
-  kind: Database
-  metadata:
-    name: database-sample
-  spec:
-    version: 21.4.30
-    nodes: 6
-    storageClusterRef:
-      name: storage-sample
-  EOF
+  kubectl apply -f samples/database.yaml
   ```
+
 
   {% note info %}
 
@@ -166,6 +142,7 @@
       storage-sample-5    1/1     Running   0          1m
       storage-sample-6    1/1     Running   0          1m
       storage-sample-7    1/1     Running   0          1m
+      storage-sample-8    1/1     Running   0          1m
       ```
 
   1. Запустите новый под с {{ ydb-short-name }} CLI:

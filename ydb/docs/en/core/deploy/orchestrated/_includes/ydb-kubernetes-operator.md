@@ -40,22 +40,7 @@ Apply the manifest for creating a {{ ydb-short-name }} cluster:
   Run the command:
 
   ```bash
-  kubectl create -f - <<EOF
-  apiVersion: ydb.tech/v1alpha1
-  kind: Storage
-  metadata:
-    name: storage-sample
-  spec:
-    dataStore:
-      volumeMode: Block
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 80Gi
-    version: 21.4.30
-    nodes: 8
-  EOF
+  kubectl apply -f samples/storage.yaml
   ```
 
   This command creates a StatefulSet object that describes a set of containers with stable network IDs and disks assigned to them, as well as Service and ConfigMap objects that are required for the cluster to work.
@@ -77,7 +62,7 @@ The cluster configuration is static. The controller won't process any changes wh
 
 {% endnote %}
 
-The standard configuration includes the minimum required 8 storage nodes, 80 GB each. We recommend using disks of at least 80 GB to ensure the stable operation of {{ ydb-short-name }} clusters.
+The standard configuration includes the minimum required 9 storage nodes, 80 GB each. We recommend using disks of at least 80 GB to ensure the stable operation of {{ ydb-short-name }} clusters.
 
 ## Create a database {#create-database}
 
@@ -90,17 +75,7 @@ Apply the manifest for creating a database:
   Run the command:
 
   ```bash
-  kubectl create -f - <<EOF
-  apiVersion: ydb.tech/v1alpha1
-  kind: Database
-  metadata:
-    name: database-sample
-  spec:
-    version: 21.4.30
-    nodes: 6
-    storageClusterRef:
-      name: storage-sample
-  EOF
+  kubectl apply -f samples/minikube/database.yaml
   ```
 
   {% note info %}
@@ -165,6 +140,7 @@ Test how {{ ydb-short-name }} works:
       storage-sample-5    1/1     Running   0          1m
       storage-sample-6    1/1     Running   0          1m
       storage-sample-7    1/1     Running   0          1m
+      storage-sample-8    1/1     Running   0          1m
       ```
 
   1. Start a new pod using the {{ ydb-short-name }} CLI:

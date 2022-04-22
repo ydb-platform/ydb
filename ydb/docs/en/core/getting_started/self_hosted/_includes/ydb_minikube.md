@@ -10,7 +10,7 @@ To create a {{ ydb-short-name }} cluster using [Minikube](https://kubernetes.io/
 
 1. Install the {{ k8s }} [Helm 3](https://helm.sh/docs/intro/install/) package manager.
 
-1. Clone the repository with ```ydb-kubernetes-operator```.
+1. Clone the repository with [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator).
 
       ```bash
       git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator

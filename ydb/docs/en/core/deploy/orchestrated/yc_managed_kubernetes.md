@@ -20,6 +20,12 @@ To use [{{ k8s }}](https://kubernetes.io/) to create a cluster [{{ ydb-short-nam
 
 1. Install the {{ k8s }} [Helm 3](https://helm.sh/docs/intro/install/) package manager.
 
+1. Clone the repository with [ydb-kubernetes-operator](https://github.com/ydb-platform/ydb-kubernetes-operator).
+
+      ```bash
+      git clone https://github.com/ydb-platform/ydb-kubernetes-operator && cd ydb-kubernetes-operator
+      ```
+
 1. Add a repository for {{ yandex-cloud }} to Helm:
 
     {% list tabs %}

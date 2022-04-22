@@ -21,6 +21,8 @@ scopes:
     - exhaustivestruct
   a.yandex-team.ru/strm/plgo:
     - exhaustivestruct
+  a.yandex-team.ru/strm/ponger:
+    - exhaustivestruct
   a.yandex-team.ru/strm/vybrator:
     - exhaustivestruct
   a.yandex-team.ru/strm/xaccelredirect:

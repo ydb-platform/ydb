@@ -45,6 +45,8 @@ ci:
         - contrib/libs/libevent
         - contrib/libs/libheif
         - contrib/libs/libiconv
+        - contrib/libs/libidn
+        - contrib/libs/libidn2
         - contrib/libs/libjpeg-turbo
         - contrib/libs/libmysql_r
         - contrib/libs/libmysql_r/strings/uca9dump/bin
@@ -54,6 +56,7 @@ ci:
         - contrib/libs/libpqxx
         - contrib/libs/libraw
         - contrib/libs/librsvg
+        - contrib/libs/libunistring
         - contrib/libs/libvpx
         - contrib/libs/libx265
         - contrib/libs/llvm12

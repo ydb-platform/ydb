@@ -15,6 +15,18 @@
    __getattr__.
 */
 
+#if defined(_asan_enabled_)
+void __lsan_ignore_object(const void* p);
+#endif
+
+inline static void MarkAsIntentionallyLeaked(const void* ptr) {
+#if defined(_asan_enabled_)
+     __lsan_ignore_object(ptr);
+#else
+     (void)ptr;
+#endif
+}
+
 struct CPyExtFunc_s {
     PyMethodDef md;
     void *direct_fn;
@@ -340,6 +352,7 @@ static PyObject *lib_build_and_cache_attr(LibObject *lib, PyObject *name,
                 PyErr_NoMemory();
                 return NULL;
             }
+            MarkAsIntentionallyLeaked(data);
             ((void(*)(char*))g->address)(data);
         }
         x = convert_to_object(data, ct);

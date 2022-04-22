@@ -7,6 +7,39 @@
 
 namespace NKikimr::NKqp {
 
+struct TSessionShutdownState {
+    TSessionShutdownState(ui32 softTimeout, ui32 hardTimeout)
+        : HardTimeout(hardTimeout)
+        , SoftTimeout(softTimeout)
+    {}
+
+    ui32 Step = 0;
+    ui32 HardTimeout;
+    ui32 SoftTimeout;
+
+    void MoveToNextState() {
+        ++Step;
+    }
+
+    ui32 GetNextTickMs() const {
+        if (Step == 0) {
+            return std::min(HardTimeout, SoftTimeout);
+        } else if (Step == 1) {
+            return std::max(HardTimeout, SoftTimeout) - std::min(HardTimeout, SoftTimeout) + 1;
+        } else {
+            return 50;
+        }
+    }
+
+    bool SoftTimeoutReached() const {
+        return Step == 1;
+    }
+
+    bool HardTimeoutReached() const {
+        return Step == 2;
+    }
+};
+
 inline bool IsExecuteAction(const NKikimrKqp::EQueryAction& action) {
     switch (action) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:

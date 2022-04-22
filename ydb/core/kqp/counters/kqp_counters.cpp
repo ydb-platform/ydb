@@ -495,6 +495,10 @@ void TKqpCountersBase::ReportSessionActorClosedError() {
     SessionActorsClosedError->Inc();
 }
 
+void TKqpCountersBase::ReportSessionActorClosedRequest() {
+    SessionActorsClosedRequest->Inc();
+}
+
 void TKqpCountersBase::ReportQueriesPerSessionActor(ui32 queryId) {
     QueriesPerSessionActor->Collect(queryId);
 }
@@ -1018,6 +1022,13 @@ void TKqpCounters::ReportSessionActorClosedError(TKqpDbCountersPtr dbCounters) {
     TKqpCountersBase::ReportSessionActorClosedError();
     if (dbCounters) {
         dbCounters->ReportSessionActorClosedError();
+    }
+}
+
+void TKqpCounters::ReportSessionActorClosedRequest(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportSessionActorClosedRequest();
+    if (dbCounters) {
+        dbCounters->ReportSessionActorClosedRequest();
     }
 }
 

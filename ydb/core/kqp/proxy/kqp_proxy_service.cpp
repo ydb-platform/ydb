@@ -949,7 +949,11 @@ public:
                     }
                 }
 
-                str << Endl << "Active workers count on node: " << LocalSessions.size() << Endl;
+                str << Endl;
+
+                str << "EnableSessionActor: "
+                    << (AppData()->FeatureFlags.GetEnableKqpSessionActor() ? "true" : "false") << Endl;
+                str << "Active workers/session_actors count on node: " << LocalSessions.size() << Endl;
 
                 const auto& sessionsShutdownInFlight = LocalSessions.GetShutdownInFlight();
                 if (!sessionsShutdownInFlight.empty()) {

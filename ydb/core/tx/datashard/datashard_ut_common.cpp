@@ -1704,6 +1704,31 @@ ui64 AsyncAlterAddStream(
     return ev->Get()->Record.GetTxId();
 }
 
+ui64 AsyncAlterDisableStream(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName,
+        const TString& streamName)
+{
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterCdcStream);
+    tx.SetWorkingDir(workingDir);
+    auto &desc = *tx.MutableAlterCdcStream();
+    desc.SetTableName(tableName);
+    desc.SetStreamName(streamName);
+    desc.MutableDisable();
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+    return ev->Get()->Record.GetTxId();
+}
+
 ui64 AsyncAlterDropStream(
         Tests::TServer::TPtr server,
         const TString& workingDir,

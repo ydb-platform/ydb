@@ -5,7 +5,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -263,6 +263,8 @@ wolfssl_connect_step1(struct Curl_easy *data, struct connectdata *conn,
 #define use_sni(x)  Curl_nop_stmt
 #endif
 
+  DEBUGASSERT(backend);
+
   if(connssl->state == ssl_connection_complete)
     return CURLE_OK;
 
@@ -462,12 +464,17 @@ wolfssl_connect_step1(struct Curl_easy *data, struct connectdata *conn,
     if((hostname_len < USHRT_MAX) &&
        (0 == Curl_inet_pton(AF_INET, hostname, &addr4)) &&
 #ifdef ENABLE_IPV6
-       (0 == Curl_inet_pton(AF_INET6, hostname, &addr6)) &&
+       (0 == Curl_inet_pton(AF_INET6, hostname, &addr6))
 #endif
-       (wolfSSL_CTX_UseSNI(backend->ctx, WOLFSSL_SNI_HOST_NAME, hostname,
-                          (unsigned short)hostname_len) != 1)) {
-      infof(data, "WARNING: failed to configure server name indication (SNI) "
-            "TLS extension");
+      ) {
+      size_t snilen;
+      char *snihost = Curl_ssl_snihost(data, hostname, &snilen);
+      if(!snihost ||
+         wolfSSL_CTX_UseSNI(backend->ctx, WOLFSSL_SNI_HOST_NAME, snihost,
+                            (unsigned short)snilen) != 1) {
+        failf(data, "Failed to set SNI");
+        return CURLE_SSL_CONNECT_ERROR;
+      }
     }
   }
 #endif
@@ -590,9 +597,10 @@ wolfssl_connect_step2(struct Curl_easy *data, struct connectdata *conn,
   int ret = -1;
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
   struct ssl_backend_data *backend = connssl->backend;
-  const char * const hostname = SSL_HOST_NAME();
   const char * const dispname = SSL_HOST_DISPNAME();
   const char * const pinnedpubkey = SSL_PINNED_PUB_KEY();
+
+  DEBUGASSERT(backend);
 
   ERR_clear_error();
 
@@ -601,9 +609,10 @@ wolfssl_connect_step2(struct Curl_easy *data, struct connectdata *conn,
 
   /* Enable RFC2818 checks */
   if(SSL_CONN_CONFIG(verifyhost)) {
-    ret = wolfSSL_check_domain_name(backend->handle, hostname);
-    if(ret == SSL_FAILURE)
-      return CURLE_OUT_OF_MEMORY;
+    char *snihost = Curl_ssl_snihost(data, SSL_HOST_NAME(), NULL);
+    if(!snihost ||
+       (wolfSSL_check_domain_name(backend->handle, snihost) == SSL_FAILURE))
+      return CURLE_SSL_CONNECT_ERROR;
   }
 
   ret = SSL_connect(backend->handle);
@@ -797,6 +806,7 @@ wolfssl_connect_step3(struct Curl_easy *data, struct connectdata *conn,
   struct ssl_backend_data *backend = connssl->backend;
 
   DEBUGASSERT(ssl_connect_3 == connssl->connecting_state);
+  DEBUGASSERT(backend);
 
   if(SSL_SET_OPTION(primary.sessionid)) {
     bool incache;
@@ -848,6 +858,8 @@ static ssize_t wolfssl_send(struct Curl_easy *data,
   int memlen = (len > (size_t)INT_MAX) ? INT_MAX : (int)len;
   int rc;
 
+  DEBUGASSERT(backend);
+
   ERR_clear_error();
 
   rc = SSL_write(backend->handle, mem, memlen);
@@ -880,6 +892,8 @@ static void wolfssl_close(struct Curl_easy *data, struct connectdata *conn,
 
   (void) data;
 
+  DEBUGASSERT(backend);
+
   if(backend->handle) {
     char buf[32];
     /* Maybe the server has already sent a close notify alert.
@@ -908,17 +922,22 @@ static ssize_t wolfssl_recv(struct Curl_easy *data,
   int buffsize = (buffersize > (size_t)INT_MAX) ? INT_MAX : (int)buffersize;
   int nread;
 
+  DEBUGASSERT(backend);
+
   ERR_clear_error();
 
   nread = SSL_read(backend->handle, buf, buffsize);
 
-  if(nread < 0) {
+  if(nread <= 0) {
     int err = SSL_get_error(backend->handle, nread);
 
     switch(err) {
     case SSL_ERROR_ZERO_RETURN: /* no more data */
       break;
+    case SSL_ERROR_NONE:
+      /* FALLTHROUGH */
     case SSL_ERROR_WANT_READ:
+      /* FALLTHROUGH */
     case SSL_ERROR_WANT_WRITE:
       /* there's data pending, re-invoke SSL_read() */
       *curlcode = CURLE_AGAIN;
@@ -974,6 +993,7 @@ static bool wolfssl_data_pending(const struct connectdata *conn,
 {
   const struct ssl_connect_data *connssl = &conn->ssl[connindex];
   struct ssl_backend_data *backend = connssl->backend;
+  DEBUGASSERT(backend);
   if(backend->handle)   /* SSL is in use */
     return (0 != SSL_pending(backend->handle)) ? TRUE : FALSE;
   else
@@ -993,6 +1013,8 @@ static int wolfssl_shutdown(struct Curl_easy *data, struct connectdata *conn,
   struct ssl_backend_data *backend = connssl->backend;
 
   (void) data;
+
+  DEBUGASSERT(backend);
 
   if(backend->handle) {
     ERR_clear_error();
@@ -1173,6 +1195,7 @@ static void *wolfssl_get_internals(struct ssl_connect_data *connssl,
 {
   struct ssl_backend_data *backend = connssl->backend;
   (void)info;
+  DEBUGASSERT(backend);
   return backend->handle;
 }
 

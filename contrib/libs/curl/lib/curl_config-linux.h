@@ -493,7 +493,8 @@
 /* Define to 1 if you have the <openssl/rsa.h> header file. */
 #define HAVE_OPENSSL_RSA_H 1
 
-/* if you have the function SRP_Calc_client_key */
+/* if you have the functions SSL_CTX_set_srp_username and
+   SSL_CTX_set_srp_password */
 #define HAVE_OPENSSL_SRP 1
 
 /* Define to 1 if you have the <openssl/ssl.h> header file. */
@@ -965,9 +966,6 @@
 
 /* if mbedTLS is enabled */
 /* #undef USE_MBEDTLS */
-
-/* if MesaLink is enabled */
-/* #undef USE_MESALINK */
 
 /* if nghttp2 is in use */
 #define USE_NGHTTP2 1

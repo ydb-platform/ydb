@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_MESALINK_H
-#define HEADER_CURL_MESALINK_H
+#ifndef HEADER_CURL_HOSTCHECK_H
+#define HEADER_CURL_HOSTCHECK_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -7,8 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2017 - 2018, Yiming Jing, <jingyiming@baidu.com>
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -22,11 +21,11 @@
  * KIND, either express or implied.
  *
  ***************************************************************************/
-#include "curl_setup.h"
 
-#ifdef USE_MESALINK
+#include <curl/curl.h>
 
-extern const struct Curl_ssl Curl_ssl_mesalink;
+/* returns TRUE if there's a match */
+bool Curl_cert_hostcheck(const char *match_pattern, size_t matchlen,
+                         const char *hostname, size_t hostlen);
 
-#endif /* USE_MESALINK */
-#endif /* HEADER_CURL_MESALINK_H */
+#endif /* HEADER_CURL_HOSTCHECK_H */

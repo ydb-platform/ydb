@@ -7,7 +7,7 @@
  *
  * Copyright (C) 2012 - 2016, Marc Hoersken, <info@marc-hoersken.de>
  * Copyright (C) 2012, Mark Salisbury, <mark.salisbury@hp.com>
- * Copyright (C) 2012 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2012 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -465,6 +465,7 @@ static CURLcode verify_host(struct Curl_easy *data,
   CURLcode result = CURLE_PEER_FAILED_VERIFICATION;
   TCHAR *cert_hostname_buff = NULL;
   size_t cert_hostname_buff_index = 0;
+  size_t hostlen = strlen(conn_hostname);
   DWORD len = 0;
   DWORD actual_len = 0;
 
@@ -520,10 +521,8 @@ static CURLcode verify_host(struct Curl_easy *data,
       result = CURLE_OUT_OF_MEMORY;
     }
     else {
-      int match_result;
-
-      match_result = Curl_cert_hostcheck(cert_hostname, conn_hostname);
-      if(match_result == CURL_HOST_MATCH) {
+      if(Curl_cert_hostcheck(cert_hostname, strlen(cert_hostname),
+                             conn_hostname, hostlen)) {
         infof(data,
               "schannel: connection hostname (%s) validated "
               "against certificate name (%s)",
@@ -576,6 +575,8 @@ CURLcode Curl_verify_certificate(struct Curl_easy *data,
   HCERTCHAINENGINE cert_chain_engine = NULL;
   HCERTSTORE trust_store = NULL;
   const char * const conn_hostname = SSL_HOST_NAME();
+
+  DEBUGASSERT(BACKEND);
 
   sspi_status =
     s_pSecFn->QueryContextAttributes(&BACKEND->ctxt->ctxt_handle,

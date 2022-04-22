@@ -76,7 +76,6 @@
 #include "speedcheck.h"
 #include "warnless.h"
 #include "http_proxy.h"
-#include "non-ascii.h"
 #include "socks.h"
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
@@ -1030,8 +1029,11 @@ static CURLcode ftp_state_use_port(struct Curl_easy *data,
     if(*addr != '\0') {
       /* attempt to get the address of the given interface name */
       switch(Curl_if2ip(conn->ip_addr->ai_family,
+#ifdef ENABLE_IPV6
                         Curl_ipv6_scope(conn->ip_addr->ai_addr),
-                        conn->scope_id, addr, hbuf, sizeof(hbuf))) {
+                        conn->scope_id,
+#endif
+                        addr, hbuf, sizeof(hbuf))) {
         case IF2IP_NOT_FOUND:
           /* not an interface, use the given string as host name instead */
           host = addr;
@@ -1460,7 +1462,7 @@ static CURLcode ftp_state_list(struct Curl_easy *data)
     /* url-decode before evaluation: e.g. paths starting/ending with %2f */
     const char *slashPos = NULL;
     char *rawPath = NULL;
-    result = Curl_urldecode(data, ftp->path, 0, &rawPath, NULL, REJECT_CTRL);
+    result = Curl_urldecode(ftp->path, 0, &rawPath, NULL, REJECT_CTRL);
     if(result)
       return result;
 
@@ -3247,7 +3249,7 @@ static CURLcode ftp_done(struct Curl_easy *data, CURLcode status,
 
   if(!result)
     /* get the url-decoded "raw" path */
-    result = Curl_urldecode(data, ftp->path, 0, &rawPath, &pathLen,
+    result = Curl_urldecode(ftp->path, 0, &rawPath, &pathLen,
                             REJECT_CTRL);
   if(result) {
     /* We can limp along anyway (and should try to since we may already be in
@@ -4131,9 +4133,11 @@ CURLcode ftp_parse_url_path(struct Curl_easy *data)
   ftpc->cwdfail = FALSE;
 
   /* url-decode ftp path before further evaluation */
-  result = Curl_urldecode(data, ftp->path, 0, &rawPath, &pathLen, REJECT_CTRL);
-  if(result)
+  result = Curl_urldecode(ftp->path, 0, &rawPath, &pathLen, REJECT_CTRL);
+  if(result) {
+    failf(data, "path contains control characters");
     return result;
+  }
 
   switch(data->set.ftp_filemethod) {
     case FTPFILE_NOCWD: /* fastest, but less standard-compliant */

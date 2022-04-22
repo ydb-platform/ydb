@@ -84,10 +84,10 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/getenv.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/getinfo.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/gopher.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/h2h3.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hash.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hmac.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostasyn.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostcheck.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostip.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostip4.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostip6.c
@@ -117,7 +117,6 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/mqtt.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/multi.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/netrc.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/non-ascii.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/nonblock.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/openldap.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/parsedate.c
@@ -176,6 +175,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vssh/libssh2.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vssh/wolfssh.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/bearssl.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/hostcheck.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/keylog.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/mbedtls_threadlock.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/openssl.c
@@ -183,7 +183,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/sectransp.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/vtls.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/wolfssl.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vtls/x509asn1.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/warnless.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/wildcard.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/x509asn1.c
 )

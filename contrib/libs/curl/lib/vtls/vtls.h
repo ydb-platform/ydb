@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -85,7 +85,7 @@ struct Curl_ssl {
   CURLcode (*sha256sum)(const unsigned char *input, size_t inputlen,
                     unsigned char *sha256sum, size_t sha256sumlen);
 
-  void (*associate_connection)(struct Curl_easy *data,
+  bool (*associate_connection)(struct Curl_easy *data,
                                struct connectdata *conn,
                                int sockindex);
   void (*disassociate_connection)(struct Curl_easy *data, int sockindex);
@@ -120,7 +120,6 @@ bool Curl_ssl_tls13_ciphersuites(void);
 #include "schannel.h"       /* Schannel SSPI version */
 #include "sectransp.h"      /* SecureTransport (Darwin) version */
 #include "mbedtls.h"        /* mbedTLS versions */
-#include "mesalink.h"       /* MesaLink versions */
 #include "bearssl.h"        /* BearSSL versions */
 #include "rustls.h"         /* rustls versions */
 
@@ -173,6 +172,7 @@ bool Curl_ssl_tls13_ciphersuites(void);
   data->set.str[STRING_SSL_PINNEDPUBLICKEY]
 #endif
 
+char *Curl_ssl_snihost(struct Curl_easy *data, const char *host, size_t *olen);
 bool Curl_ssl_config_matches(struct ssl_primary_config *data,
                              struct ssl_primary_config *needle);
 bool Curl_clone_primary_ssl_config(struct ssl_primary_config *source,

@@ -1,9 +1,9 @@
 [
     [
         {
-            "column0": "JsonDocument?",
+            "column0": "Optional<JsonDocument>",
             "column1": "[1,2,3,4]",
-            "column2": "JsonDocument?",
+            "column2": "Optional<JsonDocument>",
             "column3": "{\"key\":\"value\"}"
         }
     ]

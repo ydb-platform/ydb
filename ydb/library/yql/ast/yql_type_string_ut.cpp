@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
     }
 
     Y_UNIT_TEST(FormatOptional) {
-        TestFormat("((Optional (Data Uint32)))", "Uint32?");
+        TestFormat("((Optional (Data Uint32)))", "Optional<Uint32>");
         TestFormat("((List (Optional (Data Uint32))))", "List<Uint32?>");
     }
 
@@ -628,7 +628,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
                    "    ((Data String))"
                    "    ((Optional (Data Uint8)))"
                    "))))",
-                   "Optional<Callable<(Uint8?)->String>>?");
+                   "Optional<Optional<Callable<(Uint8?)->String>>>");
     }
 
     Y_UNIT_TEST(FormatCallableWithNamedArgs) {
@@ -657,7 +657,7 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestFormat("((Resource aaa))", "Resource<'aaa'>");
         TestFormat("((Resource \"a b\"))", "Resource<'a b'>");
         TestFormat("((Resource \"a\\t\\n\\x01b\"))", "Resource<'a\\t\\n\\x01b'>");
-        TestFormat("((Optional (Resource aaa)))", "Resource<'aaa'>?");
+        TestFormat("((Optional (Resource aaa)))", "Optional<Resource<'aaa'>>");
     }
 
     Y_UNIT_TEST(FormatTagged) {

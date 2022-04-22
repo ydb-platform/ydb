@@ -1139,11 +1139,13 @@ public:
 
 private:
     void Visit(const TUnitExprType& type) final {
+        TopLevel = false;
         Y_UNUSED(type);
         Out_ << TStringBuf("Unit");
     }
 
     void Visit(const TMultiExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Multi<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
@@ -1156,6 +1158,7 @@ private:
     }
 
     void Visit(const TTupleExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Tuple<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
@@ -1168,6 +1171,7 @@ private:
     }
 
     void Visit(const TStructExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Struct<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
@@ -1180,30 +1184,35 @@ private:
     }
 
     void Visit(const TItemExprType& type) final {
+        TopLevel = false;
         EscapeArbitraryAtom(type.GetName(), '\'', &Out_);
         Out_ << ':';
         type.GetItemType()->Accept(*this);
     }
 
     void Visit(const TListExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("List<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TStreamExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Stream<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TFlowExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Flow<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TDataExprType& type) final {
+        TopLevel = false;
         Out_ << type.GetName();
         if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(&type)) {
             Out_ << '(' << dataExprParamsType->GetParamOne() << ',' << dataExprParamsType->GetParamTwo() << ')';
@@ -1211,6 +1220,7 @@ private:
     }
 
     void Visit(const TPgExprType& type) final {
+        TopLevel = false;
         TStringBuf name = type.GetName();
         if (!name.SkipPrefix("_")) {
             Out_ << "pg" << name;
@@ -1221,22 +1231,26 @@ private:
 
     void Visit(const TWorldExprType& type) final {
         Y_UNUSED(type);
+        TopLevel = false;
         Out_ << TStringBuf("World");
     }
 
     void Visit(const TOptionalExprType& type) final {
         const TTypeAnnotationNode* itemType = type.GetItemType();
-        if (itemType->GetKind() == ETypeAnnotationKind::Callable) {
+        if (TopLevel || itemType->GetKind() == ETypeAnnotationKind::Callable) {
+            TopLevel = false;
             Out_ << TStringBuf("Optional<");
             itemType->Accept(*this);
             Out_ << '>';
         } else {
+            TopLevel = false;
             itemType->Accept(*this);
             Out_ << '?';
         }
     }
 
     void Visit(const TCallableExprType& type) final {
+        TopLevel = false;
         const auto& args = type.GetArguments();
         ui32 argsCount = type.GetArgumentsSize();
         ui32 optArgsCount =
@@ -1278,18 +1292,21 @@ private:
     }
 
     void Visit(const TResourceExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Resource<");
         EscapeArbitraryAtom(type.GetTag(), '\'', &Out_);
         Out_ << '>';
     }
 
     void Visit(const TTypeExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Type<");
         type.GetType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TDictExprType& type) final {
+        TopLevel = false;
         if (type.GetPayloadType()->GetKind() == ETypeAnnotationKind::Void) {
             Out_ << TStringBuf("Set<");
             type.GetKeyType()->Accept(*this);
@@ -1305,30 +1322,36 @@ private:
 
     void Visit(const TVoidExprType& type) final {
         Y_UNUSED(type);
+        TopLevel = false;
         Out_ << TStringBuf("Void");
     }
 
     void Visit(const TNullExprType& type) final {
         Y_UNUSED(type);
+        TopLevel = false;
         Out_ << TStringBuf("Null");
     }
 
     void Visit(const TEmptyListExprType& type) final {
         Y_UNUSED(type);
+        TopLevel = false;
         Out_ << TStringBuf("EmptyList");
     }
 
     void Visit(const TEmptyDictExprType& type) final {
         Y_UNUSED(type);
+        TopLevel = false;
         Out_ << TStringBuf("EmptyDict");
     }
 
     void Visit(const TGenericExprType& type) final {
         Y_UNUSED(type);
+        TopLevel = false;
         Out_ << TStringBuf("Generic");
     }
 
     void Visit(const TTaggedExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Tagged<");
         type.GetBaseType()->Accept(*this);
         Out_ << ',';
@@ -1337,6 +1360,7 @@ private:
     }
 
     void Visit(const TErrorExprType& type) final {
+        TopLevel = false;
         Out_ << TStringBuf("Error<");
         auto pos = type.GetError().Position;
         EscapeArbitraryAtom(pos.File.empty() ? "<main>" : pos.File, '\'', &Out_);
@@ -1350,6 +1374,7 @@ private:
     }
 
     void Visit(const TVariantExprType& type) final {
+        TopLevel = false;
         auto underlyingType = type.GetUnderlyingType();
         if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
             Out_ << TStringBuf("Variant<");
@@ -1388,6 +1413,7 @@ private:
 
 private:
     IOutputStream& Out_;
+    bool TopLevel = true;
 };
 
 } // namespace

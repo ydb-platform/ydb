@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <util/string/printf.h>
 
@@ -60,6 +61,46 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(RetentionPeriod) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto& rp : {TDuration::Hours(12), TDuration::Days(7), TDuration::Days(60)}) {
+            const auto status = rp.Seconds() <= TSchemeShard::MaxPQLifetimeSeconds
+                ? NKikimrScheme::StatusAccepted
+                : NKikimrScheme::StatusInvalidParameter;
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%lu"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+                RetentionPeriodSeconds: %lu
+            )", rp.Seconds(), rp.Seconds()), {status});
+
+            if (status != NKikimrScheme::StatusAccepted) {
+                continue;
+            }
+
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePrivatePath(runtime, Sprintf("/MyRoot/Table/Stream%lu/streamImpl", rp.Seconds())), {
+                NLs::PathExist,
+                NLs::RetentionPeriod(rp),
+            });
+        }
     }
 
     Y_UNIT_TEST(Negative) {

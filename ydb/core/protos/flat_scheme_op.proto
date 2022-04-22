@@ -729,6 +729,7 @@ message TCdcStreamDescription {
 message TCreateCdcStream {
     optional string TableName = 1;
     optional TCdcStreamDescription StreamDescription = 2;
+    optional uint64 RetentionPeriodSeconds = 3 [default = 86400]; // 1d by default
 }
 
 message TAlterCdcStream {

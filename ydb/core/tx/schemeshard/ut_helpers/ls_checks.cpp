@@ -699,6 +699,13 @@ TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state) {
     };
 }
 
+TCheckFunc RetentionPeriod(const TDuration& value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(value.Seconds(), record.GetPathDescription().GetPersQueueGroup()
+            .GetPQTabletConfig().GetPartitionConfig().GetLifetimeSeconds());
+    };
+}
+
 void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     ChildrenCount(0)(record);
 }

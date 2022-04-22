@@ -591,6 +591,13 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
             << "Invalid stream mode: " << static_cast<ui32>(streamDesc.GetMode()))};
     }
 
+    const auto retentionPeriod = TDuration::Seconds(op.GetRetentionPeriodSeconds());
+    if (retentionPeriod.Seconds() > TSchemeShard::MaxPQLifetimeSeconds) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+            << "Invalid retention period specified: " << retentionPeriod.Seconds()
+            << ", limit: " << TSchemeShard::MaxPQLifetimeSeconds)};
+    }
+
     const ui64 aliveStreams = context.SS->GetAliveChildren(tablePath.Base(), NKikimrSchemeOp::EPathTypeCdcStream);
     if (aliveStreams + 1 > tablePath.DomainInfo()->GetSchemeLimits().MaxTableCdcStreams) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusResourceExhausted, TStringBuilder()
@@ -643,7 +650,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
         pqConfig.SetTopicName(streamName);
         pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
         auto& partitionConfig = *pqConfig.MutablePartitionConfig();
-        partitionConfig.SetLifetimeSeconds(TDuration::Days(1).Seconds());
+        partitionConfig.SetLifetimeSeconds(retentionPeriod.Seconds());
 
         for (const auto& tag : table->KeyColumnIds) {
             Y_VERIFY(table->Columns.contains(tag));

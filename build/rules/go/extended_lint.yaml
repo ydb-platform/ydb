@@ -16,5 +16,7 @@ scopes:
     - importcheck
   a.yandex-team.ru/strm:
     - importcheck
+  a.yandex-team.ru/strm/plgo:
+    - exhaustivestruct
   a.yandex-team.ru/browser/backend:
     - sqlclosecheck

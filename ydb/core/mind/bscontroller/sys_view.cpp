@@ -528,7 +528,6 @@ void CopyInfo(TDstMap& dst, TDeletedSet& deleted, const TSrcMap& src, TChangedSe
             deleted.insert(key);
         }
     }
-    changed.clear();
 }
 
 void TBlobStorageController::UpdateSystemViews() {
@@ -537,7 +536,7 @@ void TBlobStorageController::UpdateSystemViews() {
     }
 
     if (!SysViewChangedPDisks.empty() || !SysViewChangedVSlots.empty() || !SysViewChangedGroups.empty() ||
-            !SysViewChangedStoragePools.empty()) {
+            !SysViewChangedStoragePools.empty() || SysViewChangedSettings) {
         auto update = MakeHolder<TEvControllerUpdateSystemViews>();
         update->HostRecords = HostRecords;
         update->GroupReserveMin = GroupReserveMin;
@@ -548,7 +547,6 @@ void TBlobStorageController::UpdateSystemViews() {
         CopyInfo(state.VSlots, update->DeletedVSlots, VSlots, SysViewChangedVSlots);
         CopyInfo(state.Groups, update->DeletedGroups, GroupMap, SysViewChangedGroups);
         CopyInfo(state.StoragePools, update->DeletedStoragePools, StoragePools, SysViewChangedStoragePools);
-        SysViewChangedSettings = false;
 
         // process static slots and static groups
         for (const auto& [pdiskId, pdisk] : StaticPDisks) {
@@ -613,6 +611,12 @@ void TBlobStorageController::UpdateSystemViews() {
             }
             CalculateGroupUsageStats(pb, disks, (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies());
         }
+
+        SysViewChangedPDisks.clear();
+        SysViewChangedVSlots.clear();
+        SysViewChangedGroups.clear();
+        SysViewChangedStoragePools.clear();
+        SysViewChangedSettings = false;
 
         Send(SystemViewsCollectorId, update.Release());
     }

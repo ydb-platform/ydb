@@ -886,7 +886,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     ExpectedSlotCount,
                     NumActiveSlots,
                     DecommitStatus
-                FROM `/Root/.sys/ds_pdisks`;
+                FROM `/Root/.sys/ds_pdisks`
+                WHERE BoxId IS NOT NULL;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

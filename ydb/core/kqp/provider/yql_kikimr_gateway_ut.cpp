@@ -165,12 +165,12 @@ void CheckPolicies(Tests::TClient& client, const TString& tableName) {
     UNIT_ASSERT(describeResult->Record.GetPathDescription().HasTableStats());
     const auto& desc = describeResult->Record.GetPathDescription();
     UNIT_ASSERT_VALUES_EQUAL(desc.GetTableStats().GetPartCount(), 4);
-    for (const auto column : desc.GetTable().GetColumns()) {
+    for (const auto& column : desc.GetTable().GetColumns()) {
         if (column.GetName() == "Column2") {
             UNIT_ASSERT_VALUES_EQUAL(column.GetFamilyName(), "Family2");
         }
     }
-    for (const auto family : desc.GetTable().GetPartitionConfig().GetColumnFamilies()) {
+    for (const auto& family : desc.GetTable().GetPartitionConfig().GetColumnFamilies()) {
         if (family.HasId() && family.GetId() == 0) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(family.GetColumnCodec()),
                 static_cast<size_t>(NKikimrSchemeOp::ColumnCodecPlain));

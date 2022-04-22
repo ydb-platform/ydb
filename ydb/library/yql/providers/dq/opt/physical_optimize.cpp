@@ -43,7 +43,7 @@ public:
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
 #if 0
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
-        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute));
+        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
 #endif
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
@@ -292,8 +292,9 @@ protected:
         return DqBuildHasItems(node, ctx, optCtx);
     }
 
-    TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        return DqBuildScalarPrecompute(node, ctx, optCtx);
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        return DqBuildScalarPrecompute(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 };
 

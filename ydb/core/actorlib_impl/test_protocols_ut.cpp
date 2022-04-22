@@ -620,7 +620,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
                     "Transfer-Encoding: chunked\r\n"
                     "Expect: 100-continue\r\n"
                     "Authorization:"
-                    " OAuth AQAD-qJSJgO0AAAA-xdaPY4N0ECerT77peyOg4s\r\n";
+                    " OAuth fake-token\r\n";
 
                 HTTPRequest(this, ctx,
                     result.front().GetString(),

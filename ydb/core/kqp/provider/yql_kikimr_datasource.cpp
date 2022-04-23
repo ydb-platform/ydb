@@ -209,8 +209,8 @@ private:
 class TKikimrConfigurationTransformer : public NCommon::TProviderConfigurationTransformer {
 public:
     TKikimrConfigurationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        const TTypeAnnotationContext& types, const THashSet<TString>& providerNames)
-        : TProviderConfigurationTransformer(sessionCtx->ConfigPtr(), types, providerNames)
+        const TTypeAnnotationContext& types)
+        : TProviderConfigurationTransformer(sessionCtx->ConfigPtr(), types, TString(KikimrProviderName))
         , SessionCtx(sessionCtx) {}
 
 protected:
@@ -274,14 +274,12 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
         TTypeAnnotationContext& types,
         TIntrusivePtr<IKikimrGateway> gateway,
-        TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        const THashSet<TString>& configAliases)
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx)
         : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
-        , ConfigAliases(configAliases)
-        , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types, configAliases))
+        , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
         , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
@@ -293,8 +291,6 @@ public:
 
         YQL_ENSURE(gateway);
         YQL_ENSURE(sessionCtx);
-
-        YQL_ENSURE(configAliases.contains(KikimrProviderName));
     }
 
     ~TKikimrDataSource() {}
@@ -368,7 +364,11 @@ public:
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
-            if (ConfigAliases.contains(node.Child(0)->Content())) {
+            if (node.Child(0)->Content() == YdbProviderName) {
+                node.ChildRef(0) = ctx.RenameNode(*node.Child(0), KikimrProviderName);
+            }
+
+            if (node.Child(0)->Content() == KikimrProviderName) {
                 if (node.Child(1)->Content().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
                     return false;
@@ -596,7 +596,6 @@ private:
     TTypeAnnotationContext& Types;
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
-    THashSet<TString> ConfigAliases;
 
     TAutoPtr<IGraphTransformer> ConfigurationTransformer;
     TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
@@ -634,10 +633,9 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSource(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
-    TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-    const THashSet<TString>& configAliases)
+    TIntrusivePtr<TKikimrSessionContext> sessionCtx)
 {
-    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx, configAliases);
+    return new TKikimrDataSource(functionRegistry, types, gateway, sessionCtx);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusivePtr<IKikimrGateway> gateway,

@@ -29,8 +29,6 @@ using namespace NThreading;
 
 using TSqlVersion = ui16;
 
-constexpr TStringBuf KikimrPublicProviderName = "ydb";
-
 namespace {
 
 void AddQueryStats(NKqpProto::TKqpStatsQuery& total, NKqpProto::TKqpStatsQuery&& stats) {
@@ -1038,14 +1036,14 @@ public:
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
         ExprCtx->StringsAllocationLimit = SessionCtx->Config()._KqpExprStringsAllocationLimit.Get().GetRef();
 
-        THashSet<TString> configAliases {
+        THashSet<TString> providerNames {
             TString(KikimrProviderName),
-            TString(KikimrPublicProviderName),
+            TString(YdbProviderName),
         };
 
         // Kikimr provider
         auto queryExecutor = MakeIntrusive<TKqpQueryExecutor>(Gateway, Cluster, SessionCtx, KqpRunner);
-        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, configAliases);
+        auto kikimrDataSource = CreateKikimrDataSource(*FuncRegistry, *TypesCtx, Gateway, SessionCtx);
         auto kikimrDataSink = CreateKikimrDataSink(*FuncRegistry, *TypesCtx, Gateway, SessionCtx, queryExecutor);
 
         FillSettings.AllResultsBytesLimit = Nothing();
@@ -1053,8 +1051,8 @@ public:
         FillSettings.Format = IDataProvider::EResultFormat::Custom;
         FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
 
-        TypesCtx->AddDataSource(configAliases, kikimrDataSource);
-        TypesCtx->AddDataSink(KikimrProviderName, kikimrDataSink);
+        TypesCtx->AddDataSource(providerNames, kikimrDataSource);
+        TypesCtx->AddDataSink(providerNames, kikimrDataSink);
         TypesCtx->UdfResolver = CreateSimpleUdfResolver(FuncRegistry);
         TypesCtx->TimeProvider = TAppData::TimeProvider;
         TypesCtx->RandomProvider = TAppData::RandomProvider;

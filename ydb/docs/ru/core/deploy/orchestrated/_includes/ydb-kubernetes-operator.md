@@ -155,7 +155,7 @@
 
       ```bash
       ydb \
-        --endpoint grpc://database-sample:2135 \
+        --endpoint grpc://database-sample-grpc:2135 \
         --database /root/database-sample \
         table query execute --query 'select 1;'
       ```

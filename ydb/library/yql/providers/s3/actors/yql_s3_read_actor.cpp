@@ -319,6 +319,10 @@ public:
     }
 private:
     void Run() final try {
+        TOutput::TPtr outputs;
+        // reset member to decrement ref, important for UV lifetime
+        Outputs.swap(outputs);
+
         const auto randStub = CreateDeterministicRandomProvider(1);
         const auto timeStub = CreateDeterministicTimeProvider(10000000);
 
@@ -348,12 +352,11 @@ private:
 
         const auto output = graph->GetValue();
         for (NUdf::TUnboxedValue v; NUdf::EFetchStatus::Ok == output.Fetch(v);)
-            Outputs->Data.emplace_back(std::move(v));
+            outputs->Data.emplace_back(std::move(v));
 
-        Outputs.reset();
+        outputs = nullptr;
         Send(ComputeActorId, new IDqSourceActor::TEvNewSourceDataArrived(InputIndex));
-
-    } catch (const yexception& err) {
+    } catch (const std::exception& err) {
         Send(ComputeActorId, new IDqSourceActor::TEvSourceError(InputIndex, TIssues{TIssue(err.what())}, true));
         return;
     }
@@ -505,6 +508,7 @@ private:
 
     // IActor & IDqSourceActor
     void PassAway() override { // Is called from Compute Actor
+        Outputs = nullptr;
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
 

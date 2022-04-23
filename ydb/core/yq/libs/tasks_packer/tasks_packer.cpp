@@ -9,9 +9,13 @@ namespace NTasksPacker {
 void Pack(TVector<NYql::NDqProto::TDqTask>& tasks, THashMap<i64, TString>& stagePrograms) {
     for (auto& task : tasks) {
         auto stageId = task.GetStageId();
-        auto it = stagePrograms.find(stageId);
-        if (it == stagePrograms.end()) {
-            stagePrograms[stageId] = std::move(*task.MutableProgram()->MutableRaw());
+        auto& p = stagePrograms[stageId];
+        if (!p) {
+            p = std::move(*task.MutableProgram()->MutableRaw());
+            task.MutableProgram()->MutableRaw()->clear();
+            continue;
+        }
+        if (p == task.GetProgram().GetRaw()) {
             task.MutableProgram()->MutableRaw()->clear();
         }
     }
@@ -19,6 +23,9 @@ void Pack(TVector<NYql::NDqProto::TDqTask>& tasks, THashMap<i64, TString>& stage
 
 void UnPack(TVector<NYql::NDqProto::TDqTask>& tasks, const THashMap<i64, TString>& stagePrograms) {
     for (auto& task : tasks) {
+        if (task.GetProgram().GetRaw()) {
+            continue;
+        }
         auto stageId = task.GetStageId();
         auto it = stagePrograms.find(stageId);
         YQL_ENSURE(it != stagePrograms.end());
@@ -38,6 +45,10 @@ void UnPack(
     TVector<NYql::NDqProto::TDqTask> tasks;
     tasks.reserve(src.size());
     for (const auto& srcTask : src) {
+        if (srcTask.GetProgram().GetRaw()) {
+            tasks.emplace_back(srcTask);
+            continue;
+        }
         auto stageId = srcTask.GetStageId();
         auto it = stagePrograms.find(stageId);
         YQL_ENSURE(it != stagePrograms.end());

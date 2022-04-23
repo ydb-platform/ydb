@@ -8,13 +8,14 @@ Unlike a similar keyword in Python, in YQL `IN ` **DOES NOT** searches for a sub
 
 {% endnote %}
 
-Immediately after `IN`, you can specify the `COMPACT` hint.
+Immediately after `IN`, you can specify the `COMPACT` modifier.
 If `COMPACT` is not specified, then `IN` with a subquery is executed as a relevant `JOIN` (`LEFT SEMI` for `IN` and `LEFT ONLY` for `NOT IN`), if possible.
-Using the `COMPACT` hint forces the in-memory execution strategy: a hash table is immediately built from the contents of the right `IN` part in-memory, and then the left part is filtered.
+Using the `COMPACT` modifier forces the in-memory execution strategy: a hash table is immediately built from the contents of the right `IN` part in-memory, and then the left part is filtered.
 
-The `COMPACT` hint must be used with care. Since the hash table is built in-memory, the query may fail if the right part of `IN` contains many large or different elements.
+The `COMPACT` modifier must be used with care. Since the hash table is built in-memory, the query may fail if the right part of `IN` contains many large or different elements.
 
-{% if feature_mapreduce %} Since YQL imposes a limit on the query size in bytes (it's about 1Mb), add large lists of values to your query by URLs and use the [ParseFile](../../../builtins/basic.md#parsefile) function.
+{% if feature_mapreduce %}
+Since YQL imposes a limit on the query size in bytes (it's about 1Mb), add large lists of values to your query by URLs and use the [ParseFile](../../../builtins/basic.md#parsefile) function.
 {% endif %}
 
 **Examples**

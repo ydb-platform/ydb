@@ -1,4 +1,4 @@
-## Table partitions
+## Partitions {#partitions}
 
 * **partition_stats**
 

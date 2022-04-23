@@ -11,6 +11,13 @@ Passing an argument to `RANK`/`DENSE_RANK` is a non-standard extension in YQL.
 
 {% endnote %}
 
+**Signature**
+
+```
+RANK([T])->Uint64
+DENSE_RANK([T])->Uint64
+```
+
 **Examples**
 
 ```yql

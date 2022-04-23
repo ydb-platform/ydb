@@ -1,11 +1,7 @@
-{% include [intro.md](_includes/system_views/intro.md) %}
+# System views
 
-{% include [partitions.md](_includes/system_views/partitions.md) %}
+You can find information about system views in the following articles:
 
-{% include [tops.md](_includes/system_views/tops.md) %}
+- [Database system tables](system_views_db.md)
+- [Cluster system tables](system_views_cluster.md)
 
-{% include [query_metrics.md](_includes/system_views/query_metrics.md) %}
-
-{% include [distributed_storage.md](_includes/system_views/distributed_storage.md) %}
-
-{% include [notes.md](_includes/system_views/notes.md) %}

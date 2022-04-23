@@ -415,7 +415,7 @@ In the truth table, the first column is the left argument, the first row is the 
 
 In the truth table, the first column is the left argument, the first row is the right argument, and each cell is the result of using the logical OR with both the left and right arguments:
 
-| `||` | `true` | `false` | `Null` |
+| `\|\|` | `true` | `false` | `Null` |
 | ------- | ------- | ------- | ------- |
 | `true` | `true` | `true` | `true` |
 | `false` | `true` | `false` | `Null` |

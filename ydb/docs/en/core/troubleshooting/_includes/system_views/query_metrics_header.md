@@ -1,4 +1,4 @@
-## Query details
+## Query details {#query-metrics}
 
 * **query_metrics_one_minute**
 

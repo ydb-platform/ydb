@@ -13,8 +13,8 @@ A set of wrappers around the functions from the libm library and the Yandex util
 **Examples**
 
 ```sql
-SELECT Math::Pi(); -- 3.141592654
-SELECT Math::E();  -- 2.718281828
+SELECT Math::Pi();  -- 3.141592654
+SELECT Math::E();   -- 2.718281828
 SELECT Math::Eps(); -- 2.220446049250313e-16
 ```
 

@@ -38,7 +38,7 @@ FROM my_table;
 ```yql
 SELECT * FROM my_table
 WHERE key LIKE 'foo%bar';
--- would probably only physically scan the keys
+-- if the table is sorted by key, it will only scan the keys,
 -- starting with "foo", and then, among them,
 -- will leave only those that end in "bar"
 ```

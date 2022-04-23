@@ -1,4 +1,4 @@
-## Top queries
+## Top queries {#top-queries}
 
 * **top_queries_by_duration_one_minute**
 * **top_queries_by_duration_one_hour**

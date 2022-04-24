@@ -567,6 +567,51 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
+
+    Y_UNIT_TEST_TWIN(MultiDeleteFromTable, UseNewEngine) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto params = TParamsBuilder()
+            .AddParam("$key1_1").Uint32(101).Build()
+            .AddParam("$key1_2").String("Two").Build()
+            .AddParam("$key2_1").Uint32(105).Build()
+            .AddParam("$key2_2").String("Two").Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $key1_1 AS Uint32;
+            DECLARE $key1_2 AS String;
+            DECLARE $key2_1 AS Uint32;
+            DECLARE $key2_2 AS String;
+
+            $fetch1 = SELECT Key1, Key2 FROM Join2 WHERE Key1 = $key1_1 AND Key2 < $key1_2;
+            $fetch2 = SELECT Key1, Key2 FROM Join2 WHERE Key1 = $key2_1 AND Key2 < $key2_2;
+
+            DELETE FROM Join2 ON SELECT * FROM $fetch1;
+            DELETE FROM Join2 ON SELECT * FROM $fetch2;
+
+        )"), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto checkResult = session.ExecuteDataQuery(Q1_(R"(
+            SELECT COUNT(*) FROM Join2;
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(checkResult.IsSuccess(), checkResult.GetIssues().ToString());
+        CompareYson(R"([[7u]])", FormatResultSetYson(checkResult.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+
+        AssertTableStats(result, "/Root/Join2", {
+            .ExpectedReads = 3,
+            .ExpectedDeletes = 3,
+        });
+    }
 }
 
 } // namespace NKikimr::NKqp

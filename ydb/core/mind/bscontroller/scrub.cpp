@@ -320,7 +320,9 @@ public:
         } else if (const auto it = Self->StaticVSlots.find(vslotId); it != Self->StaticVSlots.end()) {
             vdiskId = it->second.VDiskId;
         } else {
-            Y_FAIL_S("unexpected VSlotId# " << vslotId);
+            STLOG(PRI_WARN, BS_CONTROLLER, BSC40,
+                "TBlobStorageController::TScrubState::TImpl::AddItem no VDiskId found for the slot", (VSlotId, vslotId));
+            return;  // To allow static group 'reconfiguration' instead of Y_FAIL_S("unexpected VSlotId# " << vslotId);
         }
         vdiskId.GroupGeneration = 0;
 

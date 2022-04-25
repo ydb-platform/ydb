@@ -180,6 +180,12 @@ namespace NKikimr {
             }
         }
 
+        void TChain::UnlockChunk(TChunkID chunkId) {
+            if (auto it = LockedChunks.find(chunkId); it != LockedChunks.end()) {
+                FreeSpace.insert(LockedChunks.extract(it));
+            }
+        }
+
         THeapStat TChain::GetStat() const {
             // how many chunks are required to represent slotsNum
             auto slotsToChunks = [] (ui32 slotsNum, ui32 slotsInChunk) {
@@ -771,6 +777,11 @@ namespace NKikimr {
         bool THeap::LockChunkForAllocation(ui32 chunkId, ui32 slotSize) {
             TChainDelegator *cd = Chains.GetChain(slotSize);
             return cd->ChainPtr->LockChunkForAllocation(chunkId);
+        }
+
+        void THeap::UnlockChunk(ui32 chunkId, ui32 slotSize) {
+            TChainDelegator *cd = Chains.GetChain(slotSize);
+            cd->ChainPtr->UnlockChunk(chunkId);
         }
 
         THeapStat THeap::GetStat() const {

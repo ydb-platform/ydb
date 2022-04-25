@@ -871,6 +871,12 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new TEvHugeLockChunksResult(std::move(lockedChunks)));
         }
 
+        void Handle(TEvHugeUnlockChunks::TPtr& ev, const TActorContext& /*ctx*/) {
+            for (const auto& d : ev->Get()->Chunks) {
+                State.Pers->Heap->UnlockChunk(d.ChunkId, d.SlotSize);
+            }
+        }
+
         void Handle(TEvHugeStat::TPtr &ev, const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_HULLHUGE,
                 VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -929,6 +935,7 @@ namespace NKikimr {
             HFunc(TEvHullHugeWritten, Handle)
             HFunc(TEvHullHugeBlobLogged, Handle)
             HFunc(TEvHugeLockChunks, Handle)
+            HFunc(TEvHugeUnlockChunks, Handle)
             HFunc(TEvHugeStat, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)

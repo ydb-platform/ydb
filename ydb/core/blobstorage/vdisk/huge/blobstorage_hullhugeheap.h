@@ -120,6 +120,7 @@ namespace NKikimr {
             // returns freed ChunkID if any
             TFreeRes Free(const NPrivate::TChunkSlot &id);
             bool LockChunkForAllocation(TChunkID chunkId);
+            void UnlockChunk(TChunkID chunkId);
             THeapStat GetStat() const;
             // returns true is allocated, false otherwise
             bool RecoveryModeAllocate(const NPrivate::TChunkSlot &id);
@@ -297,6 +298,7 @@ namespace NKikimr {
             ui32 RemoveChunk();
             // make chunk not available for allocations, it is used for heap defragmentation
             bool LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
+            void UnlockChunk(ui32 chunkId, ui32 slotSize);
             THeapStat GetStat() const;
 
             //////////////////////////////////////////////////////////////////////////////////////////

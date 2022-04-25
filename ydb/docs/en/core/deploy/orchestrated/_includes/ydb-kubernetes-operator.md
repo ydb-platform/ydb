@@ -75,7 +75,7 @@ Apply the manifest for creating a database:
   Run the command:
 
   ```bash
-  kubectl apply -f samples/minikube/database.yaml
+  kubectl apply -f samples/database.yaml
   ```
 
   {% note info %}

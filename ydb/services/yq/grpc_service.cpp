@@ -35,113 +35,199 @@ void TGRpcYandexQueryService::DecRequest() {
 void TGRpcYandexQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-    static const TVector<TString> CreateQueryPermissions = {
-        "yq.queries.create",
-        "yq.queries.invoke",
-        "yq.connections.use",
-        "yq.bindings.use",
-        "yq.resources.managePublic"
-    };
-    static const TVector<TString> ListQueriesPermissions = {
-        "yq.queries.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> DescribeQueryPermissions = {
-        "yq.queries.get",
-        "yq.queries.viewAst",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> GetQueryStatusPermissions = {
-        "yq.queries.getStatus",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> ModifyQueryPermissions = {
-        "yq.queries.update",
-        "yq.queries.invoke",
-        "yq.connections.use",
-        "yq.bindings.use",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    static const TVector<TString> DeleteQueryPermissions = {
-        "yq.queries.delete",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    static const TVector<TString> ControlQueryPermissions = {
-        "yq.queries.control",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    static const TVector<TString> GetResultDataPermissions = {
-        "yq.queries.getData",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> ListJobsPermissions = {
-        "yq.jobs.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> DescribeJobPermissions = {
-        "yq.jobs.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> CreateConnectionPermissions = {
-        "yq.connections.create",
-        "yq.resources.managePublic",
-    };
-    static const TVector<TString> ListConnectionsPermissions = {
-        "yq.connections.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> DescribeConnectionPermissions = {
-        "yq.connections.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> ModifyConnectionPermissions = {
-        "yq.connections.update",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate",
-    };
-    static const TVector<TString> DeleteConnectionPermissions = {
-        "yq.connections.delete",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    static const TVector<TString> TestConnectionPermissions = {
-        "yq.connections.create",
-    };
-    static const TVector<TString> CreateBindingPermissions = {
-        "yq.bindings.create",
-        "yq.resources.managePublic"
-    };
-    static const TVector<TString> ListBindingsPermissions = {
-        "yq.bindings.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> DescribeBindingPermissions = {
-        "yq.bindings.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    static const TVector<TString> ModifyBindingPermissions = {
-        "yq.bindings.update",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    static const TVector<TString> DeleteBindingPermissions = {
-        "yq.bindings.delete",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
+    using NPerms = NKikimr::TEvTicketParser::TEvAuthorizeTicket;
+
+    static const std::function CreateQueryPermissions{[](const YandexQuery::CreateQueryRequest& request) {
+        TVector<NPerms::TPermission> permissions{
+            NPerms::Required("yq.queries.create"),
+            NPerms::Optional("yq.connections.use"),
+            NPerms::Optional("yq.bindings.use")
+        };
+        if (request.execute_mode() != YandexQuery::SAVE) {
+            permissions.push_back(NPerms::Required("yq.queries.invoke"));
+        }
+        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
+            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        }
+        return permissions;
+    }};
+
+    static const std::function ListQueriesPermissions{[](const YandexQuery::ListQueriesRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.queries.get"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function DescribeQueryPermissions{[](const YandexQuery::DescribeQueryRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.queries.get"),
+            NPerms::Optional("yq.queries.viewAst"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function GetQueryStatusPermissions{[](const YandexQuery::GetQueryStatusRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.queries.getStatus"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function ModifyQueryPermissions{[](const YandexQuery::ModifyQueryRequest& request) {
+        TVector<NPerms::TPermission> permissions{
+            NPerms::Required("yq.queries.update"),
+            NPerms::Optional("yq.connections.use"),
+            NPerms::Optional("yq.bindings.use"),
+            NPerms::Optional("yq.resources.managePrivate")
+        };
+        if (request.execute_mode() != YandexQuery::SAVE) {
+            permissions.push_back(NPerms::Required("yq.queries.invoke"));
+        }
+        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
+            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        }
+        return permissions;
+    }};
+
+    static const std::function DeleteQueryPermissions{[](const YandexQuery::DeleteQueryRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.queries.delete"),
+            NPerms::Optional("yq.resources.managePublic"),
+            NPerms::Optional("yq.resources.managePrivate")
+        };
+    }};
+
+    static const std::function ControlQueryPermissions{[](const YandexQuery::ControlQueryRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.queries.control"),
+            NPerms::Optional("yq.resources.managePublic"),
+            NPerms::Optional("yq.resources.managePrivate")
+        };
+    }};
+
+    static const std::function GetResultDataPermissions{[](const YandexQuery::GetResultDataRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.queries.getData"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function ListJobsPermissions{[](const YandexQuery::ListJobsRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.jobs.get"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function DescribeJobPermissions{[](const YandexQuery::DescribeJobRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.jobs.get"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function CreateConnectionPermissions{[](const YandexQuery::CreateConnectionRequest& request) {
+        TVector<NPerms::TPermission> permissions{
+            NPerms::Required("yq.connections.create"),
+        };
+        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
+            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        }
+        return permissions;
+    }};
+
+    static const std::function ListConnectionsPermissions{[](const YandexQuery::ListConnectionsRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.connections.get"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function DescribeConnectionPermissions{[](const YandexQuery::DescribeConnectionRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.connections.get"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function ModifyConnectionPermissions{[](const YandexQuery::ModifyConnectionRequest& request) {
+        TVector<NPerms::TPermission> permissions{
+            NPerms::Required("yq.connections.update"),
+            NPerms::Optional("yq.resources.managePrivate")
+        };
+        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
+            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        }
+        return permissions;
+    }};
+
+    static const std::function DeleteConnectionPermissions{[](const YandexQuery::DeleteConnectionRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.connections.delete"),
+            NPerms::Optional("yq.resources.managePublic"),
+            NPerms::Optional("yq.resources.managePrivate")
+        };
+    }};
+
+    static const std::function TestConnectionPermissions{[](const YandexQuery::TestConnectionRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.connections.create")
+        };
+    }};
+
+    static const std::function CreateBindingPermissions{[](const YandexQuery::CreateBindingRequest& request) {
+        TVector<NPerms::TPermission> permissions{
+            NPerms::Required("yq.bindings.create"),
+        };
+        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
+            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        }
+        return permissions;
+    }};
+
+    static const std::function ListBindingsPermissions{[](const YandexQuery::ListBindingsRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.bindings.get"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function DescribeBindingPermissions{[](const YandexQuery::DescribeBindingRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.bindings.get"),
+            NPerms::Optional("yq.resources.viewPublic"),
+            NPerms::Optional("yq.resources.viewPrivate")
+        };
+    }};
+
+    static const std::function ModifyBindingPermissions{[](const YandexQuery::ModifyBindingRequest& request) {
+        TVector<NPerms::TPermission> permissions{
+            NPerms::Required("yq.bindings.update"),
+            NPerms::Optional("yq.resources.managePrivate")
+        };
+        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
+            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
+        }
+        return permissions;
+    }};
+
+    static const std::function DeleteBindingPermissions{[](const YandexQuery::DeleteBindingRequest&) -> TVector<NPerms::TPermission> {
+        return {
+            NPerms::Required("yq.bindings.delete"),
+            NPerms::Optional("yq.resources.managePublic"),
+            NPerms::Optional("yq.resources.managePrivate")
+        };
+    }};
 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined

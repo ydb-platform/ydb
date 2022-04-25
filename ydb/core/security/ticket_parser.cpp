@@ -136,7 +136,7 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
                 if (it != entry.Permissions.begin()) {
                     key << '-';
                 }
-                key << *it;
+                key << it->Permission << "(" << it->Required << ")";
             }
         }
         return key.Str();

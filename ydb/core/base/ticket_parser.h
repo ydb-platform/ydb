@@ -25,9 +25,45 @@ namespace NKikimr {
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TICKET_PARSER)");
 
         struct TEvAuthorizeTicket : TEventLocal<TEvAuthorizeTicket, EvAuthorizeTicket> {
+            struct TPermission {
+                TString Permission;
+                bool Required = false;
+            };
+
+            static TPermission Required(const TString& permission) {
+                return {
+                    .Permission = permission,
+                    .Required = true
+                };
+            }
+
+            static TPermission Optional(const TString& permission) {
+                return {
+                    .Permission = permission,
+                    .Required = false
+                };
+            }
+
+            static TVector<TPermission> ToPermissions(const TVector<TString>& permissions) {
+                TVector<TPermission> result;
+                std::transform(permissions.begin(), permissions.end(), std::back_inserter(result),
+                   [](const TString& s) { return Optional(s); });
+                return result;
+            }
+
             struct TEntry {
-                TStackVec<TString> Permissions;
+                TStackVec<TPermission> Permissions;
                 TStackVec<std::pair<TString, TString>> Attributes;
+
+                TEntry(const TVector<TString>& permissions, const TVector<std::pair<TString, TString>>& attributes)
+                    : Permissions(ToPermissions(permissions))
+                    , Attributes(attributes)
+                {}
+
+                TEntry(const TVector<TPermission>& permissions, const TVector<std::pair<TString, TString>>& attributes)
+                    : Permissions(permissions)
+                    , Attributes(attributes)
+                {}
             };
 
             const TString Database;
@@ -76,10 +112,21 @@ namespace NKikimr {
 
             TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
                 : Ticket(ticket)
-                , Entries({{permissions, attributes}})
+                , Entries({{ToPermissions(permissions), attributes}})
             {}
 
             TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TString>& permissions)
+                : Ticket(ticket)
+                , PeerName(peerName)
+                , Entries({{ToPermissions(permissions), attributes}})
+            {}
+
+            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
+                : Ticket(ticket)
+                , Entries({{permissions, attributes}})
+            {}
+
+            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
                 : Ticket(ticket)
                 , PeerName(peerName)
                 , Entries({{permissions, attributes}})

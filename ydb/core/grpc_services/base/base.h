@@ -611,8 +611,12 @@ public:
     }
 
     void ReplyUnauthenticated(const TString& in) override {
-        const TString message = in.empty() ? TString("unauthenticated") : TString("unauthenticated, ") + in;
-        Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, message));
+        TStringBuilder builder;
+        builder << (in.empty() ? TString("unauthenticated") : TString("unauthenticated, ")) << in;
+        for (const auto& issue: IssueManager_.GetIssues()) {
+            builder << " " << issue.Message;
+        }
+        Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, builder));
     }
 
     void ReplyUnavaliable() override {
@@ -867,7 +871,12 @@ public:
     }
 
     void ReplyUnauthenticated(const TString& in) override {
-        Ctx_->ReplyUnauthenticated(in);
+        TStringBuilder builder;
+        builder << in;
+        for (const auto& issue: IssueManager.GetIssues()) {
+            builder << " " << issue.Message;
+        }
+        Ctx_->ReplyUnauthenticated(builder);
     }
 
     void SetInternalToken(const TString& token) override {

@@ -34,6 +34,7 @@ public:
         } else {
             GrpcRequestBaseCtx_->UpdateAuthState(NGrpc::TAuthState::AS_FAIL);
         }
+        GrpcRequestBaseCtx_->RaiseIssue(NYql::TIssue{error.Message});
         ReplyBackAndDie();
     }
 

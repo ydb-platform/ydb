@@ -46,7 +46,6 @@ ci/registry
 market/front/apps
 classifieds/verticals-backend
 classifieds/schema-registry
-classifieds/realty
 devtools/experimental/repo/REPO-33/torture
 devtools/trendbox
 devtools/workcopy-merger

@@ -15,13 +15,13 @@ For information about the purpose and use of secondary indexes for app developme
 A secondary index is created with `table index add`:
 
 ```bash
-{{ ydb-cli }} [connection options] table index add <sync_async> <table> \
+{{ ydb-cli }} [connection options] table index add <sync-async> <table> \
   --index-name STR --columns STR [--cover STR]
 ```
 
 Parameters:
 
-`<sync_async>`: Secondary index type. Set `global_sync` to build an index with [synchronous updates](../../../../concepts/secondary_indexes.md#sync) or `global_async` for an index with [asynchronous updates](../../../../concepts/secondary_indexes.md#async).
+`<sync-async>`: Secondary index type. Set `global-sync` to build an index with [synchronous updates](../../../../concepts/secondary_indexes.md#sync) or `global-async` for an index with [asynchronous updates](../../../../concepts/secondary_indexes.md#async).
 
 `<table>`: Path and name of the table that the index is being built for.
 

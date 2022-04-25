@@ -4024,6 +4024,47 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Cerr << "partition status: " << partitionStatus->DebugString() << Endl;
         }
     }
+    Y_UNIT_TEST(PartitionsMapping) {
+        NPersQueue::TTestServer server;
+
+        TString topic = "topic1";
+        TString topicFullName = "rt3.dc1--" + topic;
+
+        auto partsCount = 5u;
+        server.AnnoyingClient->CreateTopic(topicFullName, partsCount);
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY});
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        NYdb::NPersQueue::TTopicReadSettings topicSettings(topic);
+        topicSettings.AppendPartitionGroupIds(2).AppendPartitionGroupIds(4);
+        NYdb::NPersQueue::TReadSessionSettings readerSettings;
+        readerSettings.AppendTopics(topicSettings).ConsumerName("shared/user").ReadOnlyOriginal(true);
+        auto reader = CreateReader(*driver, readerSettings);
+
+        THashSet<ui32> locksGot = {};
+        while(locksGot.size() < 2) {
+            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
+            UNIT_ASSERT(createStream);
+            Cerr << "Create stream event: " << createStream->DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(createStream->GetPartitionStream()->GetTopicPath(), topic);
+            auto partId = createStream->GetPartitionStream()->GetPartitionId();
+            UNIT_ASSERT(partId == 1 || partId == 3);
+            UNIT_ASSERT(!locksGot.contains(partId));
+            locksGot.insert(partId);
+        }
+        auto reader2 = CreateReader(*driver, readerSettings);
+
+        {
+            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
+            auto release = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event);
+            UNIT_ASSERT(release);
+            UNIT_ASSERT_VALUES_EQUAL(release->GetPartitionStream()->GetTopicPath(), topic);
+            auto partId = release->GetPartitionStream()->GetPartitionId();
+            UNIT_ASSERT(partId == 1 || partId == 3);
+        }
+
+    }
 
 }
 }

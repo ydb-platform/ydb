@@ -1357,7 +1357,6 @@ haas/goscert/python-ipmiproxy
 classifieds/robot-vertis-jawa
 classifieds/s3edr
 classifieds/php
-noc/megaping
 classifieds/randomlunchbot
 data-ui/renovate-bot
 classifieds/vsdwh/mono
@@ -1410,3 +1409,4 @@ classifieds/cabinet
 bunker/nodejs-db-connector
 bunker/bunker-queue
 bunker/database
+haas/factory-packages

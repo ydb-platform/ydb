@@ -1408,3 +1408,4 @@ classifieds/services
 classifieds/octopus
 classifieds/cabinet
 bunker/nodejs-db-connector
+bunker/bunker-queue

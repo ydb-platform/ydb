@@ -688,6 +688,7 @@ namespace NKikimr::NBsController {
             for (const auto &kv : box.Hosts) {
                 auto *host = pb->AddHost();
                 host->SetHostConfigId(kv.second.HostConfigId);
+                host->SetEnforcedNodeId(kv.second.EnforcedNodeId.GetOrElse(0));
                 auto *key = host->MutableKey();
                 key->SetFqdn(kv.first.Fqdn);
                 key->SetIcPort(kv.first.IcPort);

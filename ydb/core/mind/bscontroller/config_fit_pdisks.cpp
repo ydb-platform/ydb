@@ -168,6 +168,7 @@ namespace NKikimr {
             for (const auto &kvBox : state.Boxes.Get()) {
                 const TBoxId &boxId = kvBox.first;
                 const TBoxInfo &box = kvBox.second;
+                THashSet<TNodeId> usedNodes;
                 for (const auto& [hostKey, hostValue] : box.Hosts) {
                     const THostConfigId &hostConfigId = hostValue.HostConfigId;
                     auto it = hostConfigs.find(hostConfigId);
@@ -177,9 +178,12 @@ namespace NKikimr {
                     const THostConfigInfo &hostConfig = it->second;
 
                     const THostId hostId(hostKey.Fqdn, hostKey.IcPort);
-                    const auto& nodeId = state.HostRecords->GetNodeId(hostId);
+                    const auto& nodeId = state.HostRecords->ResolveNodeId(hostKey, hostValue);
                     if (!nodeId) {
-                        throw TExHostNotFound(hostKey);
+                        throw TExHostNotFound(hostKey) << TErrorParams::BoxId(boxId) << TErrorParams::NodeId(*nodeId);
+                    } else if (!usedNodes.insert(*nodeId).second) {
+                        throw TExError() << "duplicate NodeId" << TErrorParams::BoxId(boxId) << TErrorParams::NodeId(*nodeId)
+                            << TErrorParams::Fqdn(hostKey.Fqdn) << TErrorParams::IcPort(hostKey.IcPort);
                     }
 
                     for (const auto& [drive, driveInfo] : hostConfig.Drives) {

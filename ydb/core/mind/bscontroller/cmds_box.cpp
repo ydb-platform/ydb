@@ -12,6 +12,7 @@ namespace NKikimr::NBsController {
         for (const auto &userId : cmd.GetUserId()) {
             box.UserIds.emplace(id, userId);
         }
+        THashSet<TNodeId> usedNodes;
         for (const auto &host : cmd.GetHost()) {
             TBoxInfo::THostKey hostKey;
             hostKey.BoxId = id;
@@ -28,7 +29,11 @@ namespace NKikimr::NBsController {
                 throw TExHostConfigNotFound(info.HostConfigId);
             }
 
-            box.Hosts.emplace(std::move(hostKey), std::move(info));
+            const auto [it, inserted] = box.Hosts.emplace(std::move(hostKey), std::move(info));
+            if (!inserted) {
+                throw TExError() << "duplicate HostKey" << TErrorParams::BoxId(id) << TErrorParams::Fqdn(it->first.Fqdn)
+                    << TErrorParams::IcPort(it->first.IcPort);
+            }
         }
 
         auto &boxes = Boxes.Unshare();

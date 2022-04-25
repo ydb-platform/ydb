@@ -204,9 +204,10 @@ struct Schema : NIceDb::Schema {
         struct Fqdn : Column<2, NScheme::NTypeIds::Utf8> {};
         struct IcPort : Column<3, NScheme::NTypeIds::Int32> {};
         struct HostConfigId : Column<4, HostConfig::HostConfigId::ColumnType> {};
+        struct EnforcedNodeId : Column<5, Node::ID::ColumnType> {};
 
         using TKey = TableKey<BoxId, Fqdn, IcPort>;
-        using TColumns = TableColumns<BoxId, Fqdn, IcPort, HostConfigId>;
+        using TColumns = TableColumns<BoxId, Fqdn, IcPort, HostConfigId, EnforcedNodeId>;
     };
 
     struct BoxStoragePool : Table<120> {

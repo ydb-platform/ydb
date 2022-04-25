@@ -1611,6 +1611,11 @@
                 "ColumnId": 4,
                 "ColumnName": "HostConfigId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "EnforcedNodeId",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -1620,7 +1625,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

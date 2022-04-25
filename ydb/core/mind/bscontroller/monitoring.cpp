@@ -458,7 +458,7 @@ public:
                                 }
                             }
                             if (!nodeId) {
-                                if (auto x = Self->HostRecords->GetNodeId(std::make_tuple(fqdn, icPort))) {
+                                if (auto x = Self->HostRecords->ResolveNodeId(std::make_tuple(fqdn, icPort))) {
                                     nodeId = *x;
                                 }
                             }

@@ -215,12 +215,14 @@ public:
         }
 
         // create revmap
-        std::map<std::tuple<THostId, TString>, TBoxId> driveToBox;
+        std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
             for (const auto& [host, value] : box.Hosts) {
+                const auto& nodeId = Self->HostRecords->ResolveNodeId(host, value);
+                Y_VERIFY_S(nodeId, "HostKey# " << host.Fqdn << ":" << host.IcPort << " does not resolve to a node");
                 if (const auto it = Self->HostConfigs.find(value.HostConfigId); it != Self->HostConfigs.end()) {
                     for (const auto& [drive, info] : it->second.Drives) {
-                        const bool inserted = driveToBox.emplace(std::make_tuple(host, drive.Path), boxId).second;
+                        const bool inserted = driveToBox.emplace(std::make_pair(*nodeId, drive.Path), boxId).second;
                         Y_VERIFY(inserted, "duplicate Box-generated drive BoxId# %" PRIu64 " FQDN# %s IcPort# %d Path# '%s'",
                             host.BoxId, host.Fqdn.data(), host.IcPort, drive.Path.data());
                     }
@@ -233,8 +235,7 @@ public:
 
         for (const auto& [serial, info] : Self->DrivesSerials) {
             if (info->NodeId && info->PDiskId) {
-                const auto hostId = Self->HostRecords->GetHostId(*info->NodeId);
-                const bool inserted = driveToBox.emplace(std::make_tuple(*hostId, serial.Serial), info->BoxId).second;
+                const bool inserted = driveToBox.emplace(std::make_tuple(*info->NodeId, serial.Serial), info->BoxId).second;
                 Y_VERIFY(inserted, "duplicate Serial-generated drive");
             }
         }
@@ -270,7 +271,7 @@ public:
                 }
 
                 // find the owning box
-                if (const auto it = driveToBox.find(std::make_tuple(hostId, pathOrSerial)); it != driveToBox.end()) {
+                if (const auto it = driveToBox.find(std::make_tuple(disks.GetValue<T::NodeID>(), pathOrSerial)); it != driveToBox.end()) {
                     boxId = it->second;
                     driveToBox.erase(it);
                 } else {

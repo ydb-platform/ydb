@@ -162,7 +162,7 @@ namespace NKikimr {
             bool NormalizeHostKey(NKikimrBlobStorage::THostKey *host) const {
                 if (!host->GetNodeId()) {
                     const THostId key(host->GetFqdn(), host->GetIcPort());
-                    if (const auto& nodeId = HostRecords->GetNodeId(key)) {
+                    if (const auto& nodeId = HostRecords->ResolveNodeId(key)) {
                         host->SetNodeId(*nodeId);
                         return true;
                     } else {

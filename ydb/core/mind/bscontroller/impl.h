@@ -885,13 +885,16 @@ public:
             using Table = Schema::BoxHostV2;
 
             Schema::BoxHostV2::HostConfigId::Type HostConfigId;
+            TMaybe<Schema::Node::ID::Type> EnforcedNodeId;
 
             template<typename T>
             static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
                 static TTableAdapter<Table, THostInfo,
-                        Table::HostConfigId
+                        Table::HostConfigId,
+                        Table::EnforcedNodeId
                     > adapter(
-                        &THostInfo::HostConfigId
+                        &THostInfo::HostConfigId,
+                        &THostInfo::EnforcedNodeId
                     );
                 callback(&adapter);
             }
@@ -1280,12 +1283,16 @@ public:
             Y_FAIL();
         }
 
-        TMaybe<TNodeId> GetNodeId(const THostId& hostId) const {
+        TMaybe<TNodeId> ResolveNodeId(const THostId& hostId) const {
             if (const auto it = HostIdToRecord.find(hostId); it != HostIdToRecord.end()) {
                 return it->second.NodeId;
             } else {
                 return {};
             }
+        }
+
+        TMaybe<TNodeId> ResolveNodeId(const TBoxInfo::THostKey& key, const TBoxInfo::THostInfo& info) const {
+            return info.EnforcedNodeId ? info.EnforcedNodeId : ResolveNodeId(key);
         }
 
         TMaybe<THostId> GetHostId(TNodeId nodeId) const {

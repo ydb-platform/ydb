@@ -178,13 +178,12 @@ void TReadSession::ProceedWithoutClusterDiscovery() {
         TClusterSessionInfo& clusterSessionInfo = clusterSessionInfoIter->second;
         clusterSessionInfo.ClusterEndpoint = DbDriverState->DiscoveryEndpoint;
         clusterSessionInfo.Topics = Settings.Topics_;
-        CreateClusterSessionsImpl();
+        CreateClusterSessionsImpl(deferred);
     }
     ScheduleDumpCountersToLog();
 }
 
-void TReadSession::CreateClusterSessionsImpl() {
-    TDeferredActions deferred;
+void TReadSession::CreateClusterSessionsImpl(TDeferredActions& deferred) {
     // Create cluster sessions.
     ui64 partitionStreamIdStart = 1;
     const size_t clusterSessionsCount = ClusterSessions.size();
@@ -217,7 +216,8 @@ void TReadSession::CreateClusterSessionsImpl() {
                 ErrorHandler,
                 context,
                 partitionStreamIdStart++, clusterSessionsCount);
-        clusterSessionInfo.Session->Start();
+
+        deferred.DeferStartSession(clusterSessionInfo.Session);
     }
 }
 
@@ -290,7 +290,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
                                     << normalizedName);
                 }
                 auto fullEndpoint = ApplyClusterEndpoint(DbDriverState->DiscoveryEndpoint, cluster.endpoint());
-		if (clusterSessionInfo.ClusterEndpoint && clusterSessionInfo.ClusterEndpoint != fullEndpoint) {
+                if (clusterSessionInfo.ClusterEndpoint && clusterSessionInfo.ClusterEndpoint != fullEndpoint) {
                     issues.AddIssue(TStringBuilder() << "Unexpected reply from cluster discovery. Different endpoints for one cluster name. Cluster: "
                                     << normalizedName << ". \"" << clusterSessionInfo.ClusterEndpoint << "\" vs \""
                                     << fullEndpoint << "\"");
@@ -317,7 +317,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
             return;
         }
 
-        CreateClusterSessionsImpl();
+        CreateClusterSessionsImpl(deferred);
     }
     ScheduleDumpCountersToLog();
 }
@@ -776,7 +776,7 @@ bool TSingleClusterReadSessionImpl::Reconnect(const TPlainStatus& status) {
 
     auto connectCallback = [weakThis = weak_from_this(), connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
         if (auto sharedThis = weakThis.lock()) {
-            sharedThis->OnConnect(std::move(st), std::move(processor), connectContext);
+            sharedThis->OnConnect(std::move(st), std::move(processor), connectContext); //OnConnect could be called inplace!
         }
     };
 
@@ -2296,6 +2296,10 @@ void TDeferredActions::DeferReconnection(std::shared_ptr<TSingleClusterReadSessi
     ReconnectionStatus = std::move(status);
 }
 
+void TDeferredActions::DeferStartSession(std::shared_ptr<TSingleClusterReadSessionImpl> session) {
+    Sessions.push_back(std::move(session));
+}
+
 void TDeferredActions::DeferSignalWaiter(TWaiter&& waiter) {
     Waiters.emplace_back(std::move(waiter));
 }
@@ -2306,7 +2310,15 @@ void TDeferredActions::DoActions() {
     AbortSession();
     Reconnect();
     SignalWaiters();
+    StartSessions();
 }
+
+void TDeferredActions::StartSessions() {
+    for (auto& session : Sessions) {
+        session->Start();
+    }
+}
+
 
 void TDeferredActions::Read() {
     if (ReadDst) {

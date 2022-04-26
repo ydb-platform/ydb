@@ -1218,7 +1218,7 @@ protected:
             Y_VERIFY(SinkFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             const ui64 i = outputIndex; // Crutch for clang
-            CA_LOG_D("Create sink for output " << i << " " << outputDesc);
+            CA_LOG_D("Create sink for output " << i << " " << outputDesc.ShortDebugString());
             std::tie(sink.Sink, sink.Actor) = SinkFactory->CreateDqSink(
                 IDqSinkFactory::TArguments {
                     .OutputDesc = outputDesc,

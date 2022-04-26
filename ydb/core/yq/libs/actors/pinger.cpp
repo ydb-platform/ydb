@@ -244,7 +244,7 @@ private:
             SchedulerCookieHolder.Reset(nullptr);
         }
 
-        LOG_D("Forward ping request: " << ev->Get()->Request);
+        LOG_D("Forward ping request: " << ev->Get()->Request.ShortDebugString());
         if (FatalError) {
             if (Finishing) {
                 LOG_D("Got final ping request after fatal error");

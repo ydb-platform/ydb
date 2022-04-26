@@ -114,6 +114,8 @@ public:
         , StartTime(TInstant::Now())
     {}
 
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_RESOLVE_FOLDER";
+
     void Bootstrap() {
         CPP_LOG_T("Resolve folder bootstrap. Folder id: " << FolderId << " Actor id: " << SelfId());
         Become(&TResolveFolderActor::StateFunc, GetDuration(Config.GetRequestTimeout(), TDuration::Seconds(30)), new NActors::TEvents::TEvWakeup());
@@ -168,6 +170,7 @@ public:
         Event->Get()->CloudId = cloudId;
         CPP_LOG_T("Cloud id: " << cloudId << " Folder id: " << FolderId);
         TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
+        PassAway();
     }
 };
 

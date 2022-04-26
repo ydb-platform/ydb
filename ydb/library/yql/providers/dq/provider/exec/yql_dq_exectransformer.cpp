@@ -124,6 +124,7 @@ public:
         executionContext.ComputationFactory = State->ComputationFactory;
         executionContext.RandomProvider = randomProvider.Get();
         executionContext.TimeProvider = timeProvider.Get();
+        executionContext.FuncProvider = State->TransformFactory({}, executionContext.FuncRegistry);
 
         NDq::TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = 10_MB;
@@ -379,13 +380,23 @@ private:
 
                         const TProgramBuilder pgmBuilder(typeEnv, *State->FunctionRegistry);
                         TRuntimeNode result;
+                        bool doUpload = false;
                         switch (block->Type) {
                             case EUserDataType::URL:
                             case EUserDataType::PATH: {
-                                TString content = (name == TStringBuf("FilePath"))
-                                    ? fullFileName
-                                    : TFileInput(block->FrozenFile->GetPath()).ReadAll();
-                                result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
+                                TString content = fullFileName;
+                                if (name == TStringBuf("FileContent")) {
+                                    if (block->FrozenFile->GetSize() < MaxFileReadSize) {
+                                        content = TFileInput(block->FrozenFile->GetPath()).ReadAll();
+                                    } else {
+                                        TCallableBuilder builder(typeEnv, TStringBuf("FileContentJob"), callable.GetType()->GetReturnType(), false);
+                                        builder.Add(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(fullFileName));
+                                        result = TRuntimeNode(builder.Build(), false);
+                                        doUpload = true;
+                                    }
+                                }
+                                if (!result)
+                                    result = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
                                 break;
                             }
                             case EUserDataType::RAW_INLINE_DATA: {
@@ -402,7 +413,7 @@ private:
                         if (result.GetNode() != node) {
                             callable.SetResult(result, typeEnv);
                         }
-                        if (name == TStringBuf("FilePath")) {
+                        if (name == TStringBuf("FilePath") || doUpload) {
                             // filePath, fileName, md5
                             auto f = IDqGateway::TFileResource();
                             f.SetLocalPath(filePath);
@@ -1257,6 +1268,8 @@ private:
     THolder<IGraphTransformer> DqTypeAnnotationTransformer;
     mutable THashMap<TString, TFileLinkPtr> FileLinks;
     mutable THashMap<TString, TString> ModulesMapping;
+
+    const ui64 MaxFileReadSize = 1_MB;
 };
 
 }

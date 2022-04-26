@@ -19,6 +19,7 @@ target_link_libraries(providers-dq-provider PUBLIC
   public-lib-yson_value
   cpp-client-ydb_driver
   library-yql-core
+  yql-dq-comp_nodes
   yql-dq-tasks
   yql-dq-type_ann
   providers-common-gateway

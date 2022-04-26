@@ -18,6 +18,7 @@ struct TDqState: public TThrRefBase {
     const TGatewaysConfig* GatewaysConfig;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
+    TTaskTransformFactory TransformFactory;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TTypeAnnotationContext* TypeCtx;
     const TOperationProgressWriter ProgressWriter;
@@ -40,6 +41,7 @@ struct TDqState: public TThrRefBase {
         const TGatewaysConfig* gatewaysConfig,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+        TTaskTransformFactory transformFactory,
         const TIntrusivePtr<IRandomProvider>& randomProvider,
         TTypeAnnotationContext* typeCtx,
         const TOperationProgressWriter& progressWriter,
@@ -54,6 +56,7 @@ struct TDqState: public TThrRefBase {
         , GatewaysConfig(gatewaysConfig)
         , FunctionRegistry(functionRegistry)
         , ComputationFactory(compFactory)
+        , TransformFactory(transformFactory)
         , RandomProvider(randomProvider)
         , TypeCtx(typeCtx)
         , ProgressWriter(progressWriter)

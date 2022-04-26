@@ -8,6 +8,9 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
+#include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h>
+#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_transform.h>
+
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
@@ -32,11 +35,16 @@ TDataProviderInitializer GetDqDataProviderInitializer(
     ) {
         Y_UNUSED(userName);
 
+        auto dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
+            NYql::CreateCommonDqTaskTransformFactory()
+        });
+
         TDqStatePtr state = MakeIntrusive<TDqState>(
             dqGateway, // nullptr for yqlrun
             gatewaysConfig,
             functionRegistry,
             compFactory,
+            dqTaskTransformFactory,
             randomProvider,
             typeCtx.Get(),
             progressWriter,

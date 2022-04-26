@@ -15,9 +15,10 @@ target_link_libraries(yql-dq-comp_nodes PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  dq-actors-compute
   yql-minikql-computation
   library-yql-minikql
-  dq-actors-compute
+  library-yql-utils
 )
 target_sources(yql-dq-comp_nodes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.cpp

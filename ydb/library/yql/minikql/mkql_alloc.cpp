@@ -94,6 +94,27 @@ size_t TAllocState::GetDeallocatedInPages() const {
     return deallocated;
 }
 
+void TScopedAlloc::Acquire() {
+    if (!AttachedCount_) {
+        PrevState_ = TlsAllocState;
+        TlsAllocState = &MyState_;
+        PgAcquireThreadContext(MyState_.MainContext);
+    } else {
+        Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
+    }
+
+    ++AttachedCount_;
+}
+
+void TScopedAlloc::Release() {
+    if (AttachedCount_ && --AttachedCount_ == 0) {
+        Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
+        PgReleaseThreadContext(MyState_.MainContext);
+        TlsAllocState = PrevState_;
+        PrevState_ = nullptr;
+    }
+}
+
 void* MKQLAllocSlow(size_t sz, TAllocState* state) {
     auto roundedSize = AlignUp(sz + sizeof(TAllocPageHeader), MKQL_ALIGNMENT);
     auto capacity = Max(ui64(TAlignedPagePool::POOL_PAGE_SIZE), roundedSize);

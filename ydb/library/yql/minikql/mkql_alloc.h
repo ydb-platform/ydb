@@ -136,26 +136,8 @@ public:
         return MyState_;
     }
 
-    void Acquire() {
-        if (!AttachedCount_) {
-            PrevState_ = TlsAllocState;
-            TlsAllocState = &MyState_;
-            PgAcquireThreadContext(MyState_.MainContext);
-        } else {
-            Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
-        }
-
-        ++AttachedCount_;
-    }
-
-    void Release() {
-        if (AttachedCount_ && --AttachedCount_ == 0) {
-            Y_VERIFY(TlsAllocState == &MyState_, "Mismatch allocator in thread");
-            PgReleaseThreadContext(MyState_.MainContext);
-            TlsAllocState = PrevState_;
-            PrevState_ = nullptr;
-        }
-    }
+    void Acquire();
+    void Release();
 
     size_t GetUsed() const { return MyState_.GetUsed(); }
     size_t GetPeakUsed() const { return MyState_.GetPeakUsed(); }

@@ -297,11 +297,12 @@ public:
             return false;
 
         TAllocState *const allocState = TlsAllocState;
-        Y_VERIFY(allocState == AllocState, "Wrong TLS alloc state pre check.");
-        TypeEnv.GetAllocator().Release();
+        PgReleaseThreadContext(allocState->MainContext);
+        TlsAllocState = nullptr;
         const auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadResult, TEvPrivate::TEvReadError, TEvPrivate::TEvReadFinished>();
-        TypeEnv.GetAllocator().Acquire();
-        Y_VERIFY(allocState == AllocState, "Wrong TLS alloc state post check.");
+        TlsAllocState = allocState;
+        PgAcquireThreadContext(allocState->MainContext);
+
         switch (const auto etype = ev->GetTypeRewrite()) {
             case TEvPrivate::TEvReadFinished::EventType:
                 Finished = true;
@@ -326,8 +327,14 @@ private:
         const auto randStub = CreateDeterministicRandomProvider(1);
         const auto timeStub = CreateDeterministicTimeProvider(10000000);
 
-        const auto alloc = TypeEnv.BindAllocator();
-        AllocState = TlsAllocState;
+        Y_VERIFY(!TlsAllocState);
+        TlsAllocState = &TypeEnv.GetAllocator().Ref();
+        PgAcquireThreadContext(TypeEnv.GetAllocator().Ref().MainContext);
+        Y_DEFER{
+            PgReleaseThreadContext(TypeEnv.GetAllocator().Ref().MainContext);
+            TlsAllocState = nullptr;
+        };
+
         const auto pb = std::make_unique<TProgramBuilder>(TypeEnv, FunctionRegistry);
 
         TCallableBuilder callableBuilder(TypeEnv, "CoroStream", pb->NewStreamType(pb->NewDataType(NUdf::EDataSlot::String)));
@@ -371,7 +378,6 @@ private:
     const TString Format, RowType, Compression;
     const NActors::TActorId ComputeActorId;
     TOutput::TPtr Outputs;
-    TAllocState * AllocState = nullptr;
     bool Finished = false;
 };
 

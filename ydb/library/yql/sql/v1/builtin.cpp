@@ -1897,6 +1897,7 @@ bool TSessionWindow::DoInit(TContext& ctx, ISource* src) {
     auto initLambda = Args[1];
     auto updateLambda = Args[2];
     auto calculateLambda = Args[3];
+    src->AllColumns();
 
     return orderExpr->Init(ctx, src) && initLambda->Init(ctx, FakeSource.Get()) &&
         updateLambda->Init(ctx, FakeSource.Get()) && calculateLambda->Init(ctx, FakeSource.Get());

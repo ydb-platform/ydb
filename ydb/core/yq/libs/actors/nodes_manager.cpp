@@ -78,47 +78,54 @@ private:
         ServiceCounters.Counters->GetCounter("EvAllocateWorkersRequest", true)->Inc();
         const auto &rec = ev->Get()->Record;
         const auto count = rec.GetCount();
-        Y_ASSERT(count != 0);
-        auto resourceId = rec.GetResourceId();
-        if (!resourceId) {
-            resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
-        }
-
-        TVector<TPeer> nodes;
-        for (ui32 i = 0; i < count; ++i) {
-            TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0};
-            if (!Peers.empty()) {
-                auto FirstPeer = NextPeer;
-                while (true) {
-                    if (NextPeer >= Peers.size()) {
-                        NextPeer = 0;
-                    }
-
-                    auto& nextNode = Peers[NextPeer];
-                    ++NextPeer;
-
-                    if (NextPeer == FirstPeer   // we closed loop w/o success, fallback to round robin then
-                       || nextNode.MemoryLimit == 0 // not limit defined for the node
-                       || nextNode.MemoryLimit > nextNode.MemoryAllocated + MkqlInitialMemoryLimit // memory is enough
-                    ) {
-                        // adjust allocated size to place next tasks correctly, will be reset after next health check
-                        nextNode.MemoryAllocated += MkqlInitialMemoryLimit;
-                        node = nextNode;
-                        break;
-                    }
-                }
-            }
-            nodes.push_back(node);
-        }
 
         auto req = MakeHolder<NDqs::TEvAllocateWorkersResponse>();
-        req->Record.ClearError();
-        auto& group = *req->Record.MutableNodes();
-        group.SetResourceId(resourceId);
-        for (const auto& node : nodes) {
-            auto* worker = group.AddWorker();
-            *worker->MutableGuid() = node.InstanceId;
-            worker->SetNodeId(node.NodeId);
+
+        if (count == 0) {
+            auto& error = *req->Record.MutableError();
+            error.SetErrorCode(NYql::NDqProto::EMISMATCH);
+            error.SetMessage("Incorrect request - 0 nodes requested");
+        } else {
+            auto resourceId = rec.GetResourceId();
+            if (!resourceId) {
+                resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
+            }
+
+            TVector<TPeer> nodes;
+            for (ui32 i = 0; i < count; ++i) {
+                TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0};
+                if (!Peers.empty()) {
+                    auto FirstPeer = NextPeer;
+                    while (true) {
+                        if (NextPeer >= Peers.size()) {
+                            NextPeer = 0;
+                        }
+
+                        auto& nextNode = Peers[NextPeer];
+                        ++NextPeer;
+
+                        if (NextPeer == FirstPeer   // we closed loop w/o success, fallback to round robin then
+                            || nextNode.MemoryLimit == 0 // not limit defined for the node
+                            || nextNode.MemoryLimit > nextNode.MemoryAllocated + MkqlInitialMemoryLimit // memory is enough
+                        ) {
+                            // adjust allocated size to place next tasks correctly, will be reset after next health check
+                            nextNode.MemoryAllocated += MkqlInitialMemoryLimit;
+                            node = nextNode;
+                            break;
+                        }
+                    }
+                }
+                nodes.push_back(node);
+            }
+
+            req->Record.ClearError();
+            auto& group = *req->Record.MutableNodes();
+            group.SetResourceId(resourceId);
+            for (const auto& node : nodes) {
+                auto* worker = group.AddWorker();
+                *worker->MutableGuid() = node.InstanceId;
+                worker->SetNodeId(node.NodeId);
+            }
         }
         LOG_D("TEvAllocateWorkersResponse " << req->Record.DebugString());
 

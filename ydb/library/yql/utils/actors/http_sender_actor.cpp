@@ -38,8 +38,9 @@ private:
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& ev) {
         Request = ev->Get()->Request;
+        Timeout = ev->Get()->Timeout;
         Cookie = ev->Cookie;
-        Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate()));
+        Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate(), Timeout));
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
@@ -54,7 +55,7 @@ private:
             return;
         }
 
-        Schedule(GetRetryDelay(), new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate()));
+        Schedule(GetRetryDelay(), new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate(), Timeout));
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
@@ -75,6 +76,7 @@ private:
     ui32 RetryCount = 0;
     TDuration CurrentDelay = BaseRetryDelay;
     NHttp::THttpOutgoingRequestPtr Request;
+    TDuration Timeout;
     ui64 Cookie = 0;
 };
 

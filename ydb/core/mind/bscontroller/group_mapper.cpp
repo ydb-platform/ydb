@@ -4,9 +4,9 @@
 
 namespace NKikimr::NBsController {
 
-    class TGroupMapper::TImpl : TNonCopyable {
-        using TPDiskLayoutPosition = NLayoutChecker::TPDiskLayoutPosition;
+    using namespace NLayoutChecker;
 
+    class TGroupMapper::TImpl : TNonCopyable {
         struct TPDiskInfo : TPDiskRecord {
             TPDiskLayoutPosition Position;
             bool Matching;
@@ -74,8 +74,8 @@ namespace NKikimr::NBsController {
             const bool RequireOperational;
             TForbiddenPDisks ForbiddenDisks;
             THashMap<ui32, unsigned> LocalityFactor;
-            NLayoutChecker::TGroupLayout GroupLayout;
-            std::optional<NLayoutChecker::TScore> BestScore;
+            TGroupLayout GroupLayout;
+            std::optional<TScore> BestScore;
 
             TAllocator(TImpl& self, const TGroupGeometryInfo& geom, i64 requiredSpace, bool requireOperational,
                     TForbiddenPDisks forbiddenDisks, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks)
@@ -198,7 +198,7 @@ namespace NKikimr::NBsController {
                         prev = position;
 
                         res.emplace_back(position, pdisk);
-                        ++numMatchingDisksInDomain[position.Domain];
+                        ++numMatchingDisksInDomain[position.Domain.Index()];
                     }
                 }
                 for (; realmGroupBegin < res.size(); ++realmGroupBegin) {
@@ -211,7 +211,7 @@ namespace NKikimr::NBsController {
                     res[domainBegin].second->SkipToNextDomain = res.size() - domainBegin;
                 }
                 for (const auto& [position, pdisk] : res) {
-                    pdisk->NumDomainMatchingDisks = numMatchingDisksInDomain[position.Domain];
+                    pdisk->NumDomainMatchingDisks = numMatchingDisksInDomain[position.Domain.Index()];
                 }
 
                 return std::move(res);
@@ -343,7 +343,7 @@ namespace NKikimr::NBsController {
                 using TNestedEntity = TAllocateWholeDomain;
 
                 static std::pair<TPDiskLayoutPosition, TPDiskLayoutPosition> MakeRange(const TPDiskLayoutPosition& x) {
-                    return {{x.RealmGroup, x.Realm, 0}, {x.RealmGroup, x.Realm, Max<ui32>()}};
+                    return {{x.RealmGroup, x.Realm, TEntityId::Min()}, {x.RealmGroup, x.Realm, TEntityId::Max()}};
                 }
             };
 
@@ -353,7 +353,7 @@ namespace NKikimr::NBsController {
                 using TNestedEntity = TAllocateWholeRealm;
 
                 static std::pair<TPDiskLayoutPosition, TPDiskLayoutPosition> MakeRange(const TPDiskLayoutPosition& x) {
-                    return {{x.RealmGroup, 0, 0}, {x.RealmGroup, Max<ui32>(), Max<ui32>()}};
+                    return {{x.RealmGroup, TEntityId::Min(), TEntityId::Min()}, {x.RealmGroup, TEntityId::Max(), TEntityId::Max()}};
                 }
             };
 
@@ -365,7 +365,7 @@ namespace NKikimr::NBsController {
                 const TDiskRange originalRange(range);
                 const size_t undoPosition = undo.GetPosition();
                 TPDiskLayoutPosition *prefix = nullptr;
-                ui32 currentEntityId = Max<ui32>();
+                TEntityId currentEntityId = TEntityId::Max();
                 for (ui32 index = 0, num = this->*T::EntityCount; index < num; ) {
                     // allocate nested entity
                     prefix = AllocateWholeEntity(typename T::TNestedEntity(), group, undo,
@@ -380,22 +380,22 @@ namespace NKikimr::NBsController {
                         ++index;
                     } else if (index) {
                         // disable just checked entity (to prevent its selection again)
-                        Y_VERIFY(currentEntityId != Max<ui32>());
-                        forbiddenEntities.Set(currentEntityId);
+                        Y_VERIFY(currentEntityId != TEntityId::Max());
+                        forbiddenEntities.Set(currentEntityId.Index());
                         // try another entity at this level
                         Revert(undo, group, undoPosition);
                         // revert original wide range and start from the beginning
                         range = originalRange;
                         index = 0;
-                        currentEntityId = Max<ui32>();
+                        currentEntityId = TEntityId::Max();
                     } else {
                         // no chance to allocate new entity, exit
                         return nullptr;
                     }
                 }
                 // disable filled entity from further selection
-                Y_VERIFY(prefix && currentEntityId != Max<ui32>());
-                forbiddenEntities.Set(currentEntityId);
+                Y_VERIFY(prefix && currentEntityId != TEntityId::Max());
+                forbiddenEntities.Set(currentEntityId.Index());
                 return prefix;
             }
 
@@ -418,14 +418,14 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            NLayoutChecker::TScore CalculateBestScoreWithCache(const TGroup& group) {
+            TScore CalculateBestScoreWithCache(const TGroup& group) {
                 if (!BestScore) {
                     // find the worst disk from a position of layout correctness and use it as a milestone for other
                     // disks -- they can't be misplaced worse
-                    NLayoutChecker::TScore bestScore;
+                    TScore bestScore;
                     for (ui32 i = 0; i < GroupSize; ++i) {
                         if (TPDiskInfo *pdisk = group[i]; pdisk && !pdisk->Decommitted) {
-                            NLayoutChecker::TScore score = GroupLayout.GetCandidateScore(pdisk->Position, RealmIdx[i],
+                            TScore score = GroupLayout.GetCandidateScore(pdisk->Position, RealmIdx[i],
                                 DomainIdx[i]);
                             if (bestScore.BetterThan(score)) {
                                 bestScore = score;
@@ -440,7 +440,7 @@ namespace NKikimr::NBsController {
             template<typename TCallback>
             void FindMatchingDiskBasedOnScore(TCallback&& cb, const TGroup& group, ui32 failRealmIdx, ui32 failDomainIdx,
                     TDiskRange range, TDynBitMap& forbiddenEntities) {
-                NLayoutChecker::TScore bestScore = CalculateBestScoreWithCache(group);
+                TScore bestScore = CalculateBestScoreWithCache(group);
 
                 std::vector<TPDiskInfo*> candidates;
 
@@ -449,18 +449,18 @@ namespace NKikimr::NBsController {
 
                     if (!pdisk->Matching) {
                         continue;
-                    } else if (forbiddenEntities[position.RealmGroup]) {
+                    } else if (forbiddenEntities[position.RealmGroup.Index()]) {
                         range.first += Min<ui32>(std::distance(range.first, range.second), pdisk->SkipToNextRealmGroup - 1);
                         continue;
-                    } else if (forbiddenEntities[position.Realm]) {
+                    } else if (forbiddenEntities[position.Realm.Index()]) {
                         range.first += Min<ui32>(std::distance(range.first, range.second), pdisk->SkipToNextRealm - 1);
                         continue;
-                    } else if (forbiddenEntities[position.Domain]) {
+                    } else if (forbiddenEntities[position.Domain.Index()]) {
                         range.first += Min<ui32>(std::distance(range.first, range.second), pdisk->SkipToNextDomain - 1);
                         continue;
                     }
 
-                    NLayoutChecker::TScore score = GroupLayout.GetCandidateScore(position, failRealmIdx, failDomainIdx);
+                    TScore score = GroupLayout.GetCandidateScore(position, failRealmIdx, failDomainIdx);
                     if (score.BetterThan(bestScore)) {
                         candidates.clear();
                         candidates.push_back(pdisk);
@@ -529,7 +529,7 @@ namespace NKikimr::NBsController {
     private:
         const TGroupGeometryInfo Geom;
         const bool Randomize;
-        NLayoutChecker::TDomainMapper DomainMapper;
+        TDomainMapper DomainMapper;
         TPDisks PDisks;
         TPDiskByPosition PDiskByPosition;
         bool Dirty = false;

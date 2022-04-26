@@ -6,39 +6,76 @@
 
 namespace NKikimr::NBsController {
 
-    struct TLayoutCheckResult {
-        std::vector<TVDiskIdShort> Candidates;
+    namespace NLayoutChecker {
 
-        explicit operator bool() const { // checks whether fail model is correct
-            return Candidates.empty();
-        }
-    };
+        struct TEntityId {
+            ui32 Value = ::Max<ui32>();
 
-    TLayoutCheckResult CheckGroupLayout(const TGroupGeometryInfo& geom, const THashMap<TVDiskIdShort, std::pair<TNodeLocation, TPDiskId>>& layout);
+        public:
+            bool operator ==(const TEntityId& other) const { return Value == other.Value; }
+            bool operator !=(const TEntityId& other) const { return Value != other.Value; }
+            bool operator < (const TEntityId& other) const { return Value <  other.Value; }
+            bool operator <=(const TEntityId& other) const { return Value <= other.Value; }
+            bool operator > (const TEntityId& other) const { return Value >  other.Value; }
+            bool operator >=(const TEntityId& other) const { return Value >= other.Value; }
+
+            size_t Index() const {
+                return Value;
+            }
+
+            size_t Hash() const {
+                return THash<ui32>()(Value);
+            }
+
+            static constexpr TEntityId Min() { return {.Value = 0}; };
+            static constexpr TEntityId Max() { return {.Value = ::Max<ui32>()}; };
+
+            TString ToString() const { return TStringBuilder() << Value; }
+            void Output(IOutputStream& s) const { s << Value; }
+
+        private:
+            friend class TDomainMapper;
+
+            static TEntityId SequentialValue(size_t index) {
+                return TEntityId{static_cast<ui32>(index)};
+            }
+        };
+
+    } // NLayoutChecker
+
+} // NKikimr::NBsController
+
+template<>
+struct THash<NKikimr::NBsController::NLayoutChecker::TEntityId> {
+    template<typename T>
+    size_t operator()(const T& id) const { return id.Hash(); }
+};
+
+namespace NKikimr::NBsController {
 
     namespace NLayoutChecker {
 
         class TDomainMapper {
-            std::unordered_map<TString, ui32> FailDomainId;
+            std::unordered_map<TString, TEntityId> FailDomainId;
 
         public:
-            ui32 operator ()(TString item) {
-                return FailDomainId.emplace(std::move(item), FailDomainId.size()).first->second;
+            TEntityId operator ()(TString item) {
+                return FailDomainId.emplace(std::move(item), TEntityId::SequentialValue(FailDomainId.size())).first->second;
             }
 
-            ui32 GetIdCount() const {
+            size_t GetIdCount() const {
                 return FailDomainId.size();
             }
         };
 
         struct TPDiskLayoutPosition {
-            ui32 RealmGroup = 0;
-            ui32 Realm = 0;
-            ui32 Domain = 0;
+            TEntityId RealmGroup;
+            TEntityId Realm;
+            TEntityId Domain;
 
             TPDiskLayoutPosition() = default;
 
-            TPDiskLayoutPosition(ui32 realmGroup, ui32 realm, ui32 domain)
+            TPDiskLayoutPosition(TEntityId realmGroup, TEntityId realm, TEntityId domain)
                 : RealmGroup(realmGroup)
                 , Realm(realm)
                 , Domain(domain)
@@ -121,15 +158,15 @@ namespace NKikimr::NBsController {
             const ui32 NumFailDomainsPerFailRealm;
 
             ui32 NumDisks = 0;
-            THashMap<ui32, ui32> NumDisksPerRealmGroup;
+            THashMap<TEntityId, ui32> NumDisksPerRealmGroup;
 
             TStackVec<ui32, 4> NumDisksInRealm;
-            TStackVec<THashMap<ui32, ui32>, 4> NumDisksPerRealm;
-            THashMap<ui32, ui32> NumDisksPerRealmTotal;
+            TStackVec<THashMap<TEntityId, ui32>, 4> NumDisksPerRealm;
+            THashMap<TEntityId, ui32> NumDisksPerRealmTotal;
 
             TStackVec<ui32, 32> NumDisksInDomain;
-            TStackVec<THashMap<ui32, ui32>, 32> NumDisksPerDomain;
-            THashMap<ui32, ui32> NumDisksPerDomainTotal;
+            TStackVec<THashMap<TEntityId, ui32>, 32> NumDisksPerDomain;
+            THashMap<TEntityId, ui32> NumDisksPerDomainTotal;
 
             TGroupLayout(ui32 numFailRealms, ui32 numFailDomainsPerFailRealm)
                 : NumFailDomainsPerFailRealm(numFailDomainsPerFailRealm)
@@ -173,5 +210,15 @@ namespace NKikimr::NBsController {
         };
 
     } // NLayoutChecker
+
+    struct TLayoutCheckResult {
+        std::vector<TVDiskIdShort> Candidates;
+
+        explicit operator bool() const { // checks whether fail model is correct
+            return Candidates.empty();
+        }
+    };
+
+    TLayoutCheckResult CheckGroupLayout(const TGroupGeometryInfo& geom, const THashMap<TVDiskIdShort, std::pair<TNodeLocation, TPDiskId>>& layout);
 
 } // NKikimr::NBsController

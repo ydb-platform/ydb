@@ -33,34 +33,10 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 2090c22b730be1f2aadcd050860177fe
+KEEP     COPYRIGHT_SERVICE_LABEL 314d68db4f1890b5b32a7518f13b4176
 BELONGS ya.make
     License text:
-        // Copyright 2014 Renato Tegon Forti, Antony Polukhin.
-        // Copyright 2015-2021 Antony Polukhin.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/stacktrace/detail/void_ptr_cast.hpp [1:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 43184d74bb6f0a9ca9f5562808734277
-BELONGS ya.make
-    License text:
-        // Copyright 2014 Renato Tegon Forti, Antony Polukhin.
-        // Copyright 2015-2021 Antony Polukhin.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/stacktrace/detail/void_ptr_cast.hpp [1:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 56e1fa406fd925d2911213854bb27237
-BELONGS ya.make
-    License text:
-        // Copyright Antony Polukhin, 2016-2021.
+        // Copyright Antony Polukhin, 2016-2022.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -85,6 +61,30 @@ BELONGS ya.make
         include/boost/stacktrace/safe_dump_to.hpp [1:1]
         include/boost/stacktrace/stacktrace.hpp [1:1]
         include/boost/stacktrace/stacktrace_fwd.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43184d74bb6f0a9ca9f5562808734277
+BELONGS ya.make
+    License text:
+        // Copyright 2014 Renato Tegon Forti, Antony Polukhin.
+        // Copyright Antony Polukhin, 2015-2022.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/stacktrace/detail/void_ptr_cast.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd728379e171c82a4b01405b65b3340b
+BELONGS ya.make
+    License text:
+        // Copyright 2014 Renato Tegon Forti, Antony Polukhin.
+        // Copyright Antony Polukhin, 2015-2022.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/stacktrace/detail/void_ptr_cast.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e8010e4e32ce75b509416875de06cd1c
 BELONGS ya.make

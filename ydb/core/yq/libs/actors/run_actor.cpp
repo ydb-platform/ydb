@@ -685,7 +685,7 @@ private:
         const bool finalize = failure || DqGraphIndex + 1 >= static_cast<i32>(DqGraphParams.size());
         if (finalize) {
 
-            if (RetryNeeded) {
+            if (failure) {
                 ResignQuery(ev->Get()->Record.GetStatusCode());
                 return;
             }
@@ -987,7 +987,7 @@ private:
     }
 
     void Finish(YandexQuery::QueryMeta::ComputeStatus status) {
-        LOG_D("Is about to finish query with status " << YandexQuery::QueryMeta::ComputeStatus_Name(status));;
+        LOG_D("Is about to finish query with status " << YandexQuery::QueryMeta::ComputeStatus_Name(status));
         Finishing = true;
         RetryNeeded = false;
         FinalQueryStatus = status;

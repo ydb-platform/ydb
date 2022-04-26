@@ -101,12 +101,12 @@ public:
 
             static_cast<TDerived*>(this)->DoBootstrap();
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
+            InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                 << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const std::exception& e) {
-            InternalError(TIssuesIds::UNEXPECTED, e.what());
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, e.what());
         }
 
         ReportEventElapsedTime();
@@ -198,11 +198,11 @@ protected:
                 hFunc(IDqSourceActor::TEvSourceError, OnSourceError);
                 default: {
                     CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
-                    InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
+                    InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 }
             }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
-            InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
+            InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                 << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
                 << ", host: " << HostName()
                 << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
@@ -210,7 +210,7 @@ protected:
             if (PassExceptions) {
                 throw;
             }
-            InternalError(TIssuesIds::UNEXPECTED, e.what());
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, e.what());
         }
 
         if (reportTime) {
@@ -381,7 +381,7 @@ protected:
                 if (Channels->CheckInFlight("Tasks execution finished")) {
                     State = NDqProto::COMPUTE_STATE_FINISHED;
                     CA_LOG_D("Compute state finished. All channels finished");
-                    ReportStateAndMaybeDie(TIssue("success"));
+                    ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::SUCCESS, {TIssue("success")});
                 }
             }
         }
@@ -434,38 +434,6 @@ protected:
         Terminate(success, TIssues({TIssue(message)}));
     }
 
-    void ReportStateAndMaybeDie(TIssue&& issue) {
-        ReportStateAndMaybeDie(
-            State == NDqProto::COMPUTE_STATE_FINISHED ?
-            NYql::NDqProto::StatusIds::UNSPECIFIED
-            : NYql::NDqProto::StatusIds::ABORTED, TIssues({std::move(issue)}));
-    }
-
-    void ReportStateAndDie(NDqProto::EComputeState state, TIssue&& issue) {
-        auto execEv = MakeHolder<TEvDqCompute::TEvState>();
-        auto& record = execEv->Record;
-
-        record.SetState(state);
-        if (state != NDqProto::COMPUTE_STATE_FINISHED) {
-            record.SetStatusCode(NYql::NDqProto::StatusIds::ABORTED);
-        } else {
-            record.SetStatusCode(NYql::NDqProto::StatusIds::UNSPECIFIED);
-        }
-        record.SetTaskId(Task.GetId());
-        if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            FillStats(record.MutableStats(), /* last */ true);
-        }
-
-        if (issue.Message) {
-            IssueToMessage(issue, record.MutableIssues()->Add());
-        }
-
-        this->Send(ExecuterId, execEv.Release());
-
-        TerminateSources(TIssues({issue}), state == NDqProto::COMPUTE_STATE_FINISHED);
-        Terminate(state == NDqProto::COMPUTE_STATE_FINISHED, TIssues({std::move(issue)}));
-    }
-
     void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues)
     {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
@@ -496,13 +464,28 @@ protected:
         SetIssueCode(issueCode, issue);
         std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
         State = NDqProto::COMPUTE_STATE_FAILURE;
-        ReportStateAndMaybeDie(std::move(issue));
+        ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, {std::move(issue)});
     }
 
-    void InternalError(TIssue issue) {
+    void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssuesIds::EIssueCode issueCode, const TString& message) {
+        CA_LOG_E("InternalError: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << " " << TIssuesIds::EIssueCode_Name(issueCode) << ": " << message << ".");
+        TIssue issue(message);
+        SetIssueCode(issueCode, issue);
         std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
         State = NDqProto::COMPUTE_STATE_FAILURE;
-        ReportStateAndMaybeDie(std::move(issue));
+        ReportStateAndMaybeDie(statusCode, TIssues({std::move(issue)}));
+    }
+
+    void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssue issue) {
+        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
+        State = NDqProto::COMPUTE_STATE_FAILURE;
+        ReportStateAndMaybeDie(statusCode, TIssues({std::move(issue)}));
+    }
+
+    void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
+        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
+        State = NDqProto::COMPUTE_STATE_FAILURE;
+        ReportStateAndMaybeDie(statusCode, issues);
     }
 
     void ContinueExecute() {
@@ -945,7 +928,7 @@ protected:
     void HandleExecuteBase(TEvDq::TEvAbortExecution::TPtr& ev) {
         if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
             Y_VERIFY(ev->Get()->GetIssues().Size() == 1);
-            InternalError(*ev->Get()->GetIssues().begin());
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ev->Get()->GetIssues().begin());
             return;
         }
         TIssues issues = ev->Get()->GetIssues();
@@ -1298,9 +1281,8 @@ protected:
             return;
         }
 
-        TString desc = ev->Get()->Issues.ToString();
-        CA_LOG_E("Source[" << ev->Get()->InputIndex << "] fatal error: " << desc);
-        InternalError(TIssuesIds::DEFAULT_ERROR, desc);
+        CA_LOG_E("Source[" << ev->Get()->InputIndex << "] fatal error: " << ev->Get()->Issues.ToString());
+        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, ev->Get()->Issues);
     }
 
     void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
@@ -1309,9 +1291,8 @@ protected:
             return;
         }
 
-        TString desc = issues.ToString();
-        CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << desc);
-        InternalError(TIssuesIds::DEFAULT_ERROR, desc);
+        CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << issues.ToString());
+        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
     }
 
     virtual ui64 CalcMkqlMemoryLimit() {

@@ -52,7 +52,7 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
     queryBuilder.AddText(
         "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl,\n"
         "`" RETRY_COUNTER_COLUMN_NAME "` = $retry_counter, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "` = $retry_counter_update_time, `" RETRY_RATE_COLUMN_NAME "` = $retry_rate,\n"
-        "`" IS_RESIGN_QUERY_COLUMN_NAME "` = false, `" HOST_NAME_COLUMN_NAME "` = $host, `" OWNER_COLUMN_NAME "` = $owner\n"
+        "`" HOST_NAME_COLUMN_NAME "` = $host, `" OWNER_COLUMN_NAME "` = $owner\n"
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
@@ -168,8 +168,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     queryBuilder.AddTimestamp("from", now);
     queryBuilder.AddUint64("tasks_limit", tasksBatchSize);
     queryBuilder.AddText(
-        "SELECT `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`,\n"
-        "`" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" RETRY_RATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`, `" IS_RESIGN_QUERY_COLUMN_NAME "`\n"
+        "SELECT `" SCOPE_COLUMN_NAME "`, `" QUERY_ID_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "`, `" LAST_SEEN_AT_COLUMN_NAME "`,\n"
+        "`" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" RETRY_RATE_COLUMN_NAME "`, `" QUERY_TYPE_COLUMN_NAME "`\n"
         "FROM `" PENDING_SMALL_TABLE_NAME "`\n"
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $from ORDER BY `" QUERY_ID_COLUMN_NAME "` DESC LIMIT $tasks_limit;\n"
     );
@@ -195,34 +195,36 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
             task.Scope = *parser.ColumnParser(SCOPE_COLUMN_NAME).GetOptionalString();
             task.QueryId = *parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString();
+            auto previousOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
 
-            bool isResignQuery = parser.ColumnParser(IS_RESIGN_QUERY_COLUMN_NAME).GetOptionalBool().GetOrElse(false);
             taskInternal.RetryCounter = parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0);
             taskInternal.RetryCounterUpdatedAt = parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
             taskInternal.RetryRate = parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0);
+            auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
 
-            YandexQuery::QueryContent::QueryType queryType = static_cast<YandexQuery::QueryContent::QueryType>(parser.ColumnParser(QUERY_TYPE_COLUMN_NAME).GetOptionalInt64().GetOrElse(0));
+            if (previousOwner) { // task lease timeout case only, other cases are updated at ping time
 
-            const auto retryCounterLimit = queryType == YandexQuery::QueryContent::ANALYTICS ? Config.Proto.GetAnalyticsRetryCounterLimit() : Config.Proto.GetStreamingRetryCounterLimit();
-            const auto retryCounterUpdateTime = queryType == YandexQuery::QueryContent::ANALYTICS ? Config.AnalyticsRetryCounterUpdateTime : Config.StreamingRetryCounterUpdateTime;
+                CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryCounterUpdatedAt
+                    << " LastSeenAt: " << lastSeenAt);
 
-            auto lastPeriod = now - taskInternal.RetryCounterUpdatedAt;
-            if (lastPeriod >= retryCounterUpdateTime) {
-                taskInternal.RetryRate = 0.0;
-            } else {
-                taskInternal.RetryRate += 1.0;
-                auto rate = lastPeriod / retryCounterUpdateTime * retryCounterLimit;
-                if (taskInternal.RetryRate > rate) {
-                    taskInternal.RetryRate -= rate;
-                } else {
+                auto lastPeriod = lastSeenAt - taskInternal.RetryCounterUpdatedAt;
+                if (lastPeriod >= Config.TaskLeaseRetryPolicy.RetryPeriod) {
                     taskInternal.RetryRate = 0.0;
+                } else {
+                    taskInternal.RetryRate += 1.0;
+                    auto rate = lastPeriod / Config.TaskLeaseRetryPolicy.RetryPeriod * Config.TaskLeaseRetryPolicy.RetryCount;
+                    if (taskInternal.RetryRate > rate) {
+                        taskInternal.RetryRate -= rate;
+                    } else {
+                        taskInternal.RetryRate = 0.0;
+                    }
                 }
-            }
-            taskInternal.RetryCounter += 1;
-            taskInternal.RetryCounterUpdatedAt = now;
+                taskInternal.RetryCounter += 1;
+                taskInternal.RetryCounterUpdatedAt = now;
 
-            if (!isResignQuery && taskInternal.RetryRate >= retryCounterLimit) {
-                taskInternal.ShouldAbortTask = true;
+                if (taskInternal.RetryRate >= Config.TaskLeaseRetryPolicy.RetryCount) {
+                    taskInternal.ShouldAbortTask = true;
+                }
             }
 
             CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryRate

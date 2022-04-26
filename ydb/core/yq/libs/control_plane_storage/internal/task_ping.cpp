@@ -19,7 +19,7 @@ bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
-    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl) {
+    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl, const THashMap<ui64, TYdbControlPlaneStorageActor::TRetryPolicyItem>& retryPolicies) {
 
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
     readQueryBuilder.AddString("tenant", request->TenantName);
@@ -32,8 +32,8 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         "SELECT `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
         "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $last_job_id;\n"
-        "SELECT `" OWNER_COLUMN_NAME "` FROM `" PENDING_SMALL_TABLE_NAME "`\n"
-        "   WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+        "SELECT `" OWNER_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" RETRY_RATE_COLUMN_NAME "`\n"
+        "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
@@ -41,57 +41,119 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         YandexQuery::Query query;
         YandexQuery::Internal::QueryInternal internal;
         YandexQuery::Job job;
-        TString selectedOwner;
+        TString owner;
+        ui64 retryCounter = 0;
+        TInstant retryCounterUpdatedAt = TInstant::Zero();
+        double retryRate = 0.0;
 
         if (resultSets.size() != 3) {
-           ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 3 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 3";
         }
 
         {
             TResultSetParser parser(resultSets[0]);
-            if (parser.TryNextRow()) {
-                if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
-                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
-                }
-                if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
-                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
-                }
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " QUERIES_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\"";
+            }
+            if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." QUERY_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\" and " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\"";
+            }
+            if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." INTERNAL_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\" and " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\"";
             }
         }
 
         {
             TResultSetParser parser(resultSets[1]);
-            if (parser.TryNextRow()) {
-                if (!job.ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
-                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
-                }
-                jobId = *parser.ColumnParser(JOB_ID_COLUMN_NAME).GetOptionalString();
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " JOBS_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\"";
             }
+            if (!job.ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " JOBS_TABLE_NAME "." JOB_COLUMN_NAME " where " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\"";
+            }
+            jobId = *parser.ColumnParser(JOB_ID_COLUMN_NAME).GetOptionalString();
         }
 
         {
             TResultSetParser parser(resultSets[2]);
-            if (parser.TryNextRow()) {
-                selectedOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " PENDING_SMALL_TABLE_NAME " where " TENANT_COLUMN_NAME " = \"" << request->TenantName << "\" and " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\"" ;
             }
+            owner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
+            if (owner != request->Owner) {
+                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request->QueryId << "\" MISMATCHED: \"" << request->Owner << "\" (received) != \"" << owner << "\" (selected)";
+            }
+            retryCounter = parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0);
+            retryCounterUpdatedAt = parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
+            retryRate = parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0);
         }
 
-        if (selectedOwner != request->Owner) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query with the specified Owner: \"" <<  request->Owner << "\" does not exist. Selected owner: \"" << selectedOwner << "\"";
+        TMaybe<YandexQuery::QueryMeta::ComputeStatus> queryStatus = request->Status;
+        TMaybe<NYql::TIssues> issues = request->Issues;
+        TMaybe<NYql::TIssues> transientIssues = request->TransientIssues;
+
+        // running query us locked for lease period
+        TDuration backoff = taskLeaseTtl;
+
+        if (request->ResignQuery) {
+
+            TYdbControlPlaneStorageActor::TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
+            auto it = retryPolicies.find(request->StatusCode);
+            if (it != retryPolicies.end()) {
+                policy = it->second;
+            }
+
+            auto lastPeriod = Now() - retryCounterUpdatedAt;
+            if (lastPeriod >= policy.RetryPeriod) {
+                retryRate = 0.0;
+            } else {
+                retryRate += 1.0;
+                auto rate = lastPeriod / policy.RetryPeriod * policy.RetryCount;
+                if (retryRate > rate) {
+                    retryRate -= rate;
+                } else {
+                    retryRate = 0.0;
+                }
+            }
+
+            if (retryRate < policy.RetryCount) {
+                queryStatus.Clear();
+                retryCounter += 1;
+                retryCounterUpdatedAt = Now();
+                // failing query is throttled for backoff period
+                backoff = policy.BackoffPeriod * retryRate;
+                owner = "";
+            } else {
+                Cerr << "PING FAILURE for code " << request->StatusCode << Endl;
+                // failure query should be processed instantly
+                queryStatus = YandexQuery::QueryMeta::FAILING;
+                backoff = TDuration::Zero();
+                // all transient issues became final
+                if (transientIssues) {
+                    if (issues) {
+                        issues->AddIssues(*transientIssues);
+                        transientIssues.Clear();
+                    } else {
+                        issues.Swap(transientIssues);
+                    }
+                }
+            }
+
+            Cerr << "PING " << retryCounter << " " << retryCounterUpdatedAt << " " << backoff << Endl;
         }
 
-        if (request->Status) {
-            query.mutable_meta()->set_status(*request->Status);
-            job.mutable_query_meta()->set_status(*request->Status);
+        if (queryStatus) {
+            query.mutable_meta()->set_status(*queryStatus);
+            job.mutable_query_meta()->set_status(*queryStatus);
         }
 
-        if (request->Issues) {
-            NYql::IssuesToMessage(*request->Issues, query.mutable_issue());
-            NYql::IssuesToMessage(*request->Issues, job.mutable_issue());
+        if (issues) {
+            NYql::IssuesToMessage(*issues, query.mutable_issue());
+            NYql::IssuesToMessage(*issues, job.mutable_issue());
         }
 
-        if (request->TransientIssues) {
-            NYql::TIssues issues = *request->TransientIssues;
+        if (transientIssues) {
+            NYql::TIssues issues = *transientIssues;
             for (const auto& issue: *query.mutable_transient_issue()) {
                 issues.AddIssue(NYql::IssueFromMessage(issue));
             }
@@ -223,11 +285,16 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             );
         } else {
             // update pending small
-            writeQueryBuilder.AddTimestamp("now", request->ResignQuery ? TInstant::Zero() : TInstant::Now());
-            writeQueryBuilder.AddTimestamp("ttl", request->ResignQuery ? TInstant::Zero() : TInstant::Now() + taskLeaseTtl);
-            const TString updateResignQueryFlag = request->ResignQuery ? ", `" IS_RESIGN_QUERY_COLUMN_NAME "` = true" : "";
+            writeQueryBuilder.AddTimestamp("now", TInstant::Now());
+            writeQueryBuilder.AddTimestamp("ttl", TInstant::Now() + backoff);
+            writeQueryBuilder.AddTimestamp("retry_counter_update_time", retryCounterUpdatedAt);
+            writeQueryBuilder.AddDouble("retry_rate", retryRate);
+            writeQueryBuilder.AddUint64("retry_counter", retryCounter);
+            writeQueryBuilder.AddString("owner", owner);
             writeQueryBuilder.AddText(
-                "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl" + updateResignQueryFlag + "\n"
+                "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl,\n"
+                "`" RETRY_COUNTER_COLUMN_NAME "` = $retry_counter, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "` = $retry_counter_update_time, `" RETRY_RATE_COLUMN_NAME "` = $retry_rate,\n"
+                "`" OWNER_COLUMN_NAME "` = $owner\n"
                 "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
         }
@@ -291,45 +358,47 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
     );
 
     auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
-        TString selectedOwner;
+        TString owner;
         YandexQuery::Internal::QueryInternal internal;
 
         if (resultSets.size() != 2) {
-            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 2";
         }
 
         {
             TResultSetParser parser(resultSets[0]);
-            if (parser.TryNextRow()) {
-                if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
-                    ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for pending internal query. Please contact internal support";
-                }
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " QUERIES_TABLE_NAME " where " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\"" ;
+            }
+            if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "ERROR PARSING " QUERIES_TABLE_NAME "." INTERNAL_COLUMN_NAME " where " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\" and " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\"";
             }
         }
 
         {
             TResultSetParser parser(resultSets[1]);
-            if (parser.TryNextRow()) {
-                selectedOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
+            if (!parser.TryNextRow()) {
+                ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "NOT FOUND " PENDING_SMALL_TABLE_NAME " where " TENANT_COLUMN_NAME " = \"" << request->TenantName << "\" and " SCOPE_COLUMN_NAME " = \"" << request->Scope << "\" and " QUERY_ID_COLUMN_NAME " = \"" << request->QueryId << "\"" ;
+            }
+            owner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
+            if (owner != request->Owner) {
+                ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request->QueryId << "\" MISMATCHED: \"" << request->Owner << "\" (received) != \"" << owner << "\" (selected)";
             }
         }
+
         *response = internal.action();
 
-        if (selectedOwner != request->Owner) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "query with the specified Owner: \"" <<  request->Owner << "\" does not exist. Selected owner: \"" << selectedOwner << "\"";
-        }
-
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "SoftPingTask(write)");
-        writeQueryBuilder.AddTimestamp("now", request->ResignQuery ? TInstant::Zero() : TInstant::Now());
-        writeQueryBuilder.AddTimestamp("ttl", request->ResignQuery ? TInstant::Zero() : TInstant::Now() + taskLeaseTtl);
+        writeQueryBuilder.AddTimestamp("now", TInstant::Now());
+        writeQueryBuilder.AddTimestamp("ttl", TInstant::Now() + taskLeaseTtl);
         writeQueryBuilder.AddString("tenant", request->TenantName);
         writeQueryBuilder.AddString("scope", request->Scope);
         writeQueryBuilder.AddString("query_id", request->QueryId);
-        writeQueryBuilder.AddString("owner", request->Owner);
 
-        const TString updateResignQueryFlag = request->ResignQuery ? ", `" IS_RESIGN_QUERY_COLUMN_NAME "` = true" : "";
+        Cerr << "PingTask " << TInstant::Now() << " " << request->TenantName << " " << request->Scope << " " << request->QueryId << Endl;
+
         writeQueryBuilder.AddText(
-            "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl " + updateResignQueryFlag + "\n"
+            "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl\n"
             "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         );
 
@@ -371,7 +440,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     if (request->Status)
         Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(*request->Status);
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
-        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl) :
+        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl, Config.RetryPolicies) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config.TaskLeaseTtl);
     auto readQuery = std::get<0>(pingTaskParams); // Use std::get for win compiler
     auto readParams = std::get<1>(pingTaskParams);

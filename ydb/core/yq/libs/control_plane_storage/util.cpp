@@ -56,28 +56,38 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
         config.SetNumTasksProportion(4);
     }
 
-    if (!config.GetAnalyticsRetryCounterLimit()) {
-        config.SetAnalyticsRetryCounterLimit(20);
-    }
-
-    if (!config.GetStreamingRetryCounterLimit()) {
-        config.SetStreamingRetryCounterLimit(20);
-    }
-
-    if (!config.GetAnalyticsRetryCounterUpdateTime()) {
-        config.SetAnalyticsRetryCounterUpdateTime("1d");
-    }
-
-    if (!config.GetStreamingRetryCounterUpdateTime()) {
-        config.SetStreamingRetryCounterUpdateTime("1d");
-    }
-
     if (!config.GetAutomaticQueriesTtl()) {
         config.SetAutomaticQueriesTtl("1d");
     }
 
     if (!config.GetTaskLeaseTtl()) {
         config.SetTaskLeaseTtl("30s");
+    }
+
+    if (!config.HasTaskLeaseRetryPolicy()) {
+        auto& taskLeaseRetryPolicy = *config.MutableTaskLeaseRetryPolicy();
+        taskLeaseRetryPolicy.SetRetryCount(20);
+        taskLeaseRetryPolicy.SetRetryPeriod("1d");
+    }
+
+    if (!config.RetryPolicyMappingSize()) {
+        {
+            auto& policyMapping = *config.AddRetryPolicyMapping();
+            policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::UNAVAILABLE);
+            auto& policy = *policyMapping.MutablePolicy();
+            policy.SetRetryCount(20);
+            policy.SetRetryPeriod("1d");
+            // backoff is Zero()
+        }
+        {
+            auto& policyMapping = *config.AddRetryPolicyMapping();
+            policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::OVERLOADED);
+            policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+            auto& policy = *policyMapping.MutablePolicy();
+            policy.SetRetryCount(10);
+            policy.SetRetryPeriod("1m");
+            policy.SetBackoffPeriod("1s");
+        }
     }
 
     if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) {
@@ -104,6 +114,7 @@ bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskReq
         request->Plan ||
         request->StartedAt ||
         request->FinishedAt ||
+        request->ResignQuery ||
         !request->CreatedTopicConsumers.empty() ||
         !request->DqGraphs.empty() ||
         request->DqGraphIndex ||

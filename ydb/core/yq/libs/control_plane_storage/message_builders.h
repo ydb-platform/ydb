@@ -2,6 +2,7 @@
 
 #include <util/datetime/base.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/public/api/protos/yq.pb.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
@@ -1014,6 +1015,7 @@ class TPingTaskBuilder {
     TMaybe<TInstant> StartedAt;
     TMaybe<TInstant> FinishedAt;
     bool ResignQuery = false;
+    NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
     TVector<NYq::TEvControlPlaneStorage::TTopicConsumer> CreatedTopicConsumers;
     TVector<TString> DqGraphs;
     i32 DqGraphIndex = 0;
@@ -1121,9 +1123,15 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetResignQuery(bool resignQuery = true)
+    TPingTaskBuilder& SetResignQuery(bool resignQuery = true)	
+    {	
+        ResignQuery = resignQuery;	
+        return *this;
+    }
+
+    TPingTaskBuilder& SetStatusCode(NYql::NDqProto::StatusIds::StatusCode statusCode = NYql::NDqProto::StatusIds::UNSPECIFIED)
     {
-        ResignQuery = resignQuery;
+        StatusCode = statusCode;
         return *this;
     }
 
@@ -1158,6 +1166,7 @@ public:
         request->StartedAt = StartedAt;
         request->FinishedAt = FinishedAt;
         request->ResignQuery = ResignQuery;
+        request->StatusCode = StatusCode;
         request->CreatedTopicConsumers = CreatedTopicConsumers;
         request->DqGraphs = DqGraphs;
         request->DqGraphIndex = DqGraphIndex;

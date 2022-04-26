@@ -403,7 +403,7 @@ private:
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Sprintf("TMemoryLimitExceededException: %s", err.c_str()));
         TIssue issue(err);
         SetIssueCode(TIssuesIds::KIKIMR_PRECONDITION_FAILED, issue);
-        return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TVector<TIssue>{issue});
+        return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::OVERLOADED, TVector<TIssue>{issue});
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const TString& message) {

@@ -12,6 +12,7 @@ target_link_libraries(libs-config-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-folder_service-proto
+  dq-actors-protos
   providers-common-proto
   providers-s3-proto
   contrib-libs-protobuf

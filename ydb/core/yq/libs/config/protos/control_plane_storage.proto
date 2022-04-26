@@ -6,6 +6,8 @@ option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/yq/libs/config/protos/storage.proto";
 
+import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
+
 ////////////////////////////////////////////////////////////
 
 message TMapItem {
@@ -17,6 +19,22 @@ message TQueryMapping {
     repeated TMapItem CloudIdToTenantName  = 1;
     repeated TMapItem ScopeToTenantName    = 2;
     repeated string CommonTenantName       = 3;
+}
+
+// 1. StatusCode(s) are handled with defined policis, non-unique StatusCode(s) accross all polices is UB
+// 2. RetryCount and RetryPeriodMs are used to calculate actual RetryRate, if it exceeds RetryCount, query is aborted
+// 3. BackoffPeriodMs is factor of RetryRate to delay query execution before next retry
+// 4. There are no default retry policy, all unhandled statuses are fatal
+
+message TRetryPolicy {
+    uint64 RetryCount = 1;
+    string RetryPeriod = 2;
+    string BackoffPeriod = 3;
+}
+
+message TRetryPolicyMapping {
+    repeated NYql.NDqProto.StatusIds.StatusCode StatusCode = 1;
+    TRetryPolicy Policy = 2;
 }
 
 message TControlPlaneStorageConfig {
@@ -35,14 +53,16 @@ message TControlPlaneStorageConfig {
     bool UseInMemory = 13;
     uint64 TasksBatchSize = 14;
     uint64 NumTasksProportion  = 15;
-    uint64 AnalyticsRetryCounterLimit = 16;
-    uint64 StreamingRetryCounterLimit = 17;
-    string AnalyticsRetryCounterUpdateTime = 18;
-    string StreamingRetryCounterUpdateTime = 19;
+    uint64 AnalyticsRetryCounterLimit = 16;      // DEPRECATED by RetryPolicy::RetryCount
+    uint64 StreamingRetryCounterLimit = 17;      // DEPRECATED by RetryPolicy::RetryCount
+    string AnalyticsRetryCounterUpdateTime = 18; // DEPRECATED by RetryPolicy::RetryPeriodMs
+    string StreamingRetryCounterUpdateTime = 19; // DEPRECATED by RetryPolicy::RetryPeriodMs
     string AutomaticQueriesTtl = 20;
     string TaskLeaseTtl = 21;
+    TRetryPolicy TaskLeaseRetryPolicy = 27;
     repeated string AvailableConnection = 22;
     repeated string AvailableBinding = 23;
     string ResultSetsTtl = 24;
     TQueryMapping Mapping = 25;
+    repeated TRetryPolicyMapping RetryPolicyMapping = 26;
 }

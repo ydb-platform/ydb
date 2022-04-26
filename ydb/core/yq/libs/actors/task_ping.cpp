@@ -154,6 +154,7 @@ private:
             event->FinishedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.finished_at()));
         }
         event->ResignQuery = req.resign_query();
+        event->StatusCode = req.status_code();
 
         event->CreatedTopicConsumers.reserve(req.created_topic_consumers_size());
         for (const auto& topicConsumerProto : req.created_topic_consumers()) {

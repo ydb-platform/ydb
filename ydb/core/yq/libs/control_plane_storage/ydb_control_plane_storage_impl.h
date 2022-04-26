@@ -217,17 +217,30 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         }
     };
 
+public:
+    struct TRetryPolicyItem {
+        ui64 RetryCount = 0;
+        TDuration RetryPeriod = TDuration::Zero();
+        TDuration BackoffPeriod = TDuration::Zero();
+
+        TRetryPolicyItem() = default;
+        TRetryPolicyItem(ui64 retryCount, const TDuration& retryPeriod, const TDuration& backoffPeriod)
+        : RetryCount(retryCount), RetryPeriod(retryPeriod), BackoffPeriod(backoffPeriod)
+        { }
+    };
+
+private:
     struct TConfig {
         NConfig::TControlPlaneStorageConfig Proto;
         TString IdsPrefix;
         TDuration IdempotencyKeyTtl;
         TDuration AutomaticQueriesTtl;
         TDuration ResultSetsTtl;
-        TDuration AnalyticsRetryCounterUpdateTime;
-        TDuration StreamingRetryCounterUpdateTime;
         TDuration TaskLeaseTtl;
         TSet<YandexQuery::ConnectionSetting::ConnectionCase> AvailableConnections;
         TSet<YandexQuery::BindingSetting::BindingCase> AvailableBindings;
+        THashMap<ui64, TRetryPolicyItem> RetryPolicies;
+        TRetryPolicyItem TaskLeaseRetryPolicy;
 
         TConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common);
     };

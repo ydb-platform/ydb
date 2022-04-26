@@ -117,10 +117,11 @@ private:
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG)
             << SelfId()
-            << " TaskId: " << taskId
-            << " State: " << ev->Get()->Record.GetState()
-            << " PingCookie: " << ev->Cookie;
-
+            << " EvState TaskId: " << taskId
+            << " State: " << state.GetState()
+            << " PingCookie: " << ev->Cookie
+            << " StatusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(state.GetStatusCode());
+ 
         if (state.HasStats() && state.GetStats().GetTasks().size()) {
             YQL_LOG(DEBUG) << " " << SelfId() << " AddStats " << taskId;
             AddStats(state.GetStats());
@@ -129,7 +130,7 @@ private:
             }
         }
 
-        switch (ev->Get()->Record.GetState()) {
+        switch (state.GetState()) {
             case NDqProto::COMPUTE_STATE_UNKNOWN: {
                 // TODO: use issues
                 TString message = "unexpected state from " + ToString(computeActor) + ", task: " + ToString(taskId);
@@ -491,7 +492,7 @@ private:
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool retriable, bool needFallback) {
         YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << "OnError " << issues.ToOneLineString();
+        YQL_LOG(DEBUG) << "OnError " << issues.ToOneLineString() << " " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode);
         if (Finished) {
             YQL_LOG_CTX_SCOPE(TraceId);
             YQL_LOG(WARN) << "OnError IGNORED when Finished, Retriable=" << retriable << ", NeedFallback=" << needFallback;

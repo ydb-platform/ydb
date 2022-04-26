@@ -67,8 +67,6 @@ TYdbControlPlaneStorageActor::TConfig::TConfig(const NConfig::TControlPlaneStora
     , IdempotencyKeyTtl(GetDuration(Proto.GetIdempotencyKeysTtl(), TDuration::Minutes(10)))
     , AutomaticQueriesTtl(GetDuration(Proto.GetAutomaticQueriesTtl(), TDuration::Days(1)))
     , ResultSetsTtl(GetDuration(Proto.GetResultSetsTtl(), TDuration::Days(1)))
-    , AnalyticsRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
-    , StreamingRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
     , TaskLeaseTtl(GetDuration(Proto.GetTaskLeaseTtl(), TDuration::Seconds(30)))
 {
     for (const auto& availableConnection: Proto.GetAvailableConnection()) {
@@ -77,6 +75,24 @@ TYdbControlPlaneStorageActor::TConfig::TConfig(const NConfig::TControlPlaneStora
 
     for (const auto& availableBinding: Proto.GetAvailableBinding()) {
         AvailableBindings.insert(GetBindingType(availableBinding));
+    }
+
+    for (const auto& mapping: Proto.GetRetryPolicyMapping()) {
+        auto& retryPolicy = mapping.GetPolicy();
+        auto retryCount = retryPolicy.GetRetryCount();
+        auto retryPeriod = GetDuration(retryPolicy.GetRetryPeriod(), TDuration::Hours(1));
+        auto backoffPeriod = GetDuration(retryPolicy.GetBackoffPeriod(), TDuration::Zero());
+        for (const auto statusCode: mapping.GetStatusCode()) {
+            RetryPolicies.emplace(statusCode, TRetryPolicyItem(retryCount, retryPeriod, backoffPeriod));
+        }
+    }
+
+    if (Proto.HasTaskLeaseRetryPolicy()) {
+        TaskLeaseRetryPolicy.RetryCount = Proto.GetTaskLeaseRetryPolicy().GetRetryCount();
+        TaskLeaseRetryPolicy.RetryPeriod = GetDuration(Proto.GetTaskLeaseRetryPolicy().GetRetryPeriod(), TDuration::Days(1));
+    } else {
+        TaskLeaseRetryPolicy.RetryCount = 20;
+        TaskLeaseRetryPolicy.RetryPeriod = TDuration::Days(1);
     }
 }
 

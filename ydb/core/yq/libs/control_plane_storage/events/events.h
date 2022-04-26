@@ -1591,6 +1591,7 @@ struct TEvControlPlaneStorage {
         TMaybe<TInstant> StartedAt;
         TMaybe<TInstant> FinishedAt;
         bool ResignQuery = false;
+        ui64 StatusCode = 0;
         TVector<TTopicConsumer> CreatedTopicConsumers;
         TVector<TString> DqGraphs;
         i32 DqGraphIndex = 0;

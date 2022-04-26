@@ -94,7 +94,8 @@ private:
 
     bool AddToWriteRequest(
         NKikimrClient::TPersQueuePartitionRequest& request,
-        NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message
+        NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
+        bool& incorrectRequest
     );
     void ProcessError(const TActorContext& ctx, const TString& msg);
     void ProcessError(const TActorContext& ctx, const TString& msg, const NKikimrClient::TResponse& response);

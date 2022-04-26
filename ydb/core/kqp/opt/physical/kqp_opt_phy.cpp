@@ -60,6 +60,7 @@ public:
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(DropUnordered));
         AddHandler(0, &TDqStage::Match, HNDL(FloatUpStage));
         AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
+        AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
         AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
         AddHandler(0, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<false>));
         AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
@@ -78,6 +79,7 @@ public:
         AddHandler(1, &TDqJoin::Match, HNDL(BuildJoin<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
+        AddHandler(1, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
         AddHandler(1, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
         AddHandler(1, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<true>));
         AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));

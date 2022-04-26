@@ -567,6 +567,16 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
                 return false;
             }
 
+            if (expr.Maybe<TCoHead>().Input().Maybe<TDqCnUnionAll>()) {
+                if (connection && (connection != expr.Cast<TCoHead>().Input().Ptr())) {
+                    dependsOnManyConnections = true;
+                    return false;
+                }
+
+                connection = expr.Cast<TCoHead>().Input().Ptr();
+                return false;
+            }
+
             if (expr.Maybe<TDqPhyPrecompute>().IsValid()) {
                 auto precompute = expr.Cast<TDqPhyPrecompute>();
                 auto maybeConnection = precompute.Connection().Maybe<TDqCnValue>();
@@ -1560,17 +1570,18 @@ TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContex
 TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoToOptional>()) {
+    TMaybeNode<TDqCnUnionAll> maybeUnionAll;
+    if (const auto maybeToOptional = node.Maybe<TCoToOptional>()) {
+        maybeUnionAll = maybeToOptional.Cast().List().Maybe<TDqCnUnionAll>();
+    } else if (const auto maybeHead = node.Maybe<TCoHead>()) {
+        maybeUnionAll = maybeHead.Cast().Input().Maybe<TDqCnUnionAll>();
+    }
+
+    if (!maybeUnionAll) {
         return node;
     }
 
-    auto toOptional = node.Cast<TCoToOptional>();
-
-    if (!toOptional.List().Maybe<TDqCnUnionAll>()) {
-        return node;
-    }
-
-    auto unionAll = toOptional.List().Cast<TDqCnUnionAll>();
+    const auto unionAll = maybeUnionAll.Cast();
     if (!IsSingleConsumerConnection(unionAll, parentsMap, allowStageMultiUsage)) {
         return node;
     }
@@ -1606,7 +1617,7 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
                 .Build()
             .Build()
         .State<TCoNothing>()
-            .OptionalType(ExpandType(node.Pos(), *toOptional.Ptr()->GetTypeAnn(), ctx))
+            .OptionalType(ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx))
             .Build()
         .SwitchHandler()
             .Args({"item", "state"})

@@ -54,7 +54,7 @@ std::basic_ostream<CharT, TraitsT>& operator<<(std::basic_ostream<CharT, TraitsT
 
 #ifndef BOOST_STACKTRACE_LINK
 #   if defined(BOOST_STACKTRACE_USE_NOOP)
-#       include <boost/stacktrace/detail/frame_noop.ipp>
+#       error #include <boost/stacktrace/detail/frame_noop.ipp>
 #   elif defined(BOOST_MSVC) || defined(BOOST_STACKTRACE_USE_WINDBG) || defined(BOOST_STACKTRACE_USE_WINDBG_CACHED)
 #       include <boost/stacktrace/detail/frame_msvc.ipp>
 #   else

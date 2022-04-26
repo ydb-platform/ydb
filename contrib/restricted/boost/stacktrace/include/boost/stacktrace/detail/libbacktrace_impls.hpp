@@ -74,17 +74,16 @@ BOOST_SYMBOL_VISIBLE inline ::backtrace_state* construct_state(const program_loc
     // TODO: The most obvious solution:
     //
     static ::backtrace_state* state = ::backtrace_create_state(
-       prog_location.name(),
-       1, // allow safe concurrent usage of the same state
-       boost::stacktrace::detail::libbacktrace_error_callback,
-       0 // pointer to data that will be passed to callback
+        prog_location.name(),
+        1, // allow safe concurrent usage of the same state
+        boost::stacktrace::detail::libbacktrace_error_callback,
+        0 // pointer to data that will be passed to callback
     );
     //
     //
     // Unfortunately, that solution segfaults when `construct_state()` function is in .so file
     // and multiple threads concurrently work with state.
 
-// Code from TODO works fine in Arcadia (with statically linked libbacktrace) -- bugaevskiy@
 #if 0
 #ifndef BOOST_HAS_THREADS
     static
@@ -128,7 +127,7 @@ struct to_string_using_backtrace {
                 boost::stacktrace::detail::libbacktrace_full_callback,
                 boost::stacktrace::detail::libbacktrace_error_callback,
                 &data
-            )
+            ) 
             ||
             ::backtrace_syminfo(
                 state,

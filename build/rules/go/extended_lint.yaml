@@ -8,6 +8,8 @@ scopes:
     - importcheck
   a.yandex-team.ru/market/combinator:
     - importcheck
+  a.yandex-team.ru/noc:
+    - importcheck
   a.yandex-team.ru/noc/nocauth:
     - importcheck
     - exhaustivestruct

@@ -1452,32 +1452,6 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
         preprocessLambda =
             AddSessionParamsMemberLambda(node->Pos(), sessionStartMemberName, "", keyExtractor, sessionKey, sessionInit, sessionUpdate, ctx);
 
-        if (!IsDataOrOptionalOfData(sessionKeyType)) {
-            preprocessLambda = ctx.Builder(node->Pos())
-                .Lambda()
-                    .Param("stream")
-                    .Callable("OrderedMap")
-                        .Apply(0, preprocessLambda)
-                            .With(0, "stream")
-                        .Seal()
-                        .Lambda(1)
-                            .Param("item")
-                            .Callable("ReplaceMember")
-                                .Arg(0, "item")
-                                .Atom(1, sessionStartMemberName)
-                                .Callable(2, "StablePickle")
-                                    .Callable(0, "Member")
-                                        .Arg(0, "item")
-                                        .Atom(1, sessionStartMemberName)
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-        }
-
         condenseSwitch = ctx.Builder(node->Pos())
             .Lambda()
                 .Param("item")

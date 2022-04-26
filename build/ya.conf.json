@@ -531,6 +531,9 @@
         },
         "vh3": {
             "description": "Run VH3 CLI"
+        },
+        "marketsre": {
+            "description": "Run Market SRE Cli"
         }
     },
     "toolchain": {
@@ -765,6 +768,41 @@
                 {
                     "host": {
                         "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "marketsre": {
+            "tools": {
+                "marketsre": {
+                    "bottle": "marketsre",
+                    "executable": "marketsre"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN",
+                        "arch": "arm64"
                     },
                     "default": true
                 },
@@ -8365,6 +8403,17 @@
             "executable": {
                 "vh3": [
                     "vh3"
+                ]
+            }
+        },
+        "marketsre": {
+            "formula": {
+                "sandbox_id": 1290085131,
+                "match": "marketsre"
+            },
+            "executable": {
+                "marketsre": [
+                    "marketsre"
                 ]
             }
         },

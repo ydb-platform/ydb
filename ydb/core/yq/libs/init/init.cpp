@@ -20,7 +20,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
-#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_transform.h>
+#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>

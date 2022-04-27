@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 #include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h>
-#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_transform.h>
+#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 

@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
-#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_transform.h>
+#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 

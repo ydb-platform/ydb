@@ -36,6 +36,7 @@ target_link_libraries(yq-libs-init PUBLIC
   yql-utils-actor_log
   dq-actors-compute
   yql-dq-comp_nodes
+  yql-dq-transform
   providers-clickhouse-actors
   providers-common-comp_nodes
   providers-common-metrics

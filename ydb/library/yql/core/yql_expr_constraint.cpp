@@ -3113,19 +3113,23 @@ private:
         if (const auto it = Types.ExpectedConstraints.find(input.UniqueId()); it != Types.ExpectedConstraints.cend()) {
             for (const TConstraintNode* expectedConstr: it->second) {
                 if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) {
-                    const auto newConstr = input.GetConstraint(expectedConstr->GetName());
-                    // Constraint Multi(0:{Empty},1:{Empty}, ..., N:{Empty}) can be reduced to Empty
-                    if (expectedConstr->GetName() == TMultiConstraintNode::Name()) {
-                        if (newConstr) {
+                    auto newConstr = input.GetConstraint(expectedConstr->GetName());
+                    if (!newConstr) {
+                        if (expectedConstr->GetName() == TMultiConstraintNode::Name()
+                            || expectedConstr->GetName() == TPassthroughConstraintNode::Name()) {
+                            // Constraint Multi(0:{Empty},1:{Empty}, ..., N:{Empty}) can be reduced to Empty
+                            // Constraint Passthrough can be reduced in empty containers
+                            newConstr = input.GetConstraint<TEmptyConstraintNode>();
+                        }
+                        YQL_ENSURE(newConstr, "Rewrite error, missing " << *expectedConstr << " constraint in node " << input.Content());
+                    } else {
+                        if (expectedConstr->GetName() == TMultiConstraintNode::Name()) {
                             YQL_ENSURE(static_cast<const TMultiConstraintNode*>(newConstr)->FilteredIncludes(*expectedConstr, Types.DisableConstraintCheck), "Rewrite error, unequal " << *newConstr
                                 << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
                         } else {
-                            YQL_ENSURE(input.GetConstraint<TEmptyConstraintNode>(), "Rewrite error, missing " << *expectedConstr << " constraint in node " << input.Content());
+                            YQL_ENSURE(newConstr->Includes(*expectedConstr), "Rewrite error, unequal " << *newConstr
+                                << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
                         }
-                    } else {
-                        YQL_ENSURE(newConstr, "Rewrite error, missing " << *expectedConstr << " constraint in node " << input.Content());
-                        YQL_ENSURE(newConstr->Includes(*expectedConstr), "Rewrite error, unequal " << *newConstr
-                            << " constraint in node " << input.Content() << ", previous was " << *expectedConstr);
                     }
                 }
             }

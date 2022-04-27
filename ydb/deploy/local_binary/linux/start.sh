@@ -8,6 +8,9 @@ if [[ $1 = "disk" ]]; then
     echo Data file ydb.data not found, creating ...  
     fallocate -l 64G ydb.data
     if [[ $? -ge 1 ]]; then
+      if [ ! -f ydb.data ]; then
+        rm ydb.data
+      fi
       echo Error creating data file
       exit
     fi

@@ -440,30 +440,6 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
         rightTableLabel, join.JoinType(), join.JoinKeys(), ctx);
 }
 
-TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 1, ctx)) {
-        return TStatus::Error;
-    }
-
-    node->SetTypeAnn(node->Child(TDqPrecompute::idx_Input)->GetTypeAnn());
-    return TStatus::Ok;
-}
-
-TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 1, ctx)) {
-        return TStatus::Error;
-    }
-
-    auto* cn = node->Child(TDqPhyPrecompute::idx_Connection);
-    if (!TDqConnection::Match(cn)) {
-        ctx.AddError(TIssue(ctx.GetPosition(cn->Pos()), TStringBuilder() << "Expected DqConnection, got " << cn->Content()));
-        return TStatus::Error;
-    }
-
-    node->SetTypeAnn(cn->GetTypeAnn());
-    return TStatus::Ok;
-}
-
 } // unnamed
 
 TStatus AnnotateDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -851,6 +827,30 @@ TStatus AnnotateTransformSettings(const TExprNode::TPtr& input, TExprContext& ct
     }
 
     input->SetTypeAnn(ctx.MakeType<TListExprType>(outputType));
+    return TStatus::Ok;
+}
+
+TStatus AnnotateDqPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(node->Child(TDqPrecompute::idx_Input)->GetTypeAnn());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateDqPhyPrecompute(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* cn = node->Child(TDqPhyPrecompute::idx_Connection);
+    if (!TDqConnection::Match(cn)) {
+        ctx.AddError(TIssue(ctx.GetPosition(cn->Pos()), TStringBuilder() << "Expected DqConnection, got " << cn->Content()));
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(cn->GetTypeAnn());
     return TStatus::Ok;
 }
 

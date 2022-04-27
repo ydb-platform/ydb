@@ -839,6 +839,7 @@ dsa_free(dsa_area *area, dsa_pointer dp)
 	superblock = dsa_get_address(area, span->start);
 	object = dsa_get_address(area, dp);
 	size_class = span->size_class;
+	Assert(size_class < lengthof(dsa_size_classes));
 	size = dsa_size_classes[size_class];
 
 	/*

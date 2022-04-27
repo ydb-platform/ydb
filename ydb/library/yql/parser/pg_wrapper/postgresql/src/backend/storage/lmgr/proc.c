@@ -1266,9 +1266,11 @@ ProcSleep(LOCALLOCK *locallock, LockMethod lockMethodTable)
 			timeouts[0].id = DEADLOCK_TIMEOUT;
 			timeouts[0].type = TMPARAM_AFTER;
 			timeouts[0].delay_ms = DeadlockTimeout;
+			timeouts[0].fin_time = 0;
 			timeouts[1].id = LOCK_TIMEOUT;
 			timeouts[1].type = TMPARAM_AFTER;
 			timeouts[1].delay_ms = LockTimeout;
+			timeouts[1].fin_time = 0;
 			enable_timeouts(timeouts, 2);
 		}
 		else

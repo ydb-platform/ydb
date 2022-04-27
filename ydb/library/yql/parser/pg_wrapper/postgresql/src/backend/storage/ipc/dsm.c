@@ -920,7 +920,7 @@ dsm_unpin_mapping(dsm_segment *seg)
 void
 dsm_pin_segment(dsm_segment *seg)
 {
-	void	   *handle;
+	void	   *handle = NULL;
 
 	/*
 	 * Bump reference count for this segment in shared memory. This will

@@ -332,14 +332,15 @@ heap_fill_tuple(TupleDesc tupleDesc,
 	for (i = 0; i < numberOfAttributes; i++)
 	{
 		Form_pg_attribute attr = TupleDescAttr(tupleDesc, i);
-
+		bool isNullAttribute = isnull ? isnull[i] : true;
+		Datum v = (isNullAttribute || !values) ? PointerGetDatum(NULL) : values[i];
 		fill_val(attr,
 				 bitP ? &bitP : NULL,
 				 &bitmask,
 				 &data,
 				 infomask,
-				 values ? values[i] : PointerGetDatum(NULL),
-				 isnull ? isnull[i] : true);
+				 v,
+				 isNullAttribute);
 	}
 
 	Assert((data - start) == data_size);

@@ -11,7 +11,7 @@ import "ydb/core/yq/libs/config/protos/control_plane_proxy.proto";
 import "ydb/core/yq/libs/config/protos/control_plane_storage.proto";
 import "ydb/core/yq/libs/config/protos/db_pool.proto";
 import "ydb/core/yq/libs/config/protos/gateways.proto";
-import "ydb/core/yq/libs/config/protos/health.proto";
+import "ydb/core/yq/libs/config/protos/health_config.proto";
 import "ydb/core/yq/libs/config/protos/nodes_manager.proto";
 import "ydb/core/yq/libs/config/protos/pending_fetcher.proto";
 import "ydb/core/yq/libs/config/protos/pinger.proto";

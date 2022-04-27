@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
-#include <ydb/core/yq/libs/config/protos/health.pb.h>
+#include <ydb/core/yq/libs/config/protos/health_config.pb.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 
 #include <library/cpp/actors/core/actor.h>

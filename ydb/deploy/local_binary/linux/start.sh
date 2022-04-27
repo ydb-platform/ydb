@@ -36,6 +36,7 @@ if [ $need_init -eq 1 ]; then
   `pwd`/ydbd/bin/ydbd -s grpc://localhost:2136 admin blobstorage config init --yaml-file config/$cfg > logs/init_storage.log 2>&1
   if [[ $? -ge 1 ]]; then
     echo Errors found when initializing storage, cancelling start script, check logs/init_storage.log
+    rm ydb.data
     exit
   fi
 fi

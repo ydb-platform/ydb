@@ -31,7 +31,7 @@ if [[ $? -eq 0 ]]; then
   exit
 fi
 
-if [ $need_init -eq 1 ] then
+if [ $need_init -eq 1 ]; then
   echo Initializing storage ...
   `pwd`/ydbd/bin/ydbd -s grpc://localhost:2136 admin blobstorage config init --yaml-file config/$cfg > logs/init_storage.log 2>&1
   if [[ $? -ge 1 ]]; then

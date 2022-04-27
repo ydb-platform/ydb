@@ -10,6 +10,28 @@
 
 namespace NYq {
 
+class TRetryPolicyItem {
+public:
+    TRetryPolicyItem() = default;
+    TRetryPolicyItem(ui64 retryCount, const TDuration& retryPeriod, const TDuration& backoffPeriod)
+    : RetryCount(retryCount), RetryPeriod(retryPeriod), BackoffPeriod(backoffPeriod)
+    { }
+    ui64 RetryCount = 0;
+    TDuration RetryPeriod = TDuration::Zero();
+    TDuration BackoffPeriod = TDuration::Zero();
+};
+
+class TRetryLimiter {
+public:
+    TRetryLimiter() = default;
+    TRetryLimiter(ui64 retryCount, const TInstant& retryCounterUpdatedAt, double retryRate);
+    void Assign(ui64 retryCount, const TInstant& retryCounterUpdatedAt, double retryRate);
+    bool UpdateOnRetry(const TInstant& lastSeenAt, const TRetryPolicyItem& policy, const TInstant now = Now());
+    ui64 RetryCount = 0;
+    TInstant RetryCounterUpdatedAt = TInstant::Zero();
+    double RetryRate = 0.0;
+};
+
 bool IsTerminalStatus(YandexQuery::QueryMeta::ComputeStatus status);
 
 TDuration GetDuration(const TString& value, const TDuration& defaultValue);

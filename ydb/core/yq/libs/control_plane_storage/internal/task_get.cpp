@@ -13,9 +13,7 @@ namespace {
 
 struct TTaskInternal {
     TEvControlPlaneStorage::TTask Task;
-    ui64 RetryCounter = 0;
-    TInstant RetryCounterUpdatedAt = TInstant::Zero();
-    double RetryRate = 0.0;
+    TRetryLimiter RetryLimiter;
     bool ShouldAbortTask = false;
     TString TablePathPrefix;
     TString Owner;
@@ -37,10 +35,10 @@ std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, con
     queryBuilder.AddString("owner", taskInternal.Owner);
     queryBuilder.AddTimestamp("now", nowTimestamp);
     queryBuilder.AddTimestamp("ttl", taskLeaseUntil);
-    queryBuilder.AddUint64("retry_counter", taskInternal.RetryCounter);
+    queryBuilder.AddUint64("retry_counter", taskInternal.RetryLimiter.RetryCount);
     queryBuilder.AddUint64("generation", task.Generation);
-    queryBuilder.AddTimestamp("retry_counter_update_time", taskInternal.RetryCounterUpdatedAt);
-    queryBuilder.AddDouble("retry_rate", taskInternal.RetryRate);
+    queryBuilder.AddTimestamp("retry_counter_update_time", taskInternal.RetryLimiter.RetryCounterUpdatedAt);
+    queryBuilder.AddDouble("retry_rate", taskInternal.RetryLimiter.RetryRate);
 
     // update queries
     queryBuilder.AddText(
@@ -197,38 +195,21 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             task.QueryId = *parser.ColumnParser(QUERY_ID_COLUMN_NAME).GetOptionalString();
             auto previousOwner = *parser.ColumnParser(OWNER_COLUMN_NAME).GetOptionalString();
 
-            taskInternal.RetryCounter = parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0);
-            taskInternal.RetryCounterUpdatedAt = parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
-            taskInternal.RetryRate = parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0);
+            taskInternal.RetryLimiter.Assign(
+                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0),
+                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
+                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
+            );
             auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
 
             if (previousOwner) { // task lease timeout case only, other cases are updated at ping time
-
-                CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryCounterUpdatedAt
+                CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                     << " LastSeenAt: " << lastSeenAt);
-
-                auto lastPeriod = lastSeenAt - taskInternal.RetryCounterUpdatedAt;
-                if (lastPeriod >= Config.TaskLeaseRetryPolicy.RetryPeriod) {
-                    taskInternal.RetryRate = 0.0;
-                } else {
-                    taskInternal.RetryRate += 1.0;
-                    auto rate = lastPeriod / Config.TaskLeaseRetryPolicy.RetryPeriod * Config.TaskLeaseRetryPolicy.RetryCount;
-                    if (taskInternal.RetryRate > rate) {
-                        taskInternal.RetryRate -= rate;
-                    } else {
-                        taskInternal.RetryRate = 0.0;
-                    }
-                }
-                taskInternal.RetryCounter += 1;
-                taskInternal.RetryCounterUpdatedAt = now;
-
-                if (taskInternal.RetryRate >= Config.TaskLeaseRetryPolicy.RetryCount) {
-                    taskInternal.ShouldAbortTask = true;
-                }
+                taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, Config.TaskLeaseRetryPolicy, now);
             }
 
-            CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryRate
-                << " RetryCounter: " << taskInternal.RetryCounter << " At: " << taskInternal.RetryCounterUpdatedAt
+            CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryLimiter.RetryRate
+                << " RetryCounter: " << taskInternal.RetryLimiter.RetryCount << " At: " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                 << (taskInternal.ShouldAbortTask ? " ABORTED" : ""));
         }
 

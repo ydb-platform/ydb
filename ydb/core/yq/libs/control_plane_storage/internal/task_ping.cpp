@@ -19,7 +19,7 @@ bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
-    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl, const THashMap<ui64, TYdbControlPlaneStorageActor::TRetryPolicyItem>& retryPolicies) {
+    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl, const THashMap<ui64, TRetryPolicyItem>& retryPolicies) {
 
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
     readQueryBuilder.AddString("tenant", request->TenantName);
@@ -74,6 +74,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             jobId = *parser.ColumnParser(JOB_ID_COLUMN_NAME).GetOptionalString();
         }
 
+        TRetryLimiter retryLimiter;
         {
             TResultSetParser parser(resultSets[2]);
             if (!parser.TryNextRow()) {
@@ -83,9 +84,11 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             if (owner != request->Owner) {
                 ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request->QueryId << "\" MISMATCHED: \"" << request->Owner << "\" (received) != \"" << owner << "\" (selected)";
             }
-            retryCounter = parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0);
-            retryCounterUpdatedAt = parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
-            retryRate = parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0);
+            retryLimiter.Assign(
+                parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0),
+                retryCounterUpdatedAt = parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
+                retryRate = parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
+            );
         }
 
         TMaybe<YandexQuery::QueryMeta::ComputeStatus> queryStatus = request->Status;
@@ -97,31 +100,16 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
         if (request->ResignQuery) {
 
-            TYdbControlPlaneStorageActor::TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
+            TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
             auto it = retryPolicies.find(request->StatusCode);
             if (it != retryPolicies.end()) {
                 policy = it->second;
             }
 
-            auto lastPeriod = Now() - retryCounterUpdatedAt;
-            if (lastPeriod >= policy.RetryPeriod) {
-                retryRate = 0.0;
-            } else {
-                retryRate += 1.0;
-                auto rate = lastPeriod / policy.RetryPeriod * policy.RetryCount;
-                if (retryRate > rate) {
-                    retryRate -= rate;
-                } else {
-                    retryRate = 0.0;
-                }
-            }
-
-            if (retryRate < policy.RetryCount) {
+            if (retryLimiter.UpdateOnRetry(Now(), policy)) {
                 queryStatus.Clear();
-                retryCounter += 1;
-                retryCounterUpdatedAt = Now();
                 // failing query is throttled for backoff period
-                backoff = policy.BackoffPeriod * retryRate;
+                backoff = policy.BackoffPeriod * retryLimiter.RetryRate;
                 owner = "";
             } else {
                 Cerr << "PING FAILURE for code " << request->StatusCode << Endl;
@@ -138,8 +126,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                     }
                 }
             }
-
-            Cerr << "PING " << retryCounter << " " << retryCounterUpdatedAt << " " << backoff << Endl;
+            Cerr << "PING " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff << Endl;
         }
 
         if (queryStatus) {

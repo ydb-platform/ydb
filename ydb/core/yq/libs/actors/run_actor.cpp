@@ -649,7 +649,6 @@ private:
             << ". Rows count: " << result.GetRowsCount());
 
         AddIssues(result.issues());
-        RetryNeeded |= result.GetDeprecatedRetriable();
 
         if (Finishing && !result.issues_size()) { // Race between abort and successful finishing. Override with success and provide results to user.
             FinalQueryStatus = YandexQuery::QueryMeta::COMPLETED;
@@ -989,7 +988,6 @@ private:
     void Finish(YandexQuery::QueryMeta::ComputeStatus status) {
         LOG_D("Is about to finish query with status " << YandexQuery::QueryMeta::ComputeStatus_Name(status));
         Finishing = true;
-        RetryNeeded = false;
         FinalQueryStatus = status;
         QueryStateUpdateRequest.set_status(FinalQueryStatus); // Can be changed later.
         QueryStateUpdateRequest.set_status_code(NYql::NDqProto::StatusIds::SUCCESS);
@@ -1296,7 +1294,6 @@ private:
     ::NYql::NCommon::TServiceCounters QueryCounters;
     const NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
     bool EnableCheckpointCoordinator = false;
-    bool RetryNeeded = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;
 
     const ui64 MaxTasksPerOperation = 100;

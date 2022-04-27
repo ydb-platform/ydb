@@ -10,6 +10,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -236,6 +237,7 @@ private:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
+            HFunc(TEvStateStorage::TEvListStateStorageResult, Handle);
             HFunc(TEvPrivate::TEvClusterInfo, Handle);
             HFunc(TEvPrivate::TEvLogAndSend, Handle);
             FFunc(TEvPrivate::EvUpdateClusterInfo, EnqueueRequest);
@@ -285,6 +287,7 @@ private:
                  const TActorContext &ctx) override;
     void ProcessInitQueue(const TActorContext &ctx);
 
+    void RequestStateStorageConfig(const TActorContext &ctx);
     void SubscribeForConfig(const TActorContext &ctx);
     void AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const;
     bool CheckPermissionRequest(const NKikimrCms::TPermissionRequest &request,
@@ -330,6 +333,10 @@ private:
                         const TVDiskInfo &vdisk,
                         TDuration duration,
                         TErrorInfo &error) const;
+    bool CheckActionShutdownStateStorage(const NKikimrCms::TAction &action,
+                       const TActionOptions &options,
+                       const TNodeInfo &node, 
+                       TErrorInfo& error) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
                            const TString &owner, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
@@ -383,6 +390,7 @@ private:
 
     void OnBSCPipeDestroyed(const TActorContext &ctx);
 
+    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateClusterInfo::TPtr &ev, const TActorContext &ctx);
@@ -425,6 +433,11 @@ private:
     ui64 ConfigSubscriptionId;
     TSchedulerCookieHolder WalleCleanupTimerCookieHolder;
     TSchedulerCookieHolder LogCleanupTimerCookieHolder;
+
+    // State Storage
+    TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
+    THashMap<ui32, ui32> NodeToRing;
+    THashSet<ui32> StateStorageNodes;
 
 public:
     TCms(const TActorId &tablet, TTabletStorageInfo *info)

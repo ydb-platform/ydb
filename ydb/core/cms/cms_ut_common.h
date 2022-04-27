@@ -3,6 +3,7 @@
 #include "ut_helpers.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -65,6 +66,30 @@ public:
     void Handle(TEvWhiteboard::TEvSystemStateRequest::TPtr &ev, const TActorContext &ctx);
 };
 
+struct TTestEnvOpts {
+    ui32 NodeCount;
+    ui32 VDisks;
+
+    ui32 NToSelect;
+    ui32 NRings;
+    ui32 RingSize;
+    TNodeTenantsMap Tenants;
+
+    TTestEnvOpts() = default;
+
+    TTestEnvOpts(ui32 nodeCount, 
+                ui32 vdisks = 1,
+                const TNodeTenantsMap &tenants = TNodeTenantsMap())
+            : NodeCount(nodeCount)
+            , VDisks(vdisks)
+            , NToSelect(1)
+            , NRings(1)
+            , RingSize(3)
+            , Tenants(tenants) 
+    {
+    }
+};
+
 class TCmsTestEnv : public TTestBasicRuntime {
 public:
     TCmsTestEnv(ui32 nodeCount,
@@ -72,6 +97,7 @@ public:
                 const TNodeTenantsMap &tenants = TNodeTenantsMap());
     TCmsTestEnv(ui32 nodeCount,
                 const TNodeTenantsMap &tenants);
+    TCmsTestEnv(const TTestEnvOpts &options);
 
     TActorId GetSender() { return Sender; }
 
@@ -89,6 +115,8 @@ public:
                    ui32 tenantRatioLimit,
                    ui32 clusterLimit,
                    ui32 clusterRatioLimit);
+    
+    TIntrusiveConstPtr<NKikimr::TStateStorageInfo> GetStateStorageInfo();
 
     NKikimrCms::TClusterState
     RequestState(const NKikimrCms::TClusterStateRequest &request = {},
@@ -164,6 +192,10 @@ public:
                                       NKikimrCms::MODE_MAX_AVAILABILITY,
                                       code, actions...);
     }
+
+    NKikimrCms::TPermissionResponse
+    CheckPermissionRequest(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> req,
+                           NKikimrCms::TStatus::ECode code);
 
     NKikimrCms::TManagePermissionResponse
     CheckManagePermissionRequest(const TString &user,
@@ -335,9 +367,6 @@ public:
 private:
     void SetupLogging();
 
-    NKikimrCms::TPermissionResponse
-    CheckPermissionRequest(TAutoPtr<NCms::TEvCms::TEvPermissionRequest> req,
-                           NKikimrCms::TStatus::ECode code);
     NKikimrCms::TManagePermissionResponse
     CheckManagePermissionRequest(TAutoPtr<NCms::TEvCms::TEvManagePermissionRequest> req,
                                  NKikimrCms::TStatus::ECode code);

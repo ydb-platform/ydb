@@ -1059,6 +1059,160 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckPermissionRequest("user", false, true, false, true, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
     }
+
+    Y_UNIT_TEST(StateStorageTwoRings)
+    {   
+        TTestEnvOpts options;
+        options.NodeCount = 5;
+        options.VDisks = 0;
+        options.NRings = 2;
+        options.RingSize = 2;
+        options.NToSelect = 2;
+    
+        TCmsTestEnv env(options);
+        
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageNodesFromOneRing)
+    {   
+        TTestEnvOpts options;
+        options.NodeCount = 5;
+        options.VDisks = 0;
+        options.NRings = 2;
+        options.RingSize = 2;
+        options.NToSelect = 2;
+    
+        TCmsTestEnv env(options);
+
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageAvailabilityMode)
+    {   
+        TTestEnvOpts options;
+        options.NodeCount = 5;
+        options.VDisks = 0;
+        options.NRings = 2;
+        options.RingSize = 2;
+        options.NToSelect = 2;
+    
+        TCmsTestEnv env(options);
+        
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageTwoBrokenRings)
+    {   
+        TTestEnvOpts options;
+        options.NodeCount = 7;
+        options.VDisks = 0;
+        options.NRings = 3;
+        options.RingSize = 2;
+        options.NToSelect = 2;
+    
+        TCmsTestEnv env(options);
+
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
+        TFakeNodeWhiteboardService::Info[env.GetNodeId(2)].Connected = false;
+
+        env.RestartCms();
+
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(StateStorageRollingRestart) 
+    {
+        TTestEnvOpts options;
+        options.NodeCount = 20;
+        options.VDisks = 0;
+        options.NRings = 6;
+        options.RingSize = 3;
+        options.NToSelect = 5;
+    
+        TCmsTestEnv env(options);
+
+        TIntrusiveConstPtr<TStateStorageInfo> info = env.GetStateStorageInfo();
+
+        THashMap<ui32, ui32> NodeToRing;
+        THashSet<ui32> StateStorageNodes;
+
+        for (ui32 ring = 0; ring < info->Rings.size(); ++ring) {
+            for (auto& replica : info->Rings[ring].Replicas) {
+                ui32 nodeId = replica.NodeId();
+
+                NodeToRing[nodeId] = ring;
+                StateStorageNodes.insert(nodeId);
+            }
+        }
+        
+        THashSet<TString> restarted;
+
+        while(restarted.size() < env.GetNodeCount()) {
+
+            TAutoPtr<NCms::TEvCms::TEvPermissionRequest> event = new NCms::TEvCms::TEvPermissionRequest;
+            event->Record.SetUser("user");
+            event->Record.SetPartialPermissionAllowed(true);
+            event->Record.SetDryRun(false);
+            event->Record.SetSchedule(false);
+
+            for (ui32 i = 0; i < env.GetNodeCount(); ++i) {
+                if (!restarted.contains(TStringBuilder() << env.GetNodeId(i))) {
+                    AddActions(event, MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(i), 0, "storage"));
+                }
+            }
+
+            NKikimrCms::TPermissionResponse res;
+
+            // In the last request comes the permission 
+            // for all nodes of the same ring
+            if (env.GetNodeCount() - restarted.size() == options.RingSize) {
+                res = env.CheckPermissionRequest(event, TStatus::ALLOW);
+            } else {
+                res = env.CheckPermissionRequest(event, TStatus::ALLOW_PARTIAL);
+            }
+            
+            ui32 permRing = env.GetNodeCount() + 1;
+            for (auto& perm : res.GetPermissions()) {
+                auto &action = perm.GetAction();
+                restarted.insert(action.GetHost());
+                env.CheckDonePermission("user", perm.GetId());
+
+                auto nodeId = std::stoi(action.GetHost());
+                if (!StateStorageNodes.contains(nodeId)) {
+                    continue;
+                }
+
+                // Check that all state storages in permissions 
+                // from the same ring
+                ui32 curRing = NodeToRing.at(nodeId);
+                if (permRing >= options.NRings) { // we have not met a state storage yet
+                    permRing = curRing;
+                }
+
+                UNIT_ASSERT_VALUES_EQUAL(permRing, curRing);
+            }
+        }
+    }
 }
 
 } // NCmsTest

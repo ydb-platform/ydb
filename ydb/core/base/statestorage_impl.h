@@ -165,6 +165,17 @@ struct TEvStateStorage::TEvListSchemeBoardResult : public TEventLocal<TEvListSch
     {}
 };
 
+struct TEvStateStorage::TEvListStateStorage : public TEventLocal<TEvListStateStorage, EvListStateStorage> {
+};
+
+struct TEvStateStorage::TEvListStateStorageResult : public TEventLocal<TEvListStateStorageResult, EvListStateStorageResult> {
+    TIntrusiveConstPtr<TStateStorageInfo> Info;
+
+    TEvListStateStorageResult(const TIntrusiveConstPtr<TStateStorageInfo> &info)
+        : Info(info)
+    {}
+};
+
 struct TEvStateStorage::TEvReplicaLookup : public TEventPB<TEvStateStorage::TEvReplicaLookup, NKikimrStateStorage::TEvLookup, TEvStateStorage::EvReplicaLookup>{
     struct TActualityCounter : public TRefCounted<TActualityCounter, TAtomicCounter> {};
     using TActualityCounterPtr = TIntrusivePtr<TActualityCounter>;

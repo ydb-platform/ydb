@@ -812,6 +812,15 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         Send(ev->Sender, new TEvStateStorage::TEvListSchemeBoardResult(SchemeBoardInfo), 0, ev->Cookie);
     }
 
+    void Handle(TEvStateStorage::TEvListStateStorage::TPtr &ev) {
+        if (!Info) {
+            Send(ev->Sender, new TEvStateStorage::TEvListStateStorageResult(nullptr), 0, ev->Cookie);
+            return;
+        }
+
+        Send(ev->Sender, new TEvStateStorage::TEvListStateStorageResult(Info), 0, ev->Cookie);
+    }
+
     void Handle(TEvStateStorage::TEvReplicaProbeSubscribe::TPtr &ev) {
         const auto *msg = ev->Get();
 
@@ -972,6 +981,7 @@ public:
             hFunc(TEvStateStorage::TEvResolveBoard, Handle);
             hFunc(TEvStateStorage::TEvResolveSchemeBoard, Handle);
             hFunc(TEvStateStorage::TEvListSchemeBoard, Handle);
+            hFunc(TEvStateStorage::TEvListStateStorage, Handle);
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeSubscribe, Handle);
             hFunc(TEvStateStorage::TEvReplicaProbeUnsubscribe, Handle);

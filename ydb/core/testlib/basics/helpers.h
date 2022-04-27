@@ -40,6 +40,8 @@ namespace NFake {
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            ui64 stateStorageGroup = 0, bool replicasOnFirstNode = false);
+    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, 
+                           ui32 nrings, ui32 ringSize, ui64 stateStorageGroup); 
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex);

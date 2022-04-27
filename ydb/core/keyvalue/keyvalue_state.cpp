@@ -698,30 +698,32 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     }
     THelpers::DbUpdateState(StoredState, db, ctx);
 
+
+    IsCollectEventSent = true;
     // corner case, if no CollectGarbage events were sent
     if (InitialCollectsSent == 0) {
         SendCutHistory(ctx);
         if (CollectOperation.Get()) {
             // finish collect operation from local base
-            IsCollectEventSent = true;
             StoreCollectComplete(ctx);
         } else {
             // initiate collection if trash was loaded from local base
+            IsCollectEventSent = false;
             PrepareCollectIfNeeded(ctx);
         }
     }
 }
 
 void TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
+    LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
         << " InitialCollectsSent# " << InitialCollectsSent << " Marker# KV50");
     if (--InitialCollectsSent == 0) {
         SendCutHistory(ctx);
         if (CollectOperation.Get()) {
             // finish collect operation from local base
-            IsCollectEventSent = true;
             StoreCollectComplete(ctx);
         } else {
+            IsCollectEventSent = false;
             // initiate collection if trash was loaded from local base
             PrepareCollectIfNeeded(ctx);
         }

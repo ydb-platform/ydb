@@ -6,9 +6,8 @@ fi
 if [[ $1 = "disk" ]]; then
   need_init=0
   if [ ! -f ydb.data ]; then
-    echo Data file ydb.data not found, creating ...  
+    echo Data file ydb.data not found, creating ...
     fallocate -l 64G ydb.data
-    need_init=1
     if [[ $? -ge 1 ]]; then
       if [ -f ydb.data ]; then
         rm ydb.data
@@ -16,6 +15,7 @@ if [[ $1 = "disk" ]]; then
       echo Error creating data file
       exit
     fi
+    need_init=1
   fi
   cfg=disk.yaml
 else

@@ -308,7 +308,7 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
         break;
     }
     default:
-        YQL_ENSURE(false, "unknown type " << type->GetKindAsStr());
+        YQL_ENSURE(false, "doesn't known how to convert type " << type->GetKindAsStr() << " to JSON");
     }
 }
 
@@ -339,6 +339,62 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
             items[i] = ReadJsonValue(array[i], tupleType->GetElementType(i), holderFactory);
         }
         return tuple;
+    }
+    case TType::EKind::Dict:
+    {
+        YQL_ENSURE(json.IsArray(), "Unexpected json type (expected array, but got " << jsonType << ")");
+        auto dictType = AS_TYPE(TDictType, type);
+        auto array = json.GetArray();
+        auto builder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
+        // is Set<>
+        if (dictType->GetPayloadType()->GetKind() == TType::EKind::Void) {
+            for (ui32 i = 0, e = array.size(); i < e; i++) {
+                auto value = ReadJsonValue(array[i], dictType->GetKeyType(), holderFactory);
+                builder->Add(std::move(value), NKikimr::NUdf::TUnboxedValuePod());
+            }
+        } else {
+            for (ui32 i = 0, e = array.size(); i < e; i++) {
+                auto tuple = array[i];
+                YQL_ENSURE(tuple.IsArray() && tuple.GetArray().size() == 2,
+                           "Unexpected json type (expected array with 2 elements, but got " << tuple.GetType() << ")");
+
+                auto key = ReadJsonValue(tuple[0], dictType->GetKeyType(), holderFactory);
+                auto value = ReadJsonValue(tuple[1], dictType->GetPayloadType(), holderFactory);
+                builder->Add(std::move(key), std::move(value));
+            }
+        }
+        return builder->Build();
+    }
+    case TType::EKind::Variant:
+    {
+        YQL_ENSURE(json.IsArray(), "Unexpected json type (expected array, but got " << jsonType << ")");
+        auto array = json.GetArray();
+        YQL_ENSURE(array.size() == 2, "Expected array with 2 elements, but got array with " << array.size() << " elements");
+        auto underlyingType = AS_TYPE(TVariantType, type)->GetUnderlyingType();
+        NUdf::TUnboxedValuePod variant;
+        if (underlyingType->IsTuple()) {
+            auto indexType = json[0].GetType();
+            YQL_ENSURE(indexType == EJsonValueType::JSON_INTEGER || indexType == EJsonValueType::JSON_UINTEGER,
+                       "First element of variant has unexpected type(expected integer, but got " << indexType << ")");
+            ui64 index = indexType == EJsonValueType::JSON_INTEGER ? json[0].GetInteger() : json[0].GetUInteger();
+            auto tupleType = AS_TYPE(TTupleType, underlyingType);
+            YQL_ENSURE(index < tupleType->GetElementsCount(), "Member with index " << index << " didn't find in Variant by tuple");
+            auto value = ReadJsonValue(array[1], tupleType->GetElementType(index), holderFactory);
+            variant = holderFactory.CreateVariantHolder(value.Release(), index);
+        } else {
+            auto structType = AS_TYPE(TStructType, underlyingType);
+            YQL_ENSURE(json[0].IsString(), "First element of variant has unexpected type(expected string, but got " << json[0].GetType() << ")");
+            auto index = structType->FindMemberIndex(json[0].GetString());
+            YQL_ENSURE(index, "Member with name `" << json[0].GetString() << "` didn't find in Variant by struct");
+            auto value = ReadJsonValue(array[1], structType->GetMemberType(*index), holderFactory);
+            variant = holderFactory.CreateVariantHolder(value.Release(), *index);
+        }
+        return variant;
+    }
+    case TType::EKind::Tagged:
+    {
+        auto underlyingType = AS_TYPE(TTaggedType, type)->GetBaseType();
+        return ReadJsonValue(json, underlyingType, holderFactory);
     }
     case TType::EKind::List:
     {

@@ -298,6 +298,111 @@ Y_UNIT_TEST_SUITE(SerializeContainers) {
     }
 }
 
+Y_UNIT_TEST_SUITE(DeserializeTagged) {
+    Y_UNIT_TEST(Tagged) {
+        TTestContext ctx;
+        TStringStream json;
+        json << "55.751244";
+        auto type = TTaggedType::Create(TDataType::Create(NUdf::TDataType<float>::Id, ctx.TypeEnv), "TLatitude", ctx.TypeEnv);
+        auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);
+        UNIT_ASSERT_DOUBLES_EQUAL(value.Get<float>(), 55.751244, 1e-6);
+    }
+}
+
+Y_UNIT_TEST_SUITE(DeserializeVariant) {
+    Y_UNIT_TEST(VariantTuple) {
+        TTestContext ctx;
+        TStringStream json;
+        json << "[1, {\"A\":true,\"B\":800}]";
+
+        TStructMember members[] = {
+            TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)),
+            TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv))
+        };
+        TType* tupleTypes[] = {
+            TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv),
+            TStructType::Create(2, members, ctx.TypeEnv)
+        };
+        auto underlying = TTupleType::Create(2, tupleTypes, ctx.TypeEnv);
+        auto type = TVariantType::Create(underlying, ctx.TypeEnv);
+        auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);
+
+        UNIT_ASSERT_VALUES_EQUAL(value.GetVariantIndex(), 1);
+        auto structValue = value.GetVariantItem();
+        UNIT_ASSERT_VALUES_EQUAL(structValue.GetElement(0).Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(structValue.GetElement(1).Get<ui32>(), 800);
+    }
+
+    Y_UNIT_TEST(VariantStruct) {
+        TTestContext ctx;
+        TStringStream json;
+        json << "[\"B\", 800]";
+
+        TStructMember members[] = {
+            TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, ctx.TypeEnv)),
+            TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, ctx.TypeEnv))
+        };
+        auto underlying = TStructType::Create(2, members, ctx.TypeEnv);
+        auto type = TVariantType::Create(underlying, ctx.TypeEnv);
+        auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);
+
+        UNIT_ASSERT_VALUES_EQUAL(value.GetVariantIndex(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(value.GetVariantItem().Get<ui32>(), 800);
+    }
+}
+
+Y_UNIT_TEST_SUITE(DeserializeDict) {
+    Y_UNIT_TEST(Set) {
+        TTestContext ctx;
+        TStringStream json;
+        json << "[1,3,5,7,9]";
+
+        auto type = TDictType::Create(
+            TDataType::Create(NUdf::TDataType<i32>::Id, ctx.TypeEnv),
+            ctx.TypeEnv.GetTypeOfVoid(),
+            ctx.TypeEnv
+        );
+        auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);
+
+        UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 5);
+
+        std::vector<ui32> keys;
+        for (NUdf::TUnboxedValue it = value.GetKeysIterator(), key; it.Next(key);) {
+            keys.push_back(key.Get<ui32>());
+        }
+        std::sort(keys.begin(), keys.end());
+        UNIT_ASSERT_VALUES_EQUAL(keys.at(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(keys.at(4), 9);
+    }
+
+    Y_UNIT_TEST(DictOfUtf8) {
+        TTestContext ctx;
+        TStringStream json;
+        json << "[[\"key_1\",101], [\"key_2\",201]]";
+
+        auto type = TDictType::Create(
+            TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, ctx.TypeEnv),
+            TDataType::Create(NUdf::TDataType<i32>::Id, ctx.TypeEnv),
+            ctx.TypeEnv
+        );
+        auto value = ReadJsonStrValue(&json, type, ctx.HolderFactory);
+
+        UNIT_ASSERT_VALUES_EQUAL(value.GetDictLength(), 2);
+
+        for (NUdf::TUnboxedValue it = value.GetDictIterator(), k, v; it.NextPair(k, v);) {
+            auto key = TStringBuf(k.AsStringRef());
+            if (key == TStringBuf("key_1")) {
+                UNIT_ASSERT_VALUES_EQUAL(v.Get<ui32>(), 101);
+            } else if (key == TStringBuf("key_2")) {
+                UNIT_ASSERT_VALUES_EQUAL(v.Get<ui32>(), 201);
+            } else {
+                UNIT_FAIL("Unknown key");
+            }
+        }
+    }
+}
+
+
 Y_UNIT_TEST_SUITE(SerializeOptional) {
     Y_UNIT_TEST(JustOptional) {
         TTestContext ctx;

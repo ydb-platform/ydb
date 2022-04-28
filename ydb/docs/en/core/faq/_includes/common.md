@@ -67,17 +67,6 @@ To organize paginated output, we recommend selecting data sorted by primary key 
 
 For more information, see [Paginated output](../../best_practices/paging.md).
 
-#### How do I efficiently upload large amounts of data to {{ ydb-short-name }}? {#batch_upload}
-
-To increase upload speed for large amounts of data, follow the recommendations below:
-
-* When creating a table, explicitly specify the required number of partitions or their boundaries. This will help you effectively use system bandwidth as soon as you start uploading data by avoiding unnecessary re-partitioning of the table.
-* Don't insert data in separate transactions for each row. It's more efficient to insert multiple rows at once (batch inserts). This reduces the overhead on the transaction mechanism itself.
-* In addition to the previous step, within each transaction (batch), insert rows from the primary key-sorted set of data to minimize the number of partitions that the transaction affects.
-* Avoid writing data sequentially in ascending or descending order of the primary key value to evenly distribute the load across all table partitions.
-
-For more detail, see [Uploading large volumes of data](../../best_practices/batch_upload.md).
-
 #### How do I delete expired data? {#ttl}
 
 To effectively remove expired data, we recommend using [TTL](../../concepts/ttl.md).

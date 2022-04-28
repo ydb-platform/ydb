@@ -36,7 +36,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
-    auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, actorSystem = NActors::TActivationContext::ActorSystem()](const TVector<TResultSet>& resultSets) {
         TString jobId;
         YandexQuery::Query query;
         YandexQuery::Internal::QueryInternal internal;
@@ -102,7 +102,8 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
             TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
             auto it = retryPolicies.find(request->StatusCode);
-            if (it != retryPolicies.end()) {
+            auto policyFound = it != retryPolicies.end();
+            if (policyFound) {
                 policy = it->second;
             }
 
@@ -112,7 +113,6 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                 backoff = policy.BackoffPeriod * retryLimiter.RetryRate;
                 owner = "";
             } else {
-                Cerr << "PING FAILURE for code " << request->StatusCode << Endl;
                 // failure query should be processed instantly
                 queryStatus = YandexQuery::QueryMeta::FAILING;
                 backoff = TDuration::Zero();
@@ -126,7 +126,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                     }
                 }
             }
-            Cerr << "PING " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff << Endl;
+            CPS_LOG_AS_D(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE" : "") << request->StatusCode << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
         }
 
         if (queryStatus) {
@@ -382,8 +382,6 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         writeQueryBuilder.AddString("scope", request->Scope);
         writeQueryBuilder.AddString("query_id", request->QueryId);
 
-        Cerr << "PingTask " << TInstant::Now() << " " << request->TenantName << " " << request->Scope << " " << request->QueryId << Endl;
-
         writeQueryBuilder.AddText(
             "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl\n"
             "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
@@ -409,7 +407,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     const TString owner = request->Owner;
     const TInstant deadline = request->Deadline;
 
-    CPS_LOG_T("PingTaskRequest: " << scope << " " << queryId
+    CPS_LOG_T("PingTaskRequest: " << request->TenantName << " " << scope << " " << queryId
         << " " << owner << " " << deadline << " "
         << (request->Status ? YandexQuery::QueryMeta_ComputeStatus_Name(*request->Status) : "no status"));
 

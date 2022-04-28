@@ -82,6 +82,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/gopher.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/h2h3.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hash.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/headers.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hmac.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostasyn.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/hostip.c
@@ -145,6 +146,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/system_win32.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/telnet.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/tftp.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/timediff.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/timeval.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/transfer.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/url.c
@@ -164,6 +166,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vauth/vauth.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/version.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/version_win32.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/msh3.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/ngtcp2.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/quiche.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/vquic/vquic.c

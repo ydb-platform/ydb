@@ -39,6 +39,7 @@
 #include "transfer.h"
 #include "dynbuf.h"
 #include "h2h3.h"
+#include "headers.h"
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
@@ -561,7 +562,7 @@ static int push_promise(struct Curl_easy *data,
                         const nghttp2_push_promise *frame)
 {
   int rv; /* one of the CURL_PUSH_* defines */
-  H2BUGF(infof(data, "PUSH_PROMISE received, stream %u!",
+  H2BUGF(infof(data, "PUSH_PROMISE received, stream %u",
                frame->promised_stream_id));
   if(data->multi->push_cb) {
     struct HTTP *stream;
@@ -581,11 +582,11 @@ static int push_promise(struct Curl_easy *data,
     heads.data = data;
     heads.frame = frame;
     /* ask the application */
-    H2BUGF(infof(data, "Got PUSH_PROMISE, ask application!"));
+    H2BUGF(infof(data, "Got PUSH_PROMISE, ask application"));
 
     stream = data->req.p.http;
     if(!stream) {
-      failf(data, "Internal NULL stream!");
+      failf(data, "Internal NULL stream");
       (void)Curl_close(&newhandle);
       rv = CURL_PUSH_DENY;
       goto fail;
@@ -652,7 +653,7 @@ static int push_promise(struct Curl_easy *data,
     Curl_dyn_init(&newstream->trailer_recvbuf, DYN_H2_TRAILERS);
   }
   else {
-    H2BUGF(infof(data, "Got PUSH_PROMISE, ignore it!"));
+    H2BUGF(infof(data, "Got PUSH_PROMISE, ignore it"));
     rv = CURL_PUSH_DENY;
   }
   fail:
@@ -801,7 +802,7 @@ static int on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
     }
     break;
   default:
-    H2BUGF(infof(data_s, "Got frame type %x for stream %u!",
+    H2BUGF(infof(data_s, "Got frame type %x for stream %u",
                  frame->hd.type, stream_id));
     break;
   }
@@ -824,10 +825,14 @@ static int on_data_chunk_recv(nghttp2_session *session, uint8_t flags,
 
   /* get the stream from the hash based on Stream ID */
   data_s = nghttp2_session_get_stream_user_data(session, stream_id);
-  if(!data_s)
-    /* Receiving a Stream ID not in the hash should not happen, this is an
-       internal error more than anything else! */
-    return NGHTTP2_ERR_CALLBACK_FAILURE;
+  if(!data_s) {
+    /* Receiving a Stream ID not in the hash should not happen - unless
+       we have aborted a transfer artificially and there were more data
+       in the pipeline. Silently ignore. */
+    H2BUGF(fprintf(stderr, "Data for stream %u but it doesn't exist\n",
+                   stream_id));
+    return 0;
+  }
 
   stream = data_s->req.p.http;
   if(!stream)
@@ -908,15 +913,15 @@ static int on_stream_close(nghttp2_session *session, int32_t stream_id,
     /* remove the entry from the hash as the stream is now gone */
     rv = nghttp2_session_set_stream_user_data(session, stream_id, 0);
     if(rv) {
-      infof(data_s, "http/2: failed to clear user_data for stream %d!",
+      infof(data_s, "http/2: failed to clear user_data for stream %d",
             stream_id);
       DEBUGASSERT(0);
     }
     if(stream_id == httpc->pause_stream_id) {
-      H2BUGF(infof(data_s, "Stopped the pause stream!"));
+      H2BUGF(infof(data_s, "Stopped the pause stream"));
       httpc->pause_stream_id = 0;
     }
-    H2BUGF(infof(data_s, "Removed stream %u hash!", stream_id));
+    H2BUGF(infof(data_s, "Removed stream %u hash", stream_id));
     stream->stream_id = 0; /* cleared */
   }
   return 0;
@@ -1001,7 +1006,7 @@ static int on_header(nghttp2_session *session, const nghttp2_frame *frame,
 
   stream = data_s->req.p.http;
   if(!stream) {
-    failf(data_s, "Internal NULL stream!");
+    failf(data_s, "Internal NULL stream");
     return NGHTTP2_ERR_CALLBACK_FAILURE;
   }
 
@@ -1078,9 +1083,14 @@ static int on_header(nghttp2_session *session, const nghttp2_frame *frame,
     /* nghttp2 guarantees :status is received first and only once, and
        value is 3 digits status code, and decode_status_code always
        succeeds. */
+    char buffer[32];
     stream->status_code = decode_status_code(value, valuelen);
     DEBUGASSERT(stream->status_code != -1);
-
+    msnprintf(buffer, sizeof(buffer), H2H3_PSEUDO_STATUS ":%u\r",
+              stream->status_code);
+    result = Curl_headers_push(data_s, buffer, CURLH_PSEUDO);
+    if(result)
+      return NGHTTP2_ERR_CALLBACK_FAILURE;
     result = Curl_dyn_addn(&stream->header_recvbuf, STRCONST("HTTP/2 "));
     if(result)
       return NGHTTP2_ERR_CALLBACK_FAILURE;
@@ -1228,17 +1238,18 @@ void Curl_http2_done(struct Curl_easy *data, bool premature)
      !httpc->h2) /* not HTTP/2 ? */
     return;
 
-  if(premature) {
+  /* do this before the reset handling, as that might clear ->stream_id */
+  if(http->stream_id == httpc->pause_stream_id) {
+    H2BUGF(infof(data, "DONE the pause stream (%x)", http->stream_id));
+    httpc->pause_stream_id = 0;
+  }
+  if(premature || (!http->closed && http->stream_id)) {
     /* RST_STREAM */
     set_transfer(httpc, data); /* set the transfer */
+    H2BUGF(infof(data, "RST stream %x", http->stream_id));
     if(!nghttp2_submit_rst_stream(httpc->h2, NGHTTP2_FLAG_NONE,
                                   http->stream_id, NGHTTP2_STREAM_CLOSED))
       (void)nghttp2_session_send(httpc->h2);
-
-    if(http->stream_id == httpc->pause_stream_id) {
-      H2BUGF(infof(data, "stopped the pause stream!"));
-      httpc->pause_stream_id = 0;
-    }
   }
 
   if(data->state.drain)
@@ -1249,7 +1260,7 @@ void Curl_http2_done(struct Curl_easy *data, bool premature)
     int rv = nghttp2_session_set_stream_user_data(httpc->h2,
                                                   http->stream_id, 0);
     if(rv) {
-      infof(data, "http/2: failed to clear user_data for stream %d!",
+      infof(data, "http/2: failed to clear user_data for stream %d",
             http->stream_id);
       DEBUGASSERT(0);
     }
@@ -1274,7 +1285,7 @@ static CURLcode http2_init(struct Curl_easy *data, struct connectdata *conn)
     rc = nghttp2_session_callbacks_new(&callbacks);
 
     if(rc) {
-      failf(data, "Couldn't initialize nghttp2 callbacks!");
+      failf(data, "Couldn't initialize nghttp2 callbacks");
       return CURLE_OUT_OF_MEMORY; /* most likely at least */
     }
 
@@ -1303,7 +1314,7 @@ static CURLcode http2_init(struct Curl_easy *data, struct connectdata *conn)
     nghttp2_session_callbacks_del(callbacks);
 
     if(rc) {
-      failf(data, "Couldn't initialize nghttp2!");
+      failf(data, "Couldn't initialize nghttp2");
       return CURLE_OUT_OF_MEMORY; /* most likely at least */
     }
   }
@@ -1508,7 +1519,7 @@ static ssize_t http2_handle_stream_close(struct connectdata *conn,
   /* Reset to FALSE to prevent infinite loop in readwrite_data function. */
   stream->closed = FALSE;
   if(stream->error == NGHTTP2_REFUSED_STREAM) {
-    H2BUGF(infof(data, "REFUSED_STREAM (%d), try again on a new connection!",
+    H2BUGF(infof(data, "REFUSED_STREAM (%d), try again on a new connection",
                  stream->stream_id));
     connclose(conn, "REFUSED_STREAM"); /* don't use this anymore */
     data->state.refused_stream = TRUE;
@@ -1667,7 +1678,7 @@ static ssize_t http2_recv(struct Curl_easy *data, int sockindex,
            ));
 
   if((data->state.drain) && stream->memlen) {
-    H2BUGF(infof(data, "http2_recv: DRAIN %zu bytes stream %u!! (%p => %p)",
+    H2BUGF(infof(data, "http2_recv: DRAIN %zu bytes stream %u (%p => %p)",
                  stream->memlen, stream->stream_id,
                  stream->mem, mem));
     if(mem != stream->mem) {
@@ -2083,7 +2094,7 @@ CURLcode Curl_http2_switched(struct Curl_easy *data,
                                               stream->stream_id,
                                               data);
     if(rv) {
-      infof(data, "http/2: failed to set user_data for stream %d!",
+      infof(data, "http/2: failed to set user_data for stream %d",
             stream->stream_id);
       DEBUGASSERT(0);
     }

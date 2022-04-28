@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_TIMEVAL_H
-#define HEADER_CURL_TIMEVAL_H
+#ifndef HEADER_CURL_HEADER_H
+#define HEADER_CURL_HEADER_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -21,32 +21,33 @@
  * KIND, either express or implied.
  *
  ***************************************************************************/
-
 #include "curl_setup.h"
 
-#include "timediff.h"
+#if !defined(CURL_DISABLE_HTTP) && defined(USE_HEADERS_API)
 
-struct curltime {
-  time_t tv_sec; /* seconds */
-  int tv_usec;   /* microseconds */
+struct Curl_header_store {
+  struct Curl_llist_element node;
+  char *name; /* points into 'buffer' */
+  char *value; /* points into 'buffer */
+  int request; /* 0 is the first request, then 1.. 2.. */
+  unsigned char type; /* CURLH_* defines */
+  char buffer[1]; /* this is the raw header blob */
 };
 
-struct curltime Curl_now(void);
+/*
+ * Curl_headers_push() gets passed a full header to store.
+ */
+CURLcode Curl_headers_push(struct Curl_easy *data, const char *header,
+                           unsigned char type);
 
 /*
- * Make sure that the first argument (t1) is the more recent time and t2 is
- * the older time, as otherwise you get a weird negative time-diff back...
- *
- * Returns: the time difference in number of milliseconds.
+ * Curl_headers_cleanup(). Free all stored headers and associated memory.
  */
-timediff_t Curl_timediff(struct curltime t1, struct curltime t2);
+CURLcode Curl_headers_cleanup(struct Curl_easy *data);
 
-/*
- * Make sure that the first argument (t1) is the more recent time and t2 is
- * the older time, as otherwise you get a weird negative time-diff back...
- *
- * Returns: the time difference in number of microseconds.
- */
-timediff_t Curl_timediff_us(struct curltime newer, struct curltime older);
+#else
+#define Curl_headers_push(x,y,z) CURLE_OK
+#define Curl_headers_cleanup(x) Curl_nop_stmt
+#endif
 
-#endif /* HEADER_CURL_TIMEVAL_H */
+#endif /* HEADER_CURL_HEADER_H */

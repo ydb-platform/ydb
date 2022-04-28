@@ -571,7 +571,7 @@ static CURLcode pop3_perform_authentication(struct Curl_easy *data,
       result = pop3_perform_user(data, conn);
     else {
       /* Other mechanisms not supported */
-      infof(data, "No known authentication mechanisms supported!");
+      infof(data, "No known authentication mechanisms supported");
       result = CURLE_LOGIN_DENIED;
     }
   }
@@ -924,7 +924,7 @@ static CURLcode pop3_state_command_resp(struct Curl_easy *data,
 
   if(pop3code != '+') {
     state(data, POP3_STOP);
-    return CURLE_RECV_ERROR;
+    return CURLE_WEIRD_SERVER_REPLY;
   }
 
   /* This 'OK' line ends with a CR LF pair which is the two first bytes of the

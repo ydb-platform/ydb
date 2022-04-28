@@ -172,7 +172,7 @@ static CURLcode connect_init(struct Curl_easy *data, bool reinit)
     s = calloc(1, sizeof(struct http_connect_state));
     if(!s)
       return CURLE_OUT_OF_MEMORY;
-    infof(data, "allocate connect buffer!");
+    infof(data, "allocate connect buffer");
     conn->connect_state = s;
     Curl_dyn_init(&s->rcvbuf, DYN_PROXY_CONNECT_HEADERS);
 
@@ -220,7 +220,7 @@ void Curl_connect_done(struct Curl_easy *data)
 #ifdef USE_HYPER
     data->state.hconnect = FALSE;
 #endif
-    infof(data, "CONNECT phase completed!");
+    infof(data, "CONNECT phase completed");
   }
 }
 
@@ -345,6 +345,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
           /* Send the connect request to the proxy */
           result = Curl_buffer_send(req, data, &data->info.request_size, 0,
                                     sockindex);
+          s->headerlines = 0;
         }
         if(result)
           failf(data, "Failed sending CONNECT to proxy");
@@ -472,7 +473,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
         }
 
         if(Curl_dyn_addn(&s->rcvbuf, &byte, 1)) {
-          failf(data, "CONNECT response too large!");
+          failf(data, "CONNECT response too large");
           return CURLE_RECV_ERROR;
         }
 
@@ -480,6 +481,7 @@ static CURLcode CONNECT(struct Curl_easy *data,
         if(byte != 0x0a)
           continue;
 
+        s->headerlines++;
         linep = Curl_dyn_ptr(&s->rcvbuf);
         perline = Curl_dyn_len(&s->rcvbuf); /* amount of bytes in this line */
 
@@ -488,9 +490,9 @@ static CURLcode CONNECT(struct Curl_easy *data,
 
         if(!data->set.suppress_connect_headers) {
           /* send the header to the callback */
-          int writetype = CLIENTWRITE_HEADER;
-          if(data->set.include_header)
-            writetype |= CLIENTWRITE_BODY;
+          int writetype = CLIENTWRITE_HEADER | CLIENTWRITE_CONNECT |
+            (data->set.include_header ? CLIENTWRITE_BODY : 0) |
+            (s->headerlines == 1 ? CLIENTWRITE_STATUS : 0);
 
           result = Curl_client_write(data, writetype, linep, perline);
           if(result)
@@ -765,6 +767,9 @@ static CURLcode CONNECT(struct Curl_easy *data,
       }
 
       options = hyper_clientconn_options_new();
+      hyper_clientconn_options_set_preserve_header_case(options, 1);
+      hyper_clientconn_options_set_preserve_header_order(options, 1);
+
       if(!options) {
         failf(data, "Couldn't create hyper client options");
         result = CURLE_OUT_OF_MEMORY;

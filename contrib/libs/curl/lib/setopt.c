@@ -890,7 +890,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
       ;
     else
 #endif
-#if !defined(USE_NGHTTP2) && !defined(USE_HYPER)
+#ifndef USE_HTTP2
     if(arg >= CURL_HTTP_VERSION_2)
       return CURLE_UNSUPPORTED_PROTOCOL;
 #else
@@ -2602,7 +2602,7 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
 #endif
 
   case CURLOPT_SASL_AUTHZID:
-    /* Authorisation identity (identity to act as) */
+    /* Authorization identity (identity to act as) */
     result = Curl_setstropt(&data->set.str[STRING_SASL_AUTHZID],
                             va_arg(param, char *));
     break;

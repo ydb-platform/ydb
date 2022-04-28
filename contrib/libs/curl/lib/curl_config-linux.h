@@ -447,6 +447,9 @@
 /* Define to 1 if you have the MSG_NOSIGNAL flag. */
 #define HAVE_MSG_NOSIGNAL 1
 
+/* Define to 1 if you have the <msh3.h> header file. */
+/* #undef HAVE_MSH3_H */
+
 /* Define to 1 if you have the <netdb.h> header file. */
 #define HAVE_NETDB_H 1
 
@@ -946,6 +949,9 @@
 /* GSASL support enabled */
 /* #undef USE_GSASL */
 
+/* enable headers-api */
+/* #undef USE_HEADERS_API */
+
 /* if hyper is in use */
 /* #undef USE_HYPER */
 
@@ -966,6 +972,9 @@
 
 /* if mbedTLS is enabled */
 /* #undef USE_MBEDTLS */
+
+/* if msh3 is in use */
+/* #undef USE_MSH3 */
 
 /* if nghttp2 is in use */
 #define USE_NGHTTP2 1

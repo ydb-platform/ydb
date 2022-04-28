@@ -505,7 +505,7 @@ static CURLcode smtp_perform_authentication(struct Curl_easy *data)
       state(data, SMTP_AUTH);
     else {
       /* Other mechanisms not supported */
-      infof(data, "No known authentication mechanisms supported!");
+      infof(data, "No known authentication mechanisms supported");
       result = CURLE_LOGIN_DENIED;
     }
   }
@@ -1037,7 +1037,7 @@ static CURLcode smtp_state_command_resp(struct Curl_easy *data, int smtpcode,
   if((smtp->rcpt && smtpcode/100 != 2 && smtpcode != 553 && smtpcode != 1) ||
      (!smtp->rcpt && smtpcode/100 != 2 && smtpcode != 1)) {
     failf(data, "Command failed: %d", smtpcode);
-    result = CURLE_RECV_ERROR;
+    result = CURLE_WEIRD_SERVER_REPLY;
   }
   else {
     /* Temporarily add the LF character back and send as body to the client */
@@ -1182,7 +1182,7 @@ static CURLcode smtp_state_postdata_resp(struct Curl_easy *data,
   (void)instate; /* no use for this yet */
 
   if(smtpcode != 250)
-    result = CURLE_RECV_ERROR;
+    result = CURLE_WEIRD_SERVER_REPLY;
 
   /* End of DONE phase */
   state(data, SMTP_STOP);
@@ -1840,7 +1840,7 @@ CURLcode Curl_smtp_escape_eob(struct Curl_easy *data, const ssize_t nread)
 
     scratch = newscratch = malloc(2 * data->set.upload_buffer_size);
     if(!newscratch) {
-      failf(data, "Failed to alloc scratch buffer!");
+      failf(data, "Failed to alloc scratch buffer");
 
       return CURLE_OUT_OF_MEMORY;
     }

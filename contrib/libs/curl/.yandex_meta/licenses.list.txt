@@ -88,7 +88,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2011 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2011 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -171,7 +171,7 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2015 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2015 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
  * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
 
 
@@ -206,11 +206,11 @@
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2018 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
- * Copyright (C) 2018 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2018 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================
@@ -274,6 +274,10 @@
 
 ====================COPYRIGHT====================
  * Copyright (C) 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+
+
+====================COPYRIGHT====================
+ * Copyright (C) 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
 
 
 ====================COPYRIGHT====================

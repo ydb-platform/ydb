@@ -983,7 +983,8 @@ struct connectdata {
   char *user;    /* user name string, allocated */
   char *passwd;  /* password string, allocated */
   char *options; /* options string, allocated */
-  char *sasl_authzid;     /* authorisation identity string, allocated */
+  char *sasl_authzid;     /* authorization identity string, allocated */
+  char *oauth_bearer; /* OAUTH2 bearer, allocated */
   unsigned char httpversion; /* the HTTP version*10 reported by the server */
   struct curltime now;     /* "current" time */
   struct curltime created; /* creation time */
@@ -1159,7 +1160,11 @@ struct PureInfo {
      reused, in the connection cache. */
 
   char conn_primary_ip[MAX_IPADR_LEN];
-  int conn_primary_port;
+  int conn_primary_port; /* this is the destination port to the connection,
+                            which might have been a proxy */
+  int conn_remote_port;  /* this is the "remote port", which is the port
+                            number of the used URL, independent of proxy or
+                            not */
   char conn_local_ip[MAX_IPADR_LEN];
   int conn_local_port;
   const char *conn_scheme;
@@ -1328,14 +1333,16 @@ struct UrlState {
   char *ulbuf; /* allocated upload buffer or NULL */
   curl_off_t current_speed;  /* the ProgressShow() function sets this,
                                 bytes / second */
-  char *first_host; /* host name of the first (not followed) request.
-                       if set, this should be the host name that we will
-                       sent authorization to, no else. Used to make Location:
-                       following not keep sending user+password... This is
-                       strdup() data.
-                    */
+
+  /* host name, port number and protocol of the first (not followed) request.
+     if set, this should be the host name that we will sent authorization to,
+     no else. Used to make Location: following not keep sending user+password.
+     This is strdup()ed data. */
+  char *first_host;
+  int first_remote_port;
+  unsigned int first_remote_protocol;
+
   int retrycount; /* number of retries on a new connection */
-  int first_remote_port; /* remote port of the first (not followed) request */
   struct Curl_ssl_session *session; /* array of 'max_ssl_sessions' size */
   long sessionage;                  /* number of the most recent session */
   struct tempbuf tempwrite[3]; /* BOTH, HEADER, BODY */
@@ -1343,6 +1350,7 @@ struct UrlState {
   int os_errno;  /* filled in with errno whenever an error occurs */
   char *scratch; /* huge buffer[set.buffer_size*2] for upload CRLF replacing */
   long followlocation; /* redirect counter */
+  int requests; /* request counter: redirects + authentication retakes */
 #ifdef HAVE_SIGNAL
   /* storage for the previous bag^H^H^HSIGPIPE signal handler :-) */
   void (*prev_signal)(int sig);
@@ -1414,6 +1422,8 @@ struct UrlState {
   size_t trailers_bytes_sent;
   struct dynbuf trailers_buf; /* a buffer containing the compiled trailing
                                  headers */
+  struct Curl_llist httphdrs; /* received headers */
+  struct curl_header headerout; /* for external purposes */
 #endif
   trailers_state trailers_state; /* whether we are sending trailers
                                        and what stage are we at */

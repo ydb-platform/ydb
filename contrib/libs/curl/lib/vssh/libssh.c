@@ -105,6 +105,14 @@
   } while(0)
 #endif
 
+/* These stat values may not be the same as the user's S_IFMT / S_IFLNK */
+#ifndef SSH_S_IFMT
+#define SSH_S_IFMT   00170000
+#endif
+#ifndef SSH_S_IFLNK
+#define SSH_S_IFLNK  0120000
+#endif
+
 /* Local functions: */
 static CURLcode myssh_connect(struct Curl_easy *data, bool *done);
 static CURLcode myssh_multi_statemach(struct Curl_easy *data,
@@ -1962,6 +1970,10 @@ static CURLcode myssh_statemach_act(struct Curl_easy *data, bool *block)
       }
 
       ssh_disconnect(sshc->ssh_session);
+      /* conn->sock[FIRSTSOCKET] is closed by ssh_disconnect behind our back,
+         explicitly mark it as closed with the memdebug macro: */
+      fake_sclose(conn->sock[FIRSTSOCKET]);
+      conn->sock[FIRSTSOCKET] = CURL_SOCKET_BAD;
 
       SSH_STRING_FREE_CHAR(sshc->homedir);
       data->state.most_recent_ftp_entrypath = NULL;
@@ -2053,6 +2065,9 @@ static int myssh_getsock(struct Curl_easy *data,
     bitmap |= GETSOCK_READSOCK(FIRSTSOCKET);
 
   if(conn->waitfor & KEEP_SEND)
+    bitmap |= GETSOCK_WRITESOCK(FIRSTSOCKET);
+
+  if(!conn->waitfor)
     bitmap |= GETSOCK_WRITESOCK(FIRSTSOCKET);
 
   return bitmap;
@@ -2687,7 +2702,7 @@ static void sftp_quote(struct Curl_easy *data)
    */
   cp = strchr(cmd, ' ');
   if(!cp) {
-    failf(data, "Syntax error in SFTP command. Supply parameter(s)!");
+    failf(data, "Syntax error in SFTP command. Supply parameter(s)");
     state(data, SSH_SFTP_CLOSE);
     sshc->nextstate = SSH_NO_STATE;
     sshc->actualcode = CURLE_QUOTE_ERROR;

@@ -938,9 +938,9 @@ static OSStatus SocketWrite(SSLConnectionRef connection,
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
 CF_INLINE const char *TLSCipherNameForNumber(SSLCipherSuite cipher)
 {
-  /* The first ciphers in the ciphertable are continuos. Here we do small
+  /* The first ciphers in the ciphertable are continuous. Here we do small
      optimization and instead of loop directly get SSL name by cipher number.
-   */
+  */
   if(cipher <= SSL_FORTEZZA_DMS_WITH_FORTEZZA_CBC_SHA) {
     return ciphertable[cipher].name;
   }
@@ -1701,7 +1701,7 @@ static CURLcode sectransp_connect_step1(struct Curl_easy *data,
       CFRelease(backend->ssl_ctx);
     backend->ssl_ctx = SSLCreateContext(NULL, kSSLClientSide, kSSLStreamType);
     if(!backend->ssl_ctx) {
-      failf(data, "SSL: couldn't create a context!");
+      failf(data, "SSL: couldn't create a context");
       return CURLE_OUT_OF_MEMORY;
     }
   }
@@ -1851,12 +1851,12 @@ static CURLcode sectransp_connect_step1(struct Curl_easy *data,
 #endif
         ) {
         CFArrayAppendValue(alpnArr, CFSTR(ALPN_H2));
-        infof(data, "ALPN, offering %s", ALPN_H2);
+        infof(data, VTLS_INFOF_ALPN_OFFER_1STR, ALPN_H2);
       }
 #endif
 
       CFArrayAppendValue(alpnArr, CFSTR(ALPN_HTTP_1_1));
-      infof(data, "ALPN, offering %s", ALPN_HTTP_1_1);
+      infof(data, VTLS_INFOF_ALPN_OFFER_1STR, ALPN_HTTP_1_1);
 
       /* expects length prefixed preference ordered list of protocols in wire
        * format
@@ -2788,7 +2788,7 @@ sectransp_connect_step2(struct Curl_easy *data, struct connectdata *conn,
         pkp_pin_peer_pubkey(data, backend->ssl_ctx,
                             data->set.str[STRING_SSL_PINNEDPUBLICKEY]);
       if(result) {
-        failf(data, "SSL: public key does not match pinned public key!");
+        failf(data, "SSL: public key does not match pinned public key");
         return result;
       }
     }
@@ -2853,7 +2853,7 @@ sectransp_connect_step2(struct Curl_easy *data, struct connectdata *conn,
           conn->negnpn = CURL_HTTP_VERSION_1_1;
         }
         else
-          infof(data, "ALPN, server did not agree to a protocol");
+          infof(data, VTLS_INFOF_NO_ALPN);
 
         Curl_multiuse_state(data, conn->negnpn == CURL_HTTP_VERSION_2 ?
                             BUNDLE_MULTIPLEX : BUNDLE_NO_MULTIUSE);

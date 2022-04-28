@@ -325,12 +325,12 @@ cr_init_backend(struct Curl_easy *data, struct connectdata *conn,
 
   config_builder = rustls_client_config_builder_new();
 #ifdef USE_HTTP2
-  infof(data, "offering ALPN for HTTP/1.1 and HTTP/2");
+  infof(data, VTLS_INFOF_ALPN_OFFER_1STR, ALPN_H2);
   rustls_client_config_builder_set_alpn_protocols(config_builder, alpn, 2);
 #else
-  infof(data, "offering ALPN for HTTP/1.1 only");
   rustls_client_config_builder_set_alpn_protocols(config_builder, alpn, 1);
 #endif
+  infof(data, VTLS_INFOF_ALPN_OFFER_1STR, ALPN_HTTP_1_1);
   if(!verifypeer) {
     rustls_client_config_builder_dangerous_set_certificate_verifier(
       config_builder, cr_verify_none);
@@ -406,20 +406,20 @@ cr_set_negotiated_alpn(struct Curl_easy *data, struct connectdata *conn,
 
   rustls_connection_get_alpn_protocol(rconn, &protocol, &len);
   if(!protocol) {
-    infof(data, "ALPN, server did not agree to a protocol");
+    infof(data, VTLS_INFOF_NO_ALPN);
     return;
   }
 
 #ifdef USE_HTTP2
   if(len == ALPN_H2_LENGTH && 0 == memcmp(ALPN_H2, protocol, len)) {
-    infof(data, "ALPN, negotiated h2");
+    infof(data, VTLS_INFOF_ALPN_ACCEPTED_1STR, ALPN_H2);
     conn->negnpn = CURL_HTTP_VERSION_2;
   }
   else
 #endif
   if(len == ALPN_HTTP_1_1_LENGTH &&
       0 == memcmp(ALPN_HTTP_1_1, protocol, len)) {
-    infof(data, "ALPN, negotiated http/1.1");
+    infof(data, VTLS_INFOF_ALPN_ACCEPTED_1STR, ALPN_HTTP_1_1);
     conn->negnpn = CURL_HTTP_VERSION_1_1;
   }
   else {

@@ -143,14 +143,12 @@ BELONGS ya.make
         include/curl/multi.h [10:10]
         include/curl/typecheck-gcc.h [10:10]
         lib/amigaos.c [8:8]
-        lib/asyn-ares.c [8:8]
         lib/asyn-thread.c [8:8]
         lib/asyn.h [10:10]
         lib/c-hyper.h [10:10]
         lib/connect.h [10:10]
         lib/content_encoding.c [8:8]
         lib/content_encoding.h [10:10]
-        lib/cookie.c [8:8]
         lib/cookie.h [10:10]
         lib/curl_addrinfo.c [8:8]
         lib/curl_endian.c [8:8]
@@ -159,7 +157,6 @@ BELONGS ya.make
         lib/curl_hmac.h [10:10]
         lib/curl_krb5.h [10:10]
         lib/curl_md5.h [10:10]
-        lib/curl_multibyte.c [8:8]
         lib/curl_multibyte.h [10:10]
         lib/curl_ntlm_wb.c [8:8]
         lib/curl_ntlm_wb.h [10:10]
@@ -185,7 +182,6 @@ BELONGS ya.make
         lib/http_digest.h [10:10]
         lib/http_negotiate.h [10:10]
         lib/http_ntlm.h [10:10]
-        lib/http_proxy.h [10:10]
         lib/llist.c [8:8]
         lib/md4.c [8:8]
         lib/memdebug.c [8:8]
@@ -195,15 +191,11 @@ BELONGS ya.make
         lib/pingpong.h [10:10]
         lib/progress.c [8:8]
         lib/progress.h [10:10]
-        lib/quic.h [10:10]
-        lib/rand.c [8:8]
         lib/rtsp.h [10:10]
-        lib/sendf.h [10:10]
         lib/setup-win32.h [10:10]
         lib/share.c [8:8]
         lib/share.h [10:10]
         lib/sigpipe.h [10:10]
-        lib/socks.h [10:10]
         lib/strdup.c [8:8]
         lib/strdup.h [10:10]
         lib/timeval.c [8:8]
@@ -214,8 +206,6 @@ BELONGS ya.make
         lib/vauth/oauth2.c [8:8]
         lib/vssh/ssh.h [10:10]
         lib/vtls/gtls.h [10:10]
-        lib/warnless.c [8:8]
-        lib/warnless.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1b9e8d9d7c9588e9a9cbcbd17572b2e4
 BELONGS ya.make
@@ -389,14 +379,13 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 4e8842dc60c6a1e15f16868c03918523
 BELONGS ya.make
     License text:
+         * Copyright (C) 2014 - 2016, Steve Holme, <steve_holme@hotmail.com>.
          * Copyright (C) 2015 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
-         * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/conncache.h [10:11]
         lib/vauth/digest_sspi.c [8:9]
         lib/vauth/krb5_gssapi.c [8:9]
 
@@ -410,17 +399,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/curl_rtmp.h [10:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4fecfa225cdfca0722e56253ab54fedc
-BELONGS ya.make
-    License text:
-         * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/curl/options.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 520dfafb050652350468b32c3d62b5cd
 BELONGS ya.make
@@ -449,12 +427,12 @@ KEEP     COPYRIGHT_SERVICE_LABEL 56bfb48b3999f5c4695de53fd33038ba
 BELONGS ya.make
     License text:
          * Copyright (C) 2011 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
-         * Copyright (C) 2010, Howard Chu, <hyc@openldap.org>
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        lib/curl_gssapi.c [8:8]
         lib/openldap.c [8:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5e85228ecbe10b11dde942f2822e8629
@@ -481,12 +459,15 @@ BELONGS ya.make
         include/curl/curl.h [10:10]
         include/curl/curlver.h [10:10]
         include/curl/system.h [10:10]
+        lib/asyn-ares.c [8:8]
         lib/base64.c [8:8]
         lib/c-hyper.c [8:8]
         lib/connect.c [8:8]
+        lib/cookie.c [8:8]
         lib/curl_base64.h [10:10]
         lib/curl_ctype.c [8:8]
         lib/curl_ctype.h [10:10]
+        lib/curl_multibyte.c [8:8]
         lib/curl_ntlm_core.c [8:8]
         lib/curl_ntlm_core.h [10:10]
         lib/curl_path.c [8:8]
@@ -502,6 +483,8 @@ BELONGS ya.make
         lib/gopher.c [8:8]
         lib/h2h3.c [8:8]
         lib/h2h3.h [10:10]
+        lib/headers.h [10:10]
+        lib/hmac.c [8:8]
         lib/hostip.c [8:8]
         lib/http.c [8:8]
         lib/http.h [10:10]
@@ -511,6 +494,8 @@ BELONGS ya.make
         lib/http_negotiate.c [8:8]
         lib/http_ntlm.c [8:8]
         lib/http_proxy.c [8:8]
+        lib/http_proxy.h [10:10]
+        lib/idn_win32.c [8:8]
         lib/if2ip.c [8:8]
         lib/imap.c [8:8]
         lib/ldap.c [8:8]
@@ -521,17 +506,24 @@ BELONGS ya.make
         lib/nonblock.c [8:8]
         lib/pingpong.c [8:8]
         lib/pop3.c [8:8]
+        lib/quic.h [10:10]
+        lib/rand.c [8:8]
         lib/rtsp.c [8:8]
         lib/select.c [8:8]
         lib/select.h [10:10]
         lib/sendf.c [8:8]
+        lib/sendf.h [10:10]
         lib/setopt.c [8:8]
         lib/smtp.c [8:8]
         lib/socks.c [8:8]
+        lib/socks.h [10:10]
         lib/strcase.c [8:8]
         lib/strcase.h [10:10]
         lib/telnet.c [8:8]
         lib/tftp.c [8:8]
+        lib/timediff.c [8:8]
+        lib/timediff.h [10:10]
+        lib/timeval.h [10:10]
         lib/transfer.c [8:8]
         lib/transfer.h [10:10]
         lib/url.c [8:8]
@@ -543,6 +535,7 @@ BELONGS ya.make
         lib/vauth/spnego_gssapi.c [8:8]
         lib/vauth/spnego_sspi.c [8:8]
         lib/version.c [8:8]
+        lib/vquic/msh3.c [8:8]
         lib/vquic/ngtcp2.c [8:8]
         lib/vquic/quiche.c [8:8]
         lib/vquic/vquic.c [8:8]
@@ -559,6 +552,8 @@ BELONGS ya.make
         lib/vtls/wolfssl.c [8:8]
         lib/vtls/x509asn1.c [8:8]
         lib/vtls/x509asn1.h [11:11]
+        lib/warnless.c [8:8]
+        lib/warnless.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 62e3d3c1807826946ebb38745e503228
 BELONGS ya.make
@@ -604,6 +599,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/vauth/gsasl.c [8:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71ee53e81097c7f4dbef01e90bbb0dd6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/headers.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 76a14b8bb4e715fa4b3e1efe01097c43
 BELONGS ya.make
@@ -701,8 +707,6 @@ BELONGS ya.make
         lib/getenv.c [8:8]
         lib/getinfo.h [10:10]
         lib/gopher.h [10:10]
-        lib/hmac.c [8:8]
-        lib/idn_win32.c [8:8]
         lib/inet_ntop.h [10:10]
         lib/inet_pton.h [10:10]
         lib/llist.h [10:10]
@@ -727,7 +731,6 @@ BELONGS ya.make
         lib/strtoofft.h [10:10]
         lib/telnet.h [10:10]
         lib/tftp.h [10:10]
-        lib/timeval.h [10:10]
         lib/vauth/digest.h [10:10]
         lib/vauth/ntlm.h [10:10]
         lib/vtls/gskit.h [10:10]
@@ -771,7 +774,6 @@ BELONGS ya.make
     Files with this license:
         lib/socketpair.c [8:8]
         lib/socketpair.h [10:10]
-        lib/vssh/wolfssh.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 90ce0ec9551a9d561300240060256dff
 BELONGS ya.make
@@ -784,17 +786,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/vauth/digest_sspi.c [8:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 917ac0ea862bde7d294f3af61b7a44d5
-BELONGS ya.make
-    License text:
-         * Copyright (C) 2011 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/curl_gssapi.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9d962b7054a48ee0efeaca166b582707
 BELONGS ya.make
@@ -894,7 +885,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL b9fa8adc6606591b18a8ad18fcdaf1fe
 BELONGS ya.make
     License text:
-         * Copyright (C) 2015 - 2021, Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) 2015 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
          * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -1009,6 +1000,18 @@ BELONGS ya.make
     Files with this license:
         lib/inet_pton.c [3:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL e169ecb155a1900c58e55cd82b816a79
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2015 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
+         * Copyright (C) 2012 - 2014, Linus Nielsen Feltzing, <linus@haxx.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/conncache.h [10:11]
+
 KEEP     COPYRIGHT_SERVICE_LABEL e32b7f2aa13d077a35593b170bfdd1d9
 BELONGS ya.make
     License text:
@@ -1089,17 +1092,19 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/altsvc.c [8:8]
+        lib/vssh/wolfssh.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL fe205fd73b9be07bd9a20b09c345f2ec
 BELONGS ya.make
     License text:
-         * Copyright (C) 2017, Florin Petriuc, <petriuc.florin@gmail.com>
          * Copyright (C) 2018 - 2022, Daniel Stenberg, <daniel@haxx.se>, et al.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/curl/header.h [10:10]
+        include/curl/options.h [10:10]
         lib/curl_sha256.h [10:11]
         lib/doh.c [8:8]
         lib/sha256.c [8:9]

@@ -2049,7 +2049,7 @@ typedef enum {
    * (in seconds) */
   CURLOPT(CURLOPT_MAXAGE_CONN, CURLOPTTYPE_LONG, 288),
 
-  /* SASL authorisation identity */
+  /* SASL authorization identity */
   CURLOPT(CURLOPT_SASL_AUTHZID, CURLOPTTYPE_STRINGPOINT, 289),
 
   /* allow RCPT TO command to fail for some recipients */
@@ -3069,6 +3069,7 @@ CURL_EXTERN CURLcode curl_easy_pause(CURL *handle, int bitmask);
 #include "multi.h"
 #include "urlapi.h"
 #include "options.h"
+#include "header.h"
 
 /* the typechecker doesn't work in C++ (yet) */
 #if defined(__GNUC__) && defined(__GNUC_MINOR__) && \

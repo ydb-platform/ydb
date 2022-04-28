@@ -54,6 +54,8 @@
 #define H3VERSION "h3-29"
 #elif defined(USE_NGTCP2) && !defined(UNITTESTS)
 #define H3VERSION "h3-29"
+#elif defined(USE_MSH3) && !defined(UNITTESTS)
+#define H3VERSION "h3-29"
 #else
 #define H3VERSION "h3"
 #endif
@@ -264,7 +266,7 @@ struct altsvcinfo *Curl_altsvc_init(void)
 
   /* set default behavior */
   asi->flags = CURLALTSVC_H1
-#ifdef USE_NGHTTP2
+#ifdef USE_HTTP2
     | CURLALTSVC_H2
 #endif
 #ifdef ENABLE_QUIC

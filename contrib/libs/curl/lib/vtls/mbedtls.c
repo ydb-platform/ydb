@@ -70,11 +70,18 @@
 #include "curl_memory.h"
 #include "memdebug.h"
 
+/* ALPN for http2 */
+#ifdef USE_HTTP2
+#  undef HAS_ALPN
+#  ifdef MBEDTLS_SSL_ALPN
+#    define HAS_ALPN
+#  endif
+#endif
+
 struct ssl_backend_data {
   mbedtls_ctr_drbg_context ctr_drbg;
   mbedtls_entropy_context entropy;
   mbedtls_ssl_context ssl;
-  int server_fd;
   mbedtls_x509_crt cacert;
   mbedtls_x509_crt clicert;
 #ifdef MBEDTLS_X509_CRL_PARSE_C
@@ -82,7 +89,9 @@ struct ssl_backend_data {
 #endif
   mbedtls_pk_context pk;
   mbedtls_ssl_config config;
+#ifdef HAS_ALPN
   const char *protocols[3];
+#endif
 };
 
 /* apply threading? */
@@ -143,15 +152,6 @@ static void mbed_debug(void *context, int level, const char *f_name,
 }
 #else
 #endif
-
-/* ALPN for http2? */
-#ifdef USE_NGHTTP2
-#  undef HAS_ALPN
-#  ifdef MBEDTLS_SSL_ALPN
-#    define HAS_ALPN
-#  endif
-#endif
-
 
 /*
  *  profile
@@ -614,9 +614,9 @@ mbed_connect_step1(struct Curl_easy *data, struct connectdata *conn,
 #ifdef HAS_ALPN
   if(conn->bits.tls_enable_alpn) {
     const char **p = &backend->protocols[0];
-#ifdef USE_NGHTTP2
+#ifdef USE_HTTP2
     if(data->state.httpwant >= CURL_HTTP_VERSION_2)
-      *p++ = NGHTTP2_PROTO_VERSION_ID;
+      *p++ = ALPN_H2;
 #endif
     *p++ = ALPN_HTTP_1_1;
     *p = NULL;
@@ -628,7 +628,7 @@ mbed_connect_step1(struct Curl_easy *data, struct connectdata *conn,
       return CURLE_SSL_CONNECT_ERROR;
     }
     for(p = &backend->protocols[0]; *p; ++p)
-      infof(data, "ALPN, offering %s", *p);
+      infof(data, VTLS_INFOF_ALPN_OFFER_1STR, *p);
   }
 #endif
 
@@ -813,11 +813,10 @@ mbed_connect_step2(struct Curl_easy *data, struct connectdata *conn,
     const char *next_protocol = mbedtls_ssl_get_alpn_protocol(&backend->ssl);
 
     if(next_protocol) {
-      infof(data, "ALPN, server accepted to use %s", next_protocol);
-#ifdef USE_NGHTTP2
-      if(!strncmp(next_protocol, NGHTTP2_PROTO_VERSION_ID,
-                  NGHTTP2_PROTO_VERSION_ID_LEN) &&
-         !next_protocol[NGHTTP2_PROTO_VERSION_ID_LEN]) {
+      infof(data, VTLS_INFOF_ALPN_ACCEPTED_1STR, next_protocol);
+#ifdef USE_HTTP2
+      if(!strncmp(next_protocol, ALPN_H2, ALPN_H2_LEN) &&
+         !next_protocol[ALPN_H2_LEN]) {
         conn->negnpn = CURL_HTTP_VERSION_2;
       }
       else
@@ -828,7 +827,7 @@ mbed_connect_step2(struct Curl_easy *data, struct connectdata *conn,
         }
     }
     else {
-      infof(data, "ALPN, server did not agree to a protocol");
+      infof(data, VTLS_INFOF_NO_ALPN);
     }
     Curl_multiuse_state(data, conn->negnpn == CURL_HTTP_VERSION_2 ?
                         BUNDLE_MULTIPLEX : BUNDLE_NO_MULTIUSE);

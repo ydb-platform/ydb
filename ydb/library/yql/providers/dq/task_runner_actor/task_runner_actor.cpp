@@ -103,24 +103,16 @@ private:
             } else {
                 if (!result.Fallback) {
                     if (line.Contains("FindColumnInfo(): requirement memberType->GetKind() == TType::EKind::Data")) {
-                    // temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
-                        result.Fallback = true;
-                    } else if (line.Contains("Unsupported builtin function:")) {
-                        // temporary workaround for YQL-11791
+                    // YQL-14757: temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
                         result.Fallback = true;
                     } else if (line.Contains("embedded:Len")) {
+                        // YQL-14763
                         result.Fallback = true;
                     } else if (line.Contains("Container killed by OOM")) {
                         // temporary workaround for YQL-12066
                         result.Fallback = true;
                     } else if (line.Contains("Expected data or optional of data, actual:")) {
                         // temporary workaround for YQL-12835
-                        result.Fallback = true;
-                    } else if (line.Contains("Cannot create Skiff writer for ")) {
-                        // temporary workaround for YQL-12986
-                        result.Fallback = true;
-                    } else if (line.Contains("Skiff format expected")) {
-                        // temporary workaround for YQL-12986
                         result.Fallback = true;
                     } else if (line.Contains("Pattern nodes can not get computation node by index:")) {
                         // temporary workaround for YQL-12987
@@ -151,9 +143,9 @@ private:
         }
         return result;
     }
-    
+
     static THolder<TEvDq::TEvAbortExecution> StatusToError(
-        const TEvError::TStatus& status, 
+        const TEvError::TStatus& status,
         TIntrusivePtr<TDqConfiguration> settings,
         ui64 stageId,
         TString message = CurrentExceptionMessage()) {

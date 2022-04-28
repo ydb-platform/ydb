@@ -49,6 +49,11 @@ public:
 
 TString PrettyPrintGraphParams(const NProto::TGraphParams& sourceGraphParams, bool canonical) {
     NProto::TGraphParams patchedGraphParams = sourceGraphParams;
+    if (canonical) {
+        for (auto& task : *patchedGraphParams.MutableTasks()) {
+            task.ClearStageId();
+        }
+    }
     for (auto& [secureKey, tokenValue] : *patchedGraphParams.MutableSecureParams()) {
         tokenValue = "== token_value ==";
     }

@@ -350,7 +350,7 @@ namespace NYql::NDqs {
             tasks[i].ComputeActorId = workers[i];
         }
 
-        THashMap<TStageId, std::tuple<TString, ui64>> stagePrograms = BuildAllPrograms();
+        THashMap<TStageId, std::tuple<TString, ui64, ui64>> stagePrograms = BuildAllPrograms();
         TVector<TDqTask> plan;
         THashSet<TString> clusterNameHints;
         for (const auto& task : tasks) {
@@ -391,10 +391,10 @@ namespace NYql::NDqs {
             auto& program = *taskDesc.MutableProgram();
             program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
             TString programStr;
-            ui64 stageId;
-            std::tie(programStr, stageId) = stagePrograms[task.StageId];
+            ui64 stageId, publicId;
+            std::tie(programStr, stageId, publicId) = stagePrograms[task.StageId];
             program.SetRaw(programStr);
-            taskMeta.SetStageId(stageId);
+            taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
 
@@ -535,10 +535,10 @@ namespace NYql::NDqs {
 
 #undef BUILD_CONNECTION
 
-    THashMap<TStageId, std::tuple<TString,ui64>> TDqsExecutionPlanner::BuildAllPrograms() {
+THashMap<TStageId, std::tuple<TString,ui64,ui64>> TDqsExecutionPlanner::BuildAllPrograms() {
         using namespace NKikimr::NMiniKQL;
 
-        THashMap<TStageId, std::tuple<TString,ui64>> result;
+        THashMap<TStageId, std::tuple<TString,ui64,ui64>> result;
         TScopedAlloc alloc(NKikimr::TAlignedPagePoolCounters(), FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TVector<NNodes::TExprBase> fakeReads;
@@ -552,10 +552,7 @@ namespace NYql::NDqs {
 
             auto settings = NDq::TDqStageSettings::Parse(stage);
             ui64 stageId = stage.Ref().UniqueId();
-            auto maybeStageId = PublicIds.find(settings.LogicalId);
-            if (maybeStageId != PublicIds.end()) {
-                stageId = maybeStageId->second;
-            }
+            ui64 publicId = PublicIds.Value(settings.LogicalId, stageId);
 
 /* TODO:
             ui64 stageId = stage.Ref().UniqueId();
@@ -576,7 +573,7 @@ namespace NYql::NDqs {
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,
                     ExprContext, fakeReads),
-                stageId);
+                stageId, publicId);
         }
 
         return result;

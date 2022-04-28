@@ -3,12 +3,12 @@ if [[ $1 != "disk" && $1 != "ram" ]]; then
   echo Please specify 'disk' or 'ram' as the parameter
   exit
 fi
+need_init=0
 if [[ $1 = "disk" ]]; then
-  need_init=0
   if [ ! -f ydb.data ]; then
-    echo Data file ydb.data not found, creating ...
+    echo Data file ydb.data not found, creating ...  
     fallocate -l 64G ydb.data
-    if [[ $? -ge 1 ]]; then
+   if [[ $? -ge 1 ]]; then
       if [ -f ydb.data ]; then
         rm ydb.data
       fi
@@ -28,15 +28,19 @@ sleep 3
 grep logs/storage_start_err.log -v -f config/exclude_err.txt
 if [[ $? -eq 0 ]]; then
   echo Errors found when starting storage process, cancelling start script
+  if [ $need_init -eq 1 ]; then
+    rm ydb.data
+  fi
   exit
 fi
-
-if [ $need_init -eq 1 ]; then
+if [ $need_init -eq 1 ] || [ $cfg == "ram.yaml" ]; then
   echo Initializing storage ...
   `pwd`/ydbd/bin/ydbd -s grpc://localhost:2136 admin blobstorage config init --yaml-file config/$cfg > logs/init_storage.log 2>&1
   if [[ $? -ge 1 ]]; then
     echo Errors found when initializing storage, cancelling start script, check logs/init_storage.log
-    rm ydb.data
+    if [ $need_init -eq 1 ]; then
+	    rm ydb.data
+    fi
     exit
   fi
 fi

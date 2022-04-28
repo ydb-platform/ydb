@@ -386,6 +386,7 @@ private:
     TOperationProgressWriter ProgressWriter_ = [](const TOperationProgress&) {};
     TString ExtractedQueryParametersMetadataYson_;
     const bool EnableRangeComputeFor_;
+    i64 FallbackCounter = 0;
 };
 
 } // namspace NYql

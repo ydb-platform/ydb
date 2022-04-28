@@ -993,6 +993,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
                 ExprCtx_->IssueManager.AddIssues({warning});
             }
 
+            FallbackCounter ++;
             // don't execute recapture again
             ExprCtx_->Step.Done(TExprStep::Recapture);
             return AsyncTransformWithFallback(false);
@@ -1162,6 +1163,15 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
             writer.OnKeyedItem("count");
             writer.OnInt64Scalar(rusage.MajorPageFaults);
         writer.OnEndMap();
+
+        if (FallbackCounter) {
+            writer.OnKeyedItem("Fallback");
+            writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(FallbackCounter);
+            writer.OnEndMap();
+        }
+
     writer.OnEndMap(); // system
 
     // Footer

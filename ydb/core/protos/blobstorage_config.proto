@@ -574,6 +574,9 @@ message TBaseConfig {
         bytes PhysicalLocation = 2 [deprecated=true];
         THostKey HostKey = 3;
         NActorsInterconnect.TNodeLocation Location = 4;
+        uint64 LastConnectTimestamp = 5; // TInstant
+        uint64 LastDisconnectTimestamp = 6; // TInstant
+        uint64 LastSeenTimestamp = 7; // when seen working for the last time
     }
 
     repeated TPDisk PDisk = 1;

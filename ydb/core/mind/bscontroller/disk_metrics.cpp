@@ -1,7 +1,6 @@
 #include "impl.h"
 
-namespace NKikimr {
-namespace NBsController {
+namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxUpdateDiskMetrics : public TTransactionBase<TBlobStorageController> {
 public:
@@ -47,6 +46,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     TabletCounters->Cumulative()[NBlobStorageController::COUNTER_UPDATE_DISK_METRICS_COUNT].Increment(1);
     TRequestCounter counter(TabletCounters, NBlobStorageController::COUNTER_UPDATE_DISK_METRICS_USEC);
 
+    const TInstant now = TActivationContext::Now();
     auto& record = ev->Get()->Record;
 
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXUDM01, "Updating disk status", (Record, record));
@@ -83,7 +83,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     for (const auto& m : record.GetPDisksMetrics()) {
         const TPDiskId pdiskId(ev->Sender.NodeId(), m.GetPDiskId());
         if (auto *pdisk = FindPDisk(pdiskId)) {
-            if (pdisk->UpdatePDiskMetrics(m)) {
+            if (pdisk->UpdatePDiskMetrics(m, now)) {
                 const auto first = std::make_pair(pdiskId, TList<TSelectGroupsQueueItem>::iterator());
                 for (auto it = PDiskToQueue.lower_bound(first); it != PDiskToQueue.end() && it->first == pdiskId; ++it) {
                     queues.insert(it->second);
@@ -104,12 +104,10 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     ProcessVDiskStatus(record.GetVDiskStatus());
 
     // commit into database if enough time has passed
-    const TInstant now = TActivationContext::Now();
     if (now - LastMetricsCommit >= TDuration::Seconds(15)) {
         Execute(new TTxUpdateDiskMetrics(this));
         LastMetricsCommit = now;
     }
 }
 
-}
-}
+} // NKikimr::NBsController

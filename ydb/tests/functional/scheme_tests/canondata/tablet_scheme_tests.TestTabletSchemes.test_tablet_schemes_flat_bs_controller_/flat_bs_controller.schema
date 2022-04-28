@@ -146,6 +146,16 @@
                 "ColumnId": 2,
                 "ColumnName": "NextPDiskID",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "LastConnectTimestamp",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "LastDisconnectTimestamp",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -153,7 +163,9 @@
             "0": {
                 "Columns": [
                     1,
-                    2
+                    2,
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

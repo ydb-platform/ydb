@@ -71,6 +71,7 @@ public:
     class TTxScrubQuantumFinished;
     class TTxUpdateLastSeenReady;
     class TTxUpdateNodeDrives;
+    class TTxUpdateNodeDisconnectTimestamp;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -394,9 +395,10 @@ public:
                 && Metrics.HasMaxWriteThroughput();
         }
 
-        bool UpdatePDiskMetrics(const NKikimrBlobStorage::TPDiskMetrics& pDiskMetrics) {
+        bool UpdatePDiskMetrics(const NKikimrBlobStorage::TPDiskMetrics& pDiskMetrics, TInstant now) {
             const bool hadMetrics = HasFullMetrics();
             Metrics.CopyFrom(pDiskMetrics);
+            Metrics.SetUpdateTimestamp(now.GetValue());
             MetricsDirty = true;
             return !hadMetrics && HasFullMetrics(); // true if metrics have just arrived
         }
@@ -755,15 +757,21 @@ public:
 
         ui32 ConnectedCount = 0;
         Table::NextPDiskID::Type NextPDiskID;
+        TInstant LastConnectTimestamp;
+        TInstant LastDisconnectTimestamp;
         // in-mem only
         std::map<TString, NPDisk::TDriveData> KnownDrives;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
             static TTableAdapter<Table, TNodeInfo,
-                    Table::NextPDiskID
+                    Table::NextPDiskID,
+                    Table::LastConnectTimestamp,
+                    Table::LastDisconnectTimestamp
                 > adapter(
-                    &TNodeInfo::NextPDiskID
+                    &TNodeInfo::NextPDiskID,
+                    &TNodeInfo::LastConnectTimestamp,
+                    &TNodeInfo::LastDisconnectTimestamp
                 );
             callback(&adapter);
         }

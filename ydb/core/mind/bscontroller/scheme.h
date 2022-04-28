@@ -15,10 +15,11 @@ struct Schema : NIceDb::Schema {
     struct Node : Table<2> {
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
         struct NextPDiskID : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct NextGroupKeyNonce : Column<9, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
+        struct LastConnectTimestamp : Column<10, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
+        struct LastDisconnectTimestamp : Column<11, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, NextPDiskID>;
+        using TColumns = TableColumns<ID, NextPDiskID, LastConnectTimestamp, LastDisconnectTimestamp>;
     };
 
     struct PDisk : Table<3> {

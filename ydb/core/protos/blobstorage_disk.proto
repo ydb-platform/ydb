@@ -73,4 +73,6 @@ message TPDiskMetrics {
     optional uint64 EnforcedDynamicSlotSize = 9;
 
     optional TPDiskState.E State = 10;
+
+    optional uint64 UpdateTimestamp = 11; // TInstant::GetValue()
 }

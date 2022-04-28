@@ -203,7 +203,7 @@ public:
 
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_REGISTER_NODE; }
 
-    bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Self->TabletCounters->Cumulative()[NBlobStorageController::COUNTER_REGISTER_NODE_COUNT].Increment(1);
         TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_REGISTER_NODE_USEC);
 
@@ -292,6 +292,9 @@ public:
         res->Record.SetAvailDomain(AppData()->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()));
         Response = std::make_unique<IEventHandle>(request->Sender, Self->SelfId(), res.release(), 0, request->Cookie);
 
+        NIceDb::TNiceDb db(txc.DB);
+        auto& node = Self->GetNode(nodeId);
+        db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
         return true;
     }
@@ -300,6 +303,29 @@ public:
         TActivationContext::Send(Response.release());
         Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
     }
+};
+
+class TBlobStorageController::TTxUpdateNodeDisconnectTimestamp
+    : public TTransactionBase<TBlobStorageController>
+{
+    TNodeId NodeId;
+
+public:
+    TTxUpdateNodeDisconnectTimestamp(TNodeId nodeId, TBlobStorageController *controller)
+        : TTransactionBase(controller)
+        , NodeId(nodeId)
+    {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_NODE_DISCONNECT_TIMESTAMP; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+        auto& node = Self->GetNode(NodeId);
+        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::LastDisconnectTimestamp>(node.LastDisconnectTimestamp);
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
 };
 
 void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,
@@ -429,6 +455,8 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId) {
         it->second->UpdateOperational(true);
         SysViewChangedPDisks.insert(it->first);
     }
+
+    node.LastConnectTimestamp = TInstant::Now();
 }
 
 void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
@@ -469,6 +497,8 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
     if (!lastSeenReadyQ.empty()) {
         Execute(CreateTxUpdateLastSeenReady(std::move(lastSeenReadyQ)));
     }
+    node.LastDisconnectTimestamp = now;
+    Execute(new TTxUpdateNodeDisconnectTimestamp(nodeId, this));
 }
 
 void TBlobStorageController::EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo) {

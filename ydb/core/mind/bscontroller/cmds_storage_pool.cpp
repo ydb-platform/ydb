@@ -504,6 +504,7 @@ namespace NKikimr::NBsController {
             }
         }
 
+        const TInstant now = TActivationContext::Now();
         TMap<TNodeId, NKikimrBlobStorage::TBaseConfig::TNode> nodes;
         for (const auto& [hostId, record] : *HostRecords) {
             TStringStream s;
@@ -517,6 +518,13 @@ namespace NKikimr::NBsController {
             node.SetNodeId(record.NodeId);
             node.SetPhysicalLocation(s.Str());
             record.Location.Serialize(node.MutableLocation(), false); // this field has been introduced recently, so it doesn't have compatibility format
+            const auto& nodes = Nodes.Get();
+            if (const auto it = nodes.find(record.NodeId); it != nodes.end()) {
+                node.SetLastConnectTimestamp(it->second.LastConnectTimestamp.GetValue());
+                node.SetLastDisconnectTimestamp(it->second.LastDisconnectTimestamp.GetValue());
+                node.SetLastSeenTimestamp(it->second.LastConnectTimestamp <= it->second.LastDisconnectTimestamp ?
+                    it->second.LastDisconnectTimestamp.GetValue() : now.GetValue());
+            }
             auto *key = node.MutableHostKey();
             key->SetFqdn(std::get<0>(hostId));
             key->SetIcPort(std::get<1>(hostId));

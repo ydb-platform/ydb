@@ -909,6 +909,9 @@ ALLOW .* -> vendor/github.com/gocql/gocql
 # CONTRIB-2524
 ALLOW .* -> vendor/github.com/ryanrolds/sqlclosecheck
 
+# CONTRIB-2546
+ALLOW .* -> vendor/github.com/ncruces/go-proxied
+
 #
 # Tools
 #

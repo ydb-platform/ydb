@@ -2580,7 +2580,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TBillingStats Processed;
         TBillingStats Billed;
 
-        TShardStatus();
+        TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
         TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
             TStringBuilder result;

@@ -717,6 +717,14 @@ TCollectedStreamResult CollectStreamResult(NYdb::NTable::TScanQueryPartIterator&
     return CollectStreamResultImpl(it);
 }
 
+TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table) {
+    TReadTableSettings settings;
+    settings.Ordered(true);
+    auto it = session.ReadTable(table, settings).GetValueSync();
+    UNIT_ASSERT(it.IsSuccess());
+    return StreamResultToYson(it);
+}
+
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table) {
     TReadTableSettings settings;
     settings.Ordered(true);

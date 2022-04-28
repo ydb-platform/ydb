@@ -4208,13 +4208,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TShardIdx shardIdx = TShardIdx(rowset.GetValue<Schema::IndexBuildShardStatus::OwnerShardIdx>(),
                                                    rowset.GetValue<Schema::IndexBuildShardStatus::LocalShardIdx>());
 
-
-                    TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards[shardIdx];
-
                     NKikimrTx::TKeyRange range = rowset.GetValue<Schema::IndexBuildShardStatus::Range>();
-                    shardStatus.Range.Load(range);
+                    TString lastKeyAck = rowset.GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
-                    shardStatus.LastKeyAck = rowset.GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
+                    buildInfo->Shards.emplace(shardIdx, TIndexBuildInfo::TShardStatus(TSerializedTableRange(range), std::move(lastKeyAck)));
+                    TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);
+
                     shardStatus.Status = rowset.GetValue<Schema::IndexBuildShardStatus::Status>();
 
                     shardStatus.DebugMessage = rowset.GetValueOrDefault<Schema::IndexBuildShardStatus::Message>();

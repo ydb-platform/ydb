@@ -1727,14 +1727,10 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus() {
-    TCell cell;
-    TVector<TCell> vec = {cell};
-    TArrayRef<TCell> cells(vec);
-    Range = TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
-
-    LastKeyAck = Range.From.GetBuffer();  // -inf
-}
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
+    : Range(std::move(range))
+    , LastKeyAck(std::move(lastKeyAck))
+{}
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
     : Container(container)

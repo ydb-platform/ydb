@@ -1552,7 +1552,6 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/IndexName/indexImplTable");
             const TString expected =
                 R"([[["Secondary 1"];["Primary 1"]];)"
-                R"([["Secondary 2"];#];)"
                 R"([["Secondary 3"];["Primary 3"]];)"
                 R"([["Secondary 4"];#]])";
             UNIT_ASSERT_VALUES_EQUAL(yson, expected);

@@ -16,14 +16,6 @@ using namespace NYdb::NScripting;
 
 namespace {
 
-TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table) {
-    TReadTableSettings settings;
-    settings.Ordered(true);
-    auto it = session.ReadTable(table, settings).GetValueSync();
-    UNIT_ASSERT(it.IsSuccess());
-    return StreamResultToYson(it);
-}
-
 NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query) {
     const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
     return session.ExecuteDataQuery(query, txSettings).ExtractValueSync();

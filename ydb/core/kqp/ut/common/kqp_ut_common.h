@@ -226,6 +226,7 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it);
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 
+TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table);
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table);
 
 inline void AssertSuccessResult(const NYdb::TStatus& result) {

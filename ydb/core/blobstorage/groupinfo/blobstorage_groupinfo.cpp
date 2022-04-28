@@ -299,7 +299,7 @@ TBlobStorageGroupInfo::TTopology::TTopology(TBlobStorageGroupType gtype)
 {}
 
 TBlobStorageGroupInfo::TTopology::TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms,
-        ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain)
+        ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain, bool finalize)
     : GType(gtype)
 {
     FailRealms = {numFailRealms, {
@@ -307,6 +307,9 @@ TBlobStorageGroupInfo::TTopology::TTopology(TBlobStorageGroupType gtype, ui32 nu
             {numVDisksPerFailDomain, TVDiskInfo{}}
         }}
     }};
+    if (finalize) {
+        FinalizeConstruction();
+    }
 }
 
 TBlobStorageGroupInfo::TTopology::~TTopology() = default;
@@ -398,10 +401,6 @@ const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::TTopology::GetF
 
 ui32 TBlobStorageGroupInfo::TTopology::GetOrderNumber(const TVDiskIdShort &vdisk) const {
     return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain].VDisks[vdisk.VDisk].OrderNumber;
-}
-
-ui32 TBlobStorageGroupInfo::TTopology::GetNumVDisksPerFailDomain() const {
-    return FailRealms[0].FailDomains[0].VDisks.size();
 }
 
 void TBlobStorageGroupInfo::TTopology::PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) const {

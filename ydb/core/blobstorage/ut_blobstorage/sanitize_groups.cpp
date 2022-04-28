@@ -98,6 +98,6 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         env.Sim(TDuration::Minutes(15));
         auto corrected = getGroupsWithIncorrectLayout();
         Cerr << "bad groups after shuffling and fixing# " << FormatList(corrected) << Endl;
-//        UNIT_ASSERT(corrected.empty());
+        UNIT_ASSERT(corrected.empty());
     }
 }

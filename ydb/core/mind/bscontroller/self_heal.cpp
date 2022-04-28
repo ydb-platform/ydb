@@ -244,7 +244,7 @@ namespace NKikimr::NBsController {
         TIntrusiveList<TGroupRecord, TWithInvalidLayout> GroupsWithInvalidLayout;
         std::shared_ptr<std::atomic_uint64_t> UnreassignableGroups;
         bool GroupLayoutSanitizer = false;
-        std::optional<THostRecordMapImpl> HostRecords;
+        THostRecordMap HostRecords;
 
     public:
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups)
@@ -579,8 +579,8 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
-            HostRecords.emplace(ev->Get());
+        void Handle(TEvPrivate::TEvUpdateHostRecords::TPtr ev) {
+            HostRecords = std::move(ev->Get()->HostRecords);
         }
 
         STRICT_STFUNC(StateFunc, {
@@ -589,7 +589,7 @@ namespace NKikimr::NBsController {
             hFunc(NMon::TEvRemoteHttpInfo, Handle);
             hFunc(TEvReassignerDone, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            hFunc(TEvPrivate::TEvUpdateHostRecords, Handle);
         })
     };
 

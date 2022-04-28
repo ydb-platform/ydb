@@ -945,7 +945,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 const auto [it, inserted] = item.Seen.insert(item.Group);
                 UNIT_ASSERT(inserted);
                 UNIT_ASSERT(item.Seen.size() <= 9);
-                Cerr << "processing path# " << item.Path << Endl;
+                Ctest << "processing path# " << item.Path << Endl;
 
                 auto candidates = checkLayout(item.Group);
                 if (!candidates) {
@@ -957,7 +957,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                         auto temp = context.ReallocateGroup(mapper, groupId, {pdiskId}, false, false, false);
                         TString path = TStringBuilder() << item.Path << "/" << (int)vdiskId.FailRealm << ":"
                             << (int)vdiskId.FailDomain << ":" << (int)vdiskId.VDisk << "@" << pdiskId;
-                        Cerr << "path# " << path << Endl;
+                        Ctest << "path# " << path << Endl;
                         context.DumpGroup(temp);
 
                         auto vdiskItems = item.VDiskItems;
@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                     }
                 }
 
-                Cerr << Endl;
+                Ctest << Endl;
             }
         }
     }

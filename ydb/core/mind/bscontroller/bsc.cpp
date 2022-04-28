@@ -152,7 +152,7 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     const bool initial = !HostRecords;
     HostRecords = std::make_shared<THostRecordMap::element_type>(ev->Get());
     Schedule(TDuration::Minutes(5), new TEvPrivate::TEvHostRecordsTimeToLiveExceeded);
-    TActivationContext::Send(ev->Forward(SelfHealId));
+    Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
     if (initial) {
         Execute(CreateTxInitScheme());
     }

@@ -1377,6 +1377,7 @@ private:
             EvVSlotReadyUpdate,
             EvVSlotNotReadyHistogramUpdate,
             EvProcessIncomingEvent,
+            EvUpdateHostRecords,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1390,6 +1391,14 @@ private:
         struct TEvScrub : TEventLocal<TEvScrub, EvScrub> {};
         struct TEvVSlotReadyUpdate : TEventLocal<TEvVSlotReadyUpdate, EvVSlotReadyUpdate> {};
         struct TEvVSlotNotReadyHistogramUpdate : TEventLocal<TEvVSlotNotReadyHistogramUpdate, EvVSlotNotReadyHistogramUpdate> {};
+
+        struct TEvUpdateHostRecords : TEventLocal<TEvUpdateHostRecords, EvUpdateHostRecords> {
+            THostRecordMap HostRecords;
+
+            TEvUpdateHostRecords(THostRecordMap hostRecords)
+                : HostRecords(std::move(hostRecords))
+            {}
+        };
     };
 
     static constexpr TDuration UpdateSystemViewsPeriod = TDuration::Seconds(5);

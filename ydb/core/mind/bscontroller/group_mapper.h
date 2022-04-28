@@ -18,6 +18,19 @@ namespace NKikimr {
             using TGroupDefinition = TVector<TVector<TVector<TPDiskId>>>; // Realm/Domain/Disk
             using TForbiddenPDisks = std::unordered_set<TPDiskId, THash<TPDiskId>>;
 
+            template<typename T>
+            static void Traverse(const TGroupDefinition& group, T&& callback) {
+                for (ui32 failRealmIdx = 0; failRealmIdx != group.size(); ++failRealmIdx) {
+                    const auto& realm = group[failRealmIdx];
+                    for (ui32 failDomainIdx = 0; failDomainIdx != realm.size(); ++failDomainIdx) {
+                        const auto& domain = realm[failDomainIdx];
+                        for (ui32 vdiskIdx = 0; vdiskIdx != domain.size(); ++vdiskIdx) {
+                            callback(TVDiskIdShort(failRealmIdx, failDomainIdx, vdiskIdx), domain[vdiskIdx]);
+                        }
+                    }
+                }
+            }
+
             struct TPDiskRecord {
                 const TPDiskId PDiskId;
                 const TNodeLocation Location;

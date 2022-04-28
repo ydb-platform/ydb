@@ -10,26 +10,25 @@ namespace NKikimr::NBsController {
             return {};
         }
 
-        TGroupLayout group(geom.GetNumFailRealms(), geom.GetNumFailDomainsPerFailRealm());
+        TBlobStorageGroupInfo::TTopology topology(geom.GetType(), geom.GetNumFailRealms(), geom.GetNumFailDomainsPerFailRealm(),
+            geom.GetNumVDisksPerFailDomain(), true);
+        TGroupLayout group(topology);
         TDomainMapper mapper;
         THashMap<TVDiskIdShort, TPDiskLayoutPosition> map;
         for (const auto& [vdiskId, p] : layout) {
             const auto& [location, pdiskId] = p;
             TPDiskLayoutPosition pos(mapper, location, pdiskId, geom);
-            group.AddDisk(pos, vdiskId.FailRealm, vdiskId.FailDomain);
+            group.AddDisk(pos, topology.GetOrderNumber(vdiskId));
             map.emplace(vdiskId, pos);
         }
 
         std::vector<std::pair<TScore, TVDiskIdShort>> scoreboard;
         for (const auto& [vdiskId, pos] : map) {
-            scoreboard.emplace_back(group.GetCandidateScore(pos, vdiskId.FailRealm, vdiskId.FailDomain), vdiskId);
+            scoreboard.emplace_back(group.GetCandidateScore(pos, topology.GetOrderNumber(vdiskId)), vdiskId);
         }
 
         auto comp1 = [](const auto& x, const auto& y) { return x.second < y.second; };
         std::sort(scoreboard.begin(), scoreboard.end(), comp1);
-        for (const auto& [score, vdiskId] : scoreboard) {
-            Cerr << vdiskId << "@" << map[vdiskId].ToString() << " -> " << score.ToString() << Endl;
-        }
 
         auto comp = [](const auto& x, const auto& y) { return x.first.BetterThan(y.first); };
         std::sort(scoreboard.begin(), scoreboard.end(), comp);
@@ -37,7 +36,6 @@ namespace NKikimr::NBsController {
         const auto reference = scoreboard.back().first;
         if (!reference.SameAs({})) { // not perfectly correct layout
             for (; !scoreboard.empty() && !scoreboard.back().first.BetterThan(reference); scoreboard.pop_back()) {
-                Cerr << "candidate# " << scoreboard.back().second << Endl;
                 res.Candidates.push_back(scoreboard.back().second);
             }
         }

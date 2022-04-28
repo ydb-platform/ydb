@@ -114,6 +114,10 @@ namespace NKikimr::NBsController {
             return true;
         }
 
+        TBlobStorageGroupType GetType() const {
+            return Type;
+        }
+
         TBlobStorageGroupType::EErasureSpecies GetErasure() const {
             return Type.GetErasure();
         }

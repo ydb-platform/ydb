@@ -6998,16 +6998,18 @@
         "gdbnew": {
             "formula": {
                 "sandbox_id": [
-                    1230533443
+                    1293473647
                 ],
                 "match": "GDB"
             },
             "executable": {
                 "gdb": [
+		    "gdb",
                     "bin",
                     "gdb"
                 ],
                 "gdbserver": [
+	            "gdb",
                     "bin",
                     "gdbserver"
                 ]

@@ -1052,7 +1052,7 @@ private:
             node.Ptr()->SetResult(ctx.NewAtom(node.Pos(), ToString(resultId)));
 
             if (finalizeFunc) {
-                finalizeFunc(node, result, ctx);
+                finalizeFunc(node, insertResult.first->second, ctx);
             }
 
             return std::make_pair(IGraphTransformer::TStatus::Ok, TAsyncTransformCallbackFuture());

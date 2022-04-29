@@ -66,29 +66,37 @@
         ]
     },
     {
-        "Name": "TDqSink",
+        "Name": "TDqOutputAnnotationBase",
         "Base": "TCallable",
+        "Definition": "Custom",
+        "Builder": {"Generate": "None"},
+        "Children": [
+            {"Index": 0, "Name": "Index", "Type": "TCoAtom"},
+            {"Index": 1, "Name": "DataSink", "Type": "TCallable"}
+        ]
+    },
+    {
+        "Name": "TDqTransform",
+        "Base": "TDqOutputAnnotationBase",
+        "Match": {"Type": "Callable", "Name": "DqTransform"},
+        "Children": [
+            {"Index": 2, "Name": "Type", "Type": "TCoAtom"},
+            {"Index": 3, "Name": "InputType", "Type": "TExprBase"},
+            {"Index": 4, "Name": "OutputType", "Type": "TExprBase"},
+            {"Index": 5, "Name": "Settings", "Type": "TCallable"}
+        ]
+    },
+    {
+        "Name": "TDqSink",
+        "Base": "TDqOutputAnnotationBase",
         "Match": {"Type": "Callable", "Name": "DqSink"},
         "Children": [
-            {"Index": 0, "Name": "DataSink", "Type": "TCallable"},
-            {"Index": 1, "Name": "Settings", "Type": "TExprBase"},
-            {"Index": 2, "Name": "Index", "Type": "TCoAtom"}
+            {"Index": 2, "Name": "Settings", "Type": "TCallable"}
         ]
     },
     {
-        "Name": "TDqSinksList",
-        "ListBase": "TDqSink"
-    },
-    {
-        "Name": "TTransformSettings",
-        "Base": "TCallable",
-        "Match": {"Type": "Callable", "Name": "TransformSettings"},
-        "Children": [
-            {"Index": 0, "Name": "Type", "Type": "TCoAtom"},
-            {"Index": 1, "Name": "InputType", "Type": "TExprBase"},
-            {"Index": 2, "Name": "OutputType", "Type": "TExprBase"},
-            {"Index": 3, "Name": "Other", "Type": "TCoNameValueTupleList"}
-        ]
+        "Name": "TDqStageOutputsList",
+        "ListBase": "TDqOutputAnnotationBase"
     },
     {
         "Name": "TDqStageBase",
@@ -99,7 +107,7 @@
             {"Index": 0, "Name": "Inputs", "Type": "TExprList"},
             {"Index": 1, "Name": "Program", "Type": "TCoLambda"},
             {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-            {"Index": 3, "Name": "Sinks", "Type": "TDqSinksList", "Optional": true}
+            {"Index": 3, "Name": "Outputs", "Type": "TDqStageOutputsList", "Optional": true}
         ]
     },
     {

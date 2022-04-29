@@ -22,41 +22,20 @@ public:
     }
 
     void FillTransformSettings(const TExprNode& node, ::google::protobuf::Any& transformSettings) override {
-        auto maybeDqSink = TMaybeNode<TDqSink>(&node);
-        if (!maybeDqSink)
+        auto maybeDqTransform = TMaybeNode<TDqTransform>(&node);
+        if (!maybeDqTransform)
             return;
 
-        auto dqSink = maybeDqSink.Cast();
-        auto maybeSettings = TMaybeNode<TTransformSettings>(dqSink.Settings().Raw());
+        auto maybeSettings = TMaybeNode<TFunctionTransformSettings>(maybeDqTransform.Cast().Settings().Raw());
         if (!maybeSettings) {
             return;
         }
 
         auto functionSettings = maybeSettings.Cast();
         NYql::NProto::TFunctionTransform transform;
-        for (size_t i = 0; i < functionSettings.Other().Size(); i++) {
-            TCoNameValueTuple setting = functionSettings.Other().Item(i);
-            const TStringBuf name = Name(setting);
-            if (name == "invoke_url") {
-                transform.SetInvokeUrl(TString(Value(setting)));
-            }
-        }
+        transform.SetInvokeUrl(TString{functionSettings.InvokeUrl().Value()});
 
         transformSettings.PackFrom(transform);
-    }
-
-    static TStringBuf Name(const TCoNameValueTuple& nameValue) {
-        return nameValue.Name().Value();
-    }
-
-    static TStringBuf Value(const TCoNameValueTuple& nameValue) {
-        if (TMaybeNode<TExprBase> maybeValue = nameValue.Value()) {
-            const TExprNode& value = maybeValue.Cast().Ref();
-            YQL_ENSURE(value.IsAtom());
-            return value.Content();
-        }
-
-        return {};
     }
 
 private:

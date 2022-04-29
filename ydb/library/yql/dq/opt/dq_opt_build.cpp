@@ -145,7 +145,7 @@ void MakeConsumerReplaces(
             .Body(ctx.ReplaceNodes(stageResult.Cast().Ptr(), argsMap))
             .Build()
         .Settings(TDqStageSettings::New(dqStage).BuildNode(ctx, dqStage.Pos()))
-        .Sinks(dqStage.Sinks())
+        .Outputs(dqStage.Outputs())
         .Done();
 
     for (ui32 i = 0; i < consumers.size(); ++i) {
@@ -319,7 +319,7 @@ public:
                         .Body(newBody)
                         .Build()
                     .Settings(TDqStageSettings::New(stage).BuildNode(ctx, stage.Pos()))
-                    .Sinks(stage.Sinks())
+                    .Outputs(stage.Outputs())
                     .Done();
 
                 replaces.emplace(stage.Raw(), newStage.Ptr());

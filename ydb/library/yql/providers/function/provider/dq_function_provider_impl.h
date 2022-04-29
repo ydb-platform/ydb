@@ -12,5 +12,6 @@ THolder<TVisitorTransformerBase> CreateDqFunctionIntentTransformer(TDqFunctionSt
 THolder<IGraphTransformer> CreateDqFunctionMetaLoader(TDqFunctionState::TPtr state);
 THolder<IGraphTransformer> CreateDqFunctionPhysicalOptTransformer(TDqFunctionState::TPtr state);
 THolder<IDqIntegration> CreateDqFunctionDqIntegration(TDqFunctionState::TPtr state);
+THolder<TVisitorTransformerBase> CreateDqFunctionTypeAnnotation(TDqFunctionState::TPtr state);
 
 }

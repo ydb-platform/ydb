@@ -392,8 +392,8 @@ bool GatherConsumersImpl(const TExprNode& node, TNodeMap<TNodeMultiSet>& consume
             return false;
         }
 
-        if (stage.Sinks()) {
-            if (!GatherConsumersImpl(stage.Sinks().Ref(), consumers, visited)) {
+        if (stage.Outputs()) {
+            if (!GatherConsumersImpl(stage.Outputs().Ref(), consumers, visited)) {
                 return false;
             }
         }

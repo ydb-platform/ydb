@@ -98,15 +98,15 @@ public:
 
         TDqStage inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
 
-        auto sinksBuilder = Build<TDqSinksList>(ctx, inputStage.Pos());
-        if (inputStage.Sinks()) {
-            sinksBuilder.InitFrom(inputStage.Sinks().Cast());
+        auto sinksBuilder = Build<TDqStageOutputsList>(ctx, inputStage.Pos());
+        if (inputStage.Outputs()) {
+            sinksBuilder.InitFrom(inputStage.Outputs().Cast());
         }
         sinksBuilder.Add(dqSink);
 
         auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
             .InitFrom(inputStage)
-            .Sinks(sinksBuilder.Done())
+            .Outputs(sinksBuilder.Done())
             .Done();
 
         auto dqQueryBuilder = Build<TDqQuery>(ctx, write.Pos());
@@ -119,7 +119,7 @@ public:
     }
 
 private:
-    TExprBase BuildSolomonShard(TCoAtom shardNode, TExprContext& ctx, TString solomonCluster) const {
+    TCallable BuildSolomonShard(TCoAtom shardNode, TExprContext& ctx, TString solomonCluster) const {
         const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(solomonCluster);
         YQL_ENSURE(clusterDesc, "Unknown cluster " << solomonCluster);
 

@@ -163,51 +163,51 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     }
 
     TVector<const TTypeAnnotationNode*> stageResultTypes;
-    if (TDqStageBase::idx_Sinks < stage->ChildrenSize()) {
-        YQL_ENSURE(stage->Child(TDqStageBase::idx_Sinks)->ChildrenSize() != 0, "Sink list exists but empty, stage: " << stage->Dump());
+    if (TDqStageBase::idx_Outputs < stage->ChildrenSize()) {
+        YQL_ENSURE(stage->Child(TDqStageBase::idx_Outputs)->ChildrenSize() != 0, "Stage.Outputs list exists but empty, stage: " << stage->Dump());
 
         auto outputsNumber = programResultTypesTuple.size();
-        TVector<TExprNode::TPtr> transformSinks;
-        TVector<TExprNode::TPtr> pureSinks;
-        transformSinks.reserve(outputsNumber);
-        pureSinks.reserve(outputsNumber);
-        for (const auto& sink: stage->Child(TDqStageBase::idx_Sinks)->Children()) {
-            const ui64 index = FromString(sink->Child(TDqSink::idx_Index)->Content());
+        TVector<TExprNode::TPtr> transforms;
+        TVector<TExprNode::TPtr> sinks;
+        transforms.reserve(outputsNumber);
+        sinks.reserve(outputsNumber);
+        for (const auto& output: stage->Child(TDqStageBase::idx_Outputs)->Children()) {
+            const ui64 index = FromString(output->Child(TDqOutputAnnotationBase::idx_Index)->Content());
             if (index >= outputsNumber) {
                 ctx.AddError(TIssue(ctx.GetPosition(stage->Pos()), TStringBuilder()
                     << "Sink/Transform try to process un-existing lambda's output"));
                 return TStatus::Error;
             }
 
-            auto transformSettings = sink->Child(TDqSink::idx_Settings)->IsCallable(TTransformSettings::CallableName());
-            if (transformSettings) {
-                transformSinks.push_back(sink);
+            if (output->IsCallable(TDqSink::CallableName())) {
+                sinks.push_back(output);
+            } else if (output->IsCallable(TDqTransform::CallableName())) {
+                transforms.push_back(output);
             } else {
-                pureSinks.push_back(sink);
+                YQL_ENSURE(false, "Unknown stage output type " << output->Content());
             }
         }
 
-        if (!transformSinks.empty() && !pureSinks.empty()
-            && transformSinks.size() != pureSinks.size()) {
+        if (!transforms.empty() && !sinks.empty()
+            && transforms.size() != sinks.size()) {
 
             ctx.AddError(TIssue(ctx.GetPosition(stage->Pos()), TStringBuilder()
                 << "Not every transform has a corresponding sink"));
             return TStatus::Error;
         }
 
-        if (!pureSinks.empty()) {
-            for (auto sink : pureSinks) {
+        if (!sinks.empty()) {
+            for (auto sink : sinks) {
                 sink->SetTypeAnn(resultType);
             }
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
-            for (auto sink : transformSinks) {
-                auto* sinkType = sink->GetTypeAnn();
-                if (sinkType->GetKind() != ETypeAnnotationKind::List
-                    && sinkType->GetKind() != ETypeAnnotationKind::Void) {
+            for (auto transform : transforms) {
+                auto* type = transform->GetTypeAnn();
+                if (type->GetKind() != ETypeAnnotationKind::List) {
 
-                    ctx.AddError(TIssue(ctx.GetPosition(sink->Pos()), TStringBuilder()
-                        << "Expected List or Void type, but got: " << *sinkType));
+                    ctx.AddError(TIssue(ctx.GetPosition(transform->Pos()), TStringBuilder()
+                        << "Expected List type, but got: " << *type));
                     return TStatus::Error;
                 }
                 /* auto* itemType = sinkType->Cast<TListExprType>()->GetItemType();
@@ -216,7 +216,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
                         << "Expected List<Struct<...>> type, but got: List<" << *itemType << ">"));
                     return TStatus::Error;
                 } */
-                stageResultTypes.emplace_back(sinkType);
+                stageResultTypes.emplace_back(type);
             }
         }
     } else {
@@ -810,18 +810,18 @@ TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateTransformSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 4U, ctx)) {
+TStatus AnnotateDqTransform(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 6U, ctx)) {
         return TStatus::Error;
     }
 
-    const TExprNode* outputArg = input->Child(TTransformSettings::idx_OutputType);
+    const TExprNode* outputArg = input->Child(TDqTransform::idx_OutputType);
     if (!EnsureTypeWithStructType(*outputArg, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
     const TTypeAnnotationNode* outputType = outputArg->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
 
-    const TExprNode* inputType = input->Child(TTransformSettings::idx_InputType);
+    const TExprNode* inputType = input->Child(TDqTransform::idx_InputType);
     if (!EnsureTypeWithStructType(*inputType, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -933,8 +933,8 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqSink(input, ctx);
             }
 
-            if (TTransformSettings::Match(input.Get())) {
-                return AnnotateTransformSettings (input, ctx);
+            if (TDqTransform::Match(input.Get())) {
+                return AnnotateDqTransform(input, ctx);
             }
 
             if (TDqQuery::Match(input.Get())) {

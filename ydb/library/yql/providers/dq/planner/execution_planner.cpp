@@ -156,57 +156,56 @@ namespace NYql::NDqs {
             }
 
             // Sinks
-            if (auto maybeDqSinksList = stage.Sinks()) {
-                auto dqSinksList = maybeDqSinksList.Cast();
-                for (const TDqSink& sink : dqSinksList) {
-                    const ui64 index = FromString(sink.Index().Value());
+            if (auto maybeDqOutputsList = stage.Outputs()) {
+                auto dqOutputsList = maybeDqOutputsList.Cast();
+                for (const auto& output : dqOutputsList) {
+                    const ui64 index = FromString(output.Ptr()->Child(TDqOutputAnnotationBase::idx_Index)->Content());
                     auto& stageInfo = TasksGraph.GetStageInfo(stage);
                     YQL_ENSURE(index < stageInfo.OutputsCount);
 
-                    auto dataSinkName = sink.Ptr()->Child(TDqSink::idx_DataSink)->Child(0)->Content();
+                    auto dataSinkName = output.Ptr()->Child(TDqOutputAnnotationBase::idx_DataSink)->Child(0)->Content();
                     auto datasink = TypeContext->DataSinkMap.FindPtr(dataSinkName);
                     YQL_ENSURE(datasink);
                     auto dqIntegration = (*datasink)->GetDqIntegration();
                     YQL_ENSURE(dqIntegration, "DqSink assumes that datasink has a dq integration impl");
 
-                    TTransform stageTransform;
+                    NDq::TTransform outputTransform;
                     TString sinkType;
                     ::google::protobuf::Any sinkSettings;
-
-                    auto transformSettings = sink.Settings().Maybe<TTransformSettings>();
-                    if (transformSettings) {
-                        auto settings = transformSettings.Cast();
-
-                        stageTransform.Type = settings.Type();
-                        const auto inputType = settings.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        stageTransform.InputType = NCommon::WriteTypeToYson(inputType);
-                        const auto outputType = settings.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        stageTransform.OutputType = NCommon::WriteTypeToYson(outputType);
-
-                        dqIntegration->FillTransformSettings(sink.Ref(), stageTransform.Settings);
-                    } else {
+                    if (output.Maybe<TDqSink>()) {
+                        auto sink = output.Cast<TDqSink>();
                         dqIntegration->FillSinkSettings(sink.Ref(), sinkSettings, sinkType);
                         YQL_ENSURE(!sinkSettings.type_url().empty(), "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings for its dq sink node");
                         YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings type for its dq sink node");
+                    } else if (output.Maybe<NNodes::TDqTransform>()) {
+                        auto transform = output.Cast<NNodes::TDqTransform>();
+                        outputTransform.Type = transform.Type();
+                        const auto inputType = transform.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                        outputTransform.InputType = NCommon::WriteTypeToYson(inputType);
+                        const auto outputType = transform.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                        outputTransform.OutputType = NCommon::WriteTypeToYson(outputType);
+                        dqIntegration->FillTransformSettings(transform.Ref(), outputTransform.Settings);
+                    } else {
+                        YQL_ENSURE(false, "Unknown stage output type");
                     }
 
                     for (ui64 taskId : stageInfo.Tasks) {
                         auto& task = TasksGraph.GetTask(taskId);
                         YQL_ENSURE(index < task.Outputs.size());
-                        auto& output = task.Outputs[index];
-                        if (transformSettings) {
+                        auto& taskOutput = task.Outputs[index];
 
-                            output.Transform.ConstructInPlace();
+                        if (output.Maybe<TDqSink>()) {
+                            taskOutput.SinkType = sinkType;
+                            taskOutput.SinkSettings = sinkSettings;
+                            taskOutput.Type = NDq::TTaskOutputType::Sink;
+                        } else if (output.Maybe<NNodes::TDqTransform>()) {
+                            taskOutput.Transform.ConstructInPlace();
 
-                            auto& transform = output.Transform;
-                            transform->Type = stageTransform.Type;
-                            transform->InputType = stageTransform.InputType;
-                            transform->OutputType = stageTransform.OutputType;
-                            //transform->Settings = stageTransform.Settings;
-                        } else {
-                            output.SinkType = sinkType;
-                            output.SinkSettings = sinkSettings;
-                            output.Type = NDq::TTaskOutputType::Sink;
+                            auto& transform = taskOutput.Transform;
+                            transform->Type = outputTransform.Type;
+                            transform->InputType = outputTransform.InputType;
+                            transform->OutputType = outputTransform.OutputType;
+                            //transform->Settings = outputTransform.Settings;
                         }
                     }
                 }

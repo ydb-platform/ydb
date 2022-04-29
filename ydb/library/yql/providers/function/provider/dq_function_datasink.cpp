@@ -21,6 +21,7 @@ public:
         , LoadMetaDataTransformer(CreateDqFunctionMetaLoader(State))
         , IntentDeterminationTransformer(CreateDqFunctionIntentTransformer(State))
         , DqIntegration(CreateDqFunctionDqIntegration(State))
+        , TypeAnnotationTransformer(CreateDqFunctionTypeAnnotation(State))
     {}
 
     TStringBuf GetName() const override {
@@ -50,7 +51,8 @@ public:
     }
 
     bool CanParse(const TExprNode& node) override {
-        return node.IsCallable(TDqSqlExternalFunction::CallableName());
+        return node.IsCallable(TDqSqlExternalFunction::CallableName())
+            || TypeAnnotationTransformer->CanParse(node);
     }
 
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
@@ -69,12 +71,18 @@ public:
         return DqIntegration.Get();
     }
 
+    IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
+        Y_UNUSED(instantOnly);
+        return *TypeAnnotationTransformer;
+    }
+
 private:
     const TDqFunctionState::TPtr State;
     const THolder<IGraphTransformer> PhysicalOptTransformer;
     const THolder<IGraphTransformer> LoadMetaDataTransformer;
     const THolder<TVisitorTransformerBase> IntentDeterminationTransformer;
     const THolder<IDqIntegration> DqIntegration;
+    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer;
 };
 } // namespace
 

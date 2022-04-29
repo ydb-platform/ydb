@@ -33,6 +33,7 @@ target_sources(providers-function-provider PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_provider.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_datasource.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_datasink.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_type_ann.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_physical_optimize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_dq_integration.cpp
 )

@@ -77,7 +77,6 @@ public:
         TExprNode::TPtr inputType;
         TExprNode::TPtr outputType;
 
-        TVector<TCoNameValueTuple> settings;
         for (const auto &tuple: callable.Settings().Ref().Children()) {
             const auto paramName = tuple->Head().Content();
             if (paramName == "connection") {
@@ -87,11 +86,6 @@ public:
             } else if (paramName == "output_type") {
                 outputType = tuple->TailPtr();
             } else {
-                auto setting = Build<TCoNameValueTuple>(ctx, node.Pos())
-                        .Name().Build(paramName)
-                        .Value(tuple->TailPtr())
-                        .Done();
-                settings.push_back(setting);
             }
         }
 
@@ -102,16 +96,6 @@ public:
         });
 
         YQL_ENSURE(description != State->FunctionsDescription.end(), "External function meta doesn't found " << transformName);
-        settings.push_back(
-            Build<TCoNameValueTuple>(ctx, node.Pos())
-                .Name().Build("invoke_url")
-                .Value<TCoAtom>().Build(description->InvokeUrl)
-                .Done()
-        );
-
-        auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos())
-                .Add(settings)
-                .Done();
 
         auto stage = nodeInput.Output().Stage().Cast<TDqStage>();
         auto dutyColumn = DqPushLambdaToStage(stage, nodeInput.Output().Index(), addShuffleColumn, {}, ctx, optCtx);
@@ -123,17 +107,17 @@ public:
                 .Connection().Build(connectionName)
                 .Done();
 
-        auto sinkSettings = Build<TTransformSettings>(ctx, node.Pos())
+        auto settings = Build<TFunctionTransformSettings>(ctx, node.Pos())
+                .InvokeUrl<TCoAtom>().Build(description->InvokeUrl)
+                .Done();
+
+        auto dqTransform = Build<TDqTransform>(ctx, node.Pos())
+                .Index().Build("0")
+                .DataSink(transformSink)
                 .Type<TCoAtom>().Build(transformType)
                 .InputType(inputType)
                 .OutputType(outputType)
-                .Other(settingsBuilder)
-                .Done();
-
-        auto dqSink = Build<TDqSink>(ctx, node.Pos())
-                .DataSink(transformSink)
-                .Settings(sinkSettings)
-                .Index().Build("0")
+                .Settings(settings)
                 .Done();
 
         auto transformStage = Build<TDqStage>(ctx, node.Pos())
@@ -156,7 +140,7 @@ public:
                         .Build()
                     .Build()
                 .Settings().Build()
-                .Sinks().Add(dqSink).Build()
+                .Outputs().Add(dqTransform).Build()
                 .Done();
 
         auto externalStage = Build<TDqCnUnionAll>(ctx, node.Pos())

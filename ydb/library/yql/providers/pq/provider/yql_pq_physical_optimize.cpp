@@ -92,15 +92,15 @@ public:
 
         TDqStage inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
 
-        auto sinksBuilder = Build<TDqSinksList>(ctx, topicNode.Pos());
-        if (inputStage.Sinks()) {
-            sinksBuilder.InitFrom(inputStage.Sinks().Cast());
+        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, topicNode.Pos());
+        if (inputStage.Outputs()) {
+            outputsBuilder.InitFrom(inputStage.Outputs().Cast());
         }
-        sinksBuilder.Add(dqSink);
+        outputsBuilder.Add(dqSink);
 
         auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
             .InitFrom(inputStage)
-            .Sinks(sinksBuilder.Done())
+            .Outputs(outputsBuilder.Done())
             .Done();
 
         auto dqQueryBuilder = Build<TDqQuery>(ctx, write.Pos());

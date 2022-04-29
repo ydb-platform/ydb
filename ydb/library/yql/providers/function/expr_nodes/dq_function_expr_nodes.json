@@ -26,6 +26,14 @@
             {"Index": 1, "Name": "Type", "Type": "TCoAtom"},
             {"Index": 2, "Name": "Connection", "Type": "TCoAtom"}
           ]
+        },
+        {
+          "Name": "TFunctionTransformSettings",
+          "Base": "TCallable",
+          "Match": {"Type": "Callable", "Name": "FunctionTransformSettings"},
+          "Children": [
+            {"Index": 0, "Name": "InvokeUrl", "Type": "TCoAtom"}
+          ]
         }
     ]
 }

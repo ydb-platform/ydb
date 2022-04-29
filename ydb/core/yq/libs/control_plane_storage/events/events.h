@@ -200,13 +200,14 @@ struct TEvControlPlaneStorage {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::ControlPlaneStorage), "All events must be in their subspace");
 
-    struct TEvCreateQueryRequest : NActors::TEventLocal<TEvCreateQueryRequest, EvCreateQueryRequest> {
-        explicit TEvCreateQueryRequest(const TString& scope,
-                                       const YandexQuery::CreateQueryRequest& request,
-                                       const TString& user,
-                                       const TString& token,
-                                       const TString& cloudId,
-                                       TPermissions permissions)
+    template<typename ProtoMessage, ui32 EventType>
+    struct TControlPlaneRequest : NActors::TEventLocal<TControlPlaneRequest<ProtoMessage, EventType>, EventType> {
+        explicit TControlPlaneRequest(const TString& scope,
+                                             const ProtoMessage& request,
+                                             const TString& user,
+                                             const TString& token,
+                                             const TString& cloudId,
+                                             TPermissions permissions)
             : Scope(scope)
             , Request(request)
             , User(user)
@@ -226,1139 +227,112 @@ struct TEvControlPlaneStorage {
         }
 
         TString Scope;
-        YandexQuery::CreateQueryRequest Request;
+        ProtoMessage Request;
         TString User;
         TString Token;
         TString CloudId;
         TPermissions Permissions;
     };
 
-    struct TEvCreateQueryResponse : NActors::TEventLocal<TEvCreateQueryResponse, EvCreateQueryResponse> {
-        explicit TEvCreateQueryResponse(const YandexQuery::CreateQueryResult& result,
-                                        const TAuditDetails<YandexQuery::Query>& auditDetails)
+    template<typename TDerived, typename ProtoMessage, ui32 EventType>
+    struct TControlPlaneResponse : NActors::TEventLocal<TDerived, EventType> {
+        explicit TControlPlaneResponse(const ProtoMessage& result)
             : Result(result)
+        {
+        }
+
+        explicit TControlPlaneResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {
+        }
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Result.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
+        ProtoMessage Result;
+        NYql::TIssues Issues;
+        TDebugInfoPtr DebugInfo;
+    };
+
+    template<typename ProtoMessage, ui32 EventType>
+    struct TControlPlaneNonAuditableResponse : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType> {
+        explicit TControlPlaneNonAuditableResponse(const ProtoMessage& result)
+            : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(result)
+        {
+        }
+
+        explicit TControlPlaneNonAuditableResponse(const NYql::TIssues& issues)
+            : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(issues)
+        {
+        }
+    };
+
+    template<typename ProtoMessage, typename AuditMessage, ui32 EventType>
+    struct TControlPlaneAuditableResponse : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType> {
+        explicit TControlPlaneAuditableResponse(const ProtoMessage& result,
+                                        const TAuditDetails<AuditMessage>& auditDetails)
+            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(result)
             , AuditDetails(auditDetails)
         {
         }
 
-        explicit TEvCreateQueryResponse(const NYql::TIssues& issues)
-            : Issues(issues)
+        explicit TControlPlaneAuditableResponse(const NYql::TIssues& issues)
+            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(issues)
         {
         }
 
         size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
+            return TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>::GetByteSize()
+                    + AuditDetails.GetByteSize();
         }
 
-        YandexQuery::CreateQueryResult Result;
-        TAuditDetails<YandexQuery::Query> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
+        TAuditDetails<AuditMessage> AuditDetails;
     };
 
-    struct TEvListQueriesRequest : NActors::TEventLocal<TEvListQueriesRequest, EvListQueriesRequest> {
-        explicit TEvListQueriesRequest(const TString& scope,
-                                       const YandexQuery::ListQueriesRequest& request,
-                                       const TString& user,
-                                       const TString& token,
-                                       const TString& cloudId,
-                                       TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ListQueriesRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvListQueriesResponse : NActors::TEventLocal<TEvListQueriesResponse, EvListQueriesResponse> {
-        explicit TEvListQueriesResponse(const YandexQuery::ListQueriesResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvListQueriesResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ListQueriesResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvDescribeQueryRequest : NActors::TEventLocal<TEvDescribeQueryRequest, EvDescribeQueryRequest> {
-        explicit TEvDescribeQueryRequest(const TString& scope,
-                                         const YandexQuery::DescribeQueryRequest& request,
-                                         const TString& user,
-                                         const TString& token,
-                                         const TString& cloudId,
-                                         TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::DescribeQueryRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvDescribeQueryResponse : NActors::TEventLocal<TEvDescribeQueryResponse, EvDescribeQueryResponse> {
-        explicit TEvDescribeQueryResponse(const YandexQuery::DescribeQueryResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvDescribeQueryResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::DescribeQueryResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvGetQueryStatusRequest : NActors::TEventLocal<TEvGetQueryStatusRequest, EvGetQueryStatusRequest> {
-        explicit TEvGetQueryStatusRequest(const TString& scope,
-                                         const YandexQuery::GetQueryStatusRequest& request,
-                                         const TString& user,
-                                         const TString& token,
-                                         const TString& cloudId,
-                                         TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::GetQueryStatusRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvGetQueryStatusResponse : NActors::TEventLocal<TEvGetQueryStatusResponse, EvGetQueryStatusResponse> {
-        explicit TEvGetQueryStatusResponse(const YandexQuery::GetQueryStatusResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvGetQueryStatusResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::GetQueryStatusResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvModifyQueryRequest : NActors::TEventLocal<TEvModifyQueryRequest, EvModifyQueryRequest> {
-        explicit TEvModifyQueryRequest(const TString& scope,
-                                       const YandexQuery::ModifyQueryRequest& request,
-                                       const TString& user,
-                                       const TString& token,
-                                       const TString& cloudId,
-                                       TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ModifyQueryRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvModifyQueryResponse : NActors::TEventLocal<TEvModifyQueryResponse, EvModifyQueryResponse> {
-        explicit TEvModifyQueryResponse(const YandexQuery::ModifyQueryResult& result,
-                                        const TAuditDetails<YandexQuery::Query>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvModifyQueryResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ModifyQueryResult Result;
-        TAuditDetails<YandexQuery::Query> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvDeleteQueryRequest : NActors::TEventLocal<TEvDeleteQueryRequest, EvDeleteQueryRequest> {
-        explicit TEvDeleteQueryRequest(const TString& scope,
-                                       const YandexQuery::DeleteQueryRequest& request,
-                                       const TString& user,
-                                       const TString& token,
-                                       const TString& cloudId,
-                                       TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::DeleteQueryRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvDeleteQueryResponse : NActors::TEventLocal<TEvDeleteQueryResponse, EvDeleteQueryResponse> {
-        explicit TEvDeleteQueryResponse(const YandexQuery::DeleteQueryResult& result,
-                                        const TAuditDetails<YandexQuery::Query>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvDeleteQueryResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::DeleteQueryResult Result;
-        TAuditDetails<YandexQuery::Query> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvControlQueryRequest : NActors::TEventLocal<TEvControlQueryRequest, EvControlQueryRequest> {
-        explicit TEvControlQueryRequest(const TString& scope,
-                                        const YandexQuery::ControlQueryRequest& request,
-                                        const TString& user,
-                                        const TString& token,
-                                        const TString& cloudId,
-                                        TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ControlQueryRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvControlQueryResponse : NActors::TEventLocal<TEvControlQueryResponse, EvControlQueryResponse> {
-        explicit TEvControlQueryResponse(const YandexQuery::ControlQueryResult& result,
-                                         const TAuditDetails<YandexQuery::Query>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvControlQueryResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ControlQueryResult Result;
-        TAuditDetails<YandexQuery::Query> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvGetResultDataRequest : NActors::TEventLocal<TEvGetResultDataRequest, EvGetResultDataRequest> {
-        explicit TEvGetResultDataRequest(const TString& scope,
-                                         const YandexQuery::GetResultDataRequest& request,
-                                         const TString& user,
-                                         const TString& token,
-                                         const TString& cloudId,
-                                         TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::GetResultDataRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvGetResultDataResponse : NActors::TEventLocal<TEvGetResultDataResponse, EvGetResultDataResponse> {
-        explicit TEvGetResultDataResponse(const YandexQuery::GetResultDataResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvGetResultDataResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::GetResultDataResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvListJobsRequest : NActors::TEventLocal<TEvListJobsRequest, EvListJobsRequest> {
-        explicit TEvListJobsRequest(const TString& scope,
-                                    const YandexQuery::ListJobsRequest& request,
-                                    const TString& user,
-                                    const TString& token,
-                                    const TString& cloudId,
-                                    TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ListJobsRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvListJobsResponse : NActors::TEventLocal<TEvListJobsResponse, EvListJobsResponse> {
-        explicit TEvListJobsResponse(const YandexQuery::ListJobsResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvListJobsResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ListJobsResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvDescribeJobRequest : NActors::TEventLocal<TEvDescribeJobRequest, EvDescribeJobRequest> {
-        explicit TEvDescribeJobRequest(const TString& scope,
-                                           const YandexQuery::DescribeJobRequest& request,
-                                           const TString& user,
-                                           const TString& token,
-                                           const TString& cloudId,
-                                           TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::DescribeJobRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvDescribeJobResponse : NActors::TEventLocal<TEvDescribeJobResponse, EvDescribeJobResponse> {
-        explicit TEvDescribeJobResponse(const YandexQuery::DescribeJobResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvDescribeJobResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::DescribeJobResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvCreateConnectionRequest : NActors::TEventLocal<TEvCreateConnectionRequest, EvCreateConnectionRequest> {
-        explicit TEvCreateConnectionRequest(const TString& scope,
-                                            const YandexQuery::CreateConnectionRequest& request,
-                                            const TString& user,
-                                            const TString& token,
-                                            const TString& cloudId,
-                                            TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::CreateConnectionRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvCreateConnectionResponse : NActors::TEventLocal<TEvCreateConnectionResponse, EvCreateConnectionResponse> {
-        explicit TEvCreateConnectionResponse(const YandexQuery::CreateConnectionResult& result,
-                                             const TAuditDetails<YandexQuery::Connection>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvCreateConnectionResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::CreateConnectionResult Result;
-        TAuditDetails<YandexQuery::Connection> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvListConnectionsRequest : NActors::TEventLocal<TEvListConnectionsRequest, EvListConnectionsRequest> {
-        explicit TEvListConnectionsRequest(const TString& scope,
-                                           const YandexQuery::ListConnectionsRequest& request,
-                                           const TString& user,
-                                           const TString& token,
-                                           const TString& cloudId,
-                                           TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ListConnectionsRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvListConnectionsResponse : NActors::TEventLocal<TEvListConnectionsResponse, EvListConnectionsResponse> {
-        explicit TEvListConnectionsResponse(const YandexQuery::ListConnectionsResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvListConnectionsResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ListConnectionsResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvDescribeConnectionRequest : NActors::TEventLocal<TEvDescribeConnectionRequest, EvDescribeConnectionRequest> {
-        explicit TEvDescribeConnectionRequest(const TString& scope,
-                                              const YandexQuery::DescribeConnectionRequest& request,
-                                              const TString& user,
-                                              const TString& token,
-                                              const TString& cloudId,
-                                              TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::DescribeConnectionRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvDescribeConnectionResponse : NActors::TEventLocal<TEvDescribeConnectionResponse, EvDescribeConnectionResponse> {
-        explicit TEvDescribeConnectionResponse(const YandexQuery::DescribeConnectionResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvDescribeConnectionResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::DescribeConnectionResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvModifyConnectionRequest : NActors::TEventLocal<TEvModifyConnectionRequest, EvModifyConnectionRequest> {
-        explicit TEvModifyConnectionRequest(const TString& scope,
-                                            const YandexQuery::ModifyConnectionRequest& request,
-                                            const TString& user,
-                                            const TString& token,
-                                            const TString& cloudId,
-                                            TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ModifyConnectionRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvModifyConnectionResponse : NActors::TEventLocal<TEvModifyConnectionResponse, EvModifyConnectionResponse> {
-        explicit TEvModifyConnectionResponse(const YandexQuery::ModifyConnectionResult& result,
-                                             const TAuditDetails<YandexQuery::Connection>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvModifyConnectionResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ModifyConnectionResult Result;
-        TAuditDetails<YandexQuery::Connection> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvDeleteConnectionRequest : NActors::TEventLocal<TEvDeleteConnectionRequest, EvDeleteConnectionRequest> {
-        explicit TEvDeleteConnectionRequest(const TString& scope,
-                                            const YandexQuery::DeleteConnectionRequest& request,
-                                            const TString& user,
-                                            const TString& token,
-                                            const TString& cloudId,
-                                            TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::DeleteConnectionRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvDeleteConnectionResponse : NActors::TEventLocal<TEvDeleteConnectionResponse, EvDeleteConnectionResponse> {
-        explicit TEvDeleteConnectionResponse(const YandexQuery::DeleteConnectionResult& result,
-                                             const TAuditDetails<YandexQuery::Connection>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvDeleteConnectionResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::DeleteConnectionResult Result;
-        TAuditDetails<YandexQuery::Connection> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvCreateBindingRequest : NActors::TEventLocal<TEvCreateBindingRequest, EvCreateBindingRequest> {
-        explicit TEvCreateBindingRequest(const TString& scope,
-                                         const YandexQuery::CreateBindingRequest& request,
-                                         const TString& user,
-                                         const TString& token,
-                                         const TString& cloudId,
-                                         TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::CreateBindingRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvCreateBindingResponse : NActors::TEventLocal<TEvCreateBindingResponse, EvCreateBindingResponse> {
-        explicit TEvCreateBindingResponse(const YandexQuery::CreateBindingResult& result,
-                                          const TAuditDetails<YandexQuery::Binding>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvCreateBindingResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::CreateBindingResult Result;
-        TAuditDetails<YandexQuery::Binding> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvListBindingsRequest : NActors::TEventLocal<TEvListBindingsRequest, EvListBindingsRequest> {
-        explicit TEvListBindingsRequest(const TString& scope,
-                                        const YandexQuery::ListBindingsRequest& request,
-                                        const TString& user,
-                                        const TString& token,
-                                        const TString& cloudId,
-                                        TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ListBindingsRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvListBindingsResponse : NActors::TEventLocal<TEvListBindingsResponse, EvListBindingsResponse> {
-        explicit TEvListBindingsResponse(const YandexQuery::ListBindingsResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvListBindingsResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ListBindingsResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvDescribeBindingRequest : NActors::TEventLocal<TEvDescribeBindingRequest, EvDescribeBindingRequest> {
-        explicit TEvDescribeBindingRequest(const TString& scope,
-                                           const YandexQuery::DescribeBindingRequest& request,
-                                           const TString& user,
-                                           const TString& token,
-                                           const TString& cloudId,
-                                           TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::DescribeBindingRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvDescribeBindingResponse : NActors::TEventLocal<TEvDescribeBindingResponse, EvDescribeBindingResponse> {
-        explicit TEvDescribeBindingResponse(const YandexQuery::DescribeBindingResult& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvDescribeBindingResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::DescribeBindingResult Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvModifyBindingRequest : NActors::TEventLocal<TEvModifyBindingRequest, EvModifyBindingRequest> {
-        explicit TEvModifyBindingRequest(const TString& scope,
-                                         const YandexQuery::ModifyBindingRequest& request,
-                                         const TString& user,
-                                         const TString& token,
-                                         const TString& cloudId,
-                                         TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::ModifyBindingRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvModifyBindingResponse : NActors::TEventLocal<TEvModifyBindingResponse, EvModifyBindingResponse> {
-        explicit TEvModifyBindingResponse(const YandexQuery::ModifyBindingResult& result,
-                                          const TAuditDetails<YandexQuery::Binding>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvModifyBindingResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::ModifyBindingResult Result;
-        TAuditDetails<YandexQuery::Binding> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
-
-    struct TEvDeleteBindingRequest : NActors::TEventLocal<TEvDeleteBindingRequest, EvDeleteBindingRequest> {
-        explicit TEvDeleteBindingRequest(const TString& scope,
-                                         const YandexQuery::DeleteBindingRequest& request,
-                                         const TString& user,
-                                         const TString& token,
-                                         const TString& cloudId,
-                                         TPermissions permissions)
-            : Scope(scope)
-            , Request(request)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + Request.ByteSizeLong()
-                    + User.Size()
-                    + Token.Size()
-                    + CloudId.Size();
-        }
-
-        TString Scope;
-        YandexQuery::DeleteBindingRequest Request;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-    };
-
-    struct TEvDeleteBindingResponse : NActors::TEventLocal<TEvDeleteBindingResponse, EvDeleteBindingResponse> {
-        explicit TEvDeleteBindingResponse(const YandexQuery::DeleteBindingResult& result,
-                                          const TAuditDetails<YandexQuery::Binding>& auditDetails)
-            : Result(result)
-            , AuditDetails(auditDetails)
-        {
-        }
-
-        explicit TEvDeleteBindingResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + AuditDetails.GetByteSize()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        YandexQuery::DeleteBindingResult Result;
-        TAuditDetails<YandexQuery::Binding> AuditDetails;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
+    using TEvCreateQueryRequest = TControlPlaneRequest<YandexQuery::CreateQueryRequest, EvCreateQueryRequest>;
+    using TEvCreateQueryResponse = TControlPlaneAuditableResponse<YandexQuery::CreateQueryResult, YandexQuery::Query, EvCreateQueryResponse>;
+    using TEvListQueriesRequest = TControlPlaneRequest<YandexQuery::ListQueriesRequest, EvListQueriesRequest>;
+    using TEvListQueriesResponse = TControlPlaneNonAuditableResponse<YandexQuery::ListQueriesResult, EvListQueriesResponse>;
+    using TEvDescribeQueryRequest = TControlPlaneRequest<YandexQuery::DescribeQueryRequest, EvDescribeQueryRequest>;
+    using TEvDescribeQueryResponse = TControlPlaneNonAuditableResponse<YandexQuery::DescribeQueryResult, EvDescribeQueryResponse>;
+    using TEvGetQueryStatusRequest = TControlPlaneRequest<YandexQuery::GetQueryStatusRequest, EvGetQueryStatusRequest>;
+    using TEvGetQueryStatusResponse = TControlPlaneNonAuditableResponse<YandexQuery::GetQueryStatusResult, EvGetQueryStatusResponse>;
+    using TEvModifyQueryRequest = TControlPlaneRequest<YandexQuery::ModifyQueryRequest, EvModifyQueryRequest>;
+    using TEvModifyQueryResponse = TControlPlaneAuditableResponse<YandexQuery::ModifyQueryResult, YandexQuery::Query, EvModifyQueryResponse>;
+    using TEvDeleteQueryRequest = TControlPlaneRequest<YandexQuery::DeleteQueryRequest, EvDeleteQueryRequest>;
+    using TEvDeleteQueryResponse = TControlPlaneAuditableResponse<YandexQuery::DeleteQueryResult, YandexQuery::Query, EvDeleteQueryResponse>;
+    using TEvControlQueryRequest = TControlPlaneRequest<YandexQuery::ControlQueryRequest, EvControlQueryRequest>;
+    using TEvControlQueryResponse = TControlPlaneAuditableResponse<YandexQuery::ControlQueryResult, YandexQuery::Query, EvControlQueryResponse>;
+    using TEvGetResultDataRequest = TControlPlaneRequest<YandexQuery::GetResultDataRequest, EvGetResultDataRequest>;
+    using TEvGetResultDataResponse = TControlPlaneNonAuditableResponse<YandexQuery::GetResultDataResult, EvGetResultDataResponse>;
+    using TEvListJobsRequest = TControlPlaneRequest<YandexQuery::ListJobsRequest, EvListJobsRequest>;
+    using TEvListJobsResponse = TControlPlaneNonAuditableResponse<YandexQuery::ListJobsResult, EvListJobsResponse>;
+    using TEvDescribeJobRequest = TControlPlaneRequest<YandexQuery::DescribeJobRequest, EvDescribeJobRequest>;
+    using TEvDescribeJobResponse = TControlPlaneNonAuditableResponse<YandexQuery::DescribeJobResult, EvDescribeJobResponse>;
+    using TEvCreateConnectionRequest = TControlPlaneRequest<YandexQuery::CreateConnectionRequest, EvCreateConnectionRequest>;
+    using TEvCreateConnectionResponse = TControlPlaneAuditableResponse<YandexQuery::CreateConnectionResult, YandexQuery::Connection, EvCreateConnectionResponse>;
+    using TEvListConnectionsRequest = TControlPlaneRequest<YandexQuery::ListConnectionsRequest, EvListConnectionsRequest>;
+    using TEvListConnectionsResponse = TControlPlaneNonAuditableResponse<YandexQuery::ListConnectionsResult, EvListConnectionsResponse>;
+    using TEvDescribeConnectionRequest = TControlPlaneRequest<YandexQuery::DescribeConnectionRequest, EvDescribeConnectionRequest>;
+    using TEvDescribeConnectionResponse = TControlPlaneNonAuditableResponse<YandexQuery::DescribeConnectionResult, EvDescribeConnectionResponse>;
+    using TEvModifyConnectionRequest = TControlPlaneRequest<YandexQuery::ModifyConnectionRequest, EvModifyConnectionRequest>;
+    using TEvModifyConnectionResponse = TControlPlaneAuditableResponse<YandexQuery::ModifyConnectionResult, YandexQuery::Connection, EvModifyConnectionResponse>;
+    using TEvDeleteConnectionRequest = TControlPlaneRequest<YandexQuery::DeleteConnectionRequest, EvDeleteConnectionRequest>;
+    using TEvDeleteConnectionResponse = TControlPlaneAuditableResponse<YandexQuery::DeleteConnectionResult, YandexQuery::Connection, EvDeleteConnectionResponse>;
+    using TEvCreateBindingRequest = TControlPlaneRequest<YandexQuery::CreateBindingRequest, EvCreateBindingRequest>;
+    using TEvCreateBindingResponse = TControlPlaneAuditableResponse<YandexQuery::CreateBindingResult, YandexQuery::Binding, EvCreateBindingResponse>;
+    using TEvListBindingsRequest = TControlPlaneRequest<YandexQuery::ListBindingsRequest, EvListBindingsRequest>;
+    using TEvListBindingsResponse = TControlPlaneNonAuditableResponse<YandexQuery::ListBindingsResult, EvListBindingsResponse>;
+    using TEvDescribeBindingRequest = TControlPlaneRequest<YandexQuery::DescribeBindingRequest, EvDescribeBindingRequest>;
+    using TEvDescribeBindingResponse = TControlPlaneNonAuditableResponse<YandexQuery::DescribeBindingResult, EvDescribeBindingResponse>;
+    using TEvModifyBindingRequest = TControlPlaneRequest<YandexQuery::ModifyBindingRequest, EvModifyBindingRequest>;
+    using TEvModifyBindingResponse = TControlPlaneAuditableResponse<YandexQuery::ModifyBindingResult, YandexQuery::Binding, EvModifyBindingResponse>;
+    using TEvDeleteBindingRequest = TControlPlaneRequest<YandexQuery::DeleteBindingRequest, EvDeleteBindingRequest>;
+    using TEvDeleteBindingResponse = TControlPlaneAuditableResponse<YandexQuery::DeleteBindingResult, YandexQuery::Binding, EvDeleteBindingResponse>;
 
     // internal messages
     struct TEvWriteResultDataRequest : NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {

@@ -65,7 +65,8 @@ public:
         }
 
         auto status = CollectUnusedNodes(*input, ctx);
-        if (status == TStatus::Error) {
+        YQL_CLOG(INFO, CoreExecution) << "Collect unused nodes for root #" << input->UniqueId() << ", status: " << status;
+        if (status != TStatus::Ok) {
             return status;
         }
 
@@ -85,6 +86,7 @@ public:
             return status;
         }
 
+        YQL_CLOG(INFO, CoreExecution) << "Creating finalizing transformer, output #" << output->UniqueId();
         FinalizingTransformer = CreateCompositeFinalizingTransformer(Types);
         return FinalizingTransformer->Transform(input, output, ctx);
     }

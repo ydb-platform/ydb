@@ -132,7 +132,7 @@ void PrepareChanges(TOperationId opId, TPathElement::TPtr path, TTableInfo::TPtr
     TTxState& txState = context.SS->CreateTx(opId, TTxState::TxAlterTable, path->PathId);
     txState.State = TTxState::CreateParts;
 
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     TTxState::ETxState commonShardOp = table->NeedRecreateParts()
             ? TTxState::CreateParts
@@ -334,7 +334,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();

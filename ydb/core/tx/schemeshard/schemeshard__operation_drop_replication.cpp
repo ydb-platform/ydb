@@ -94,7 +94,7 @@ public:
             return false;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         context.OnComplete.ActivateTx(OperationId);
 
@@ -150,7 +150,7 @@ public:
         Y_VERIFY(context.SS->PathsById.contains(path->ParentPathId));
         auto parentPath = context.SS->PathsById.at(path->ParentPathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
@@ -320,7 +320,7 @@ public:
         path->DropTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistLastTxId(db, path.Base());
         context.SS->PersistTxState(db, OperationId);

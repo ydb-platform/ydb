@@ -17,7 +17,7 @@ void PrepareChanges(TOperationId operationId,
                     TKesusInfo::TPtr kesus,
                     TOperationContext& context)
 {
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     item->LastTxId = operationId.GetTxId();
     item->PathState = TPathElement::EPathState::EPathStateAlter;
@@ -96,7 +96,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -180,7 +180,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
 

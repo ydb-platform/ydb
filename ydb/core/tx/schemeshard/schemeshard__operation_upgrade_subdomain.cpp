@@ -63,7 +63,7 @@ public:
         }
 
         if (isDone) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
 
             TPathId pathId = txState->TargetPathId;
             TPathElement::TPtr elem = context.SS->PathsById.at(pathId);
@@ -144,7 +144,7 @@ public:
         auto next = NextMessage(context);
         if (!next) {
             // All tablets have replied so we can done this transaction
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::PublishTenantReadOnly);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -374,7 +374,7 @@ public:
         auto next = NextMessage(context);
         if (!next) {
             // All tablets have replied so we can done this transaction
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::PublishTenantReadOnly);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -465,7 +465,7 @@ public:
 
         Y_VERIFY(TTabletId(ev->Get()->Record.GetTenantSchemeShard()) == TenantSchemeShardId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::PublishGlobal);
         context.OnComplete.ActivateTx(OperationId);
         return true;
@@ -553,7 +553,7 @@ public:
             context.SS->ClearDescribePathCaches(item); //something has changed let's show it
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain);
         context.SS->PersistPath(db, path->PathId);
@@ -581,7 +581,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr item = context.SS->PathsById.at(pathId);
 
@@ -701,7 +701,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
@@ -774,7 +774,7 @@ public:
         auto nextEvent = NextRequest(context);
 
         if (!nextEvent) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::PublishTenant);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -862,7 +862,7 @@ public:
         auto event = NextRequest(context);
 
         if (!event) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::PublishTenant);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -904,7 +904,7 @@ public:
     }
 
     bool HandleReply(TEvSchemeShard::TEvPublishTenantResult::TPtr& /*ev*/, TOperationContext& context) override {
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DoneMigrateTree);
         context.OnComplete.ActivateTx(OperationId);
         return true;
@@ -991,7 +991,7 @@ public:
 
         Init(txState->TargetPathId, context);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         if (!ShardsToRememder.empty()) {
             const auto shardIdx = ShardsToRememder.back();
@@ -1249,7 +1249,7 @@ public:
         subDomain->SetAlter(alterData);
 
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistUpdateNextShardIdx(db);
 
         context.SS->PersistTxState(db, OperationId);
@@ -1499,7 +1499,7 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxUpgradeSubDomainDecision, path.Base()->PathId);
         txState.State = TTxState::Waiting;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistTxState(db, OperationId);
 

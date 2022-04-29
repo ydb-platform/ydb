@@ -370,7 +370,7 @@ public:
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_VERIFY(alterData);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         // TODO: make a new FinishPropose method or something like that
         alterData->AlterBody.Clear();
@@ -514,7 +514,7 @@ public:
     }
 
     bool UpdateTables(TOperationContext& context) {
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         ui32 updated = 0;
         while (!TablesToUpdate.empty() && updated < UpdateBatchSize) {
@@ -555,7 +555,7 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxAlterOlapStore);
 
         if (txState->ShardsInProgress.empty() && TablesToUpdate.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
             return true;
         }
@@ -698,7 +698,7 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterOlapStore, path->PathId);
         txState.State = TTxState::ConfigureParts;

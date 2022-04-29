@@ -192,7 +192,7 @@ public:
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         Y_VERIFY(path.IsResolved());
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
@@ -267,7 +267,7 @@ public:
 
         Y_VERIFY(ActivePathId == ev->Get()->PathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
         return true;
     }
@@ -291,7 +291,7 @@ public:
                        DebugHint() << " ProgressState"
                                    << ", no renaming has been detected for this operation");
 
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
             return true;
         }
@@ -349,7 +349,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         DropPath(db, context, OperationId, *txState, path);
@@ -421,7 +421,7 @@ public:
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxDropTable);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistRemoveTable(db, txState->TargetPathId, context.Ctx);
 
@@ -596,6 +596,7 @@ public:
             return result;
         }
 
+        auto guard = context.DbGuard();
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabPath(context.SS, path.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, parent.Base()->PathId);
@@ -628,7 +629,7 @@ public:
         path.Base()->DropTxId = OperationId.GetTxId();
         path.Base()->LastTxId = OperationId.GetTxId();
 
-        IncParentDirAlterVersionWithRepublish(OperationId, path, context);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, path, context.SS, context.OnComplete);
 
         for (auto splitTx: table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());

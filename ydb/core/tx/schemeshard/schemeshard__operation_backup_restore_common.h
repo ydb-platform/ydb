@@ -174,7 +174,7 @@ public:
             return;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         const auto& result = evRecord.GetOpResult();
 
         if (!txState.ShardStatuses.contains(shardIdx)) {
@@ -248,7 +248,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         txState->ClearShardsInProgress();
         for (TTxState::TShardOperation& shard : txState->Shards) {
@@ -319,7 +319,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         for (TTxState::TShardOperation& shard : txState->Shards) {
             if (shard.Operation < TTxState::ProposedWaitParts) {
@@ -414,7 +414,7 @@ public:
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
 
         return true;
@@ -558,7 +558,7 @@ public:
             txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistTxState(db, OperationId);
 
         TKind::PersistTask(path->PathId, Transaction, context);

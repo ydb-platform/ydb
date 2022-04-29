@@ -463,7 +463,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -783,7 +783,7 @@ public:
         dstPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
         dstPath.Base()->PathType = TPathElement::EPathType::EPathTypeColumnTable;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateOlapTable, pathId);
         txState.State = TTxState::ConfigureParts;

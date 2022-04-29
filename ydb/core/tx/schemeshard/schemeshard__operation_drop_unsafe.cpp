@@ -81,7 +81,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
         auto pathes = context.SS->ListSubThee(pathId, context.Ctx);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
 
@@ -266,7 +266,7 @@ public:
         txState.State = TTxState::Waiting;
         txState.MinStep = TStepId(1);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         auto pathes = context.SS->ListSubThee(path.Base()->PathId, context.Ctx);
 

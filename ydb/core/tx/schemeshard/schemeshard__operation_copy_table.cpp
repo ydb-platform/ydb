@@ -181,7 +181,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -540,6 +540,7 @@ public:
             }
         }
 
+        auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, parent.Base()->PathId);

@@ -37,7 +37,7 @@ public:
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxDropOlapStore);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         txState->ClearShardsInProgress();
 
@@ -86,7 +86,7 @@ public:
                    "no parent with id: " <<  path->ParentPathId << " for node with id: " << path->PathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
@@ -168,7 +168,7 @@ public:
     }
 
     bool Finish(TOperationContext& context) {
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedDeleteParts);
         return true;
     }
@@ -243,7 +243,7 @@ public:
         Y_VERIFY(txState);
         Y_VERIFY(txState->TxType == TTxState::TxDropOlapStore);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistOlapStoreRemove(db, txState->TargetPathId);
 
         for (auto& shard : txState->Shards) {
@@ -358,7 +358,7 @@ public:
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         for (auto shardIdx : storeInfo->ColumnShards) {
             Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);

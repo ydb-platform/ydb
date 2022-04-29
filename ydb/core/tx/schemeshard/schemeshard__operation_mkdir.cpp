@@ -40,7 +40,7 @@ public:
 
         context.SS->TabletCounters->Simple()[COUNTER_DIR_COUNT].Add(1);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path.Base()->DirAlterVersion += 1;
         context.SS->PersistPathDirAlterVersion(db, path.Base());
@@ -222,6 +222,7 @@ public:
             return result;
         }
 
+        auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
@@ -255,7 +256,7 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
-        IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         dstPath.DomainInfo()->IncPathsInside();
         parentPath.Base()->IncAliveChildren();

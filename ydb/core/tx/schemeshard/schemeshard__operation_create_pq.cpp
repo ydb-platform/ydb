@@ -476,7 +476,7 @@ public:
 
         ApplySharding(OperationId.GetTxId(), pathId, pqGroup, txState, tabletChannelsBinding, pqChannelsBinding, context.SS);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         for (auto& shard : pqGroup->Shards) {
             auto shardIdx = shard.first;

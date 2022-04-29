@@ -321,7 +321,7 @@ public:
             alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         subDomain->LastTxId = OperationId.GetTxId();
         subDomain->PathState = TPathElement::EPathState::EPathStateAlter;

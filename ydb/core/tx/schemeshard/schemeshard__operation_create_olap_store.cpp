@@ -393,7 +393,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -730,7 +730,7 @@ public:
             OperationId.GetTxId(), pathId, storeInfo,
             metaChannelsBindings, channelsBindings, txState, context.SS);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TOlapStoreInfo::TPtr pending = new TOlapStoreInfo;
         pending->AlterData = storeInfo;

@@ -44,7 +44,7 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         return true;
     }
@@ -91,7 +91,7 @@ public:
         auto path = context.SS->PathsById.at(pathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
@@ -306,7 +306,7 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     txState.MinStep = TStepId(1);
     txState.State = TTxState::DeleteParts;
 
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     auto fs = context.SS->FileStoreInfos.at(path.Base()->PathId);
     Y_VERIFY_S(fs, "FileStore info is null. PathId: " << path.Base()->PathId);

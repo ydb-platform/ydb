@@ -84,7 +84,7 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterUserAttributes, path.Base()->PathId);
@@ -144,7 +144,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
         context.OnComplete.ReleasePathState(OperationId, pathId, TPathElement::EPathState::EPathStateNoChanges);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(path->UserAttrs);
         Y_VERIFY(path->UserAttrs->AlterData);

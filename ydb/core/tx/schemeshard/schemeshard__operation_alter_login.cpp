@@ -24,7 +24,7 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
         auto result = MakeHolder<TProposeResponse>(OperationId.GetTxId(), ssId);
         if (Transaction.GetWorkingDir() != context.SS->LoginProvider.Audience) {

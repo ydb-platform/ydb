@@ -58,7 +58,7 @@ public:
             solomonPartition->TabletId = tabletId;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         return true;
     }
@@ -98,7 +98,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
         Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
@@ -261,6 +261,7 @@ public:
 
         if (alter.GetUpdateChannelsBinding() && !AppData()->FeatureFlags.GetAllowUpdateChannelsBindingOfSolomonPartitions()) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, "Updating of channels binding is not available");
+            return result;
         }
 
         if (alter.HasPartitionCount()) {
@@ -295,7 +296,7 @@ public:
 
         TSolomonVolumeInfo::TPtr alterSolomon = solomon->CreateAlter();
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterSolomonVolume,  path.Base()->PathId);
 

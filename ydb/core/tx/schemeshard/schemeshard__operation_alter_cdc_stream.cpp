@@ -55,7 +55,7 @@ public:
         Y_VERIFY(context.SS->CdcStreams.contains(pathId));
         auto stream = context.SS->CdcStreams.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistCdcStream(db, pathId);
         context.SS->CdcStreams[pathId] = stream->AlterData;
@@ -173,6 +173,7 @@ public:
             }
         }
 
+        auto guard = context.DbGuard();
         context.DbChanges.PersistAlterCdcStream(streamPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 

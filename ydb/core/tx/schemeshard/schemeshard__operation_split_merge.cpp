@@ -35,7 +35,7 @@ public:
                                << ", at schemeshard: " << ssId
                                << " message# " << ev->Get()->Record.ShortDebugString());
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -112,7 +112,7 @@ public:
         TString extraData;
         bool serializeRes = txState->SplitDescription->SerializeToString(&extraData);
         Y_VERIFY(serializeRes);
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         db.Table<Schema::TxInFlightV2>().Key(OperationId.GetTxId(), OperationId.GetSubTxId()).Update(
                     NIceDb::TUpdate<Schema::TxInFlightV2::ExtraBytes>(extraData));
 
@@ -204,7 +204,7 @@ public:
                                << ", at schemeshard: " << ssId
                                << ", message: " << ev->Get()->Record.ShortDebugString());
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -954,6 +954,7 @@ public:
         /// Accept operation
         ///
 
+        auto guard = context.DbGuard();
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.MemChanges.GrabDomain(context.SS, path.DomainId());
         context.MemChanges.GrabPath(context.SS, path->PathId);

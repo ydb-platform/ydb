@@ -53,7 +53,7 @@ public:
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         context.SS->PersistRemoveCdcStream(db, pathId);
@@ -181,6 +181,7 @@ public:
             }
         }
 
+        auto guard = context.DbGuard();
         context.DbChanges.PersistTxState(OperationId);
 
         Y_VERIFY(!context.SS->FindTx(OperationId));

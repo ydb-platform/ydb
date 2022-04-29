@@ -68,7 +68,7 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         const TString owner = Transaction.GetModifyACL().GetNewOwner();
 

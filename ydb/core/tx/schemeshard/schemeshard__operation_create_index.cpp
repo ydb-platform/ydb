@@ -37,7 +37,7 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxCreateTableIndex);
         Y_VERIFY(txState->State == TTxState::Propose);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
@@ -231,6 +231,7 @@ public:
             }
         }
 
+        auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);

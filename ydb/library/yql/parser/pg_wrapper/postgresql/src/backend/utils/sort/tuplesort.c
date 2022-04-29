@@ -3777,8 +3777,10 @@ comparetup_heap(const SortTuple *a, const SortTuple *b, Tuplesortstate *state)
 	/* Compare additional sort keys */
 	ltup.t_len = ((MinimalTuple) a->tuple)->t_len + MINIMAL_TUPLE_OFFSET;
 	ltup.t_data = (HeapTupleHeader) ((char *) a->tuple - MINIMAL_TUPLE_OFFSET);
+	ltup.t_tableOid = 0;
 	rtup.t_len = ((MinimalTuple) b->tuple)->t_len + MINIMAL_TUPLE_OFFSET;
 	rtup.t_data = (HeapTupleHeader) ((char *) b->tuple - MINIMAL_TUPLE_OFFSET);
+	rtup.t_tableOid = 0;
 	tupDesc = state->tupDesc;
 
 	if (sortKey->abbrev_converter)
@@ -3833,6 +3835,7 @@ copytup_heap(Tuplesortstate *state, SortTuple *stup, void *tup)
 	/* set up first-column key value */
 	htup.t_len = tuple->t_len + MINIMAL_TUPLE_OFFSET;
 	htup.t_data = (HeapTupleHeader) ((char *) tuple - MINIMAL_TUPLE_OFFSET);
+	htup.t_tableOid = 0;
 	original = heap_getattr(&htup,
 							state->sortKeys[0].ssup_attno,
 							state->tupDesc,
@@ -3939,6 +3942,7 @@ readtup_heap(Tuplesortstate *state, SortTuple *stup,
 	/* set up first-column key value */
 	htup.t_len = tuple->t_len + MINIMAL_TUPLE_OFFSET;
 	htup.t_data = (HeapTupleHeader) ((char *) tuple - MINIMAL_TUPLE_OFFSET);
+    htup.t_tableOid = 0;
 	stup->datum1 = heap_getattr(&htup,
 								state->sortKeys[0].ssup_attno,
 								state->tupDesc,

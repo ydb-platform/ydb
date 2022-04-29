@@ -1074,6 +1074,7 @@ StartPrepare(GlobalTransaction gxact)
 														  &hdr.initfileinval);
 	hdr.gidlen = strlen(gxact->gid) + 1;	/* Include '\0' */
 	hdr.origin_lsn = 0;
+	hdr.origin_timestamp = 0;
 
 	save_state_data(&hdr, sizeof(TwoPhaseFileHeader));
 	save_state_data(gxact->gid, hdr.gidlen);

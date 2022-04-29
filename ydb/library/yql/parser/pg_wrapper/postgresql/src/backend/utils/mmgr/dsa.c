@@ -839,7 +839,13 @@ dsa_free(dsa_area *area, dsa_pointer dp)
 	superblock = dsa_get_address(area, span->start);
 	object = dsa_get_address(area, dp);
 	size_class = span->size_class;
-	Assert(size_class < lengthof(dsa_size_classes));
+	if (size_class >= lengthof(dsa_size_classes))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_CORRUPTED),
+				errmsg("invalid span size"),
+				errdetail("Invalid span->size_class value %zu, but dsa_size_classes size is %zu.", size_class, lengthof(dsa_size_classes))));
+	}
 	size = dsa_size_classes[size_class];
 
 	/*

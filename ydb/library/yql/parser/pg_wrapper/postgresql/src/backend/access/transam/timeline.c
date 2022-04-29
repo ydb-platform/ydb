@@ -405,6 +405,7 @@ writeTimeLineHistory(TimeLineID newTLI, TimeLineID parentTLI,
 			 LSN_FORMAT_ARGS(switchpoint),
 			 reason);
 
+	buffer[BLCKSZ - 1] = 0;
 	nbytes = strlen(buffer);
 	errno = 0;
 	pgstat_report_wait_start(WAIT_EVENT_TIMELINE_HISTORY_WRITE);

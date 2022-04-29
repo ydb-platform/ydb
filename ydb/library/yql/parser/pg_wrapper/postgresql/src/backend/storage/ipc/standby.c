@@ -651,6 +651,7 @@ ResolveRecoveryConflictWithLock(LOCKTAG locktag, bool logging_conflict)
 		timeouts[cnt].id = STANDBY_DEADLOCK_TIMEOUT;
 		timeouts[cnt].type = TMPARAM_AFTER;
 		timeouts[cnt].delay_ms = DeadlockTimeout;
+		timeouts[cnt].fin_time = 0;
 		cnt++;
 
 		enable_timeouts(timeouts, cnt);

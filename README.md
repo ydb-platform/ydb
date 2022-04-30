@@ -60,7 +60,7 @@ For development purposes we test that YDB could be built and run under latest ve
 ## Getting Started
 
 1. Install YDB using [pre-built executables](https://ydb.tech/en/docs/getting_started/self_hosted/ydb_local), [build it from source](BUILD.md) or [use Docker container](https://ydb.tech/en/docs/getting_started/self_hosted/ydb_docker).
-1. Install [command line interace](https://ydb.tech/en/docs/getting_started/cli) tool to work with scheme and run queries.
+1. Install [command line interface](https://ydb.tech/en/docs/getting_started/cli) tool to work with scheme and run queries.
 1. Start [local cluster](https://ydb.tech/en/docs/getting_started/self_hosted/ydb_local) or container and run [YQL query](https://ydb.tech/en/docs/yql/reference/) via [YDB CLI](https://ydb.tech/en/docs/getting_started/cli).
 1. Access [Embedded UI](https://ydb.tech/en/docs/maintenance/embedded_monitoring/) via browser for schema navigation, query execution and other database development related tasks.
 1. Run available [example application](https://ydb.tech/en/docs/reference/ydb-sdk/example/go/).

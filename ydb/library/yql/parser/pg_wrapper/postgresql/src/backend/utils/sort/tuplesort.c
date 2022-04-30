@@ -3942,7 +3942,7 @@ readtup_heap(Tuplesortstate *state, SortTuple *stup,
 	/* set up first-column key value */
 	htup.t_len = tuple->t_len + MINIMAL_TUPLE_OFFSET;
 	htup.t_data = (HeapTupleHeader) ((char *) tuple - MINIMAL_TUPLE_OFFSET);
-    htup.t_tableOid = 0;
+	htup.t_tableOid = 0;
 	stup->datum1 = heap_getattr(&htup,
 								state->sortKeys[0].ssup_attno,
 								state->tupDesc,

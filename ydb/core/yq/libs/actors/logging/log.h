@@ -165,6 +165,16 @@
 #define LOG_YQ_TEST_CONNECTION_DEBUG(logRecordStream) LOG_STREAMS_IMPL(DEBUG, YQ_TEST_CONNECTION, logRecordStream)
 #define LOG_YQ_TEST_CONNECTION_TRACE(logRecordStream) LOG_STREAMS_IMPL(TRACE, YQ_TEST_CONNECTION, logRecordStream)
 
+#define LOG_YQ_TEST_CONNECTION_AS_EMERG(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, EMERG, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_ALERT(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, ALERT, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_CRIT(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, CRIT, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_ERROR(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, ERROR, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_WARN(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, WARN, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_NOTICE(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, NOTICE, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_INFO(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, INFO, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_DEBUG(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, DEBUG, YQ_TEST_CONNECTION, logRecordStream)
+#define LOG_YQ_TEST_CONNECTION_AS_TRACE(actorSystem, logRecordStream) LOG_STREAMS_IMPL_AS(actorSystem, TRACE, YQ_TEST_CONNECTION, logRecordStream)
+
 // Component: YQ_AUDIT.
 #define LOG_YQ_AUDIT_SERVICE_EMERG(logRecordStream) LOG_STREAMS_IMPL(EMERG, YQ_AUDIT, logRecordStream)
 #define LOG_YQ_AUDIT_SERVICE_ALERT(logRecordStream) LOG_STREAMS_IMPL(ALERT, YQ_AUDIT, logRecordStream)

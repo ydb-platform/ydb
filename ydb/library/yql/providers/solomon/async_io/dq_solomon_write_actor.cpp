@@ -5,13 +5,14 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
+#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/url_builder.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -74,6 +75,32 @@ struct TMetricsInflight {
 };
 
 } // namespace
+
+TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
+    TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
+
+    switch (type) {
+        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
+            builder.AddPathComponent("api");
+            builder.AddPathComponent("v2");
+            builder.AddPathComponent("push");
+            builder.AddUrlParam("project", project);
+            builder.AddUrlParam("cluster", cluster);
+            builder.AddUrlParam("service", service);
+            break;
+        }
+        case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
+            builder.AddPathComponent("monitoring/v2/data/write");
+            builder.AddUrlParam("folderId", cluster);
+            builder.AddUrlParam("service", service);
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(type));
+    }
+
+    return builder.Build();
+}
 
 class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, public IDqComputeActorAsyncOutput {
 public:
@@ -246,29 +273,12 @@ private:
     NDqProto::TSinkState BuildState() { return {}; }
 
     TString GetUrl() const {
-        TStringBuilder builder;
-        builder << (WriteParams.Shard.GetUseSsl() ? "https://" : "http://");
-        builder << WriteParams.Shard.GetEndpoint();
-
-        switch (WriteParams.Shard.GetClusterType()) {
-            case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
-                builder << "/api/v2/push";
-                builder << "?project=" << WriteParams.Shard.GetProject();
-                builder << "&cluster=" << WriteParams.Shard.GetCluster();
-                builder << "&service=" << WriteParams.Shard.GetService();
-                break;
-            }
-            case NSo::NProto::ESolomonClusterType::CT_MONITORING: {
-                builder << "/monitoring/v2/data/write";
-                builder << "?folderId=" << WriteParams.Shard.GetCluster();
-                builder << "&service=" << WriteParams.Shard.GetService();
-                break;
-            }
-            default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
-        }
-
-        return builder;
+        return GetSolomonUrl(WriteParams.Shard.GetEndpoint(),
+                WriteParams.Shard.GetUseSsl(),
+                WriteParams.Shard.GetProject(),
+                WriteParams.Shard.GetCluster(),
+                WriteParams.Shard.GetService(),
+                WriteParams.Shard.GetClusterType());
     }
 
     void PushMetricsToBuffer(ui64& metricsCount) {

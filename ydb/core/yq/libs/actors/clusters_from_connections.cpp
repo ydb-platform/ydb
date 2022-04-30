@@ -13,7 +13,9 @@ using namespace NYql;
 namespace {
 
 template <typename TClusterConfig>
-void FillClusterAuth(TClusterConfig& clusterCfg, const YandexQuery::IamAuth& auth, const TString& authToken, const THashMap<TString, TString>& accountIdSignatures) {
+void FillClusterAuth(TClusterConfig& clusterCfg,
+        const YandexQuery::IamAuth& auth, const TString& authToken,
+        const THashMap<TString, TString>& accountIdSignatures) {
     switch (auth.identity_case()) {
     case YandexQuery::IamAuth::kNone:
         break;
@@ -30,7 +32,99 @@ void FillClusterAuth(TClusterConfig& clusterCfg, const YandexQuery::IamAuth& aut
     }
 }
 
+void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
+        const TString& name, bool useBearerForYdb,
+        const TString& authToken, const THashMap<TString, TString>& accountIdSignatures,
+        const YandexQuery::DataStreams& ds) {
+    clusterConfig.SetName(name);
+    if (ds.endpoint()) {
+        clusterConfig.SetEndpoint(ds.endpoint());
+    }
+    clusterConfig.SetDatabase(ds.database());
+    clusterConfig.SetDatabaseId(ds.database_id());
+    clusterConfig.SetUseSsl(ds.secure());
+    clusterConfig.SetAddBearerToToken(useBearerForYdb);
+    clusterConfig.SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
+    FillClusterAuth(clusterConfig, ds.auth(), authToken, accountIdSignatures);
+}
+
+void FillS3ClusterConfig(NYql::TS3ClusterConfig& clusterConfig,
+        const TString& name, const TString& authToken,
+        const TString& objectStorageEndpoint,
+        const THashMap<TString, TString>& accountIdSignatures,
+        const YandexQuery::ObjectStorageConnection& s3) {
+    clusterConfig.SetName(name);
+    TString objectStorageUrl;
+    if (objectStorageEndpoint == "https://s3.mds.yandex.net") {
+        objectStorageUrl = TStringBuilder() << "https://" << s3.bucket() << ".s3.mds.yandex.net/";
+    } else {
+        objectStorageUrl = TStringBuilder() << objectStorageEndpoint << '/' << s3.bucket() << '/';
+    }
+    clusterConfig.SetUrl(objectStorageUrl);
+    FillClusterAuth(clusterConfig, s3.auth(), authToken, accountIdSignatures);
+}
+
+void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
+        const TString& name, const TString& authToken,
+        const THashMap<TString, TString>& accountIdSignatures,
+        const YandexQuery::Monitoring& monitoring) {
+        clusterConfig.SetName(name);
+
+        // TODO: move Endpoint to yq config
+        auto solomonEndpointForTest = GetEnv("SOLOMON_ENDPOINT");
+        auto solomonEndpoint = solomonEndpointForTest ? TString(solomonEndpointForTest) : TString();
+        if (solomonEndpoint.empty()) {
+            if (name.StartsWith("pre")) {
+                solomonEndpoint = "monitoring.api.cloud-preprod.yandex.net";
+                clusterConfig.SetUseSsl(true);
+            } else if (name.StartsWith("so")) {
+                solomonEndpoint = "solomon.yandex.net";
+            } else {
+                solomonEndpoint = "monitoring.api.cloud.yandex.net";
+                clusterConfig.SetUseSsl(true);
+            }
+        }
+
+        clusterConfig.SetCluster(solomonEndpoint);
+        clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
+        clusterConfig.MutablePath()->SetProject(monitoring.project());
+        clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
+        FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
+}
+
 } //namespace
+
+NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name,
+        bool useBearerForYdb, const TString& authToken,
+        const TString& accountSignature, const YandexQuery::DataStreams& ds) {
+    NYql::TPqClusterConfig cluster;
+    THashMap<TString, TString> accountIdSignatures;
+    if (ds.auth().has_service_account()) {
+        accountIdSignatures[ds.auth().service_account().id()] = accountSignature;
+    }
+    FillPqClusterConfig(cluster, name, useBearerForYdb, authToken, accountIdSignatures, ds);
+    return cluster;
+}
+
+NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name,
+        const TString& authToken, const TString& objectStorageEndpoint,
+        const TString& accountSignature, const YandexQuery::ObjectStorageConnection& s3) {
+    NYql::TS3ClusterConfig cluster;
+    THashMap<TString, TString> accountIdSignatures;
+    accountIdSignatures[s3.auth().service_account().id()] = accountSignature;
+    FillS3ClusterConfig(cluster, name, authToken, objectStorageEndpoint, accountIdSignatures, s3);
+    return cluster;
+}
+
+NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
+        const TString& authToken, const TString& accountSignature,
+        const YandexQuery::Monitoring& monitoring) {
+    NYql::TSolomonClusterConfig cluster;
+    THashMap<TString, TString> accountIdSignatures;
+    accountIdSignatures[monitoring.auth().service_account().id()] = accountSignature;
+    FillSolomonClusterConfig(cluster, name, authToken, accountIdSignatures, monitoring);
+    return cluster;
+}
 
 void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>& connections,
     bool useBearerForYdb,
@@ -73,58 +167,21 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
         case YandexQuery::ConnectionSetting::kObjectStorage: {
             const auto& s3 = conn.content().setting().object_storage();
             auto* clusterCfg = gatewaysConfig.MutableS3()->AddClusterMapping();
-            clusterCfg->SetName(connectionName);
-            TString objectStorageUrl;
-            if (objectStorageEndpoint == "https://s3.mds.yandex.net") {
-                objectStorageUrl = TStringBuilder() << "https://" << s3.bucket() << ".s3.mds.yandex.net/";
-            } else {
-                objectStorageUrl = TStringBuilder() << objectStorageEndpoint << '/' << s3.bucket() << '/';
-            }
-            clusterCfg->SetUrl(objectStorageUrl);
-            FillClusterAuth(*clusterCfg, s3.auth(), authToken, accountIdSignatures);
+            FillS3ClusterConfig(*clusterCfg, connectionName, authToken, objectStorageEndpoint, accountIdSignatures, s3);
             clusters.emplace(connectionName, S3ProviderName);
             break;
         }
         case YandexQuery::ConnectionSetting::kDataStreams: {
             const auto& ds = conn.content().setting().data_streams();
             auto* clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
-            clusterCfg->SetName(connectionName);
-            if (ds.endpoint())
-                clusterCfg->SetEndpoint(ds.endpoint());
-            clusterCfg->SetDatabase(ds.database());
-            clusterCfg->SetDatabaseId(ds.database_id());
-            clusterCfg->SetUseSsl(ds.secure());
-            clusterCfg->SetAddBearerToToken(useBearerForYdb);
-            clusterCfg->SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
-            FillClusterAuth(*clusterCfg, ds.auth(), authToken, accountIdSignatures);
+            FillPqClusterConfig(*clusterCfg, connectionName, useBearerForYdb, authToken, accountIdSignatures, ds);
             clusters.emplace(connectionName, PqProviderName);
             break;
         }
         case YandexQuery::ConnectionSetting::kMonitoring: {
             const auto& monitoring = conn.content().setting().monitoring();
             auto* clusterCfg = gatewaysConfig.MutableSolomon()->AddClusterMapping();
-            clusterCfg->SetName(connectionName);
-
-            // TODO: move Endpoint to yq config
-            auto solomonEndpointForTest = GetEnv("SOLOMON_ENDPOINT");
-            auto solomonEndpoint = solomonEndpointForTest ? TString(solomonEndpointForTest) : TString();
-            if (solomonEndpoint.empty()) {
-                if (connectionName.StartsWith("pre")) {
-                    solomonEndpoint = "monitoring.api.cloud-preprod.yandex.net";
-                    clusterCfg->SetUseSsl(true);
-                } else if (connectionName.StartsWith("so")) {
-                    solomonEndpoint = "solomon.yandex.net";
-                } else {
-                    solomonEndpoint = "monitoring.api.cloud.yandex.net";
-                    clusterCfg->SetUseSsl(true);
-                }
-            }
-
-            clusterCfg->SetCluster(solomonEndpoint);
-            clusterCfg->SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
-            clusterCfg->MutablePath()->SetProject(monitoring.project());
-            clusterCfg->MutablePath()->SetCluster(monitoring.cluster());
-            FillClusterAuth(*clusterCfg, monitoring.auth(), authToken, accountIdSignatures);
+            FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, accountIdSignatures, monitoring);
             clusters.emplace(connectionName, SolomonProviderName);
             break;
         }

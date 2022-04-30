@@ -26,6 +26,14 @@ public:
         const TString& path,
         const TString& token) override;
 
+    NThreading::TFuture<TListStreams> ListStreams(
+        const TString& sessionId,
+        const TString& cluster,
+        const TString& database,
+        const TString& token,
+        ui32 limit,
+        const TString& exclusiveStartStreamName = {}) override;
+
     void UpdateClusterConfigs(
         const TString& clusterName,
         const TString& endpoint,
@@ -118,6 +126,10 @@ TPqSession::TPtr TPqNativeGateway::GetExistingSession(const TString& sessionId) 
 
 NPq::NConfigurationManager::TAsyncDescribePathResult TPqNativeGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
     return GetExistingSession(sessionId)->DescribePath(cluster, database, path, token);
+}
+
+NThreading::TFuture<IPqGateway::TListStreams> TPqNativeGateway::ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName) {
+    return GetExistingSession(sessionId)->ListStreams(cluster, database, token, limit, exclusiveStartStreamName);
 }
 
 IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services) {

@@ -42,6 +42,11 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePa
     }
 }
 
+NThreading::TFuture<IPqGateway::TListStreams> TDummyPqGateway::ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName) {
+    Y_UNUSED(sessionId, cluster, database, token, limit, exclusiveStartStreamName);
+    return NThreading::MakeFuture<IPqGateway::TListStreams>();
+}
+
 TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
     with_lock (Mutex) {
         Y_ENSURE(topic.Cluster);

@@ -99,7 +99,6 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         TDuration backoff = taskLeaseTtl;
 
         if (request->ResignQuery) {
-
             TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
             auto it = retryPolicies.find(request->StatusCode);
             auto policyFound = it != retryPolicies.end();

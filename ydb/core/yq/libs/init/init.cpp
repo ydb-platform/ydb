@@ -75,13 +75,6 @@ void Init(
         actorRegistrator(NYq::ControlPlaneStorageServiceActorId(), controlPlaneStorage);
     }
 
-    if (protoConfig.GetTestConnection().GetEnabled()) {
-        auto testConnection = NYq::CreateTestConnectionActor(
-                protoConfig.GetTestConnection(),
-                appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "TestConnection"));
-        actorRegistrator(NYq::TestConnectionActorId(), testConnection);
-    }
-
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
         auto controlPlaneProxy = NYq::CreateControlPlaneProxyActor(protoConfig.GetControlPlaneProxy(),
             appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneProxy"));
@@ -135,6 +128,9 @@ void Init(
         }
 
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent);
+    }
+
+    if (protoConfig.GetPrivateApi().GetEnabled()) {
         RegisterDqPqReadActorFactory(*sourceActorFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
         RegisterYdbReadActorFactory(*sourceActorFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterS3ReadActorFactory(*sourceActorFactory, credentialsFactory,
@@ -204,6 +200,21 @@ void Init(
 
     auto httpProxy = NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance());
     actorRegistrator(MakeYqlAnalyticsHttpProxyId(), httpProxy);
+
+    if (protoConfig.GetTestConnection().GetEnabled()) {
+        auto testConnection = NYq::CreateTestConnectionActor(
+                protoConfig.GetTestConnection(),
+                protoConfig.GetControlPlaneStorage(),
+                protoConfig.GetCommon(),
+                protoConfig.GetTokenAccessor(),
+                yqSharedResources,
+                credentialsFactory,
+                pqCmConnections,
+                appData->FunctionRegistry,
+                httpGateway,
+                appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "TestConnection"));
+        actorRegistrator(NYq::TestConnectionActorId(), testConnection);
+    }
 
     if (protoConfig.GetPendingFetcher().GetEnabled()) {
         auto fetcher = CreatePendingFetcher(

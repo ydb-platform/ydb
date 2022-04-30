@@ -34,7 +34,20 @@ public:
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override;
     void CloseSession(const TString& sessionId) override;
 
-    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) override;
+    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
+        const TString& sessionId,
+        const TString& cluster,
+        const TString& database,
+        const TString& path,
+        const TString& token) override;
+
+    NThreading::TFuture<TListStreams> ListStreams(
+        const TString& sessionId,
+        const TString& cluster,
+        const TString& database,
+        const TString& token,
+        ui32 limit,
+        const TString& exclusiveStartStreamName = {}) override;
 
     void UpdateClusterConfigs(
         const TString& clusterName,

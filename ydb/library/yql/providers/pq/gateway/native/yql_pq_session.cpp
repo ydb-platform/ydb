@@ -25,6 +25,17 @@ NYdb::NPersQueue::TPersQueueClientSettings GetYdbPqClientOptions(const TString& 
 
     return opts;
 }
+
+NYdb::TCommonClientSettings GetDsClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    NYdb::TCommonClientSettings opts;
+    opts
+        .DiscoveryEndpoint(cfg.GetEndpoint())
+        .Database(database)
+        .EnableSsl(cfg.GetUseSsl())
+        .CredentialsProviderFactory(credentialsProviderFactory);
+
+    return opts;
+}
 }
 
 const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerClient(const TString& cluster, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
@@ -41,6 +52,14 @@ NYdb::NPersQueue::TPersQueueClient& TPqSession::GetYdbPqClient(const TString& cl
         return clientIt->second;
     }
     return ClusterYdbPqClients.emplace(cluster, NYdb::NPersQueue::TPersQueueClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+}
+
+NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    const auto clientIt = ClusterDsClients.find(cluster);
+    if (clientIt != ClusterDsClients.end()) {
+        return clientIt->second;
+    }
+    return ClusterDsClients.emplace(cluster, NYdb::NDataStreams::V1::TDataStreamsClient(YdbDriver, GetDsClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(const TString& cluster, const TString& database, const TString& path, const TString& token) {
@@ -75,6 +94,51 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             desc.PartitionsCount = describeTopicResult.TopicSettings().PartitionsCount();
             return NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(std::move(desc));
         });
+    }
+}
+
+NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName) {
+    const auto* config = ClusterConfigs->FindPtr(cluster);
+    if (!config) {
+        ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+    }
+
+    YQL_ENSURE(config->GetEndpoint(), "Can't get list topics for " << cluster << ": no endpoint");
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
+    with_lock (Mutex) {
+        if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
+            const NPq::NConfigurationManager::IClient::TPtr& client = GetConfigManagerClient(cluster, *config, credentialsProviderFactory);
+            if (!client) {
+                NThreading::TPromise<IPqGateway::TListStreams> result = NThreading::NewPromise<IPqGateway::TListStreams>();
+                result.SetException(
+                    std::make_exception_ptr(
+                        yexception()
+                            << "Pq configuration manager is not supported"));
+                return result;
+            }
+            return client->DescribePath("/").Apply([](const auto& future) {
+                auto response = future.GetValue();
+                if (!response.IsPath()) {
+                    throw yexception() << "response does not contain object of type path";
+                }
+                return IPqGateway::TListStreams{};
+            });
+        }
+
+        return GetDsClient(cluster, database, *config, credentialsProviderFactory)
+                .ListStreams(NYdb::NDataStreams::V1::TListStreamsSettings{ .Limit_ = limit, .ExclusiveStartStreamName_ = exclusiveStartStreamName})
+                .Apply([](const auto& future) {
+                    auto& response = future.GetValue();
+                    if (!response.IsSuccess()) {
+                        throw yexception() << response.GetIssues().ToString();
+                    }
+                    const auto& result = response.GetResult();
+                    IPqGateway::TListStreams listStrems;
+                    listStrems.Names.insert(listStrems.Names.end(), result.stream_names().begin(), result.stream_names().end());
+                    return listStrems;
+
+                });
     }
 }
 

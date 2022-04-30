@@ -1,13 +1,15 @@
 #pragma once
 
+#include "config.h"
 #include "control_plane_storage.h"
 #include "control_plane_storage_counters.h"
 #include "exceptions.h"
 #include "extractors.h"
-#include <ydb/core/yq/libs/control_plane_storage/internal/response_tasks.h>
 #include "probes.h"
+#include "request_validators.h"
 #include "util.h"
 #include "validators.h"
+#include <ydb/core/yq/libs/control_plane_storage/internal/response_tasks.h>
 
 #include <util/generic/guid.h>
 #include <util/system/yassert.h>
@@ -217,25 +219,9 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         }
     };
 
-private:
-    struct TConfig {
-        NConfig::TControlPlaneStorageConfig Proto;
-        TString IdsPrefix;
-        TDuration IdempotencyKeyTtl;
-        TDuration AutomaticQueriesTtl;
-        TDuration ResultSetsTtl;
-        TDuration TaskLeaseTtl;
-        TSet<YandexQuery::ConnectionSetting::ConnectionCase> AvailableConnections;
-        TSet<YandexQuery::BindingSetting::BindingCase> AvailableBindings;
-        THashMap<ui64, TRetryPolicyItem> RetryPolicies;
-        TRetryPolicyItem TaskLeaseRetryPolicy;
-
-        TConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common);
-    };
-
     TCounters Counters;
 
-    TConfig Config;
+    ::NYq::TControlPlaneStorageConfig Config;
 
     TYdbConnectionPtr YdbConnection;
 
@@ -327,174 +313,15 @@ public:
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)
     {
-        const auto& request = ev->Get()->Request;
-        NYql::TIssues issues = ValidateEvent(ev);
-
-        if (!request.has_content()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content field is not specified"));
-        }
-
-        const YandexQuery::ConnectionContent& content = request.content();
-        if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.acl.visibility field is not specified"));
-        }
-
-        if (content.name() != to_lower(content.name())) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incorrect connection name: " + content.name() + ". Please use only lower case"));
-        }
-
-        if (!content.has_setting()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting field is not specified"));
-        }
-
-        const YandexQuery::ConnectionSetting& setting = content.setting();
-        if (!Config.AvailableConnections.contains(setting.connection_case())) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "connection of the specified type is disabled"));
-        }
-
-        switch (setting.connection_case()) {
-        case YandexQuery::ConnectionSetting::kYdbDatabase: {
-            const YandexQuery::YdbDatabase database = setting.ydb_database();
-            if (!database.has_auth() || database.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.ydb_database.auth field is not specified"));
-            }
-
-            if (database.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-            }
-
-            if (!database.database_id() && !(database.endpoint() && database.database())) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.ydb_database.{database_id||database,endpoint} field is not specified"));
-            }
-            break;
-        }
-        case YandexQuery::ConnectionSetting::kClickhouseCluster: {
-            const YandexQuery::ClickHouseCluster ch = setting.clickhouse_cluster();
-            if (!ch.has_auth() || ch.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.auth field is not specified"));
-            }
-
-            if (ch.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-            }
-
-            if (!ch.database_id() && !(ch.host() && ch.port())) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.{database_id||host,port} field is not specified"));
-            }
-
-            if (!ch.login()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.login field is not specified"));
-            }
-
-            if (!ch.password() && clickHousePasswordRequire) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.clickhouse_cluster.password field is not specified"));
-            }
-            break;
-        }
-        case YandexQuery::ConnectionSetting::kObjectStorage: {
-            const YandexQuery::ObjectStorageConnection objectStorage = setting.object_storage();
-            if (!objectStorage.has_auth() || objectStorage.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.object_storage.auth field is not specified"));
-            }
-
-            if (objectStorage.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-            }
-
-            if (!objectStorage.bucket()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.object_storage.bucket field is not specified"));
-            }
-            break;
-        }
-        case YandexQuery::ConnectionSetting::kDataStreams: {
-            const YandexQuery::DataStreams dataStreams = setting.data_streams();
-            if (!dataStreams.has_auth() || dataStreams.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.data_streams.auth field is not specified"));
-            }
-
-            if (dataStreams.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-            }
-
-            if (!dataStreams.database_id() && !(dataStreams.endpoint() && dataStreams.database())) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.data_streams.{database_id||database,endpoint} field is not specified"));
-            }
-            break;
-        }
-        case YandexQuery::ConnectionSetting::kMonitoring: {
-            const YandexQuery::Monitoring monitoring = setting.monitoring();
-            if (!monitoring.has_auth() || monitoring.auth().identity_case() == YandexQuery::IamAuth::IDENTITY_NOT_SET) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.monitoring.auth field is not specified"));
-            }
-
-            if (monitoring.auth().identity_case() == YandexQuery::IamAuth::kCurrentIam && Config.Proto.GetDisableCurrentIam()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
-            }
-
-            if (!monitoring.project()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.monitoring.project field is not specified"));
-            }
-
-            if (!monitoring.cluster()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.monitoring.cluster field is not specified"));
-            }
-            break;
-        }
-        case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET: {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "connection is not set"));
-            break;
-        }
-        // Do not add default. Adding a new connection should cause a compilation error
-        }
-        return issues;
+        return ::NYq::ValidateConnection<T>(ev, Config.Proto.GetMaxRequestSize(),
+                                  Config.AvailableConnections, Config.Proto.GetDisableCurrentIam(),
+                                  clickHousePasswordRequire);
     }
 
     template<typename T>
      NYql::TIssues ValidateBinding(T& ev)
     {
-        const auto& request = ev->Get()->Request;
-        NYql::TIssues issues = ValidateEvent(ev);
-
-        if (request.has_content()) {
-            const YandexQuery::BindingContent& content = request.content();
-            if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.acl.visibility field is not specified"));
-            }
-
-            if (content.name() != to_lower(content.name())) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Incorrect binding name: " + content.name() + ". Please use only lower case"));
-            }
-
-            if (!content.has_setting()) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.setting field is not specified"));
-            }
-
-            const YandexQuery::BindingSetting& setting = content.setting();
-            if (!Config.AvailableBindings.contains(setting.binding_case())) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding of the specified type is disabled"));
-            }
-
-            switch (setting.binding_case()) {
-            case YandexQuery::BindingSetting::kDataStreams: {
-                const YandexQuery::DataStreamsBinding dataStreams = setting.data_streams();
-                if (!dataStreams.has_schema()) {
-                    issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
-                }
-                break;
-            }
-            case YandexQuery::BindingSetting::BINDING_NOT_SET: {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding is not set"));
-                break;
-            }
-                // Do not replace with default. Adding a new binding should cause a compilation error
-            case YandexQuery::BindingSetting::kObjectStorage:
-                break;
-            }
-        } else {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding field is not specified"));
-        }
-
-        return issues;
+        return ::NYq::ValidateBinding<T>(ev, Config.Proto.GetMaxRequestSize(), Config.AvailableBindings);
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
@@ -512,61 +339,13 @@ public:
     template<typename T>
     NYql::TIssues ValidateQuery(T& ev)
     {
-        NYql::TIssues issues = ValidateEvent(ev);
-        auto& request = ev->Get()->Request;
-        const auto& content = request.content();
-
-        if (request.execute_mode() == YandexQuery::ExecuteMode::EXECUTE_MODE_UNSPECIFIED) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "mode field is not specified"));
-        }
-
-        if (content.type() == YandexQuery::QueryContent::QUERY_TYPE_UNSPECIFIED) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "type field is not specified"));
-        }
-
-        if (content.acl().visibility() == YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "acl.visibility field is not specified"));
-        }
-
-        if (content.type() == YandexQuery::QueryContent::STREAMING && !request.has_disposition()) {
-            request.mutable_disposition()->mutable_fresh();
-        }
-
-        return issues;
+        return ::NYq::ValidateQuery<T>(ev, Config.Proto.GetMaxRequestSize());
     }
 
     template<class P>
     NYql::TIssues ValidateEvent(P& ev)
     {
-        const auto& request = ev->Get()->Request;
-        const TString scope = ev->Get()->Scope;
-        const TString user = ev->Get()->User;
-        const TString token = ev->Get()->Token;
-        const int byteSize = request.ByteSize();
-
-        NYql::TIssues issues;
-        if (!scope) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "scope is not specified"));
-        }
-
-        if (!user) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "user is empty"));
-        }
-
-        if (!token) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "token is empty"));
-        }
-
-        if (byteSize > static_cast<int>(Config.Proto.GetMaxRequestSize())) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "request size exceeded " + ToString(request.ByteSize()) + " out of " + ToString(Config.Proto.GetMaxRequestSize()) + " bytes"));
-        }
-
-        TString error;
-        if (!request.validate(error)) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, error));
-        }
-
-        return issues;
+        return ::NYq::ValidateEvent<P>(ev, Config.Proto.GetMaxRequestSize());
     }
 
     /*

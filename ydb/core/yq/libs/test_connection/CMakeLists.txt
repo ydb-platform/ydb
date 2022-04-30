@@ -15,11 +15,18 @@ target_link_libraries(yq-libs-test_connection PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-lwtrace
+  cpp-xml-document
   libs-actors-logging
   libs-config-protos
+  yq-libs-control_plane_storage
   libs-test_connection-events
+  providers-solomon-async_io
 )
 target_sources(yq-libs-test_connection PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/test_connection.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/counters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/probes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/test_connection.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/test_data_streams.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/test_monitoring.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/test_connection/test_object_storage.cpp
 )

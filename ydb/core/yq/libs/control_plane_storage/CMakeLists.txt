@@ -36,10 +36,12 @@ target_link_libraries(yq-libs-control_plane_storage PUBLIC
   yql-public-issue
 )
 target_sources(yq-libs-control_plane_storage PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/control_plane_storage_counters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/exceptions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/in_memory_control_plane_storage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/probes.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/request_validators.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/validators.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage.cpp

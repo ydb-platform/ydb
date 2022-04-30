@@ -13,6 +13,7 @@ target_link_libraries(pq-gateway-native PUBLIC
   yutil
   common-token_accessor-client
   library-yql-utils
+  cpp-client-ydb_datastreams
   cpp-client-ydb_driver
   cpp-client-ydb_persqueue_core
   providers-common-metrics

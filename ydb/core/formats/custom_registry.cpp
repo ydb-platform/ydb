@@ -1,7 +1,9 @@
+#include "custom_registry.h"
+
 #include "functions.h"
 #include "func_common.h"
 #include <util/system/yassert.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.cc>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry_internal.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
 namespace cp = ::arrow::compute;
@@ -18,7 +20,10 @@ static void RegisterMath(cp::FunctionRegistry* registry) {
     Y_VERIFY(registry->AddFunction(MakeMathUnary<TErfc>(TErfc::Name)).ok());
     Y_VERIFY(registry->AddFunction(MakeMathUnary<TExp>(TExp::Name)).ok());
     Y_VERIFY(registry->AddFunction(MakeMathUnary<TExp2>(TExp2::Name)).ok());
+    // Temporarily disabled because of compilation error on Windows.
+#if 0
     Y_VERIFY(registry->AddFunction(MakeMathUnary<TExp10>(TExp10::Name)).ok());
+#endif
     Y_VERIFY(registry->AddFunction(MakeMathBinary<THypot>(THypot::Name)).ok());
     Y_VERIFY(registry->AddFunction(MakeMathUnary<TLgamma>(TLgamma::Name)).ok());
     Y_VERIFY(registry->AddFunction(MakeConstNullary<TPi>(TPi::Name)).ok());
@@ -40,24 +45,31 @@ static void RegisterArithmetic(cp::FunctionRegistry* registry) {
     Y_VERIFY(registry->AddFunction(MakeArithmeticBinary<TModuloOrZero>(TModuloOrZero::Name)).ok());
 }
 
+static void RegisterYdbCast(cp::FunctionRegistry* registry) {
+    cp::internal::RegisterScalarCast(registry);
+    Y_VERIFY(registry->AddFunction(std::make_shared<YdbCastMetaFunction>()).ok());
+}
+
 
 static std::unique_ptr<cp::FunctionRegistry> CreateCustomRegistry() {
     auto registry = cp::FunctionRegistry::Make();
     RegisterMath(registry.get());
     RegisterRound(registry.get());
     RegisterArithmetic(registry.get());
-    cp::internal::RegisterScalarCast(registry.get());
+    RegisterYdbCast(registry.get());
     return registry;
 }
 
+// Creates singleton custom registry
 cp::FunctionRegistry* GetCustomFunctionRegistry() {
     static auto g_registry = CreateCustomRegistry();
     return g_registry.get();
 }
 
+// We want to have ExecContext per thread. All these context use one custom registry.
 cp::ExecContext* GetCustomExecContext() {
-    static auto context = std::make_unique<cp::ExecContext>(arrow::default_memory_pool(), NULLPTR, GetCustomFunctionRegistry());
-    return context.get();
+    static thread_local cp::ExecContext context(arrow::default_memory_pool(), nullptr, GetCustomFunctionRegistry());
+    return &context;
 }
 
 }

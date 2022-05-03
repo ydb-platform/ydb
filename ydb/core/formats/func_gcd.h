@@ -1,17 +1,18 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernel.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include "func_common.h"
-#include <cstdlib>
 #include <type_traits>
+
+#ifdef WIN32
+#define INLINE inline
+#else
+#define INLINE __attribute__((always_inline))
+#endif
 
 namespace NKikimr::NArrow {
 
 template<typename T>
-__attribute__((always_inline)) void FastIntSwap(T& lhs, T& rhs) {
+INLINE void FastIntSwap(T& lhs, T& rhs) {
     lhs ^= rhs;
     rhs ^= lhs;
     lhs ^= rhs;
@@ -35,3 +36,5 @@ struct TGreatestCommonDivisor {
 };
 
 }
+
+#undef INLINE

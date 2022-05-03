@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
 #include <ydb/core/formats/one_batch_input_stream.h>
 #include <ydb/core/formats/merging_sorted_input_stream.h>
+#include <ydb/core/formats/custom_registry.h>
 
 namespace NKikimr::NOlap {
 
@@ -504,7 +505,7 @@ TIndexedReadData::MakeResult(TVector<std::vector<std::shared_ptr<arrow::RecordBa
 
     if (ReadMetadata->HasProgram()) {
         for (auto& batch : out) {
-            ApplyProgram(batch.ResultBatch, ReadMetadata->Program);
+            ApplyProgram(batch.ResultBatch, ReadMetadata->Program, NArrow::GetCustomExecContext());
         }
     }
     return out;

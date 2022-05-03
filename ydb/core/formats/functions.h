@@ -1,5 +1,6 @@
 #pragma once
 
+#include "func_cast.h"
 #include "func_gcd.h"
 #include "func_lcm.h"
 #include "func_modulo.h"

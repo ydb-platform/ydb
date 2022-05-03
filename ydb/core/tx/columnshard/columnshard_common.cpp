@@ -121,6 +121,31 @@ NArrow::TAssign MakeFunction(TContext& info, const std::string& name,
         case TId::FUNC_MATH_DIVIDE:
             Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Divide, std::move(arguments));
+        case TId::FUNC_CAST_TO_INT32:
+        {
+            Y_VERIFY(args.size() == 1); // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
+            auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
+            castOpts->to_type = std::make_shared<arrow::Int32Type>();
+            return TAssign(name, EOperation::CastInt32, std::move(arguments), castOpts);
+        }
+        case TId::FUNC_CAST_TO_TIMESTAMP:
+        {
+            Y_VERIFY(args.size() == 1);
+            auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
+            castOpts->to_type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
+            return TAssign(name, EOperation::CastTimestamp, std::move(arguments), castOpts);
+        }
+        case TId::FUNC_CAST_TO_INT8:
+        case TId::FUNC_CAST_TO_INT16:
+        case TId::FUNC_CAST_TO_INT64:
+        case TId::FUNC_CAST_TO_UINT8:
+        case TId::FUNC_CAST_TO_UINT16:
+        case TId::FUNC_CAST_TO_UINT32:
+        case TId::FUNC_CAST_TO_UINT64:
+        case TId::FUNC_CAST_TO_FLOAT:
+        case TId::FUNC_CAST_TO_DOUBLE:
+        case TId::FUNC_CAST_TO_BINARY:
+        case TId::FUNC_CAST_TO_FIXED_SIZE_BINARY:
         case TId::FUNC_UNSPECIFIED:
             break;
     }

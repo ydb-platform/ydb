@@ -59,6 +59,20 @@ message TProgram {
             FUNC_MATH_SUBTRACT = 15;
             FUNC_MATH_MULTIPLY = 16;
             FUNC_MATH_DIVIDE = 17;
+            FUNC_CAST_TO_BOOLEAN = 18;
+            FUNC_CAST_TO_INT8 = 19;
+            FUNC_CAST_TO_INT16 = 20;
+            FUNC_CAST_TO_INT32 = 21;
+            FUNC_CAST_TO_INT64 = 22;
+            FUNC_CAST_TO_UINT8 = 23;
+            FUNC_CAST_TO_UINT16 = 24;
+            FUNC_CAST_TO_UINT32 = 25;
+            FUNC_CAST_TO_UINT64 = 26;
+            FUNC_CAST_TO_FLOAT = 27;
+            FUNC_CAST_TO_DOUBLE = 28;
+            FUNC_CAST_TO_BINARY = 29;
+            FUNC_CAST_TO_FIXED_SIZE_BINARY = 30;
+            FUNC_CAST_TO_TIMESTAMP = 31;
         }
 
         message TFunction {

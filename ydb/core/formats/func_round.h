@@ -9,6 +9,15 @@
 #include <fenv.h>
 #include <type_traits>
 
+#ifdef WIN32
+#include <intrin.h>
+#define CLZ __lzcnt
+#define CLZLL __lzcnt64
+#else
+#define CLZ __builtin_clz
+#define CLZLL __builtin_clzll
+#endif
+
 namespace NKikimr::NArrow {
 
 struct TRound {
@@ -42,7 +51,7 @@ struct TRoundToExp2 {
     (sizeof(TRes) <= sizeof(uint32_t)), TRes>
     Call(arrow::compute::KernelContext*, TArg arg, arrow::Status*) {
         static_assert(std::is_same_v<TRes, TArg>, "");
-        return arg <= 0 ? 0 : (TRes(1) << (31 - __builtin_clz(arg)));
+        return arg <= 0 ? 0 : (TRes(1) << (31 - CLZ(arg)));
     }
 
     template <typename TRes, typename TArg>
@@ -50,7 +59,7 @@ struct TRoundToExp2 {
     (sizeof(TRes) == sizeof(uint64_t)), TRes>
     Call(arrow::compute::KernelContext*, TArg arg, arrow::Status*) {
         static_assert(std::is_same_v<TRes, TArg>, "");
-        return arg <= 0 ? 0 : (TRes(1) << (63 - __builtin_clzll(arg)));
+        return arg <= 0 ? 0 : (TRes(1) << (63 - CLZLL(arg)));
     }
 
     template <typename TRes, typename TArg>
@@ -67,3 +76,6 @@ struct TRoundToExp2 {
 };
 
 }
+
+#undef CLZ
+#undef CLZLL

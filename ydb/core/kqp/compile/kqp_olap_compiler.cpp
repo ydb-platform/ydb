@@ -77,6 +77,7 @@ private:
 
 
 TProgram::TAssignment* CompileCondition(const TExprBase& condition, TKqpOlapCompileContext& ctx);
+ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx);
 
 ui32 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
 {
@@ -145,6 +146,52 @@ ui32 ConvertParameterToColumn(const TCoParameter& parameter, TKqpOlapCompileCont
     return ssaValue->GetColumn().GetId();
 }
 
+ui32 ConvertSafeCastToColumn(const TCoSafeCast& cast, TKqpOlapCompileContext& ctx)
+{
+    auto columnId = GetOrCreateColumnId(cast.Value(), ctx);
+    
+    TProgram::TAssignment* ssaValue = ctx.CreateAssignCmd();
+
+    auto newCast = ssaValue->MutableFunction();
+
+    auto maybeDataType = cast.Type().Maybe<TCoDataType>();
+    YQL_ENSURE(maybeDataType.IsValid());
+
+    auto dataType = maybeDataType.Cast();
+    ui32 castFunction = TProgram::TAssignment::FUNC_UNSPECIFIED;
+    if (dataType.Type().Value() == "Boolean") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_BOOLEAN;
+    } else if (dataType.Type().Value() == "Int8") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT8;
+    } else if (dataType.Type().Value() == "Int16") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT16;
+    } else if (dataType.Type().Value() == "Int32") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT32;
+    } else if (dataType.Type().Value() == "Int64") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_INT64;
+    } else if (dataType.Type().Value() == "Uint8") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT8;
+    } else if (dataType.Type().Value() == "Uint16") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT16;
+    } else if (dataType.Type().Value() == "Uint32") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT32;
+    } else if (dataType.Type().Value() == "Uint64") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_UINT64;
+    } else if (dataType.Type().Value() == "Float") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_FLOAT;
+    } else if (dataType.Type().Value() == "Double") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_DOUBLE;
+    } else if (dataType.Type().Value() == "Timestamp") {
+        castFunction = TProgram::TAssignment::FUNC_CAST_TO_TIMESTAMP;
+    } else {
+        YQL_ENSURE(false, "Unsupported data type for pushed down safe cast: " << dataType.Type().Value());
+    }
+
+    newCast->SetId(castFunction);
+    newCast->AddArguments()->SetId(columnId);
+    return ssaValue->GetColumn().GetId();
+}
+
 ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
     if (auto maybeData = node.Maybe<TCoDataCtor>()) {
         return ConvertValueToColumn(maybeData.Cast(), ctx);
@@ -156,6 +203,10 @@ ui64 GetOrCreateColumnId(const TExprBase& node, TKqpOlapCompileContext& ctx) {
 
     if (auto maybeParameter = node.Maybe<TCoParameter>()) {
         return ConvertParameterToColumn(maybeParameter.Cast(), ctx);
+    }
+
+    if (auto maybeCast = node.Maybe<TCoSafeCast>()) {
+        return ConvertSafeCastToColumn(maybeCast.Cast(), ctx);
     }
 
     YQL_ENSURE(false, "Unknown node in OLAP comparison compiler: " << node.Ptr()->Content());

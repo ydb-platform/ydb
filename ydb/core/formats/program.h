@@ -23,6 +23,7 @@ enum class EOperation {
     CastBinary,
     CastFixedSizeBinary,
     CastString,
+    CastTimestamp,
     //
     IsValid,
     IsNull,
@@ -90,60 +91,77 @@ public:
         : Name(name)
         , Operation(op)
         , Arguments(std::move(args))
+        , FuncOpts(nullptr)
+    {}
+
+    TAssign(const std::string& name, EOperation op, std::vector<std::string>&& args, std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
+        : Name(name)
+        , Operation(op)
+        , Arguments(std::move(args))
+        , FuncOpts(funcOpts)
     {}
 
     explicit TAssign(const std::string& name, bool value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::BooleanScalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     explicit TAssign(const std::string& name, i32 value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::Int32Scalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     explicit TAssign(const std::string& name, ui32 value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::UInt32Scalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     explicit TAssign(const std::string& name, i64 value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::Int64Scalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     explicit TAssign(const std::string& name, ui64 value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::UInt64Scalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     explicit TAssign(const std::string& name, float value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::FloatScalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     explicit TAssign(const std::string& name, double value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::DoubleScalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     explicit TAssign(const std::string& name, const std::string& value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(std::make_shared<arrow::StringScalar>(value))
+        , FuncOpts(nullptr)
     {}
 
     TAssign(const std::string& name, const std::shared_ptr<arrow::Scalar>& value)
         : Name(name)
         , Operation(EOperation::Constant)
         , Constant(value)
+        , FuncOpts(nullptr)
     {}
 
     bool IsConstant() const { return Operation == EOperation::Constant; }
@@ -151,12 +169,14 @@ public:
     const std::vector<std::string>& GetArguments() const { return Arguments; }
     std::shared_ptr<arrow::Scalar> GetConstant() const { return Constant; }
     const std::string& GetName() const { return Name; }
+    const arrow::compute::FunctionOptions* GetFunctionOptions() const { return FuncOpts.get(); }
 
 private:
     std::string Name;
     EOperation Operation{EOperation::Unspecified};
     std::vector<std::string> Arguments;
     std::shared_ptr<arrow::Scalar> Constant;
+    std::shared_ptr<arrow::compute::FunctionOptions> FuncOpts;
 };
 
 /// Group of commands that finishes with projection. Steps add locality for columns definition.

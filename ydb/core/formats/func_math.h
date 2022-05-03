@@ -95,6 +95,8 @@ struct TExp2 {
     }
 };
 
+#if 0
+// Temporarily disable function because it doesn't compile on Windows.
 struct TExp10 {
 
     static constexpr const char * Name = "exp10";
@@ -104,6 +106,7 @@ struct TExp10 {
         return exp10(arg);
     }
 };
+#endif
 
 struct THypot {
 

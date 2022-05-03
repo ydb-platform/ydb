@@ -5,7 +5,12 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-parameter"
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/codegen_internal.h>
+#pragma clang diagnostic pop
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <util/datetime/base.h>
@@ -17,8 +22,6 @@
 #include "switch_type.h"
 
 namespace cp = arrow::compute;
-using cp::internal::applicator::ScalarBinary;
-using cp::internal::applicator::ScalarUnary;
 
 namespace NKikimr::NArrow {
 

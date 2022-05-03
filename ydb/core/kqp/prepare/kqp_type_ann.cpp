@@ -769,6 +769,11 @@ TStatus AnnotateOlapFilterCompare(const TExprNode::TPtr& node, TExprContext& ctx
             return true;
         }
 
+        // SafeCast, the checks about validity should be placed in kqp_opt_phy_olap_filter.cpp
+        if (TCoSafeCast::Match(node)) {
+            return true;
+        }
+
         ctx.AddError(TIssue(
             ctx.GetPosition(node->Pos()),
             TStringBuilder()

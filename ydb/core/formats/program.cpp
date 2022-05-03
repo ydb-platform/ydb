@@ -20,33 +20,21 @@ namespace NKikimr::NArrow {
 const char * GetFunctionName(EOperation op) {
     switch (op) {
         case EOperation::CastBoolean:
-            return "cast_boolean";
         case EOperation::CastInt8:
-            return "cast_int8";
         case EOperation::CastInt16:
-            return "cast_int16";
         case EOperation::CastInt32:
-            return "cast_int32";
         case EOperation::CastInt64:
-            return "cast_int64";
         case EOperation::CastUInt8:
-            return "cast_uint8";
         case EOperation::CastUInt16:
-            return "cast_uint16";
         case EOperation::CastUInt32:
-            return "cast_uint32";
         case EOperation::CastUInt64:
-            return "cast_uint64";
         case EOperation::CastFloat:
-            return "cast_float";
         case EOperation::CastDouble:
-            return "cast_double";
         case EOperation::CastBinary:
-            return "cast_binary";
         case EOperation::CastFixedSizeBinary:
-            return "cast_fixed_size_binary";
         case EOperation::CastString:
-            return "cast_string";
+        case EOperation::CastTimestamp:
+            return "ydb.cast";
 
         case EOperation::IsValid:
             return "is_valid";
@@ -263,7 +251,7 @@ std::shared_ptr<arrow::Scalar> CallScalarFunction(EOperation funcId, const std::
     return result->scalar();
 }
 
-arrow::Datum CallFunctionById(EOperation funcId, const std::vector<std::string>& args,
+arrow::Datum CallFunctionById(EOperation funcId, const std::vector<std::string>& args, const arrow::compute::FunctionOptions* funcOpts,
                                            std::shared_ptr<TProgramStep::TDatumBatch> batch, arrow::compute::ExecContext* ctx) {
     std::vector<arrow::Datum> arguments;
     arguments.reserve(args.size());
@@ -274,17 +262,20 @@ arrow::Datum CallFunctionById(EOperation funcId, const std::vector<std::string>&
         arguments.push_back(*column);
     }
     std::string funcName = GetFunctionName(funcId);
+
     arrow::Result<arrow::Datum> result;
     if (ctx != nullptr && ctx->func_registry()->GetFunction(funcName).ok()) {
-        result = arrow::compute::CallFunction(GetFunctionName(funcId), arguments, ctx);
+        result = arrow::compute::CallFunction(GetFunctionName(funcId), arguments, funcOpts, ctx);
     } else {
-        result = arrow::compute::CallFunction(GetFunctionName(funcId), arguments);
+        result = arrow::compute::CallFunction(GetFunctionName(funcId), arguments, funcOpts);
     }
     Y_VERIFY(result.ok());
     return result.ValueOrDie();
 }
 
-
+arrow::Datum CallFunctionByAssign(const TAssign& assign, std::shared_ptr<TProgramStep::TDatumBatch> batch, arrow::compute::ExecContext* ctx) {
+    return CallFunctionById(assign.GetOperation(), assign.GetArguments(), assign.GetFunctionOptions(), batch, ctx);
+}
 
 void TProgramStep::ApplyAssignes(std::shared_ptr<TProgramStep::TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const {
     if (Assignes.empty()) {
@@ -298,7 +289,7 @@ void TProgramStep::ApplyAssignes(std::shared_ptr<TProgramStep::TDatumBatch>& bat
         if (assign.IsConstant()) {
             column = assign.GetConstant();
         } else {
-            column = CallFunctionById(assign.GetOperation(), assign.GetArguments(), batch, ctx);
+            column = CallFunctionByAssign(assign, batch, ctx);
         }
         AddColumn(batch, assign.GetName(), column);
     }
@@ -313,9 +304,9 @@ void TProgramStep::ApplyFilters(std::shared_ptr<TDatumBatch>& batch) const {
     filters.reserve(Filters.size());
     for (auto& colName : Filters) {
         auto column = GetColumnByName(batch, colName);
-        Y_VERIFY(column.ok());
-        Y_VERIFY(column->is_array());
-        Y_VERIFY(column->type() == arrow::boolean());
+        Y_VERIFY_S(column.ok(), TStringBuilder() << "Column " << colName << " is not ok.");
+        Y_VERIFY_S(column->is_array(), TStringBuilder() << "Column " << colName << " is not an array.");
+        Y_VERIFY_S(column->type() == arrow::boolean(), TStringBuilder() << "Column " << colName << " type is not bool.");
         auto boolColumn = std::static_pointer_cast<arrow::BooleanArray>(column->make_array());
         filters.push_back(std::vector<bool>(boolColumn->length()));
         auto& bits = filters.back();

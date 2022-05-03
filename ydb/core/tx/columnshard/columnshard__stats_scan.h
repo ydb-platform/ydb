@@ -4,6 +4,7 @@
 #include "columnshard_common.h"
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/formats/custom_registry.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -53,7 +54,7 @@ public:
         ApplyRangePredicates(batch);
 
         if (!ReadMetadata->Program.empty()) {
-            ApplyProgram(batch, ReadMetadata->Program);
+            ApplyProgram(batch, ReadMetadata->Program, NArrow::GetCustomExecContext());
         }
 
         // Leave only requested columns

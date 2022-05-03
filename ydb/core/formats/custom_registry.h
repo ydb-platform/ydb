@@ -1,9 +1,11 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
-namespace cp = ::arrow::compute;
+namespace arrow::compute {
+    class FunctionRegistry;
+    class ExecContext;
+}
 
 namespace NKikimr::NArrow {
-    cp::FunctionRegistry* GetCustomFunctionRegistry();
-    cp::ExecContext* GetCustomExecContext();
+    arrow::compute::FunctionRegistry* GetCustomFunctionRegistry();
+    arrow::compute::ExecContext* GetCustomExecContext();
 }

@@ -230,6 +230,21 @@ void TYdbControlPlaneStorageActor::CreateResultSetsTable()
     RunCreateTableActor(tablePath, TTableDescription(description));
 }
 
+void TYdbControlPlaneStorageActor::CreateQuotasTable()
+{
+    auto tablePath = JoinPath(YdbConnection->TablePathPrefix, QUOTAS_TABLE_NAME);
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SUBJECT_TYPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(SUBJECT_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(METRIC_NAME_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(METRIC_VALUE_COLUMN_NAME, EPrimitiveType::Int64)
+        .SetPrimaryKeyColumns({SUBJECT_TYPE_COLUMN_NAME, SUBJECT_ID_COLUMN_NAME, METRIC_NAME_COLUMN_NAME})
+        .Build();
+
+    RunCreateTableActor(tablePath, TTableDescription(description));
+}
+
 bool TYdbControlPlaneStorageActor::IsSuperUser(const TString& user)
 {
     return AnyOf(Config.Proto.GetSuperUsers(), [&user](const auto& superUser) {

@@ -361,6 +361,7 @@ public:
     void CreateBindingsTable();
     void CreateIdempotencyKeysTable();
     void CreateResultSetsTable();
+    void CreateQuotasTable();
 
     void RunCreateTableActor(const TString& path, NYdb::NTable::TTableDescription desc);
 

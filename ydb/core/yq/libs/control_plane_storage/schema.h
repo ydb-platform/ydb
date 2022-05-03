@@ -11,6 +11,7 @@ namespace NYq {
 #define IDEMPOTENCY_KEYS_TABLE_NAME "idempotency_keys"
 #define JOBS_TABLE_NAME "jobs"
 #define NODES_TABLE_NAME "nodes"
+#define QUOTAS_TABLE_NAME "quotas"
 
 // columns
 #define SCOPE_COLUMN_NAME "scope"
@@ -68,5 +69,10 @@ namespace NYq {
 #define LAST_SEEN_AT_COLUMN_NAME "last_seen_at"
 #define ASSIGNED_UNTIL_COLUMN_NAME "assigned_until"
 #define RETRY_RATE_COLUMN_NAME "retry_rate"
+
+#define SUBJECT_TYPE_COLUMN_NAME "subject_type"
+#define SUBJECT_ID_COLUMN_NAME "subject_id"
+#define METRIC_NAME_COLUMN_NAME "metric_name"
+#define METRIC_VALUE_COLUMN_NAME "metric_value"
 
 } // namespace NYq

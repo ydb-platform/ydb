@@ -1,2 +1,2 @@
 exclude:
-- tests/integration/.+
+- tests/integration/*

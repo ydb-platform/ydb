@@ -4,6 +4,6 @@ additional_requirements:
 - library/python/resource
 exclude:
 - botocore/vendored/six.py
-- tests/.+
+- tests/*
 keep:
 - tests/SQS-119.py

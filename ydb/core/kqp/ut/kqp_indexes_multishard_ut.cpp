@@ -914,24 +914,13 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
-
-        {
-            const TString query1(Q_(R"(
-                UPSERT INTO `/Root/SecondaryWithDataColumns` (Key, Index2, Value) VALUES
-                ("p2", "s2", "2");
-            )"));
-
-            auto result = session.ExecuteDataQuery(
-                                 query1,
-                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                          .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-        }
+        CreateTableWithMultishardIndexAndDataColumn(kikimr.GetTestClient());
+        FillTableWithDataColumn(db);
 
         {
             const TString query1(Q_(R"(
                 UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
-                (1, 111, "Secondary1");
+                (333, 2000000000u, "xxx");
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -945,7 +934,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
             const TString query(Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryWithDataColumns` VIEW Index WHERE Index2 = 'Secondary1';
+                SELECT value FROM `/Root/MultiShardIndexedWithDataColumn` VIEW index WHERE fk = 3000000000u;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -954,13 +943,13 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
                                      execSettings)
                               .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value1\"]]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v3\"]]]");
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
 
         }
@@ -969,7 +958,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             NYdb::NTable::TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
             const TString query = Q1_(R"(
-                SELECT Value FROM `/Root/SecondaryWithDataColumns` VIEW Index WHERE Index2 IN ('Secondary1');
+                SELECT value FROM `/Root/MultiShardIndexedWithDataColumn` VIEW index WHERE fk IN (3000000000u);
             )");
 
             auto result = session.ExecuteDataQuery(
@@ -978,14 +967,14 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
                                      execSettings)
                               .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value1\"]]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"v3\"]]]");
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/MultiShardIndexedWithDataColumn/index/indexImplTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
         }
 
@@ -994,8 +983,8 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
             const TString query = Q1_(R"(
-                SELECT t2.Value FROM `/Root/SecondaryKeys` as t1
-                    INNER JOIN `/Root/SecondaryWithDataColumns` VIEW Index as t2 ON t2.Index2 = t1.Value;
+                SELECT t2.value FROM `/Root/SecondaryKeys` as t1
+                    INNER JOIN `/Root/MultiShardIndexedWithDataColumn` VIEW index as t2 ON t2.fk = t1.Fk;
             )");
 
             auto result = session.ExecuteDataQuery(
@@ -1005,63 +994,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
-                "[[[\"Value1\"]]]");
-
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            int phaseCount = 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
-            if (WithMvcc && !UseNewEngine) {
-                phaseCount--;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), phaseCount);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryKeys");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
-
-            int idx = UseNewEngine ? 2 : 1;
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(idx).table_access().size(), 1, stats.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
-        }
-
-        {
-            NYdb::NTable::TExecDataQuerySettings execSettings;
-            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
-
-            const TString query = Q1_(R"(
-                SELECT t2.Value FROM `/Root/SecondaryWithDataColumns` VIEW Index as t1
-                    INNER JOIN `/Root/KeyValue2` as t2 ON t2.Key = t1.Value WHERE t1.Index2 = "s2";
-            )");
-
-            auto result = session.ExecuteDataQuery(
-                    query,
-                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                    execSettings)
-                .ExtractValueSync();
-            UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
-                "[[[\"Two\"]]]");
-
-            auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            int phaseCount = 3;  // In mvcc case we don't acquire locks, so that we skip locks check and cleanup
-            if (WithMvcc && !UseNewEngine) {
-                phaseCount--;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), phaseCount);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/SecondaryWithDataColumns/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-
-            int idx = phaseCount - 1;
-            if (!WithMvcc && !UseNewEngine) {
-                idx--;
-            }
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(idx).table_access().size(), 1, stats.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/KeyValue2");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+                "[[[\"v2\"]]]");
         }
     }
 

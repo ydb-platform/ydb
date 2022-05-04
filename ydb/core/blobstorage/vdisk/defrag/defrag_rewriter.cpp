@@ -1,4 +1,5 @@
 #include "defrag_rewriter.h"
+#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 
 namespace NKikimr {
 
@@ -13,7 +14,7 @@ namespace NKikimr {
         const TVDiskID SelfVDiskId;
         const TActorId NotifyId;
         // we can rewrite data while we are holding snapshot for data being read
-        THullDsSnap FullSnap;
+        std::optional<THullDsSnap> FullSnap;
         std::vector<TDefragRecord> Recs;
         size_t RecToReadIdx = 0;
         size_t RewrittenRecsCounter = 0;
@@ -26,19 +27,55 @@ namespace NKikimr {
 
         void SendNextRead(const TActorContext &ctx) {
             if (RecToReadIdx < Recs.size()) {
-                const TDiskPart &p = Recs[RecToReadIdx].OldDiskPart;
-                auto msg = std::make_unique<NPDisk::TEvChunkRead>(DCtx->PDiskCtx->Dsk->Owner,
-                    DCtx->PDiskCtx->Dsk->OwnerRound, p.ChunkIdx, p.Offset, p.Size, NPriRead::HullComp, nullptr);
-                ctx.Send(DCtx->PDiskCtx->PDiskId, msg.release());
-                DCtx->DefragMonGroup.DefragBytesRewritten() += p.Size;
-                RewrittenBytes += p.Size;
+                ctx.Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
             } else if (RewrittenRecsCounter == Recs.size()) {
                 ctx.Send(NotifyId, new TEvDefragRewritten(RewrittenRecsCounter, RewrittenBytes));
                 Die(ctx);
             }
         }
 
+        void Handle(TEvTakeHullSnapshotResult::TPtr ev, const TActorContext& ctx) {
+            FullSnap.emplace(std::move(ev->Get()->Snap));
+            FullSnap->BlocksSnap.Destroy();
+            FullSnap->BarriersSnap.Destroy();
+
+            TLogoBlobsSnapshot::TForwardIterator iter(FullSnap->HullCtx, &FullSnap->LogoBlobsSnap);
+            const TLogoBlobID id = Recs[RecToReadIdx].LogoBlobId;
+            iter.Seek(id.FullID());
+            if (iter.Valid() && iter.GetCurKey().LogoBlobID() == id.FullID()) {
+                struct TCallback {
+                    const ui32 PartId;
+                    TDiskPart Location;
+
+                    void operator ()(const TDiskPart& data, const NMatrix::TVectorType v) {
+                        if (v.Get(PartId - 1)) {
+                            Y_VERIFY(v == NMatrix::TVectorType::MakeOneHot(PartId - 1, v.GetSize()));
+                            Location = data;
+                        }
+                    }
+
+                    void operator ()(const TDiskBlob&) {}
+                } callback{id.PartId(), {}};
+                TRecordMergerCallback<TKeyLogoBlob, TMemRecLogoBlob, TCallback> merger(&callback, DCtx->VCtx->Top->GType);
+                iter.PutToMerger(&merger);
+                merger.Finish();
+
+                const TDiskPart &p = callback.Location;
+                auto msg = std::make_unique<NPDisk::TEvChunkRead>(DCtx->PDiskCtx->Dsk->Owner,
+                    DCtx->PDiskCtx->Dsk->OwnerRound, p.ChunkIdx, p.Offset, p.Size, NPriRead::HullComp, nullptr);
+                ctx.Send(DCtx->PDiskCtx->PDiskId, msg.release());
+                DCtx->DefragMonGroup.DefragBytesRewritten() += p.Size;
+                RewrittenBytes += p.Size;
+            } else {
+                ++RecToReadIdx;
+                ++RewrittenRecsCounter;
+                SendNextRead(ctx);
+            }
+        }
+
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev, const TActorContext& ctx) {
+            FullSnap.reset();
+
             // FIXME: handle read errors gracefully
             CHECK_PDISK_RESPONSE(DCtx->VCtx, ev, ctx);
 
@@ -84,6 +121,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(StateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvTakeHullSnapshotResult, Handle)
             HFunc(NPDisk::TEvChunkReadResult, Handle)
             HFunc(TEvBlobStorage::TEvVPutResult, Handle)
         )
@@ -99,18 +137,14 @@ namespace NKikimr {
                 const std::shared_ptr<TDefragCtx> &dCtx,
                 const TVDiskID &selfVDiskId,
                 const TActorId &notifyId,
-                THullDsSnap &&fullSnap,
                 std::vector<TDefragRecord> &&recs)
             : TActorBootstrapped<TDefragRewriter>()
             , DCtx(dCtx)
             , SelfVDiskId(selfVDiskId)
             , NotifyId(notifyId)
-            , FullSnap(std::move(fullSnap))
             , Recs(std::move(recs))
         {}
     };
-
-
 
     ////////////////////////////////////////////////////////////////////////////
     // VDISK DEFRAG REWRITER
@@ -120,9 +154,8 @@ namespace NKikimr {
             const std::shared_ptr<TDefragCtx> &dCtx,
             const TVDiskID &selfVDiskId,
             const TActorId &notifyId,
-            THullDsSnap &&fullSnap,
             std::vector<TDefragRecord> &&recs) {
-        return new TDefragRewriter(dCtx, selfVDiskId, notifyId, std::move(fullSnap), std::move(recs));
+        return new TDefragRewriter(dCtx, selfVDiskId, notifyId, std::move(recs));
     }
 
 } // NKikimr

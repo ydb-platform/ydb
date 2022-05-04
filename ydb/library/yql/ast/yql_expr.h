@@ -122,6 +122,7 @@ enum ETypeAnnotationFlags {
     TypeHasOptional = 0x100,
     TypeHasManyValues = 0x200,
     TypeHasBareYson = 0x400,
+    TypeHasNestedOptional = 0x800,
 };
 
 const ui64 TypeHashMagic = 0x10000;
@@ -209,6 +210,10 @@ public:
 
     bool HasOptional() const {
         return (GetFlags() & TypeHasOptional) != 0;
+    }
+
+    bool HasNestedOptional() const {
+        return (GetFlags() & TypeHasNestedOptional) != 0;
     }
 
     bool HasOptionalOrNull() const {
@@ -764,6 +769,9 @@ public:
         if (itemType->GetKind() == ETypeAnnotationKind::Data &&
             itemType->Cast<TDataExprType>()->GetSlot() == NUdf::EDataSlot::Yson) {
             ret = ret & ~TypeHasBareYson;
+        }
+        if (itemType->IsOptionalOrNull()) {
+            ret |= TypeHasNestedOptional;
         }
 
         return ret;

@@ -2169,8 +2169,7 @@ public:
             if (tablet != nullptr) {
                 tablets.push_back(tablet);
             }
-        } else
-        if (TabletType != TTabletTypes::TYPE_INVALID) {
+        } else if (TabletType != TTabletTypes::TYPE_INVALID) {
             for (auto& pr : Self->Tablets) {
                 if (pr.second.Type == TabletType) {
                     tablets.push_back(&pr.second);

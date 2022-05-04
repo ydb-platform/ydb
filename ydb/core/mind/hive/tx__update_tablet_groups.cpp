@@ -160,10 +160,18 @@ public:
             if (channel->History.empty()) {
                 fromGeneration = 0;
             } else {
-                tablet->IncreaseGeneration();
-                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration);
+                if (!changed) {
+                    tablet->IncreaseGeneration();
+                    db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::KnownGeneration>(tablet->KnownGeneration);
+                }
                 fromGeneration = tablet->KnownGeneration;
             }
+
+            if (!changed) {
+                ++tabletStorageInfo->Version;
+                db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
+            }
+
             TInstant timestamp = ctx.Now();
             db.Table<Schema::TabletChannelGen>().Key(tablet->Id, channelId, fromGeneration).Update(
                         NIceDb::TUpdate<Schema::TabletChannelGen::Group>(group->GetGroupID()),
@@ -198,9 +206,6 @@ public:
         }
 
         if (changed && (tablet->ChannelProfileNewGroup.none() || !hasEmptyChannel)) {
-            ++tabletStorageInfo->Version;
-            db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::TabletStorageVersion>(tabletStorageInfo->Version);
-
             if (tablet->ChannelProfileNewGroup.any()) {
                 BLOG_W("THive::TTxUpdateTabletGroups::Execute{" << (ui64)this << "}: tablet "
                        << tablet->Id

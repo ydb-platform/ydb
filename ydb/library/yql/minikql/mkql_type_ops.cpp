@@ -715,8 +715,7 @@ public:
     }
 
     bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const {
-        if (Y_UNLIKELY(year < NUdf::MIN_YEAR || year > NUdf::MAX_YEAR
-            || (year == NUdf::MAX_YEAR && (day > 1U || month > 1U)))) {
+        if (Y_UNLIKELY(year < NUdf::MIN_YEAR || year >= NUdf::MAX_YEAR)) {
             return false;
         }
 

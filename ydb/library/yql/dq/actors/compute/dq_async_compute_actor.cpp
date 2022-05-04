@@ -14,7 +14,7 @@ namespace {
 
 bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
     auto* settings = actorSystem->LoggerSettings();
-    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_TASKS_RUNNER);
+    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_COMPUTE);
 }
 
 } // anonymous namespace
@@ -44,7 +44,7 @@ public:
         TLogFunc logger;
         if (IsDebugLogEnabled(actorSystem)) {
             logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
-                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
+                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << txId
                     << ", task: " << taskId << ": " << message);
             };
         }

@@ -1,6 +1,7 @@
 import future.utils as fu
 
 cdef extern from "library/cpp/svnversion/svnversion.h":
+    cdef const char* GetVCS() except +;
     cdef const char* GetProgramSvnVersion() except +;
     cdef int GetProgramSvnRevision() except +;
     cdef int GetArcadiaLastChangeNum() except +;
@@ -33,3 +34,6 @@ def svn_tag():
 
 def patch_number():
     return GetArcadiaPatchNumber()
+
+def vcs():
+    return fu.bytes_to_native_str(GetVCS())

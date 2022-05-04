@@ -290,22 +290,23 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             tagToName.emplace(tag, column.Name);
         }
 
-        THashMap<TPathId, TString> indexPathIdToName;
+        THashMap<TString, TPathId> indexNameToPathId;
         for (const auto& index : entry.Indexes) {
             const auto& name = index.GetName();
             const auto pathId = TPathId(index.GetPathOwnerId(), index.GetLocalPathId());
-            indexPathIdToName.emplace(pathId, name);
+            indexNameToPathId.emplace(name, pathId);
         }
 
         const auto tabletIds = GetTableShards(server, sender, path);
         UNIT_ASSERT_VALUES_EQUAL(tabletIds.size(), 1);
 
-        for (const auto& [pathId, actual] : GetChangeRecordsWithDetails(runtime, sender, tabletIds[0])) {
-            UNIT_ASSERT(indexPathIdToName.contains(pathId));
-            const auto& name = indexPathIdToName.at(pathId);
+        const auto actualRecords = GetChangeRecordsWithDetails(runtime, sender, tabletIds[0]);
+        for (const auto& [name, expected] : expectedRecords) {
+            UNIT_ASSERT(indexNameToPathId.contains(name));
+            const auto& pathId = indexNameToPathId.at(name);
 
-            UNIT_ASSERT(expectedRecords.contains(name));
-            const auto& expected = expectedRecords.at(name);
+            UNIT_ASSERT(actualRecords.contains(pathId));
+            const auto& actual = actualRecords.at(pathId);
 
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
@@ -502,6 +503,54 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 100}}),
                 TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 200}}),
+            }},
+        });
+    }
+
+    Y_UNIT_TEST(AllColumnsInPk) {
+        const auto schema = TShardedTableOptions()
+            .Columns({
+                {"a", "Uint32", true, false},
+                {"b", "Uint32", true, false},
+            })
+            .Indexes({
+                {"by_b", {"b"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+            });
+
+        Run("/Root/path", schema, TVector<TString>{
+            "UPSERT INTO `/Root/path` (a, b) VALUES (1, 10);",
+            "UPSERT INTO `/Root/path` (a, b) VALUES (1, 20);",
+            "UPSERT INTO `/Root/path` (a, b) VALUES (1, 10);",
+            "UPSERT INTO `/Root/path` (a, b) VALUES (2, 10);",
+        }, {
+            {"by_b", {
+                TStructRecord(NTable::ERowOp::Upsert, {{"b", 10}, {"a", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"b", 20}, {"a", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"b", 10}, {"a", 2}}),
+            }},
+        });
+    }
+
+    Y_UNIT_TEST(UpsertWithoutIndexedValue) {
+        const auto schema = TShardedTableOptions()
+            .Columns({
+                {"a", "Uint32", true, false},
+                {"b", "Uint32", true, false},
+                {"c", "Uint32", false, false},
+                {"d", "Uint32", false, false},
+            })
+            .Indexes({
+                {"by_c", {"c"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+            });
+
+        Run("/Root/path", schema, TVector<TString>{
+            "UPSERT INTO `/Root/path` (a, b, d) VALUES (1, 10, 10000);",
+            "UPSERT INTO `/Root/path` (a, b, c) VALUES (1, 10, 1000);",
+        }, {
+            {"by_c", {
+                TStructRecord(NTable::ERowOp::Upsert, {{"c", Null}, {"a", 1}, {"b", 10}}),
+                TStructRecord(NTable::ERowOp::Erase,  {{"c", Null}, {"a", 1}, {"b", 10}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"c", 1000}, {"a", 1}, {"b", 10}}),
             }},
         });
     }

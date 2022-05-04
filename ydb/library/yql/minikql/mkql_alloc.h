@@ -322,8 +322,8 @@ inline void* MKQLAllocFastWithSize(size_t sz, TAllocState* state) {
 
 void MKQLFreeSlow(TAllocPageHeader* header) noexcept;
 
-inline void MKQLFreeDeprecated(const void* p) noexcept {
-    if (!p) {
+inline void MKQLFreeDeprecated(const void* mem) noexcept {
+    if (!mem) {
         return;
     }
 
@@ -337,7 +337,7 @@ inline void MKQLFreeDeprecated(const void* p) noexcept {
     return;
 #endif
 
-    TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(p);
+    TAllocPageHeader* header = (TAllocPageHeader*)TAllocState::GetPageStart(mem);
     if (Y_LIKELY(--header->UseCount != 0)) {
         return;
     }

@@ -8,7 +8,7 @@ struct TQueuePath {
     TString Root;
     TString UserName;
     TString QueueName;
-    ui64 Version;
+    ui64 Version = 0;
     TString VersionSuffix;
 
     TQueuePath()

@@ -659,10 +659,7 @@ public:
     }
 
     void RegisterPages(TMon* mon, TActorSystem* actorSystem, TActorId actorId) override {
-        auto* indexPage = mon->FindIndexPage("memory");
-        if (!indexPage) {
-            return;
-        }
+        auto* indexPage = mon->RegisterIndexPage("memory", "Memory");
         mon->RegisterActorPage(indexPage, "heap", "Heap", false, actorSystem, actorId);
         mon->RegisterActorPage(indexPage, "peakheap", "Peak heap", false, actorSystem, actorId);
         mon->RegisterActorPage(indexPage, "fragmentation", "Fragmentation", false, actorSystem, actorId);

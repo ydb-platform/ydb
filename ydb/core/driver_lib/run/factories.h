@@ -55,7 +55,7 @@ struct TModuleFactories {
     /// Factory for pdisk's aio engines
     std::shared_ptr<NPDisk::IIoContextFactory> IoContextFactory;
 
-    std::function<NActors::TMon* (NActors::TMon::TConfig)> MonitoringFactory;
+    std::function<NActors::TMon* (NActors::TMon::TConfig, const NKikimrConfig::TAppConfig& appConfig)> MonitoringFactory;
     std::shared_ptr<NSQS::IAuthFactory> SqsAuthFactory;
 
     std::shared_ptr<NHttpProxy::IAuthFactory> DataStreamsAuthFactory;

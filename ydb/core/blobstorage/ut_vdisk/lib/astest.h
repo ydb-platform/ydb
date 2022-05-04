@@ -6,7 +6,7 @@
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/executor_pool_io.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/core/mon/sync_http_mon.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <ydb/core/base/appdata.h>
@@ -106,7 +106,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     if (!MonPort) {
         MonPort = pm.GetPort(MonPort);
     }
-    Monitoring.reset(new NActors::TMon({
+    Monitoring.reset(new NActors::TSyncHttpMon({
         .Port = MonPort,
         .Title = "at"
     }));

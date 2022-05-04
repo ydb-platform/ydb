@@ -126,7 +126,8 @@ public:
     }
 
     void Handle(NMon::TEvRemoteJsonInfoRes::TPtr &ev, const TActorContext &ctx) {
-        ctx.Send(Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPOKJSON + ev->Get()->Json, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        static const char HTTPOKJSON[] = "HTTP/1.1 200 Ok\r\nContent-Type: application/json\r\n\r\n";
+        ctx.Send(Sender, new NMon::TEvHttpInfoRes(HTTPOKJSON + ev->Get()->Json, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Detach(ctx);
     }
 

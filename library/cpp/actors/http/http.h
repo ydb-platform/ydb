@@ -40,6 +40,17 @@ struct TLessNoCase {
     }
 };
 
+struct TEqNoCase {
+    bool operator()(TStringBuf l, TStringBuf r) const {
+        auto ll = l.length();
+        auto rl = r.length();
+        if (ll != rl) {
+            return false;
+        }
+        return strnicmp(l.data(), r.data(), ll) == 0;
+    }
+};
+
 struct TUrlParameters {
     THashMap<TStringBuf, TStringBuf> Parameters;
 
@@ -77,6 +88,7 @@ struct THeaders {
     TStringBuf operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
+    size_t Parse(TStringBuf headers);
     TString Render() const;
 };
 
@@ -84,6 +96,7 @@ struct THeadersBuilder : THeaders {
     TDeque<std::pair<TString, TString>> Data;
 
     THeadersBuilder();
+    THeadersBuilder(TStringBuf headers);
     THeadersBuilder(const THeadersBuilder& builder);
     void Set(TStringBuf name, TStringBuf data);
 };
@@ -188,6 +201,7 @@ public:
     size_t ChunkLength = 0;
     size_t ContentSize = 0;
     TString Content;
+    std::optional<size_t> TotalSize;
 
     THttpParser(const THttpParser& src)
         : HeaderType(src)
@@ -285,6 +299,10 @@ public:
     void Advance(size_t len);
     void ConnectionClosed();
 
+    size_t GetBodySizeFromTotalSize() const {
+        return TotalSize.value() - (HeaderType::Headers.end() - BufferType::Data());
+    }
+
     void Clear() {
         BufferType::Clear();
         HeaderType::Clear();
@@ -333,9 +351,7 @@ public:
         return IsReady() || IsError();
     }
 
-    bool HaveBody() const {
-        return !HeaderType::ContentType.empty() || !HeaderType::ContentLength.empty() || !HeaderType::TransferEncoding.empty();
-    }
+    bool HaveBody() const;
 
     bool EnsureEnoughSpaceAvailable(size_t need = BufferType::BUFFER_MIN_STEP) {
         bool result = BufferType::EnsureEnoughSpaceAvailable(need);
@@ -395,6 +411,16 @@ public:
         : Stage(GetInitialStage())
         , LastSuccessStage(Stage)
     {}
+
+    THttpParser(TStringBuf data)
+        : Stage(GetInitialStage())
+        , LastSuccessStage(Stage)
+    {
+        BufferType::Assign(data.data(), data.size());
+        BufferType::Clear(); // reset position to 0
+        TotalSize = data.size();
+        Advance(data.size());
+    }
 };
 
 template <typename HeaderType, typename BufferType>
@@ -440,14 +466,21 @@ public:
         Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
         Append(name);
         Append(": ");
+        auto data = BufferType::Pos();
         Append(value);
+        auto cit = HeaderType::HeadersLocation.find(name);
+        if (cit != HeaderType::HeadersLocation.end()) {
+            (this->*cit->second) = TStringBuf(data, BufferType::Pos());
+        }
         Append("\r\n");
         HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
     }
 
     void Set(const THeaders& headers) {
         Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
-        Append(headers.Render());
+        for (const auto& [name, value] : headers.Headers) {
+            Set(name, value);
+        }
         HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
     }
 
@@ -497,6 +530,10 @@ public:
         Stage = ERenderStage::Done;
     }
 
+    void FinishBody() {
+        Stage = ERenderStage::Done;
+    }
+
     bool IsDone() const {
         return Stage == ERenderStage::Done;
     }
@@ -505,6 +542,10 @@ public:
         switch (Stage) {
         case ERenderStage::Header:
             FinishHeader();
+            FinishBody();
+            break;
+        case ERenderStage::Body:
+            FinishBody();
             break;
         default:
             break;
@@ -599,7 +640,7 @@ public:
         if (Connection.empty()) {
             return Version == "1.0";
         } else {
-            return Connection == "close";
+            return TEqNoCase()(Connection, "close");
         }
     }
 
@@ -679,14 +720,14 @@ public:
 
     bool IsConnectionClose() const {
         if (!Connection.empty()) {
-            return Connection == "close";
+            return TEqNoCase()(Connection, "close");
         } else {
             return Request->IsConnectionClose();
         }
     }
 
     bool IsNeedBody() const {
-        return Status != "204";
+        return GetRequest()->Method != "HEAD" && Status != "204";
     }
 
     THttpIncomingRequestPtr GetRequest() const {

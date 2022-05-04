@@ -19,7 +19,7 @@ public:
     void Output(TStringStream& ss);
 };
 
-void RegisterPages(NMonitoring::TMonService2* mon, bool allowUnsafe = false);
+void RegisterPages(NMonitoring::TIndexMonPage* index, bool allowUnsafe = false);
 NLWTrace::TProbeRegistry& ProbeRegistry(); // This is not safe to use this function before main()
 NLWTrace::TManager& TraceManager(bool allowUnsafe = false);
 TDashboardRegistry& DashboardRegistry();

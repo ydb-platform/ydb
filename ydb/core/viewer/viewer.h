@@ -13,7 +13,7 @@
 namespace NKikimr {
 namespace NViewer {
 
-inline TActorId MakeViewerID(ui32 node = 0) {
+inline TActorId MakeViewerID(ui32 node) {
     char x[12] = {'v','i','e','w','e','r'};
     return TActorId(node, TStringBuf(x, 12));
 }

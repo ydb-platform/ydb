@@ -68,6 +68,10 @@ namespace NMonitoring {
         IMonPage* FindPage(const TString& relativePath);
         TIndexMonPage* FindIndexPage(const TString& relativePath);
         void SortPages();
+
+        TIndexMonPage* GetRoot() {
+            return IndexMonPage.Get();
+        }
     };
 
 }

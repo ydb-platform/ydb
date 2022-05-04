@@ -6,6 +6,8 @@
 #include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 
+#include <ydb/core/mon/sync_http_mon.h>
+
 #include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <library/cpp/actors/core/executor_pool_basic.h>
@@ -359,7 +361,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// MONITORING SETTINGS /////////////////////////////////
-    Monitoring.reset(new NActors::TMon({
+    Monitoring.reset(new NActors::TSyncHttpMon({
         .Port = 8088,
         .Title = "at"
     }));

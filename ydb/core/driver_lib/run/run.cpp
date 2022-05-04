@@ -31,7 +31,8 @@
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/grpc_mon.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/async_http_mon.h>
 #include <ydb/core/mon/crossref.h>
 #include <ydb/core/mon_alloc/profiler.h>
 
@@ -372,9 +373,13 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         }
 
         if (ModuleFactories && ModuleFactories->MonitoringFactory) {
-            Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig));
+            Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig), appConfig);
         } else {
-            Monitoring = new NActors::TMon(std::move(monConfig));
+            if (appConfig.GetFeatureFlags().GetEnableAsyncHttpMon()) {
+                Monitoring = new NActors::TAsyncHttpMon(std::move(monConfig));
+            } else {
+                Monitoring = new NActors::TSyncHttpMon(std::move(monConfig));
+            }
         }
         if (Monitoring) {
             Monitoring->RegisterCountersPage("counters", "Counters", Counters);
@@ -1383,10 +1388,6 @@ void RegisterBaseTagForMemoryProfiling(TActorSystem* as) {
 
 void TKikimrRunner::KikimrStart() {
 
-    if (!!Monitoring) {
-        Monitoring->Start();
-    }
-
     if (!!PollerThreads) {
         PollerThreads->Start();
     }
@@ -1395,6 +1396,10 @@ void TKikimrRunner::KikimrStart() {
     if (ActorSystem) {
         RegisterBaseTagForMemoryProfiling(ActorSystem.Get());
         ActorSystem->Start();
+    }
+
+    if (!!Monitoring) {
+        Monitoring->Start(ActorSystem.Get());
     }
 
     for (auto& server : GRpcServers) {

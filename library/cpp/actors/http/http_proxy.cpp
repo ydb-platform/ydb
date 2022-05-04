@@ -68,13 +68,14 @@ protected:
                 return;
             } else {
                 if (url.EndsWith('/')) {
-                    url.Trunc(url.size() - 1);
-                }
-                size_t pos = url.rfind('/');
-                if (pos == TStringBuf::npos) {
-                    break;
+                    url.Chop(1);
                 } else {
-                    url = url.substr(0, pos + 1);
+                    size_t pos = url.rfind('/');
+                    if (pos == TStringBuf::npos) {
+                        break;
+                    } else {
+                        url = url.substr(0, pos + 1);
+                    }
                 }
             }
         }
@@ -117,7 +118,8 @@ protected:
         Connections.erase(event->Get()->ConnectionID);
     }
 
-    void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext&) {
+    void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
         Handlers[event->Get()->Path] = event->Get()->Handler;
     }
 
@@ -207,6 +209,12 @@ protected:
     }
 
     void Handle(NActors::TEvents::TEvPoison::TPtr, const NActors::TActorContext&) {
+        for (const TActorId& acceptor : Acceptors) {
+            Send(acceptor, new NActors::TEvents::TEvPoisonPill());
+        }
+        for (const TActorId& connection : Connections) {
+            Send(connection, new NActors::TEvents::TEvPoisonPill());
+        }
         PassAway();
     }
 

@@ -5,7 +5,7 @@
 
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/core/persqueue/cluster_tracker.h>
-
+#include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <ydb/library/aclib/aclib.h>
@@ -14,7 +14,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h>  
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/join.h>
@@ -331,7 +331,7 @@ namespace NKikimr::NPersQueueTests {
 
                 const auto monPort = TPortManager().GetPort();
                 auto Counters = server.CleverServer->GetGRpcServerRootCounters();
-                NActors::TMon Monitoring({monPort, "localhost", 3, "root", "localhost", {}, {}, {}});
+                NActors::TSyncHttpMon Monitoring({monPort, "localhost", 3, "root", "localhost", {}, {}, {}});
                 Monitoring.RegisterCountersPage("counters", "Counters", Counters);
                 Monitoring.Start();
 

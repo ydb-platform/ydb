@@ -4671,12 +4671,12 @@ private:
     }
 };
 
-void RegisterPages(NMonitoring::TMonService2* mon, bool allowUnsafe) {
+void RegisterPages(NMonitoring::TIndexMonPage* index, bool allowUnsafe) {
     THolder<NLwTraceMonPage::TLWTraceMonPage> p = MakeHolder<NLwTraceMonPage::TLWTraceMonPage>(allowUnsafe);
-    mon->Register(p.Release());
+    index->Register(p.Release());
 
 #define WWW_STATIC_FILE(file, type) \
-        mon->Register(new TResourceMonPage(file, file, NMonitoring::TResourceMonPage::type));
+        index->Register(new TResourceMonPage(file, file, NMonitoring::TResourceMonPage::type));
     WWW_STATIC_FILE("lwtrace/mon/static/common.css", CSS);
     WWW_STATIC_FILE("lwtrace/mon/static/common.js", JAVASCRIPT);
     WWW_STATIC_FILE("lwtrace/mon/static/css/bootstrap.min.css", CSS);

@@ -3,7 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/tablet/tablet_impl.h>
 
@@ -148,7 +148,7 @@ namespace NActors {
 
             if (NeedMonitoring && !SingleSysEnv) {
                 ui16 port = GetPortManager().GetPort();
-                node->Mon.Reset(new NActors::TMon({
+                node->Mon.Reset(new NActors::TSyncHttpMon({
                     .Port = port,
                     .Threads = 10,
                     .Title = "KIKIMR monitoring"

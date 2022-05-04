@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_ut_base_test.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/mon/sync_http_mon.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/library/pdisk_io/aio.h>
 
@@ -138,7 +139,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
         if (IsMonitoringEnabled) {
             // Monitoring startup
-            monitoring.Reset(new NActors::TMon({
+            monitoring.Reset(new NActors::TSyncHttpMon({
                 .Port = pm.GetPort(8081),
                 .Title = "TestYard monitoring"
             }));

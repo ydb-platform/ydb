@@ -20,17 +20,12 @@ public:
 
 }; // TS3Uploader
 
-IActor* TS3Export::CreateUploader(
-        const TActorId& dataShard,
-        ui64 txId,
-        const TTableColumns& columns,
-        const TTask& task) const
-{
-    auto scheme = (task.GetShardNum() == 0)
-        ? GenYdbScheme(columns, task.GetTable())
+IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
+    auto scheme = (Task.GetShardNum() == 0)
+        ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    return new TS3Uploader(dataShard, txId, task, std::move(scheme));
+    return new TS3Uploader(dataShard, txId, Task, std::move(scheme));
 }
 
 } // NDataShard

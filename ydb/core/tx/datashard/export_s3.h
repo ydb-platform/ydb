@@ -11,17 +11,24 @@ namespace NDataShard {
 
 class TS3Export: public IExport {
 public:
-    IActor* CreateUploader(
-        const TActorId& dataShard,
-        ui64 txId,
-        const TTableColumns& columns,
-        const TTask& task) const override;
+    explicit TS3Export(const TTask& task, const TTableColumns& columns)
+        : Task(task)
+        , Columns(columns)
+    {
+        Y_VERIFY(task.HasS3Settings());
+    }
 
-    IBuffer* CreateBuffer(const TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit) const override {
-        return CreateS3ExportBuffer(columns, rowsLimit, bytesLimit);
+    IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override;
+
+    IBuffer* CreateBuffer(ui64 rowsLimit, ui64 bytesLimit) const override {
+        return CreateS3ExportBuffer(Columns, rowsLimit, bytesLimit);
     }
 
     void Shutdown() const override {}
+
+protected:
+    const TTask Task;
+    const TTableColumns Columns;
 };
 
 } // NDataShard

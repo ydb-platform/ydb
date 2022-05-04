@@ -15,13 +15,8 @@ public:
 public:
     virtual ~IExport() = default;
 
-    virtual IActor* CreateUploader(
-        const TActorId& dataShard,
-        ui64 txId,
-        const TTableColumns& columns,
-        const TTask& task) const = 0;
-
-    virtual IBuffer* CreateBuffer(const TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit) const = 0;
+    virtual IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const = 0;
+    virtual IBuffer* CreateBuffer(ui64 rowsLimit, ui64 bytesLimit) const = 0;
 
     virtual void Shutdown() const = 0;
 };
@@ -30,8 +25,8 @@ class IExportFactory {
 public:
     virtual ~IExportFactory() = default;
 
-    virtual IExport* CreateExportToYt(bool useTypeV3) const = 0;
-    virtual IExport* CreateExportToS3() const = 0;
+    virtual IExport* CreateExportToYt(const IExport::TTask& task, const IExport::TTableColumns& columns) const = 0;
+    virtual IExport* CreateExportToS3(const IExport::TTask& task, const IExport::TTableColumns& columns) const = 0;
     virtual void Shutdown() = 0;
 };
 

@@ -4091,6 +4091,58 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
         }
     };
 
+    struct TTxCheckRowsReadTx : public ITransaction {
+        TString& Data;
+        const ui64 TxId;
+
+        TTxCheckRowsReadTx(TString& data, ui64 txId)
+            : Data(data)
+            , TxId(txId)
+        { }
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            TStringBuilder builder;
+
+            TVector<NTable::TTag> tags;
+            tags.push_back(KeyColumnId);
+            tags.push_back(ValueColumnId);
+            tags.push_back(Value2ColumnId);
+
+            NTable::EReady ready;
+            auto it = txc.DB.IterateRange(TableId, { }, tags,
+                TRowVersion::Max(),
+                MakeIntrusive<NTable::TSingleTransactionMap>(TxId, TRowVersion::Min()));
+
+            while ((ready = it->Next(NTable::ENext::All)) != NTable::EReady::Gone) {
+                if (ready == NTable::EReady::Page) {
+                    return false;
+                }
+
+                const auto& row = it->Row();
+
+                TString key;
+                DbgPrintValue(key, row.Get(0), NScheme::TUint64::TypeId);
+
+                TString value;
+                DbgPrintValue(value, row.Get(1), NScheme::TString::TypeId);
+
+                TString value2;
+                DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
+
+                builder << "Key " << key << " = " << row.GetRowState()
+                    << " value = " << NTable::ECellOp(row.GetCellOp(1)) << " " << value
+                    << " value2 = " << NTable::ECellOp(row.GetCellOp(2)) << " " << value2 << Endl;
+            }
+
+            Data = builder;
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
     struct TTxCheckRowsUncommitted : public ITransaction {
         TString& Data;
 
@@ -4613,6 +4665,53 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTx) {
         {
             TString data;
             env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set foo value2 = Set def\n"
+                "Key 2 = Upsert value = Empty NULL value2 = Set ghi\n"
+                "Key 3 = Upsert value = Set abc value2 = Empty NULL\n");
+        }
+    }
+
+    Y_UNIT_TEST(MemTableLongTxRead) {
+        TMyEnvBase env;
+
+        //env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
+        //env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "foo") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(2, "bar") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "abc", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "def", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(2, "ghi", 123) });
+
+        // We should see our own uncommitted changes
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsReadTx(data, 123) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set foo value2 = Set def\n"
+                "Key 2 = Upsert value = Empty NULL value2 = Set ghi\n"
+                "Key 3 = Upsert value = Set abc value2 = Empty NULL\n");
+        }
+
+        // Others shouldn't see these changes yet
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+                "Key 2 = Upsert value = Empty NULL value2 = Set bar\n");
+        }
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        // Once committed everyone will see these changes
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
             UNIT_ASSERT_VALUES_EQUAL(data,
                 "Key 1 = Upsert value = Set foo value2 = Set def\n"
                 "Key 2 = Upsert value = Empty NULL value2 = Set ghi\n"

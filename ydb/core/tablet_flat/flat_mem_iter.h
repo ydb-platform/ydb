@@ -183,7 +183,7 @@ namespace NTable {
             return bool(CurrentVersion);
         }
 
-        void Apply(TRowState& row, const NTable::TTransactionMap<TRowVersion>& committedTransactions) const noexcept
+        void Apply(TRowState& row, NTable::ITransactionMapSimplePtr committedTransactions) const noexcept
         {
             Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
@@ -225,7 +225,7 @@ namespace NTable {
          * Returns false if there is no such version, e.g. current key did not
          * exist or didn't have any known updates at this rowVersion.
          */
-        bool SkipToRowVersion(TRowVersion rowVersion, const NTable::TTransactionMap<TRowVersion>& committedTransactions) noexcept
+        bool SkipToRowVersion(TRowVersion rowVersion, NTable::ITransactionMapSimplePtr committedTransactions) noexcept
         {
             Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
 

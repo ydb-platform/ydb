@@ -46,7 +46,8 @@ namespace NTest {
         {
             auto pair = Tool.Split(tagged, true, rop != ERowOp::Erase);
 
-            return Table->Update(rop, pair.Key, pair.Ops, { }, /* TODO: rowVersion */ TRowVersion::Min(), /* committed */ {}), *this;
+            return Table->Update(rop, pair.Key, pair.Ops, { }, /* TODO: rowVersion */ TRowVersion::Min(),
+                    /* committed */ nullptr), *this;
         }
 
     private:

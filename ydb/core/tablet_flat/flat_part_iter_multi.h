@@ -819,7 +819,7 @@ namespace NTable {
         }
 
         EReady SkipToRowVersion(TRowVersion rowVersion,
-                                const NTable::TTransactionMap<TRowVersion>& committedTransactions) noexcept
+                                NTable::ITransactionMapSimplePtr committedTransactions) noexcept
         {
             Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to use an invalid iterator");
 
@@ -1013,7 +1013,7 @@ namespace NTable {
         }
 
         void Apply(TRowState& row,
-                   const NTable::TTransactionMap<TRowVersion>& committedTransactions) const noexcept
+                   NTable::ITransactionMapSimplePtr committedTransactions) const noexcept
         {
             Y_VERIFY_DEBUG(IsValid(), "Attempt to apply an invalid row");
 
@@ -1481,7 +1481,7 @@ namespace NTable {
         }
 
         void Apply(TRowState& row,
-                   const NTable::TTransactionMap<TRowVersion>& committedTransactions) const noexcept
+                   NTable::ITransactionMapSimplePtr committedTransactions) const noexcept
         {
             Y_VERIFY_DEBUG(CurrentIt);
             CurrentIt->Apply(row, committedTransactions);
@@ -1495,7 +1495,7 @@ namespace NTable {
 
         EReady SkipToRowVersion(
                 TRowVersion rowVersion,
-                const NTable::TTransactionMap<TRowVersion>& committedTransactions) noexcept
+                NTable::ITransactionMapSimplePtr committedTransactions) noexcept
         {
             Y_VERIFY_DEBUG(CurrentIt);
             auto ready = CurrentIt->SkipToRowVersion(rowVersion, committedTransactions);

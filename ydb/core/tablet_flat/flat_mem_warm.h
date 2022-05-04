@@ -132,7 +132,7 @@ namespace NMem {
         {}
 
         void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<TMemGlob> pages, TRowVersion rowVersion,
-                    const NTable::TTransactionMap<TRowVersion>& committed)
+                    NTable::ITransactionMapSimplePtr committed)
         {
             Y_VERIFY_DEBUG(
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,

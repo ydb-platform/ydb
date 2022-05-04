@@ -116,7 +116,7 @@ namespace NTable {
         TVector<TMemTableSnapshot> Frozen;
         TVector<TPartView> Flatten;
         TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
-        TTransactionMap<TRowVersion> CommittedTransactions;
+        TTransactionMap CommittedTransactions;
         TTransactionSet RemovedTransactions;
         TVector<TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     };

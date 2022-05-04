@@ -126,10 +126,15 @@ public:
 
     TVector<TIntrusiveConstPtr<TMemTable>> GetMemTables() const noexcept;
 
-    TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
-    TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
+    TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek,
+            TRowVersion snapshot,
+            const ITransactionMapPtr& visible = nullptr) const noexcept;
+    TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek,
+            TRowVersion snapshot,
+            const ITransactionMapPtr& visible = nullptr) const noexcept;
     TReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
-                   ui64 flg, TRowVersion snapshot, TDeque<TPartSimpleIt>& tempIterators) const noexcept;
+                   ui64 flg, TRowVersion snapshot, TDeque<TPartSimpleIt>& tempIterators,
+                   const ITransactionMapPtr& visible = nullptr) const noexcept;
 
     TReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                    IPages* env, ui64 flg,
@@ -301,7 +306,7 @@ private:
 
     THashSet<ui64> CheckTransactions;
     THashMap<ui64, TOpenTransaction> OpenTransactions;
-    TTransactionMap<TRowVersion> CommittedTransactions;
+    TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
 };
 

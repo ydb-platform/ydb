@@ -238,7 +238,7 @@ public:
     TTableItBase(
         const TRowScheme* scheme, TTagsRef tags, ui64 lim = Max<ui64>(),
         TRowVersion snapshot = TRowVersion::Max(),
-        const NTable::TTransactionMap<TRowVersion>& committedTransactions = {});
+        NTable::ITransactionMapPtr committedTransactions = nullptr);
 
     ~TTableItBase();
 
@@ -340,7 +340,7 @@ private:
     const TRowVersion SnapshotVersion;
 
     // A map of currently committed transactions to corresponding row versions
-    const NTable::TTransactionMap<TRowVersion> CommittedTransactions;
+    const NTable::ITransactionMapPtr CommittedTransactions;
 
     EStage Stage = EStage::Seek;
     EReady Ready = EReady::Gone;
@@ -458,13 +458,13 @@ template<class TIteratorOps>
 inline TTableItBase<TIteratorOps>::TTableItBase(
         const TRowScheme* scheme, TTagsRef tags, ui64 limit,
         TRowVersion snapshot,
-        const NTable::TTransactionMap<TRowVersion>& committedTransactions)
+        NTable::ITransactionMapPtr committedTransactions)
     : Scheme(scheme)
     , Remap(*Scheme, tags)
     , Limit(limit)
     , State(Remap.Size())
     , SnapshotVersion(snapshot)
-    , CommittedTransactions(committedTransactions)
+    , CommittedTransactions(std::move(committedTransactions))
     , Comparator(Scheme->Keys->Types)
     , Active(Iterators.end())
     , Inactive(Iterators.end())

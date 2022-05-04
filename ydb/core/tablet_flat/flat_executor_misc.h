@@ -35,7 +35,7 @@ namespace NTabletFlatExecutor {
         NTable::TRowVersionRanges::TSnapshot RemovedRowVersions;
 
         // Non-empty when compaction also needs to write a tx status table part
-        NTable::TTransactionMap<TRowVersion> CommittedTransactions;
+        NTable::TTransactionMap CommittedTransactions;
         NTable::TTransactionSet RemovedTransactions;
         // The above may contain extra keys, these allow them to be narrowed
         TVector<TIntrusiveConstPtr<NTable::TMemTable>> Frozen;

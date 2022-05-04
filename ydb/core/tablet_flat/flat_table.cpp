@@ -444,6 +444,8 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
 
     auto res = TxStatus.emplace(txStatus->Label, txStatus);
     Y_VERIFY(res.second, "Unexpected failure to add a new TTxStatusPart");
+
+    ErasedKeysCache.Reset();
 }
 
 void TTable::ProcessCheckTransactions() noexcept
@@ -679,14 +681,17 @@ TMemTable& TTable::MemTable()
         *(Mutable ? Mutable : (Mutable = new TMemTable(Scheme, Epoch, Annexed)));
 }
 
-TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek, TRowVersion snapshot) const noexcept
+TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
     Y_VERIFY(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableIt> dbIter(new TTableIt(Scheme.Get(), tags, limit, snapshot, CommittedTransactions));
+    TAutoPtr<TTableIt> dbIter(new TTableIt(Scheme.Get(), tags, limit, snapshot,
+            TMergedTransactionMap::Create(visible, CommittedTransactions)));
 
     if (Mutable) {
         dbIter->Push(TMemIt::Make(*Mutable, Mutable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
@@ -707,7 +712,7 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
         }
     }
 
-    if (EraseCacheEnabled) {
+    if (EraseCacheEnabled && !visible) {
         if (!ErasedKeysCache) {
             ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
         }
@@ -717,14 +722,17 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     return dbIter;
 }
 
-TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek, TRowVersion snapshot) const noexcept
+TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
     Y_VERIFY(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
-    TAutoPtr<TTableReverseIt> dbIter(new TTableReverseIt(Scheme.Get(), tags, limit, snapshot, CommittedTransactions));
+    TAutoPtr<TTableReverseIt> dbIter(new TTableReverseIt(Scheme.Get(), tags, limit, snapshot,
+            TMergedTransactionMap::Create(visible, CommittedTransactions)));
 
     if (Mutable) {
         dbIter->Push(TMemIt::Make(*Mutable, Mutable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
@@ -745,7 +753,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
         }
     }
 
-    if (EraseCacheEnabled) {
+    if (EraseCacheEnabled && !visible) {
         if (!ErasedKeysCache) {
             ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
         }
@@ -757,7 +765,8 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
 
 TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                              ui64 flg, TRowVersion snapshot,
-                             TDeque<TPartSimpleIt>& tempIterators) const noexcept
+                             TDeque<TPartSimpleIt>& tempIterators,
+                             const ITransactionMapPtr& visible) const noexcept
 {
     Y_VERIFY(ColdParts.empty(), "Cannot select with cold parts");
     Y_VERIFY(key_.size() == Scheme->Keys->Types.size());
@@ -778,15 +787,16 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
     TEpoch lastEpoch = TEpoch::Max();
 
     bool snapshotFound = (snapshot == TRowVersion::Max());
+    auto committed = TMergedTransactionMap::Create(visible, CommittedTransactions);
 
     // Mutable has the newest data
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIt::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, CommittedTransactions))) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, committed))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
-                it->Apply(row, CommittedTransactions);
+                it->Apply(row, committed);
             }
             result.Invisible += it->InvisibleRowSkips;
         }
@@ -798,10 +808,10 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
         Y_VERIFY(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
         if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
-            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, CommittedTransactions))) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, committed))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
-                it->Apply(row, CommittedTransactions);
+                it->Apply(row, committed);
             }
             result.Invisible += it->InvisibleRowSkips;
         }
@@ -825,7 +835,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
                         Y_VERIFY(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
                         if (!snapshotFound) {
-                            res = it.SkipToRowVersion(snapshot, CommittedTransactions);
+                            res = it.SkipToRowVersion(snapshot, committed);
                             result.Invisible += std::exchange(it.InvisibleRowSkips, 0);
                             if (res == EReady::Data) {
                                 // N.B. stop looking for snapshot after the first hit
@@ -835,7 +845,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
                     }
                     if (ready = ready && bool(res)) {
                         if (res == EReady::Data) {
-                            it.Apply(row, CommittedTransactions);
+                            it.Apply(row, committed);
                             if (row.IsFinalized()) {
                                 break;
                             }

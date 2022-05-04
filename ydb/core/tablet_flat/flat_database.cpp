@@ -72,20 +72,24 @@ TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, E
     return Require(table)->Iterate(key, tags, Env, seekBy(key, mode), TRowVersion::Max());
 }
 
-TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags, TRowVersion snapshot) const noexcept
+TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
     IteratedTables.insert(table);
 
-    auto iter = Require(table)->Iterate(key, tags, Env, ESeek::Exact, snapshot);
+    auto iter = Require(table)->Iterate(key, tags, Env, ESeek::Exact, snapshot, visible);
 
     // N.B. ESeek::Exact produces iterators with limit=1
 
     return iter;
 }
 
-TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
+TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -93,7 +97,7 @@ TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, T
 
     ESeek seek = !range.MinKey || range.MinInclusive ? ESeek::Lower : ESeek::Upper;
 
-    auto iter = Require(table)->Iterate(range.MinKey, tags, Env, seek, snapshot);
+    auto iter = Require(table)->Iterate(range.MinKey, tags, Env, seek, snapshot, visible);
 
     if (range.MaxKey) {
         TCelled maxKey(range.MaxKey, *iter->Scheme->Keys, false);
@@ -108,7 +112,9 @@ TAutoPtr<TTableIt> TDatabase::IterateRange(ui32 table, const TKeyRange& range, T
     return iter;
 }
 
-TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
+TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
 
@@ -116,7 +122,7 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
 
     ESeek seek = !range.MaxKey || range.MaxInclusive ? ESeek::Lower : ESeek::Upper;
 
-    auto iter = Require(table)->IterateReverse(range.MaxKey, tags, Env, seek, snapshot);
+    auto iter = Require(table)->IterateReverse(range.MaxKey, tags, Env, seek, snapshot, visible);
 
     if (range.MinKey) {
         TCelled minKey(range.MinKey, *iter->Scheme->Keys, false);
@@ -132,22 +138,28 @@ TAutoPtr<TTableReverseIt> TDatabase::IterateRangeReverse(ui32 table, const TKeyR
 }
 
 template<>
-TAutoPtr<TTableIt> TDatabase::IterateRangeGeneric<TTableIt>(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
+TAutoPtr<TTableIt> TDatabase::IterateRangeGeneric<TTableIt>(ui32 table, const TKeyRange& range, TTagsRef tags,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
-    return IterateRange(table, range, tags, snapshot);
+    return IterateRange(table, range, tags, snapshot, visible);
 }
 
 template<>
-TAutoPtr<TTableReverseIt> TDatabase::IterateRangeGeneric<TTableReverseIt>(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot) const noexcept
+TAutoPtr<TTableReverseIt> TDatabase::IterateRangeGeneric<TTableReverseIt>(ui32 table, const TKeyRange& range, TTagsRef tags,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
-    return IterateRangeReverse(table, range, tags, snapshot);
+    return IterateRangeReverse(table, range, tags, snapshot, visible);
 }
 
-EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, ui64 flg, TRowVersion snapshot) const noexcept
+EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, ui64 flg,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
     TempIterators.clear();
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
-    auto res = Require(table)->Select(key, tags, Env, row, flg, snapshot, TempIterators);
+    auto res = Require(table)->Select(key, tags, Env, row, flg, snapshot, TempIterators, visible);
     Change->Stats.SelectSieved += res.Sieved;
     Change->Stats.SelectWeeded += res.Weeded;
     Change->Stats.SelectNoKey += res.NoKey;
@@ -155,11 +167,13 @@ EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row
     return res.Ready;
 }
 
-EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, TSelectStats& stats, ui64 flg, TRowVersion snapshot) const noexcept
+EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, TSelectStats& stats, ui64 flg,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible) const noexcept
 {
     TempIterators.clear();
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
-    auto res = Require(table)->Select(key, tags, Env, row, flg, snapshot, TempIterators);
+    auto res = Require(table)->Select(key, tags, Env, row, flg, snapshot, TempIterators, visible);
     Change->Stats.SelectSieved += res.Sieved;
     Change->Stats.SelectWeeded += res.Weeded;
     Change->Stats.SelectNoKey += res.NoKey;

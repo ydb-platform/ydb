@@ -310,15 +310,15 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
 
     ESplitReason splitReason = ESplitReason::NO_SPLIT;
-    if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
+    if (table->ShouldSplitBySize(dataSize)) {
+        splitReason = ESplitReason::SPLIT_BY_SIZE;
+    }
+
+    if (splitReason == ESplitReason::NO_SPLIT && table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
         const TTableInfo* parentTable = Self->GetMainTableForIndex(tableId);
         if (parentTable && table->GetPartitions().size() < parentTable->GetPartitions().size()) {
             splitReason = ESplitReason::FAST_SPLIT_INDEX;
         }
-    }
-
-    if (splitReason == ESplitReason::NO_SPLIT && dataSize >= table->GetShardSizeToSplit()) {
-        splitReason = ESplitReason::SPLIT_BY_SIZE;
     }
 
     if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
@@ -329,8 +329,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         return true;
     }
 
-
-    if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
+    if (splitReason != ESplitReason::SPLIT_BY_SIZE && table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         return true;
     }
 

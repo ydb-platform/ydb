@@ -649,7 +649,11 @@ public:
             return false;
         }
 
-        if (tableInfo->GetExpectedPartitionCount() + count - 1 > tableInfo->GetMaxPartitionsCount()) {
+        auto srcShardIdx = tableInfo->GetPartitions()[srcPartitionIdx].ShardIdx;
+
+        if (tableInfo->GetExpectedPartitionCount() + count - 1 > tableInfo->GetMaxPartitionsCount() &&
+            !tableInfo->IsForceSplitBySizeShardIdx(srcShardIdx))
+        {
             errStr = "Reached MaxPartitionsCount limit: " + ToString(tableInfo->GetMaxPartitionsCount());
             return false;
         }
@@ -677,7 +681,6 @@ public:
 
         op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
         auto* srcRange = op.SplitDescription->AddSourceRanges();
-        auto srcShardIdx = tableInfo->GetPartitions()[srcPartitionIdx].ShardIdx;
         srcRange->SetShardIdx(ui64(srcShardIdx.GetLocalId()));
         srcRange->SetTabletID(ui64(context.SS->ShardInfos[srcShardIdx].TabletID));
         srcRange->SetKeyRangeEnd(tableInfo->GetPartitions()[srcPartitionIdx].EndOfRange);

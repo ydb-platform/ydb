@@ -77,7 +77,10 @@ namespace {
         Y_UNUSED(valueBuilder);
         ui16 port = 0;
         TStringBuf scheme, host;
-        return TryGetSchemeHostAndPort(TStringBuf(args[0].AsStringRef()), scheme, host, port) && port
+        TString lowerUri(args[0].AsStringRef());
+        std::transform(lowerUri.cbegin(), lowerUri.cbegin() + GetSchemePrefixSize(lowerUri),
+                       lowerUri.begin(), [](unsigned char c){ return std::tolower(c); });
+        return TryGetSchemeHostAndPort(lowerUri, scheme, host, port) && port
             ? TUnboxedValuePod(port)
             : TUnboxedValuePod();
     }

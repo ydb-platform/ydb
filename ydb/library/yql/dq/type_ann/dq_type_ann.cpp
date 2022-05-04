@@ -204,18 +204,9 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         } else {
             for (auto transform : transforms) {
                 auto* type = transform->GetTypeAnn();
-                if (type->GetKind() != ETypeAnnotationKind::List) {
-
-                    ctx.AddError(TIssue(ctx.GetPosition(transform->Pos()), TStringBuilder()
-                        << "Expected List type, but got: " << *type));
+                if (!EnsureListType(transform->Pos(), *type, ctx)) {
                     return TStatus::Error;
                 }
-                /* auto* itemType = sinkType->Cast<TListExprType>()->GetItemType();
-                if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
-                    ctx.AddError(TIssue(ctx.GetPosition(sink->Pos()), TStringBuilder()
-                        << "Expected List<Struct<...>> type, but got: List<" << *itemType << ">"));
-                    return TStatus::Error;
-                } */
                 stageResultTypes.emplace_back(type);
             }
         }

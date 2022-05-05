@@ -32,25 +32,6 @@ TAppData::TAppData(
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 
-TAppData::TDefaultTabletTypes::TDefaultTabletTypes()
-    : SchemeShard(TTabletTypes::FLAT_SCHEMESHARD)
-    , DataShard(TTabletTypes::FLAT_DATASHARD)
-    , KeyValue(TTabletTypes::KEYVALUEFLAT)
-    , PersQueue(TTabletTypes::PERSQUEUE)
-    , PersQueueReadBalancer(TTabletTypes::PERSQUEUE_READ_BALANCER)
-    , Dummy(TTabletTypes::TX_DUMMY)
-    , Coordinator(TTabletTypes::FLAT_TX_COORDINATOR)
-    , Mediator(TTabletTypes::TX_MEDIATOR)
-    , Kesus(TTabletTypes::KESUS)
-    , Hive(TTabletTypes::Hive)
-    , SysViewProcessor(TTabletTypes::SysViewProcessor)
-    , ColumnShard(TTabletTypes::COLUMNSHARD)
-    , TestShard(TTabletTypes::TestShard)
-    , SequenceShard(TTabletTypes::SequenceShard)
-    , ReplicationController(TTabletTypes::ReplicationController)
-{
-}
-
 TIntrusivePtr<IRandomProvider> TAppData::RandomProvider = CreateDefaultRandomProvider();
 TIntrusivePtr<ITimeProvider> TAppData::TimeProvider = CreateDefaultTimeProvider();
 

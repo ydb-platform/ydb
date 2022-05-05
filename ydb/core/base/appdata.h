@@ -99,28 +99,6 @@ struct TAppData {
     NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
 
-    struct TDefaultTabletTypes {
-        TTabletTypes::EType SchemeShard;
-        TTabletTypes::EType DataShard;
-        TTabletTypes::EType KeyValue;
-        TTabletTypes::EType PersQueue;
-        TTabletTypes::EType PersQueueReadBalancer;
-        TTabletTypes::EType Dummy;
-        TTabletTypes::EType Coordinator;
-        TTabletTypes::EType Mediator;
-        TTabletTypes::EType Kesus;
-        TTabletTypes::EType Hive;
-        TTabletTypes::EType SysViewProcessor;
-        TTabletTypes::EType ColumnShard;
-        TTabletTypes::EType TestShard;
-        TTabletTypes::EType SequenceShard;
-        TTabletTypes::EType ReplicationController;
-
-        TDefaultTabletTypes();
-    };
-
-    TDefaultTabletTypes DefaultTabletTypes;
-
     static TIntrusivePtr<IRandomProvider> RandomProvider;
     static TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;

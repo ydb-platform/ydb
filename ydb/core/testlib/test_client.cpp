@@ -496,59 +496,59 @@ namespace Tests {
     }
 
     void TServer::SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData) {
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Dummy] =
+        localConfig.TabletClassInfo[TTabletTypes::Dummy] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateFlatDummyTablet, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.DataShard] =
+        localConfig.TabletClassInfo[TTabletTypes::DataShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateDataShard, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.KeyValue] =
+        localConfig.TabletClassInfo[TTabletTypes::KeyValue] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateKeyValueFlat, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.ColumnShard] =
+        localConfig.TabletClassInfo[TTabletTypes::ColumnShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateColumnShard, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.PersQueue] =
+        localConfig.TabletClassInfo[TTabletTypes::PersQueue] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreatePersQueue, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.PersQueueReadBalancer] =
+        localConfig.TabletClassInfo[TTabletTypes::PersQueueReadBalancer] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreatePersQueueReadBalancer, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Coordinator] =
+        localConfig.TabletClassInfo[TTabletTypes::Coordinator] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateFlatTxCoordinator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Mediator] =
+        localConfig.TabletClassInfo[TTabletTypes::Mediator] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateTxMediator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Kesus] =
+        localConfig.TabletClassInfo[TTabletTypes::Kesus] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NKesus::CreateKesusTablet, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SchemeShard] =
+        localConfig.TabletClassInfo[TTabletTypes::SchemeShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateFlatTxSchemeShard, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Hive] =
+        localConfig.TabletClassInfo[TTabletTypes::Hive] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateDefaultHive, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SysViewProcessor] =
+        localConfig.TabletClassInfo[TTabletTypes::SysViewProcessor] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NSysView::CreateSysViewProcessorForTests, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SequenceShard] =
+        localConfig.TabletClassInfo[TTabletTypes::SequenceShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NSequenceShard::CreateSequenceShard, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.ReplicationController] =
+        localConfig.TabletClassInfo[TTabletTypes::ReplicationController] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));

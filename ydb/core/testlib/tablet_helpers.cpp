@@ -1153,41 +1153,40 @@ namespace NKikimr {
             const auto type = ev->Get()->Record.GetTabletType();
             const auto bootMode = ev->Get()->Record.GetTabletBootMode();
             auto it = State->Tablets.find(key);
-            const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes;
             TActorId bootstrapperActorId;
             if (it == State->Tablets.end()) {
                 if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                     // don't boot anything
                 } else if (auto x = GetTabletCreationFunc(type)) {
                     bootstrapperActorId = Boot(ctx, type, x, DataGroupErasure);
-                } else if (type == defaultTabletTypes.DataShard) {
+                } else if (type == TTabletTypes::DataShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateDataShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.KeyValue) {
+                } else if (type == TTabletTypes::KeyValue) {
                     bootstrapperActorId = Boot(ctx, type, &CreateKeyValueFlat, DataGroupErasure);
-                } else if (type == defaultTabletTypes.ColumnShard) {
+                } else if (type == TTabletTypes::ColumnShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateColumnShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.PersQueue) {
+                } else if (type == TTabletTypes::PersQueue) {
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueue, DataGroupErasure);
-                } else if (type == defaultTabletTypes.PersQueueReadBalancer) {
+                } else if (type == TTabletTypes::PersQueueReadBalancer) {
                     bootstrapperActorId = Boot(ctx, type, &CreatePersQueueReadBalancer, DataGroupErasure);
-                } else if (type == defaultTabletTypes.Coordinator) {
+                } else if (type == TTabletTypes::Coordinator) {
                     bootstrapperActorId = Boot(ctx, type, &CreateFlatTxCoordinator, DataGroupErasure);
-                } else if (type == defaultTabletTypes.Mediator) {
+                } else if (type == TTabletTypes::Mediator) {
                     bootstrapperActorId = Boot(ctx, type, &CreateTxMediator, DataGroupErasure);
-                } else if (type == defaultTabletTypes.SchemeShard) {
+                } else if (type == TTabletTypes::SchemeShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.Kesus) {
+                } else if (type == TTabletTypes::Kesus) {
                     bootstrapperActorId = Boot(ctx, type, &NKesus::CreateKesusTablet, DataGroupErasure);
-                } else if (type == defaultTabletTypes.Hive) {
+                } else if (type == TTabletTypes::Hive) {
                     TFakeHiveState::TPtr state = State->AllocateSubHive();
                     bootstrapperActorId = Boot(ctx, type, [=](const TActorId& tablet, TTabletStorageInfo* info) {
                                                    return new TFakeHive(tablet, info, state, &TFakeHive::DefaultGetTabletCreationFunc);
                                                }, DataGroupErasure);
-                } else if (type == defaultTabletTypes.SysViewProcessor) {
+                } else if (type == TTabletTypes::SysViewProcessor) {
                     bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
-                } else if (type == defaultTabletTypes.SequenceShard) {
+                } else if (type == TTabletTypes::SequenceShard) {
                     bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.ReplicationController) {
+                } else if (type == TTabletTypes::ReplicationController) {
                     bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;

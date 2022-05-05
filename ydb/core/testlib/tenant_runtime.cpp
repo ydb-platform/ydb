@@ -405,7 +405,6 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         const auto type = ev->Get()->Record.GetTabletType();
         const auto bootMode = ev->Get()->Record.GetTabletBootMode();
         auto it = State.Tablets.find(key);
-        const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes;
         TActorId bootstrapperActorId;
         if (it == State.Tablets.end()) {
             if (ev->Get()->Record.AllowedDomainsSize()) {
@@ -423,19 +422,19 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
             }
 
             if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
-            } else if (type == defaultTabletTypes.Coordinator) {
+            } else if (type == TTabletTypes::Coordinator) {
                 bootstrapperActorId = Boot(ctx, type, &CreateFlatTxCoordinator, DataGroupErasure);
-            } else if (type == defaultTabletTypes.Mediator) {
+            } else if (type == TTabletTypes::Mediator) {
                 bootstrapperActorId = Boot(ctx, type, &CreateTxMediator, DataGroupErasure);
-            } else if (type == defaultTabletTypes.SchemeShard) {
+            } else if (type == TTabletTypes::SchemeShard) {
                 bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure);
-            } else if (type == defaultTabletTypes.Hive) {
+            } else if (type == TTabletTypes::Hive) {
                 bootstrapperActorId = Boot(ctx, type, &CreateDefaultHive, DataGroupErasure);
-            } else if (type == defaultTabletTypes.SysViewProcessor) {
+            } else if (type == TTabletTypes::SysViewProcessor) {
                 bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
-            } else if (type == defaultTabletTypes.SequenceShard) {
+            } else if (type == TTabletTypes::SequenceShard) {
                 bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
-            } else if (type == defaultTabletTypes.ReplicationController) {
+            } else if (type == TTabletTypes::ReplicationController) {
                 bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
             } else {
                 status = NKikimrProto::ERROR;

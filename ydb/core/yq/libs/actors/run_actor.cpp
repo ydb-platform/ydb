@@ -826,7 +826,7 @@ private:
             resultId = NActors::TActivationContext::Register(
                     CreateResultWriter(
                         ExecuterId, dqGraphParams.GetResultType(),
-                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline));
+                        writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ResultBytesLimit));
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
             resultId = ExecuterId;

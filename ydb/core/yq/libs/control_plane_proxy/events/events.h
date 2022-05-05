@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/yq/libs/quota_manager/events/events.h>
 
 #include <ydb/public/api/protos/yq.pb.h>
 
@@ -68,12 +69,14 @@ struct TEvControlPlaneProxy {
                                       const ProtoMessage& request,
                                       const TString& user,
                                       const TString& token,
-                                      const TVector<TString>& permissions)
+                                      const TVector<TString>& permissions,
+                                      const TQuotaMap& quotas = {})
             : FolderId(folderId)
             , Request(request)
             , User(user)
             , Token(token)
             , Permissions(permissions)
+            , Quotas(quotas)
         {
         }
 
@@ -83,6 +86,7 @@ struct TEvControlPlaneProxy {
         TString User;
         TString Token;
         TVector<TString> Permissions;
+        TQuotaMap Quotas;
     };
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>

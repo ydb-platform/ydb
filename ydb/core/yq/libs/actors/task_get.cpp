@@ -166,6 +166,7 @@ private:
                 newTask->set_query_name(task.Query.content().name());
                 *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);
                 newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
+                newTask->set_result_limit(task.Internal.result_limit());
 
                 THashMap<TString, TString> accountIdSignatures;
                 for (const auto& connection: task.Internal.connection()) {

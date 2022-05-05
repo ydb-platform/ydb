@@ -29,13 +29,15 @@ struct TEvTestConnection {
                                           const TString& user,
                                           const TString& token,
                                           const TString& cloudId,
-                                          const TPermissions& permissions)
+                                          const TPermissions& permissions,
+                                          const TQuotaMap& quotas)
             : CloudId(cloudId)
             , Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
             , Permissions(permissions)
+            , Quotas(quotas)
         {
         }
 
@@ -45,6 +47,7 @@ struct TEvTestConnection {
         TString User;
         TString Token;
         TPermissions Permissions;
+        const TQuotaMap Quotas;
     };
 
     struct TEvTestConnectionResponse : NActors::TEventLocal<TEvTestConnectionResponse, EvTestConnectionResponse> {

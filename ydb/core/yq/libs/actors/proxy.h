@@ -72,8 +72,8 @@ NActors::IActor* CreateResultWriter(
     const TResultId& resultId,
     const TVector<TString>& columns,
     const TString& traceId,
-    const TInstant& deadline
-    );
+    const TInstant& deadline,
+    ui64 resultBytesLimit);
 
 NActors::IActor* CreatePingerActor(
     const TString& tenantName,

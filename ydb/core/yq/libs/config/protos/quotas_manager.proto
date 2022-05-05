@@ -1,0 +1,23 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+////////////////////////////////////////////////////////////
+
+message TQuotaLimit {
+    string Name = 1;
+    uint64 Limit = 2;
+}
+
+message TQuotaList {
+    string SubjectType = 1;
+    string SubjectId = 2;
+    repeated TQuotaLimit Limit = 3;
+}
+
+message TQuotasManagerConfig {
+    bool Enabled = 1;
+    repeated TQuotaList Quotas = 2;
+}

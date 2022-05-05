@@ -42,14 +42,20 @@ public:
         const TResultId& resultId,
         const TVector<TString>& columns,
         const TString& traceId,
-        const TInstant& deadline)
+        const TInstant& deadline,
+        ui64 resultBytesLimit)
         : ExecuterId(executerId)
         , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
         , ResultId({resultId})
         , TraceId(traceId)
         , Deadline(deadline)
+        , ResultBytesLimit(resultBytesLimit)
         , InternalServiceId(MakeInternalServiceActorId())
-    { }
+    { 
+        if (!ResultBytesLimit) {
+            ResultBytesLimit = 20_MB;
+        }
+    }
 
     static constexpr char ActorName[] = "YQ_RESULT_WRITER";
 
@@ -214,9 +220,9 @@ private:
         FreeSpace -= data.GetRaw().size();
         OccupiedSpace += data.GetRaw().size();
 
-        if (OccupiedSpace > SpaceLimitPerQuery) {
+        if (OccupiedSpace > ResultBytesLimit) {
             TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Can not write results with size > " << SpaceLimitPerQuery / (1024 * 1024) << "_MB");
+            issues.AddIssue(TStringBuilder() << "Can not write results with size > " << ResultBytesLimit << " byte(s)");
             SendIssuesAndSetErrorFlag(issues);
             return;
         }
@@ -315,7 +321,7 @@ private:
     bool HasError = false;
     bool Finished = false;
     NYql::TIssues Issues;
-    ui64 SpaceLimitPerQuery = 20_MB;
+    ui64 ResultBytesLimit;
     ui64 OccupiedSpace = 0;
 
     TVector<Yq::Private::WriteTaskResultRequest> ResultChunks;
@@ -330,9 +336,10 @@ NActors::IActor* CreateResultWriter(
     const TResultId& resultId,
     const TVector<TString>& columns,
     const TString& traceId,
-    const TInstant& deadline)
+    const TInstant& deadline,
+    ui64 resultBytesLimit)
 {
-    return new TResultWriter(executerId, resultType, resultId, columns, traceId, deadline);
+    return new TResultWriter(executerId, resultType, resultId, columns, traceId, deadline, resultBytesLimit);
 }
 
 } // namespace NYq

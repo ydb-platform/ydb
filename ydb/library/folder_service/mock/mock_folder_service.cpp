@@ -18,10 +18,16 @@ public:
     }
 
     void Handle(TEvListFolderRequest::TPtr& ev) {
+        auto folderId = ev.Get()->Get()->Request.folder_id();
         auto result = std::make_unique<TEvListFolderResponse>();
         auto* fakeFolder = result->Response.mutable_folder();
-        fakeFolder->set_id(ev.Get()->Get()->Request.folder_id());
-        fakeFolder->set_cloud_id("mock_cloud");
+        TString cloudId = "mock_cloud";
+        auto p = folderId.find('@');
+        if (p != folderId.npos) {
+            cloudId = folderId.substr(p + 1);
+        }
+        fakeFolder->set_id(folderId);
+        fakeFolder->set_cloud_id(cloudId);
         result->Status = NGrpc::TGrpcStatus();
         Send(ev->Sender, result.release());
     }

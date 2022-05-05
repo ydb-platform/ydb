@@ -9,6 +9,7 @@
 #include <ydb/core/yq/libs/health/health.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/yq/libs/private_client/internal_service.h>
+#include <ydb/core/yq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
@@ -77,7 +78,7 @@ void Init(
 
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
         auto controlPlaneProxy = NYq::CreateControlPlaneProxyActor(protoConfig.GetControlPlaneProxy(),
-            appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneProxy"));
+            appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneProxy"), protoConfig.GetQuotasManager().GetEnabled());
         actorRegistrator(NYq::ControlPlaneProxyActorId(), controlPlaneProxy);
     }
 
@@ -257,6 +258,15 @@ void Init(
             yqSharedResources,
             serviceCounters.Counters);
         actorRegistrator(NYq::HealthActorId(), health);
+    }
+
+    if (protoConfig.GetQuotasManager().GetEnabled()) {
+        auto quotaService = NYq::CreateQuotaServiceActor(
+            protoConfig.GetQuotasManager(),
+            yqSharedResources,
+            serviceCounters.Counters,
+            { TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_RESULT_LIMIT, 20_MB) });
+        actorRegistrator(NYq::MakeQuotaServiceActorId(), quotaService);
     }
 }
 

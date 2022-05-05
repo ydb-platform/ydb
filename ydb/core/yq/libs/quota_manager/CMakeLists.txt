@@ -7,16 +7,22 @@
 
 
 
-add_library(libs-control_plane_storage-events)
-target_link_libraries(libs-control_plane_storage-events PUBLIC
+add_library(yq-libs-quota_manager)
+target_compile_options(yq-libs-quota_manager PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_link_libraries(yq-libs-quota_manager PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-actors-core
-  cpp-actors-interconnect
+  cpp-monlib-dynamic_counters
+  cpp-protobuf-json
+  api-grpc-draft
+  cpp-client-ydb_table
   libs-control_plane_storage-proto
-  yq-libs-events
   libs-quota_manager-events
+  yq-libs-shared_resources
+  ydb-core-protos
 )
-target_sources(libs-control_plane_storage-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/events/events.cpp
+target_sources(yq-libs-quota_manager PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/quota_manager/quota_manager.cpp
 )

@@ -70,6 +70,7 @@ message GetTaskResult {
         string query_name = 23;
         google.protobuf.Timestamp deadline = 24;
         YandexQuery.StreamingDisposition disposition = 25;
+        uint64 result_limit = 26;
     }
     repeated Task tasks = 1;
 }

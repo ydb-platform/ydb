@@ -329,7 +329,8 @@ private:
             NProtoInterop::CastFromProto(task.deadline()),
             ClientCounters,
             createdAt,
-            TenantName);
+            TenantName,
+            task.result_limit());
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 

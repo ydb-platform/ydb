@@ -16,6 +16,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/yq/libs/events/event_subspace.h>
+#include <ydb/core/yq/libs/quota_manager/events/events.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 namespace NYq {
@@ -207,13 +208,15 @@ struct TEvControlPlaneStorage {
                                              const TString& user,
                                              const TString& token,
                                              const TString& cloudId,
-                                             TPermissions permissions)
+                                             TPermissions permissions,
+                                             const TQuotaMap& quotas)
             : Scope(scope)
             , Request(request)
             , User(user)
             , Token(token)
             , CloudId(cloudId)
             , Permissions(permissions)
+            , Quotas(quotas)
         {
         }
 
@@ -232,6 +235,7 @@ struct TEvControlPlaneStorage {
         TString Token;
         TString CloudId;
         TPermissions Permissions;
+        TQuotaMap Quotas;
     };
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>

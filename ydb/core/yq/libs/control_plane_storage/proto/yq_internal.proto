@@ -30,6 +30,7 @@ message QueryInternal {
     repeated bytes dq_graph = 13;
     int32 dq_graph_index = 14;
     StreamingDisposition disposition = 15;
+    uint64 result_limit = 16;
 }
 
 message JobInternal {

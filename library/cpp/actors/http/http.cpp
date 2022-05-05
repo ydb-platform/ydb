@@ -30,6 +30,7 @@ template <> TStringBuf THttpRequest::GetName<&THttpRequest::Connection>() { retu
 template <> TStringBuf THttpRequest::GetName<&THttpRequest::ContentType>() { return "Content-Type"; }
 template <> TStringBuf THttpRequest::GetName<&THttpRequest::ContentLength>() { return "Content-Length"; }
 template <> TStringBuf THttpRequest::GetName<&THttpRequest::TransferEncoding>() { return "Transfer-Encoding"; }
+template <> TStringBuf THttpRequest::GetName<&THttpRequest::AcceptEncoding>() { return "Accept-Encoding"; }
 
 const TMap<TStringBuf, TStringBuf THttpRequest::*, TLessNoCase> THttpRequest::HeadersLocation = {
     { THttpRequest::GetName<&THttpRequest::Host>(), &THttpRequest::Host },
@@ -38,6 +39,7 @@ const TMap<TStringBuf, TStringBuf THttpRequest::*, TLessNoCase> THttpRequest::He
     { THttpRequest::GetName<&THttpRequest::ContentType>(), &THttpRequest::ContentType },
     { THttpRequest::GetName<&THttpRequest::ContentLength>(), &THttpRequest::ContentLength },
     { THttpRequest::GetName<&THttpRequest::TransferEncoding>(), &THttpRequest::TransferEncoding },
+    { THttpRequest::GetName<&THttpRequest::AcceptEncoding>(), &THttpRequest::AcceptEncoding },
 };
 
 template <> TStringBuf THttpResponse::GetName<&THttpResponse::Connection>() { return "Connection"; }

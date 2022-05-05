@@ -21,6 +21,7 @@ target_link_libraries(cpp-actors-http PUBLIC
 )
 target_sources(cpp-actors-http PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/http/http_cache.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/http/http_compress.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/http/http_proxy_acceptor.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/http/http_proxy_incoming.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/http/http_proxy_outgoing.cpp

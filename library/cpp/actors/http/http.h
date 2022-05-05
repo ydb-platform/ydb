@@ -130,6 +130,7 @@ public:
     TStringBuf Connection;
     TStringBuf ContentType;
     TStringBuf ContentLength;
+    TStringBuf AcceptEncoding;
     TStringBuf TransferEncoding;
 
     TStringBuf Body;
@@ -200,7 +201,7 @@ public:
     TStringBuf& Header = Line;
     size_t ChunkLength = 0;
     size_t ContentSize = 0;
-    TString Content;
+    TString Content; // body storage
     std::optional<size_t> TotalSize;
 
     THttpParser(const THttpParser& src)
@@ -436,6 +437,36 @@ public:
 
     ERenderStage Stage = ERenderStage::Init;
 
+    //THttpRenderer(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version); // request
+    void InitRequest(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version) {
+        Y_VERIFY_DEBUG(Stage == ERenderStage::Init);
+        AppendParsedValue<&THttpRequest::Method>(method);
+        Append(' ');
+        AppendParsedValue<&THttpRequest::URL>(url);
+        Append(' ');
+        AppendParsedValue<&THttpRequest::Protocol>(protocol);
+        Append('/');
+        AppendParsedValue<&THttpRequest::Version>(version);
+        Append("\r\n");
+        Stage = ERenderStage::Header;
+        HeaderType::Headers = TStringBuf(BufferType::Pos(), size_t(0));
+    }
+
+    //THttpRenderer(TStringBuf protocol, TStringBuf version, TStringBuf status, TStringBuf message); // response
+    void InitResponse(TStringBuf protocol, TStringBuf version, TStringBuf status, TStringBuf message) {
+        Y_VERIFY_DEBUG(Stage == ERenderStage::Init);
+        AppendParsedValue<&THttpResponse::Protocol>(protocol);
+        Append('/');
+        AppendParsedValue<&THttpResponse::Version>(version);
+        Append(' ');
+        AppendParsedValue<&THttpResponse::Status>(status);
+        Append(' ');
+        AppendParsedValue<&THttpResponse::Message>(message);
+        Append("\r\n");
+        Stage = ERenderStage::Header;
+        HeaderType::Headers = TStringBuf(BufferType::Pos(), size_t(0));
+    }
+
     void Append(TStringBuf text) {
         EnsureEnoughSpaceAvailable(text.size());
         BufferType::Append(text.data(), text.size());
@@ -484,34 +515,13 @@ public:
         HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
     }
 
-    //THttpRenderer(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version); // request
-    void InitRequest(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Init);
-        AppendParsedValue<&THttpRequest::Method>(method);
-        Append(' ');
-        AppendParsedValue<&THttpRequest::URL>(url);
-        Append(' ');
-        AppendParsedValue<&THttpRequest::Protocol>(protocol);
-        Append('/');
-        AppendParsedValue<&THttpRequest::Version>(version);
-        Append("\r\n");
-        Stage = ERenderStage::Header;
-        HeaderType::Headers = TStringBuf(BufferType::Pos(), size_t(0));
-    }
+    static constexpr TStringBuf ALLOWED_CONTENT_ENCODINGS[] = {"deflate"};
 
-    //THttpRenderer(TStringBuf protocol, TStringBuf version, TStringBuf status, TStringBuf message); // response
-    void InitResponse(TStringBuf protocol, TStringBuf version, TStringBuf status, TStringBuf message) {
-        Y_VERIFY_DEBUG(Stage == ERenderStage::Init);
-        AppendParsedValue<&THttpResponse::Protocol>(protocol);
-        Append('/');
-        AppendParsedValue<&THttpResponse::Version>(version);
-        Append(' ');
-        AppendParsedValue<&THttpResponse::Status>(status);
-        Append(' ');
-        AppendParsedValue<&THttpResponse::Message>(message);
-        Append("\r\n");
-        Stage = ERenderStage::Header;
-        HeaderType::Headers = TStringBuf(BufferType::Pos(), size_t(0));
+    void SetContentEncoding(TStringBuf contentEncoding) {
+        Y_VERIFY_DEBUG(Stage == ERenderStage::Header);
+        if (Count(ALLOWED_CONTENT_ENCODINGS, contentEncoding) != 0) {
+            Set("Content-Encoding", contentEncoding);
+        }
     }
 
     void FinishHeader() {
@@ -621,6 +631,12 @@ inline void THttpRenderer<THttpRequest, TSocketBuffer>::Set<&THttpRequest::Body>
     SetBody(value);
 }
 
+template <>
+template <>
+inline void THttpRenderer<THttpResponse, TSocketBuffer>::Set<&THttpResponse::ContentEncoding>(TStringBuf value) {
+    SetContentEncoding(value);
+}
+
 class THttpIncomingRequest;
 using THttpIncomingRequestPtr = TIntrusivePtr<THttpIncomingRequest>;
 
@@ -728,6 +744,33 @@ public:
 
     bool IsNeedBody() const {
         return GetRequest()->Method != "HEAD" && Status != "204";
+    }
+
+    void EnableCompression() {
+        TStringBuf acceptEncoding = Request->AcceptEncoding;
+        std::vector<TStringBuf> encodings;
+        TStringBuf encoding;
+        while (acceptEncoding.NextTok(',', encoding)) {
+            Trim(encoding, ' ');
+            if (Count(ALLOWED_CONTENT_ENCODINGS, encoding) != 0) {
+                encodings.push_back(encoding);
+            }
+        }
+        if (!encodings.empty()) {
+            // TODO: prioritize encodings
+            SetContentEncoding(encodings.front());
+        }
+    }
+
+    static TString CompressDeflate(TStringBuf source);
+
+    void SetBody(TStringBuf body) {
+        if (ContentEncoding == "deflate") {
+            TString compressedBody = CompressDeflate(body);
+            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(compressedBody);
+        } else {
+            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(body);
+        }
     }
 
     THttpIncomingRequestPtr GetRequest() const {

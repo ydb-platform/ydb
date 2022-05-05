@@ -288,6 +288,8 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccIncompleteEdgeTxId = 7;
     optional uint64 MvccLowWatermarkStep = 8;
     optional uint64 MvccLowWatermarkTxId = 9;
+    optional uint64 MvccImmediateWriteEdgeStep = 10;
+    optional uint64 MvccImmediateWriteEdgeTxId = 11;
 }
 
 message TSnapshotTransferInfo {
@@ -691,6 +693,10 @@ message TEvSplitTransferSnapshot {
 
     // Number of bytes that are in the ReplicationSourceOffsets table
     optional uint64 ReplicationSourceOffsetsBytes = 16;
+
+    optional uint64 MvccImmediateWriteEdgeStep = 17;
+    optional uint64 MvccImmediateWriteEdgeTxId = 18;
+    optional bool MvccPerformedUnprotectedReads = 19;
 }
 
 message TEvSplitTransferSnapshotAck {

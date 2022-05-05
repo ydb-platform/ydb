@@ -638,7 +638,7 @@ TDuration TSnapshotManager::CleanupTimeout() const {
         snapshotTimeout = snapshot->ExpireTime - now;
 
     if (IsMvccEnabled()) {
-        if (LowWatermark == CompleteEdge) {
+        if (LowWatermark >= CompleteEdge) {
             mvccGcTimeout = GetCleanupSnapshotPeriod();
         } else {
             mvccGcTimeout = TInstant::MilliSeconds(LowWatermark.Step + GetKeepSnapshotTimeout() + 1) - now;
@@ -682,6 +682,7 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
 
     ui64 keepSnapshotTimeout = GetKeepSnapshotTimeout();
     TRowVersion proposed = TRowVersion(Max(now.MilliSeconds(), keepSnapshotTimeout) - keepSnapshotTimeout, 0);
+
     TRowVersion leastPlanned = TRowVersion::Max();
     if (auto it = Self->Pipeline.GetPlan().begin(); it != Self->Pipeline.GetPlan().end())
         leastPlanned = TRowVersion(it->Step, it->TxId);
@@ -697,7 +698,14 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
         PromoteCompleteEdge(ImmediateWriteEdgeReplied.Step, txc);
     }
 
-    removed |= AdvanceWatermark(txc.DB, Min(proposed, leastPlanned, leastAcquired, CompleteEdge));
+    // Calculate the maximum version where we may have written something
+    // Cleaning beyond this point would be a waste of log bandwidth
+    TRowVersion maxWriteVersion(CompleteEdge.Step, Max<ui64>());
+    if (maxWriteVersion < ImmediateWriteEdge) {
+        maxWriteVersion = ImmediateWriteEdge;
+    }
+
+    removed |= AdvanceWatermark(txc.DB, Min(proposed, leastPlanned, leastAcquired, maxWriteVersion));
     LastAdvanceWatermark = NActors::TActivationContext::Monotonic();
 
     return removed;

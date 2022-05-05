@@ -246,6 +246,28 @@ protected:
         }
     };
 
+
+    struct TTxRegisterInitialGCCompletion : public NTabletFlatExecutor::ITransaction {
+        TKeyValueFlat *Self;
+
+        TTxRegisterInitialGCCompletion(TKeyValueFlat *keyValueFlat)
+            : Self(keyValueFlat)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxRegisterInitialGCCompletion Execute");
+            TSimpleDbFlat db(txc.DB);
+            Self->State.RegisterInitialGCCompletionExecute(db, ctx);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override {
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
+                    << " TTxRegisterInitialGCCompletion Complete");
+            Self->State.RegisterInitialGCCompletionComplete(ctx);
+        }
+    };
+
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
@@ -373,23 +395,27 @@ protected:
             return;
         }
 
-        if (ev->Cookie == (ui64)TKeyValueState::ECollectCookie::SoftInitial) {
-            NKikimrProto::EReplyStatus status = ev->Get()->Status;
-            if (status == NKikimrProto::OK) {
-                State.RegisterInitialCollectResult(ctx);
-            } else {
-                LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                    << " received not ok TEvCollectGarbageResult"
-                    << " Status# " << NKikimrProto::EReplyStatus_Name(status)
-                    << " ErrorReason# " << ev->Get()->ErrorReason);
-                Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
-            }
+        if (ev->Cookie != (ui64)TKeyValueState::ECollectCookie::SoftInitial) {
+            LOG_CRIT_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                << " received TEvCollectGarbageResult with unexpected Cookie# " << ev->Cookie);
+            Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
             return;
         }
 
-        LOG_CRIT_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-            << " received TEvCollectGarbageResult with unexpected Cookie# " << ev->Cookie);
-        Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
+        NKikimrProto::EReplyStatus status = ev->Get()->Status;
+        if (status != NKikimrProto::OK) {
+            LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                << " received not ok TEvCollectGarbageResult"
+                << " Status# " << NKikimrProto::EReplyStatus_Name(status)
+                << " ErrorReason# " << ev->Get()->ErrorReason);
+            Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
+            return;
+        }
+
+        bool isLast = State.RegisterInitialCollectResult(ctx);
+        if (isLast) {
+            Execute(new TTxRegisterInitialGCCompletion(this));
+        }
     }
 
     void Handle(TEvKeyValue::TEvRequest::TPtr ev, const TActorContext &ctx) {

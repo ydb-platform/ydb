@@ -575,6 +575,19 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         THashMap<TGroupChannel, THolder<TVector<TLogoBlobID>>> keepForGroupChannel;
         const ui32 barrierGeneration = executorGeneration - 1;
         const ui32 barrierStep = Max<ui32>();
+
+        auto addBlobToKeep = [&] (const TLogoBlobID &id) {
+            ui32 group = info->GroupFor(id.Channel(), id.Generation());
+            Y_VERIFY(group != Max<ui32>(), "RefBlob# %s is mapped to an invalid group (-1)!",
+                    id.ToString().c_str());
+            TGroupChannel key(group, id.Channel());
+            THolder<TVector<TLogoBlobID>> &ptr = keepForGroupChannel[key];
+            if (!ptr) {
+                ptr = MakeHolder<TVector<TLogoBlobID>>();
+            }
+            ptr->emplace_back(id);
+        };
+
         for (const auto &refInfo : RefCounts) {
             // Extract blob id and validate its channel
             const TLogoBlobID &id = refInfo.first;
@@ -584,19 +597,16 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             const THelpers::TGenerationStep storedGenStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
             // Mark with keep flag only new blobs
             if (storedGenStep < blobGenStep) {
-                const ui32 group = info->GroupFor(id.Channel(), id.Generation());
-                Y_VERIFY(group != Max<ui32>(), "RefBlob# %s is mapped to an invalid group (-1)!",
-                        id.ToString().c_str());
-                const TGroupChannel key(group, id.Channel());
-                auto it = keepForGroupChannel.find(key);
-                if (it == keepForGroupChannel.end()) {
-                    bool isInserted = false;
-                    std::tie(it, isInserted) = keepForGroupChannel.emplace(key, MakeHolder<TVector<TLogoBlobID>>());
-                    Y_VERIFY(isInserted);
-                }
-                it->second->emplace_back(id);
+                addBlobToKeep(id);
             }
         }
+
+        if (CollectOperation) {
+            for (const TLogoBlobID &id : CollectOperation->Keep) {
+                addBlobToKeep(id);
+            }
+        }
+
         for (const auto &channelInfo : info->Channels) {
             if (channelInfo.Channel < BLOB_CHANNEL) {
                 continue;
@@ -676,7 +686,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             ChannelRangeSets[id.Channel()].Remove(id.Generation());
         }
     }
-    if (CollectOperation.Get()) {
+    if (CollectOperation) {
         auto &keep = CollectOperation->Keep;
         for (auto it = keep.begin(); it != keep.end(); ++it) {
             const TLogoBlobID &id = *it;
@@ -696,38 +706,52 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
         CollectOperation->Header.SetCollectGeneration(ExecutorGeneration);
         CollectOperation->Header.SetCollectStep(0);
     }
+
+    if (CollectOperation) {
+        for (const TLogoBlobID &id : CollectOperation->DoNotKeep) {
+            Trash.insert(id);
+            THelpers::DbUpdateTrash(id, db, ctx);
+        }
+        THelpers::DbEraseCollect(db, ctx);
+        CollectOperation = nullptr;
+    }
+
+
     THelpers::DbUpdateState(StoredState, db, ctx);
 
 
-    IsCollectEventSent = true;
     // corner case, if no CollectGarbage events were sent
     if (InitialCollectsSent == 0) {
         SendCutHistory(ctx);
-        if (CollectOperation.Get()) {
-            // finish collect operation from local base
-            StoreCollectComplete(ctx);
-        } else {
-            // initiate collection if trash was loaded from local base
-            IsCollectEventSent = false;
-            PrepareCollectIfNeeded(ctx);
-        }
+        RegisterInitialGCCompletionComplete(ctx);
+    } else {
+        IsCollectEventSent = true;
     }
 }
 
-void TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx) {
+
+
+bool TKeyValueState::RegisterInitialCollectResult(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
         << " InitialCollectsSent# " << InitialCollectsSent << " Marker# KV50");
     if (--InitialCollectsSent == 0) {
         SendCutHistory(ctx);
-        if (CollectOperation.Get()) {
-            // finish collect operation from local base
-            StoreCollectComplete(ctx);
-        } else {
-            IsCollectEventSent = false;
-            // initiate collection if trash was loaded from local base
-            PrepareCollectIfNeeded(ctx);
-        }
+        return true;
     }
+    return false;
+}
+
+
+void TKeyValueState::RegisterInitialGCCompletionExecute(ISimpleDb &db, const TActorContext &ctx) {
+    StoredState.SetCollectGeneration(ExecutorGeneration);
+    StoredState.SetCollectStep(0);
+    THelpers::DbUpdateState(StoredState, db, ctx);
+}
+
+void TKeyValueState::RegisterInitialGCCompletionComplete(const TActorContext &ctx) {
+    IsCollectEventSent = false;
+    // initiate collection if trash was loaded from local base
+    PrepareCollectIfNeeded(ctx);
 }
 
 void TKeyValueState::SendCutHistory(const TActorContext &ctx) {

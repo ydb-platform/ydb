@@ -318,7 +318,9 @@ public:
     void Load(const TString &key, const TString& value);
     void InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 executorGeneration, ISimpleDb &db,
         const TActorContext &ctx, const TTabletStorageInfo *info);
-    void RegisterInitialCollectResult(const TActorContext &ctx);
+    bool RegisterInitialCollectResult(const TActorContext &ctx);
+    void RegisterInitialGCCompletionExecute(ISimpleDb &db, const TActorContext &ctx);
+    void RegisterInitialGCCompletionComplete(const TActorContext &ctx);
     void SendCutHistory(const TActorContext &ctx);
     void OnInitQueueEmpty(const TActorContext &ctx);
     void OnStateWork(const TActorContext &ctx);

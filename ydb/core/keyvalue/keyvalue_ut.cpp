@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "keyvalue.h"
+#include "keyvalue_flat_impl.h"
 #include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -7,13 +8,14 @@
 #include <util/random/fast.h>
 
 const bool ENABLE_DETAILED_KV_LOG = false;
+const bool ENABLE_TESTLOG_OUTPUT = false;
 
 namespace NKikimr {
 namespace {
 
 template <typename... TArgs>
 void TestLog(TArgs&&... args) {
-    if constexpr (ENABLE_DETAILED_KV_LOG) {
+    if constexpr (ENABLE_TESTLOG_OUTPUT || ENABLE_DETAILED_KV_LOG) {
         Cerr << ((TStringBuilder() << ... << args) << Endl);
     }
 }
@@ -84,7 +86,7 @@ struct TTestContext {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
         Runtime.Reset(new TTestBasicRuntime);
-        Runtime->SetScheduledLimit(100);
+        Runtime->SetScheduledLimit(200);
         Runtime->SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
@@ -1012,15 +1014,15 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
             if (tabletActor && *tabletActor == event->Recipient && event->GetTypeRewrite() == TEvBlobStorage::TEvCollectGarbageResult::EventType) {
                 if (collectStep == 2) {
                     savedInitialEvents.push(event);
+                    TestLog("Event drop; saved intial GCresult");
                     return TTestActorRuntime::EEventAction::DROP;
                 }
-            }
-            if (tabletActor && *tabletActor == event->Sender && event->GetTypeRewrite() == TEvBlobStorage::TEvCollectGarbage::EventType) {
             }
             if (tabletActor && *tabletActor == event->Recipient && event->GetTypeRewrite() == TEvKeyValue::TEvCollect::EventType) {
                 switch (collectStep++) {
                     case 1: {
                         runtime.Send(new IEventHandle(event->Recipient, event->Recipient, new TKikimrEvents::TEvPoisonPill));
+                        TestLog("Event drop; Collect; Tablet was poisoned");
                         return TTestActorRuntime::EEventAction::DROP;
                     }
                 }
@@ -1050,6 +1052,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
     ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
     TDispatchOptions options;
     options.FinalEvents.push_back(TKikimrEvents::TEvPoisonPill::EventType);
+    TestLog("First dispatch");
     tc.Runtime->DispatchEvents(options);
     ExecuteWrite(tc, {{"key3", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
 
@@ -1059,9 +1062,11 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
 
     bool onlyOneCollect = false;
     try {
+        TestLog("Second dispatch");
         tc.Runtime->DispatchEvents(options2);
     } catch (NActors::TSchedulingLimitReachedException) {
         onlyOneCollect = true;
+        TestLog("Exception was catch");
     }
 
     while (savedInitialEvents.size()) {
@@ -1072,13 +1077,14 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
     TDispatchOptions options3;
     options3.FinalEvents.push_back(TEvKeyValue::TEvEraseCollect::EventType);
 
-    tc.Runtime->DispatchEvents(options3);
+    TestLog("Third dispatch ", collectStep);
+    UNIT_ASSERT_VALUES_EQUAL(collectStep, 2);
+ 
+    ExecuteWrite(tc, {{"key4", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    ExecuteWrite(tc, {{"key5", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    ExecuteWrite(tc, {{"key6", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
 
-    try {
-        tc.Runtime->DispatchEvents(options3);
-    } catch (NActors::TSchedulingLimitReachedException) {
-        onlyOneCollect = true;
-    }
+    UNIT_ASSERT_VALUES_EQUAL(collectStep, 3);
     UNIT_ASSERT(onlyOneCollect);
 }
 

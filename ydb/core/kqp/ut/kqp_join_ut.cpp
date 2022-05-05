@@ -1055,6 +1055,35 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CompareYson(R"([[5u]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureInnerConverted) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTables(session);
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$rows")
+                .BeginList()
+                .AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint8(1)
+                    .EndStruct()
+                .EndList()
+            .Build()
+        .Build();
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $rows AS List<Struct<Key: Uint8>>;
+
+            SELECT COUNT(*)
+            FROM AS_TABLE($rows) AS tl
+            INNER JOIN `/Root/Join1_1` AS tr
+            ON tl.Key = tr.Key;  -- Uint8 = Int32
+        )"), TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(JoinLeftPureFull) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

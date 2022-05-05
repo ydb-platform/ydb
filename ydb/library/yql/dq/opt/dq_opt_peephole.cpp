@@ -120,6 +120,68 @@ TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, con
             .Done().Ptr();
 }
 
+TExprNode::TPtr AddConvertedKeys(TExprNode::TPtr list, TExprContext& ctx, TExprNode::TListType& leftKeyColumnNodes, const TTypeAnnotationNode::TListType& keyTypes, const TStructExprType* origItemType) {
+    std::vector<std::pair<TString, std::pair<TString, const TTypeAnnotationNode*>>> columnsToConvert;
+    for (auto i = 0U; i < leftKeyColumnNodes.size(); i++) {
+        const auto origName = TString(leftKeyColumnNodes[i]->Content());
+        auto itemType= origItemType->FindItemType(origName);
+        if (itemType->Equals(*keyTypes[i])) {
+            continue;
+        }
+        const auto newName = TStringBuilder() << origName << "_map_join_core_key_converted_" << i << "_";
+        columnsToConvert.emplace_back(origName, std::pair<TString, const TTypeAnnotationNode*>{newName, keyTypes[i]});
+        leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), newName);
+    }
+    const auto pos = list->Pos();
+    return ctx.Builder(pos)
+        .Callable("Map")
+            .Add(0, std::move(list))
+            .Lambda(1)
+                .Param("dict")
+                .Callable("FlattenMembers")
+                    .List(0)
+                        .Atom(0, "")
+                        .Arg(1, "dict")
+                    .Seal()
+                    .List(1)
+                        .Atom(0, "")
+                        .Callable(1, "AsStruct")
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                auto i = 0U;
+                                for (const auto& [oldName, newCol]: columnsToConvert) {
+                                    parent.List(i)
+                                        .Atom(0, newCol.first)
+                                        .Callable(1, "StrictCast")
+                                            .Callable(0, "Member")
+                                                .Arg(0, "dict")
+                                                .Atom(1, oldName)
+                                            .Seal()
+                                            .Add(1, ExpandType(pos, *newCol.second, ctx))
+                                        .Seal()
+                                    .Seal();
+                                    i++;
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TListType OriginalJoinOutputMembers(const TDqPhyMapJoin& mapJoin, TExprContext& ctx) {
+    const auto origItemType = mapJoin.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List ? 
+        mapJoin.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>() :
+        mapJoin.Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
+    TExprNode::TListType structMembers;
+    structMembers.reserve(origItemType->GetItems().size());
+    for (const auto& item: origItemType->GetItems()) {
+        structMembers.push_back(ctx.NewAtom(mapJoin.Pos(), item->GetName()));
+    }
+    return structMembers;
+}
 } // anonymous namespace end
 
 /**
@@ -130,6 +192,7 @@ TExprNode::TPtr BuildDictKeySelector(TExprContext& ctx, TPositionHandle pos, con
  *  - Explicitly convert right input to the dict
  *  - Use quite pretty trick: do `MapJoinCore` in `FlatMap`-lambda
  *    (rely on the fact that there will be only one element in the `FlatMap`-stream)
+ *  - Align key types using `StrictCast`, use internal columns to store converted left keys   
  */
 TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyMapJoin>()) {
@@ -166,12 +229,14 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
             rightPayloads.emplace_back(*it);
     }
 
+    TTypeAnnotationNode::TListType keyTypesLeft(keyWidth);
     TTypeAnnotationNode::TListType keyTypes(keyWidth);
     for (auto i = 0U; i < keyTypes.size(); ++i) {
         const auto keyTypeLeft = itemTypeLeft->FindItemType(leftKeyColumnNodes[i]->Content());
         const auto keyTypeRight = itemTypeRight->FindItemType(rightKeyColumnNodes[i]->Content());
         bool optKey = false;
         keyTypes[i] = JoinDryKeyType(keyTypeLeft, keyTypeRight, optKey, ctx);
+        keyTypesLeft[i] = optKey ? ctx.MakeType<TOptionalExprType>(keyTypes[i]) : keyTypes[i];
         if (!keyTypes[i])
             keyTypes.clear();
     }
@@ -221,20 +286,25 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
 
     const bool payloads = !rightPayloads.empty();
     rightInput = MakeDictForJoin<true>(PrepareListForJoin(std::move(rightInput), keyTypes, rightKeyColumnNodes, rightPayloads, payloads, false, true, ctx), payloads, withRightSide, ctx);
-
-    return Build<TCoFlatMap>(ctx, pos)
-        .Input(std::move(rightInput))
-        .Lambda()
-            .Args({"dict"})
-            .Body<TCoMapJoinCore>()
-                .LeftInput(std::move(leftInput))
-                .RightDict("dict")
-                .JoinKind(mapJoin.JoinType())
-                .LeftKeysColumns(ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
-                .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
+    leftInput = AddConvertedKeys(std::move(leftInput), ctx, leftKeyColumnNodes, keyTypesLeft, itemTypeLeft);
+    return Build<TCoExtractMembers>(ctx, pos)
+        .Input<TCoFlatMap>()
+            .Input(std::move(rightInput))
+            .Lambda()
+                .Args({"dict"})
+                .Body<TCoMapJoinCore>()
+                    .LeftInput(std::move(leftInput))
+                    .RightDict("dict")
+                    .JoinKind(mapJoin.JoinType())
+                    .LeftKeysColumns(ctx.NewList(pos, std::move(leftKeyColumnNodes)))
+                    .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
+                    .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
                 .Build()
             .Build()
+        .Build()
+        .Members()
+            .Add(OriginalJoinOutputMembers(mapJoin, ctx))
+        .Build()
         .Done();
 }
 

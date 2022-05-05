@@ -1796,7 +1796,6 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
     const auto dictNode = callable.GetInput(1);
     const auto dictType = AS_TYPE(TDictType, dictNode);
     const auto dictKeyType = dictType->GetKeyType();
-    const bool isTupleKey = dictKeyType->IsTuple();
     const auto joinKindNode = callable.GetInput(2);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
     const auto kind = GetJoinKind(rawKind);
@@ -1806,6 +1805,7 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
         AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType():
         AS_TYPE(TStreamType, callable.GetType()->GetReturnType())->GetItemType();
     const auto leftKeyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(3));
+    const bool isTupleKey = leftKeyColumnsNode->GetValuesCount() > 1;
     const auto leftRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(4));
     const auto rightRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(5));
 
@@ -1832,10 +1832,15 @@ IComputationNode* WrapMapJoinCore(TCallable& callable, const TComputationNodeFac
         const auto leftColumnType = leftItemType->IsTuple() ?
             AS_TYPE(TTupleType, leftItemType)->GetElementType(leftKeyColumns[i]):
             AS_TYPE(TStructType, leftItemType)->GetMemberType(leftKeyColumns[i]);
+        const auto rightType = isTupleKey ? AS_TYPE(TTupleType, dictKeyType)->GetElementType(i) : dictKeyType;
+        bool isOptional;
+        if (UnpackOptional(leftColumnType, isOptional)->IsSameType(*rightType)) {
+            continue;
+        }
         bool isLeftOptional;
         const auto leftDataType = UnpackOptionalData(leftColumnType, isLeftOptional);
         bool isRightOptional;
-        const auto rightDataType = UnpackOptionalData(isTupleKey ? AS_TYPE(TTupleType, dictKeyType)->GetElementType(i) : dictKeyType, isRightOptional);
+        const auto rightDataType = UnpackOptionalData(rightType, isRightOptional);
         if (leftDataType->GetSchemeType() != rightDataType->GetSchemeType()) {
             // find a converter
             const std::array<TArgType, 2U> argsTypes = {{{rightDataType->GetSchemeType(), isLeftOptional}, {leftDataType->GetSchemeType(), isLeftOptional}}};

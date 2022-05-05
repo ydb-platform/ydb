@@ -1,4 +1,5 @@
 #include "credentials.h"
+#include <util/string/cast.h>
 
 namespace NYdb {
 
@@ -15,6 +16,10 @@ public:
         return false;
     }
 };
+
+TStringType ICredentialsProviderFactory::GetClientIdentity() const {
+    return ToString((ui64)this);
+}
 
 class TInsecureCredentialsProviderFactory : public ICredentialsProviderFactory {
 public:

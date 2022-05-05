@@ -74,10 +74,6 @@ public:
         return std::make_shared<TExampleDummyProvider>(std::move(facility), RunCnt);
     }
 
-    TStringType GetClientIdentity() const override {
-        return ToString((ui64)this);
-    }
-
     // Just for compatibility with old interface
     std::shared_ptr<ICredentialsProvider> CreateProvider() const override {
         Y_FAIL();

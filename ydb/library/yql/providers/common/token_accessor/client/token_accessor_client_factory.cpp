@@ -28,10 +28,6 @@ public:
     {
     }
 
-    TString GetClientIdentity() const override {
-        return "TOKEN_ACCESSOR_CLIENT" + ToString((ui64)this);
-    }
-
     std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
         return CreateTokenAccessorCredentialsProvider(TokenAccessorEndpoint, UseSsl, SslCaCert, ServiceAccountId, ServiceAccountIdSignature, RefreshPeriod, RequestTimeout);
     }

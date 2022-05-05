@@ -25,7 +25,7 @@ public:
         Y_UNUSED(facility);
         return CreateProvider();
     }
-    virtual TStringType GetClientIdentity() const = 0;
+    virtual TStringType GetClientIdentity() const;
 };
 
 using TCredentialsProviderFactoryPtr = std::shared_ptr<ICredentialsProviderFactory>;

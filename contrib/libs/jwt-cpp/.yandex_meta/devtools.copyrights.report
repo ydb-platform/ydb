@@ -40,7 +40,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        picojson.h [2:4]
+        picojson/picojson.h [2:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL cb493d7b4451c90d47d799c48ee86dfc
 BELONGS ya.make
@@ -64,4 +64,4 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        picojson.h [2:4]
+        picojson/picojson.h [2:4]

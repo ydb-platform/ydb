@@ -61,4 +61,4 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
-        picojson.h [6:26]
+        picojson/picojson.h [6:26]

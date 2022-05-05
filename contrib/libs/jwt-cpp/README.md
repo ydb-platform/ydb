@@ -1,6 +1,7 @@
 # jwt-cpp
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/5f7055e294744901991fd0a1620b231d)](https://app.codacy.com/app/Thalhammer/jwt-cpp?utm_source=github.com&utm_medium=referral&utm_content=Thalhammer/jwt-cpp&utm_campaign=Badge_Grade_Settings)
+[![Build Status](https://travis-ci.com/Thalhammer/jwt-cpp.svg?branch=master)](https://travis-ci.com/Thalhammer/jwt-cpp)
 
 A header only library for creating and validating json web tokens in c++.
 
@@ -50,7 +51,7 @@ Creating a token (and signing) is equally easy.
 auto token = jwt::create()
 	.set_issuer("auth0")
 	.set_type("JWS")
-	.set_payload_claim("sample", std::string("test"))
+	.set_payload_claim("sample", jwt::claim(std::string("test")))
 	.sign(jwt::algorithm::hs256{"secret"});
 ```
 

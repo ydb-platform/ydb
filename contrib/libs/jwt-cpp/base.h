@@ -2,16 +2,26 @@
 #include <string>
 #include <array>
 
+#ifdef __has_cpp_attribute
+#if __has_cpp_attribute(fallthrough)
+#define JWT_FALLTHROUGH [[fallthrough]]
+#endif
+#endif
+
+#ifndef JWT_FALLTHROUGH
+#define JWT_FALLTHROUGH
+#endif
+
 namespace jwt {
 	namespace alphabet {
 		struct base64 {
 			static const std::array<char, 64>& data() {
-                            static std::array<char, 64> data = {
-                                {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                                 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-                                 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-                                 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'}};
-                            return data;
+				static std::array<char, 64> data = {
+					{'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+					 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+					 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+					 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'}};
+					return data;
 			};
 			static const std::string& fill() {
 				static std::string fill = "=";
@@ -20,12 +30,12 @@ namespace jwt {
 		};
 		struct base64url {
 			static const std::array<char, 64>& data() {
-                            static std::array<char, 64> data = {
-                                {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                                 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-                                 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-                                 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '_'}};
-                            return data;
+				static std::array<char, 64> data = {
+					{'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+					 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+					 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+					 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '_'}};
+					return data;
 			};
 			static const std::string& fill() {
 				static std::string fill = "%3d";
@@ -43,6 +53,14 @@ namespace jwt {
 		template<typename T>
 		static std::string decode(const std::string& base) {
 			return decode(base, T::data(), T::fill());
+		}
+		template<typename T>
+		static std::string pad(const std::string& base) {
+			return pad(base, T::fill());
+		}
+		template<typename T>
+		static std::string trim(const std::string& base) {
+			return trim(base, T::fill());
 		}
 
 	private:
@@ -120,7 +138,7 @@ namespace jwt {
 			auto get_sextet = [&](size_t offset) {
 				for (size_t i = 0; i < alphabet.size(); i++) {
 					if (alphabet[i] == base[offset])
-						return i;
+						return static_cast<uint32_t>(i);
 				}
 				throw std::runtime_error("Invalid input");
 			};
@@ -163,6 +181,30 @@ namespace jwt {
 			}
 
 			return res;
+		}
+		
+		static std::string pad(const std::string& base, const std::string& fill) {
+			std::string padding;
+			switch (base.size() % 4) {
+				case 1:
+					padding += fill;
+					JWT_FALLTHROUGH;
+				case 2:
+					padding += fill;
+					JWT_FALLTHROUGH;
+				case 3:
+					padding += fill;
+					JWT_FALLTHROUGH;
+				default:
+					break;
+			}
+
+			return base + padding;
+		}
+
+		static std::string trim(const std::string& base, const std::string& fill) {
+			auto pos = base.find(fill);
+			return base.substr(0, pos);
 		}
 	};
 }

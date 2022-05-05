@@ -1,6 +1,6 @@
 #pragma once
 #define PICOJSON_USE_INT64
-#include "picojson.h"
+#include "picojson/picojson.h"
 #include "base.h"
 #include <set>
 #include <chrono>
@@ -13,12 +13,12 @@
 #include <openssl/err.h>
 
 //If openssl version less than 1.1
-#if OPENSSL_VERSION_NUMBER < 269484032
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 #define OPENSSL10
 #endif
 
 #ifndef JWT_CLAIM_EXPLICIT
-#define JWT_CLAIM_EXPLICIT 0
+#define JWT_CLAIM_EXPLICIT explicit
 #endif
 
 namespace jwt {
@@ -74,11 +74,10 @@ namespace jwt {
 	namespace helper {
 		inline
 		std::string extract_pubkey_from_cert(const std::string& certstr, const std::string& pw = "") {
-			// TODO: Cannot find the exact version this change happended
-#if OPENSSL_VERSION_NUMBER <= 0x1000114fL
+#if OPENSSL_VERSION_NUMBER <= 0x10100003L
 			std::unique_ptr<BIO, decltype(&BIO_free_all)> certbio(BIO_new_mem_buf(const_cast<char*>(certstr.data()), certstr.size()), BIO_free_all);
 #else
-			std::unique_ptr<BIO, decltype(&BIO_free_all)> certbio(BIO_new_mem_buf(certstr.data(), certstr.size()), BIO_free_all);
+			std::unique_ptr<BIO, decltype(&BIO_free_all)> certbio(BIO_new_mem_buf(certstr.data(), static_cast<int>(certstr.size())), BIO_free_all);
 #endif
 			std::unique_ptr<BIO, decltype(&BIO_free_all)> keybio(BIO_new(BIO_s_mem()), BIO_free_all);
 
@@ -99,28 +98,58 @@ namespace jwt {
 			std::unique_ptr<BIO, decltype(&BIO_free_all)> pubkey_bio(BIO_new(BIO_s_mem()), BIO_free_all);
 			if(key.substr(0, 27) == "-----BEGIN CERTIFICATE-----") {
 				auto epkey = helper::extract_pubkey_from_cert(key, password);
-				if ((size_t)BIO_write(pubkey_bio.get(), epkey.data(), epkey.size()) != epkey.size())
+				const int len = static_cast<int>(epkey.size());
+				if (BIO_write(pubkey_bio.get(), epkey.data(), len) != len)
 					throw rsa_exception("failed to load public key: bio_write failed");
 			} else {
-				if ((size_t)BIO_write(pubkey_bio.get(), key.data(), key.size()) != key.size())
+				const int len = static_cast<int>(key.size());
+				if (BIO_write(pubkey_bio.get(), key.data(), len) != len)
 					throw rsa_exception("failed to load public key: bio_write failed");
 			}
 			
 			std::shared_ptr<EVP_PKEY> pkey(PEM_read_bio_PUBKEY(pubkey_bio.get(), nullptr, nullptr, (void*)password.c_str()), EVP_PKEY_free);
 			if (!pkey)
-				throw rsa_exception("failed to load public key: PEM_read_bio_PUBKEY failed");
+				throw rsa_exception("failed to load public key: PEM_read_bio_PUBKEY failed:" + std::string(ERR_error_string(ERR_get_error(), NULL)));
 			return pkey;
 		}
 
 		inline
 		std::shared_ptr<EVP_PKEY> load_private_key_from_string(const std::string& key, const std::string& password = "") {
 			std::unique_ptr<BIO, decltype(&BIO_free_all)> privkey_bio(BIO_new(BIO_s_mem()), BIO_free_all);
-			if ((size_t)BIO_write(privkey_bio.get(), key.data(), key.size()) != key.size())
+			const int len = static_cast<int>(key.size());
+			if (BIO_write(privkey_bio.get(), key.data(), len) != len)
 				throw rsa_exception("failed to load private key: bio_write failed");
 			std::shared_ptr<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(privkey_bio.get(), nullptr, nullptr, const_cast<char*>(password.c_str())), EVP_PKEY_free);
 			if (!pkey)
 				throw rsa_exception("failed to load private key: PEM_read_bio_PrivateKey failed");
 			return pkey;
+		}
+		
+		/**
+		 * Convert a OpenSSL BIGNUM to a std::string
+		 * \param bn BIGNUM to convert
+		 * \return bignum as string
+		 */
+		inline
+#ifdef OPENSSL10
+		static std::string bn2raw(BIGNUM* bn)
+#else
+		static std::string bn2raw(const BIGNUM* bn)
+#endif
+		{
+			std::string res;
+			res.resize(BN_num_bytes(bn));
+			BN_bn2bin(bn, (unsigned char*)res.data());
+			return res;
+		}
+		/**
+		 * Convert an std::string to a OpenSSL BIGNUM
+		 * \param raw String to convert
+		 * \return BIGNUM representation
+		 */
+		inline
+		static std::unique_ptr<BIGNUM, decltype(&BN_free)> raw2bn(const std::string& raw) {
+			return std::unique_ptr<BIGNUM, decltype(&BN_free)>(BN_bin2bn((const unsigned char*)raw.data(), static_cast<int>(raw.size()), nullptr), BN_free);
 		}
 	}
 
@@ -166,9 +195,9 @@ namespace jwt {
 			 */
 			std::string sign(const std::string& data) const {
 				std::string res;
-				res.resize(EVP_MAX_MD_SIZE);
-				unsigned int len = res.size();
-				if (HMAC(md(), secret.data(), secret.size(), (const unsigned char*)data.data(), data.size(), (unsigned char*)res.data(), &len) == nullptr)
+				res.resize(static_cast<size_t>(EVP_MAX_MD_SIZE));
+				unsigned int len = static_cast<unsigned int>(res.size());
+				if (HMAC(md(), secret.data(), static_cast<int>(secret.size()), (const unsigned char*)data.data(), static_cast<int>(data.size()), (unsigned char*)res.data(), &len) == nullptr)
 					throw signature_generation_exception();
 				res.resize(len);
 				return res;
@@ -280,7 +309,7 @@ namespace jwt {
 					throw signature_verification_exception("failed to verify signature: VerifyInit failed");
 				if (!EVP_VerifyUpdate(ctx.get(), data.data(), data.size()))
 					throw signature_verification_exception("failed to verify signature: VerifyUpdate failed");
-				auto res = EVP_VerifyFinal(ctx.get(), (const unsigned char*)signature.data(), signature.size(), pkey.get());
+				auto res = EVP_VerifyFinal(ctx.get(), (const unsigned char*)signature.data(), static_cast<unsigned int>(signature.size()), pkey.get());
 				if (res != 1)
 					throw signature_verification_exception("evp verify final failed: " + std::to_string(res) + " " + ERR_error_string(ERR_get_error(), NULL));
 			}
@@ -312,35 +341,44 @@ namespace jwt {
 			 * \param md Pointer to hash function
 			 * \param name Name of the algorithm
 			 */
-			ecdsa(const std::string& public_key, const std::string& private_key, const std::string& public_key_password, const std::string& private_key_password, const EVP_MD*(*md)(), const std::string& name)
-				: md(md), alg_name(name)
+			ecdsa(const std::string& public_key, const std::string& private_key, const std::string& public_key_password, const std::string& private_key_password, const EVP_MD*(*md)(), const std::string& name, size_t siglen)
+				: md(md), alg_name(name), signature_length(siglen)
 			{
 				if (!public_key.empty()) {
 					std::unique_ptr<BIO, decltype(&BIO_free_all)> pubkey_bio(BIO_new(BIO_s_mem()), BIO_free_all);
 					if(public_key.substr(0, 27) == "-----BEGIN CERTIFICATE-----") {
 						auto epkey = helper::extract_pubkey_from_cert(public_key, public_key_password);
-						if ((size_t)BIO_write(pubkey_bio.get(), epkey.data(), epkey.size()) != epkey.size())
+						const int len = static_cast<int>(epkey.size());
+						if (BIO_write(pubkey_bio.get(), epkey.data(), len) != len)
 							throw ecdsa_exception("failed to load public key: bio_write failed");
 					} else  {
-						if ((size_t)BIO_write(pubkey_bio.get(), public_key.data(), public_key.size()) != public_key.size())
+						const int len = static_cast<int>(public_key.size());
+						if (BIO_write(pubkey_bio.get(), public_key.data(), len) != len)
 							throw ecdsa_exception("failed to load public key: bio_write failed");
 					}
 
 					pkey.reset(PEM_read_bio_EC_PUBKEY(pubkey_bio.get(), nullptr, nullptr, (void*)public_key_password.c_str()), EC_KEY_free);
 					if (!pkey)
-						throw ecdsa_exception("failed to load public key: PEM_read_bio_EC_PUBKEY failed");
+						throw ecdsa_exception("failed to load public key: PEM_read_bio_EC_PUBKEY failed:" + std::string(ERR_error_string(ERR_get_error(), NULL)));
+					size_t keysize = EC_GROUP_get_degree(EC_KEY_get0_group(pkey.get()));
+					if(keysize != signature_length*4 && (signature_length != 132 || keysize != 521))
+						throw ecdsa_exception("invalid key size");
 				}
 
 				if (!private_key.empty()) {
 					std::unique_ptr<BIO, decltype(&BIO_free_all)> privkey_bio(BIO_new(BIO_s_mem()), BIO_free_all);
-					if ((size_t)BIO_write(privkey_bio.get(), private_key.data(), private_key.size()) != private_key.size())
-						throw rsa_exception("failed to load private key: bio_write failed");
+						const int len = static_cast<int>(private_key.size());
+					if (BIO_write(privkey_bio.get(), private_key.data(), len) != len)
+						throw ecdsa_exception("failed to load private key: bio_write failed");
 					pkey.reset(PEM_read_bio_ECPrivateKey(privkey_bio.get(), nullptr, nullptr, const_cast<char*>(private_key_password.c_str())), EC_KEY_free);
 					if (!pkey)
-						throw rsa_exception("failed to load private key: PEM_read_bio_ECPrivateKey failed");
+						throw ecdsa_exception("failed to load private key: PEM_read_bio_ECPrivateKey failed");
+					size_t keysize = EC_GROUP_get_degree(EC_KEY_get0_group(pkey.get()));
+					if(keysize != signature_length*4 && (signature_length != 132 || keysize != 521))
+						throw ecdsa_exception("invalid key size");
 				}
 				if(!pkey)
-					throw rsa_exception("at least one of public or private key need to be present");
+					throw ecdsa_exception("at least one of public or private key need to be present");
 
 				if(EC_KEY_check_key(pkey.get()) == 0)
 					throw ecdsa_exception("failed to load key: key is invalid");
@@ -355,19 +393,27 @@ namespace jwt {
 				const std::string hash = generate_hash(data);
 
 				std::unique_ptr<ECDSA_SIG, decltype(&ECDSA_SIG_free)>
-					sig(ECDSA_do_sign((const unsigned char*)hash.data(), hash.size(), pkey.get()), ECDSA_SIG_free);
+					sig(ECDSA_do_sign((const unsigned char*)hash.data(), static_cast<int>(hash.size()), pkey.get()), ECDSA_SIG_free);
 				if(!sig)
 					throw signature_generation_exception();
 #ifdef OPENSSL10
 
-				return bn2raw(sig->r) + bn2raw(sig->s);
+				auto rr = helper::bn2raw(sig->r);
+				auto rs = helper::bn2raw(sig->s);
 #else
 				const BIGNUM *r;
 				const BIGNUM *s;
 				ECDSA_SIG_get0(sig.get(), &r, &s);
-				return bn2raw(r) + bn2raw(s);
+				auto rr = helper::bn2raw(r);
+				auto rs = helper::bn2raw(s);
 #endif
+				if(rr.size() > signature_length/2 || rs.size() > signature_length/2)
+					throw std::logic_error("bignum size exceeded expected length");
+				while(rr.size() != signature_length/2) rr = '\0' + rr;
+				while(rs.size() != signature_length/2) rs = '\0' + rs;
+				return rr + rs;
 			}
+
 			/**
 			 * Check if signature is valid
 			 * \param data The data to check signature against
@@ -376,8 +422,8 @@ namespace jwt {
 			 */
 			void verify(const std::string& data, const std::string& signature) const {
 				const std::string hash = generate_hash(data);
-				auto r = raw2bn(signature.substr(0, signature.size() / 2));
-				auto s = raw2bn(signature.substr(signature.size() / 2));
+				auto r = helper::raw2bn(signature.substr(0, signature.size() / 2));
+				auto s = helper::raw2bn(signature.substr(signature.size() / 2));
 
 #ifdef OPENSSL10
 				ECDSA_SIG sig;
@@ -387,11 +433,11 @@ namespace jwt {
 				if(ECDSA_do_verify((const unsigned char*)hash.data(), hash.size(), &sig, pkey.get()) != 1)
 					throw signature_verification_exception("Invalid signature");
 #else
-				ECDSA_SIG *sig = ECDSA_SIG_new();
+				std::unique_ptr<ECDSA_SIG, decltype(&ECDSA_SIG_free)> sig(ECDSA_SIG_new(), ECDSA_SIG_free);
 
-				ECDSA_SIG_set0(sig, r.get(), s.get());
+				ECDSA_SIG_set0(sig.get(), r.release(), s.release());
 
-				if(ECDSA_do_verify((const unsigned char*)hash.data(), hash.size(), sig, pkey.get()) != 1)
+				if(ECDSA_do_verify((const unsigned char*)hash.data(), static_cast<int>(hash.size()), sig.get(), pkey.get()) != 1)
 					throw signature_verification_exception("Invalid signature");
 #endif
 			}
@@ -403,38 +449,6 @@ namespace jwt {
 				return alg_name;
 			}
 		private:
-			/**
-			 * Convert a OpenSSL BIGNUM to a std::string
-			 * \param bn BIGNUM to convert
-			 * \return bignum as string
-			 */
-#ifdef OPENSSL10
-			static std::string bn2raw(BIGNUM* bn)
-#else
-			static std::string bn2raw(const BIGNUM* bn)
-#endif
-			{
-				std::string res;
-				res.resize(BN_num_bytes(bn));
-				BN_bn2bin(bn, (unsigned char*)res.data());
-				if(res.size()%2 == 1 && res[0] == 0x00)
-					return res.substr(1);
-				return res;
-			}
-			/**
-			 * Convert an std::string to a OpenSSL BIGNUM
-			 * \param raw String to convert
-			 * \return BIGNUM representation
-			 */
-			static std::unique_ptr<BIGNUM, decltype(&BN_free)> raw2bn(const std::string& raw) {
-				if(static_cast<uint8_t>(raw[0]) >= 0x80) {
-					std::string str(1, 0x00);
-					str += raw;
-					return std::unique_ptr<BIGNUM, decltype(&BN_free)>(BN_bin2bn((const unsigned char*)str.data(), str.size(), nullptr), BN_free);
-				}
-				return std::unique_ptr<BIGNUM, decltype(&BN_free)>(BN_bin2bn((const unsigned char*)raw.data(), raw.size(), nullptr), BN_free);
-			}
-
 			/**
 			 * Hash the provided data using the hash function specified in constructor
 			 * \param data Data to hash
@@ -465,6 +479,8 @@ namespace jwt {
 			const EVP_MD*(*md)();
 			/// Algorithmname
 			const std::string alg_name;
+			/// Length of the resulting signature
+			const size_t signature_length;
 		};
 
 		/**
@@ -524,7 +540,7 @@ namespace jwt {
 				const int size = RSA_size(key.get());
 				
 				std::string sig(size, 0x00);
-				if(!RSA_public_decrypt(signature.size(), (const unsigned char*)signature.data(), (unsigned char*)sig.data(), key.get(), RSA_NO_PADDING))
+				if(!RSA_public_decrypt(static_cast<int>(signature.size()), (const unsigned char*)signature.data(), (unsigned char*)sig.data(), key.get(), RSA_NO_PADDING))
 					throw signature_verification_exception("Invalid signature");
 				
 				if(!RSA_verify_PKCS1_PSS_mgf1(key.get(), (const unsigned char*)hash.data(), md(), md(), (const unsigned char*)sig.data(), -1))
@@ -617,7 +633,7 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			rs256(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+			explicit rs256(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
 				: rsa(public_key, private_key, public_key_password, private_key_password, EVP_sha256, "RS256")
 			{}
 		};
@@ -632,7 +648,7 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			rs384(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+			explicit rs384(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
 				: rsa(public_key, private_key, public_key_password, private_key_password, EVP_sha384, "RS384")
 			{}
 		};
@@ -647,7 +663,7 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			rs512(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+			explicit rs512(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
 				: rsa(public_key, private_key, public_key_password, private_key_password, EVP_sha512, "RS512")
 			{}
 		};
@@ -662,8 +678,8 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			es256(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
-				: ecdsa(public_key, private_key, public_key_password, private_key_password, EVP_sha256, "ES256")
+			explicit es256(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+				: ecdsa(public_key, private_key, public_key_password, private_key_password, EVP_sha256, "ES256", 64)
 			{}
 		};
 		/**
@@ -677,8 +693,8 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			es384(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
-				: ecdsa(public_key, private_key, public_key_password, private_key_password, EVP_sha384, "ES384")
+			explicit es384(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+				: ecdsa(public_key, private_key, public_key_password, private_key_password, EVP_sha384, "ES384", 96)
 			{}
 		};
 		/**
@@ -692,8 +708,8 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			es512(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
-				: ecdsa(public_key, private_key, public_key_password, private_key_password, EVP_sha512, "ES512")
+			explicit es512(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+				: ecdsa(public_key, private_key, public_key_password, private_key_password, EVP_sha512, "ES512", 132)
 			{}
 		};
 
@@ -708,7 +724,7 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			ps256(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+			explicit ps256(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
 				: pss(public_key, private_key, public_key_password, private_key_password, EVP_sha256, "PS256")
 			{}
 		};
@@ -723,7 +739,7 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			ps384(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+			explicit ps384(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
 				: pss(public_key, private_key, public_key_password, private_key_password, EVP_sha384, "PS384")
 			{}
 		};
@@ -738,7 +754,7 @@ namespace jwt {
 			 * \param public_key_password Password to decrypt public key pem.
 			 * \param privat_key_password Password to decrypt private key pem.
 			 */
-			ps512(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
+			explicit ps512(const std::string& public_key, const std::string& private_key = "", const std::string& public_key_password = "", const std::string& private_key_password = "")
 				: pss(public_key, private_key, public_key_password, private_key_password, EVP_sha512, "PS512")
 			{}
 		};
@@ -763,33 +779,28 @@ namespace jwt {
 		claim()
 			: val()
 		{}
-#if JWT_CLAIM_EXPLICIT
-		explicit claim(std::string s)
+		JWT_CLAIM_EXPLICIT claim(std::string s)
 			: val(std::move(s))
 		{}
-		explicit claim(const date& s)
+		JWT_CLAIM_EXPLICIT claim(const date& s)
 			: val(int64_t(std::chrono::system_clock::to_time_t(s)))
 		{}
-		explicit claim(const std::set<std::string>& s)
+		JWT_CLAIM_EXPLICIT claim(const std::set<std::string>& s)
 			: val(picojson::array(s.cbegin(), s.cend()))
 		{}
-		explicit claim(const picojson::value& val)
+		JWT_CLAIM_EXPLICIT claim(const picojson::value& val)
 			: val(val)
 		{}
-#else
-		claim(std::string s)
-			: val(std::move(s))
-		{}
-		claim(const date& s)
-			: val(int64_t(std::chrono::system_clock::to_time_t(s)))
-		{}
-		claim(const std::set<std::string>& s)
-			: val(picojson::array(s.cbegin(), s.cend()))
-		{}
-		claim(const picojson::value& val)
-			: val(val)
-		{}
-#endif
+
+		template<typename Iterator>
+		claim(Iterator start, Iterator end)
+			: val(picojson::array())
+		{
+			auto& arr = val.get<picojson::array>();
+			for(; start != end; start++) {
+				arr.push_back(picojson::value(*start));
+			}
+		}
 
 		/**
 		 * Get wrapped json object
@@ -797,6 +808,15 @@ namespace jwt {
 		 */
 		picojson::value to_json() const {
 			return val;
+		}
+
+		/**
+		 * Parse input stream into wrapped json object
+		 * \return input stream
+		 */
+		inline std::istream& operator>>(std::istream& is)
+		{
+			return is >> val;
 		}
 
 		/**
@@ -1126,36 +1146,9 @@ namespace jwt {
 			signature = signature_base64 = token.substr(payload_end + 1);
 
 			// Fix padding: JWT requires padding to get removed
-			auto fix_padding = [](std::string& str) {
-				switch (str.size() % 4) {
-				case 1:
-					str += alphabet::base64url::fill();
-#ifdef __has_cpp_attribute
-#if __has_cpp_attribute(fallthrough)
-					[[fallthrough]];
-#endif
-#endif
-				case 2:
-					str += alphabet::base64url::fill();
-#ifdef __has_cpp_attribute
-#if __has_cpp_attribute(fallthrough)
-					[[fallthrough]];
-#endif
-#endif
-				case 3:
-					str += alphabet::base64url::fill();
-#ifdef __has_cpp_attribute
-#if __has_cpp_attribute(fallthrough)
-					[[fallthrough]];
-#endif
-#endif
-				default:
-					break;
-				}
-			};
-			fix_padding(header);
-			fix_padding(payload);
-			fix_padding(signature);
+			header = base::pad<alphabet::base64url>(header);
+			payload = base::pad<alphabet::base64url>(payload);
+			signature = base::pad<alphabet::base64url>(signature);
 
 			header = base::decode<alphabet::base64url>(header);
 			payload = base::decode<alphabet::base64url>(payload);
@@ -1180,37 +1173,37 @@ namespace jwt {
 		 * Get token string, as passed to constructor
 		 * \return token as passed to constructor
 		 */
-		const std::string& get_token() const { return token; }
+		const std::string& get_token() const noexcept { return token; }
 		/**
 		 * Get header part as json string
 		 * \return header part after base64 decoding
 		 */
-		const std::string& get_header() const { return header; }
+		const std::string& get_header() const noexcept { return header; }
 		/**
 		 * Get payload part as json string
 		 * \return payload part after base64 decoding
 		 */
-		const std::string& get_payload() const { return payload; }
+		const std::string& get_payload() const noexcept { return payload; }
 		/**
 		 * Get signature part as json string
 		 * \return signature part after base64 decoding
 		 */
-		const std::string& get_signature() const { return signature; }
+		const std::string& get_signature() const noexcept { return signature; }
 		/**
 		 * Get header part as base64 string
 		 * \return header part before base64 decoding
 		 */
-		const std::string& get_header_base64() const { return header_base64; }
+		const std::string& get_header_base64() const noexcept { return header_base64; }
 		/**
 		 * Get payload part as base64 string
 		 * \return payload part before base64 decoding
 		 */
-		const std::string& get_payload_base64() const { return payload_base64; }
+		const std::string& get_payload_base64() const noexcept { return payload_base64; }
 		/**
 		 * Get signature part as base64 string
 		 * \return signature part before base64 decoding
 		 */
-		const std::string& get_signature_base64() const { return signature_base64; }
+		const std::string& get_signature_base64() const noexcept { return signature_base64; }
 
 	};
 
@@ -1319,12 +1312,11 @@ namespace jwt {
 		 * \return Final token as a string
 		 */
 		template<typename T>
-		std::string sign(const T& algo) {
-			this->set_algorithm(algo.name());
-
+		std::string sign(const T& algo) const {
 			picojson::object obj_header;
+			obj_header["alg"] = picojson::value(algo.name());
 			for (auto& e : header_claims) {
-				obj_header.insert({ e.first, e.second.to_json() });
+				obj_header[e.first] = e.second.to_json();
 			}
 			picojson::object obj_payload;
 			for (auto& e : payload_claims) {
@@ -1332,10 +1324,7 @@ namespace jwt {
 			}
 
 			auto encode = [](const std::string& data) {
-				auto base = base::encode<alphabet::base64url>(data);
-				auto pos = base.find(alphabet::base64url::fill());
-				base = base.substr(0, pos);
-				return base;
+				return base::trim<alphabet::base64url>(base::encode<alphabet::base64url>(data));
 			};
 
 			std::string header = encode(picojson::value(obj_header).serialize());
@@ -1429,6 +1418,13 @@ namespace jwt {
 		 */
 		verifier& with_audience(const std::set<std::string>& aud) { return with_claim("aud", claim(aud)); }
 		/**
+		 * Set an audience to check for.
+		 * If the specified audiences is not present in the token the check fails.
+		 * \param aud Audience to check for.
+		 * \return *this to allow chaining
+		 */
+		verifier& with_audience(const std::string& aud) { return with_claim("aud", claim(aud)); }
+		/**
 		 * Set an id to check for.
 		 * Check is casesensitive.
 		 * \param id ID to check for.
@@ -1488,6 +1484,10 @@ namespace jwt {
 						if (*it1++ != *it2++)
 							throw token_verification_exception("claim " + key + " does not match expected");
 					}
+				}
+				else if (c.get_type() == claim::type::object) {
+					if( c.to_json().serialize() != jc.to_json().serialize())
+						throw token_verification_exception("claim " + key + " does not match expected");
 				}
 				else if (c.get_type() == claim::type::string) {
 					if (c.as_string() != jc.as_string())
@@ -1584,4 +1584,14 @@ namespace jwt {
 	decoded_jwt decode(const std::string& token) {
 		return decoded_jwt(token);
 	}
+}
+
+inline std::istream& operator>>(std::istream& is, jwt::claim& c)
+{
+	return c.operator>>(is);
+}
+
+inline std::ostream& operator<<(std::ostream& os, const jwt::claim& c)
+{
+	return os << c.to_json();
 }

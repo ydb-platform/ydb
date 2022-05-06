@@ -316,7 +316,7 @@ public:
         }
 
         TString GetName() const {
-            return TStringBuilder() << (Request->Secure ? "https://" : "http://") << Request->Host << Request->URL
+            return TStringBuilder() << (Request->Endpoint->Secure ? "https://" : "http://") << Request->Host << Request->URL
                 << " (" << CacheId << ")";
         }
     };

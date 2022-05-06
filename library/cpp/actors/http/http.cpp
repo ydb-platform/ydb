@@ -366,16 +366,28 @@ void THttpParser<THttpResponse, TSocketBuffer>::ConnectionClosed() {
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf data) {
     THttpParser<THttpResponse, TSocketBuffer> parser(data);
     THeadersBuilder headers(parser.Headers);
-    if (!WorkerName.empty()) {
-        headers.Set("X-Worker-Name", WorkerName);
+    if (!Endpoint->WorkerName.empty()) {
+        headers.Set("X-Worker-Name", Endpoint->WorkerName);
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this);
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
-    response->Set(headers);
     if (parser.HaveBody()) {
+        if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
+            TStringBuf contentType = parser.ContentType.Before(';');
+            Trim(ContentType, ' ');
+            if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
+                if (response->EnableCompression()) {
+                    headers.Erase("Content-Length"); // we will need new length after compression
+                }
+            }
+        }
+        response->Set(headers);
         response->SetBody(parser.Body);
     } else {
-        response->Set<&THttpResponse::ContentLength>("0");
+        response->Set(headers);
+        if (!response->ContentLength) {
+            response->Set<&THttpResponse::ContentLength>("0");
+        }
     }
     return response;
 }
@@ -415,8 +427,8 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status,
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this, "HTTP", version, status, message);
     response->Set<&THttpResponse::Connection>(GetConnection());
-    if (!WorkerName.empty()) {
-        response->Set("X-Worker-Name", WorkerName);
+    if (!Endpoint->WorkerName.empty()) {
+        response->Set("X-Worker-Name", Endpoint->WorkerName);
     }
     if (!contentType.empty() && !body.empty()) {
         response->Set<&THttpResponse::ContentType>(contentType);
@@ -699,6 +711,10 @@ THeadersBuilder::THeadersBuilder(const THeadersBuilder& builder) {
 void THeadersBuilder::Set(TStringBuf name, TStringBuf data) {
     Data.emplace_back(name, data);
     Headers[Data.back().first] = Data.back().second;
+}
+
+void THeadersBuilder::Erase(TStringBuf name) {
+    Headers.erase(name);
 }
 
 }

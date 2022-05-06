@@ -13,7 +13,7 @@ public:
     NActors::TPollerToken::TPtr PollerToken;
     THashSet<TActorId> Connections;
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
-    TEndpointInfo Endpoint;
+    std::shared_ptr<TPrivateEndpointInfo> Endpoint;
 
     TAcceptorActor(const TActorId& owner, const TActorId& poller)
         : NActors::TActor<TAcceptorActor>(&TAcceptorActor::StateInit)
@@ -45,19 +45,20 @@ protected:
     }
 
     void HandleInit(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
-        SocketAddressType bindAddress("::", event->Get()->Port);
-        Endpoint.Owner = ctx.SelfID;
-        Endpoint.Proxy = Owner;
-        Endpoint.WorkerName = event->Get()->WorkerName;
-        Endpoint.Secure = event->Get()->Secure;
+        SocketAddressType bindAddress(event->Get()->Address ? event->Get()->Address.data() : "::", event->Get()->Port);
+        Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
+        Endpoint->Owner = ctx.SelfID;
+        Endpoint->Proxy = Owner;
+        Endpoint->WorkerName = event->Get()->WorkerName;
+        Endpoint->Secure = event->Get()->Secure;
         int err = 0;
-        if (Endpoint.Secure) {
+        if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
-                Endpoint.SecureContext = TSslHelpers::CreateServerContext(event->Get()->SslCertificatePem);
+                Endpoint->SecureContext = TSslHelpers::CreateServerContext(event->Get()->SslCertificatePem);
             } else {
-                Endpoint.SecureContext = TSslHelpers::CreateServerContext(event->Get()->CertificateFile, event->Get()->PrivateKeyFile);
+                Endpoint->SecureContext = TSslHelpers::CreateServerContext(event->Get()->CertificateFile, event->Get()->PrivateKeyFile);
             }
-            if (Endpoint.SecureContext == nullptr) {
+            if (Endpoint->SecureContext == nullptr) {
                 err = -1;
                 LOG_WARN_S(ctx, HttpLog, "Failed to construct server security context");
             }
@@ -72,7 +73,7 @@ protected:
                 SetNonBlock(Socket->Socket);
                 ctx.Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 TBase::Become(&TAcceptorActor::StateListening);
-                ctx.Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress), 0, event->Cookie);
+                ctx.Send(event->Sender, new TEvHttpProxy::TEvConfirmListen(bindAddress, Endpoint), 0, event->Cookie);
                 return;
             }
         }

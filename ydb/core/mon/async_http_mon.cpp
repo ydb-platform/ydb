@@ -429,7 +429,18 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
             ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
         TStringBuilder workerName;
         workerName << FQDNHostName() << ":" << Config.Port;
-        ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvAddListeningPort(Config.Port, workerName));
+        auto addPort = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>();
+        addPort->Port = Config.Port;
+        addPort->WorkerName = workerName;
+        addPort->Address = Config.Address;
+        addPort->CompressContentTypes = {
+            "text/plain",
+            "text/html",
+            "text/css",
+            "application/javascript",
+            "application/json",
+        };
+        ActorSystem->Send(HttpProxyActorId, addPort.release());
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
         for (NMonitoring::IMonPage* page : ActorMonPages) {
             RegisterActorMonPage(page);

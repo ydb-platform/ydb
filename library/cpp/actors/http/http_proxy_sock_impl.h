@@ -49,7 +49,7 @@ struct TPlainSocketImpl : virtual public THttpConfig {
         return 1;
     }
 
-    static constexpr int OnAccept(const TEndpointInfo&, bool&, bool&) {
+    static int OnAccept(std::shared_ptr<TPrivateEndpointInfo>, bool&, bool&) {
         return 1;
     }
 
@@ -237,9 +237,9 @@ struct TSecureSocketImpl : TPlainSocketImpl, TSslHelpers {
         return res;
     }
 
-    int OnAccept(const TEndpointInfo& endpoint, bool& read, bool& write) {
+    int OnAccept(std::shared_ptr<TPrivateEndpointInfo> endpoint, bool& read, bool& write) {
         if (!Ssl) {
-            InitServerSsl(endpoint.SecureContext.Get());
+            InitServerSsl(endpoint->SecureContext.Get());
         }
         int res = SSL_accept(Ssl.Get());
         if (res <= 0) {

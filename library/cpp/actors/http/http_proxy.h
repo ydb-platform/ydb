@@ -44,12 +44,16 @@ struct TEvHttpProxy {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_HTTP), "ES_HTTP event space is too small.");
 
     struct TEvAddListeningPort : NActors::TEventLocal<TEvAddListeningPort, EvAddListeningPort> {
+        TString Address;
         TIpPort Port;
         TString WorkerName;
         bool Secure = false;
         TString CertificateFile;
         TString PrivateKeyFile;
         TString SslCertificatePem;
+        std::vector<TString> CompressContentTypes;
+
+        TEvAddListeningPort() = default;
 
         TEvAddListeningPort(TIpPort port)
             : Port(port)
@@ -63,9 +67,11 @@ struct TEvHttpProxy {
 
     struct TEvConfirmListen : NActors::TEventLocal<TEvConfirmListen, EvConfirmListen> {
         THttpConfig::SocketAddressType Address;
+        std::shared_ptr<THttpEndpointInfo> Endpoint;
 
-        TEvConfirmListen(const THttpConfig::SocketAddressType& address)
+        TEvConfirmListen(const THttpConfig::SocketAddressType& address, std::shared_ptr<THttpEndpointInfo> endpoint)
             : Address(address)
+            , Endpoint(std::move(endpoint))
         {}
     };
 
@@ -217,19 +223,21 @@ struct TEvHttpProxy {
     };
 };
 
-struct TEndpointInfo {
+struct TPrivateEndpointInfo : THttpEndpointInfo {
     TActorId Proxy;
     TActorId Owner;
-    TString WorkerName;
-    bool Secure;
     TSslHelpers::TSslHolder<SSL_CTX> SecureContext;
+
+    TPrivateEndpointInfo(const std::vector<TString>& compressContentTypes)
+        : THttpEndpointInfo(compressContentTypes)
+    {}
 };
 
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> registry = NMonitoring::TMetricRegistry::SharedInstance());
 NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner, const TActorId& poller);
 NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, const TString& host, bool secure, const TActorId& poller);
 NActors::IActor* CreateIncomingConnectionActor(
-        const TEndpointInfo& endpoint,
+        std::shared_ptr<TPrivateEndpointInfo> endpoint,
         TIntrusivePtr<TSocketDescriptor> socket,
         THttpConfig::SocketAddressType address,
         THttpIncomingRequestPtr recycledRequest = nullptr);

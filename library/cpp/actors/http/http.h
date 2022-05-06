@@ -99,6 +99,7 @@ struct THeadersBuilder : THeaders {
     THeadersBuilder(TStringBuf headers);
     THeadersBuilder(const THeadersBuilder& builder);
     void Set(TStringBuf name, TStringBuf data);
+    void Erase(TStringBuf name);
 };
 
 class TSocketBuffer : public TBuffer, public THttpConfig {
@@ -637,6 +638,19 @@ inline void THttpRenderer<THttpResponse, TSocketBuffer>::Set<&THttpResponse::Con
     SetContentEncoding(value);
 }
 
+struct THttpEndpointInfo {
+    TString WorkerName;
+    bool Secure = false;
+    const std::vector<TString> CompressContentTypes; // content types, which will be automatically compressed on response
+
+    THttpEndpointInfo() = default;
+
+protected:
+    THttpEndpointInfo(std::vector<TString> compressContentTypes)
+        : CompressContentTypes(std::move(compressContentTypes))
+    {}
+};
+
 class THttpIncomingRequest;
 using THttpIncomingRequestPtr = TIntrusivePtr<THttpIncomingRequest>;
 
@@ -647,10 +661,18 @@ class THttpIncomingRequest :
         public THttpParser<THttpRequest, TSocketBuffer>,
         public TRefCounted<THttpIncomingRequest, TAtomicCounter> {
 public:
+    std::shared_ptr<THttpEndpointInfo> Endpoint;
     THttpConfig::SocketAddressType Address;
-    TString WorkerName;
     THPTimer Timer;
-    bool Secure = false;
+
+    THttpIncomingRequest()
+        : Endpoint(std::make_shared<THttpEndpointInfo>())
+    {}
+
+    THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
+        : Endpoint(std::move(endpoint))
+        , Address(address)
+    {}
 
     bool IsConnectionClose() const {
         if (Connection.empty()) {
@@ -746,7 +768,7 @@ public:
         return GetRequest()->Method != "HEAD" && Status != "204";
     }
 
-    void EnableCompression() {
+    bool EnableCompression() {
         TStringBuf acceptEncoding = Request->AcceptEncoding;
         std::vector<TStringBuf> encodings;
         TStringBuf encoding;
@@ -759,7 +781,9 @@ public:
         if (!encodings.empty()) {
             // TODO: prioritize encodings
             SetContentEncoding(encodings.front());
+            return true;
         }
+        return false;
     }
 
     static TString CompressDeflate(TStringBuf source);

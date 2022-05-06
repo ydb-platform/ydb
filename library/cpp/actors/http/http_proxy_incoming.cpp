@@ -11,7 +11,7 @@ public:
     using TBase = TActor<TIncomingConnectionActor<TSocketImpl>>;
     static constexpr bool RecycleRequests = true;
 
-    const TEndpointInfo& Endpoint;
+    std::shared_ptr<TPrivateEndpointInfo> Endpoint;
     SocketAddressType Address;
     TList<THttpIncomingRequestPtr> Requests;
     THashMap<THttpIncomingRequestPtr, THttpOutgoingResponsePtr> Responses;
@@ -26,13 +26,13 @@ public:
     TPollerToken::TPtr PollerToken;
 
     TIncomingConnectionActor(
-            const TEndpointInfo& endpoint,
+            std::shared_ptr<TPrivateEndpointInfo> endpoint,
             TIntrusivePtr<TSocketDescriptor> socket,
             SocketAddressType address,
             THttpIncomingRequestPtr recycledRequest = nullptr)
         : TBase(&TIncomingConnectionActor::StateAccepting)
         , TSocketImpl(std::move(socket))
-        , Endpoint(endpoint)
+        , Endpoint(std::move(endpoint))
         , Address(address)
     {
         if (recycledRequest != nullptr) {
@@ -61,7 +61,7 @@ public:
     }
 
     void Die(const TActorContext& ctx) override {
-        ctx.Send(Endpoint.Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
+        ctx.Send(Endpoint->Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID, std::move(RecycledRequests)));
         TSocketImpl::Shutdown();
         TBase::Die(ctx);
     }
@@ -108,12 +108,11 @@ protected:
                     if (RecycleRequests && !RecycledRequests.empty()) {
                         CurrentRequest = std::move(RecycledRequests.front());
                         RecycledRequests.pop_front();
+                        CurrentRequest->Address = Address;
+                        CurrentRequest->Endpoint = Endpoint;
                     }  else {
-                        CurrentRequest = new THttpIncomingRequest();
+                        CurrentRequest = new THttpIncomingRequest(Endpoint, Address);
                     }
-                    CurrentRequest->Address = Address;
-                    CurrentRequest->WorkerName = Endpoint.WorkerName;
-                    CurrentRequest->Secure = Endpoint.Secure;
                 }
                 if (!CurrentRequest->EnsureEnoughSpaceAvailable()) {
                     LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - not enough space available");
@@ -130,7 +129,7 @@ protected:
                         CurrentRequest->Timer.Reset();
                         if (CurrentRequest->IsReady()) {
                             LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
-                            ctx.Send(Endpoint.Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
+                            ctx.Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
                             CurrentRequest = nullptr;
                         } else if (CurrentRequest->IsError()) {
                             LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
@@ -206,7 +205,7 @@ protected:
                         << TString(response->GetRawData()).substr(0, MAX_LOGGED_SIZE));
         }
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
-        ctx.Send(Endpoint.Owner, sensors.Release());
+        ctx.Send(Endpoint->Owner, sensors.Release());
         if (request == Requests.front() && CurrentResponse == nullptr) {
             CurrentResponse = response;
             return FlushOutput(ctx);
@@ -288,14 +287,14 @@ protected:
 };
 
 IActor* CreateIncomingConnectionActor(
-        const TEndpointInfo& endpoint,
+        std::shared_ptr<TPrivateEndpointInfo> endpoint,
         TIntrusivePtr<TSocketDescriptor> socket,
         THttpConfig::SocketAddressType address,
         THttpIncomingRequestPtr recycledRequest) {
-    if (endpoint.Secure) {
-        return new TIncomingConnectionActor<TSecureSocketImpl>(endpoint, std::move(socket), address, std::move(recycledRequest));
+    if (endpoint->Secure) {
+        return new TIncomingConnectionActor<TSecureSocketImpl>(std::move(endpoint), std::move(socket), address, std::move(recycledRequest));
     } else {
-        return new TIncomingConnectionActor<TPlainSocketImpl>(endpoint, std::move(socket), address, std::move(recycledRequest));
+        return new TIncomingConnectionActor<TPlainSocketImpl>(std::move(endpoint), std::move(socket), address, std::move(recycledRequest));
     }
 }
 

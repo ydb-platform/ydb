@@ -578,9 +578,26 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
             const ui32 localTableId = userTable->LocalTid;
             Y_VERIFY(Executor()->Scheme().GetTableInfo(localTableId));
 
-            auto policy = Executor()->Scheme().GetTableInfo(localTableId)->CompactionPolicy;
-            auto opts = TScanOptions().SetResourceBroker(policy->BackupResourceBrokerTask, policy->DefaultTaskPriority + 2);
-            const ui64 scanId = QueueScan(localTableId, scan.Release(), localTxId, opts);
+            auto* appData = AppData(ctx);
+            const auto& taskName = appData->DataShardConfig.GetTtlTaskName();
+            const auto taskPrio = appData->DataShardConfig.GetTtlTaskPriority();
+
+            ui64 readAheadLo = appData->DataShardConfig.GetTtlReadAheadLo();
+            if (ui64 readAheadLoOverride = GetTtlReadAheadLoOverride(); readAheadLoOverride > 0) {
+                readAheadLo = readAheadLoOverride;
+            }
+
+            ui64 readAheadHi = appData->DataShardConfig.GetTtlReadAheadHi();
+            if (ui64 readAheadHiOverride = GetTtlReadAheadHiOverride(); readAheadHiOverride > 0) {
+                readAheadHi = readAheadHiOverride;
+            }
+
+            const ui64 scanId = QueueScan(localTableId, scan.Release(), localTxId,
+                TScanOptions()
+                    .SetResourceBroker(taskName, taskPrio)
+                    .SetReadAhead(readAheadLo, readAheadHi)
+                    .SetReadPrio(TScanOptions::EReadPrio::Low)
+            );
             InFlightCondErase.Enqueue(localTxId, scanId, condition);
         }
     } else {

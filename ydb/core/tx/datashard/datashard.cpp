@@ -140,6 +140,8 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , ReadColumnsScanInUserPool(0, 0, 1)
     , BackupReadAheadLo(0, 0, 64*1024*1024)
     , BackupReadAheadHi(0, 0, 128*1024*1024)
+    , TtlReadAheadLo(0, 0, 64*1024*1024)
+    , TtlReadAheadHi(0, 0, 128*1024*1024)
     , EnablePrioritizedMvccSnapshotReads(1, 0, 1)
     , EnableUnprotectedMvccSnapshotReads(1, 0, 1)
     , EnableLeaderLeases(1, 0, 1)
@@ -306,6 +308,9 @@ void TDataShard::IcbRegister() {
 
         appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
         appData->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
+
+        appData->Icb->RegisterSharedControl(TtlReadAheadLo, "DataShardControls.TtlReadAheadLo");
+        appData->Icb->RegisterSharedControl(TtlReadAheadHi, "DataShardControls.TtlReadAheadHi");
 
         appData->Icb->RegisterSharedControl(EnablePrioritizedMvccSnapshotReads, "DataShardControls.PrioritizedMvccSnapshotReads");
         appData->Icb->RegisterSharedControl(EnableUnprotectedMvccSnapshotReads, "DataShardControls.UnprotectedMvccSnapshotReads");

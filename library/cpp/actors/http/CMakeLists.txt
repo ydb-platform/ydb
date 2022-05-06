@@ -7,12 +7,14 @@
 
 
 find_package(OpenSSL REQUIRED)
+find_package(ZLIB REQUIRED)
 
 add_library(cpp-actors-http)
 target_link_libraries(cpp-actors-http PUBLIC
   contrib-libs-cxxsupp
   yutil
   OpenSSL::OpenSSL
+  ZLIB::ZLIB
   cpp-actors-core
   cpp-actors-interconnect
   library-cpp-dns

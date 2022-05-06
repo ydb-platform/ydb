@@ -1,6 +1,6 @@
 #include "http.h"
 
-#include <contrib/libs/zlib/zlib.h>
+#include <zlib.h>
 
 namespace NHttp {
 

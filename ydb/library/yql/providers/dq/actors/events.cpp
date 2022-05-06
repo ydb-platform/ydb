@@ -12,25 +12,22 @@ namespace NYql::NDqs {
         Record.SetStatusCode(statusCode);
     }
 
-    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool retriable, bool needFallback) {
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
         IssuesToMessage(issues, Record.MutableIssues());
-        Record.SetDeprecatedRetriable(retriable);
-        Record.SetDeprecatedNeedFallback(needFallback);
         Record.SetStatusCode(statusCode);
     }
 
-    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssue& issue, bool retriable, bool needFallback)
-        : TEvDqFailure(statusCode, TIssues({issue}), retriable, needFallback)
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssue& issue)
+        : TEvDqFailure(statusCode, TIssues({issue}))
     {
     }
 
-    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& error, bool retriable, bool needFallback) 
-        : TEvDqFailure(
-            statusCode,
+/*
             TIssue(error).SetCode(
                 needFallback ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR : TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR), 
-            retriable, 
-            needFallback) {
+*/
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString&) 
+        : TEvDqFailure(statusCode) {
     }
 
     TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {

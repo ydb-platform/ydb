@@ -131,10 +131,15 @@ namespace NYql::NDqs {
                 queryResult.Mutableresult()->CopyFrom(result.resultset());
                 queryResult.set_yson(result.yson());
 
-                auto needFallback = result.GetDeprecatedNeedFallback();
-
-                if (needFallback != NCommon::NeedFallback(ev->Get()->Record.GetStatusCode())) {
-                    Counters->GetSubgroup("MistmatchedNeedFallback", needFallback ? "False" : "True")->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode()))->Inc();
+                bool needFallback;
+                auto statusCode = result.GetStatusCode();
+                if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
+                    needFallback = NCommon::NeedFallback(statusCode);
+                    if (needFallback != result.GetDeprecatedNeedFallback()) {
+                        Counters->GetSubgroup("MistmatchedNeedFallback", needFallback ? "True" : "False")->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(statusCode))->Inc();
+                    }
+                } else {
+                    needFallback = result.GetDeprecatedNeedFallback();
                 }
 
                 if (needFallback) {
@@ -185,27 +190,34 @@ namespace NYql::NDqs {
             }
 
             void OnReturnResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+                auto& result = ev->Get()->Record;
                 Y_UNUSED(ctx);
                 YQL_LOG_CTX_SCOPE(TraceId);
-                YQL_LOG(DEBUG) << "TServiceProxyActor::OnReturnResult " << ev->Get()->Record.GetMetric().size();
-                QueryStat.AddCounters(ev->Get()->Record);
-                auto retriable = ev->Get()->Record.GetDeprecatedRetriable();
+                YQL_LOG(DEBUG) << "TServiceProxyActor::OnReturnResult " << result.GetMetric().size();
+                QueryStat.AddCounters(result);
 
-                if (retriable != NCommon::IsRetriable(ev->Get()->Record.GetStatusCode())) {
-                    Counters->GetSubgroup("MistmatchedRetriable", retriable ? "False" : "True")->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(ev->Get()->Record.GetStatusCode()))->Inc();
+                bool retriable;
+                auto statusCode = result.GetStatusCode();
+                if (statusCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
+                    retriable = NCommon::IsRetriable(statusCode);
+                    if (retriable != result.GetDeprecatedRetriable()) {
+                        Counters->GetSubgroup("MistmatchedRetriable", retriable ? "True" : "False")->GetCounter(NYql::NDqProto::StatusIds_StatusCode_Name(statusCode))->Inc();
+                    }
+                } else {
+                    retriable = result.GetDeprecatedRetriable();
                 }
 
-                if (ev->Get()->Record.GetIssues().size() > 0 && retriable && Retry < MaxRetries) {
+                if (result.GetIssues().size() > 0 && retriable && Retry < MaxRetries) {
                     QueryStat.AddCounter(RetryName, TDuration::MilliSeconds(0));
                     NYql::TIssues issues;
-                    NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+                    NYql::IssuesFromMessage(result.GetIssues(), issues);
                     YQL_LOG(WARN) << RetryName << " " << Retry << " Issues: " << issues.ToString();
                     DoRetry();
                 } else {
-                    auto needFallback = ev->Get()->Record.GetDeprecatedNeedFallback();
-                    if (ev->Get()->Record.GetIssues().size() > 0) {
+                    auto needFallback = NCommon::NeedFallback(statusCode);
+                    if (result.GetIssues().size() > 0) {
                         NYql::TIssues issues;
-                        NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+                        NYql::IssuesFromMessage(result.GetIssues(), issues);
                         YQL_LOG(WARN) << "Issues: " << issues.ToString();
                         *ErrorCounter += 1;
                     }

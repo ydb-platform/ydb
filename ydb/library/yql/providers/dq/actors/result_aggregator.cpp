@@ -105,11 +105,11 @@ private:
         YQL_LOG(DEBUG) << __FUNCTION__;
         auto now = TInstant::Now();
         if (PullRequestTimeout && now - PullRequestStartTime > PullRequestTimeout) {
-            OnError(NYql::NDqProto::StatusIds::TIMEOUT, "Timeout " + ToString(SourceID.NodeId()), true, true);
+            OnError(NYql::NDqProto::StatusIds::TIMEOUT, "Timeout " + ToString(SourceID.NodeId()));
         }
 
         if (PingTimeout && now - PingStartTime > PingTimeout) {
-            OnError(NYql::NDqProto::StatusIds::TIMEOUT, "PingTimeout " + ToString(SourceID.NodeId()), true, true);
+            OnError(NYql::NDqProto::StatusIds::TIMEOUT, "PingTimeout " + ToString(SourceID.NodeId()));
         }
 
         if (!PingRequested) {
@@ -171,7 +171,7 @@ private:
                 Schedule(TDuration::MilliSeconds(10), new TEvPullResult());
                 return;
             case NYql::NDqProto::ERROR: {
-                OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, ev->Get()->Record.GetErrorMessage(), false, true);
+                OnError(NYql::NDqProto::StatusIds::UNSUPPORTED, ev->Get()->Record.GetErrorMessage());
                 break;
             }
             case NYql::NDqProto::UNKNOWN:

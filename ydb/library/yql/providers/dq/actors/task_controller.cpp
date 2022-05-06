@@ -99,7 +99,7 @@ private:
         TString message = "Undelivered Event " + ToString(ev->Get()->SourceType)
             + " from " + ToString(SelfId()) + " (Self) to " + ToString(ev->Sender) +
             + " Reason: " + ToString(ev->Get()->Reason) + " Cookie: " + ToString(ev->Cookie);
-        OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, true, true);
+        OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message);
     }
 
     void OnAbortExecution(NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
@@ -107,7 +107,7 @@ private:
         auto statusCode = ev->Get()->Record.GetStatusCode();
         TIssues issues = ev->Get()->GetIssues();
         YQL_LOG(DEBUG) << "AbortExecution from " << ev->Sender << ":" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << " " << issues.ToOneLineString();
-        OnError(statusCode, issues, NCommon::IsRetriable(ev), NCommon::NeedFallback(ev));
+        OnError(statusCode, issues);
     }
 
     void OnComputeActorState(NDq::TEvDqCompute::TEvState::TPtr& ev) {
@@ -134,20 +134,13 @@ private:
             case NDqProto::COMPUTE_STATE_UNKNOWN: {
                 // TODO: use issues
                 TString message = "unexpected state from " + ToString(computeActor) + ", task: " + ToString(taskId);
-                OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message, false, false);
+                OnError(NYql::NDqProto::StatusIds::BAD_REQUEST, message);
                 break;
             }
             case NDqProto::COMPUTE_STATE_FAILURE: {
                 // TODO: don't convert issues to string
                 NYql::IssuesFromMessage(state.GetIssues(), Issues);
-                bool retriable = true;
-                for (const auto& issue : Issues) {
-                    if (issue.IssueCode == TIssuesIds::UNEXPECTED) {
-                        retriable = false;
-                        break;
-                    }
-                }
-                OnError(state.GetStatusCode(), Issues, retriable, false);
+                OnError(state.GetStatusCode(), Issues);
                 break;
             }
             case NDqProto::COMPUTE_STATE_EXECUTING: {
@@ -490,25 +483,25 @@ private:
         }
     }
 
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool retriable, bool needFallback) {
+    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << "OnError " << issues.ToOneLineString() << " " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode);
         if (Finished) {
             YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(WARN) << "OnError IGNORED when Finished, Retriable=" << retriable << ", NeedFallback=" << needFallback;
+            YQL_LOG(WARN) << "OnError IGNORED when Finished";
         } else {
-            auto req = MakeHolder<TEvDqFailure>(statusCode, issues, retriable, needFallback);
+            auto req = MakeHolder<TEvDqFailure>(statusCode, issues);
             FinalStat().FlushCounters(req->Record);
             Send(ExecuterId, req.Release());
             Finished = true;
         }
     }
 
-    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, bool retriable, bool needFallback) {
-        auto issueCode = needFallback
+    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message) {
+        auto issueCode = NCommon::NeedFallback(statusCode)
             ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
             : TIssuesIds::DQ_GATEWAY_ERROR;
-        OnError(statusCode, TIssues({TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR)}), retriable, needFallback);
+        OnError(statusCode, TIssues({TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR)}));
     }
 
     void Finish() {

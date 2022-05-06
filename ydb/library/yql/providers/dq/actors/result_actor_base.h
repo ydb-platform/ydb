@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -95,7 +96,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                         return true;
                     });
                 } catch (...) {
-                    OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, CurrentExceptionMessage(), false, true);
+                    OnError(NYql::NDqProto::StatusIds::UNSUPPORTED, CurrentExceptionMessage());
                     return;
                 }
 
@@ -124,14 +125,14 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
         }
 
-        void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, bool retriable, bool needFallback) {
+        void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message) {
             YQL_LOG(ERROR) << "OnError " << message;
-            auto issueCode = needFallback
+            auto issueCode = NCommon::NeedFallback(statusCode)
                 ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
                 : TIssuesIds::DQ_GATEWAY_ERROR;
             const auto issue = TIssue(message).SetCode(issueCode, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});  // remember issue to pass it with TEvQueryResponse, cause executor_actor ignores TEvDqFailure after finish
-            auto req = MakeHolder<TEvDqFailure>(statusCode, issue, retriable, needFallback);
+            auto req = MakeHolder<TEvDqFailure>(statusCode, issue);
             FlushCounters(req->Record);
             TBase::Send(ExecuterID, req.Release());
         }
@@ -222,7 +223,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             TString message = "Undelivered from " + ToString(ev->Sender) + " to " + ToString(TBase::SelfId())
                 + " reason: " + ToString(ev->Get()->Reason) + " sourceType: " + ToString(ev->Get()->SourceType >> 16)
                 + "." + ToString(ev->Get()->SourceType & 0xFFFF);
-            OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, true, true);
+            OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message);
         }
 
         void OnFullResultWriterAck(TEvFullResultWriterAck::TPtr& ev, const NActors::TActorContext&) {
@@ -283,7 +284,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                 YQL_LOG_CTX_SCOPE(TraceId);
 
                 if (auto msg = ev->Get()->Record.GetErrorMessage()) {
-                    OnError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, msg, false, true);
+                    OnError(NYql::NDqProto::StatusIds::UNSUPPORTED, msg);
                 } else {
                     NActorsProto::TActorId fullResultWriterProto;
                     ev->Get()->Record.GetMessage().UnpackTo(&fullResultWriterProto);

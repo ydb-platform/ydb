@@ -1,5 +1,5 @@
 items:
 #- name: Overview
 #  href: concepts.md
-- name: Local deployment
+- name: On-premise deployment
   href: deploy-ydb-on-premises.md

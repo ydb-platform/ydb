@@ -156,7 +156,7 @@ void SetupServices(TTestActorRuntime &runtime,
         runtime.DispatchEvents(options);
     }
 
-    auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeNodeBrokerID(0), TTabletTypes::NODE_BROKER), &CreateNodeBroker);
+    auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeNodeBrokerID(0), TTabletTypes::NodeBroker), &CreateNodeBroker);
     runtime.EnableScheduleForActor(aid, true);
 }
 

@@ -563,7 +563,7 @@ public:
         , RoundCounter(0xdeadbeefdeadbeefull)
         , SelfSeed(0xdeadbeefdeadbeefull)
     {
-        Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType);
+        Y_VERIFY(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
     }
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId &selfId, const TActorId &parentId) override {

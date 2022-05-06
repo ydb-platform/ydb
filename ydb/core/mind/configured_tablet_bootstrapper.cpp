@@ -73,7 +73,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             // extract from kikimr_services_initializer
             const TTabletTypes::EType tabletType = BootstrapperTypeToTabletType(config.GetType());
 
-            if (storageInfo->TabletType == TTabletTypes::TYPE_INVALID)
+            if (storageInfo->TabletType == TTabletTypes::TypeInvalid)
                 storageInfo->TabletType = tabletType;
 
             TIntrusivePtr<TTabletSetupInfo> tabletSetupInfo = MakeTabletSetupInfo(tabletType, appData->UserPoolId, appData->SystemPoolId);
@@ -127,42 +127,42 @@ public:
 TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type) {
     switch (type) {
     case NKikimrConfig::TBootstrap::TX_DUMMY:
-        return TTabletTypes::TX_DUMMY;
+        return TTabletTypes::Dummy;
     case NKikimrConfig::TBootstrap::HIVE:
     case NKikimrConfig::TBootstrap::FLAT_HIVE:
-        return TTabletTypes::FLAT_HIVE;
+        return TTabletTypes::Hive;
     case NKikimrConfig::TBootstrap::TX_COORDINATOR:
     case NKikimrConfig::TBootstrap::FLAT_TX_COORDINATOR:
-        return TTabletTypes::FLAT_TX_COORDINATOR;
+        return TTabletTypes::Coordinator;
     case NKikimrConfig::TBootstrap::TX_MEDIATOR:
-        return TTabletTypes::TX_MEDIATOR;
+        return TTabletTypes::Mediator;
     case NKikimrConfig::TBootstrap::BS_DOMAINCONTROLLER:
     case NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER:
-        return TTabletTypes::FLAT_BS_CONTROLLER;
+        return TTabletTypes::BSController;
     case NKikimrConfig::TBootstrap::DATASHARD:
     case NKikimrConfig::TBootstrap::FAKE_DATASHARD:
-        return TTabletTypes::FLAT_DATASHARD;
+        return TTabletTypes::DataShard;
     case NKikimrConfig::TBootstrap::SCHEMESHARD:
     case NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD:
-        return TTabletTypes::FLAT_SCHEMESHARD;
+        return TTabletTypes::SchemeShard;
     case NKikimrConfig::TBootstrap::KEYVALUEFLAT:
-        return TTabletTypes::KEYVALUEFLAT;
+        return TTabletTypes::KeyValue;
     case NKikimrConfig::TBootstrap::TX_PROXY:
     case NKikimrConfig::TBootstrap::FLAT_TX_PROXY:
     case NKikimrConfig::TBootstrap::TX_ALLOCATOR:
-        return TTabletTypes::TX_ALLOCATOR;
+        return TTabletTypes::TxAllocator;
     case NKikimrConfig::TBootstrap::CMS:
-        return TTabletTypes::CMS;
+        return TTabletTypes::Cms;
     case NKikimrConfig::TBootstrap::NODE_BROKER:
-        return TTabletTypes::NODE_BROKER;
+        return TTabletTypes::NodeBroker;
     case NKikimrConfig::TBootstrap::TENANT_SLOT_BROKER:
-        return TTabletTypes::TENANT_SLOT_BROKER;
+        return TTabletTypes::TenantSlotBroker;
     case NKikimrConfig::TBootstrap::CONSOLE:
-        return TTabletTypes::CONSOLE;
+        return TTabletTypes::Console;
     default:
         Y_FAIL("unknown tablet type");
     }
-    return TTabletTypes::TYPE_INVALID;
+    return TTabletTypes::TypeInvalid;
 }
 
 TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
@@ -196,7 +196,7 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::KeyValue:
         createFunc = &CreateKeyValueFlat;
         break;
-    case TTabletTypes::CMS:
+    case TTabletTypes::Cms:
         createFunc = &NCms::CreateCms;
         break;
     case TTabletTypes::NodeBroker:

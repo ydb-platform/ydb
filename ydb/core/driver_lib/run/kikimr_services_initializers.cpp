@@ -1317,7 +1317,7 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
 
     tabletSetup = MakeTabletSetupInfo(tabletType, workPoolId, appData->SystemPoolId);
 
-    if (tabletInfo->TabletType == TTabletTypes::TYPE_INVALID) {
+    if (tabletInfo->TabletType == TTabletTypes::TypeInvalid) {
         tabletInfo->TabletType = tabletType;
     }
 

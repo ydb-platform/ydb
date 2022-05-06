@@ -28,7 +28,7 @@ namespace NFake {
             auto *info = new TStorageInfo;
 
             info->TabletID = tablet;
-            info->TabletType = TTabletTypes::TX_DUMMY;
+            info->TabletType = TTabletTypes::Dummy;
             info->Channels.resize(4);
 
             for (auto num: xrange(info->Channels.size())) {

@@ -56,7 +56,7 @@ public:
         : TTabletInfo(ETabletRole::Leader, hive)
         , Id(id)
         , State(ETabletState::Unknown)
-        , Type(TTabletTypes::TYPE_INVALID)
+        , Type(TTabletTypes::TypeInvalid)
         , ObjectId(0)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)

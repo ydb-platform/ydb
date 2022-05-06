@@ -99,7 +99,7 @@ struct TTestContext {
 
 
     TTestContext() {
-        TabletType = TTabletTypes::PERSQUEUE;
+        TabletType = TTabletTypes::PersQueue;
         TabletId = MakeTabletID(0, 0, 1);
         TabletIds.push_back(TabletId);
 
@@ -152,7 +152,7 @@ struct TTestContext {
         Runtime->DispatchEvents(options);
 
         CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone),
+            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PersQueueReadBalancer, TErasureType::ErasureNone),
             &CreatePersQueueReadBalancer);
 
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -179,7 +179,7 @@ struct TTestContext {
         Runtime->DispatchEvents(options);
 
         CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone),
+            CreateTestTabletInfo(BalancerTabletId, TTabletTypes::PersQueueReadBalancer, TErasureType::ErasureNone),
             &CreatePersQueueReadBalancer);
 
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));

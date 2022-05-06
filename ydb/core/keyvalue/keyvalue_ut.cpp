@@ -77,7 +77,7 @@ struct TTestContext {
     TActorId Edge;
 
     TTestContext() {
-        TabletType = TTabletTypes::KEYVALUEFLAT;
+        TabletType = TTabletTypes::KeyValue;
         TabletId = MakeTabletID(0, 0, 1);
         TabletIds.push_back(TabletId);
     }

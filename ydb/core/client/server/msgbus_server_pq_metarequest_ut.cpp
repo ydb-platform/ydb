@@ -126,7 +126,7 @@ protected:
 
     TActorId StartBalancer(ui64 balancerTabletId) {
         TActorId id = CreateTestBootstrapper(*Runtime,
-                                       CreateTestTabletInfo(balancerTabletId, TTabletTypes::PERSQUEUE_READ_BALANCER, TErasureType::ErasureNone),
+                                       CreateTestTabletInfo(balancerTabletId, TTabletTypes::PersQueueReadBalancer, TErasureType::ErasureNone),
                                        &CreatePersQueueReadBalancer);
 
         TDispatchOptions options;
@@ -184,7 +184,7 @@ protected:
 
     TActorId StartPQTablet(ui64 tabletId) {
         TActorId id = CreateTestBootstrapper(*Runtime,
-                                       CreateTestTabletInfo(tabletId, TTabletTypes::PERSQUEUE, TErasureType::ErasureNone),
+                                       CreateTestTabletInfo(tabletId, TTabletTypes::PersQueue, TErasureType::ErasureNone),
                                        &CreatePersQueue);
 
         TDispatchOptions options;

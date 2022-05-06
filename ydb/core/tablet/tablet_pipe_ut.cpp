@@ -405,10 +405,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -445,10 +445,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -474,7 +474,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -516,10 +516,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -543,10 +543,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -581,10 +581,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -626,10 +626,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -660,10 +660,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -687,10 +687,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTabletWithoutAcceptor(tablet, info);
         });
 
@@ -726,10 +726,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTabletWithoutAcceptor(tablet, info);
         });
 
@@ -771,10 +771,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -798,10 +798,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         }, 1);
 
@@ -831,10 +831,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         }, 1);
 
@@ -883,7 +883,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto scheduledEventsGuard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         });
 
@@ -912,7 +912,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
             runtime.DispatchEvents(options);
         }
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         });
 
@@ -936,10 +936,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         }, 1);
 
@@ -993,10 +993,10 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender1);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TProducerTablet(tablet, info);
         }, 0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TConsumerTablet(tablet, info);
         }, 1);
 
@@ -1135,7 +1135,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TActorId sender1 = runtime.AllocateEdgeActor(0);
         TActorId sender2 = runtime.AllocateEdgeActor(1);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy), [](const TActorId & tablet, TTabletStorageInfo* info) {
             return new TEchoTablet(tablet, info);
         });
 

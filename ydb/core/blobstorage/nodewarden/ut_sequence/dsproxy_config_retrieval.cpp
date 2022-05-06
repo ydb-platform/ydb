@@ -79,7 +79,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
 
     runtime.Initialize(app.Unwrap());
 
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController);
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::BSController), &CreateFlatBsController);
 
     // setup box and storage pool for testing
     {

@@ -59,7 +59,7 @@ void AllocateAndCheck(NActors::TTestActorRuntime &runtime, ui64 size, TResultSta
 }
 
 void TTestEnv::Boot(TTestActorRuntime &runtime) {
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TxAllocatorTablet, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TxAllocatorTablet, TTabletTypes::TxAllocator), &CreateTxAllocator);
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));

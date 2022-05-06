@@ -313,8 +313,8 @@ public:
             alter->AddStoragePool(pool);
         }
 
-        DeclareShards(txState, OperationId.GetTxId(), newNode->PathId, settings.GetCoordinators(), TTabletTypes::FLAT_TX_COORDINATOR, channelBindings, context.SS);
-        DeclareShards(txState, OperationId.GetTxId(), newNode->PathId, settings.GetMediators(), TTabletTypes::TX_MEDIATOR, channelBindings, context.SS);
+        DeclareShards(txState, OperationId.GetTxId(), newNode->PathId, settings.GetCoordinators(), TTabletTypes::Coordinator, channelBindings, context.SS);
+        DeclareShards(txState, OperationId.GetTxId(), newNode->PathId, settings.GetMediators(), TTabletTypes::Mediator, channelBindings, context.SS);
 
         for (auto& shard: txState.Shards) {
             alter->AddPrivateShard(shard.Idx);

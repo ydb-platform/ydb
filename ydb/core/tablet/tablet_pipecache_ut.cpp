@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY),
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
             [](const TActorId& tablet, TTabletStorageInfo* info) {
                 return new TCustomTablet(tablet, info);
             });
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
         UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->TabletId, TTestTxConfig::TxTablet0);
         UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->NodeId, 0);
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY),
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy),
             [](const TActorId& tablet, TTabletStorageInfo* info) {
                 return new TCustomTablet(tablet, info);
             });

@@ -209,7 +209,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
     static void BootSchemeShard(TTestActorRuntime& runtime, ui64 tabletId) {
         using namespace NSchemeShard;
 
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
 
         const TActorId edge = runtime.AllocateEdgeActor();
 
@@ -223,7 +223,7 @@ class TTestWithSchemeshard: public NUnitTest::TTestBase {
     }
 
     static void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId) {
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TxAllocator), &CreateTxAllocator);
     }
 
     void BootCoordinator(TTestActorRuntime& runtime, ui64 tabletId) {

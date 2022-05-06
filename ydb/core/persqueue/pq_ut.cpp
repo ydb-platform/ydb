@@ -489,7 +489,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
 void CheckLabeledCountersResponse(ui32 count, TTestContext& tc, TVector<TString> mustHave = {})
 {
-    IActor* actor = CreateClusterLabeledCountersAggregatorActor(tc.Edge, TTabletTypes::PERSQUEUE);
+    IActor* actor = CreateClusterLabeledCountersAggregatorActor(tc.Edge, TTabletTypes::PersQueue);
     tc.Runtime->Register(actor);
 
     TAutoPtr<IEventHandle> handle;

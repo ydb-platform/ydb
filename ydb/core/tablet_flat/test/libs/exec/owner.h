@@ -31,7 +31,7 @@ namespace NFake {
             , Limit(Max(ui32(1), limit))
             , FollowerId(followerId)
         {
-            Y_VERIFY(TTabletTypes::TYPE_INVALID != Info->TabletType);
+            Y_VERIFY(TTabletTypes::TypeInvalid != Info->TabletType);
         }
 
     private:

@@ -949,7 +949,7 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(ctx.SelfID.NodeId());
         ctx.Send(countersAggregator, new TEvTabletCounters::TEvTabletAddLabeledCounters(
-                                        CounterEventsInflight[group], TabletID(), TTabletTypes::PERSQUEUE, aggr));
+                                        CounterEventsInflight[group], TabletID(), TTabletTypes::PersQueue, aggr));
     }
 }
 

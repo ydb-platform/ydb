@@ -525,7 +525,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
 
     TActorId sender = runtime.AllocateEdgeActor();
-    //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::FLAT_BS_CONTROLLER), &CreateFlatBsController);
+    //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::BSController), &CreateFlatBsController);
     BootSchemeShard(runtime, schemeRoot);
     BootTxAllocator(runtime, txAllocator);
     BootFakeCoordinator(runtime, coordinator, CoordinatorState);
@@ -834,11 +834,11 @@ void NSchemeShardUT_Private::TTestEnv::InitRootStoragePools(NActors::TTestActorR
 
 
 void NSchemeShardUT_Private::TTestEnv::BootSchemeShard(NActors::TTestActorRuntime &runtime, ui64 schemeRoot) {
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(schemeRoot, TTabletTypes::FLAT_SCHEMESHARD), SchemeShardFactory);
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(schemeRoot, TTabletTypes::SchemeShard), SchemeShardFactory);
 }
 
 void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntime &runtime, ui64 tabletId) {
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TxAllocator), &CreateTxAllocator);
 }
 
 NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)

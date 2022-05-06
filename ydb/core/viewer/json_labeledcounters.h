@@ -66,7 +66,7 @@ public:
                 Groups = topic;
             }
         }
-        CreateClusterLabeledCountersAggregator(ctx.SelfID, TTabletTypes::PERSQUEUE, ctx, Version, Version >= 2 ? Groups : TString());
+        CreateClusterLabeledCountersAggregator(ctx.SelfID, TTabletTypes::PersQueue, ctx, Version, Version >= 2 ? Groups : TString());
         Become(&TThis::StateRequestedTopicInfo, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 

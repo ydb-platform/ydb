@@ -1448,7 +1448,7 @@ private:
             TCountersByTabletType& countersByTabletType)
         {
             auto datashard = FindCountersByTabletType(
-                TTabletTypes::FLAT_DATASHARD, countersByTabletType);
+                TTabletTypes::DataShard, countersByTabletType);
 
             if (datashard && !RowUpdates) {
                 auto datashardGroup = counters->GetSubgroup("type", "DataShard");
@@ -1475,7 +1475,7 @@ private:
             }
 
             auto schemeshard = FindCountersByTabletType(
-                TTabletTypes::FLAT_SCHEMESHARD, countersByTabletType);
+                TTabletTypes::SchemeShard, countersByTabletType);
 
             if (schemeshard && !DiskSpaceTablesTotalBytes) {
                 auto schemeshardGroup = counters->GetSubgroup("type", "SchemeShard");
@@ -1940,7 +1940,7 @@ TTabletCountersAggregatorActor::HandleWork(NMon::TEvHttpInfo::TPtr &ev, const TA
     TString reqTabletType = ev->Get()->Request.GetParams().Get("type");
     ui32 workers = 0;
     TryFromString(ev->Get()->Request.GetParams().Get("workers"), workers);
-    for (ui32 tabletType = 0; tabletType < TTabletTypes::USER_TYPE_START; ++tabletType) {
+    for (ui32 tabletType = 0; tabletType < TTabletTypes::UserTypeStart; ++tabletType) {
         if (!NKikimrTabletBase::TTabletTypes::EType_IsValid(tabletType))
             continue;
         TString tabletTypeStr = TTabletTypes::TypeToStr((TTabletTypes::EType)tabletType);

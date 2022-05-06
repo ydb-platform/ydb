@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         std::unique_ptr<TTabletCountersBase> AppCountersBaseline;
 
     public:
-        static constexpr TTabletTypes::EType TabletType = TTabletTypes::FLAT_DATASHARD;
+        static constexpr TTabletTypes::EType TabletType = TTabletTypes::DataShard;
 
         static constexpr TTabletPercentileCounter::TRangeDef RangeDefs1[] = {
             {0,   "0"}

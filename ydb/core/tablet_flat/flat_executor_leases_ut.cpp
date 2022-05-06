@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
         const ui64 tabletId = TTestTxConfig::TxTablet0;
 
         auto boot1 = CreateTestBootstrapper(runtime,
-            CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY),
+            CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
             [enableInitialLease](const TActorId & tablet, TTabletStorageInfo* info) {
                 return new TLeasesTablet(tablet, info, enableInitialLease);
             });
@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
         auto prevObserver = runtime.SetObserverFunc(observerFunc);
 
         auto boot2 = CreateTestBootstrapper(runtime,
-            CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY),
+            CreateTestTabletInfo(tabletId, TTabletTypes::Dummy),
             [enableInitialLease](const TActorId & tablet, TTabletStorageInfo* info) {
                 return new TLeasesTablet(tablet, info, enableInitialLease);
             },

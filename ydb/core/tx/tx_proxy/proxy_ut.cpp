@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         ui64 owner = THash<TString>()("CreateTablet");
         ui64 index = 1;
         TAutoPtr<NMsgBusProxy::TBusResponse> resp = env.GetClient().HiveCreateTablet(
-                    env.GetSettings().Domain, owner, index, TTabletTypes::TX_DUMMY, {}, {});
+                    env.GetSettings().Domain, owner, index, TTabletTypes::Dummy, {}, {});
         NKikimrClient::TResponse& record = resp->Record;
 
         UNIT_ASSERT_VALUES_EQUAL(record.CreateTabletResultSize(), 1);
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         allowed_domains.push_back(TSubDomainKey(999, 999));
 
         TAutoPtr<NMsgBusProxy::TBusResponse> resp = env.GetClient().HiveCreateTablet(
-                    env.GetSettings().Domain, owner, index, TTabletTypes::TX_DUMMY, {}, allowed_domains);
+                    env.GetSettings().Domain, owner, index, TTabletTypes::Dummy, {}, allowed_domains);
         NKikimrClient::TResponse& record = resp->Record;
 
         UNIT_ASSERT_VALUES_EQUAL(record.CreateTabletResultSize(), 1);

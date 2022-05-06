@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NKesus {
 
 TTestContext::TTestContext()
-    : TabletType(TTabletTypes::KESUS)
+    : TabletType(TTabletTypes::Kesus)
     , TabletId(MakeTabletID(0, 0, 1))
 {}
 

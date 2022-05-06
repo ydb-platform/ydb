@@ -42,7 +42,7 @@ void TTestEnv::AsyncAllocate(ui64 size) {
 }
 
 void TTestEnv::Boot() {
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(TxAllocatorTablet, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(TxAllocatorTablet, TTabletTypes::TxAllocator), &CreateTxAllocator);
 
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));

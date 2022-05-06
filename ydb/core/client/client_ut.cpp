@@ -2064,7 +2064,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
@@ -2144,7 +2144,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
@@ -2195,7 +2195,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
@@ -2318,7 +2318,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();
@@ -2509,7 +2509,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         // Start leader on node 1
@@ -2670,7 +2670,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId leaderEdge = runtime.AllocateEdgeActor();
@@ -2768,7 +2768,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TTestActorRuntime &runtime = *server.GetRuntime();
 
         const ui64 tabletId = ChangeStateStorage(DummyTablet1, settings.Domain);
-        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo = CreateTestTabletInfo(tabletId, TTabletTypes::Dummy);
         TIntrusivePtr<TTabletSetupInfo> setupInfo = new TTabletSetupInfo(&CreateFlatDummyTablet, TMailboxType::Simple, 0, TMailboxType::Simple, 0);
 
         const TActorId edge = runtime.AllocateEdgeActor();

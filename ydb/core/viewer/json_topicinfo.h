@@ -47,7 +47,7 @@ public:
         if (pos != TString::npos)
             Topic = Topic.substr(pos + 1);
         //proxy is not used
-        CreateClusterLabeledCountersAggregator(ctx.SelfID, TTabletTypes::PERSQUEUE, ctx);
+        CreateClusterLabeledCountersAggregator(ctx.SelfID, TTabletTypes::PersQueue, ctx);
 
         Become(&TThis::StateRequestedTopicInfo, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }

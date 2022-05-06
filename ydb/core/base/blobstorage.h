@@ -315,7 +315,7 @@ public:
     //
     TTabletStorageInfo()
         : TabletID(Max<ui64>())
-        , TabletType(TTabletTypes::TYPE_INVALID)
+        , TabletType(TTabletTypes::TypeInvalid)
         , Version(0)
     {}
     TTabletStorageInfo(ui64 tabletId, TTabletTypes::EType tabletType)

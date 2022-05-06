@@ -67,8 +67,8 @@ TTester::TTester(ESchema schema, const TOptions& opts)
     Sender = Runtime.AllocateEdgeActor();
 
     // Schemeshard is only used to receive notifications
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TxAllocator), &CreateTxAllocator);
     CreateSchema(schema, opts);
 }
 
@@ -86,8 +86,8 @@ TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void
     DispatchName = dispatchName;
 
     // Schemeshard is only used to receive notifications
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
-    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
+    CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TxAllocator), &CreateTxAllocator);
     CreateSchema(schema, opts);
 }
 
@@ -148,7 +148,7 @@ TTester::TKeyResolver TTester::GetKeyResolver() const {
 }
 
 void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TString& schemeText, bool withRegister) {
-    TActorId actorId = CreateTestBootstrapper(Runtime, CreateTestTabletInfo(tabletId, TTabletTypes::FLAT_DATASHARD),
+    TActorId actorId = CreateTestBootstrapper(Runtime, CreateTestTabletInfo(tabletId, TTabletTypes::DataShard),
         &::NKikimr::CreateDataShard);
     Y_UNUSED(actorId);
 

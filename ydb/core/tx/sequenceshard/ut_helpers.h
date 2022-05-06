@@ -13,7 +13,7 @@ namespace NKikimr {
 namespace NSequenceShard {
 
     struct TTestContext {
-        TTabletTypes::EType TabletType = TTabletTypes::SEQUENCESHARD;
+        TTabletTypes::EType TabletType = TTabletTypes::SequenceShard;
         ui64 TabletId = MakeTabletID(0, 0, 1);
         THolder<TTestActorRuntime> Runtime;
         TActorId ClientId;

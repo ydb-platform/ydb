@@ -14,7 +14,7 @@ void RunTestCase(TCallback&& callback) {
     TTestActorSystem runtime(1);
     runtime.Start();
     const TActorId& parentId = runtime.AllocateEdgeActor(1);
-    TBlobStorageController Controller({}, new TTabletStorageInfo(1, TTabletTypes::FLAT_BS_CONTROLLER));
+    TBlobStorageController Controller({}, new TTabletStorageInfo(1, TTabletTypes::BSController));
     const TActorId& selfHealId = runtime.Register(Controller.CreateSelfHealActor(), parentId, {}, {}, 1);
     callback(selfHealId, parentId, runtime);
     runtime.Stop();

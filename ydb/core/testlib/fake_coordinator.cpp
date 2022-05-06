@@ -4,7 +4,7 @@
 namespace NKikimr {
 
     void BootFakeCoordinator(TTestActorRuntime& runtime, ui64 coordinatorId, TFakeCoordinator::TState::TPtr state) {
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(coordinatorId, TTabletTypes::FLAT_TX_COORDINATOR),
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(coordinatorId, TTabletTypes::Coordinator),
             [=](const TActorId & tablet, TTabletStorageInfo* info) {
                 return new TFakeCoordinator(tablet, info, state);
         });

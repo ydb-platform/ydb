@@ -2116,7 +2116,7 @@ public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TTabletId TabletId = 0;
-    TTabletTypes::EType TabletType = TTabletTypes::TYPE_INVALID;
+    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
     TVector<ui32> ForcedGroupIds;
@@ -2169,7 +2169,7 @@ public:
             if (tablet != nullptr) {
                 tablets.push_back(tablet);
             }
-        } else if (TabletType != TTabletTypes::TYPE_INVALID) {
+        } else if (TabletType != TTabletTypes::TypeInvalid) {
             for (auto& pr : Self->Tablets) {
                 if (pr.second.Type == TabletType) {
                     tablets.push_back(&pr.second);
@@ -2641,7 +2641,7 @@ public:
     THolder<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
     TTabletId TabletId = 0;
-    TTabletTypes::EType TabletType = TTabletTypes::TYPE_INVALID;
+    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     ui32 ChannelFrom = 0;
     ui32 ChannelTo = 255;
     ui32 GroupId = 0;
@@ -2687,7 +2687,7 @@ public:
             if (tablet != nullptr) {
                 tablets.push_back(tablet);
             }
-        } else if (TabletType != TTabletTypes::TYPE_INVALID) {
+        } else if (TabletType != TTabletTypes::TypeInvalid) {
             for (auto& pr : Self->Tablets) {
                 if (pr.second.Type == TabletType) {
                     tablets.push_back(&pr.second);

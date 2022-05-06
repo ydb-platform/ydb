@@ -230,7 +230,7 @@ struct TEnvironmentSetup {
 
     void SetupTablet() {
         const TActorId bootstrapper = CreateTestBootstrapper(*Runtime,
-                                                       CreateTestTabletInfo(TabletId, TTabletTypes::FLAT_BS_CONTROLLER, TErasureType::ErasureNone, GroupId),
+                                                       CreateTestTabletInfo(TabletId, TTabletTypes::BSController, TErasureType::ErasureNone, GroupId),
                                                        &CreateFlatBsController, NodeId);
         Runtime->EnableScheduleForActor(bootstrapper);
         {

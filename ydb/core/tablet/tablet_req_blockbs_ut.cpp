@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TBlockBlobStorageTest) {
         SetupTabletServices(runtime);
 
         THashSet<ui32> groups;
-        TIntrusivePtr<TTabletStorageInfo> info = CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY);
+        TIntrusivePtr<TTabletStorageInfo> info = CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::Dummy);
         for (size_t channel = 0; channel < info->Channels.size(); ++channel) {
             // use non-existant groups for all channels >= 2
             if (channel >= 2) {

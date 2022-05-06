@@ -1850,7 +1850,7 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , TxCacheQuota(txCacheQuota)
 {
     Y_VERIFY(!info->Channels.empty() && !info->Channels[0].History.empty());
-    Y_VERIFY(TTabletTypes::TYPE_INVALID != info->TabletType);
+    Y_VERIFY(TTabletTypes::TypeInvalid != info->TabletType);
 }
 
 TAutoPtr<IEventHandle> TTablet::AfterRegister(const TActorId &self, const TActorId& parentId) {

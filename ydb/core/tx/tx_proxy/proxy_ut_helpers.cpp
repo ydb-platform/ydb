@@ -365,7 +365,7 @@ ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString &name, ui64
     TAutoPtr<NMsgBusProxy::TBusResponse> resp = env.GetClient().HiveCreateTablet(
                 env.GetSettings().Domain,
                 owner, shard_index,
-                TTabletTypes::TX_DUMMY,
+                TTabletTypes::Dummy,
                 {},
                 {key},
                 channelBindings);

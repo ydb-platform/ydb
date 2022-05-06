@@ -662,6 +662,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         }
     }
 
+    Y_UNIT_TEST(BackupCopyHasNoTtlSettings) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "ts"
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/", R"(
+            CopyTableDescriptions {
+              SrcPath: "/MyRoot/TTLEnabledTable"
+              DstPath: "/MyRoot/TTLEnabledTableCopy"
+              IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(
+            DescribePath(runtime, "/MyRoot/TTLEnabledTableCopy"), {
+                NLs::PathExist,
+                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    UNIT_ASSERT(!record.GetPathDescription().GetTable().HasTTLSettings());
+                }
+            }
+        );
+    }
+
     Y_UNIT_TEST(RacyAlterTableAndConditionalErase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

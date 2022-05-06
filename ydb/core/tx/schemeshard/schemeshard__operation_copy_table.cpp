@@ -482,11 +482,17 @@ public:
         auto schema = Transaction.GetCreateTable();
         const bool omitFollowers = schema.GetOmitFollowers();
         const bool isBackup = schema.GetIsBackup();
+
         PrepareScheme(&schema, name, srcTableInfo, context);
+        schema.SetIsBackup(isBackup);
+
         if (omitFollowers) {
             schema.MutablePartitionConfig()->AddFollowerGroups()->Clear();
         }
-        schema.SetIsBackup(isBackup);
+
+        if (isBackup) {
+            schema.ClearTTLSettings();
+        }
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)

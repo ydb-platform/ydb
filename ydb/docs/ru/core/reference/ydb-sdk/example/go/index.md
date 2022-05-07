@@ -158,9 +158,6 @@ err := db.Table().Do(
       table.NewQueryParameters(
         table.ValueParam("$seriesID", types.Uint64Value(1)), // подстановка в условие запроса
       ),
-      options.WithQueryCachePolicy(
-        options.WithQueryCachePolicyKeepInCache(), // включаем серверный кэш скомпилированных запросов
-      ),
     )
     if err != nil {
       return err

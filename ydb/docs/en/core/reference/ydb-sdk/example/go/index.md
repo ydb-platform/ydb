@@ -156,9 +156,6 @@ err := db.Table().Do(
       table.NewQueryParameters(
         table.ValueParam("$seriesID", types.Uint64Value(1)), // substitution in the query condition
       ),
-      options.WithQueryCachePolicy(
-        options.WithQueryCachePolicyKeepInCache(), // enabling the server cache of compiled queries
-      ),
     )
     if err != nil {
       return err

@@ -21,7 +21,6 @@ target_link_libraries(contrib-libs-jemalloc PUBLIC
   contrib-libs-libunwind
 )
 target_sources(contrib-libs-jemalloc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/jemalloc/hack.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/jemalloc/src/arena.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/jemalloc/src/background_thread.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/jemalloc/src/base.c

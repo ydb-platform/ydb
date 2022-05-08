@@ -50,7 +50,7 @@ xmlValidateAttributeValueInternal(xmlDocPtr doc, xmlAttributeType type,
 /**
  * xmlVErrMemory:
  * @ctxt:  an XML validation parser context
- * @extra:  extra informations
+ * @extra:  extra information
  *
  * Handle an out of memory error
  */
@@ -89,7 +89,7 @@ xmlVErrMemory(xmlValidCtxtPtr ctxt, const char *extra)
  * xmlErrValid:
  * @ctxt:  an XML validation parser context
  * @error:  the error number
- * @extra:  extra informations
+ * @extra:  extra information
  *
  * Handle a validation error
  */
@@ -131,11 +131,11 @@ xmlErrValid(xmlValidCtxtPtr ctxt, xmlParserErrors error,
  * @ctxt:  an XML validation parser context
  * @node:  the node raising the error
  * @error:  the error number
- * @str1:  extra informations
- * @str2:  extra informations
- * @str3:  extra informations
+ * @str1:  extra information
+ * @str2:  extra information
+ * @str3:  extra information
  *
- * Handle a validation error, provide contextual informations
+ * Handle a validation error, provide contextual information
  */
 static void LIBXML_ATTR_FORMAT(4,0)
 xmlErrValidNode(xmlValidCtxtPtr ctxt,
@@ -174,11 +174,11 @@ xmlErrValidNode(xmlValidCtxtPtr ctxt,
  * @ctxt:  an XML validation parser context
  * @node:  the node raising the error
  * @error:  the error number
- * @str1:  extra informations
- * @int2:  extra informations
- * @str3:  extra informations
+ * @str1:  extra information
+ * @int2:  extra information
+ * @str3:  extra information
  *
- * Handle a validation error, provide contextual informations
+ * Handle a validation error, provide contextual information
  */
 static void LIBXML_ATTR_FORMAT(4,0)
 xmlErrValidNodeNr(xmlValidCtxtPtr ctxt,
@@ -477,6 +477,35 @@ nodeVPop(xmlValidCtxtPtr ctxt)
     ret = ctxt->nodeTab[ctxt->nodeNr];
     ctxt->nodeTab[ctxt->nodeNr] = NULL;
     return (ret);
+}
+
+/**
+ * xmlValidNormalizeString:
+ * @str: a string
+ *
+ * Normalize a string in-place.
+ */
+static void
+xmlValidNormalizeString(xmlChar *str) {
+    xmlChar *dst;
+    const xmlChar *src;
+
+    if (str == NULL)
+        return;
+    src = str;
+    dst = str;
+
+    while (*src == 0x20) src++;
+    while (*src != 0) {
+	if (*src == 0x20) {
+	    while (*src == 0x20) src++;
+	    if (*src != 0)
+		*dst++ = 0x20;
+	} else {
+	    *dst++ = *src++;
+	}
+    }
+    *dst = 0;
 }
 
 #ifdef DEBUG_VALID_ALGO
@@ -1174,7 +1203,7 @@ xmlFreeElementContent(xmlElementContentPtr cur) {
  * @buf:  An XML buffer
  * @cur:  An element table
  *
- * Dump the occurence operator of an element.
+ * Dump the occurrence operator of an element.
  */
 static void
 xmlDumpElementOccur(xmlBufferPtr buf, xmlElementContentPtr cur) {
@@ -2607,6 +2636,24 @@ xmlDumpNotationTable(xmlBufferPtr buf, xmlNotationTablePtr table) {
 	    (xmlDictOwns(dict, (const xmlChar *)(str)) == 0)))	\
 	    xmlFree((char *)(str));
 
+static int
+xmlIsStreaming(xmlValidCtxtPtr ctxt) {
+    xmlParserCtxtPtr pctxt;
+
+    if (ctxt == NULL)
+        return(0);
+    /*
+     * These magic values are also abused to detect whether we're validating
+     * while parsing a document. In this case, userData points to the parser
+     * context.
+     */
+    if ((ctxt->finishDtd != XML_CTXT_FINISH_DTD_0) &&
+        (ctxt->finishDtd != XML_CTXT_FINISH_DTD_1))
+        return(0);
+    pctxt = ctxt->userData;
+    return(pctxt->parseMode == XML_PARSE_READER);
+}
+
 /**
  * xmlFreeID:
  * @not:  A id
@@ -2650,7 +2697,7 @@ xmlAddID(xmlValidCtxtPtr ctxt, xmlDocPtr doc, const xmlChar *value,
     if (doc == NULL) {
 	return(NULL);
     }
-    if (value == NULL) {
+    if ((value == NULL) || (value[0] == 0)) {
 	return(NULL);
     }
     if (attr == NULL) {
@@ -2681,7 +2728,7 @@ xmlAddID(xmlValidCtxtPtr ctxt, xmlDocPtr doc, const xmlChar *value,
      */
     ret->value = xmlStrdup(value);
     ret->doc = doc;
-    if ((ctxt != NULL) && (ctxt->vstateNr != 0)) {
+    if (xmlIsStreaming(ctxt)) {
 	/*
 	 * Operating in streaming mode, attr is gonna disappear
 	 */
@@ -2820,6 +2867,7 @@ xmlRemoveID(xmlDocPtr doc, xmlAttrPtr attr) {
     ID = xmlNodeListGetString(doc, attr->children, 1);
     if (ID == NULL)
         return(-1);
+    xmlValidNormalizeString(ID);
 
     id = xmlHashLookup(table, ID);
     if (id == NULL || id->attr != attr) {
@@ -3009,7 +3057,7 @@ xmlAddRef(xmlValidCtxtPtr ctxt, xmlDocPtr doc, const xmlChar *value,
      * fill the structure.
      */
     ret->value = xmlStrdup(value);
-    if ((ctxt != NULL) && (ctxt->vstateNr != 0)) {
+    if (xmlIsStreaming(ctxt)) {
 	/*
 	 * Operating in streaming mode, attr is gonna disappear
 	 */
@@ -4028,8 +4076,7 @@ xmlValidateAttributeValue2(xmlValidCtxtPtr ctxt, xmlDocPtr doc,
 xmlChar *
 xmlValidCtxtNormalizeAttributeValue(xmlValidCtxtPtr ctxt, xmlDocPtr doc,
 	     xmlNodePtr elem, const xmlChar *name, const xmlChar *value) {
-    xmlChar *ret, *dst;
-    const xmlChar *src;
+    xmlChar *ret;
     xmlAttributePtr attrDecl = NULL;
     int extsubset = 0;
 
@@ -4070,19 +4117,7 @@ xmlValidCtxtNormalizeAttributeValue(xmlValidCtxtPtr ctxt, xmlDocPtr doc,
     ret = xmlStrdup(value);
     if (ret == NULL)
 	return(NULL);
-    src = value;
-    dst = ret;
-    while (*src == 0x20) src++;
-    while (*src != 0) {
-	if (*src == 0x20) {
-	    while (*src == 0x20) src++;
-	    if (*src != 0)
-		*dst++ = 0x20;
-	} else {
-	    *dst++ = *src++;
-	}
-    }
-    *dst = 0;
+    xmlValidNormalizeString(ret);
     if ((doc->standalone) && (extsubset == 1) && (!xmlStrEqual(value, ret))) {
 	xmlErrValidNode(ctxt, elem, XML_DTD_NOT_STANDALONE,
 "standalone: %s on %s value had to be normalized based on external subset declaration\n",
@@ -4114,8 +4149,7 @@ xmlValidCtxtNormalizeAttributeValue(xmlValidCtxtPtr ctxt, xmlDocPtr doc,
 xmlChar *
 xmlValidNormalizeAttributeValue(xmlDocPtr doc, xmlNodePtr elem,
 			        const xmlChar *name, const xmlChar *value) {
-    xmlChar *ret, *dst;
-    const xmlChar *src;
+    xmlChar *ret;
     xmlAttributePtr attrDecl = NULL;
 
     if (doc == NULL) return(NULL);
@@ -4145,19 +4179,7 @@ xmlValidNormalizeAttributeValue(xmlDocPtr doc, xmlNodePtr elem,
     ret = xmlStrdup(value);
     if (ret == NULL)
 	return(NULL);
-    src = value;
-    dst = ret;
-    while (*src == 0x20) src++;
-    while (*src != 0) {
-	if (*src == 0x20) {
-	    while (*src == 0x20) src++;
-	    if (*src != 0)
-		*dst++ = 0x20;
-	} else {
-	    *dst++ = *src++;
-	}
-    }
-    *dst = 0;
+    xmlValidNormalizeString(ret);
     return(ret);
 }
 
@@ -5434,7 +5456,7 @@ fail:
     } else if (ret == -2) {
 	/*
 	 * An entities reference appeared at this level.
-	 * Buid a minimal representation of this node content
+	 * Build a minimal representation of this node content
 	 * sufficient to run the validation process on it
 	 */
 	DEBUG_VALID_MSG("Found an entity reference, linearizing");
@@ -5919,28 +5941,27 @@ xmlValidatePushCData(xmlValidCtxtPtr ctxt, const xmlChar *data, int len) {
 		    break;
 		case XML_ELEMENT_TYPE_MIXED:
 		    break;
-		case XML_ELEMENT_TYPE_ELEMENT:
-		    if (len > 0) {
-			int i;
+		case XML_ELEMENT_TYPE_ELEMENT: {
+                    int i;
 
-			for (i = 0;i < len;i++) {
-			    if (!IS_BLANK_CH(data[i])) {
-				xmlErrValidNode(ctxt, state->node,
-						XML_DTD_CONTENT_MODEL,
-	   "Element %s content does not follow the DTD, Text not allowed\n",
-				       state->node->name, NULL, NULL);
-				ret = 0;
-				goto done;
-			    }
-			}
-			/*
-			 * TODO:
-			 * VC: Standalone Document Declaration
-			 *  element types with element content, if white space
-			 *  occurs directly within any instance of those types.
-			 */
-		    }
-		    break;
+                    for (i = 0;i < len;i++) {
+                        if (!IS_BLANK_CH(data[i])) {
+                            xmlErrValidNode(ctxt, state->node,
+                                            XML_DTD_CONTENT_MODEL,
+       "Element %s content does not follow the DTD, Text not allowed\n",
+                                   state->node->name, NULL, NULL);
+                            ret = 0;
+                            goto done;
+                        }
+                    }
+                    /*
+                     * TODO:
+                     * VC: Standalone Document Declaration
+                     *  element types with element content, if white space
+                     *  occurs directly within any instance of those types.
+                     */
+                    break;
+                }
 	    }
 	}
     }

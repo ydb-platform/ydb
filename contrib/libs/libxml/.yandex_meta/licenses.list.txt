@@ -20,14 +20,6 @@
  Copyright (C) 1998-2012 Daniel Veillard.  All Rights Reserved.
 
 
-====================File: AUTHORS====================
-Daniel Veillard <daniel@veillard.com>
-Bjorn Reese <breese@users.sourceforge.net>
-William Brack <wbrack@mmm.com.hk>
-Igor Zlatkovic <igor@zlatkovic.com> for the Windows port
-Aleksey Sanin <aleksey@aleksey.com>
-
-
 ====================File: Copyright====================
 Except where otherwise noted in the source code (e.g. the files hash.c,
 list.c and the trio files, which are covered by a similar licence but
@@ -113,6 +105,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
+====================MIT====================
+This code is released under the MIT License, see the Copyright file.
+
+
 ====================Mit-Veillard-Variant====================
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -120,5 +116,5 @@ THE SOFTWARE.
  *
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
- * MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE AUTHORS AND
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE AUTHORS AND
  * CONTRIBUTORS ACCEPT NO RESPONSIBILITY IN ANY CONCEIVABLE MANNER.

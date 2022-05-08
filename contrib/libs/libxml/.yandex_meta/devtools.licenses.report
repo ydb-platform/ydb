@@ -54,13 +54,25 @@ FILE_INCLUDE Copyright found in files: xpath.c at line 11
     Files with this license:
         xpath.c [11:11]
 
-KEEP     Mit-Veillard-Variant 1d17653acef0ece203567b31819d603d
+KEEP     MIT                  4138c95edb8e207b0c56cfaf284bd9fd
 BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: dict.c at line 13, hash.c at line 14, list.c at line 12
+FILE_INCLUDE Copyright found in files: README.md at line 18
+    License text:
+        This code is released under the MIT License, see the Copyright file.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [18:18]
+
+KEEP     Mit-Veillard-Variant 43589b25dd99faeb77ea58a7ea046a1f
+BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: LicenseRef-scancode-mit-veillard-variant
-        Score           : 100.00
+        Score           : 98.57
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit-veillard-variant.LICENSE, https://raw.githubusercontent.com/GNOME/libxml2/4c2e7c651f6c2f0d1a74f350cbda95f7df3e7017/hash.c
     Files with this license:
@@ -70,7 +82,6 @@ FILE_INCLUDE AUTHORS found in files: dict.c at line 13, hash.c at line 14, list.
 
 KEEP     MIT                  4372cff0d21afdacf852b4c78b18140d
 BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: timsort.h at line 28
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT
@@ -155,7 +166,6 @@ FILE_INCLUDE Copyright found in files: tree.c at line 7
 
 KEEP     MIT                  78d4c8870de0cf03b21661637338ced8
 BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: COPYING at line 20, Copyright at line 20
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT

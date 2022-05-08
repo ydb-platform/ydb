@@ -2286,3 +2286,10 @@ LIBXML2_2.9.8 {
   xmlHashDefaultDeallocator;
 } LIBXML2_2.9.1;
 
+LIBXML2_2.9.11 {
+    global:
+
+# xmlIO
+  xmlPopOutputCallbacks;
+} LIBXML2_2.9.8;
+

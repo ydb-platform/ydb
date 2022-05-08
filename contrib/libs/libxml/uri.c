@@ -11,6 +11,7 @@
 #define IN_LIBXML
 #include "libxml.h"
 
+#include <limits.h>
 #include <string.h>
 
 #include <libxml/xmlmemory.h>
@@ -329,9 +330,14 @@ xmlParse3986Port(xmlURIPtr uri, const char **str)
 
     if (ISA_DIGIT(cur)) {
 	while (ISA_DIGIT(cur)) {
-	    port = port * 10 + (*cur - '0');
-            if (port > 99999999)
-                port = 99999999;
+            int digit = *cur - '0';
+
+            if (port > INT_MAX / 10)
+                return(1);
+            port *= 10;
+            if (port > INT_MAX - digit)
+                return(1);
+	    port += digit;
 
 	    cur++;
 	}
@@ -348,7 +354,7 @@ xmlParse3986Port(xmlURIPtr uri, const char **str)
  * @uri:  pointer to an URI structure
  * @str:  the string to analyze
  *
- * Parse an user informations part and fills in the appropriate fields
+ * Parse an user information part and fills in the appropriate fields
  * of the @uri structure
  *
  * userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
@@ -1632,23 +1638,24 @@ xmlURIUnescapeString(const char *str, int len, char *target) {
     out = ret;
     while(len > 0) {
 	if ((len > 2) && (*in == '%') && (is_hex(in[1])) && (is_hex(in[2]))) {
+            int c = 0;
 	    in++;
 	    if ((*in >= '0') && (*in <= '9'))
-	        *out = (*in - '0');
+	        c = (*in - '0');
 	    else if ((*in >= 'a') && (*in <= 'f'))
-	        *out = (*in - 'a') + 10;
+	        c = (*in - 'a') + 10;
 	    else if ((*in >= 'A') && (*in <= 'F'))
-	        *out = (*in - 'A') + 10;
+	        c = (*in - 'A') + 10;
 	    in++;
 	    if ((*in >= '0') && (*in <= '9'))
-	        *out = *out * 16 + (*in - '0');
+	        c = c * 16 + (*in - '0');
 	    else if ((*in >= 'a') && (*in <= 'f'))
-	        *out = *out * 16 + (*in - 'a') + 10;
+	        c = c * 16 + (*in - 'a') + 10;
 	    else if ((*in >= 'A') && (*in <= 'F'))
-	        *out = *out * 16 + (*in - 'A') + 10;
+	        c = c * 16 + (*in - 'A') + 10;
 	    in++;
 	    len -= 3;
-	    out++;
+	    *out++ = (char) c;
 	} else {
 	    *out++ = *in++;
 	    len--;
@@ -1748,11 +1755,6 @@ xmlURIEscape(const xmlChar * str)
     xmlURIPtr uri;
     int ret2;
 
-#define NULLCHK(p) if(!p) { \
-         xmlURIErrMemory("escaping URI value\n"); \
-         xmlFreeURI(uri); \
-         return NULL; } \
-
     if (str == NULL)
         return (NULL);
 
@@ -1774,6 +1776,12 @@ xmlURIEscape(const xmlChar * str)
 
     ret = NULL;
 
+#define NULLCHK(p) if(!p) { \
+         xmlURIErrMemory("escaping URI value\n"); \
+         xmlFreeURI(uri); \
+         xmlFree(ret); \
+         return NULL; } \
+
     if (uri->scheme) {
         segment = xmlURIEscapeStr(BAD_CAST uri->scheme, BAD_CAST "+-.");
         NULLCHK(segment)
@@ -1794,7 +1802,7 @@ xmlURIEscape(const xmlChar * str)
     if (uri->user) {
         segment = xmlURIEscapeStr(BAD_CAST uri->user, BAD_CAST ";:&=+$,");
         NULLCHK(segment)
-		ret = xmlStrcat(ret,BAD_CAST "//");
+        ret = xmlStrcat(ret,BAD_CAST "//");
         ret = xmlStrcat(ret, segment);
         ret = xmlStrcat(ret, BAD_CAST "@");
         xmlFree(segment);
@@ -1803,8 +1811,8 @@ xmlURIEscape(const xmlChar * str)
     if (uri->server) {
         segment = xmlURIEscapeStr(BAD_CAST uri->server, BAD_CAST "/?;:@");
         NULLCHK(segment)
-		if (uri->user == NULL)
-		ret = xmlStrcat(ret, BAD_CAST "//");
+        if (uri->user == NULL)
+            ret = xmlStrcat(ret, BAD_CAST "//");
         ret = xmlStrcat(ret, segment);
         xmlFree(segment);
     }

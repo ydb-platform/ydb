@@ -203,6 +203,7 @@ struct TEvControlPlaneStorage {
 
     template<typename ProtoMessage, ui32 EventType>
     struct TControlPlaneRequest : NActors::TEventLocal<TControlPlaneRequest<ProtoMessage, EventType>, EventType> {
+        using ProtoRequestType = ProtoMessage;
         explicit TControlPlaneRequest(const TString& scope,
                                              const ProtoMessage& request,
                                              const TString& user,
@@ -240,6 +241,7 @@ struct TEvControlPlaneStorage {
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>
     struct TControlPlaneResponse : NActors::TEventLocal<TDerived, EventType> {
+        using ProtoResultType = ProtoMessage;
         explicit TControlPlaneResponse(const ProtoMessage& result)
             : Result(result)
         {

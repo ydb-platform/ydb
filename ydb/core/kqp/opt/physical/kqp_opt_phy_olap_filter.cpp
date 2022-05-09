@@ -254,7 +254,7 @@ TVector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNod
             if (!IsSupportedCast(maybeSafeCast.Cast())) {
                 return NullNode;
             }
-            
+
             return node;
         }
 
@@ -612,13 +612,13 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& flatmap,
 
     return ComparisonPushdown(parameters, predicate, ctx, pos, input);
 }
-	
+
 TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos,
     const TExprNode* lambdaArg, const TExprBase& input)
 {
     if (!IsSupportedPredicate(predicate)) {
         return NullNode;
-    }	
+    }
 
     auto parameters = ExtractComparisonParameters(predicate, lambdaArg, input);
 
@@ -629,7 +629,7 @@ TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, TExpr
     return ComparisonPushdown(parameters, predicate, ctx, pos, input);
 }
 
-	
+
 TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx, TPositionHandle pos,
     const TExprNode* lambdaArg, const TExprBase& input)
 {
@@ -745,7 +745,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     const auto& lambda = flatmap.Lambda();
     auto lambdaArg = lambda.Args().Arg(0).Raw();
 
-    YQL_CLOG(INFO, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
+    YQL_CLOG(TRACE, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
 
     auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
 
@@ -780,7 +780,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Build()
         .Done();
 
-    YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
+    YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
 
 #ifdef ENABLE_COLUMNS_PRUNING
     TMaybeNode<TCoAtomList> readColumns = BuildColumnsFromLambda(lambda, ctx, node.Pos());

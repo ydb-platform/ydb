@@ -20,12 +20,12 @@ static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::T
         builder << KqpExprToPrettyString(*input, ctx) << Endl;
         builder << "Expression after rule application: " << Endl;
         builder << KqpExprToPrettyString(*output, ctx);
-        YQL_CLOG(INFO, ProviderKqp) << builder;
+        YQL_CLOG(TRACE, ProviderKqp) << builder;
     }
 #else
     Y_UNUSED(ctx);
     if (input != output) {
-        YQL_CLOG(INFO, ProviderKqp) << name;
+        YQL_CLOG(TRACE, ProviderKqp) << name;
     }
 #endif
 }

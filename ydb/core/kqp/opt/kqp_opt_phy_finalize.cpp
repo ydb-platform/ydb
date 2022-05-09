@@ -17,14 +17,25 @@ namespace {
 TStatus KqpBuildPureExprStagesResult(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)
 {
+    output = input;
+
     TExprBase inputExpr(input);
     auto query = inputExpr.Cast<TKqlQuery>();
 
-    auto hasPrecomputes = [](TExprBase node) {
-        auto precompute = FindNode(node.Ptr(), [](const NYql::TExprNode::TPtr& node) {
-            return TMaybeNode<TDqPhyPrecompute>(node).IsValid();
-        });
+    if (query.Results().Empty()) {
+        return TStatus::Ok;
+    }
 
+    auto predicate = [](const NYql::TExprNode::TPtr& node) {
+        return TMaybeNode<TDqPhyPrecompute>(node).IsValid();
+    };
+
+    auto filter = [](const NYql::TExprNode::TPtr& node) {
+        return !TMaybeNode<TCoLambda>(node).IsValid();
+    };
+
+    auto hasPrecomputes = [&](TExprBase node) {
+        auto precompute = FindNode(node.Ptr(), filter, predicate);
         return precompute != nullptr;
     };
 
@@ -215,6 +226,8 @@ NYql::IGraphTransformer::TStatus PerformGlobalRule(const TString& ruleName, cons
 TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx) {
     return CreateFunctorTransformer(
         [kqpCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+            output = input;
+
             PERFORM_GLOBAL_RULE("ReplicateMultiUsedConnection", input, output, ctx,
                 [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                     YQL_ENSURE(TKqlQuery::Match(input.Get()));
@@ -241,7 +254,7 @@ TAutoPtr<IGraphTransformer> CreateKqpFinalizingOptTransformer(const TIntrusivePt
                     return KqpDuplicateResults(input, output, ctx);
                 });
 
-            YQL_CLOG(INFO, ProviderKqp) << "FinalizingOptimized KQL query: " << KqpExprToPrettyString(*input, ctx);
+            YQL_CLOG(TRACE, ProviderKqp) << "FinalizingOptimized KQL query: " << KqpExprToPrettyString(*input, ctx);
 
             return TStatus::Ok;
         });

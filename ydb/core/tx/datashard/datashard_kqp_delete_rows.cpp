@@ -130,13 +130,12 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
     auto rowsNode = callable.GetInput(1);
 
     auto tableId = NKqp::ParseTableId(tableNode);
-    auto localTableId = computeCtx.GetLocalTableId(tableId);
-    MKQL_ENSURE_S(localTableId);
-    auto tableKeyTypes = computeCtx.GetKeyColumnsInfo(tableId);
+    auto tableInfo = computeCtx.GetTable(tableId);
+    MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString());
 
     auto rowType = AS_TYPE(TStructType, AS_TYPE(TStreamType, rowsNode.GetStaticType())->GetItemType());
-    MKQL_ENSURE_S(tableKeyTypes.size() == rowType->GetMembersCount(), "Table key column count mismatch"
-        << ", expected: " << tableKeyTypes.size()
+    MKQL_ENSURE_S(tableInfo->KeyColumnIds.size() == rowType->GetMembersCount(), "Table key column count mismatch"
+        << ", expected: " << tableInfo->KeyColumnIds.size()
         << ", actual: " << rowType->GetMembersCount());
 
     THashMap<TString, ui32> inputIndex;
@@ -153,13 +152,15 @@ IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeF
         rowTypes[i] = typeId;
     }
 
-    TVector<ui32> keyIndices(tableKeyTypes.size());
-    for (ui32 i = 0; i < tableKeyTypes.size(); i++) {
-        auto it = inputIndex.find(tableKeyTypes[i].second);
+    TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());
+    for (ui32 i = 0; i < keyIndices.size(); i++) {
+        auto& columnInfo = computeCtx.GetKeyColumnInfo(*tableInfo, i);
 
-        MKQL_ENSURE_S(rowTypes[it->second] == tableKeyTypes[i].first, "Key type mismatch"
-            << ", column: " << tableKeyTypes[i].second
-            << ", expected: " << tableKeyTypes[i].first
+        auto it = inputIndex.find(columnInfo.Name);
+
+        MKQL_ENSURE_S(rowTypes[it->second] == columnInfo.Type, "Key type mismatch"
+            << ", column: " << columnInfo.Name
+            << ", expected: " << columnInfo.Type
             << ", actual: " << rowTypes[it->second]);
 
         keyIndices[i] = it->second;

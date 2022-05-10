@@ -16,7 +16,7 @@ using namespace NUdf;
 
 namespace {
 
-void ValidateKeyType(const TType* keyType, const std::pair<NScheme::TTypeId, TString>& keyColumn) {
+void ValidateKeyType(const TType* keyType, NScheme::TTypeId expectedType) {
     auto type = keyType;
 
     if (type->IsOptional()) {
@@ -25,25 +25,31 @@ void ValidateKeyType(const TType* keyType, const std::pair<NScheme::TTypeId, TSt
 
     auto dataType = AS_TYPE(TDataType, type)->GetSchemeType();
 
-    MKQL_ENSURE_S(dataType == keyColumn.first);
+    MKQL_ENSURE_S(dataType == expectedType);
 }
 
-void ValidateKeyTuple(const TTupleType* tupleType, const TVector<std::pair<NScheme::TTypeId, TString>>& keyColumns) {
+void ValidateKeyTuple(const TTupleType* tupleType, const NDataShard::TUserTable& tableInfo,
+    const TKqpDatashardComputeContext& computeCtx)
+{
     MKQL_ENSURE_S(tupleType);
-    MKQL_ENSURE_S(tupleType->GetElementsCount() <= keyColumns.size());
+    MKQL_ENSURE_S(tupleType->GetElementsCount() <= tableInfo.KeyColumnIds.size());
 
     for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-        ValidateKeyType(tupleType->GetElementType(i), keyColumns[i]);
+        auto& columnInfo = computeCtx.GetKeyColumnInfo(tableInfo, i);
+        ValidateKeyType(tupleType->GetElementType(i), columnInfo.Type);
     }
 }
 
-void ValidateRangeBound(const TTupleType* tupleType, const TVector<std::pair<NScheme::TTypeId, TString>>& keyColumns) {
+void ValidateRangeBound(const TTupleType* tupleType, const NDataShard::TUserTable& tableInfo,
+    const TKqpDatashardComputeContext& computeCtx)
+{
     MKQL_ENSURE_S(tupleType);
-    MKQL_ENSURE_S(tupleType->GetElementsCount() == keyColumns.size() + 1);
+    MKQL_ENSURE_S(tupleType->GetElementsCount() == tableInfo.KeyColumnIds.size() + 1);
 
-    for (ui32 i = 0; i < keyColumns.size(); ++i) {
+    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+        auto& columnInfo = computeCtx.GetKeyColumnInfo(tableInfo, i);
         auto elementType = tupleType->GetElementType(i);
-        ValidateKeyType(AS_TYPE(TOptionalType, elementType)->GetItemType(), keyColumns[i]);
+        ValidateKeyType(AS_TYPE(TOptionalType, elementType)->GetItemType(), columnInfo.Type);
     }
 }
 
@@ -382,11 +388,13 @@ IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputa
     auto parseResult = ParseWideReadTableRanges(callable);
     auto rangesNode = LocateNode(ctx.NodeLocator, *parseResult.Ranges);
 
-    auto keyColumns = computeCtx.GetKeyColumnsInfo(parseResult.TableId);
+    auto tableInfo = computeCtx.GetTable(parseResult.TableId);
+    MKQL_ENSURE(tableInfo, "Table not found: " << parseResult.TableId.PathId.ToString());
+
     auto keyRangesType = ParseKeyRangesType(parseResult.Ranges->GetType());
     if (keyRangesType) {
-        ValidateRangeBound(keyRangesType->From, keyColumns);
-        ValidateRangeBound(keyRangesType->To, keyColumns);
+        ValidateRangeBound(keyRangesType->From, *tableInfo, computeCtx);
+        ValidateRangeBound(keyRangesType->To, *tableInfo, computeCtx);
     }
 
     IComputationNode* itemsLimit = nullptr;
@@ -408,9 +416,11 @@ IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNo
     auto fromNode = LocateNode(ctx.NodeLocator, *parseResult.FromTuple);
     auto toNode = LocateNode(ctx.NodeLocator, *parseResult.ToTuple);
 
-    auto keyColumns = computeCtx.GetKeyColumnsInfo(parseResult.TableId);
-    ValidateKeyTuple(parseResult.FromTuple->GetType(), keyColumns);
-    ValidateKeyTuple(parseResult.ToTuple->GetType(), keyColumns);
+    auto tableInfo = computeCtx.GetTable(parseResult.TableId);
+    MKQL_ENSURE(tableInfo, "Table not found: " << parseResult.TableId.PathId.ToString());
+
+    ValidateKeyTuple(parseResult.FromTuple->GetType(), *tableInfo, computeCtx);
+    ValidateKeyTuple(parseResult.ToTuple->GetType(), *tableInfo, computeCtx);
 
     IComputationNode* itemsLimit = nullptr;
     if (parseResult.ItemsLimit) {

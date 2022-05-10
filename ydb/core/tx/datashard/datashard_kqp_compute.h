@@ -4,12 +4,12 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tx/datashard/datashard_user_table.h>
 
 namespace NKikimr {
     namespace NDataShard {
         class TExecuteKqpScanTxUnit;
         class TDataShard;
-        struct TUserTable;
     }
 }
 
@@ -33,7 +33,8 @@ public:
     void BreakSetLocks() const;
     void SetLockTxId(ui64 lockTxId);
 
-    TVector<std::pair<NScheme::TTypeId, TString>> GetKeyColumnsInfo(const TTableId &tableId) const;
+    const NDataShard::TUserTable::TUserColumn& GetKeyColumnInfo(
+        const NDataShard::TUserTable& table, ui32 keyIndex) const;
     THashMap<TString, NScheme::TTypeId> GetKeyColumnsMap(const TTableId &tableId) const;
 
     void SetHasPersistentChannels(bool value) { PersistentChannels = value; }

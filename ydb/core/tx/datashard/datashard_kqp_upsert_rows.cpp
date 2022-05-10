@@ -167,31 +167,30 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     auto upsertColumnsNode = callable.GetInput(2);
 
     auto tableId = NKqp::ParseTableId(tableNode);
-    auto localTableId = computeCtx.GetLocalTableId(tableId);
-    MKQL_ENSURE_S(localTableId);
-    auto tableKeyTypes = computeCtx.GetKeyColumnsInfo(tableId);
-
     auto tableInfo = computeCtx.GetTable(tableId);
     MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString());
 
     auto rowType = AS_TYPE(TStructType, AS_TYPE(TStreamType, rowsNode.GetStaticType())->GetItemType());
 
-    MKQL_ENSURE_S(tableKeyTypes.size() <= rowType->GetMembersCount(), "not enough columns in the runtime node");
+    MKQL_ENSURE_S(tableInfo->KeyColumnIds.size() <= rowType->GetMembersCount(),
+        "not enough columns in the runtime node");
 
-    THashMap<TString, ui32> inputIndex;
+    THashMap<TStringBuf, ui32> inputIndex;
     TVector<NUdf::TDataTypeId> rowTypes(rowType->GetMembersCount());
     for (ui32 i = 0; i < rowTypes.size(); ++i) {
         const auto& name = rowType->GetMemberName(i);
-        MKQL_ENSURE_S(inputIndex.emplace(TString(name), i).second);
+        MKQL_ENSURE_S(inputIndex.emplace(name, i).second);
         rowTypes[i] = NKqp::UnwrapDataTypeFromStruct(*rowType, i);
     }
 
-    TVector<ui32> keyIndices(tableKeyTypes.size());
-    for (ui32 i = 0; i < tableKeyTypes.size(); i++) {
-        auto it = inputIndex.find(tableKeyTypes[i].second);
+    TVector<ui32> keyIndices(tableInfo->KeyColumnIds.size());
+    for (ui32 i = 0; i < keyIndices.size(); i++) {
+        auto& columnInfo = computeCtx.GetKeyColumnInfo(*tableInfo, i);
+
+        auto it = inputIndex.find(columnInfo.Name);
         MKQL_ENSURE_S(it != inputIndex.end());
         auto typeId = NKqp::UnwrapDataTypeFromStruct(*rowType, it->second);
-        MKQL_ENSURE_S(typeId == tableKeyTypes[i].first, "row key type missmatch with table key type");
+        MKQL_ENSURE_S(typeId == columnInfo.Type, "row key type missmatch with table key type");
         keyIndices[i] = it->second;
     }
 
@@ -221,7 +220,6 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
 
         MKQL_ENSURE_S(rowTypes[upsertColumn.RowIndex] == tableColumn->Type,
             "upsert column type missmatch, column: " << tableColumn->Name);
-
     }
 
     return new TKqpUpsertRowsWrapper(ctx.Mutables, computeCtx, tableId,

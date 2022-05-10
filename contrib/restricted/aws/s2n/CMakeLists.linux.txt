@@ -11,7 +11,6 @@ find_package(OpenSSL REQUIRED)
 add_library(restricted-aws-s2n)
 target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_ADX
-  -D_POSIX_C_SOURCE=200809L
   -DS2N_HAVE_EXECINFO
   -DS2N_SIKEP434R2_ASM
   -DS2N_CPUID_AVAILABLE

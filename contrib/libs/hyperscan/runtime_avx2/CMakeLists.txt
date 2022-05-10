@@ -19,6 +19,8 @@ target_compile_options(libs-hyperscan-runtime_avx2 PRIVATE
   -DHAVE_AVX
   -mavx2
   -mfma
+  -mbmi
+  -mbmi2
   -DHAVE_AVX2
   -DCrc32c_ComputeBuf=avx2_Crc32c_ComputeBuf
   -DblockInitSufPQ=avx2_blockInitSufPQ

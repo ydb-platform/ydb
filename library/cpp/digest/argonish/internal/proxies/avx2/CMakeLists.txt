@@ -25,4 +25,6 @@ set_property(
   COMPILE_OPTIONS
   -mavx2
   -mfma
+  -mbmi
+  -mbmi2
 )

@@ -19,6 +19,8 @@ target_compile_options(libs-hyperscan-runtime_avx512 PRIVATE
   -DHAVE_AVX
   -mavx2
   -mfma
+  -mbmi
+  -mbmi2
   -DHAVE_AVX2
   -mavx512f
   -mavx512cd

@@ -27,40 +27,101 @@
 #include "utils/s2n_safety.h"
 #include "utils/s2n_blob.h"
 
-#define S2N_TLS_ALERT_CLOSE_NOTIFY          0
-#define S2N_TLS_ALERT_UNEXPECTED_MSG        10
-#define S2N_TLS_ALERT_BAD_RECORD_MAC        20
-#define S2N_TLS_ALERT_DECRYPT_FAILED        21
-#define S2N_TLS_ALERT_RECORD_OVERFLOW       22
-#define S2N_TLS_ALERT_DECOMP_FAILED         30
-#define S2N_TLS_ALERT_HANDSHAKE_FAILURE     40
-#define S2N_TLS_ALERT_NO_CERTIFICATE        41
-#define S2N_TLS_ALERT_BAD_CERTIFICATE       42
-#define S2N_TLS_ALERT_UNSUPPORTED_CERT      43
-#define S2N_TLS_ALERT_CERT_REVOKED          44
-#define S2N_TLS_ALERT_CERT_EXPIRED          45
-#define S2N_TLS_ALERT_CERT_UNKNOWN          46
-#define S2N_TLS_ALERT_ILLEGAL_PARAMETER     47
-#define S2N_TLS_ALERT_UNKNOWN_CA            48
-#define S2N_TLS_ALERT_ACCESS_DENIED         49
-#define S2N_TLS_ALERT_DECODE_ERROR          50
-#define S2N_TLS_ALERT_DECRYPT_ERROR         51
-#define S2N_TLS_ALERT_EXPORT_RESTRICTED     60
-#define S2N_TLS_ALERT_PROTOCOL_VERSION      70
-#define S2N_TLS_ALERT_INSUFFICIENT_SECURITY 71
-#define S2N_TLS_ALERT_INTERNAL_ERROR        80
-#define S2N_TLS_ALERT_USER_CANCELED         90
-#define S2N_TLS_ALERT_NO_RENEGOTIATION      100
-#define S2N_TLS_ALERT_UNSUPPORTED_EXTENSION 110
-
 #define S2N_TLS_ALERT_LEVEL_WARNING         1
 #define S2N_TLS_ALERT_LEVEL_FATAL           2
+
+#define S2N_ALERT_CASE(error, alert_code) \
+    case (error): \
+        *alert = (alert_code); \
+        return S2N_RESULT_OK
+
+#define S2N_NO_ALERT(error) \
+    case (error): \
+        RESULT_BAIL(S2N_ERR_NO_ALERT)
+
+static S2N_RESULT s2n_translate_protocol_error_to_alert(int error_code, uint8_t *alert)
+{
+    RESULT_ENSURE_REF(alert);
+
+    switch(error_code) {
+        S2N_ALERT_CASE(S2N_ERR_MISSING_EXTENSION, S2N_TLS_ALERT_MISSING_EXTENSION);
+
+        /* TODO: The ERR_BAD_MESSAGE -> ALERT_UNEXPECTED_MESSAGE mapping
+         * isn't always correct. Sometimes s2n-tls uses ERR_BAD_MESSAGE
+         * to indicate S2N_TLS_ALERT_ILLEGAL_PARAMETER instead.
+         * We'll want to add a new error to distinguish between the two usages:
+         * our errors should be equally or more specific than alerts, not less.
+         */
+        S2N_ALERT_CASE(S2N_ERR_BAD_MESSAGE, S2N_TLS_ALERT_UNEXPECTED_MESSAGE);
+
+        /* TODO: Add mappings for other protocol errors.
+         */
+        S2N_NO_ALERT(S2N_ERR_ENCRYPT);
+        S2N_NO_ALERT(S2N_ERR_DECRYPT);
+        S2N_NO_ALERT(S2N_ERR_KEY_INIT);
+        S2N_NO_ALERT(S2N_ERR_KEY_DESTROY);
+        S2N_NO_ALERT(S2N_ERR_DH_SERIALIZING);
+        S2N_NO_ALERT(S2N_ERR_DH_SHARED_SECRET);
+        S2N_NO_ALERT(S2N_ERR_DH_WRITING_PUBLIC_KEY);
+        S2N_NO_ALERT(S2N_ERR_DH_FAILED_SIGNING);
+        S2N_NO_ALERT(S2N_ERR_DH_COPYING_PARAMETERS);
+        S2N_NO_ALERT(S2N_ERR_DH_GENERATING_PARAMETERS);
+        S2N_NO_ALERT(S2N_ERR_CIPHER_NOT_SUPPORTED);
+        S2N_NO_ALERT(S2N_ERR_NO_APPLICATION_PROTOCOL);
+        S2N_NO_ALERT(S2N_ERR_FALLBACK_DETECTED);
+        S2N_NO_ALERT(S2N_ERR_HASH_DIGEST_FAILED);
+        S2N_NO_ALERT(S2N_ERR_HASH_INIT_FAILED);
+        S2N_NO_ALERT(S2N_ERR_HASH_UPDATE_FAILED);
+        S2N_NO_ALERT(S2N_ERR_HASH_COPY_FAILED);
+        S2N_NO_ALERT(S2N_ERR_HASH_WIPE_FAILED);
+        S2N_NO_ALERT(S2N_ERR_HASH_NOT_READY);
+        S2N_NO_ALERT(S2N_ERR_ALLOW_MD5_FOR_FIPS_FAILED);
+        S2N_NO_ALERT(S2N_ERR_DECODE_CERTIFICATE);
+        S2N_NO_ALERT(S2N_ERR_DECODE_PRIVATE_KEY);
+        S2N_NO_ALERT(S2N_ERR_INVALID_HELLO_RETRY);
+        S2N_NO_ALERT(S2N_ERR_INVALID_SIGNATURE_ALGORITHM);
+        S2N_NO_ALERT(S2N_ERR_INVALID_SIGNATURE_SCHEME);
+        S2N_NO_ALERT(S2N_ERR_CBC_VERIFY);
+        S2N_NO_ALERT(S2N_ERR_DH_COPYING_PUBLIC_KEY);
+        S2N_NO_ALERT(S2N_ERR_SIGN);
+        S2N_NO_ALERT(S2N_ERR_VERIFY_SIGNATURE);
+        S2N_NO_ALERT(S2N_ERR_ECDHE_GEN_KEY);
+        S2N_NO_ALERT(S2N_ERR_ECDHE_SHARED_SECRET);
+        S2N_NO_ALERT(S2N_ERR_ECDHE_UNSUPPORTED_CURVE);
+        S2N_NO_ALERT(S2N_ERR_ECDSA_UNSUPPORTED_CURVE);
+        S2N_NO_ALERT(S2N_ERR_ECDHE_SERIALIZING);
+        S2N_NO_ALERT(S2N_ERR_KEM_UNSUPPORTED_PARAMS);
+        S2N_NO_ALERT(S2N_ERR_SHUTDOWN_RECORD_TYPE);
+        S2N_NO_ALERT(S2N_ERR_SHUTDOWN_CLOSED);
+        S2N_NO_ALERT(S2N_ERR_NON_EMPTY_RENEGOTIATION_INFO);
+        S2N_NO_ALERT(S2N_ERR_RECORD_LIMIT);
+        S2N_NO_ALERT(S2N_ERR_CERT_UNTRUSTED);
+        S2N_NO_ALERT(S2N_ERR_CERT_TYPE_UNSUPPORTED);
+        S2N_NO_ALERT(S2N_ERR_INVALID_MAX_FRAG_LEN);
+        S2N_NO_ALERT(S2N_ERR_MAX_FRAG_LEN_MISMATCH);
+        S2N_NO_ALERT(S2N_ERR_PROTOCOL_VERSION_UNSUPPORTED);
+        S2N_NO_ALERT(S2N_ERR_BAD_KEY_SHARE);
+        S2N_NO_ALERT(S2N_ERR_CANCELLED);
+        S2N_NO_ALERT(S2N_ERR_PROTOCOL_DOWNGRADE_DETECTED);
+        S2N_NO_ALERT(S2N_ERR_MAX_INNER_PLAINTEXT_SIZE);
+        S2N_NO_ALERT(S2N_ERR_RECORD_STUFFER_SIZE);
+        S2N_NO_ALERT(S2N_ERR_FRAGMENT_LENGTH_TOO_LARGE);
+        S2N_NO_ALERT(S2N_ERR_FRAGMENT_LENGTH_TOO_SMALL);
+        S2N_NO_ALERT(S2N_ERR_RECORD_STUFFER_NEEDS_DRAINING);
+        S2N_NO_ALERT(S2N_ERR_UNSUPPORTED_EXTENSION);
+        S2N_NO_ALERT(S2N_ERR_DUPLICATE_EXTENSION);
+        S2N_NO_ALERT(S2N_ERR_MAX_EARLY_DATA_SIZE);
+        S2N_NO_ALERT(S2N_ERR_EARLY_DATA_TRIAL_DECRYPT);
+    }
+
+    RESULT_BAIL(S2N_ERR_UNIMPLEMENTED);
+}
 
 static bool s2n_alerts_supported(struct s2n_connection *conn)
 {
     /* If running in QUIC mode, QUIC handles alerting.
      * S2N should not send or receive alerts. */
-    return conn && conn->config && !conn->config->quic_enabled;
+    return !s2n_connection_is_quic_enabled(conn);
 }
 
 static bool s2n_handle_as_warning(struct s2n_connection *conn, uint8_t level, uint8_t type)
@@ -78,12 +139,38 @@ static bool s2n_handle_as_warning(struct s2n_connection *conn, uint8_t level, ui
     return type == S2N_TLS_ALERT_USER_CANCELED;
 }
 
+int s2n_error_get_alert(int error, uint8_t *alert)
+{
+    int error_type = s2n_error_get_type(error);
+
+    POSIX_ENSURE_REF(alert);
+
+    switch(error_type) {
+        case S2N_ERR_T_OK:
+        case S2N_ERR_T_CLOSED:
+        case S2N_ERR_T_BLOCKED:
+        case S2N_ERR_T_USAGE:
+        case S2N_ERR_T_ALERT:
+            POSIX_BAIL(S2N_ERR_NO_ALERT);
+            break;
+        case S2N_ERR_T_PROTO:
+            POSIX_GUARD_RESULT(s2n_translate_protocol_error_to_alert(error, alert));
+            break;
+        case S2N_ERR_T_IO:
+        case S2N_ERR_T_INTERNAL:
+            *alert = S2N_TLS_ALERT_INTERNAL_ERROR;
+            break;
+    }
+
+    return S2N_SUCCESS;
+}
+
 int s2n_process_alert_fragment(struct s2n_connection *conn)
 {
-    notnull_check(conn);
+    POSIX_ENSURE_REF(conn);
     S2N_ERROR_IF(s2n_stuffer_data_available(&conn->in) == 0, S2N_ERR_BAD_MESSAGE);
     S2N_ERROR_IF(s2n_stuffer_data_available(&conn->alert_in) == 2, S2N_ERR_ALERT_PRESENT);
-    ENSURE_POSIX(s2n_alerts_supported(conn), S2N_ERR_BAD_MESSAGE);
+    POSIX_ENSURE(s2n_alerts_supported(conn), S2N_ERR_BAD_MESSAGE);
 
     while (s2n_stuffer_data_available(&conn->in)) {
         uint8_t bytes_required = 2;
@@ -95,19 +182,20 @@ int s2n_process_alert_fragment(struct s2n_connection *conn)
 
         int bytes_to_read = MIN(bytes_required, s2n_stuffer_data_available(&conn->in));
 
-        GUARD(s2n_stuffer_copy(&conn->in, &conn->alert_in, bytes_to_read));
+        POSIX_GUARD(s2n_stuffer_copy(&conn->in, &conn->alert_in, bytes_to_read));
 
         if (s2n_stuffer_data_available(&conn->alert_in) == 2) {
 
             /* Close notifications are handled as shutdowns */
             if (conn->alert_in_data[1] == S2N_TLS_ALERT_CLOSE_NOTIFY) {
                 conn->closed = 1;
+                conn->close_notify_received = true;
                 return 0;
             }
 
             /* Ignore warning-level alerts if we're in warning-tolerant mode */
             if (s2n_handle_as_warning(conn, conn->alert_in_data[0], conn->alert_in_data[1])) {
-                GUARD(s2n_stuffer_wipe(&conn->alert_in));
+                POSIX_GUARD(s2n_stuffer_wipe(&conn->alert_in));
                 return 0;
             }
 
@@ -118,7 +206,7 @@ int s2n_process_alert_fragment(struct s2n_connection *conn)
 
             /* All other alerts are treated as fatal errors */
             conn->closed = 1;
-            S2N_ERROR(S2N_ERR_ALERT);
+            POSIX_BAIL(S2N_ERR_ALERT);
         }
     }
 
@@ -127,7 +215,7 @@ int s2n_process_alert_fragment(struct s2n_connection *conn)
 
 int s2n_queue_writer_close_alert_warning(struct s2n_connection *conn)
 {
-    notnull_check(conn);
+    POSIX_ENSURE_REF(conn);
 
     uint8_t alert[2];
     alert[0] = S2N_TLS_ALERT_LEVEL_WARNING;
@@ -144,7 +232,7 @@ int s2n_queue_writer_close_alert_warning(struct s2n_connection *conn)
         return S2N_SUCCESS;
     }
 
-    GUARD(s2n_stuffer_write(&conn->writer_alert_out, &out));
+    POSIX_GUARD(s2n_stuffer_write(&conn->writer_alert_out, &out));
     conn->close_notify_queued = 1;
 
     return S2N_SUCCESS;
@@ -152,7 +240,7 @@ int s2n_queue_writer_close_alert_warning(struct s2n_connection *conn)
 
 static int s2n_queue_reader_alert(struct s2n_connection *conn, uint8_t level, uint8_t error_code)
 {
-    notnull_check(conn);
+    POSIX_ENSURE_REF(conn);
 
     uint8_t alert[2];
     alert[0] = level;
@@ -169,7 +257,7 @@ static int s2n_queue_reader_alert(struct s2n_connection *conn, uint8_t level, ui
         return S2N_SUCCESS;
     }
 
-    GUARD(s2n_stuffer_write(&conn->reader_alert_out, &out));
+    POSIX_GUARD(s2n_stuffer_write(&conn->reader_alert_out, &out));
 
     return S2N_SUCCESS;
 }

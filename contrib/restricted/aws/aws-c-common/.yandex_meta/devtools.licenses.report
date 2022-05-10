@@ -28,9 +28,12 @@
 # FILE_IGNORE - ignore file (do nothing)
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
+# CONTRIBUTING.md describes contributing rules for patch upstreaming; it does not contain any legal information
+IGNORE_FILES CONTRIBUTING.md
 
 KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
 BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0

@@ -264,6 +264,11 @@ This library is licensed under the Apache 2.0 License.
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 
+====================File: NOTICE====================
+AWS C Common
+Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+
+
 ====================Public-Domain====================
  * The following public domain code has been modified as follows:
 

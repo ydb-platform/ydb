@@ -7,7 +7,7 @@ TUseCountChecker::TUseCountChecker() {
 }
 
 TUseCountChecker::~TUseCountChecker() {
-    TAtomicBase count = Counter.Val();
+    auto count = Counter.Val();
     Y_VERIFY(count == 0, "must not release when count is not zero: %ld", (long)count);
 }
 

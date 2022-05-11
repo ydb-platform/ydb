@@ -80,10 +80,8 @@ For development purposes we test that YDB could be built and run under latest ve
 We are glad to welcome new contributors!
 
 1. Please read [contributor's guide](CONTRIBUTING.md).
-2. We can accept your work to YDB after you have read contributor's license agreement (aka CLA).
+2. We can accept your work to YDB after you have signed contributor's license agreement (aka CLA).
 3. Please don't forget to add a note to your pull request, that you agree to the terms of the CLA.
-
-More information can be found in [CONTRIBUTING](CONTRIBUTING) file.
 
 ## Success Stories
 

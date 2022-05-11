@@ -9,7 +9,6 @@
 
 #include <aws/common/clock.h>
 #include <aws/common/device_random.h>
-#include <aws/common/logging.h>
 #include <aws/common/mutex.h>
 #include <aws/common/task_scheduler.h>
 
@@ -27,7 +26,7 @@ struct exponential_backoff_retry_token {
     size_t max_retries;
     uint64_t backoff_scale_factor_ns;
     enum aws_exponential_backoff_jitter_mode jitter_mode;
-    /* Let's not make this worst by constantly moving across threads if we can help it */
+    /* Let's not make this worse by constantly moving across threads if we can help it */
     struct aws_event_loop *bound_loop;
     uint64_t (*generate_random)(void);
     struct aws_task retry_task;
@@ -42,7 +41,10 @@ struct exponential_backoff_retry_token {
 
 static void s_exponential_retry_destroy(struct aws_retry_strategy *retry_strategy) {
     if (retry_strategy) {
-        aws_mem_release(retry_strategy->allocator, retry_strategy);
+        struct exponential_backoff_strategy *exponential_strategy = retry_strategy->impl;
+        struct aws_event_loop_group *el_group = exponential_strategy->config.el_group;
+        aws_mem_release(retry_strategy->allocator, exponential_strategy);
+        aws_ref_count_release(&el_group->ref_count);
     }
 }
 
@@ -72,6 +74,7 @@ static void s_exponential_retry_task(struct aws_task *task, void *arg, enum aws_
             !aws_mutex_unlock(&backoff_retry_token->thread_data.mutex) && "Retry token mutex release failed");
     } /**** END CRITICAL SECTION ***********/
 
+    aws_retry_token_acquire(&backoff_retry_token->base);
     if (acquired_fn) {
         AWS_LOGF_DEBUG(
             AWS_LS_IO_EXPONENTIAL_BACKOFF_RETRY_STRATEGY,
@@ -86,7 +89,10 @@ static void s_exponential_retry_task(struct aws_task *task, void *arg, enum aws_
             (void *)backoff_retry_token->base.retry_strategy,
             (void *)&backoff_retry_token->base);
         retry_ready_fn(&backoff_retry_token->base, error_code, user_data);
+        /* it's acquired before being scheduled for retry */
+        aws_retry_token_release(&backoff_retry_token->base);
     }
+    aws_retry_token_release(&backoff_retry_token->base);
 }
 
 static int s_exponential_retry_acquire_token(
@@ -114,6 +120,7 @@ static int s_exponential_retry_acquire_token(
 
     backoff_retry_token->base.allocator = retry_strategy->allocator;
     backoff_retry_token->base.retry_strategy = retry_strategy;
+    aws_atomic_init_int(&backoff_retry_token->base.ref_count, 1u);
     aws_retry_strategy_acquire(retry_strategy);
     backoff_retry_token->base.impl = backoff_retry_token;
 
@@ -222,7 +229,7 @@ static int s_exponential_retry_schedule_retry(
         aws_event_loop_current_clock_time(backoff_retry_token->bound_loop, &current_time);
         schedule_at = backoff + current_time;
         aws_atomic_init_int(&backoff_retry_token->last_backoff, (size_t)backoff);
-        aws_atomic_fetch_add(&backoff_retry_token->current_retry_count, 1);
+        aws_atomic_fetch_add(&backoff_retry_token->current_retry_count, 1u);
         AWS_LOGF_DEBUG(
             AWS_LS_IO_EXPONENTIAL_BACKOFF_RETRY_STRATEGY,
             "id=%p: Computed backoff value of %" PRIu64 "ns on token %p",
@@ -242,6 +249,8 @@ static int s_exponential_retry_schedule_retry(
         } else {
             backoff_retry_token->thread_data.retry_ready_fn = retry_ready;
             backoff_retry_token->thread_data.user_data = user_data;
+            /* acquire to hold until the task runs. */
+            aws_retry_token_acquire(token);
             aws_task_init(
                 &backoff_retry_token->retry_task,
                 s_exponential_retry_task,
@@ -329,13 +338,15 @@ struct aws_retry_strategy *aws_retry_strategy_new_exponential_backoff(
     exponential_backoff_strategy->base.vtable = &s_exponential_retry_vtable;
     aws_atomic_init_int(&exponential_backoff_strategy->base.ref_count, 1);
     exponential_backoff_strategy->config = *config;
+    exponential_backoff_strategy->config.el_group =
+        aws_ref_count_acquire(&exponential_backoff_strategy->config.el_group->ref_count);
 
     if (!exponential_backoff_strategy->config.generate_random) {
         exponential_backoff_strategy->config.generate_random = s_default_gen_rand;
     }
 
     if (!exponential_backoff_strategy->config.max_retries) {
-        exponential_backoff_strategy->config.max_retries = 10;
+        exponential_backoff_strategy->config.max_retries = 5;
     }
 
     if (!exponential_backoff_strategy->config.backoff_scale_factor_ms) {

@@ -100,7 +100,7 @@ static bool s_sift_up(struct aws_priority_queue *queue, size_t index) {
 
     bool did_move = false;
 
-    void *parent_item, *child_item;
+    void *parent_item = NULL, *child_item = NULL;
     size_t parent = PARENT_OF(index);
     while (index) {
         /*

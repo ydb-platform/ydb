@@ -88,6 +88,14 @@ AWS_STATIC_IMPL
 int aws_array_list_front(const struct aws_array_list *AWS_RESTRICT list, void *val);
 
 /**
+ * Pushes the memory pointed to by val onto the front of internal list.
+ * This call results in shifting all of the elements in the list. Avoid this call unless that
+ * is intended behavior.
+ */
+AWS_STATIC_IMPL
+int aws_array_list_push_front(struct aws_array_list *AWS_RESTRICT list, const void *val);
+
+/**
  * Deletes the element at the front of the list if it exists. If list is empty, AWS_ERROR_LIST_EMPTY will be raised.
  * This call results in shifting all of the elements at the end of the array to the front. Avoid this call unless that
  * is intended behavior.

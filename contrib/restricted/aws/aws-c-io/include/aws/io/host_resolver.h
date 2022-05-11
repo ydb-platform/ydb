@@ -116,6 +116,13 @@ struct aws_host_resolver {
     struct aws_shutdown_callback_options shutdown_options;
 };
 
+struct aws_host_resolver_default_options {
+    size_t max_entries;
+    struct aws_event_loop_group *el_group;
+    const struct aws_shutdown_callback_options *shutdown_options;
+    aws_io_clock_fn *system_clock_override_fn;
+};
+
 AWS_EXTERN_C_BEGIN
 
 /**
@@ -176,9 +183,7 @@ AWS_IO_API int aws_default_dns_resolve(
  */
 AWS_IO_API struct aws_host_resolver *aws_host_resolver_new_default(
     struct aws_allocator *allocator,
-    size_t max_entries,
-    struct aws_event_loop_group *el_group,
-    const struct aws_shutdown_callback_options *shutdown_options);
+    struct aws_host_resolver_default_options *options);
 
 /**
  * Increments the reference count on the host resolver, allowing the caller to take a reference to it.
@@ -238,6 +243,22 @@ typedef void(aws_host_listener_resolved_address_fn)(
     /* User data that was specified when adding the listener. */
     void *user_data);
 
+/* Callback for learning of an expired address from a listener. Memory for the expired address list is only guaranteed
+ * to exist during the callback, and must be copied if the caller needs it to persist after. */
+typedef void(aws_host_listener_expired_address_fn)(
+    /* Listener that owns this callback. */
+    struct aws_host_listener *listener,
+
+    /* Array list of aws_host_address structures.  To get an item:
+     *
+     * struct aws_host_address *host_address = NULL;
+     * aws_array_list_get_at_ptr(new_address_list, (void **)&host_address, address_index);
+     * */
+    const struct aws_array_list *expired_address_list,
+
+    /* User data that was specified when adding the listener. */
+    void *user_data);
+
 /* Callback for when the listener has completed its clean up. */
 typedef void(aws_host_listener_shutdown_fn)(void *user_data);
 
@@ -249,11 +270,17 @@ struct aws_host_listener_options {
     /* Callback for when an address is resolved for the specified host. */
     aws_host_listener_resolved_address_fn *resolved_address_callback;
 
+    /* Callback for when a resolved address expires for the specified host. */
+    aws_host_listener_expired_address_fn *expired_address_callback;
+
     /* Callback for when a listener has completely shutdown. */
     aws_host_listener_shutdown_fn *shutdown_callback;
 
     /* User data to be passed into each callback. */
     void *user_data;
+
+    /* Lets the resolver know to keep the resolution thread alive for as long as this listener is attached */
+    bool pin_host_entry;
 };
 
 /* Create and add a listener to the host resolver using the specified options. */

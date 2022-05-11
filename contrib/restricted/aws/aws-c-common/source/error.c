@@ -198,6 +198,8 @@ int aws_translate_and_raise_io_error(int error_no) {
             return aws_raise_error(AWS_ERROR_MAX_FDS_EXCEEDED);
         case ENOMEM:
             return aws_raise_error(AWS_ERROR_OOM);
+        case ENOSPC:
+            return aws_raise_error(AWS_ERROR_NO_SPACE);
         default:
             return aws_raise_error(AWS_ERROR_SYS_CALL_FAILURE);
     }

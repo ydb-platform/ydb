@@ -18,54 +18,37 @@ This library is licensed under the Apache 2.0 License.
 
 ### Building
 
-#### Building s2n (Linux Only)
+CMake 3.1+ is required to build.
 
-If you are building on Linux, you will need to build s2n before being able to build aws-c-io.  For our CRT's, we build s2n at a specific commit, and recommend doing the same when using it with this library.  That commit hash can be found [here](https://github.com/awslabs/aws-crt-cpp/tree/master/aws-common-runtime).  The commands below will build s2n using OpenSSL 1.1.1.  For using other versions of OpenSSL, there is additional information in the [s2n Usage Guide](https://github.com/awslabs/s2n/blob/master/docs/USAGE-GUIDE.md).
+`<install-path>` must be an absolute path in the following instructions.
+
+#### Linux-Only Dependencies
+
+If you are building on Linux, you will need to build aws-lc and s2n-tls first.
 
 ```
-git clone git@github.com:awslabs/s2n.git
-cd s2n
-git checkout <s2n-commit-hash-used-by-aws-crt-cpp>
+git clone git@github.com:awslabs/aws-lc.git
+cmake -S aws-lc -B aws-lc/build -DCMAKE_INSTALL_PREFIX=<install-path>
+cmake --build aws-lc/build --target install
 
-# We keep the build artifacts in the -build directory
-cd libcrypto-build
-
-# Download the latest version of OpenSSL
-curl -LO https://www.openssl.org/source/openssl-1.1.1-latest.tar.gz
-tar -xzvf openssl-1.1.1-latest.tar.gz
-
-# Build openssl libcrypto.  Note that the install path specified here must be absolute.
-cd `tar ztf openssl-1.1.1-latest.tar.gz | head -n1 | cut -f1 -d/`
-./config -fPIC no-shared              \
-         no-md2 no-rc5 no-rfc3779 no-sctp no-ssl-trace no-zlib     \
-         no-hw no-mdc2 no-seed no-idea enable-ec_nistp_64_gcc_128 no-camellia\
-         no-bf no-ripemd no-dsa no-ssl2 no-ssl3 no-capieng                  \
-         -DSSL_FORBID_ENULL -DOPENSSL_NO_DTLS1 -DOPENSSL_NO_HEARTBEATS      \
-         --prefix=<absolute-install-path>
-make
-make install
-
-# Build s2n
-cd ../../../
-cmake -DCMAKE_PREFIX_PATH=<install-path> -DCMAKE_INSTALL_PREFIX=<install-path> -S s2n -B s2n/build
-cmake --build s2n/build --target install
+git clone git@github.com:aws/s2n-tls.git
+cmake -S s2n-tls -B s2n-tls/build -DCMAKE_INSTALL_PREFIX=<install-path> -DCMAKE_PREFIX_PATH=<install-path>
+cmake --build s2n-tls/build --target install
 ```
 
 #### Building aws-c-io and Remaining Dependencies
 
-Note that aws-c-io has a dependency on aws-c-common so it must be built first:
-
 ```
 git clone git@github.com:awslabs/aws-c-common.git
-cmake -DCMAKE_PREFIX_PATH=<install-path> -DCMAKE_INSTALL_PREFIX=<install-path> -S aws-c-common -B aws-c-common/build
+cmake -S aws-c-common -B aws-c-common/build -DCMAKE_INSTALL_PREFIX=<install-path>
 cmake --build aws-c-common/build --target install
 
 git clone git@github.com:awslabs/aws-c-cal.git
-cmake -DCMAKE_PREFIX_PATH=<install-path> -DCMAKE_INSTALL_PREFIX=<install-path> -S aws-c-cal -B aws-c-cal/build
+cmake -S aws-c-cal -B aws-c-cal/build -DCMAKE_INSTALL_PREFIX=<install-path> -DCMAKE_PREFIX_PATH=<install-path>
 cmake --build aws-c-cal/build --target install
 
 git clone git@github.com:awslabs/aws-c-io.git
-cmake -DCMAKE_PREFIX_PATH=<install-path> -DCMAKE_INSTALL_PREFIX=<install-path> -S aws-c-io -B aws-c-io/build
+cmake -S aws-c-io -B aws-c-io/build -DCMAKE_INSTALL_PREFIX=<install-path> -DCMAKE_PREFIX_PATH=<install-path>
 cmake --build aws-c-io/build --target install
 ```
 
@@ -230,7 +213,10 @@ BSD Variants | s2n
 Apple Devices | Security Framework/ Secure Transport. See https://developer.apple.com/documentation/security/secure_transport
 Windows | Secure Channel. See https://msdn.microsoft.com/en-us/library/windows/desktop/aa380123(v=vs.85).aspx
 
-In addition, you can always write your own handler around your favorite implementation and use that.
+In addition, you can always write your own handler around your favorite implementation and use that. To provide your own
+TLS implementation, you must build this library with the cmake argument `-DBYO_CRYPTO=ON`. You will no longer need s2n or
+libcrypto once you do this. Instead, your application provides an implementation of `aws_tls_ctx`, and `aws_channel_handler`.
+At startup time, you must invoke the functions: `aws_tls_byo_crypto_set_client_setup_options()` and `aws_tls_byo_crypto_set_server_setup_options()`.
 
 ### Typical Channel
 ![Typical Channel Diagram](docs/images/typical_channel.png)

@@ -1142,3 +1142,29 @@ int aws_channel_set_statistics_handler(struct aws_channel *channel, struct aws_c
 struct aws_event_loop *aws_channel_get_event_loop(struct aws_channel *channel) {
     return channel->loop;
 }
+
+int aws_channel_trigger_read(struct aws_channel *channel) {
+    if (channel == NULL) {
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+    if (!aws_channel_thread_is_callers_thread(channel)) {
+        return aws_raise_error(AWS_ERROR_INVALID_STATE);
+    }
+
+    struct aws_channel_slot *slot = channel->first;
+    if (slot == NULL) {
+        return aws_raise_error(AWS_ERROR_INVALID_STATE);
+    }
+
+    struct aws_channel_handler *handler = slot->handler;
+    if (handler == NULL) {
+        return aws_raise_error(AWS_ERROR_INVALID_STATE);
+    }
+
+    if (handler->vtable->trigger_read != NULL) {
+        handler->vtable->trigger_read(handler);
+    }
+
+    return AWS_OP_SUCCESS;
+}

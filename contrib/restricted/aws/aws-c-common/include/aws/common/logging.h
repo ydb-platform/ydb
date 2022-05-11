@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+#include <aws/common/atomics.h>
 #include <aws/common/common.h>
 #include <aws/common/thread.h>
 
@@ -80,6 +81,9 @@ enum aws_common_log_subject {
     AWS_LS_COMMON_THREAD,
     AWS_LS_COMMON_MEMTRACE,
     AWS_LS_COMMON_XML_PARSER,
+    AWS_LS_COMMON_IO,
+    AWS_LS_COMMON_BUS,
+    AWS_LS_COMMON_TEST,
 
     AWS_LS_COMMON_LAST = AWS_LOG_SUBJECT_END_RANGE(AWS_C_COMMON_PACKAGE_ID)
 };
@@ -109,6 +113,7 @@ struct aws_logger_vtable {
         ;
     enum aws_log_level (*const get_log_level)(struct aws_logger *logger, aws_log_subject_t subject);
     void (*const clean_up)(struct aws_logger *logger);
+    int (*set_log_level)(struct aws_logger *logger, enum aws_log_level);
 };
 
 struct aws_logger {
@@ -189,7 +194,7 @@ struct aws_logger_pipeline {
     struct aws_log_channel *channel;
     struct aws_log_writer *writer;
     struct aws_allocator *allocator;
-    enum aws_log_level level;
+    struct aws_atomic_var level;
 };
 
 /**
@@ -222,6 +227,15 @@ struct aws_logger *aws_logger_get(void);
  */
 AWS_COMMON_API
 void aws_logger_clean_up(struct aws_logger *logger);
+
+/**
+ * Sets the current logging level for the logger.  Loggers are not require to support this.
+ * @param logger logger to set the log level for
+ * @param level new log level for the logger
+ * @return AWS_OP_SUCCESS if the level was successfully set, AWS_OP_ERR otherwise
+ */
+AWS_COMMON_API
+int aws_logger_set_log_level(struct aws_logger *logger, enum aws_log_level level);
 
 /**
  * Converts a log level to a c-string constant.  Intended primarily to support building log lines that

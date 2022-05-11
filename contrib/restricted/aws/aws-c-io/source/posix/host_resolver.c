@@ -31,7 +31,7 @@ int aws_default_dns_resolve(
     AWS_LOGF_DEBUG(AWS_LS_IO_DNS, "static: resolving host %s", hostname_cstr);
 
     /* Android would prefer NO HINTS IF YOU DON'T MIND, SIR */
-#ifdef ANDROID
+#if defined(ANDROID)
     int err_code = getaddrinfo(hostname_cstr, NULL, NULL, &result);
 #else
     struct addrinfo hints;
@@ -44,7 +44,8 @@ int aws_default_dns_resolve(
 #endif
 
     if (err_code) {
-        AWS_LOGF_ERROR(AWS_LS_IO_DNS, "static: getaddrinfo failed with error_code %d", err_code);
+        AWS_LOGF_ERROR(
+            AWS_LS_IO_DNS, "static: getaddrinfo failed with error_code %d: %s", err_code, gai_strerror(err_code));
         goto clean_up;
     }
 

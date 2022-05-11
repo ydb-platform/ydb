@@ -496,7 +496,7 @@ uint64_t aws_hash_array_ignore_case(const void *array, const size_t len) {
     const uint64_t fnv_prime = 0x100000001b3ULL;
 
     const uint8_t *i = array;
-    const uint8_t *end = i + len;
+    const uint8_t *end = (i == NULL) ? NULL : (i + len);
 
     uint64_t hash = fnv_offset_basis;
     while (i != end) {
@@ -555,6 +555,42 @@ bool aws_byte_cursor_eq_c_str_ignore_case(const struct aws_byte_cursor *const cu
     AWS_PRECONDITION(c_str != NULL);
     bool rv = aws_array_eq_c_str_ignore_case(cursor->ptr, cursor->len, c_str);
     AWS_POSTCONDITION(aws_byte_cursor_is_valid(cursor));
+    return rv;
+}
+
+bool aws_byte_cursor_starts_with(const struct aws_byte_cursor *input, const struct aws_byte_cursor *prefix) {
+
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(input));
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(prefix));
+
+    if (input->len < prefix->len) {
+        return false;
+    }
+
+    struct aws_byte_cursor start = {.ptr = input->ptr, .len = prefix->len};
+    bool rv = aws_byte_cursor_eq(&start, prefix);
+
+    AWS_POSTCONDITION(aws_byte_cursor_is_valid(input));
+    AWS_POSTCONDITION(aws_byte_cursor_is_valid(prefix));
+    return rv;
+}
+
+bool aws_byte_cursor_starts_with_ignore_case(
+    const struct aws_byte_cursor *input,
+    const struct aws_byte_cursor *prefix) {
+
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(input));
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(prefix));
+
+    if (input->len < prefix->len) {
+        return false;
+    }
+
+    struct aws_byte_cursor start = {.ptr = input->ptr, .len = prefix->len};
+    bool rv = aws_byte_cursor_eq_ignore_case(&start, prefix);
+
+    AWS_POSTCONDITION(aws_byte_cursor_is_valid(input));
+    AWS_POSTCONDITION(aws_byte_cursor_is_valid(prefix));
     return rv;
 }
 
@@ -750,7 +786,13 @@ int aws_byte_buf_reserve(struct aws_byte_buf *buffer, size_t requested_capacity)
         AWS_POSTCONDITION(aws_byte_buf_is_valid(buffer));
         return AWS_OP_SUCCESS;
     }
-
+    if (!buffer->buffer && !buffer->capacity && requested_capacity > buffer->capacity) {
+        if (aws_byte_buf_init(buffer, buffer->allocator, requested_capacity)) {
+            return AWS_OP_ERR;
+        }
+        AWS_POSTCONDITION(aws_byte_buf_is_valid(buffer));
+        return AWS_OP_SUCCESS;
+    }
     if (aws_mem_realloc(buffer->allocator, (void **)&buffer->buffer, buffer->capacity, requested_capacity)) {
         return AWS_OP_ERR;
     }
@@ -857,6 +899,13 @@ int aws_byte_cursor_compare_lookup(
     AWS_PRECONDITION(aws_byte_cursor_is_valid(lhs));
     AWS_PRECONDITION(aws_byte_cursor_is_valid(rhs));
     AWS_PRECONDITION(AWS_MEM_IS_READABLE(lookup_table, 256));
+    if (lhs->len == 0 && rhs->len == 0) {
+        return 0;
+    } else if (lhs->len == 0) {
+        return -1;
+    } else if (rhs->len == 0) {
+        return 1;
+    }
     const uint8_t *lhs_curr = lhs->ptr;
     const uint8_t *lhs_end = lhs_curr + lhs->len;
 
@@ -1047,8 +1096,7 @@ struct aws_byte_cursor aws_byte_cursor_advance(struct aws_byte_cursor *const cur
     } else {
         rv.ptr = cursor->ptr;
         rv.len = len;
-
-        cursor->ptr += len;
+        cursor->ptr = (cursor->ptr == NULL) ? NULL : cursor->ptr + len;
         cursor->len -= len;
     }
     AWS_POSTCONDITION(aws_byte_cursor_is_valid(cursor));
@@ -1089,7 +1137,7 @@ struct aws_byte_cursor aws_byte_cursor_advance_nospec(struct aws_byte_cursor *co
         /* Make sure anything acting upon the returned cursor _also_ doesn't advance past NULL */
         rv.len = len & mask;
 
-        cursor->ptr += len;
+        cursor->ptr = (cursor->ptr == NULL) ? NULL : cursor->ptr + len;
         cursor->len -= len;
     } else {
         rv.ptr = NULL;
@@ -1371,7 +1419,7 @@ bool aws_byte_buf_advance(
     AWS_PRECONDITION(aws_byte_buf_is_valid(buffer));
     AWS_PRECONDITION(aws_byte_buf_is_valid(output));
     if (buffer->capacity - buffer->len >= len) {
-        *output = aws_byte_buf_from_array(buffer->buffer + buffer->len, len);
+        *output = aws_byte_buf_from_array((buffer->buffer == NULL) ? NULL : buffer->buffer + buffer->len, len);
         buffer->len += len;
         output->len = 0;
         AWS_POSTCONDITION(aws_byte_buf_is_valid(buffer));
@@ -1611,18 +1659,52 @@ bool aws_isxdigit(uint8_t ch) {
 bool aws_isspace(uint8_t ch) {
     switch (ch) {
         case 0x20: /* ' ' - space */
-            return true;
         case 0x09: /* '\t' - horizontal tab */
-            return true;
         case 0x0A: /* '\n' - line feed */
-            return true;
         case 0x0B: /* '\v' - vertical tab */
-            return true;
         case 0x0C: /* '\f' - form feed */
-            return true;
         case 0x0D: /* '\r' - carriage return */
             return true;
         default:
             return false;
     }
+}
+
+static int s_read_unsigned(struct aws_byte_cursor cursor, uint64_t *dst, uint8_t base) {
+    uint64_t val = 0;
+    *dst = 0;
+
+    if (cursor.len == 0) {
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+    const uint8_t *hex_to_num_table = aws_lookup_table_hex_to_num_get();
+
+    /* read from left to right */
+    for (size_t i = 0; i < cursor.len; ++i) {
+        const uint8_t c = cursor.ptr[i];
+        const uint8_t cval = hex_to_num_table[c];
+        if (cval >= base) {
+            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        }
+
+        if (aws_mul_u64_checked(val, base, &val)) {
+            return aws_raise_error(AWS_ERROR_OVERFLOW_DETECTED);
+        }
+
+        if (aws_add_u64_checked(val, cval, &val)) {
+            return aws_raise_error(AWS_ERROR_OVERFLOW_DETECTED);
+        }
+    }
+
+    *dst = val;
+    return AWS_OP_SUCCESS;
+}
+
+int aws_byte_cursor_utf8_parse_u64(struct aws_byte_cursor cursor, uint64_t *dst) {
+    return s_read_unsigned(cursor, dst, 10 /*base*/);
+}
+
+int aws_byte_cursor_utf8_parse_u64_hex(struct aws_byte_cursor cursor, uint64_t *dst) {
+    return s_read_unsigned(cursor, dst, 16 /*base*/);
 }

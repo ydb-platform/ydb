@@ -40,6 +40,7 @@ void aws_task_run(struct aws_task *task, enum aws_task_status status) {
         task->type_tag,
         aws_task_status_to_c_str(status));
 
+    task->abi_extension.scheduled = false;
     task->fn(task, task->arg, status);
 }
 
@@ -139,6 +140,7 @@ void aws_task_scheduler_schedule_now(struct aws_task_scheduler *scheduler, struc
     task->timestamp = 0;
 
     aws_linked_list_push_back(&scheduler->asap_list, &task->node);
+    task->abi_extension.scheduled = true;
 }
 
 void aws_task_scheduler_schedule_future(
@@ -177,6 +179,7 @@ void aws_task_scheduler_schedule_future(
         }
         aws_linked_list_insert_before(node_i, &task->node);
     }
+    task->abi_extension.scheduled = true;
 }
 
 void aws_task_scheduler_run_all(struct aws_task_scheduler *scheduler, uint64_t current_time) {
@@ -253,7 +256,7 @@ void aws_task_scheduler_cancel_task(struct aws_task_scheduler *scheduler, struct
      */
     if (task->node.next) {
         aws_linked_list_remove(&task->node);
-    } else {
+    } else if (task->abi_extension.scheduled) {
         aws_priority_queue_remove(&scheduler->timed_queue, &task, &task->priority_queue_node);
     }
 

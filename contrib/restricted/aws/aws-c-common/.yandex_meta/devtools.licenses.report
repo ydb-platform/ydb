@@ -54,7 +54,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
     Files with this license:
-        include/aws/common/private/lookup3.inl [21:22]
+        include/aws/common/private/lookup3.inl [24:25]
 
 KEEP     Public-Domain        5b7627115f23e7c5f0d8e352a16d9353
 BELONGS ya.make
@@ -66,7 +66,19 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        include/aws/common/private/lookup3.inl [6:6]
+        include/aws/common/private/lookup3.inl [9:9]
+
+KEEP     MIT                  5debb370f50e1dfd24ff5144233a2ef6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/aws/common/external/cJSON.h [4:20]
+        source/external/cJSON.c [4:20]
 
 KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
 BELONGS ya.make
@@ -91,7 +103,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        include/aws/common/private/lookup3.inl [16:16]
+        include/aws/common/private/lookup3.inl [19:19]
 
 KEEP     Apache-2.0           7b04071babb9b8532292659e4abba7e3
 BELONGS ya.make
@@ -115,6 +127,7 @@ BELONGS ya.make
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         source/arch/arm/asm/cpuid.c [4:13]
+        source/bus.c [4:13]
 
 KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
 BELONGS ya.make
@@ -137,6 +150,7 @@ BELONGS ya.make
         include/aws/common/atomics_gnu.inl [6:6]
         include/aws/common/atomics_gnu_old.inl [5:5]
         include/aws/common/atomics_msvc.inl [6:6]
+        include/aws/common/bus.h [6:6]
         include/aws/common/byte_buf.h [5:5]
         include/aws/common/byte_order.h [6:6]
         include/aws/common/byte_order.inl [6:6]
@@ -156,7 +170,9 @@ BELONGS ya.make
         include/aws/common/error.inl [6:6]
         include/aws/common/exports.h [5:5]
         include/aws/common/fifo_cache.h [5:5]
+        include/aws/common/file.h [5:5]
         include/aws/common/hash_table.h [6:6]
+        include/aws/common/json.h [6:6]
         include/aws/common/lifo_cache.h [5:5]
         include/aws/common/linked_hash_table.h [5:5]
         include/aws/common/linked_list.h [6:6]
@@ -186,10 +202,11 @@ BELONGS ya.make
         include/aws/common/private/byte_buf.h [5:5]
         include/aws/common/private/dlloads.h [5:5]
         include/aws/common/private/hash_table_impl.h [6:6]
+        include/aws/common/private/thread_shared.h [5:5]
         include/aws/common/private/xml_parser_impl.h [6:6]
         include/aws/common/process.h [5:5]
+        include/aws/common/promise.h [3:3]
         include/aws/common/ref_count.h [6:6]
-        include/aws/common/resource_name.h [3:3]
         include/aws/common/ring_buffer.h [5:5]
         include/aws/common/ring_buffer.inl [5:5]
         include/aws/common/rw_lock.h [6:6]
@@ -201,6 +218,7 @@ BELONGS ya.make
         include/aws/common/system_info.h [6:6]
         include/aws/common/task_scheduler.h [6:6]
         include/aws/common/thread.h [6:6]
+        include/aws/common/thread_scheduler.h [5:5]
         include/aws/common/time.h [5:5]
         include/aws/common/uuid.h [6:6]
         include/aws/common/xml_parser.h [6:6]
@@ -224,7 +242,9 @@ BELONGS ya.make
         source/encoding.c [3:3]
         source/error.c [3:3]
         source/fifo_cache.c [3:3]
+        source/file.c [3:3]
         source/hash_table.c [3:3]
+        source/json.c [3:3]
         source/lifo_cache.c [3:3]
         source/linked_hash_table.c [3:3]
         source/log_channel.c [3:3]
@@ -238,6 +258,7 @@ BELONGS ya.make
         source/posix/condition_variable.c [3:3]
         source/posix/device_random.c [3:3]
         source/posix/environment.c [3:3]
+        source/posix/file.c [3:3]
         source/posix/mutex.c [3:3]
         source/posix/process.c [3:3]
         source/posix/rw_lock.c [3:3]
@@ -246,12 +267,14 @@ BELONGS ya.make
         source/posix/time.c [3:3]
         source/priority_queue.c [3:3]
         source/process_common.c [3:3]
+        source/promise.c [3:3]
         source/ref_count.c [3:3]
-        source/resource_name.c [3:3]
         source/ring_buffer.c [3:3]
         source/statistics.c [3:3]
         source/string.c [3:3]
         source/task_scheduler.c [3:3]
+        source/thread_scheduler.c [3:3]
+        source/thread_shared.c [3:3]
         source/uuid.c [3:3]
         source/xml_parser.c [3:3]
 

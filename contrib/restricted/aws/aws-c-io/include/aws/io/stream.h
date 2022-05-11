@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+#include <aws/common/ref_count.h>
 #include <aws/io/io.h>
 
 struct aws_input_stream;
@@ -24,7 +25,7 @@ struct aws_stream_status {
 };
 
 struct aws_input_stream_vtable {
-    int (*seek)(struct aws_input_stream *stream, aws_off_t offset, enum aws_stream_seek_basis basis);
+    int (*seek)(struct aws_input_stream *stream, int64_t offset, enum aws_stream_seek_basis basis);
     /**
      * Stream as much data as will fit into the destination buffer and update its length.
      * The destination buffer's capacity MUST NOT be changed.
@@ -38,24 +39,50 @@ struct aws_input_stream_vtable {
     int (*read)(struct aws_input_stream *stream, struct aws_byte_buf *dest);
     int (*get_status)(struct aws_input_stream *stream, struct aws_stream_status *status);
     int (*get_length)(struct aws_input_stream *stream, int64_t *out_length);
-    void (*destroy)(struct aws_input_stream *stream);
+
+    /**
+     * Optional.
+     * If not set, the default aws_ref_count_acquire/release will be used.
+     * Set for high level language binding that has its own refcounting implementation and needs to be kept alive from
+     * C.
+     * If set, ref_count member will not be used.
+     */
+    void (*acquire)(struct aws_input_stream *stream);
+    void (*release)(struct aws_input_stream *stream);
 };
 
+/**
+ * Base class for input streams.
+ * Note: when you implement one input stream, the ref_count needs to be initialized to clean up the resource when
+ * reaches to zero.
+ */
 struct aws_input_stream {
-    struct aws_allocator *allocator;
+    /* point to the impl only set if needed. */
     void *impl;
-    struct aws_input_stream_vtable *vtable;
+    const struct aws_input_stream_vtable *vtable;
+    struct aws_ref_count ref_count;
 };
 
 AWS_EXTERN_C_BEGIN
 
+/**
+ * Increments the reference count on the input stream, allowing the caller to take a reference to it.
+ *
+ * Returns the same input stream passed in.
+ */
+AWS_IO_API struct aws_input_stream *aws_input_stream_acquire(struct aws_input_stream *stream);
+
+/**
+ * Decrements a input stream's ref count.  When the ref count drops to zero, the input stream will be destroyed.
+ *
+ * Returns NULL always.
+ */
+AWS_IO_API struct aws_input_stream *aws_input_stream_release(struct aws_input_stream *stream);
+
 /*
  * Seek to a position within a stream; analagous to fseek() and its relatives
  */
-AWS_IO_API int aws_input_stream_seek(
-    struct aws_input_stream *stream,
-    aws_off_t offset,
-    enum aws_stream_seek_basis basis);
+AWS_IO_API int aws_input_stream_seek(struct aws_input_stream *stream, int64_t offset, enum aws_stream_seek_basis basis);
 
 /*
  * Read data from a stream.  If data is available, will read up to the (capacity - len) open bytes
@@ -75,8 +102,8 @@ AWS_IO_API int aws_input_stream_get_status(struct aws_input_stream *stream, stru
  */
 AWS_IO_API int aws_input_stream_get_length(struct aws_input_stream *stream, int64_t *out_length);
 
-/*
- * Tears down the stream
+/* DEPRECATED
+ * Tears down the stream. Equivalent to aws_input_stream_release()
  */
 AWS_IO_API void aws_input_stream_destroy(struct aws_input_stream *stream);
 

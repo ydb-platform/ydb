@@ -186,11 +186,15 @@ static void s_sba_clean_up(struct small_block_allocator *sba) {
         for (size_t page_idx = 0; page_idx < bin->active_pages.length; ++page_idx) {
             void *page_addr = NULL;
             aws_array_list_get_at(&bin->active_pages, &page_addr, page_idx);
-            s_aligned_free(page_addr);
+            struct page_header *page = page_addr;
+            AWS_ASSERT(page->alloc_count == 0 && "Memory still allocated in aws_sba_allocator (bin)");
+            s_aligned_free(page);
         }
         if (bin->page_cursor) {
             void *page_addr = s_page_base(bin->page_cursor);
-            s_aligned_free(page_addr);
+            struct page_header *page = page_addr;
+            AWS_ASSERT(page->alloc_count == 0 && "Memory still allocated in aws_sba_allocator (page)");
+            s_aligned_free(page);
         }
 
         aws_array_list_clean_up(&bin->active_pages);
@@ -236,6 +240,53 @@ void aws_small_block_allocator_destroy(struct aws_allocator *sba_allocator) {
     struct aws_allocator *allocator = sba->allocator;
     s_sba_clean_up(sba);
     aws_mem_release(allocator, sba);
+}
+
+size_t aws_small_block_allocator_bytes_active(struct aws_allocator *sba_allocator) {
+    AWS_FATAL_ASSERT(sba_allocator && "aws_small_block_allocator_bytes_used requires a non-null allocator");
+    struct small_block_allocator *sba = sba_allocator->impl;
+    AWS_FATAL_ASSERT(sba && "aws_small_block_allocator_bytes_used: supplied allocator has invalid SBA impl");
+
+    size_t used = 0;
+    for (unsigned idx = 0; idx < AWS_SBA_BIN_COUNT; ++idx) {
+        struct sba_bin *bin = &sba->bins[idx];
+        sba->lock(&bin->mutex);
+        for (size_t page_idx = 0; page_idx < bin->active_pages.length; ++page_idx) {
+            void *page_addr = NULL;
+            aws_array_list_get_at(&bin->active_pages, &page_addr, page_idx);
+            struct page_header *page = page_addr;
+            used += page->alloc_count * bin->size;
+        }
+        if (bin->page_cursor) {
+            void *page_addr = s_page_base(bin->page_cursor);
+            struct page_header *page = page_addr;
+            used += page->alloc_count * bin->size;
+        }
+        sba->unlock(&bin->mutex);
+    }
+
+    return used;
+}
+
+size_t aws_small_block_allocator_bytes_reserved(struct aws_allocator *sba_allocator) {
+    AWS_FATAL_ASSERT(sba_allocator && "aws_small_block_allocator_bytes_used requires a non-null allocator");
+    struct small_block_allocator *sba = sba_allocator->impl;
+    AWS_FATAL_ASSERT(sba && "aws_small_block_allocator_bytes_used: supplied allocator has invalid SBA impl");
+
+    size_t used = 0;
+    for (unsigned idx = 0; idx < AWS_SBA_BIN_COUNT; ++idx) {
+        struct sba_bin *bin = &sba->bins[idx];
+        sba->lock(&bin->mutex);
+        used += (bin->active_pages.length + (bin->page_cursor != NULL)) * AWS_SBA_PAGE_SIZE;
+        sba->unlock(&bin->mutex);
+    }
+
+    return used;
+}
+
+size_t aws_small_block_allocator_page_size(struct aws_allocator *sba_allocator) {
+    (void)sba_allocator;
+    return AWS_SBA_PAGE_SIZE;
 }
 
 /* NOTE: Expects the mutex to be held by the caller */

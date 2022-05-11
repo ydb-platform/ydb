@@ -125,6 +125,15 @@ AWS_COMMON_API int aws_byte_buf_init_copy(
     const struct aws_byte_buf *src);
 
 /**
+ * Reads 'filename' into 'out_buf'. If successful, 'out_buf' is allocated and filled with the data;
+ * It is your responsibility to call 'aws_byte_buf_clean_up()' on it. Otherwise, 'out_buf' remains
+ * unused. In the very unfortunate case where some API needs to treat out_buf as a c_string, a null terminator
+ * is appended, but is not included as part of the length field.
+ */
+AWS_COMMON_API
+int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocator *alloc, const char *filename);
+
+/**
  * Evaluates the set of properties that define the shape of all valid aws_byte_buf structures.
  * It is also a cheap check, in the sense it run in constant time (i.e., no loops or recursion).
  */
@@ -494,6 +503,20 @@ bool aws_byte_cursor_eq_c_str(const struct aws_byte_cursor *const cursor, const 
  */
 AWS_COMMON_API
 bool aws_byte_cursor_eq_c_str_ignore_case(const struct aws_byte_cursor *const cursor, const char *const c_str);
+
+/**
+ * Return true if the input starts with the prefix (exact byte comparison).
+ */
+AWS_COMMON_API
+bool aws_byte_cursor_starts_with(const struct aws_byte_cursor *input, const struct aws_byte_cursor *prefix);
+
+/**
+ * Return true if the input starts with the prefix (case-insensitive).
+ * The "C" locale is used for comparing upper and lowercase letters.
+ * Data is assumed to be ASCII text, UTF-8 will work fine too.
+ */
+AWS_COMMON_API
+bool aws_byte_cursor_starts_with_ignore_case(const struct aws_byte_cursor *input, const struct aws_byte_cursor *prefix);
 
 /**
  * Case-insensitive hash function for array containing ASCII or UTF-8 text.
@@ -872,6 +895,46 @@ AWS_COMMON_API bool aws_isxdigit(uint8_t ch);
  * line feed (0x0A), carriage return (0x0D), horizontal tab (0x09), or vertical tab (0x0B).
  */
 AWS_COMMON_API bool aws_isspace(uint8_t ch);
+
+/**
+ * Read entire cursor as ASCII/UTF-8 unsigned base-10 number.
+ * Stricter than strtoull(), which allows whitespace and inputs that start with "0x"
+ *
+ * Examples:
+ * "0" -> 0
+ * "123" -> 123
+ * "00004" -> 4 // leading zeros ok
+ *
+ * Rejects things like:
+ * "-1" // negative numbers not allowed
+ * "1,000" // only characters 0-9 allowed
+ * "" // blank string not allowed
+ * " 0 " // whitespace not allowed
+ * "0x0" // hex not allowed
+ * "FF" // hex not allowed
+ * "999999999999999999999999999999999999999999" // larger than max u64
+ */
+AWS_COMMON_API
+int aws_byte_cursor_utf8_parse_u64(struct aws_byte_cursor cursor, uint64_t *dst);
+
+/**
+ * Read entire cursor as ASCII/UTF-8 unsigned base-16 number with NO "0x" prefix.
+ *
+ * Examples:
+ * "F" -> 15
+ * "000000ff" -> 255 // leading zeros ok
+ * "Ff" -> 255 // mixed case ok
+ * "123" -> 291
+ * "FFFFFFFFFFFFFFFF" -> 18446744073709551616 // max u64
+ *
+ * Rejects things like:
+ * "0x0" // 0x prefix not allowed
+ * "" // blank string not allowed
+ * " F " // whitespace not allowed
+ * "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" // larger than max u64
+ */
+AWS_COMMON_API
+int aws_byte_cursor_utf8_parse_u64_hex(struct aws_byte_cursor cursor, uint64_t *dst);
 
 AWS_EXTERN_C_END
 

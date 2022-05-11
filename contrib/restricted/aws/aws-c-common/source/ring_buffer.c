@@ -73,7 +73,7 @@ int aws_ring_buffer_acquire(struct aws_ring_buffer *ring_buf, size_t requested_s
 
     /* this branch is, we don't have any vended buffers. */
     if (head_cpy == tail_cpy) {
-        size_t ring_space = ring_buf->allocation_end - ring_buf->allocation;
+        size_t ring_space = ring_buf->allocation_end == NULL ? 0 : ring_buf->allocation_end - ring_buf->allocation;
 
         if (requested_size > ring_space) {
             AWS_POSTCONDITION(aws_ring_buffer_is_valid(ring_buf));
@@ -147,7 +147,7 @@ int aws_ring_buffer_acquire_up_to(
 
     /* this branch is, we don't have any vended buffers. */
     if (head_cpy == tail_cpy) {
-        size_t ring_space = ring_buf->allocation_end - ring_buf->allocation;
+        size_t ring_space = ring_buf->allocation_end == NULL ? 0 : ring_buf->allocation_end - ring_buf->allocation;
 
         size_t allocation_size = ring_space > requested_size ? requested_size : ring_space;
 
@@ -232,10 +232,11 @@ static inline bool s_buf_belongs_to_pool(const struct aws_ring_buffer *ring_buff
 #ifdef CBMC
     /* only continue if buf points-into ring_buffer because comparison of pointers to different objects is undefined
      * (C11 6.5.8) */
-    if (!__CPROVER_same_object(buf->buffer, ring_buffer->allocation) ||
-        !__CPROVER_same_object(buf->buffer, ring_buffer->allocation_end - 1)) {
-        return false;
-    }
+    return (
+        __CPROVER_same_object(buf->buffer, ring_buffer->allocation) &&
+        AWS_IMPLIES(
+            ring_buffer->allocation_end != NULL, __CPROVER_same_object(buf->buffer, ring_buffer->allocation_end - 1)));
+
 #endif
     return buf->buffer && ring_buffer->allocation && ring_buffer->allocation_end &&
            buf->buffer >= ring_buffer->allocation && buf->buffer + buf->capacity <= ring_buffer->allocation_end;
@@ -257,65 +258,4 @@ bool aws_ring_buffer_buf_belongs_to_pool(const struct aws_ring_buffer *ring_buff
     AWS_POSTCONDITION(aws_ring_buffer_is_valid(ring_buffer));
     AWS_POSTCONDITION(aws_byte_buf_is_valid(buf));
     return rval;
-}
-
-/* Ring buffer allocator implementation */
-static void *s_ring_buffer_mem_acquire(struct aws_allocator *allocator, size_t size) {
-    struct aws_ring_buffer *buffer = allocator->impl;
-    struct aws_byte_buf buf;
-    AWS_ZERO_STRUCT(buf);
-    /* allocate extra space for the size */
-    if (aws_ring_buffer_acquire(buffer, size + sizeof(size_t), &buf)) {
-        return NULL;
-    }
-    /* store the size ahead of the allocation */
-    *((size_t *)buf.buffer) = buf.capacity;
-    return buf.buffer + sizeof(size_t);
-}
-
-static void s_ring_buffer_mem_release(struct aws_allocator *allocator, void *ptr) {
-    /* back up to where the size is stored */
-    const void *addr = ((uint8_t *)ptr - sizeof(size_t));
-    const size_t size = *((size_t *)addr);
-
-    struct aws_byte_buf buf = aws_byte_buf_from_array(addr, size);
-    buf.allocator = allocator;
-
-    struct aws_ring_buffer *buffer = allocator->impl;
-    aws_ring_buffer_release(buffer, &buf);
-}
-
-static void *s_ring_buffer_mem_calloc(struct aws_allocator *allocator, size_t num, size_t size) {
-    void *mem = s_ring_buffer_mem_acquire(allocator, num * size);
-    if (!mem) {
-        return NULL;
-    }
-    memset(mem, 0, num * size);
-    return mem;
-}
-
-static void *s_ring_buffer_mem_realloc(struct aws_allocator *allocator, void *ptr, size_t old_size, size_t new_size) {
-    (void)allocator;
-    (void)ptr;
-    (void)old_size;
-    (void)new_size;
-    AWS_FATAL_ASSERT(!"ring_buffer_allocator does not support realloc, as it breaks allocation ordering");
-    return NULL;
-}
-
-int aws_ring_buffer_allocator_init(struct aws_allocator *allocator, struct aws_ring_buffer *ring_buffer) {
-    if (allocator == NULL || ring_buffer == NULL) {
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-    }
-
-    allocator->impl = ring_buffer;
-    allocator->mem_acquire = s_ring_buffer_mem_acquire;
-    allocator->mem_release = s_ring_buffer_mem_release;
-    allocator->mem_calloc = s_ring_buffer_mem_calloc;
-    allocator->mem_realloc = s_ring_buffer_mem_realloc;
-    return AWS_OP_SUCCESS;
-}
-
-void aws_ring_buffer_allocator_clean_up(struct aws_allocator *allocator) {
-    AWS_ZERO_STRUCT(*allocator);
 }

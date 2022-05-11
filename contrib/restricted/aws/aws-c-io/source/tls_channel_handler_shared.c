@@ -63,3 +63,7 @@ void aws_on_tls_negotiation_completed(struct aws_tls_channel_handler_shared *tls
     aws_channel_current_clock_time(
         tls_handler_shared->handler->slot->channel, &tls_handler_shared->stats.handshake_end_ns);
 }
+
+bool aws_tls_options_buf_is_set(const struct aws_byte_buf *buf) {
+    return buf->allocator != NULL;
+}

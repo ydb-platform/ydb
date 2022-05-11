@@ -14,6 +14,11 @@ enum aws_platform_os {
     AWS_PLATFORM_OS_UNIX,
 };
 
+struct aws_cpu_info {
+    int32_t cpu_id;
+    bool suspected_hyper_thread;
+};
+
 AWS_EXTERN_C_BEGIN
 
 /* Returns the OS this was built under */
@@ -23,6 +28,25 @@ enum aws_platform_os aws_get_platform_build_os(void);
 /* Returns the number of online processors available for usage. */
 AWS_COMMON_API
 size_t aws_system_info_processor_count(void);
+
+/**
+ * Returns the logical processor groupings on the system (such as multiple numa nodes).
+ */
+AWS_COMMON_API
+uint16_t aws_get_cpu_group_count(void);
+
+/**
+ * For a group, returns the number of CPUs it contains.
+ */
+AWS_COMMON_API
+size_t aws_get_cpu_count_for_group(uint16_t group_idx);
+
+/**
+ * Fills in cpu_ids_array with the cpu_id's for the group. To obtain the size to allocate for cpu_ids_array
+ * and the value for argument for cpu_ids_array_length, call aws_get_cpu_count_for_group().
+ */
+AWS_COMMON_API
+void aws_get_cpu_ids_for_group(uint16_t group_idx, struct aws_cpu_info *cpu_ids_array, size_t cpu_ids_array_length);
 
 /* Returns true if a debugger is currently attached to the process. */
 AWS_COMMON_API
@@ -74,7 +98,7 @@ void aws_backtrace_print(FILE *fp, void *call_site_data);
 
 /* Log the callstack from the current stack to the currently configured aws_logger */
 AWS_COMMON_API
-void aws_backtrace_log(void);
+void aws_backtrace_log(int log_level);
 
 AWS_EXTERN_C_END
 

@@ -32,6 +32,12 @@ AWS_STATIC_IMPL uint64_t aws_timestamp_convert(
     uint64_t *remainder);
 
 /**
+ * More general form of aws_timestamp_convert that takes arbitrary frequencies rather than the timestamp enum.
+ */
+AWS_STATIC_IMPL uint64_t
+    aws_timestamp_convert_u64(uint64_t ticks, uint64_t old_frequency, uint64_t new_frequency, uint64_t *remainder);
+
+/**
  * Get ticks in nanoseconds (usually 100 nanosecond precision) on the high resolution clock (most-likely TSC). This
  * clock has no bearing on the actual system time. On success, timestamp will be set.
  */

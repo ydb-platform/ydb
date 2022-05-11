@@ -8,8 +8,10 @@
 #endif
 
 #include <aws/common/clock.h>
+#include <aws/common/linked_list.h>
 #include <aws/common/logging.h>
 #include <aws/common/private/dlloads.h>
+#include <aws/common/private/thread_shared.h>
 #include <aws/common/thread.h>
 
 #include <dlfcn.h>
@@ -25,10 +27,29 @@
 typedef cpuset_t cpu_set_t;
 #endif
 
+#if !defined(AWS_AFFINITY_METHOD)
+#    error "Must provide a method for setting thread affinity"
+#endif
+
+// Possible methods for setting thread affinity
+#define AWS_AFFINITY_METHOD_NONE 0
+#define AWS_AFFINITY_METHOD_PTHREAD_ATTR 1
+#define AWS_AFFINITY_METHOD_PTHREAD 2
+
+// Ensure provided affinity method matches one of the supported values
+// clang-format off
+#if AWS_AFFINITY_METHOD != AWS_AFFINITY_METHOD_NONE \
+ && AWS_AFFINITY_METHOD != AWS_AFFINITY_METHOD_PTHREAD_ATTR \
+ && AWS_AFFINITY_METHOD != AWS_AFFINITY_METHOD_PTHREAD
+// clang-format on
+#    error "Invalid thread affinity method"
+#endif
+
 static struct aws_thread_options s_default_options = {
     /* this will make sure platform default stack size is used. */
     .stack_size = 0,
     .cpu_id = -1,
+    .join_strategy = AWS_TJS_MANUAL,
 };
 
 struct thread_atexit_callback {
@@ -39,44 +60,92 @@ struct thread_atexit_callback {
 
 struct thread_wrapper {
     struct aws_allocator *allocator;
+    struct aws_linked_list_node node;
     void (*func)(void *arg);
     void *arg;
     struct thread_atexit_callback *atexit;
     void (*call_once)(void *);
     void *once_arg;
-    struct aws_thread *thread;
+
+    /*
+     * The managed thread system does lazy joins on threads once finished via their wrapper.  For that to work
+     * we need something to join against, so we keep a by-value copy of the original thread here.  The tricky part
+     * is how to set the threadid/handle of this copy since the copy must be injected into the thread function before
+     * the threadid/handle is known.  We get around that by just querying it at the top of the wrapper thread function.
+     */
+    struct aws_thread thread_copy;
     bool membind;
 };
 
 static AWS_THREAD_LOCAL struct thread_wrapper *tl_wrapper = NULL;
 
+/*
+ * thread_wrapper is platform-dependent so this function ends up being duplicated in each thread implementation
+ */
+void aws_thread_join_and_free_wrapper_list(struct aws_linked_list *wrapper_list) {
+    struct aws_linked_list_node *iter = aws_linked_list_begin(wrapper_list);
+    while (iter != aws_linked_list_end(wrapper_list)) {
+
+        struct thread_wrapper *join_thread_wrapper = AWS_CONTAINER_OF(iter, struct thread_wrapper, node);
+
+        /*
+         * Can't do a for-loop since we need to advance to the next wrapper before we free the wrapper
+         */
+        iter = aws_linked_list_next(iter);
+
+        join_thread_wrapper->thread_copy.detach_state = AWS_THREAD_JOINABLE;
+        aws_thread_join(&join_thread_wrapper->thread_copy);
+
+        /*
+         * This doesn't actually do anything when using posix threads, but it keeps us
+         * in sync with the Windows version as well as the lifecycle contract we're
+         * presenting for threads.
+         */
+        aws_thread_clean_up(&join_thread_wrapper->thread_copy);
+
+        aws_mem_release(join_thread_wrapper->allocator, join_thread_wrapper);
+
+        aws_thread_decrement_unjoined_count();
+    }
+}
+
 static void *thread_fn(void *arg) {
-    struct thread_wrapper wrapper = *(struct thread_wrapper *)arg;
+    struct thread_wrapper *wrapper_ptr = arg;
+
+    /*
+     * Make sure the aws_thread copy has the right thread id stored in it.
+     */
+    wrapper_ptr->thread_copy.thread_id = aws_thread_current_thread_id();
+
+    struct thread_wrapper wrapper = *wrapper_ptr;
     struct aws_allocator *allocator = wrapper.allocator;
     tl_wrapper = &wrapper;
+
     if (wrapper.membind && g_set_mempolicy_ptr) {
         AWS_LOGF_INFO(
             AWS_LS_COMMON_THREAD,
-            "id=%p: a cpu affinity was specified when launching this thread and set_mempolicy() is available on this "
-            "system. Setting the memory policy to MPOL_PREFERRED",
-            (void *)tl_wrapper->thread);
+            "a cpu affinity was specified when launching this thread and set_mempolicy() is available on this "
+            "system. Setting the memory policy to MPOL_PREFERRED");
         /* if a user set a cpu id in their thread options, we're going to make sure the numa policy honors that
          * and makes sure the numa node of the cpu we launched this thread on is where memory gets allocated. However,
          * we don't want to fail the application if this fails, so make the call, and ignore the result. */
         long resp = g_set_mempolicy_ptr(AWS_MPOL_PREFERRED_ALIAS, NULL, 0);
         if (resp) {
-            AWS_LOGF_WARN(
-                AWS_LS_COMMON_THREAD,
-                "id=%p: call to set_mempolicy() failed with errno %d",
-                (void *)wrapper.thread,
-                errno);
+            AWS_LOGF_WARN(AWS_LS_COMMON_THREAD, "call to set_mempolicy() failed with errno %d", errno);
         }
     }
     wrapper.func(wrapper.arg);
 
-    struct thread_atexit_callback *exit_callback_data = wrapper.atexit;
-    aws_mem_release(allocator, arg);
+    /*
+     * Managed threads don't free the wrapper yet.  The thread management system does it later after the thread
+     * is joined.
+     */
+    bool is_managed_thread = wrapper.thread_copy.detach_state == AWS_THREAD_MANAGED;
+    if (!is_managed_thread) {
+        aws_mem_release(allocator, arg);
+    }
 
+    struct thread_atexit_callback *exit_callback_data = wrapper.atexit;
     while (exit_callback_data) {
         aws_thread_atexit_fn *exit_callback = exit_callback_data->callback;
         void *exit_callback_user_data = exit_callback_data->user_data;
@@ -88,6 +157,13 @@ static void *thread_fn(void *arg) {
         exit_callback_data = next_exit_callback_data;
     }
     tl_wrapper = NULL;
+
+    /*
+     * Release this thread to the managed thread system for lazy join.
+     */
+    if (is_managed_thread) {
+        aws_thread_pending_join_add(&wrapper_ptr->node);
+    }
 
     return NULL;
 }
@@ -138,6 +214,10 @@ int aws_thread_launch(
     pthread_attr_t *attributes_ptr = NULL;
     int attr_return = 0;
     int allocation_failed = 0;
+    bool is_managed_thread = options != NULL && options->join_strategy == AWS_TJS_MANAGED;
+    if (is_managed_thread) {
+        thread->detach_state = AWS_THREAD_MANAGED;
+    }
 
     if (options) {
         attr_return = pthread_attr_init(&attributes);
@@ -160,7 +240,7 @@ int aws_thread_launch(
  * NUMA or not is setup in interleave mode.
  * Thread afinity is also not supported on Android systems, and honestly, if you're running android on a NUMA
  * configuration, you've got bigger problems. */
-#if !defined(__MACH__) && !defined(__ANDROID__) && !defined(_musl_)
+#if AWS_AFFINITY_METHOD == AWS_AFFINITY_METHOD_PTHREAD_ATTR
         if (options->cpu_id >= 0) {
             AWS_LOGF_INFO(
                 AWS_LS_COMMON_THREAD,
@@ -183,7 +263,7 @@ int aws_thread_launch(
                 goto cleanup;
             }
         }
-#endif /* !defined(__MACH__) && !defined(__ANDROID__) */
+#endif /* AWS_AFFINITY_METHOD == AWS_AFFINITY_METHOD_PTHREAD_ATTR */
     }
 
     struct thread_wrapper *wrapper =
@@ -198,17 +278,58 @@ int aws_thread_launch(
         wrapper->membind = true;
     }
 
-    wrapper->thread = thread;
+    wrapper->thread_copy = *thread;
     wrapper->allocator = thread->allocator;
     wrapper->func = func;
     wrapper->arg = arg;
+
+    /*
+     * Increment the count prior to spawning the thread.  Decrement back if the create failed.
+     */
+    if (is_managed_thread) {
+        aws_thread_increment_unjoined_count();
+    }
+
     attr_return = pthread_create(&thread->thread_id, attributes_ptr, thread_fn, (void *)wrapper);
 
     if (attr_return) {
+        if (is_managed_thread) {
+            aws_thread_decrement_unjoined_count();
+        }
         goto cleanup;
     }
 
-    thread->detach_state = AWS_THREAD_JOINABLE;
+#if AWS_AFFINITY_METHOD == AWS_AFFINITY_METHOD_PTHREAD
+    /* If we don't have pthread_attr_setaffinity_np, we may
+     * still be able to set the thread affinity after creation. */
+    if (options && options->cpu_id >= 0) {
+        AWS_LOGF_INFO(
+            AWS_LS_COMMON_THREAD,
+            "id=%p: cpu affinity of cpu_id %d was specified, attempting to honor the value.",
+            (void *)thread,
+            options->cpu_id);
+
+        cpu_set_t cpuset;
+        CPU_ZERO(&cpuset);
+        CPU_SET((uint32_t)options->cpu_id, &cpuset);
+
+        attr_return = pthread_setaffinity_np(thread->thread_id, sizeof(cpuset), &cpuset);
+        if (attr_return) {
+            AWS_LOGF_ERROR(
+                AWS_LS_COMMON_THREAD, "id=%p: pthread_setaffinity_np() failed with %d.", (void *)thread, errno);
+            goto cleanup;
+        }
+    }
+#endif /* AWS_AFFINITY_METHOD == AWS_AFFINITY_METHOD_PTHREAD */
+    /*
+     * Managed threads need to stay unjoinable from an external perspective.  We'll handle it after thread function
+     * completion.
+     */
+    if (is_managed_thread) {
+        aws_thread_clean_up(thread);
+    } else {
+        thread->detach_state = AWS_THREAD_JOINABLE;
+    }
 
 cleanup:
     if (attributes_ptr) {

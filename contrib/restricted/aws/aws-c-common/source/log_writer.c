@@ -3,16 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+#include <aws/common/file.h>
 #include <aws/common/log_writer.h>
 
 #include <aws/common/string.h>
 
 #include <errno.h>
 #include <stdio.h>
-
-#ifdef _MSC_VER
-#    pragma warning(disable : 4996) /* Disable warnings about fopen() being insecure */
-#endif                              /* _MSC_VER */
 
 /*
  * Basic log writer implementations - stdout, stderr, arbitrary file
@@ -76,7 +73,7 @@ static int s_aws_file_writer_init_internal(
 
     /* Open file if name passed in */
     if (file_name_to_open != NULL) {
-        impl->log_file = fopen(file_name_to_open, "a+");
+        impl->log_file = aws_fopen(file_name_to_open, "a+");
         if (impl->log_file == NULL) {
             aws_mem_release(allocator, impl);
             return aws_translate_and_raise_io_error(errno);

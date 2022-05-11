@@ -33,7 +33,12 @@ struct aws_task {
     struct aws_linked_list_node node;
     struct aws_priority_queue_node priority_queue_node;
     const char *type_tag;
-    size_t reserved;
+
+    /* honor the ABI compat */
+    union {
+        bool scheduled;
+        size_t reserved;
+    } abi_extension;
 };
 
 struct aws_task_scheduler {

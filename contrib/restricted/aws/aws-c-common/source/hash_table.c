@@ -222,7 +222,6 @@ int aws_hash_table_init(
     AWS_PRECONDITION(alloc != NULL);
     AWS_PRECONDITION(hash_fn != NULL);
     AWS_PRECONDITION(equals_fn != NULL);
-
     struct hash_table_state template;
     template.hash_fn = hash_fn;
     template.equals_fn = equals_fn;
@@ -715,6 +714,13 @@ int aws_hash_table_foreach(
 
     for (struct aws_hash_iter iter = aws_hash_iter_begin(map); !aws_hash_iter_done(&iter); aws_hash_iter_next(&iter)) {
         int rv = callback(context, &iter.element);
+        if (rv & AWS_COMMON_HASH_TABLE_ITER_ERROR) {
+            int error = aws_last_error();
+            if (error == AWS_ERROR_SUCCESS) {
+                aws_raise_error(AWS_ERROR_UNKNOWN);
+            }
+            return AWS_OP_ERR;
+        }
 
         if (rv & AWS_COMMON_HASH_TABLE_ITER_DELETE) {
             aws_hash_iter_delete(&iter, false);
@@ -1000,7 +1006,7 @@ bool aws_hash_callback_string_eq(const void *a, const void *b) {
     AWS_PRECONDITION(aws_string_is_valid(a));
     AWS_PRECONDITION(aws_string_is_valid(b));
     bool rval = aws_string_eq(a, b);
-    AWS_RETURN_WITH_POSTCONDITION(rval, aws_c_string_is_valid(a) && aws_c_string_is_valid(b));
+    AWS_RETURN_WITH_POSTCONDITION(rval, aws_string_is_valid(a) && aws_string_is_valid(b));
 }
 
 void aws_hash_callback_string_destroy(void *a) {

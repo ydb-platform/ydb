@@ -31,18 +31,18 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     Apache-2.0           1a2162d65587b1c6b4482cab8e65b94f
+KEEP     Custom-Oasis-Pkcs11  2661c322534a1eac3a81a0e2c173c27e
 BELONGS ya.make
-    License text:
-        \## License
-        This library is licensed under the Apache 2.0 License.
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: Apache-2.0
+        Original SPDX id: LicenseRef-scancode-oasis-ipr-policy-2014
         Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/oasis-ipr-policy-2014.LICENSE, https://www.oasis-open.org/policies-guidelines/ipr
     Files with this license:
-        README.md [13:15]
+        source/pkcs11/v2.40/pkcs11.h [2:5]
+        source/pkcs11/v2.40/pkcs11f.h [2:5]
+        source/pkcs11/v2.40/pkcs11t.h [2:5]
 
 KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
 BELONGS ya.make
@@ -55,6 +55,19 @@ FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LI
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         LICENSE [2:202]
+
+KEEP     Custom-Oasis-Pkcs11  34e6010c1f019f721ac79740e9f0a963
+BELONGS ya.make
+    License text:
+        FITNESS FOR A PARTICULAR PURPOSE. OASIS AND ITS MEMBERS WILL NOT BE LIABLE FOR
+        ANY DIRECT, INDIRECT, SPECIAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
+        Score           : 19.35
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+    Files with this license:
+        THIRD-PARTY-LICENSES.txt [29:30]
 
 KEEP     Apache-2.0           43f57e875cdc02e8385ff667f85d702e
 BELONGS ya.make
@@ -81,6 +94,19 @@ BELONGS ya.make
     Files with this license:
         CONTRIBUTING.md [61:61]
 
+KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [13:15]
+
 KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
 BELONGS ya.make
     License text:
@@ -101,7 +127,9 @@ BELONGS ya.make
         include/aws/io/logging.h [6:6]
         include/aws/io/message_pool.h [5:5]
         include/aws/io/pipe.h [6:6]
-        include/aws/io/pki_utils.h [5:5]
+        include/aws/io/pkcs11.h [5:5]
+        include/aws/io/private/pem_utils.h [6:6]
+        include/aws/io/private/pki_utils.h [5:5]
         include/aws/io/private/tls_channel_handler_shared.h [5:5]
         include/aws/io/retry_strategy.h [5:5]
         include/aws/io/shared_library.h [6:6]
@@ -117,13 +145,14 @@ BELONGS ya.make
         source/channel_bootstrap.c [3:3]
         source/event_loop.c [3:3]
         source/exponential_backoff_retry_strategy.c [3:3]
-        source/file_utils_shared.c [3:3]
         source/host_resolver.c [3:3]
         source/io.c [3:3]
         source/linux/epoll_event_loop.c [3:3]
         source/message_pool.c [3:3]
+        source/pem_utils.c [3:3]
+        source/pkcs11.c [3:3]
+        source/pkcs11_private.h [6:6]
         source/pki_utils.c [3:3]
-        source/posix/file_utils.c [3:3]
         source/posix/host_resolver.c [3:3]
         source/posix/pipe.c [3:3]
         source/posix/shared_library.c [3:3]
@@ -131,11 +160,23 @@ BELONGS ya.make
         source/retry_strategy.c [3:3]
         source/s2n/s2n_tls_channel_handler.c [3:3]
         source/socket_channel_handler.c [3:3]
+        source/standard_retry_strategy.c [3:3]
         source/statistics.c [3:3]
         source/stream.c [3:3]
         source/tls_channel_handler.c [3:3]
         source/tls_channel_handler_shared.c [3:3]
         source/uri.c [3:3]
+
+KEEP     Custom-Oasis-Pkcs11  e561d19ebbe9cbf3e19e2ad68aca5ade
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-ecma-documentation
+        Score           : 93.43
+        Match type      : TEXT
+        Links           : http://www.ecma-international.org/publications/DISCLAIMER.pdf, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ecma-documentation.LICENSE
+    Files with this license:
+        THIRD-PARTY-LICENSES.txt [10:29]
 
 SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
 BELONGS ya.make

@@ -41,7 +41,7 @@ struct aws_priority_queue {
 };
 
 struct aws_priority_queue_node {
-    /** The current index of the node in queuesion, or SIZE_MAX if the node has been removed. */
+    /** The current index of the node in question, or SIZE_MAX if the node has been removed. */
     size_t current_index;
 };
 

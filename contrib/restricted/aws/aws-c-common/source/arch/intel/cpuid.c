@@ -51,14 +51,36 @@ static bool s_has_sse42(void) {
 
 static bool s_has_avx2(void) {
     uint32_t abcd[4];
-    uint32_t avx2_bmi12_mask = (1 << 5) | (1 << 3) | (1 << 8);
-    /* CPUID.(EAX=01H, ECX=0H):ECX.FMA[bit 12]==1   &&
-       CPUID.(EAX=01H, ECX=0H):ECX.MOVBE[bit 22]==1 &&
-       CPUID.(EAX=01H, ECX=0H):ECX.OSXSAVE[bit 27]==1 */
-    aws_run_cpuid(7, 0, abcd);
 
-    if ((abcd[1] & avx2_bmi12_mask) != avx2_bmi12_mask)
+    /* Check AVX2:
+     * CPUID.(EAX=07H, ECX=0H):EBX.AVX2[bit 5]==1 */
+    uint32_t avx2_mask = (1 << 5);
+    aws_run_cpuid(7, 0, abcd);
+    if ((abcd[1] & avx2_mask) != avx2_mask) {
         return false;
+    }
+
+    /* Also check AVX:
+     * CPUID.(EAX=01H, ECX=0H):ECX.AVX[bit 28]==1
+     *
+     * NOTE: It SHOULD be impossible for a CPU to support AVX2 without supporting AVX.
+     * But we've received crash reports where the AVX2 feature check passed
+     * and then an AVX instruction caused an "invalid instruction" crash.
+     *
+     * We diagnosed these machines by asking users to run the sample program from:
+     * https://docs.microsoft.com/en-us/cpp/intrinsics/cpuid-cpuidex?view=msvc-160
+     * and observed the following results:
+     *
+     *      AVX not supported
+     *      AVX2 supported
+     *
+     * We don't know for sure what was up with those machines, but this extra
+     * check should stop them from running our AVX/AVX2 code paths. */
+    uint32_t avx1_mask = (1 << 28);
+    aws_run_cpuid(1, 0, abcd);
+    if ((abcd[2] & avx1_mask) != avx1_mask) {
+        return false;
+    }
 
     return true;
 }

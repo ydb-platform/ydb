@@ -19,6 +19,24 @@ void aws_fatal_assert(const char *cond_str, const char *file, int line) AWS_ATTR
 AWS_EXTERN_C_END
 
 #if defined(CBMC)
+#    define AWS_PANIC_OOM(mem, msg)                                                                                    \
+        do {                                                                                                           \
+            if (!(mem)) {                                                                                              \
+                fprintf(stderr, "%s: %s, line %d", msg, __FILE__, __LINE__);                                           \
+                exit(-1);                                                                                              \
+            }                                                                                                          \
+        } while (0)
+#else
+#    define AWS_PANIC_OOM(mem, msg)                                                                                    \
+        do {                                                                                                           \
+            if (!(mem)) {                                                                                              \
+                fprintf(stderr, "%s", msg);                                                                            \
+                abort();                                                                                               \
+            }                                                                                                          \
+        } while (0)
+#endif /* defined(CBMC) */
+
+#if defined(CBMC)
 #    define AWS_ASSUME(cond) __CPROVER_assume(cond)
 #elif defined(_MSC_VER)
 #    define AWS_ASSUME(cond) __assume(cond)
@@ -86,8 +104,8 @@ AWS_EXTERN_C_END
 #    define AWS_POSTCONDITION1(cond) __CPROVER_assert((cond), #    cond " check failed")
 #    define AWS_FATAL_POSTCONDITION2(cond, explanation) __CPROVER_assert((cond), (explanation))
 #    define AWS_FATAL_POSTCONDITION1(cond) __CPROVER_assert((cond), #    cond " check failed")
-#    define AWS_MEM_IS_READABLE(base, len) (((len) == 0) || (__CPROVER_r_ok((base), (len))))
-#    define AWS_MEM_IS_WRITABLE(base, len) (((len) == 0) || (__CPROVER_r_ok((base), (len))))
+#    define AWS_MEM_IS_READABLE_CHECK(base, len) (((len) == 0) || (__CPROVER_r_ok((base), (len))))
+#    define AWS_MEM_IS_WRITABLE_CHECK(base, len) (((len) == 0) || (__CPROVER_r_ok((base), (len))))
 #else
 #    define AWS_PRECONDITION2(cond, expl) AWS_ASSERT(cond)
 #    define AWS_PRECONDITION1(cond) AWS_ASSERT(cond)
@@ -98,11 +116,21 @@ AWS_EXTERN_C_END
 #    define AWS_FATAL_POSTCONDITION2(cond, expl) AWS_FATAL_ASSERT(cond)
 #    define AWS_FATAL_POSTCONDITION1(cond) AWS_FATAL_ASSERT(cond)
 /**
+ * These macros should not be used in is_valid functions.
+ * All validate functions are also used in assumptions for CBMC proofs,
+ * which should not contain __CPROVER_*_ok primitives. The use of these primitives
+ * in assumptions may lead to spurious results.
  * The C runtime does not give a way to check these properties,
  * but we can at least check that the pointer is valid. */
-#    define AWS_MEM_IS_READABLE(base, len) (((len) == 0) || (base))
-#    define AWS_MEM_IS_WRITABLE(base, len) (((len) == 0) || (base))
+#    define AWS_MEM_IS_READABLE_CHECK(base, len) (((len) == 0) || (base))
+#    define AWS_MEM_IS_WRITABLE_CHECK(base, len) (((len) == 0) || (base))
 #endif /* CBMC */
+
+/**
+ * These macros can safely be used in validate functions.
+ */
+#define AWS_MEM_IS_READABLE(base, len) (((len) == 0) || (base))
+#define AWS_MEM_IS_WRITABLE(base, len) (((len) == 0) || (base))
 
 /* Logical consequence. */
 #define AWS_IMPLIES(a, b) (!(a) || (b))

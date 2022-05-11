@@ -52,14 +52,20 @@ void aws_wrapped_cf_allocator_destroy(CFAllocatorRef allocator);
 #endif
 
 /**
- * Returns at least `size` of memory ready for usage or returns NULL on failure.
+ * Returns at least `size` of memory ready for usage. In versions v0.6.8 and prior, this function was allowed to return
+ * NULL. In later versions, if allocator->mem_acquire() returns NULL, this function will assert and exit. To handle
+ * conditions where OOM is not a fatal error, allocator->mem_acquire() is responsible for finding/reclaiming/running a
+ * GC etc...before returning.
  */
 AWS_COMMON_API
 void *aws_mem_acquire(struct aws_allocator *allocator, size_t size);
 
 /**
  * Allocates a block of memory for an array of num elements, each of them size bytes long, and initializes all its bits
- * to zero. Returns null on failure.
+ * to zero. In versions v0.6.8 and prior, this function was allowed to return NULL.
+ * In later versions, if allocator->mem_calloc() returns NULL, this function will assert and exit. To handle
+ * conditions where OOM is not a fatal error, allocator->mem_calloc() is responsible for finding/reclaiming/running a
+ * GC etc...before returning.
  */
 AWS_COMMON_API
 void *aws_mem_calloc(struct aws_allocator *allocator, size_t num, size_t size);
@@ -72,6 +78,11 @@ void *aws_mem_calloc(struct aws_allocator *allocator, size_t num, size_t size);
  * in the same contiguous block of memory.
  *
  * Returns a pointer to the allocation.
+ *
+ * In versions v0.6.8 and prior, this function was allowed to return
+ * NULL. In later versions, if allocator->mem_acquire() returns NULL, this function will assert and exit. To handle
+ * conditions where OOM is not a fatal error, allocator->mem_acquire() is responsible for finding/reclaiming/running a
+ * GC etc...before returning.
  */
 AWS_COMMON_API
 void *aws_mem_acquire_many(struct aws_allocator *allocator, size_t count, ...);
@@ -83,13 +94,15 @@ void *aws_mem_acquire_many(struct aws_allocator *allocator, size_t count, ...);
 AWS_COMMON_API
 void aws_mem_release(struct aws_allocator *allocator, void *ptr);
 
-/*
+/**
  * Attempts to adjust the size of the pointed-to memory buffer from oldsize to
  * newsize. The pointer (*ptr) may be changed if the memory needs to be
  * reallocated.
  *
- * If reallocation fails, *ptr is unchanged, and this method raises an
- * AWS_ERROR_OOM error.
+ * In versions v0.6.8 and prior, this function was allowed to return
+ * NULL. In later versions, if allocator->mem_realloc() returns NULL, this function will assert and exit. To handle
+ * conditions where OOM is not a fatal error, allocator->mem_realloc() is responsible for finding/reclaiming/running a
+ * GC etc...before returning.
  */
 AWS_COMMON_API
 int aws_mem_realloc(struct aws_allocator *allocator, void **ptr, size_t oldsize, size_t newsize);
@@ -165,6 +178,25 @@ struct aws_allocator *aws_small_block_allocator_new(struct aws_allocator *alloca
  */
 AWS_COMMON_API
 void aws_small_block_allocator_destroy(struct aws_allocator *sba_allocator);
+
+/*
+ * Returns the number of bytes currently active in the SBA
+ */
+AWS_COMMON_API
+size_t aws_small_block_allocator_bytes_active(struct aws_allocator *sba_allocator);
+
+/*
+ * Returns the number of bytes reserved in pages/bins inside the SBA, e.g. the
+ * current system memory used by the SBA
+ */
+AWS_COMMON_API
+size_t aws_small_block_allocator_bytes_reserved(struct aws_allocator *sba_allocator);
+
+/*
+ * Returns the page size that the SBA is using
+ */
+AWS_COMMON_API
+size_t aws_small_block_allocator_page_size(struct aws_allocator *sba_allocator);
 
 AWS_EXTERN_C_END
 

@@ -4,9 +4,11 @@
  */
 
 #include <aws/common/common.h>
+#include <aws/common/json.h>
 #include <aws/common/logging.h>
 #include <aws/common/math.h>
 #include <aws/common/private/dlloads.h>
+#include <aws/common/private/thread_shared.h>
 
 #include <stdarg.h>
 #include <stdlib.h>
@@ -28,6 +30,11 @@
 #endif
 
 long (*g_set_mempolicy_ptr)(int, const unsigned long *, unsigned long) = NULL;
+int (*g_numa_available_ptr)(void) = NULL;
+int (*g_numa_num_configured_nodes_ptr)(void) = NULL;
+int (*g_numa_num_possible_cpus_ptr)(void) = NULL;
+int (*g_numa_node_of_cpu_ptr)(int cpu) = NULL;
+
 void *g_libnuma_handle = NULL;
 
 void aws_secure_zero(void *pBuf, size_t bufsize) {
@@ -76,6 +83,9 @@ static struct aws_error_info errors[] = {
     AWS_DEFINE_ERROR_INFO_COMMON(
         AWS_ERROR_OOM,
         "Out of memory."),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_NO_SPACE,
+        "Out of space on disk."),
     AWS_DEFINE_ERROR_INFO_COMMON(
         AWS_ERROR_UNKNOWN,
         "Unknown error."),
@@ -226,6 +236,20 @@ static struct aws_error_info errors[] = {
     AWS_DEFINE_ERROR_INFO_COMMON(
         AWS_ERROR_DIVIDE_BY_ZERO,
         "Attempt to divide a number by zero."),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_INVALID_FILE_HANDLE,
+        "Invalid file handle"),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_OPERATION_INTERUPTED,
+        "The operation was interrupted."
+    ),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_DIRECTORY_NOT_EMPTY,
+        "An operation on a directory was attempted which is not allowed when the directory is not empty."
+    ),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_PLATFORM_NOT_SUPPORTED,
+        "Feature not supported on this platform"),
 };
 /* clang-format on */
 
@@ -244,8 +268,11 @@ static struct aws_log_subject_info s_common_log_subject_infos[] = {
         "task-scheduler",
         "Subject for task scheduler or task specific logging."),
     DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_THREAD, "thread", "Subject for logging thread related functions."),
-    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_XML_PARSER, "xml-parser", "Subject for xml parser specific logging."),
     DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_MEMTRACE, "memtrace", "Output from the aws_mem_trace_dump function"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_XML_PARSER, "xml-parser", "Subject for xml parser specific logging."),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_IO, "common-io", "Common IO utilities"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_BUS, "bus", "Message bus"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_TEST, "test", "Unit/integration testing"),
 };
 
 static struct aws_log_subject_info_list s_common_log_subject_list = {
@@ -262,11 +289,26 @@ void aws_common_library_init(struct aws_allocator *allocator) {
         s_common_library_initialized = true;
         aws_register_error_info(&s_list);
         aws_register_log_subject_info_list(&s_common_log_subject_list);
+        aws_thread_initialize_thread_management();
+        aws_json_module_init(allocator);
 
 /* NUMA is funky and we can't rely on libnuma.so being available. We also don't want to take a hard dependency on it,
  * try and load it if we can. */
 #if !defined(_WIN32) && !defined(WIN32)
-        g_libnuma_handle = dlopen("libnuma.so", RTLD_NOW);
+        /* libnuma defines set_mempolicy() as a WEAK symbol. Loading into the global symbol table overwrites symbols and
+           assumptions due to the way loaders and dlload are often implemented and those symbols are defined by things
+           like libpthread.so on some unix distros. Sorry about the memory usage here, but it's our only safe choice.
+           Also, please don't do numa configurations if memory is your economic bottlneck. */
+        g_libnuma_handle = dlopen("libnuma.so", RTLD_LOCAL);
+
+        /* turns out so versioning is really inconsistent these days */
+        if (!g_libnuma_handle) {
+            g_libnuma_handle = dlopen("libnuma.so.1", RTLD_LOCAL);
+        }
+
+        if (!g_libnuma_handle) {
+            g_libnuma_handle = dlopen("libnuma.so.2", RTLD_LOCAL);
+        }
 
         if (g_libnuma_handle) {
             AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: libnuma.so loaded");
@@ -276,6 +318,35 @@ void aws_common_library_init(struct aws_allocator *allocator) {
             } else {
                 AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: set_mempolicy() failed to load");
             }
+
+            *(void **)(&g_numa_available_ptr) = dlsym(g_libnuma_handle, "numa_available");
+            if (g_numa_available_ptr) {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_available() loaded");
+            } else {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_available() failed to load");
+            }
+
+            *(void **)(&g_numa_num_configured_nodes_ptr) = dlsym(g_libnuma_handle, "numa_num_configured_nodes");
+            if (g_numa_num_configured_nodes_ptr) {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_configured_nodes() loaded");
+            } else {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_configured_nodes() failed to load");
+            }
+
+            *(void **)(&g_numa_num_possible_cpus_ptr) = dlsym(g_libnuma_handle, "numa_num_possible_cpus");
+            if (g_numa_num_possible_cpus_ptr) {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_possible_cpus() loaded");
+            } else {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_possible_cpus() failed to load");
+            }
+
+            *(void **)(&g_numa_node_of_cpu_ptr) = dlsym(g_libnuma_handle, "numa_node_of_cpu");
+            if (g_numa_node_of_cpu_ptr) {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_node_of_cpu() loaded");
+            } else {
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_node_of_cpu() failed to load");
+            }
+
         } else {
             AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: libnuma.so failed to load");
         }
@@ -286,8 +357,10 @@ void aws_common_library_init(struct aws_allocator *allocator) {
 void aws_common_library_clean_up(void) {
     if (s_common_library_initialized) {
         s_common_library_initialized = false;
+        aws_thread_join_all_managed();
         aws_unregister_error_info(&s_list);
         aws_unregister_log_subject_info_list(&s_common_log_subject_list);
+        aws_json_module_cleanup();
 #if !defined(_WIN32) && !defined(WIN32)
         if (g_libnuma_handle) {
             dlclose(g_libnuma_handle);

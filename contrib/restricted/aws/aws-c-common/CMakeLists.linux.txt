@@ -10,10 +10,12 @@
 add_library(restricted-aws-aws-c-common)
 target_compile_options(restricted-aws-aws-c-common PRIVATE
   -DAWS_COMMON_USE_IMPORT_EXPORT
+  -DCJSON_HIDE_SYMBOLS
   -DHAVE_AVX2_INTRINSICS
   -DHAVE_MM256_EXTRACT_EPI64
   -DHAVE_SYSCONF
   -DUSE_SIMD_ENCODING
+  -DAWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_PTHREAD_ATTR
 )
 target_include_directories(restricted-aws-aws-c-common PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/generated/include
@@ -29,6 +31,7 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator_sba.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/array_list.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/assert.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/bus.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/byte_buf.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/cache.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/codegen.c
@@ -39,8 +42,11 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/device_random.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/encoding.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/error.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/cJSON.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/fifo_cache.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/file.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/hash_table.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/json.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lifo_cache.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/linked_hash_table.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_channel.c
@@ -54,6 +60,7 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/condition_variable.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/device_random.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/environment.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/file.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/mutex.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/process.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/rw_lock.c
@@ -62,12 +69,14 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/time.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/priority_queue.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/process_common.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/promise.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ref_count.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/resource_name.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ring_buffer.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/statistics.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/string.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/task_scheduler.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_scheduler.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_shared.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/uuid.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/xml_parser.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/asm/cpuid.c

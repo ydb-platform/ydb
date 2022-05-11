@@ -224,7 +224,7 @@ static int s_collect_stack_trace(void *context, struct aws_hash_element *item) {
         struct aws_byte_cursor cursor = aws_byte_cursor_from_c_str(caller);
         aws_byte_buf_append(&stacktrace, &cursor);
     }
-    free(symbols);
+    aws_mem_release(aws_default_allocator(), symbols);
     /* record the resultant buffer as a string */
     stack_info->trace = aws_string_new_from_array(aws_default_allocator(), stacktrace.buffer, stacktrace.len);
     AWS_FATAL_ASSERT(stack_info->trace);

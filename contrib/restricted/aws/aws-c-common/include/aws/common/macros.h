@@ -75,6 +75,16 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 #    endif     /*  defined(__GNUC__) || defined(__clang__) */
 #endif         /*  defined(_MSC_VER) */
 
+#if defined(__has_feature)
+#    if __has_feature(address_sanitizer)
+#        define AWS_SUPPRESS_ASAN __attribute__((no_sanitize("address")))
+#    endif
+#endif
+
+#if !defined(AWS_SUPPRESS_ASAN)
+#    define AWS_SUPPRESS_ASAN
+#endif
+
 /* If this is C++, restrict isn't supported. If this is not at least C99 on gcc and clang, it isn't supported.
  * If visual C++ building in C mode, the restrict definition is __restrict.
  * This just figures all of that out based on who's including this header file. */

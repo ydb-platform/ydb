@@ -9,10 +9,12 @@ void aws_retry_strategy_acquire(struct aws_retry_strategy *retry_strategy) {
 }
 
 void aws_retry_strategy_release(struct aws_retry_strategy *retry_strategy) {
-    size_t ref_count = aws_atomic_fetch_sub_explicit(&retry_strategy->ref_count, 1, aws_memory_order_seq_cst);
+    if (retry_strategy) {
+        size_t ref_count = aws_atomic_fetch_sub_explicit(&retry_strategy->ref_count, 1, aws_memory_order_seq_cst);
 
-    if (ref_count == 1) {
-        retry_strategy->vtable->destroy(retry_strategy);
+        if (ref_count == 1) {
+            retry_strategy->vtable->destroy(retry_strategy);
+        }
     }
 }
 
@@ -39,7 +41,7 @@ int aws_retry_strategy_schedule_retry(
     return token->retry_strategy->vtable->schedule_retry(token, error_type, retry_ready, user_data);
 }
 
-int aws_retry_strategy_token_record_success(struct aws_retry_token *token) {
+int aws_retry_token_record_success(struct aws_retry_token *token) {
     AWS_PRECONDITION(token);
     AWS_PRECONDITION(token->retry_strategy);
     AWS_PRECONDITION(token->retry_strategy->vtable->record_success);
@@ -47,11 +49,19 @@ int aws_retry_strategy_token_record_success(struct aws_retry_token *token) {
     return token->retry_strategy->vtable->record_success(token);
 }
 
-void aws_retry_strategy_release_retry_token(struct aws_retry_token *token) {
+void aws_retry_token_acquire(struct aws_retry_token *token) {
+    aws_atomic_fetch_add_explicit(&token->ref_count, 1u, aws_memory_order_relaxed);
+}
+
+void aws_retry_token_release(struct aws_retry_token *token) {
     if (token) {
         AWS_PRECONDITION(token->retry_strategy);
         AWS_PRECONDITION(token->retry_strategy->vtable->release_token);
 
-        token->retry_strategy->vtable->release_token(token);
+        size_t prev_count = aws_atomic_fetch_sub_explicit(&token->ref_count, 1u, aws_memory_order_seq_cst);
+
+        if (prev_count == 1u) {
+            token->retry_strategy->vtable->release_token(token);
+        }
     }
 }

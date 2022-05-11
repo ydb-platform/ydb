@@ -119,6 +119,12 @@ struct aws_channel_handler_vtable {
      * associated with the channel's handler chain.
      */
     void (*gather_statistics)(struct aws_channel_handler *handler, struct aws_array_list *stats_list);
+
+    /*
+     * If this handler represents a source of data (like the socket_handler), then this will trigger a read
+     * from the data source.
+     */
+    void (*trigger_read)(struct aws_channel_handler *handler);
 };
 
 struct aws_channel_handler {
@@ -466,6 +472,15 @@ size_t aws_channel_handler_initial_window_size(struct aws_channel_handler *handl
 
 AWS_IO_API
 struct aws_channel_slot *aws_channel_get_first_slot(struct aws_channel *channel);
+
+/**
+ * A way for external processes to force a read by the data-source channel handler.  Necessary in certain cases, like
+ * when a server channel finishes setting up its initial handlers, a read may have already been triggered on the
+ * socket (the client's CLIENT_HELLO tls payload, for example) and absent further data/notifications, this data
+ * would never get processed.
+ */
+AWS_IO_API
+int aws_channel_trigger_read(struct aws_channel *channel);
 
 AWS_EXTERN_C_END
 

@@ -12,6 +12,7 @@
 #include <aws/common/time.h>
 
 #include <ctype.h>
+#include <math.h>
 
 static const char *RFC822_DATE_FORMAT_STR_MINUS_Z = "%a, %d %b %Y %H:%M:%S GMT";
 static const char *RFC822_DATE_FORMAT_STR_WITH_Z = "%a, %d %b %Y %H:%M:%S %Z";
@@ -22,8 +23,8 @@ static const char *ISO_8601_LONG_BASIC_DATE_FORMAT_STR = "%Y%m%dT%H%M%SZ";
 static const char *ISO_8601_SHORT_BASIC_DATE_FORMAT_STR = "%Y%m%d";
 
 #define STR_TRIPLET_TO_INDEX(str)                                                                                      \
-    (((uint32_t)(uint8_t)tolower((str)[0]) << 0) | ((uint32_t)(uint8_t)tolower((str)[1]) << 8) |                       \
-     ((uint32_t)(uint8_t)tolower((str)[2]) << 16))
+    (((uint32_t)tolower((uint8_t)((str)[0])) << 0) | ((uint32_t)tolower((uint8_t)((str)[1])) << 8) |                   \
+     ((uint32_t)tolower((uint8_t)((str)[2])) << 16))
 
 static uint32_t s_jan = 0;
 static uint32_t s_feb = 0;
@@ -140,7 +141,7 @@ static bool is_utc_time_zone(const char *str) {
         }
 
         if (len == 2) {
-            return tolower(str[0]) == 'u' && tolower(str[1]) == 't';
+            return tolower((uint8_t)str[0]) == 'u' && tolower((uint8_t)str[1]) == 't';
         }
 
         if (len < 3) {
@@ -170,21 +171,25 @@ struct tm s_get_time_struct(struct aws_date_time *dt, bool local_time) {
 }
 
 void aws_date_time_init_now(struct aws_date_time *dt) {
-    uint64_t current_time = 0;
-    aws_sys_clock_get_ticks(&current_time);
-    dt->timestamp = (time_t)aws_timestamp_convert(current_time, AWS_TIMESTAMP_NANOS, AWS_TIMESTAMP_SECS, NULL);
-    dt->gmt_time = s_get_time_struct(dt, false);
-    dt->local_time = s_get_time_struct(dt, true);
+    uint64_t current_time_ns = 0;
+    aws_sys_clock_get_ticks(&current_time_ns);
+    aws_date_time_init_epoch_millis(
+        dt, aws_timestamp_convert(current_time_ns, AWS_TIMESTAMP_NANOS, AWS_TIMESTAMP_MILLIS, NULL));
 }
 
 void aws_date_time_init_epoch_millis(struct aws_date_time *dt, uint64_t ms_since_epoch) {
-    dt->timestamp = (time_t)(ms_since_epoch / AWS_TIMESTAMP_MILLIS);
+    uint64_t milliseconds = 0;
+    dt->timestamp =
+        (time_t)aws_timestamp_convert(ms_since_epoch, AWS_TIMESTAMP_MILLIS, AWS_TIMESTAMP_SECS, &milliseconds);
+    dt->milliseconds = (uint16_t)milliseconds;
     dt->gmt_time = s_get_time_struct(dt, false);
     dt->local_time = s_get_time_struct(dt, true);
 }
 
 void aws_date_time_init_epoch_secs(struct aws_date_time *dt, double sec_ms) {
-    dt->timestamp = (time_t)sec_ms;
+    double integral = 0;
+    dt->milliseconds = (uint16_t)(round(modf(sec_ms, &integral) * AWS_TIMESTAMP_MILLIS));
+    dt->timestamp = (time_t)integral;
     dt->gmt_time = s_get_time_struct(dt, false);
     dt->local_time = s_get_time_struct(dt, true);
 }
@@ -629,6 +634,7 @@ int aws_date_time_init_from_str_cursor(
      * timestamp. */
     dt->timestamp -= seconds_offset;
 
+    dt->milliseconds = 0U;
     dt->gmt_time = s_get_time_struct(dt, false);
     dt->local_time = s_get_time_struct(dt, true);
 
@@ -743,15 +749,17 @@ int aws_date_time_to_utc_time_short_str(
 }
 
 double aws_date_time_as_epoch_secs(const struct aws_date_time *dt) {
-    return (double)dt->timestamp;
+    return (double)dt->timestamp + (double)(dt->milliseconds / 1000.0);
 }
 
 uint64_t aws_date_time_as_nanos(const struct aws_date_time *dt) {
-    return (uint64_t)dt->timestamp * AWS_TIMESTAMP_NANOS;
+    return aws_timestamp_convert((uint64_t)dt->timestamp, AWS_TIMESTAMP_SECS, AWS_TIMESTAMP_NANOS, NULL) +
+           aws_timestamp_convert((uint64_t)dt->milliseconds, AWS_TIMESTAMP_MILLIS, AWS_TIMESTAMP_NANOS, NULL);
 }
 
 uint64_t aws_date_time_as_millis(const struct aws_date_time *dt) {
-    return (uint64_t)dt->timestamp * AWS_TIMESTAMP_MILLIS;
+    return aws_timestamp_convert((uint64_t)dt->timestamp, AWS_TIMESTAMP_SECS, AWS_TIMESTAMP_MILLIS, NULL) +
+           (uint64_t)dt->milliseconds;
 }
 
 uint16_t aws_date_time_year(const struct aws_date_time *dt, bool local_time) {

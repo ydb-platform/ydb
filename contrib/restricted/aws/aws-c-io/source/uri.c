@@ -327,18 +327,41 @@ static void s_parse_authority(struct uri_parser *parser, struct aws_byte_cursor 
     struct aws_byte_cursor authority_parse_csr = parser->uri->authority;
 
     if (authority_parse_csr.len) {
+        /* RFC-3986 section 3.2: authority = [ userinfo "@" ] host [ ":" port ] */
+        uint8_t *userinfo_delim = memchr(authority_parse_csr.ptr, '@', authority_parse_csr.len);
+        if (userinfo_delim) {
+
+            parser->uri->userinfo =
+                aws_byte_cursor_advance(&authority_parse_csr, userinfo_delim - authority_parse_csr.ptr);
+            /* For the "@" mark */
+            aws_byte_cursor_advance(&authority_parse_csr, 1);
+            struct aws_byte_cursor userinfo_parse_csr = parser->uri->userinfo;
+            uint8_t *info_delim = memchr(userinfo_parse_csr.ptr, ':', userinfo_parse_csr.len);
+            /* RFC-3986 section 3.2.1: Use of the format "user:password" in the userinfo field is deprecated. But we
+             * treat the userinfo as URL here, also, if the format is not following URL pattern, you have the whole
+             * userinfo */
+            /* RFC-1738 section 3.1: <user>:<password> */
+            if (info_delim) {
+                parser->uri->user.ptr = userinfo_parse_csr.ptr;
+                parser->uri->user.len = info_delim - userinfo_parse_csr.ptr;
+                parser->uri->password.ptr = info_delim + 1;
+                parser->uri->password.len = parser->uri->userinfo.len - parser->uri->user.len - 1;
+            } else {
+                parser->uri->user = userinfo_parse_csr;
+            }
+        }
         uint8_t *port_delim = memchr(authority_parse_csr.ptr, ':', authority_parse_csr.len);
 
         if (!port_delim) {
             parser->uri->port = 0;
-            parser->uri->host_name = parser->uri->authority;
+            parser->uri->host_name = authority_parse_csr;
             return;
         }
 
         parser->uri->host_name.ptr = authority_parse_csr.ptr;
         parser->uri->host_name.len = port_delim - authority_parse_csr.ptr;
 
-        size_t port_len = parser->uri->authority.len - parser->uri->host_name.len - 1;
+        size_t port_len = authority_parse_csr.len - parser->uri->host_name.len - 1;
         port_delim += 1;
         for (size_t i = 0; i < port_len; ++i) {
             if (!aws_isdigit(port_delim[i])) {
@@ -437,23 +460,21 @@ static void s_unchecked_append_canonicalized_path_character(struct aws_byte_buf 
     }
 
     switch (value) {
+        /* non-alpha-numeric unreserved, don't % encode them */
         case '-':
         case '_':
         case '.':
         case '~':
-        case '$':
-        case '&':
-        case ',':
+
+        /* reserved characters that we should not % encode in the path component */
         case '/':
-        case ':':
-        case ';':
-        case '=':
-        case '@': {
             ++buffer->len;
             *dest_ptr = value;
             return;
-        }
 
+        /*
+         * everything else we should % encode, including from the reserved list
+         */
         default:
             buffer->len += 3;
             *dest_ptr++ = '%';

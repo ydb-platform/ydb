@@ -10,6 +10,7 @@
 
 struct aws_channel_slot;
 struct aws_channel_handler;
+struct aws_pkcs11_session;
 struct aws_string;
 
 enum aws_tls_versions {
@@ -28,6 +29,7 @@ enum aws_tls_cipher_pref {
     AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_02 = 3,
     AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2020_02 = 4,
     AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_07 = 5,
+    AWS_IO_TLS_CIPHER_PREF_PQ_TLSv1_0_2021_05 = 6,
 
     AWS_IO_TLS_CIPHER_PREF_END_RANGE = 0xFFFF
 };
@@ -159,6 +161,15 @@ struct aws_tls_ctx_options {
      * Password for the pkcs12 data in pkcs12.
      */
     struct aws_byte_buf pkcs12_password;
+
+#    if !defined(AWS_OS_IOS)
+    /**
+     * On Apple OS you can also use a custom keychain instead of
+     * the default keychain of the account.
+     */
+    struct aws_string *keychain_path;
+#    endif
+
 #endif
 
     /** max tls fragment size. Default is the value of g_aws_channel_max_fragment_size. */
@@ -174,6 +185,25 @@ struct aws_tls_ctx_options {
      * If you set this in server mode, it enforces client authentication.
      */
     bool verify_peer;
+
+    /**
+     * For use when adding BYO_CRYPTO implementations. You can set extra data in here for use with your TLS
+     * implementation.
+     */
+    void *ctx_options_extension;
+
+    /**
+     * Set if using PKCS#11 for private key operations.
+     * See aws_tls_ctx_pkcs11_options for more details.
+     */
+    struct {
+        struct aws_pkcs11_lib *lib;                  /* required */
+        struct aws_string *user_pin;                 /* NULL if token uses "protected authentication path" */
+        struct aws_string *token_label;              /* optional */
+        struct aws_string *private_key_object_label; /* optional */
+        uint64_t slot_id;                            /* optional */
+        bool has_slot_id;
+    } pkcs11;
 };
 
 struct aws_tls_negotiated_protocol_message {
@@ -195,6 +225,35 @@ enum aws_tls_negotiation_status {
     AWS_TLS_NEGOTIATION_STATUS_FAILURE
 };
 
+#ifdef BYO_CRYPTO
+/**
+ * Callback for creating a TLS handler. If you're using this you're using BYO_CRYPTO. This function should return
+ * a fully implemented aws_channel_handler instance for TLS. Note: the aws_tls_options passed to your
+ * aws_tls_handler_new_fn contains multiple callbacks. Namely: aws_tls_on_negotiation_result_fn. You are responsible for
+ * invoking this function when TLs session negotiation has completed.
+ */
+typedef struct aws_channel_handler *(aws_tls_handler_new_fn)(
+    struct aws_allocator *allocator,
+    struct aws_tls_connection_options *options,
+    struct aws_channel_slot *slot,
+    void *user_data);
+
+/**
+ * Invoked when it's time to start TLS negotiation. Note: the aws_tls_options passed to your aws_tls_handler_new_fn
+ * contains multiple callbacks. Namely: aws_tls_on_negotiation_result_fn. You are responsible for invoking this function
+ * when TLS session negotiation has completed.
+ */
+typedef int(aws_tls_client_handler_start_negotiation_fn)(struct aws_channel_handler *handler, void *user_data);
+
+struct aws_tls_byo_crypto_setup_options {
+    aws_tls_handler_new_fn *new_handler_fn;
+    /* ignored for server implementations, required for clients. */
+    aws_tls_client_handler_start_negotiation_fn *start_negotiation_fn;
+    void *user_data;
+};
+
+#endif /* BYO_CRYPTO */
+
 AWS_EXTERN_C_BEGIN
 
 /******************************** tls options init stuff ***********************/
@@ -209,13 +268,13 @@ AWS_IO_API void aws_tls_ctx_options_init_default_client(
  */
 AWS_IO_API void aws_tls_ctx_options_clean_up(struct aws_tls_ctx_options *options);
 
-#if !defined(AWS_OS_IOS)
-
 /**
  * Initializes options for use with mutual tls in client mode.
  * cert_path and pkey_path are paths to files on disk. cert_path
  * and pkey_path are treated as PKCS#7 PEM armored. They are loaded
  * from disk and stored in buffers internally.
+ *
+ * NOTE: This is unsupported on iOS.
  */
 AWS_IO_API int aws_tls_ctx_options_init_client_mtls_from_path(
     struct aws_tls_ctx_options *options,
@@ -227,12 +286,108 @@ AWS_IO_API int aws_tls_ctx_options_init_client_mtls_from_path(
  * Initializes options for use with mutual tls in client mode.
  * cert and pkey are copied. cert and pkey are treated as PKCS#7 PEM
  * armored.
+ *
+ * NOTE: This is unsupported on iOS.
  */
 AWS_IO_API int aws_tls_ctx_options_init_client_mtls(
     struct aws_tls_ctx_options *options,
     struct aws_allocator *allocator,
     const struct aws_byte_cursor *cert,
     const struct aws_byte_cursor *pkey);
+
+/**
+ * This struct exists as a graceful way to pass many arguments when
+ * calling init-with-pkcs11 functions on aws_tls_ctx_options (this also makes
+ * it easy to introduce optional arguments in the future).
+ * Instances of this struct should only exist briefly on the stack.
+ *
+ * Instructions for binding this to high-level languages:
+ * - Python: The members of this struct should be the keyword args to the init-with-pkcs11 functions.
+ * - JavaScript: This should be an options map passed to init-with-pkcs11 functions.
+ * - Java: This should be an options class passed to init-with-pkcs11 functions.
+ * - C++: Same as Java
+ *
+ * Notes on integer types:
+ * PKCS#11 uses `unsigned long` for IDs, handles, etc but we expose them as `uint64_t` in public APIs.
+ * We do this because sizeof(long) is inconsistent across platform/arch/language
+ * (ex: always 64bit in Java, always 32bit in C on Windows, matches CPU in C on Linux and Apple).
+ * By using uint64_t in our public API, we can keep the careful bounds-checking all in one
+ * place, instead of expecting each high-level language binding to get it just right.
+ */
+struct aws_tls_ctx_pkcs11_options {
+    /**
+     * The PKCS#11 library to use.
+     * This field is required.
+     */
+    struct aws_pkcs11_lib *pkcs11_lib;
+
+    /**
+     * User PIN, for logging into the PKCS#11 token (UTF-8).
+     * Zero out to log into a token with a "protected authentication path".
+     */
+    struct aws_byte_cursor user_pin;
+
+    /**
+     * ID of slot containing PKCS#11 token.
+     * If set to NULL, the token will be chosen based on other criteria
+     * (such as token label).
+     */
+    const uint64_t *slot_id;
+
+    /**
+     * Label of PKCS#11 token to use.
+     * If zeroed out, the token will be chosen based on other criteria
+     * (such as slot ID).
+     */
+    struct aws_byte_cursor token_label;
+
+    /**
+     * Label of private key object on PKCS#11 token (UTF-8).
+     * If zeroed out, the private key will be chosen based on other criteria
+     * (such as being the only available private key on the token).
+     */
+    struct aws_byte_cursor private_key_object_label;
+
+    /**
+     * Certificate's file path on disk (UTF-8).
+     * The certificate must be PEM formatted and UTF-8 encoded.
+     * Zero out if passing in certificate by some other means (such as file contents).
+     */
+    struct aws_byte_cursor cert_file_path;
+
+    /**
+     * Certificate's file contents (UTF-8).
+     * The certificate must be PEM formatted and UTF-8 encoded.
+     * Zero out if passing in certificate by some other means (such as file path).
+     */
+    struct aws_byte_cursor cert_file_contents;
+};
+
+/**
+ * Initializes options for use with mutual TLS in client mode,
+ * where a PKCS#11 library provides access to the private key.
+ *
+ * NOTE: This only works on Unix devices.
+ *
+ * @param options           aws_tls_ctx_options to be initialized.
+ * @param allocator         Allocator to use.
+ * @param pkcs11_options    Options for using PKCS#11 (contents are copied)
+ */
+AWS_IO_API int aws_tls_ctx_options_init_client_mtls_with_pkcs11(
+    struct aws_tls_ctx_options *options,
+    struct aws_allocator *allocator,
+    const struct aws_tls_ctx_pkcs11_options *pkcs11_options);
+
+/**
+ * @Deprecated
+ *
+ * Sets a custom keychain path for storing the cert and pkey with mutual tls in client mode.
+ *
+ * NOTE: This only works on MacOS.
+ */
+AWS_IO_API int aws_tls_ctx_options_set_keychain_path(
+    struct aws_tls_ctx_options *options,
+    struct aws_byte_cursor *keychain_path_cursor);
 
 /**
  * Initializes options for use with in server mode.
@@ -257,37 +412,38 @@ AWS_IO_API int aws_tls_ctx_options_init_default_server(
     struct aws_byte_cursor *cert,
     struct aws_byte_cursor *pkey);
 
-#endif /* AWS_OS_IOS */
-
-#ifdef _WIN32
 /**
- * Initializes options for use with mutual tls in client mode. This function is only available on
- * windows. cert_reg_path is the path to a system
+ * Initializes options for use with mutual tls in client mode.
+ * cert_reg_path is the path to a system
  * installed certficate/private key pair. Example:
  * CurrentUser\\MY\\<thumprint>
+ *
+ * NOTE: This only works on Windows.
  */
-AWS_IO_API void aws_tls_ctx_options_init_client_mtls_from_system_path(
+AWS_IO_API int aws_tls_ctx_options_init_client_mtls_from_system_path(
     struct aws_tls_ctx_options *options,
     struct aws_allocator *allocator,
     const char *cert_reg_path);
 
 /**
- * Initializes options for use with server mode. This function is only available on
- * windows. cert_reg_path is the path to a system
+ * Initializes options for use with server mode.
+ * cert_reg_path is the path to a system
  * installed certficate/private key pair. Example:
  * CurrentUser\\MY\\<thumprint>
+ *
+ * NOTE: This only works on Windows.
  */
-AWS_IO_API void aws_tls_ctx_options_init_default_server_from_system_path(
+AWS_IO_API int aws_tls_ctx_options_init_default_server_from_system_path(
     struct aws_tls_ctx_options *options,
     struct aws_allocator *allocator,
     const char *cert_reg_path);
-#endif /* _WIN32 */
 
-#ifdef __APPLE__
 /**
- * Initializes options for use with mutual tls in client mode. This function is only available on
- * apple machines. pkcs12_path is a path to a file on disk containing a pkcs#12 file. The file is loaded
+ * Initializes options for use with mutual tls in client mode.
+ * pkcs12_path is a path to a file on disk containing a pkcs#12 file. The file is loaded
  * into an internal buffer. pkcs_pwd is the corresponding password for the pkcs#12 file; it is copied.
+ *
+ * NOTE: This only works on Apple devices.
  */
 AWS_IO_API int aws_tls_ctx_options_init_client_mtls_pkcs12_from_path(
     struct aws_tls_ctx_options *options,
@@ -296,9 +452,11 @@ AWS_IO_API int aws_tls_ctx_options_init_client_mtls_pkcs12_from_path(
     struct aws_byte_cursor *pkcs_pwd);
 
 /**
- * Initializes options for use with mutual tls in client mode. This function is only available on
- * apple machines. pkcs12 is a buffer containing a pkcs#12 certificate and private key; it is copied.
+ * Initializes options for use with mutual tls in client mode.
+ * pkcs12 is a buffer containing a pkcs#12 certificate and private key; it is copied.
  * pkcs_pwd is the corresponding password for the pkcs#12 buffer; it is copied.
+ *
+ * NOTE: This only works on Apple devices.
  */
 AWS_IO_API int aws_tls_ctx_options_init_client_mtls_pkcs12(
     struct aws_tls_ctx_options *options,
@@ -307,9 +465,11 @@ AWS_IO_API int aws_tls_ctx_options_init_client_mtls_pkcs12(
     struct aws_byte_cursor *pkcs_pwd);
 
 /**
- * Initializes options for use in server mode. This function is only available on
- * apple machines. pkcs12_path is a path to a file on disk containing a pkcs#12 file. The file is loaded
+ * Initializes options for use in server mode.
+ * pkcs12_path is a path to a file on disk containing a pkcs#12 file. The file is loaded
  * into an internal buffer. pkcs_pwd is the corresponding password for the pkcs#12 file; it is copied.
+ *
+ * NOTE: This only works on Apple devices.
  */
 AWS_IO_API int aws_tls_ctx_options_init_server_pkcs12_from_path(
     struct aws_tls_ctx_options *options,
@@ -318,16 +478,17 @@ AWS_IO_API int aws_tls_ctx_options_init_server_pkcs12_from_path(
     struct aws_byte_cursor *pkcs_password);
 
 /**
- * Initializes options for use in server mode. This function is only available on
- * apple machines. pkcs12 is a buffer containing a pkcs#12 certificate and private key; it is copied.
+ * Initializes options for use in server mode.
+ * pkcs12 is a buffer containing a pkcs#12 certificate and private key; it is copied.
  * pkcs_pwd is the corresponding password for the pkcs#12 buffer; it is copied.
+ *
+ * NOTE: This only works on Apple devices.
  */
 AWS_IO_API int aws_tls_ctx_options_init_server_pkcs12(
     struct aws_tls_ctx_options *options,
     struct aws_allocator *allocator,
     struct aws_byte_cursor *pkcs12,
     struct aws_byte_cursor *pkcs_password);
-#endif /* __APPLE__ */
 
 /**
  * Sets alpn list in the form <protocol1;protocol2;...>. A maximum of 4 protocols are supported.
@@ -365,6 +526,12 @@ AWS_IO_API int aws_tls_ctx_options_override_default_trust_store_from_path(
     struct aws_tls_ctx_options *options,
     const char *ca_path,
     const char *ca_file);
+
+/**
+ * When implementing BYO_CRYPTO, if you need extra data to pass to your tls implementation, set it here. The lifetime of
+ * extension_data must outlive the options object and be cleaned up after options is cleaned up.
+ */
+AWS_IO_API void aws_tls_ctx_options_set_extension_data(struct aws_tls_ctx_options *options, void *extension_data);
 
 /**
  * Initializes default connection options from an instance ot aws_tls_ctx.
@@ -450,6 +617,18 @@ AWS_IO_API struct aws_channel_handler *aws_tls_server_handler_new(
     struct aws_tls_connection_options *options,
     struct aws_channel_slot *slot);
 
+#ifdef BYO_CRYPTO
+/**
+ * If using BYO_CRYPTO, you need to call this function prior to creating any client channels in the application.
+ */
+AWS_IO_API void aws_tls_byo_crypto_set_client_setup_options(const struct aws_tls_byo_crypto_setup_options *options);
+/**
+ * If using BYO_CRYPTO, you need to call this function prior to creating any server channels in the application.
+ */
+AWS_IO_API void aws_tls_byo_crypto_set_server_setup_options(const struct aws_tls_byo_crypto_setup_options *options);
+
+#endif /* BYO_CRYPTO */
+
 /**
  * Creates a channel handler, for client or server mode, that handles alpn. This isn't necessarily required
  * since you can always call aws_tls_handler_protocol in the aws_tls_on_negotiation_result_fn callback, but
@@ -466,6 +645,7 @@ AWS_IO_API struct aws_channel_handler *aws_tls_alpn_handler_new(
  */
 AWS_IO_API int aws_tls_client_handler_start_negotiation(struct aws_channel_handler *handler);
 
+#ifndef BYO_CRYPTO
 /**
  * Creates a new server ctx. This ctx can be used for the lifetime of the application assuming you want the same
  * options for every incoming connection. Options will be copied.
@@ -481,6 +661,7 @@ AWS_IO_API struct aws_tls_ctx *aws_tls_server_ctx_new(
 AWS_IO_API struct aws_tls_ctx *aws_tls_client_ctx_new(
     struct aws_allocator *alloc,
     const struct aws_tls_ctx_options *options);
+#endif /* BYO_CRYPTO */
 
 /**
  * Increments the reference count on the tls context, allowing the caller to take a reference to it.

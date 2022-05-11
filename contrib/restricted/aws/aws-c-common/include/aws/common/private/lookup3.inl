@@ -1,5 +1,8 @@
 #ifndef AWS_COMMON_PRIVATE_LOOKUP3_INL
 #define AWS_COMMON_PRIVATE_LOOKUP3_INL
+
+#include <aws/common/macros.h>
+
 /* clang-format off */
 
 /*
@@ -498,6 +501,7 @@ static void hashlittle2(
   size_t      length,    /* length of the key */
   uint32_t   *pc,        /* IN: primary initval, OUT: primary hash */
   uint32_t   *pb)        /* IN: secondary initval, OUT: secondary hash */
+  AWS_SUPPRESS_ASAN      /* AddressSanitizer hates this implementation, even though it's innocuous */
 {
   uint32_t a,b,c;                                          /* internal state */
   union { const void *ptr; size_t i; } u;     /* needed for Mac Powerbook G4 */

@@ -131,6 +131,7 @@ struct client_connection_args {
     bool connection_chosen;
     bool setup_called;
     bool enable_read_back_pressure;
+    struct aws_event_loop *requested_event_loop;
 
     /*
      * It is likely that all reference adjustments to the connection args take place in a single event loop
@@ -169,6 +170,18 @@ static void s_client_connection_args_release(struct client_connection_args *args
     if (args != NULL) {
         aws_ref_count_release(&args->ref_count);
     }
+}
+
+static struct aws_event_loop *s_get_connection_event_loop(struct client_connection_args *args) {
+    if (args == NULL) {
+        return NULL;
+    }
+
+    if (args->requested_event_loop != NULL) {
+        return args->requested_event_loop;
+    }
+
+    return aws_event_loop_group_get_next_loop(args->bootstrap->event_loop_group);
 }
 
 static void s_connection_args_setup_callback(
@@ -632,8 +645,7 @@ static void s_on_host_resolved(
         (void *)client_connection_args->bootstrap,
         (unsigned long long)host_addresses_len);
     /* use this event loop for all outgoing connection attempts (only one will ultimately win). */
-    struct aws_event_loop *connect_loop =
-        aws_event_loop_group_get_next_loop(client_connection_args->bootstrap->event_loop_group);
+    struct aws_event_loop *connect_loop = s_get_connection_event_loop(client_connection_args);
     client_connection_args->addresses_count = (uint8_t)host_addresses_len;
 
     /* allocate all the task data first, in case it fails... */
@@ -692,6 +704,24 @@ static void s_on_host_resolved(
     }
 }
 
+static bool s_does_event_loop_belong_to_event_loop_group(
+    struct aws_event_loop *loop,
+    struct aws_event_loop_group *elg) {
+    if (loop == NULL || elg == NULL) {
+        return false;
+    }
+
+    size_t loop_count = aws_event_loop_group_get_loop_count(elg);
+    for (size_t i = 0; i < loop_count; ++i) {
+        struct aws_event_loop *elg_loop = aws_event_loop_group_get_loop_at(elg, i);
+        if (elg_loop == loop) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 int aws_client_bootstrap_new_socket_channel(struct aws_socket_channel_bootstrap_options *options) {
 
     struct aws_client_bootstrap *bootstrap = options->bootstrap;
@@ -706,6 +736,14 @@ int aws_client_bootstrap_new_socket_channel(struct aws_socket_channel_bootstrap_
 
     AWS_FATAL_ASSERT(tls_options == NULL || socket_options->type == AWS_SOCKET_STREAM);
     aws_io_fatal_assert_library_initialized();
+
+    if (options->requested_event_loop != NULL) {
+        /* If we're asking for a specific event loop, verify it belongs to the bootstrap's event loop group */
+        if (!(s_does_event_loop_belong_to_event_loop_group(
+                options->requested_event_loop, bootstrap->event_loop_group))) {
+            return aws_raise_error(AWS_ERROR_IO_PINNED_EVENT_LOOP_MISMATCH);
+        }
+    }
 
     struct client_connection_args *client_connection_args =
         aws_mem_calloc(bootstrap->allocator, 1, sizeof(struct client_connection_args));
@@ -736,6 +774,7 @@ int aws_client_bootstrap_new_socket_channel(struct aws_socket_channel_bootstrap_
     client_connection_args->outgoing_options = *socket_options;
     client_connection_args->outgoing_port = port;
     client_connection_args->enable_read_back_pressure = options->enable_read_back_pressure;
+    client_connection_args->requested_event_loop = options->requested_event_loop;
 
     if (tls_options) {
         if (aws_tls_connection_options_copy(&client_connection_args->channel_data.tls_options, tls_options)) {
@@ -815,7 +854,7 @@ int aws_client_bootstrap_new_socket_channel(struct aws_socket_channel_bootstrap_
 
         client_connection_args->addresses_count = 1;
 
-        struct aws_event_loop *connect_loop = aws_event_loop_group_get_next_loop(bootstrap->event_loop_group);
+        struct aws_event_loop *connect_loop = s_get_connection_event_loop(client_connection_args);
 
         s_client_connection_args_acquire(client_connection_args);
         if (aws_socket_connect(
@@ -1083,6 +1122,16 @@ static inline int s_setup_server_tls(struct server_channel_data *channel_data, s
         if (aws_channel_slot_set_handler(alpn_slot, alpn_handler)) {
             return AWS_OP_ERR;
         }
+    }
+
+    /*
+     * Server-side channels can reach this point in execution and actually have the CLIENT_HELLO payload already
+     * on the socket in a signalled state, but there was no socket handler or read handler at the time of signal.
+     * So we need to manually trigger a read here to cover that case, otherwise the negotiation will time out because
+     * we will not receive any more data/notifications (unless we read and react).
+     */
+    if (aws_channel_trigger_read(channel)) {
+        return AWS_OP_ERR;
     }
 
     return AWS_OP_SUCCESS;

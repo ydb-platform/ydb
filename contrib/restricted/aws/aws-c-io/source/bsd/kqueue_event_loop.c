@@ -91,6 +91,8 @@ struct kqueue_loop {
          * on them later */
         enum event_thread_state state;
     } thread_data;
+
+    struct aws_thread_options thread_options;
 };
 
 /* Data attached to aws_io_handle while the handle is subscribed to io events */
@@ -128,9 +130,13 @@ struct aws_event_loop_vtable s_kqueue_vtable = {
     .is_on_callers_thread = s_is_event_thread,
 };
 
-struct aws_event_loop *aws_event_loop_new_default(struct aws_allocator *alloc, aws_io_clock_fn *clock) {
+struct aws_event_loop *aws_event_loop_new_default_with_options(
+    struct aws_allocator *alloc,
+    const struct aws_event_loop_options *options) {
     AWS_ASSERT(alloc);
     AWS_ASSERT(clock);
+    AWS_ASSERT(options);
+    AWS_ASSERT(options->clock);
 
     bool clean_up_event_loop_mem = false;
     bool clean_up_event_loop_base = false;
@@ -149,7 +155,7 @@ struct aws_event_loop *aws_event_loop_new_default(struct aws_allocator *alloc, a
     AWS_LOGF_INFO(AWS_LS_IO_EVENT_LOOP, "id=%p: Initializing edge-triggered kqueue", (void *)event_loop);
     clean_up_event_loop_mem = true;
 
-    int err = aws_event_loop_init_base(event_loop, alloc, clock);
+    int err = aws_event_loop_init_base(event_loop, alloc, options->clock);
     if (err) {
         goto clean_up;
     }
@@ -159,6 +165,13 @@ struct aws_event_loop *aws_event_loop_new_default(struct aws_allocator *alloc, a
     if (!impl) {
         goto clean_up;
     }
+
+    if (options->thread_options) {
+        impl->thread_options = *options->thread_options;
+    } else {
+        impl->thread_options = *aws_default_thread_options();
+    }
+
     /* intialize thread id to NULL. It will be set when the event loop thread starts. */
     aws_atomic_init_ptr(&impl->running_thread_id, NULL);
     clean_up_impl_mem = true;
@@ -353,8 +366,12 @@ static int s_run(struct aws_event_loop *event_loop) {
      * and it's ok to touch cross_thread_data without locking the mutex */
     impl->cross_thread_data.state = EVENT_THREAD_STATE_RUNNING;
 
-    int err = aws_thread_launch(&impl->thread_created_on, s_event_thread_main, (void *)event_loop, NULL);
+    aws_thread_increment_unjoined_count();
+    int err =
+        aws_thread_launch(&impl->thread_created_on, s_event_thread_main, (void *)event_loop, &impl->thread_options);
+
     if (err) {
+        aws_thread_decrement_unjoined_count();
         AWS_LOGF_FATAL(AWS_LS_IO_EVENT_LOOP, "id=%p: thread creation failed.", (void *)event_loop);
         goto clean_up;
     }
@@ -414,6 +431,7 @@ static int s_wait_for_stop_completion(struct aws_event_loop *event_loop) {
 #endif
 
     int err = aws_thread_join(&impl->thread_created_on);
+    aws_thread_decrement_unjoined_count();
     if (err) {
         return AWS_OP_ERR;
     }
@@ -836,6 +854,7 @@ static void s_event_thread_main(void *user_data) {
         int num_kevents = kevent(
             impl->kq_fd, NULL /*changelist*/, 0 /*nchanges*/, kevents /*eventlist*/, MAX_EVENTS /*nevents*/, &timeout);
 
+        aws_event_loop_register_tick_start(event_loop);
         AWS_LOGF_TRACE(
             AWS_LS_IO_EVENT_LOOP, "id=%p: wake up with %d events to process.", (void *)event_loop, num_kevents);
         if (num_kevents == -1) {
@@ -952,6 +971,8 @@ static void s_event_thread_main(void *user_data) {
             timeout.tv_sec = (time_t)(timeout_sec);
             timeout.tv_nsec = (long)(timeout_remainder_ns);
         }
+
+        aws_event_loop_register_tick_end(event_loop);
     }
 
     AWS_LOGF_INFO(AWS_LS_IO_EVENT_LOOP, "id=%p: exiting main loop", (void *)event_loop);

@@ -5,19 +5,18 @@
 
 #include <aws/common/logging.h>
 
-#include <aws/common/string.h>
-
+#include <aws/common/file.h>
 #include <aws/common/log_channel.h>
 #include <aws/common/log_formatter.h>
 #include <aws/common/log_writer.h>
 #include <aws/common/mutex.h>
+#include <aws/common/string.h>
 
 #include <errno.h>
 #include <stdarg.h>
 
 #if _MSC_VER
 #    pragma warning(disable : 4204) /* non-constant aggregate initializer */
-#    pragma warning(disable : 4996) /* Disable warnings about fopen() being insecure */
 #endif
 
 /*
@@ -55,7 +54,11 @@ static struct aws_logger_vtable s_null_vtable = {
     .clean_up = s_null_logger_clean_up,
 };
 
-static struct aws_logger s_null_logger = {.vtable = &s_null_vtable, .allocator = NULL, .p_impl = NULL};
+static struct aws_logger s_null_logger = {
+    .vtable = &s_null_vtable,
+    .allocator = NULL,
+    .p_impl = NULL,
+};
 
 /*
  * Pipeline logger implementation
@@ -120,13 +123,22 @@ static enum aws_log_level s_aws_logger_pipeline_get_log_level(struct aws_logger 
 
     struct aws_logger_pipeline *impl = logger->p_impl;
 
-    return impl->level;
+    return (enum aws_log_level)aws_atomic_load_int(&impl->level);
+}
+
+static int s_aws_logger_pipeline_set_log_level(struct aws_logger *logger, enum aws_log_level level) {
+    struct aws_logger_pipeline *impl = logger->p_impl;
+
+    aws_atomic_store_int(&impl->level, (size_t)level);
+
+    return AWS_OP_SUCCESS;
 }
 
 struct aws_logger_vtable g_pipeline_logger_owned_vtable = {
     .get_log_level = s_aws_logger_pipeline_get_log_level,
     .log = s_aws_logger_pipeline_log,
     .clean_up = s_aws_logger_pipeline_owned_clean_up,
+    .set_log_level = s_aws_logger_pipeline_set_log_level,
 };
 
 int aws_logger_init_standard(
@@ -181,7 +193,7 @@ int aws_logger_init_standard(
         impl->channel = channel;
         impl->writer = writer;
         impl->allocator = allocator;
-        impl->level = options->level;
+        aws_atomic_store_int(&impl->level, (size_t)options->level);
 
         logger->vtable = &g_pipeline_logger_owned_vtable;
         logger->allocator = allocator;
@@ -224,6 +236,7 @@ static struct aws_logger_vtable s_pipeline_logger_unowned_vtable = {
     .get_log_level = s_aws_logger_pipeline_get_log_level,
     .log = s_aws_logger_pipeline_log,
     .clean_up = s_aws_pipeline_logger_unowned_clean_up,
+    .set_log_level = s_aws_logger_pipeline_set_log_level,
 };
 
 int aws_logger_init_from_external(
@@ -244,7 +257,7 @@ int aws_logger_init_from_external(
     impl->channel = channel;
     impl->writer = writer;
     impl->allocator = allocator;
-    impl->level = level;
+    aws_atomic_store_int(&impl->level, (size_t)level);
 
     logger->vtable = &s_pipeline_logger_unowned_vtable;
     logger->allocator = allocator;
@@ -368,6 +381,17 @@ void aws_register_log_subject_info_list(struct aws_log_subject_info_list *log_su
     const uint32_t min_range = log_subject_list->subject_list[0].subject_id;
     const uint32_t slot_index = min_range >> AWS_LOG_SUBJECT_STRIDE_BITS;
 
+#if DEBUG_BUILD
+    for (uint32_t i = 0; i < log_subject_list->count; ++i) {
+        const struct aws_log_subject_info *info = &log_subject_list->subject_list[i];
+        uint32_t expected_id = min_range + i;
+        if (expected_id != info->subject_id) {
+            fprintf(stderr, "\"%s\" is at wrong index in aws_log_subject_info[]\n", info->subject_name);
+            AWS_FATAL_ASSERT(0);
+        }
+    }
+#endif /* DEBUG_BUILD */
+
     if (slot_index >= AWS_PACKAGE_SLOTS) {
         /* This is an NDEBUG build apparently. Kill the process rather than
          * corrupting heap. */
@@ -405,7 +429,7 @@ void aws_unregister_log_subject_info_list(struct aws_log_subject_info_list *log_
  * no alloc implementation
  */
 struct aws_logger_noalloc {
-    enum aws_log_level level;
+    struct aws_atomic_var level;
     FILE *file;
     bool should_close;
     struct aws_mutex lock;
@@ -415,7 +439,7 @@ static enum aws_log_level s_noalloc_stderr_logger_get_log_level(struct aws_logge
     (void)subject;
 
     struct aws_logger_noalloc *impl = logger->p_impl;
-    return impl->level;
+    return (enum aws_log_level)aws_atomic_load_int(&impl->level);
 }
 
 #define MAXIMUM_NO_ALLOC_LOG_LINE_SIZE 8192
@@ -464,13 +488,15 @@ static int s_noalloc_stderr_logger_log(
 
     aws_mutex_lock(&impl->lock);
 
+    int write_result = AWS_OP_SUCCESS;
     if (fwrite(format_buffer, 1, format_data.amount_written, impl->file) < format_data.amount_written) {
-        return aws_translate_and_raise_io_error(errno);
+        aws_translate_and_raise_io_error(errno);
+        write_result = AWS_OP_ERR;
     }
 
     aws_mutex_unlock(&impl->lock);
 
-    return AWS_OP_SUCCESS;
+    return write_result;
 }
 
 static void s_noalloc_stderr_logger_clean_up(struct aws_logger *logger) {
@@ -489,10 +515,19 @@ static void s_noalloc_stderr_logger_clean_up(struct aws_logger *logger) {
     AWS_ZERO_STRUCT(*logger);
 }
 
+int s_no_alloc_stderr_logger_set_log_level(struct aws_logger *logger, enum aws_log_level level) {
+    struct aws_logger_noalloc *impl = logger->p_impl;
+
+    aws_atomic_store_int(&impl->level, (size_t)level);
+
+    return AWS_OP_SUCCESS;
+}
+
 static struct aws_logger_vtable s_noalloc_stderr_vtable = {
     .get_log_level = s_noalloc_stderr_logger_get_log_level,
     .log = s_noalloc_stderr_logger_log,
     .clean_up = s_noalloc_stderr_logger_clean_up,
+    .set_log_level = s_no_alloc_stderr_logger_set_log_level,
 };
 
 int aws_logger_init_noalloc(
@@ -506,12 +541,13 @@ int aws_logger_init_noalloc(
         return AWS_OP_ERR;
     }
 
-    impl->level = options->level;
+    aws_atomic_store_int(&impl->level, (size_t)options->level);
+
     if (options->file != NULL) {
         impl->file = options->file;
         impl->should_close = false;
     } else { /* _MSC_VER */
-        impl->file = fopen(options->filename, "w");
+        impl->file = aws_fopen(options->filename, "w");
         impl->should_close = true;
     }
 
@@ -522,4 +558,16 @@ int aws_logger_init_noalloc(
     logger->p_impl = impl;
 
     return AWS_OP_SUCCESS;
+}
+
+int aws_logger_set_log_level(struct aws_logger *logger, enum aws_log_level level) {
+    if (logger == NULL || logger->vtable == NULL) {
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+    if (logger->vtable->set_log_level == NULL) {
+        return aws_raise_error(AWS_ERROR_UNIMPLEMENTED);
+    }
+
+    return logger->vtable->set_log_level(logger, level);
 }

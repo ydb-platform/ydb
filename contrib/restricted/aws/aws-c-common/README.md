@@ -121,8 +121,8 @@ have pre-slotted log subjects & error codes for each library. The currently allo
 | [0x2C00, 0x3000) | aws-crt-nodejs |
 | [0x3000, 0x3400) | aws-crt-dotnet |
 | [0x3400, 0x3800) | aws-c-iot |
-| [0x3800, 0x3C00) | (reserved for future project) |
-| [0x3C00, 0x4000) | (reserved for future project) |
+| [0x3800, 0x3C00) | aws-c-s3 |
+| [0x3C00, 0x4000) | aws-c-sdkutils |
 | [0x4000, 0x4400) | (reserved for future project) |
 | [0x4400, 0x4800) | (reserved for future project) |
 

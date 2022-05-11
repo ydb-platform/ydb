@@ -48,6 +48,7 @@ enum aws_date_day_of_week {
 
 struct aws_date_time {
     time_t timestamp;
+    uint16_t milliseconds;
     char tz[6];
     struct tm gmt_time;
     struct tm local_time;

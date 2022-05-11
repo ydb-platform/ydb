@@ -16,7 +16,9 @@ struct aws_event_loop_group;
 /**
  * Invoked upon the acquisition, or failure to acquire a retry token. This function will always be invoked if and only
  * if aws_retry_strategy_acquire_retry_token() returns AWS_OP_SUCCESS. It will never be invoked synchronously from
- * aws_retry_strategy_acquire_retry_token(). Token will always be NULL if error_code is non-zero, and vice-versa.
+ * aws_retry_strategy_acquire_retry_token(). Token will always be NULL if error_code is non-zero, and vice-versa. If
+ * token is non-null, it will have a reference count of 1, and you must call aws_retry_token_release() on it later. See
+ * the comments for aws_retry_strategy_on_retry_ready_fn for more info.
  */
 typedef void(aws_retry_strategy_on_retry_token_acquired_fn)(
     struct aws_retry_strategy *retry_strategy,
@@ -28,8 +30,8 @@ typedef void(aws_retry_strategy_on_retry_token_acquired_fn)(
  * Invoked after a successful call to aws_retry_strategy_schedule_retry(). This function will always be invoked if and
  * only if aws_retry_strategy_schedule_retry() returns AWS_OP_SUCCESS. It will never be invoked synchronously from
  * aws_retry_strategy_schedule_retry(). After attempting the operation, either call aws_retry_strategy_schedule_retry()
- * with an aws_retry_error_type or call aws_retry_strategy_token_record_success() and then release the token via.
- * aws_retry_strategy_release_retry_token().
+ * with an aws_retry_error_type or call aws_retry_token_record_success() and then release the token via.
+ * aws_retry_token_release().
  */
 typedef void(aws_retry_strategy_on_retry_ready_fn)(struct aws_retry_token *token, int error_code, void *user_data);
 
@@ -74,6 +76,7 @@ struct aws_retry_strategy {
 struct aws_retry_token {
     struct aws_allocator *allocator;
     struct aws_retry_strategy *retry_strategy;
+    struct aws_atomic_var ref_count;
     void *impl;
 };
 
@@ -109,6 +112,12 @@ struct aws_exponential_backoff_retry_options {
     uint64_t (*generate_random)(void);
 };
 
+struct aws_standard_retry_options {
+    struct aws_exponential_backoff_retry_options backoff_retry_options;
+    /** capacity for partitions. Defaults to 500 */
+    size_t initial_bucket_capacity;
+};
+
 AWS_EXTERN_C_BEGIN
 /**
  * Acquire a reference count on retry_strategy.
@@ -130,6 +139,7 @@ AWS_IO_API int aws_retry_strategy_acquire_retry_token(
     aws_retry_strategy_on_retry_token_acquired_fn *on_acquired,
     void *user_data,
     uint64_t timeout_ms);
+
 /**
  * Schedules a retry based on the backoff and token based strategies. retry_ready is invoked when the retry is either
  * ready for execution or if it has been canceled due to application shutdown.
@@ -149,12 +159,18 @@ AWS_IO_API int aws_retry_strategy_schedule_retry(
  * some strategies such as exponential backoff will ignore this, but you should always call it after a successful
  * operation or your system will never recover during an outage.
  */
-AWS_IO_API int aws_retry_strategy_token_record_success(struct aws_retry_token *token);
+AWS_IO_API int aws_retry_token_record_success(struct aws_retry_token *token);
+
+/**
+ * Increments reference count for token. This should be called any time you seat the token to a pointer you own.
+ */
+AWS_IO_API void aws_retry_token_acquire(struct aws_retry_token *token);
+
 /**
  * Releases the reference count for token. This should always be invoked after either calling
- * aws_retry_strategy_schedule_retry() and failing, or after calling aws_retry_strategy_token_record_success().
+ * aws_retry_strategy_schedule_retry() and failing, or after calling aws_retry_token_record_success().
  */
-AWS_IO_API void aws_retry_strategy_release_retry_token(struct aws_retry_token *token);
+AWS_IO_API void aws_retry_token_release(struct aws_retry_token *token);
 /**
  * Creates a retry strategy using exponential backoff. This strategy does not perform any bookkeeping on error types and
  * success. There is no circuit breaker functionality in here. See the comments above for
@@ -163,6 +179,35 @@ AWS_IO_API void aws_retry_strategy_release_retry_token(struct aws_retry_token *t
 AWS_IO_API struct aws_retry_strategy *aws_retry_strategy_new_exponential_backoff(
     struct aws_allocator *allocator,
     const struct aws_exponential_backoff_retry_options *config);
+
+/**
+ * This is a retry implementation that cuts off traffic if it's
+ * detected that an endpoint partition is having availability
+ * problems. This is necessary to keep from making outages worse
+ * by scheduling work that's unlikely to succeed yet increases
+ * load on an already ailing system.
+ *
+ * We do this by creating a bucket for each partition. A partition
+ * is an arbitrary specifier. It can be anything: a region, a service,
+ * a combination of region and service, a literal dns name.... doesn't matter.
+ *
+ * Each bucket has a budget for maximum allowed retries. Different types of events
+ * carry different weights. Things that indicate an unhealthy partition such as
+ * transient errors (timeouts, unhealthy connection etc...) cost more.
+ * A retry for any other reason (service sending a 5xx response code) cost a bit less.
+ * When a retry is attempted this capacity is leased out to the retry. On success it is
+ * released back to the capacity pool. On failure, it remains leased.
+ * Operations that succeed without a retry slowly restore the capacity pool.
+ *
+ * If a partition runs out of capacity it is assumed unhealthy and retries will be blocked
+ * until capacity returns to the pool. To prevent a partition from staying unhealthy after
+ * an outage has recovered, new requests that succeed without a retry will increase the capacity
+ * slowly ( a new request gets a payback lease of 1, but the lease is never actually deducted from the capacity pool).
+ */
+AWS_IO_API struct aws_retry_strategy *aws_retry_strategy_new_standard(
+    struct aws_allocator *allocator,
+    const struct aws_standard_retry_options *config);
+
 AWS_EXTERN_C_END
 
 #endif /* AWS_IO_CLIENT_RETRY_STRATEGY_H */

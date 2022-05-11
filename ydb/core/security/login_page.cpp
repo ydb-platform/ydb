@@ -78,7 +78,7 @@ public:
             return ReplyErrorAndPassAway("400 Bad Request", "Invalid method");
         }
 
-        if (Request.GetHeader("Content-Type") != "application/json") {
+        if (Request.GetHeader("Content-Type").Before(';') != "application/json") {
             return ReplyErrorAndPassAway("400 Bad Request", "Invalid Content-Type");
         }
 
@@ -297,7 +297,7 @@ public:
             return ReplyErrorAndPassAway("400 Bad Request", "Invalid method");
         }
 
-        if (Request.GetHeader("Content-Type") != "application/json") {
+        if (Request.GetHeader("Content-Type").Before(';') != "application/json") {
             return ReplyErrorAndPassAway("400 Bad Request", "Invalid Content-Type");
         }
 

@@ -111,7 +111,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         )
 
     def _initialize(self):
-        node = self.nodes.values()[0]
+        node = list(self.nodes.values())[0]
         node.ssh_command(['bash /Berkanavt/kikimr/cfg/init_storage.bash'], raise_on_error=True)
         node.ssh_command(['bash /Berkanavt/kikimr/cfg/init_cms.bash'], raise_on_error=True)
         node.ssh_command(['bash /Berkanavt/kikimr/cfg/init_compute.bash'], raise_on_error=True)

@@ -8,9 +8,7 @@
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
 
-#include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId
 #include <ydb/core/base/kikimr_issue.h>
-#include <ydb/core/tablet_flat/util_basics.h> // TODO: IDestructable
 #include <ydb/core/protos/services.pb.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -26,6 +24,8 @@
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
+
+#include <any>
 
 #if defined CA_LOG_D || defined CA_LOG_I || defined CA_LOG_E || defined CA_LOG_C
 #   error log macro definition clash
@@ -758,11 +758,11 @@ protected:
 protected:
     // virtual methods (TODO: replace with static_cast<TDerived*>(this)->Foo()
 
-    virtual THolder<NKikimr::IDestructable> GetSourcesState() {
+    virtual std::any GetSourcesState() {
         return nullptr;
     }
 
-    virtual void PollSources(THolder<NKikimr::IDestructable> /* state */) {
+    virtual void PollSources(std::any /* state */) {
     }
 
     virtual void TerminateSources(const TIssues& /* issues */, bool /* success */) {

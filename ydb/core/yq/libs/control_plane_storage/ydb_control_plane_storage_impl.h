@@ -357,7 +357,6 @@ public:
     */
     void CreateDirectory();
     void CreateQueriesTable();
-    void CreatePendingTable();
     void CreatePendingSmallTable();
     void CreateConnectionsTable();
     void CreateJobsTable();

@@ -1420,3 +1420,5 @@ crm/space/frontend_static
 mail/java/furita
 toolbox/tunneler
 samsara/samsara-attachments
+education/schoolbook/services/gauss
+education/schoolbook/packages/accio

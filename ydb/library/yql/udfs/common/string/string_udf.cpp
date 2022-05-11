@@ -376,6 +376,8 @@ namespace {
         return TUnboxedValuePod(result);
     }
 
+    static constexpr ui64 padLim = 1000000;
+
     SIMPLE_UDF_OPTIONS(TRightPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), builder.OptionalArgs(1)) {
         TStringStream result;
         const TStringBuf input(args[0].AsStringRef());
@@ -386,7 +388,11 @@ namespace {
             }
             paddingSymbol = TString(args[2].AsStringRef())[0];
         }
-        result << RightPad(input, args[1].Get<ui64>(), paddingSymbol);
+        const ui64 padLen = args[1].Get<ui64>();
+        if (padLen > padLim) {
+             ythrow yexception() << "Padding length (" << padLen << ") exceeds maximum: " << padLim;
+        }
+        result << RightPad(input, padLen, paddingSymbol);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
@@ -400,7 +406,11 @@ namespace {
             }
             paddingSymbol = TString(args[2].AsStringRef())[0];
         }
-        result << LeftPad(input, args[1].Get<ui64>(), paddingSymbol);
+        const ui64 padLen = args[1].Get<ui64>();
+        if (padLen > padLim) {
+             ythrow yexception() << "Padding length (" << padLen << ") exceeds maximum: " << padLim;
+        }
+        result << LeftPad(input, padLen, paddingSymbol);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 

@@ -11,4 +11,7 @@ items:
   include: { mode: link, path: debug/toc_p.yaml }
 - name: Установить размер пула сессий
   href: session_pool_limit/index.md
-
+- name: Вставка данных
+  href: upsert/index.md
+- name: Пакетная вставка данных
+  href: bulk_upsert/index.md

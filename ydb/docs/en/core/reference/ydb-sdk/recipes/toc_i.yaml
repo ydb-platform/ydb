@@ -11,3 +11,7 @@ items:
   include: { mode: link, path: debug/toc_p.yaml }
 - name: Setting the session pool size
   href: session_pool_limit/index.md
+- name: Upserting data
+  href: upsert/index.md
+- name: Bulk-upserting data
+  href: bulk_upsert/index.md

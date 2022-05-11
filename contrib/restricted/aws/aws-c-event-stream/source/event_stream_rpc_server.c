@@ -484,12 +484,10 @@ static void s_on_protocol_message_written_fn(
         aws_error_debug_str(error_code));
 
     if (message_args->message_type == AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_CONNECT_ACK) {
-        AWS_LOGF_INFO(
+        AWS_LOGF_TRACE(
             AWS_LS_EVENT_STREAM_RPC_SERVER,
-            "id=%p: connect ack message sent, the connect handshake is completed",
+            "id=%p: connect ack message flushed to wire",
             (void *)message_args->connection);
-        aws_atomic_store_int(
-            &message_args->connection->handshake_state, CONNECTION_HANDSHAKE_STATE_CONNECT_ACK_PROCESSED);
     }
 
     if (message_args->end_stream) {
@@ -580,13 +578,20 @@ static int s_send_protocol_message(
         }
     }
 
-    if (message_args->message_type == AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_CONNECT_ACK &&
-        !(message_args->message_flags & AWS_EVENT_STREAM_RPC_MESSAGE_FLAG_CONNECTION_ACCEPTED)) {
-        AWS_LOGF_DEBUG(
+    if (message_args->message_type == AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_CONNECT_ACK) {
+        AWS_LOGF_INFO(
             AWS_LS_EVENT_STREAM_RPC_SERVER,
-            "id=%p: connection ack was rejected closing connection",
+            "id=%p: sending connect ack message, the connect handshake is completed",
             (void *)connection);
-        args->terminate_connection = true;
+        aws_atomic_store_int(&connection->handshake_state, CONNECTION_HANDSHAKE_STATE_CONNECT_ACK_PROCESSED);
+
+        if (!(message_args->message_flags & AWS_EVENT_STREAM_RPC_MESSAGE_FLAG_CONNECTION_ACCEPTED)) {
+            AWS_LOGF_DEBUG(
+                AWS_LS_EVENT_STREAM_RPC_SERVER,
+                "id=%p: connection ack was rejected closing connection",
+                (void *)connection);
+            args->terminate_connection = true;
+        }
     }
 
     args->flush_fn = flush_fn;

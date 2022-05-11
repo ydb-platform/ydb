@@ -115,8 +115,8 @@ enum aws_libcrypto_version {
 } s_libcrypto_version = AWS_LIBCRYPTO_NONE;
 
 static int s_resolve_libcrypto_hmac(enum aws_libcrypto_version version, void *module) {
-    hmac_ctx_init init_fn = 0;
-    hmac_ctx_clean_up clean_up_fn = 0;
+    hmac_ctx_init init_fn = HMAC_CTX_init;
+    hmac_ctx_clean_up clean_up_fn = HMAC_CTX_cleanup;
     hmac_ctx_new new_fn = HMAC_CTX_new;
     hmac_ctx_free free_fn = HMAC_CTX_free;
     hmac_ctx_reset reset_fn = HMAC_CTX_reset;
@@ -203,7 +203,7 @@ static int s_resolve_libcrypto_hmac(enum aws_libcrypto_version version, void *mo
 #    undef EVP_MD_CTX_create
 #endif
 extern EVP_MD_CTX *EVP_MD_CTX_create(void) __attribute__((weak, used));
-static evp_md_ctx_new s_EVP_MD_CTX_create = 0;
+static evp_md_ctx_new s_EVP_MD_CTX_create = EVP_MD_CTX_create;
 #if defined(EVP_MD_CTX_create)
 #    pragma pop_macro("EVP_MD_CTX_create")
 #endif
@@ -213,7 +213,7 @@ static evp_md_ctx_new s_EVP_MD_CTX_create = 0;
 #    undef EVP_MD_CTX_destroy
 #endif
 extern void EVP_MD_CTX_destroy(EVP_MD_CTX *) __attribute__((weak, used));
-static evp_md_ctx_free s_EVP_MD_CTX_destroy = 0;
+static evp_md_ctx_free s_EVP_MD_CTX_destroy = EVP_MD_CTX_destroy;
 #if defined(EVP_MD_CTX_destroy)
 #    pragma pop_macro("EVP_MD_CTX_destroy")
 #endif

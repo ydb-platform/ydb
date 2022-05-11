@@ -31,6 +31,19 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     Apache-2.0           1a2162d65587b1c6b4482cab8e65b94f
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [5:7]
+
 KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
 BELONGS ya.make
 FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
@@ -67,19 +80,6 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
     Files with this license:
         CONTRIBUTING.md [61:61]
-
-KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
-BELONGS ya.make
-    License text:
-        \## License
-        This library is licensed under the Apache 2.0 License.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        README.md [5:7]
 
 KEEP     Apache-2.0           d3a6c1cb5b7a1e53a61f819a19149ee8
 BELONGS ya.make

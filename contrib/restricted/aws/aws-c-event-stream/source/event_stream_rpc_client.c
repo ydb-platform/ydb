@@ -412,11 +412,10 @@ static void s_on_protocol_message_written_fn(
         (void *)message);
 
     if (message_args->message_type == AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_CONNECT) {
-        AWS_LOGF_DEBUG(
+        AWS_LOGF_TRACE(
             AWS_LS_EVENT_STREAM_RPC_CLIENT,
-            "id=%p: connect message flushed to the wire, waiting on connect ack.",
+            "id=%p: connect message flushed to the wire.",
             (void *)message_args->connection);
-        aws_atomic_store_int(&message_args->connection->handshake_state, CONNECTION_HANDSHAKE_STATE_CONNECT_PROCESSED);
     }
 
     if (message_args->end_stream) {
@@ -535,7 +534,10 @@ static int s_send_protocol_message(
     }
 
     if (message_args->message_type == AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_CONNECT) {
-        AWS_LOGF_DEBUG(AWS_LS_EVENT_STREAM_RPC_CLIENT, "id=%p: sending connect message", (void *)connection);
+        AWS_LOGF_DEBUG(
+            AWS_LS_EVENT_STREAM_RPC_CLIENT,
+            "id=%p: sending connect message, waiting on connect ack",
+            (void *)connection);
         aws_atomic_store_int(&connection->handshake_state, CONNECTION_HANDSHAKE_STATE_CONNECT_PROCESSED);
     }
 

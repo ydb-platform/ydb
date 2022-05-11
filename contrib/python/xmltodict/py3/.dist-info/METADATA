@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: xmltodict
-Version: 0.12.0
+Version: 0.13.0
 Summary: Makes working with XML feel like you are working with JSON
 Home-page: https://github.com/martinblech/xmltodict
 Author: Martin Blech
@@ -11,24 +11,25 @@ Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.4
 Classifier: Programming Language :: Python :: 3.5
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
-Classifier: Programming Language :: Python :: Implementation :: Jython
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Text Processing :: Markup :: XML
-Requires-Python: >=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*
+Requires-Python: >=3.4
 Description-Content-Type: text/markdown
+License-File: LICENSE
 
 # xmltodict
 
 `xmltodict` is a Python module that makes working with XML feel like you are working with [JSON](http://docs.python.org/library/json.html), as in this ["spec"](http://www.xml.com/pub/a/2006/05/31/converting-between-xml-and-json.html):
 
-[![Build Status](https://secure.travis-ci.org/martinblech/xmltodict.svg)](http://travis-ci.org/martinblech/xmltodict)
+[![Build Status](https://travis-ci.com/martinblech/xmltodict.svg?branch=master)](https://travis-ci.com/martinblech/xmltodict)
 
 ```python
 >>> print(json.dumps(xmltodict.parse("""
@@ -189,6 +190,37 @@ Text values for nodes can be specified with the `cdata_key` key in the python di
 <text stroke="2" color="red">This is a test</text>
 ```
 
+Lists that are specified under a key in a dictionary use the key as a tag for each item. But if a list does have a parent key, for example if a list exists inside another list, it does not have a tag to use and the items are converted to a string as shown in the example below.  To give tags to nested lists, use the `expand_iter` keyword argument to provide a tag as demonstrated below. Note that using `expand_iter` will break roundtripping.
+
+```python
+>>> mydict = {
+...     "line": {
+...         "points": [
+...             [1, 5],
+...             [2, 6],
+...         ]
+...     }
+... }
+>>> print(xmltodict.unparse(mydict, pretty=True))
+<?xml version="1.0" encoding="utf-8"?>
+<line>
+        <points>[1, 5]</points>
+        <points>[2, 6]</points>
+</line>
+>>> print(xmltodict.unparse(mydict, pretty=True, expand_iter="coord"))
+<?xml version="1.0" encoding="utf-8"?>
+<line>
+        <points>
+                <coord>1</coord>
+                <coord>5</coord>
+        </points>
+        <points>
+                <coord>2</coord>
+                <coord>6</coord>
+        </points>
+</line>
+```
+
 ## Ok, how do I get it?
 
 ### Using pypi
@@ -229,6 +261,18 @@ There is an [official FreeBSD port for xmltodict](https://svnweb.freebsd.org/por
 
 ```sh
 $ pkg install py36-xmltodict
+```
+
+### openSUSE/SLE (SLE 15, Leap 15, Tumbleweed)
+
+There is an [official openSUSE package for xmltodict](https://software.opensuse.org/package/python-xmltodict).
+
+```sh
+# Python2
+$ zypper in python2-xmltodict
+
+# Python3
+$ zypper in python3-xmltodict
 ```
 
 

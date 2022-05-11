@@ -1,4 +1,5 @@
 from xmltodict import parse, ParsingInterrupted
+import collections
 import unittest
 
 try:
@@ -119,6 +120,17 @@ class XMLToDictTestCase(unittest.TestCase):
                           parse, '<a>x</a>',
                           item_depth=1, item_callback=cb)
 
+    def test_streaming_generator(self):
+        def cb(path, item):
+            cb.count += 1
+            self.assertEqual(path, [('a', {'x': 'y'}), ('b', None)])
+            self.assertEqual(item, str(cb.count))
+            return True
+        cb.count = 0
+        parse((n for n in '<a x="y"><b>1</b><b>2</b><b>3</b></a>'),
+              item_depth=2, item_callback=cb)
+        self.assertEqual(cb.count, 3)
+
     def test_postprocessor(self):
         def postprocessor(path, key, value):
             try:
@@ -171,7 +183,8 @@ class XMLToDictTestCase(unittest.TestCase):
         xml = """
         <root xmlns="http://defaultns.com/"
               xmlns:a="http://a.com/"
-              xmlns:b="http://b.com/">
+              xmlns:b="http://b.com/"
+              version="1.00">
           <x a:attr="val">1</x>
           <a:y>2</a:y>
           <b:z>3</b:z>
@@ -179,12 +192,13 @@ class XMLToDictTestCase(unittest.TestCase):
         """
         d = {
             'http://defaultns.com/:root': {
+                '@version': '1.00',
+                '@xmlns': {
+                    '': 'http://defaultns.com/',
+                    'a': 'http://a.com/',
+                    'b': 'http://b.com/',
+                },
                 'http://defaultns.com/:x': {
-                    '@xmlns': {
-                        '': 'http://defaultns.com/',
-                        'a': 'http://a.com/',
-                        'b': 'http://b.com/',
-                    },
                     '@http://a.com/:attr': 'val',
                     '#text': '1',
                 },
@@ -199,7 +213,8 @@ class XMLToDictTestCase(unittest.TestCase):
         xml = """
         <root xmlns="http://defaultns.com/"
               xmlns:a="http://a.com/"
-              xmlns:b="http://b.com/">
+              xmlns:b="http://b.com/"
+              version="1.00">
           <x a:attr="val">1</x>
           <a:y>2</a:y>
           <b:z>3</b:z>
@@ -211,12 +226,13 @@ class XMLToDictTestCase(unittest.TestCase):
         }
         d = {
             'root': {
+                '@version': '1.00',
+                '@xmlns': {
+                    '': 'http://defaultns.com/',
+                    'a': 'http://a.com/',
+                    'b': 'http://b.com/',
+                },
                 'x': {
-                    '@xmlns': {
-                        '': 'http://defaultns.com/',
-                        'a': 'http://a.com/',
-                        'b': 'http://b.com/',
-                    },
                     '@ns_a:attr': 'val',
                     '#text': '1',
                 },
@@ -227,11 +243,43 @@ class XMLToDictTestCase(unittest.TestCase):
         res = parse(xml, process_namespaces=True, namespaces=namespaces)
         self.assertEqual(res, d)
 
+    def test_namespace_collapse_all(self):
+        xml = """
+        <root xmlns="http://defaultns.com/"
+              xmlns:a="http://a.com/"
+              xmlns:b="http://b.com/"
+              version="1.00">
+          <x a:attr="val">1</x>
+          <a:y>2</a:y>
+          <b:z>3</b:z>
+        </root>
+        """
+        namespaces = collections.defaultdict(lambda: None)
+        d = {
+            'root': {
+                '@version': '1.00',
+                '@xmlns': {
+                    '': 'http://defaultns.com/',
+                    'a': 'http://a.com/',
+                    'b': 'http://b.com/',
+                },
+                'x': {
+                    '@attr': 'val',
+                    '#text': '1',
+                },
+                'y': '2',
+                'z': '3',
+            },
+        }
+        res = parse(xml, process_namespaces=True, namespaces=namespaces)
+        self.assertEqual(res, d)
+
     def test_namespace_ignore(self):
         xml = """
         <root xmlns="http://defaultns.com/"
               xmlns:a="http://a.com/"
-              xmlns:b="http://b.com/">
+              xmlns:b="http://b.com/"
+              version="1.00">
           <x>1</x>
           <a:y>2</a:y>
           <b:z>3</b:z>
@@ -242,6 +290,7 @@ class XMLToDictTestCase(unittest.TestCase):
                 '@xmlns': 'http://defaultns.com/',
                 '@xmlns:a': 'http://a.com/',
                 '@xmlns:b': 'http://b.com/',
+                '@version': '1.00',
                 'x': '1',
                 'a:y': '2',
                 'b:z': '3',
@@ -380,3 +429,31 @@ class XMLToDictTestCase(unittest.TestCase):
         else:
             self.assertTrue(False)
         expat.ParserCreate = ParserCreate
+
+    def test_comments(self):
+        xml = """
+        <a>
+          <b>
+            <!-- b comment -->
+            <c>
+                <!-- c comment -->
+                1
+            </c>
+            <d>2</d>
+          </b>
+        </a>
+        """
+        expectedResult = {
+            'a': {
+                'b': {
+                    '#comment': 'b comment',
+                    'c': {
+
+                        '#comment': 'c comment',
+                        '#text': '1',
+                    },
+                    'd': '2',
+                },
+            }
+        }
+        self.assertEqual(parse(xml, process_comments=True), expectedResult)

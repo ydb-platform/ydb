@@ -3,7 +3,6 @@
 import base64
 import logging
 import time
-from collections import OrderedDict
 
 import pytest
 from hamcrest import assert_that, equal_to, not_none, greater_than, has_item, has_items, raises, is_not, not_, empty, instance_of
@@ -944,7 +943,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             len(batch_result['GetQueueAttributesBatchResultEntry']), equal_to(11)
         )
         assert_that(
-            batch_result['BatchResultErrorEntry'], instance_of(OrderedDict)  # that means that we have only one entry for error
+            batch_result['BatchResultErrorEntry'], instance_of(dict)  # that means that we have only one entry for error
         )
 
         for entry in batch_result['GetQueueAttributesBatchResultEntry']:

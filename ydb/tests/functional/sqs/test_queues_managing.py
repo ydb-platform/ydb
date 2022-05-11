@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
-from collections import OrderedDict
 
 import pytest
 from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
@@ -163,7 +162,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
             len(delete_queue_batch_result['DeleteQueueBatchResultEntry']), equal_to(2)
         )
         assert_that(
-            delete_queue_batch_result['BatchResultErrorEntry'], instance_of(OrderedDict)  # that means that we have only one entry for error
+            delete_queue_batch_result['BatchResultErrorEntry'], instance_of(dict)  # that means that we have only one entry for error
         )
 
         existing_queues = [to_bytes(y) for y in self._sqs_api.list_queues()]
@@ -217,7 +216,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
             len(purge_queue_batch_result['PurgeQueueBatchResultEntry']), equal_to(2)
         )
         assert_that(
-            purge_queue_batch_result['BatchResultErrorEntry'], instance_of(OrderedDict)  # that means that we have only one entry for error
+            purge_queue_batch_result['BatchResultErrorEntry'], instance_of(dict)  # that means that we have only one entry for error
         )
 
         def check_purged_queue(queue_url):

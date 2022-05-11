@@ -40,8 +40,30 @@ static struct aws_error_info_list s_list = {
     .count = AWS_ARRAY_SIZE(s_errors),
 };
 
+static struct aws_log_subject_info s_cal_log_subject_infos[] = {
+    DEFINE_LOG_SUBJECT_INFO(
+        AWS_LS_CAL_GENERAL,
+        "aws-c-cal",
+        "Subject for Cal logging that doesn't belong to any particular category"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_CAL_ECC, "ecc", "Subject for elliptic curve cryptography specific logging."),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_CAL_HASH, "hash", "Subject for hashing specific logging."),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_CAL_HMAC, "hmac", "Subject for hmac specific logging."),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_CAL_DER, "der", "Subject for der specific logging."),
+    DEFINE_LOG_SUBJECT_INFO(
+        AWS_LS_CAL_LIBCRYPTO_RESOLVE,
+        "libcrypto_resolve",
+        "Subject for libcrypto symbol resolution logging."),
+};
+
+static struct aws_log_subject_info_list s_cal_log_subject_list = {
+    .subject_list = s_cal_log_subject_infos,
+    .count = AWS_ARRAY_SIZE(s_cal_log_subject_infos),
+};
+
+#ifndef BYO_CRYPTO
 extern void aws_cal_platform_init(struct aws_allocator *allocator);
 extern void aws_cal_platform_clean_up(void);
+#endif /* BYO_CRYPTO */
 
 static bool s_cal_library_initialized = false;
 
@@ -49,14 +71,20 @@ void aws_cal_library_init(struct aws_allocator *allocator) {
     if (!s_cal_library_initialized) {
         aws_common_library_init(allocator);
         aws_register_error_info(&s_list);
+        aws_register_log_subject_info_list(&s_cal_log_subject_list);
+#ifndef BYO_CRYPTO
         aws_cal_platform_init(allocator);
+#endif /* BYO_CRYPTO */
         s_cal_library_initialized = true;
     }
 }
 void aws_cal_library_clean_up(void) {
     if (s_cal_library_initialized) {
         s_cal_library_initialized = false;
+#ifndef BYO_CRYPTO
         aws_cal_platform_clean_up();
+#endif /* BYO_CRYPTO */
+        aws_unregister_log_subject_info_list(&s_cal_log_subject_list);
         aws_unregister_error_info(&s_list);
         aws_common_library_clean_up();
     }

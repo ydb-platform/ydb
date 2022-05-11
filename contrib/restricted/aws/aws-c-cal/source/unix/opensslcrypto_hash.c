@@ -28,6 +28,14 @@ static struct aws_hash_vtable s_sha256_vtable = {
     .provider = "OpenSSL Compatible libcrypto",
 };
 
+static struct aws_hash_vtable s_sha1_vtable = {
+    .destroy = s_destroy,
+    .update = s_update,
+    .finalize = s_finalize,
+    .alg_name = "SHA1",
+    .provider = "OpenSSL Compatible libcrypto",
+};
+
 static void s_destroy(struct aws_hash *hash) {
     if (hash == NULL) {
         return;
@@ -99,6 +107,35 @@ struct aws_hash *aws_sha256_default_new(struct aws_allocator *allocator) {
     return hash;
 }
 
+struct aws_hash *aws_sha1_default_new(struct aws_allocator *allocator) {
+    struct aws_hash *hash = aws_mem_acquire(allocator, sizeof(struct aws_hash));
+
+    if (!hash) {
+        return NULL;
+    }
+
+    hash->allocator = allocator;
+    hash->vtable = &s_sha1_vtable;
+    hash->digest_size = AWS_SHA1_LEN;
+    EVP_MD_CTX *ctx = g_aws_openssl_evp_md_ctx_table->new_fn();
+    hash->impl = ctx;
+    hash->good = true;
+
+    if (!hash->impl) {
+        s_destroy(hash);
+        aws_raise_error(AWS_ERROR_OOM);
+        return NULL;
+    }
+
+    if (!g_aws_openssl_evp_md_ctx_table->init_ex_fn(ctx, EVP_sha1(), NULL)) {
+        s_destroy(hash);
+        aws_raise_error(AWS_ERROR_UNKNOWN);
+        return NULL;
+    }
+
+    return hash;
+}
+
 static int s_update(struct aws_hash *hash, const struct aws_byte_cursor *to_hash) {
     if (!hash->good) {
         return aws_raise_error(AWS_ERROR_INVALID_STATE);
@@ -129,7 +166,7 @@ static int s_finalize(struct aws_hash *hash, struct aws_byte_buf *output) {
 
     if (AWS_LIKELY(g_aws_openssl_evp_md_ctx_table->final_ex_fn(
             ctx, output->buffer + output->len, (unsigned int *)&buffer_len))) {
-        output->len += buffer_len;
+        output->len += hash->digest_size;
         hash->good = false;
         return AWS_OP_SUCCESS;
     }

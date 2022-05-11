@@ -72,9 +72,9 @@ AWS_CAL_API int aws_sha256_hmac_compute(
     size_t truncate_to);
 /**
  * Set the implementation of sha256 hmac to use. If you compiled without
- * AWS_BYO_CRYPTO, you do not need to call this. However, if use this, we will
+ * BYO_CRYPTO, you do not need to call this. However, if use this, we will
  * honor it, regardless of compile options. This may be useful for testing
- * purposes. If you did set AWS_BYO_CRYPTO, and you do not call this function
+ * purposes. If you did set BYO_CRYPTO, and you do not call this function
  * you will segfault.
  */
 AWS_CAL_API void aws_set_sha256_hmac_new_fn(aws_hmac_new_fn *fn);

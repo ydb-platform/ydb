@@ -12,27 +12,32 @@ This library is licensed under the Apache 2.0 License.
 * Unix (via OpenSSL compatible libcrypto)
 
 ## Build Instructions
-Since this project builds with CMake, you can build with whichever tool you prefer. Here, we show make for simplicity. You can
-use Visual Studio, XCode, or whatever you'd like via the -G option.
+
+CMake 3.0+ is required to build.
+
+`<install-path>` must be an absolute path in the following instructions.
+
+#### Linux-Only Dependencies
+
+If you are building on Linux, you will need to build aws-lc first.
 
 ```
-git clone git@github.com:awslabs/aws-c-common
-mkdir aws-c-common-build
-cd aws-c-common-build
-cmake -DCMAKE_PREFIX_PATH=<install path> -DCMAKE_INSTALL_PREFIX=<install path> ../aws-c-common
-make
-make test
-make install
+git clone git@github.com:awslabs/aws-lc.git
+cmake -S aws-lc -B aws-lc/build -DCMAKE_INSTALL_PREFIX=<install-path>
+cmake --build aws-lc/build --target install
+```
 
-cd ..
-git clone git@github.com:awslabs/aws-c-cal
-mkdir aws-c-cal-build
-cd aws-c-cal-build
-cmake -DCMAKE_PREFIX_PATH=<install path> -DCMAKE_INSTALL_PREFIX=<install path> ../aws-c-cal
-make
-make test
-make install
-````
+#### Building aws-c-cal and Remaining Dependencies
+
+```
+git clone git@github.com:awslabs/aws-c-common.git
+cmake -S aws-c-common -B aws-c-common/build -DCMAKE_INSTALL_PREFIX=<install-path>
+cmake --build aws-c-common/build --target install
+
+git clone git@github.com:awslabs/aws-c-cal.git
+cmake -S aws-c-cal -B aws-c-cal/build -DCMAKE_INSTALL_PREFIX=<install-path> -DCMAKE_PREFIX_PATH=<install-path>
+cmake --build aws-c-cal/build --target install
+```
 
 ## Currently provided algorithms
 

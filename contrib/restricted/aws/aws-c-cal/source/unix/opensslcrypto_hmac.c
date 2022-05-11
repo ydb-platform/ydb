@@ -113,7 +113,7 @@ static int s_finalize(struct aws_hmac *hmac, struct aws_byte_buf *output) {
     if (AWS_LIKELY(
             g_aws_openssl_hmac_ctx_table->final_fn(ctx, output->buffer + output->len, (unsigned int *)&buffer_len))) {
         hmac->good = false;
-        output->len += buffer_len;
+        output->len += hmac->digest_size;
         return AWS_OP_SUCCESS;
     }
 

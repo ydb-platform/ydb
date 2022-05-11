@@ -6,6 +6,7 @@
  */
 
 #include <aws/common/common.h>
+#include <aws/common/logging.h>
 
 #include <aws/cal/exports.h>
 
@@ -23,6 +24,17 @@ enum aws_cal_errors {
     AWS_ERROR_CAL_UNSUPPORTED_ALGORITHM,
 
     AWS_ERROR_CAL_END_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_CAL_PACKAGE_ID)
+};
+
+enum aws_cal_log_subject {
+    AWS_LS_CAL_GENERAL = AWS_LOG_SUBJECT_BEGIN_RANGE(AWS_C_CAL_PACKAGE_ID),
+    AWS_LS_CAL_ECC,
+    AWS_LS_CAL_HASH,
+    AWS_LS_CAL_HMAC,
+    AWS_LS_CAL_DER,
+    AWS_LS_CAL_LIBCRYPTO_RESOLVE,
+
+    AWS_LS_CAL_LAST = AWS_LOG_SUBJECT_END_RANGE(AWS_C_CAL_PACKAGE_ID)
 };
 
 AWS_EXTERN_C_BEGIN

@@ -48,7 +48,7 @@ func main() {
 	}
 	// execute bulk upsert with native ydb data
 	err = db.Table().Do( // Do retry operation on errors with best effort
-		ctx, // context manage exiting from Do
+		ctx, // context manages exiting from Do
 		func(ctx context.Context, s table.Session) (err error) { // retry operation
 			rows := make([]types.Value, 0, len(logs))
 			for _, msg := range logs {

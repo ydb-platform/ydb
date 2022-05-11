@@ -97,8 +97,8 @@ public:
 using TInsecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchema, false>;
 using TSecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchemaSecure, true>;
 
-bool CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath, const TString& schema,
-                       std::function<void(const NJson::TJsonValue::TMapType& map)> tags_check,
+ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath, const TString& schema,
+                      std::function<void(const NJson::TJsonValue::TMapType& map)> tags_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> labels_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> usage_check) {
     Sleep(TDuration::Seconds(1));
@@ -107,28 +107,23 @@ bool CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
         meteringFile->Close();
     }
     auto input = TFileInput(TFile(meteringFile->Name(), RdOnly | OpenExisting));
-    ui64 totalLines = 0;
+    ui32 schemaFoundTimes{0};
     TString line;
-    bool schemaFound = false;
     while(input.ReadLine(line)) {
-        totalLines++;
         Cerr << "Got line from metering file data: '" << line << "'" << Endl;
         NJson::TJsonValue json;
         NJson::ReadJsonTree(line, &json, true);
         auto& map = json.GetMap();
         UNIT_ASSERT(map.contains("schema"));
         if (map.find("schema")->second.GetString() == schema) {
-            schemaFound = true;
+            ++schemaFoundTimes;
         } else {
             continue;
         }
         UNIT_ASSERT(map.contains("cloud_id"));
         UNIT_ASSERT(map.contains("folder_id"));
         UNIT_ASSERT(map.contains("resource_id"));
-        UNIT_ASSERT(map.find("resource_id")->second.GetString() == streamPath);
         UNIT_ASSERT(map.contains("labels"));
-        UNIT_ASSERT_VALUES_EQUAL(map.find("labels")->second.GetMap().size(), 2);
-        UNIT_ASSERT(map.contains("tags"));
         UNIT_ASSERT(map.contains("source_id"));
         UNIT_ASSERT(map.contains("source_wt"));
         UNIT_ASSERT(map.find("cloud_id")->second.GetString() == "somecloud");
@@ -138,7 +133,7 @@ bool CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
         labels_check(map);
         usage_check(map);
     }
-    return schemaFound;
+    return schemaFoundTimes;
 }
 
 
@@ -214,7 +209,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
 
-        {  // for metering purposes
+        // for metering purposes
+        {
             std::vector<NYDS_V1::TDataRecord> records;
             for (ui32 i = 1; i <= 30; ++i) {
                 TString data = Sprintf("%04u", i);
@@ -266,8 +262,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.events.puts.v1",
                           [](const NJson::TJsonValue::TMapType& map) {
                               UNIT_ASSERT(map.contains("tags"));
-                              auto& tags = map.find("tags")->second.GetMap();
-                              UNIT_ASSERT_VALUES_EQUAL(tags.size(), 0);
+                              UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().size(), 0);
                           },
                           [streamName](const NJson::TJsonValue::TMapType& map) {
                               UNIT_ASSERT(map.contains("labels"));
@@ -283,7 +278,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                               UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
                               UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "put_events");
                           });
-        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, true);
+        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 3);
 
         auto resourcesReservedSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.resources.reserved.v1",
@@ -308,7 +303,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                               UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
                               UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "second");
                           });
-        UNIT_ASSERT_VALUES_EQUAL(resourcesReservedSchemaFound, true);
+        UNIT_ASSERT_GT(resourcesReservedSchemaFound, 16);
+        UNIT_ASSERT_LT(resourcesReservedSchemaFound, 20);
     }
 
     Y_UNIT_TEST(TestNonChargeableUser) {
@@ -334,7 +330,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT(result.IsSuccess());
         }
 
-        {  // for metering purposes
+        // for metering purposes
+        {
             std::vector<NYDS_V1::TDataRecord> records;
             for (ui32 i = 1; i <= 30; ++i) {
                 TString data = Sprintf("%04u", i);
@@ -342,6 +339,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
             auto result = client.PutRecords(streamPath, records).ExtractValueSync();
             Cerr << result.GetResult().DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->UpdateStream(streamPath,
+                 NYDS_V1::TUpdateStreamSettings().TargetShardCount(2)
+            ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -357,7 +362,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                           [](const NJson::TJsonValue::TMapType&) {},
                           [](const NJson::TJsonValue::TMapType&) {},
                           [](const NJson::TJsonValue::TMapType&) {});
-        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, false);
+        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 0);
 
         auto resourcesReservedSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), streamPath, "yds.resources.reserved.v1",
@@ -382,7 +387,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                               UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
                               UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "second");
                           });
-        UNIT_ASSERT_VALUES_EQUAL(resourcesReservedSchemaFound, true);
+        UNIT_ASSERT_VALUES_EQUAL(resourcesReservedSchemaFound, 3);
     }
 
     Y_UNIT_TEST(TestCreateExistingStream) {

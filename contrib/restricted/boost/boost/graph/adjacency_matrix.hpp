@@ -1089,19 +1089,19 @@ namespace boost {
     typedef typename lookup_property_from_edge<boost::mpl::false_>::result_type single_nonconst_type;
     typedef typename lookup_property_from_edge<boost::mpl::true_>::result_type single_const_type;
 
-    static type get_nonconst(adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag) {
+    static type get_nonconst([[maybe_unused]] adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag) {
       return type(tag);
     }
 
-    static const_type get_const(const adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag) {
+    static const_type get_const([[maybe_unused]] const adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag) {
       return const_type(tag);
     }
 
-    static single_nonconst_type get_nonconst_one(adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag, edge_descriptor e) {
+    static single_nonconst_type get_nonconst_one([[maybe_unused]] adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag, edge_descriptor e) {
       return lookup_one_property<EP, Tag>::lookup(*static_cast<EP*>(e.get_property()), tag);
     }
 
-    static single_const_type get_const_one(const adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag, edge_descriptor e) {
+    static single_const_type get_const_one([[maybe_unused]] const adjacency_matrix<D, VP, EP, GP, A>& g, Tag tag, edge_descriptor e) {
       return lookup_one_property<const EP, Tag>::lookup(*static_cast<const EP*>(e.get_property()), tag);
     }
   };

@@ -35,8 +35,46 @@ TMaybe<TTtlSettings> TtlSettingsFromProto(const Ydb::Table::TtlSettings& proto) 
     return {};
 }
 
+static TCompression CompressionFromProto(const Ydb::LogStore::Compression& compression) {
+    TCompression out;
+    switch (compression.compression_codec()) {
+        case Ydb::LogStore::Compression::CODEC_PLAIN:
+            out.Codec = EColumnCompression::None;
+            break;
+        case Ydb::LogStore::Compression::CODEC_LZ4:
+            out.Codec = EColumnCompression::LZ4;
+            break;
+        case Ydb::LogStore::Compression::CODEC_ZSTD:
+            out.Codec = EColumnCompression::ZSTD;
+            break;
+        default:
+            break;
+    }
+    if (compression.compression_level()) {
+        out.Level = compression.compression_level();
+    }
+    return out;
+}
+
 TType MakeColumnType(EPrimitiveType primitiveType) {
     return TTypeBuilder().BeginOptional().Primitive(primitiveType).EndOptional().Build();
+}
+
+void TCompression::SerializeTo(Ydb::LogStore::Compression& compression) const {
+    switch (Codec) {
+        case EColumnCompression::None:
+            compression.set_compression_codec(Ydb::LogStore::Compression::CODEC_PLAIN);
+            break;
+        case EColumnCompression::LZ4:
+            compression.set_compression_codec(Ydb::LogStore::Compression::CODEC_LZ4);
+            break;
+        case EColumnCompression::ZSTD:
+            compression.set_compression_codec(Ydb::LogStore::Compression::CODEC_ZSTD);
+            break;
+    }
+    if (Level) {
+        compression.set_compression_level(*Level);
+    }
 }
 
 TSchema::TSchema(const Ydb::LogStore::Schema& schema)
@@ -47,6 +85,10 @@ TSchema::TSchema(const Ydb::LogStore::Schema& schema)
     for (const auto& col : schema.columns()) {
         TColumn c(col.name(), TType(col.type()));
         Columns.emplace_back(std::move(c));
+    }
+
+    if (schema.has_default_compression()) {
+        DefaultCompression = CompressionFromProto(schema.default_compression());
     }
 }
 
@@ -59,14 +101,18 @@ void TSchema::SerializeTo(Ydb::LogStore::Schema& schema) const {
     for (const auto& pkc : PrimaryKeyColumns) {
         schema.add_primary_key(pkc);
     }
+    DefaultCompression.SerializeTo(*schema.mutable_default_compression());
 }
 
-TLogStoreDescription::TLogStoreDescription(ui32 columnShardCount, const THashMap<TString, TSchema>& schemaPresets)
+TLogStoreDescription::TLogStoreDescription(ui32 columnShardCount, const THashMap<TString, TSchema>& schemaPresets,
+                                           const THashMap<TString, TTierConfig>& tierConfigs)
     : ColumnShardCount(columnShardCount)
     , SchemaPresets(schemaPresets)
+    , TierConfigs(tierConfigs)
 {}
 
-TLogStoreDescription::TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult&& desc, const TDescribeLogStoreSettings& describeSettings)
+TLogStoreDescription::TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult&& desc,
+                                           const TDescribeLogStoreSettings& describeSettings)
     : ColumnShardCount(desc.column_shard_count())
     , SchemaPresets()
     , Owner(desc.self().owner())
@@ -77,15 +123,27 @@ TLogStoreDescription::TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult
     }
     PermissionToSchemeEntry(desc.self().permissions(), &Permissions);
     PermissionToSchemeEntry(desc.self().effective_permissions(), &EffectivePermissions);
+    for (const auto& tier : desc.tiers()) {
+        TTierConfig cfg;
+        if (tier.has_compression()) {
+            cfg.Compression = CompressionFromProto(tier.compression());
+        }
+        TierConfigs.emplace(tier.name(), std::move(cfg));
+    }
 }
 
 void TLogStoreDescription::SerializeTo(Ydb::LogStore::CreateLogStoreRequest& request) const {
-    for (const auto& sp : SchemaPresets) {
+    for (const auto& [presetName, presetSchema] : SchemaPresets) {
         auto& pb = *request.add_schema_presets();
-        pb.set_name(sp.first);
-        sp.second.SerializeTo(*pb.mutable_schema());
+        pb.set_name(presetName);
+        presetSchema.SerializeTo(*pb.mutable_schema());
     }
     request.set_column_shard_count(ColumnShardCount);
+    for (const auto& [tierName, tierCfg] : TierConfigs) {
+        auto& pb = *request.add_tiers();
+        pb.set_name(tierName);
+        tierCfg.Compression.SerializeTo(*pb.mutable_compression());
+    }
 }
 
 TDescribeLogStoreResult::TDescribeLogStoreResult(TStatus&& status, Ydb::LogStore::DescribeLogStoreResult&& desc,
@@ -111,7 +169,16 @@ TLogTableDescription::TLogTableDescription(const TSchema& schema, const TVector<
     , TtlSettings(ttlSettings)
 {}
 
-TLogTableDescription::TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc, const TDescribeLogTableSettings& describeSettings)
+TLogTableDescription::TLogTableDescription(const TString& schemaPresetName, const TVector<TString>& shardingColumns,
+    ui32 columnShardCount, const THashMap<TString, TTier>& tiers)
+    : SchemaPresetName(schemaPresetName)
+    , ShardingColumns(shardingColumns)
+    , ColumnShardCount(columnShardCount)
+    , Tiers(tiers)
+{}
+
+TLogTableDescription::TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc,
+                                           const TDescribeLogTableSettings& describeSettings)
     : Schema(desc.schema())
     , ShardingColumns(desc.sharding_columns().begin(), desc.sharding_columns().end())
     , ColumnShardCount(desc.column_shard_count())
@@ -206,6 +273,22 @@ public:
             Ydb::LogStore::DropLogStoreResponse>(
             std::move(request),
             &Ydb::LogStore::V1::LogStoreService::Stub::AsyncDropLogStore,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
+    }
+
+    TAsyncStatus AlterLogStore(const TString& path, const TAlterLogStoreSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::LogStore::AlterLogStoreRequest>(settings);
+        request.set_path(path);
+
+        // TODO
+
+        return RunSimple<
+            Ydb::LogStore::V1::LogStoreService,
+            Ydb::LogStore::AlterLogStoreRequest,
+            Ydb::LogStore::AlterLogStoreResponse>(
+            std::move(request),
+            &Ydb::LogStore::V1::LogStoreService::Stub::AsyncAlterLogStore,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
     }
@@ -308,6 +391,11 @@ TAsyncStatus TLogStoreClient::CreateLogStore(const TString& path, TLogStoreDescr
 TAsyncDescribeLogStoreResult TLogStoreClient::DescribeLogStore(const TString& path, const TDescribeLogStoreSettings& settings)
 {
     return Impl_->DescribeLogStore(path, settings);
+}
+
+TAsyncStatus TLogStoreClient::AlterLogStore(const TString& path, const TAlterLogStoreSettings& settings)
+{
+    return Impl_->AlterLogStore(path, settings);
 }
 
 TAsyncStatus TLogStoreClient::DropLogStore(const TString& path, const TDropLogStoreSettings& settings)

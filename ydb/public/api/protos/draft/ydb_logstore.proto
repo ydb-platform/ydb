@@ -11,14 +11,28 @@ import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "google/protobuf/empty.proto";
 
+message Compression {
+    enum Codec {
+        CODEC_UNSPECIFIED = 0;
+        CODEC_PLAIN = 1;
+        CODEC_LZ4 = 2;
+        CODEC_ZSTD = 3;
+    }
+
+    Codec compression_codec = 1;
+    int32 compression_level = 2;
+}
+
 message ColumnMeta {
     string name = 1;
     Type type = 2;
+    //Compression compression = 3; Not implemented
 }
 
 message Schema {
     repeated ColumnMeta columns = 1;    // Columns (name, type)
     repeated string primary_key = 2;    // List of columns used as primary key
+    Compression default_compression = 3; // LZ4 with default compression level if not specified
 }
 
 message SchemaPreset {
@@ -26,9 +40,21 @@ message SchemaPreset {
     Schema schema = 2;
 }
 
-message TtlSettingsPreset {
+// Named storage configuration Tier based on
+message TierConfig {
     string name = 1;
-    Ydb.Table.TtlSettings ttl_settings = 2;
+    Compression compression = 2;
+    //string external_storage = 3; Not implemented
+}
+
+// A storage layer that implements logic: keep fresh data, evict stale data to the next tier.
+message Tier {
+    string name = 1; // A link to the TierConfig
+    Ydb.Table.TtlSettings eviction = 2; // When to evict data to the next tier (or remove if none)
+}
+
+message Tiering {
+    repeated Tier tiers = 1;
 }
 
 message CreateLogStoreRequest {
@@ -37,7 +63,7 @@ message CreateLogStoreRequest {
     string path = 2;        // Full path
     uint32 column_shard_count = 3;
     repeated SchemaPreset schema_presets = 4;
-    // repeated TtlSettingsPreset ttl_settings_presets = 5; // Unimplemented
+    repeated TierConfig tiers = 5;
 }
 
 message CreateLogStoreResponse {
@@ -55,7 +81,7 @@ message DescribeLogStoreResult {
 
     uint32 column_shard_count = 2;
     repeated SchemaPreset schema_presets = 3;
-    // repeated TtlSettingsPreset ttl_settings_presets = 4; // Unimplemented
+    repeated TierConfig tiers = 4;
 }
 
 message DescribeLogStoreResponse {
@@ -73,6 +99,26 @@ message DropLogStoreResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message AlterLogStoreRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    string path = 2;        // Full path
+
+    oneof schema_preset_modification {
+        SchemaPreset set_schema_preset = 3;
+        string drop_schema_preset = 4;
+    }
+
+    oneof tier_modification {
+        TierConfig set_tier = 5;
+        string drop_tier = 6;
+    }
+}
+
+message AlterLogStoreResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
 message CreateLogTableRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
@@ -83,12 +129,11 @@ message CreateLogTableRequest {
     };
     oneof ttl_specification {
         Ydb.Table.TtlSettings ttl_settings = 5;
-        // string ttl_settings_preset_name = 6;    // Unimplemented for now
+        Tiering tiering = 6;
     };
 
     // Specifies the desired number of ColumnShards for this table
     uint32 column_shard_count = 7;
-
     repeated string sharding_columns = 8;
 }
 
@@ -107,12 +152,13 @@ message DescribeLogTableResult {
 
     string schema_preset_name = 2;
     Schema schema = 3;
-    string ttl_settings_preset_name = 4;
-    Ydb.Table.TtlSettings ttl_settings = 5;
+    oneof ttl_specification {
+        Ydb.Table.TtlSettings ttl_settings = 5;
+        Tiering tiering = 4;
+    }
 
     // Specifies the desired number of ColumnShards for this table
     uint32 column_shard_count = 6;
-
     repeated string sharding_columns = 7;
 }
 
@@ -139,7 +185,7 @@ message AlterLogTableRequest {
     oneof ttl_action {
         google.protobuf.Empty drop_ttl_settings = 3;
         Ydb.Table.TtlSettings set_ttl_settings = 4;
-        // string set_ttl_preset_name = 5;    // Unimplemened for now
+        Tiering set_tiering = 5;
     }
 }
 

@@ -9,6 +9,41 @@
 
 using namespace NYdb;
 
+namespace {
+
+TVector<NYdb::TColumn> TestSchemaColumns() {
+    return {
+        NYdb::TColumn("timestamp",      NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
+        NYdb::TColumn("resource_type",  NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
+        NYdb::TColumn("resource_id",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
+        NYdb::TColumn("uid",            NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
+        NYdb::TColumn("level",          NYdb::NLogStore::MakeColumnType(EPrimitiveType::Int32)),
+        NYdb::TColumn("message",        NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
+        NYdb::TColumn("json_payload",   NYdb::NLogStore::MakeColumnType(EPrimitiveType::JsonDocument)),
+        NYdb::TColumn("request_id",     NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
+        NYdb::TColumn("ingested_at",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
+        NYdb::TColumn("saved_at",       NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
+    };
+}
+
+TVector<TString> TestSchemaKey() {
+    return {"timestamp", "resource_type", "resource_id", "uid"};
+}
+
+THashMap<TString, NYdb::NLogStore::TTierConfig> TestTierConfigs() {
+    using NYdb::NLogStore::TTierConfig;
+    using NYdb::NLogStore::TCompression;
+    using NYdb::NLogStore::EColumnCompression;
+
+    THashMap<TString, TTierConfig> out;
+    out.emplace("default", TTierConfig{ TCompression{ EColumnCompression::LZ4, {}} });
+    out.emplace("tier_zstd1", TTierConfig{ TCompression{ EColumnCompression::ZSTD, 1} });
+    out.emplace("tier_zstd5", TTierConfig{ TCompression{ EColumnCompression::ZSTD, 5} });
+    return out;
+}
+
+}
+
 Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     void EnableDebugLogs(TKikimrWithGrpcAndRootSchema& server) {
@@ -30,25 +65,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
-        NYdb::NLogStore::TSchema logSchema(
-            {
-                NYdb::TColumn("timestamp",      NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("resource_type",  NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("resource_id",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("uid",            NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("level",          NYdb::NLogStore::MakeColumnType(EPrimitiveType::Int32)),
-                NYdb::TColumn("message",        NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("json_payload",   NYdb::NLogStore::MakeColumnType(EPrimitiveType::JsonDocument)),
-                NYdb::TColumn("request_id",     NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("ingested_at",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("saved_at",       NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-            },
-            {"timestamp", "resource_type", "resource_id", "uid"}
-        );
-
         auto connection = ConnectToServer(server);
         NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
+
         {
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey());
             THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
             schemaPresets["default"] = logSchema;
             NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
@@ -63,6 +84,8 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(descr.GetColumnShardCount(), 4);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().count("default"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetOwner(), "root@builtin");
+
             const auto& schema = descr.GetSchemaPresets().begin()->second;
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[0].ToString(), "{ name: \"timestamp\", type: Timestamp? }");
@@ -70,12 +93,129 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns()[4].ToString(), "{ name: \"level\", type: Int32? }");
             UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns(),
                 TVector<TString>({"timestamp", "resource_type", "resource_id", "uid"}));
-            UNIT_ASSERT_VALUES_EQUAL(descr.GetOwner(), "root@builtin");
+            UNIT_ASSERT_EQUAL(schema.GetDefaultCompression().Codec, NYdb::NLogStore::EColumnCompression::LZ4);
+            UNIT_ASSERT(!schema.GetDefaultCompression().Level);
         }
 
         {
             auto res = logStoreClient.DropLogStore("/Root/LogStore").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(LogStoreTiers) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        EnableDebugLogs(server);
+
+        auto connection = ConnectToServer(server);
+        NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
+
+        {
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey(),
+                NYdb::NLogStore::TCompression{NYdb::NLogStore::EColumnCompression::ZSTD, 1});
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["default"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets, TestTierConfigs());
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        {
+            auto res = logStoreClient.DescribeLogStore("/Root/LogStore").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+            auto descr = res.GetDescription();
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetColumnShardCount(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetSchemaPresets().count("default"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetOwner(), "root@builtin");
+
+            const auto& schema = descr.GetSchemaPresets().begin()->second;
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns().size(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetPrimaryKeyColumns().size(), 4);
+            UNIT_ASSERT_EQUAL(schema.GetDefaultCompression().Codec, NYdb::NLogStore::EColumnCompression::ZSTD);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetDefaultCompression().Level, 1);
+
+            const auto& tiers = descr.GetTierConfigs();
+            auto expectedTiers = TestTierConfigs();
+            UNIT_ASSERT_VALUES_EQUAL(tiers.size(), expectedTiers.size());
+
+            for (auto& [name, cfg] : expectedTiers) {
+                UNIT_ASSERT_VALUES_EQUAL(tiers.count(name), 1);
+                UNIT_ASSERT_EQUAL(tiers.find(name)->second.Compression.Codec, cfg.Compression.Codec);
+                UNIT_ASSERT_VALUES_EQUAL(tiers.find(name)->second.Compression.Level, cfg.Compression.Level);
+            }
+        }
+
+        {
+            auto res = logStoreClient.DropLogStore("/Root/LogStore").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(LogStoreNegative) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        EnableDebugLogs(server);
+
+        auto connection = ConnectToServer(server);
+        NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
+
+        { // wrong schema: no columns
+            NYdb::NLogStore::TSchema logSchema({}, TestSchemaKey());
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["default"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+        }
+
+        { // wrong schema: no PK
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), {});
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["default"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+        }
+
+        { // wrong schema: wrong PK
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), {"timestamp", "unknown_column"});
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["default"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+        }
+
+        { // wrong schema: not supported PK
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), {"resource_type", "resource_id"});
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["default"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+        }
+
+        { // no "default" preset
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey());
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["some"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
+        }
+
+        { // Compression::None is not tested yet - disabled
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey(),
+                NYdb::NLogStore::TCompression{NYdb::NLogStore::EColumnCompression::None, {}});
+            THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
+            schemaPresets["default"] = logSchema;
+            NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
+            auto res = logStoreClient.CreateLogStore("/Root/LogStore", std::move(storeDescr)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
         }
     }
 
@@ -85,25 +225,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
-        NYdb::NLogStore::TSchema logSchema(
-            {
-                NYdb::TColumn("timestamp",      NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("resource_type",  NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("resource_id",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("uid",            NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("level",          NYdb::NLogStore::MakeColumnType(EPrimitiveType::Int32)),
-                NYdb::TColumn("message",        NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("json_payload",   NYdb::NLogStore::MakeColumnType(EPrimitiveType::JsonDocument)),
-                NYdb::TColumn("request_id",     NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("ingested_at",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("saved_at",       NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-            },
-            {"timestamp", "resource_type", "resource_id", "uid"}
-        );
-
         auto connection = ConnectToServer(server);
         NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
+
         {
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey());
             THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
             schemaPresets["default"] = logSchema;
             NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);
@@ -156,24 +282,11 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
-        NYdb::NLogStore::TSchema logSchema(
-            {
-                NYdb::TColumn("timestamp",      NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("resource_type",  NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("resource_id",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("uid",            NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("level",          NYdb::NLogStore::MakeColumnType(EPrimitiveType::Int32)),
-                NYdb::TColumn("message",        NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("json_payload",   NYdb::NLogStore::MakeColumnType(EPrimitiveType::JsonDocument)),
-                NYdb::TColumn("request_id",     NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("ingested_at",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("saved_at",       NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-            },
-            {"timestamp", "resource_type", "resource_id", "uid"}
-        );
-
         auto connection = ConnectToServer(server);
         NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
+
+        NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey());
+
         {
             THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
             schemaPresets["default"] = logSchema;
@@ -302,32 +415,34 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
         }
     }
 
+    Y_UNIT_TEST(AlterLogStore) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+        EnableDebugLogs(server);
+
+        auto connection = ConnectToServer(server);
+        NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
+
+        // Add LogStore (currently not supported)
+        {
+            NYdb::NLogStore::TAlterLogStoreSettings alterLogStoreSettings;
+            auto res = logStoreClient.AlterLogStore("/Root/LogStore", std::move(alterLogStoreSettings)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::UNSUPPORTED, res.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(AlterLogTable) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
-        NYdb::NLogStore::TSchema logSchema(
-            {
-                NYdb::TColumn("timestamp",      NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("resource_type",  NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("resource_id",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("uid",            NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("level",          NYdb::NLogStore::MakeColumnType(EPrimitiveType::Int32)),
-                NYdb::TColumn("message",        NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("json_payload",   NYdb::NLogStore::MakeColumnType(EPrimitiveType::JsonDocument)),
-                NYdb::TColumn("request_id",     NYdb::NLogStore::MakeColumnType(EPrimitiveType::Utf8)),
-                NYdb::TColumn("ingested_at",    NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("saved_at",       NYdb::NLogStore::MakeColumnType(EPrimitiveType::Timestamp)),
-                NYdb::TColumn("uint_timestamp", NYdb::NLogStore::MakeColumnType(EPrimitiveType::Uint64)),
-            },
-            {"timestamp", "resource_type", "resource_id", "uid"}
-        );
-
         auto connection = ConnectToServer(server);
         NYdb::NLogStore::TLogStoreClient logStoreClient(connection);
+
         {
+            NYdb::NLogStore::TSchema logSchema(TestSchemaColumns(), TestSchemaKey());
             THashMap<TString, NYdb::NLogStore::TSchema> schemaPresets;
             schemaPresets["default"] = logSchema;
             NYdb::NLogStore::TLogStoreDescription storeDescr(4, schemaPresets);

@@ -5,8 +5,7 @@
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 TGRpcYdbLogStoreService::TGRpcYdbLogStoreService(NActors::TActorSystem *system,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
@@ -53,6 +52,7 @@ void TGRpcYdbLogStoreService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(CreateLogStore, DoCreateLogStoreRequest)
     ADD_REQUEST(DescribeLogStore, DoDescribeLogStoreRequest)
     ADD_REQUEST(DropLogStore, DoDropLogStoreRequest)
+    ADD_REQUEST(AlterLogStore, DoAlterLogStoreRequest)
 
     ADD_REQUEST(CreateLogTable, DoCreateLogTableRequest)
     ADD_REQUEST(DescribeLogTable, DoDescribeLogTableRequest)
@@ -62,5 +62,4 @@ void TGRpcYdbLogStoreService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #undef ADD_REQUEST
 }
 
-} // namespace NGRpcService
-} // namespace NKikimr
+}

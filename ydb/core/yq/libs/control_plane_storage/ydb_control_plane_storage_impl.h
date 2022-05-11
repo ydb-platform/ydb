@@ -33,6 +33,7 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
+#include <ydb/core/yq/libs/quota_manager/events/events.h>
 #include <ydb/core/yq/libs/ydb/util.h>
 #include <ydb/core/yq/libs/ydb/ydb.h>
 
@@ -279,6 +280,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvNodesHealthCheckRequest, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
+        hFunc(TEvQuotaService::TQuotaUsageRequest, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
@@ -309,6 +311,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev);
 
     void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev);
+
+    void Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev);
 
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)

@@ -108,6 +108,19 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     if (request.disposition().has_from_last_checkpoint()) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request"));
     }
+
+    {
+        auto it = event.Quotas.find(QUOTA_COUNT_LIMIT);
+        if (it != event.Quotas.end()) {
+            auto& quota = it->second;
+            if (!quota.Usage) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::NOT_READY, "Control Plane is not ready yet. Please retry later."));
+            } else if (*quota.Usage > quota.Limit) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::QUOTA_EXCEEDED, Sprintf("Too many queries (%lu of %lu). Please delete other queries or increase limits.", *quota.Usage, quota.Limit)));
+            }
+        }
+    }
+
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, queryId)
             << "CreateQueryRequest, validation failed: "

@@ -17,5 +17,7 @@ message TIssuesIds {
         EXPIRED = 1004;
         UNSUPPORTED = 1005;
         UNAUTHORIZED = 1006;
+        NOT_READY = 1007;
+        QUOTA_EXCEEDED = 1008;
     }
 }

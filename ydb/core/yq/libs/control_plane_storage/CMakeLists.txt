@@ -48,4 +48,5 @@ target_sources(yq-libs-control_plane_storage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage_bindings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage_connections.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage_queries.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/ydb_control_plane_storage_quotas.cpp
 )

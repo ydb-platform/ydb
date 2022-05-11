@@ -102,15 +102,13 @@ public:
 
     void Bootstrap() {
         CPP_LOG_T("Get quotas bootstrap. Cloud id: " << Event->Get()->CloudId << " Actor id: " << SelfId());
-        Become(&TGetQuotaActor::StateFunc);
-        auto request = std::make_unique<TEvQuotaService::TQuotaGetRequest>();
-        request->SubjectType = SUBJECT_TYPE_CLOUD;
-        request->SubjectId = Event->Get()->CloudId;
-        Send(MakeQuotaServiceActorId(), request.release(), 0, 0);
+        Become(&TGetQuotaActor::StateFunc, TDuration::Seconds(10), new NActors::TEvents::TEvWakeup());
+        Send(MakeQuotaServiceActorId(), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, Event->Get()->CloudId));
     }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvQuotaService::TQuotaGetResponse, Handle);
+        cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
     )
 
     void Handle(TEvQuotaService::TQuotaGetResponse::TPtr& ev) {
@@ -118,6 +116,11 @@ public:
         CPP_LOG_T("Cloud id: " << Event->Get()->CloudId << " Quota count: " << Event->Get()->Quotas.size());
         TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
         PassAway();
+    }
+
+    void HandleTimeout() {
+        CPP_LOG_D("Quota request timeout. Cloud id: " << Event->Get()->CloudId << " Actor id: " << SelfId());
+        Send(MakeQuotaServiceActorId(), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, Event->Get()->CloudId, true));
     }
 };
 

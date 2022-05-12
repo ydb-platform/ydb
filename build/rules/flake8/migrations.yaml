@@ -2085,7 +2085,6 @@ migrations:
     - noc/aioalexandria
     - noc/annlib/contrib/valkit
     - noc/checkist/clients/python/swagger_client
-    - noc/hbf-server
     - noc/soft_pingers
     - noc/yanet/yanetagent
     - ofd/notifier/server/blueprints/monitoring

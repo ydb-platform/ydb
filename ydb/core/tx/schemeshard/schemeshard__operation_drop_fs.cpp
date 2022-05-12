@@ -117,10 +117,12 @@ public:
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);
         context.SS->ClearDescribePathCaches(parentDir);
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-
         context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+
+        if (!context.SS->DisablePublicationsOfDropping) {
+            context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+            context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+        }
 
         context.OnComplete.DoneOperation(OperationId);
 
@@ -335,10 +337,12 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     ++parentDir.Base()->DirAlterVersion;
     context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
     context.SS->ClearDescribePathCaches(parentDir.Base());
-    context.OnComplete.PublishToSchemeBoard(OperationId, parentDir.Base()->PathId);
-
     context.SS->ClearDescribePathCaches(path.Base());
-    context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
+
+    if (!context.SS->DisablePublicationsOfDropping) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir.Base()->PathId);
+        context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
+    }
 
     State = NextState();
     SetState(SelectStateFunc(State));

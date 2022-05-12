@@ -14,8 +14,6 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-static const i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD = 16*24*60*60*1000;
-
 inline TActorId GetPQSchemaServiceActorID() {
     return TActorId(0, "PQSchmSvc");
 }

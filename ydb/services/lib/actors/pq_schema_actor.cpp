@@ -11,13 +11,11 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-#define DEFAULT_PARTITION_SPEED 1048576 // 1Mb
-
-    constexpr i32 MAX_READ_RULES_COUNT = 3000;
-
     constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
-    static const i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD = 16*24*60*60*1000;
-
+    constexpr i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS =
+        TDuration::Days(16).MilliSeconds();
+    constexpr ui64 DEFAULT_PARTITION_SPEED = 1_MB;
+    constexpr i32 MAX_READ_RULES_COUNT = 3000;
     constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;
 
     TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx) {
@@ -312,8 +310,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             error = TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << settings.message_group_seqno_retention_period_ms() << ") must be more then retention_period_ms (provided " << settings.retention_period_ms() << ")";
             return Ydb::StatusIds::BAD_REQUEST;
         }
-        if (settings.message_group_seqno_retention_period_ms() > DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD) {
-            error = TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << settings.message_group_seqno_retention_period_ms() << ") must be less then default limit for database " << DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD;
+        if (settings.message_group_seqno_retention_period_ms() >
+            DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS) {
+            error = TStringBuilder() <<
+                "message_group_seqno_retention_period_ms (provided " <<
+                settings.message_group_seqno_retention_period_ms() <<
+                ") must be less then default limit for database " <<
+                DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS;
             return Ydb::StatusIds::BAD_REQUEST;
         }
         if (settings.message_group_seqno_retention_period_ms() < 0) {

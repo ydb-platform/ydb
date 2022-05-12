@@ -62,6 +62,10 @@ Y_UNIT_TEST_SUITE(TDyNumberTests) {
         TestDyNumber(".023");
         TestDyNumber("0.93");
         TestDyNumber("724.1");
+        TestDyNumber("150e2");
+        TestDyNumber("15e3");
+        TestDyNumber("0.150e4");
+        TestDyNumber("0.15e4");
         TestDyNumber("1E-130");
         TestDyNumber("9.9999999999999999999999999999999999999E+125");
         TestDyNumber("9.9999999999999999999999999999999999999000E+125");

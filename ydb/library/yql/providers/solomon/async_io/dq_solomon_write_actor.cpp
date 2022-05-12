@@ -32,21 +32,21 @@
 #include <variant>
 
 #define SINK_LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SINK_LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SINK_LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SINK_LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SINK_LOG_N(s) \
-    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SINK_LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SINK_LOG_C(s) \
-    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 #define SINK_LOG(prio, s) \
-    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, "Solomon sink. " << s)
+    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 namespace NYql::NDq {
 
@@ -108,6 +108,7 @@ public:
 
     TDqSolomonWriteActor(
         ui64 outputIndex,
+        const TTxId& txId,
         TDqSolomonWriteParams&& writeParams,
         NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const NMonitoring::TDynamicCounterPtr& counters,
@@ -115,6 +116,8 @@ public:
         i64 freeSpace)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
+        , TxId(txId)
+        , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", Solomon sink. ")
         , WriteParams(std::move(writeParams))
         , Url(GetUrl())
         , Callbacks(callbacks)
@@ -246,7 +249,7 @@ private:
             }
 
             TIssues issues { TIssue(errorBuilder) };
-            SINK_LOG_W("Got error response from solomon " << issues.ToString());
+            SINK_LOG_W("Got error response from solomon " << issues.ToOneLineString());
             Callbacks->OnSinkError(OutputIndex, issues, res->IsTerminal);
             return;
         }
@@ -432,6 +435,8 @@ private:
 
 private:
     const ui64 OutputIndex;
+    const TTxId TxId;
+    const TString LogPrefix;
     const TDqSolomonWriteParams WriteParams;
     const TString Url;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
@@ -453,6 +458,7 @@ private:
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
     NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex,
+    const TTxId& txId,
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const NMonitoring::TDynamicCounterPtr& counters,
@@ -471,6 +477,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
 
     TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(
         outputIndex,
+        txId,
         std::move(params),
         callbacks,
         counters,
@@ -490,6 +497,7 @@ void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredService
             return CreateDqSolomonWriteActor(
                 std::move(settings),
                 args.OutputIndex,
+                args.TxId,
                 args.SecureParams,
                 args.Callback,
                 counters,

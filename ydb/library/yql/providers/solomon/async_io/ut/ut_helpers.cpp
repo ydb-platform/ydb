@@ -48,6 +48,7 @@ void InitSink(
         auto [dqSink, dqSinkAsActor] = CreateDqSolomonWriteActor(
             std::move(settings),
             0,
+            "TxId-42",
             secureParams,
             &actor.GetSinkCallbacks(),
             counters,

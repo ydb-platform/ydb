@@ -37,23 +37,21 @@ namespace NKikimrServices {
     constexpr ui32 KQP_COMPUTE = 535;
 };
 
-const TString LogPrefix = "PQ sink. ";
-
-#define SINK_LOG_T(s) \
+#define SRC_LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_D(s) \
+#define SRC_LOG_D(s) \
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_I(s) \
+#define SRC_LOG_I(s) \
     LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_W(s) \
+#define SRC_LOG_W(s) \
     LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_N(s) \
+#define SRC_LOG_N(s) \
     LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_E(s) \
+#define SRC_LOG_E(s) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_C(s) \
+#define SRC_LOG_C(s) \
     LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG(prio, s) \
+#define SRC_LOG(prio, s) \
     LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 namespace NYql::NDq {
@@ -93,7 +91,7 @@ public:
 
     TDqPqReadActor(
         ui64 inputIndex,
-        const TString& txId,
+        const TTxId& txId,
         const THolderFactory& holderFactory,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
@@ -108,6 +106,7 @@ public:
         , BufferSize(bufferSize)
         , RangesMode(rangesMode)
         , HolderFactory(holderFactory)
+        , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", PQ source. ")
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , SourceParams(std::move(sourceParams))
@@ -251,7 +250,7 @@ private:
 
         i64 usedSpace = 0;
         for (auto& event : events) {
-            std::visit(TPQEventProcessor{*this, buffer, usedSpace}, event);
+            std::visit(TPQEventProcessor{*this, buffer, usedSpace, LogPrefix}, event);
         }
 
         SubscribeOnNextEvent();
@@ -309,8 +308,8 @@ private:
             for (const auto& message : event.GetMessages()) {
                 const TString& data = message.GetData();
 
-                LWPROBE(PqReadDataReceived, Self.TxId, Self.SourceParams.GetTopicPath(), data);
-                SINK_LOG_T("Data received: " << data);
+                LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
+                SRC_LOG_T("Data received: " << message.DebugString(true));
 
                 Batch.emplace_back(NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size())));
                 UsedSpace += data.Size();
@@ -346,14 +345,16 @@ private:
         TDqPqReadActor& Self;
         TUnboxedValueVector& Batch;
         i64& UsedSpace;
+        const TString& LogPrefix;
     };
 
 private:
     const ui64 InputIndex;
-    const TString TxId;
+    const TTxId TxId;
     const i64 BufferSize;
     const bool RangesMode;
     const THolderFactory& HolderFactory;
+    const TString LogPrefix;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     const NPq::NProto::TDqPqTopicSource SourceParams;
@@ -395,7 +396,7 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
 
     TDqPqReadActor* actor = new TDqPqReadActor(
         inputIndex,
-        std::holds_alternative<ui64>(txId) ? ToString(txId) : std::get<TString>(txId),
+        txId,
         holderFactory,
         std::move(settings),
         std::move(readTaskParamsMsg),

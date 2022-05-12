@@ -560,8 +560,8 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 (6, CAST("636249600000" As DyNumber)),
 (7, NULL);
         )", R"(
-key = 5, value = .190244160e10
-key = 6, value = .63624960000e12
+key = 5, value = .19024416e10
+key = 6, value = .6362496e12
 key = 7, value = (empty maybe)
         )", WithMvcc);
     }
@@ -576,8 +576,8 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 (4, CAST("636249600000000" As DyNumber)),
 (5, NULL);
         )", R"(
-key = 3, value = .1902441600000e13
-key = 4, value = .636249600000000e15
+key = 3, value = .19024416e13
+key = 4, value = .6362496e15
 key = 5, value = (empty maybe)
         )", WithMvcc);
     }
@@ -595,7 +595,7 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 (7, CAST("9.9999999999999999999999999999999999999E+125" As DyNumber)),
 (8, NULL);
         )", R"(
-key = 6, value = .190244160000000e16
+key = 6, value = .19024416e16
 key = 7, value = .99999999999999999999999999999999999999e126
 key = 8, value = (empty maybe)
         )", WithMvcc);
@@ -610,7 +610,7 @@ UPSERT INTO `/Root/table-1` (key, value) VALUES
 (3, CAST("1902441600000000000" As DyNumber)),
 (4, NULL);
         )", R"(
-key = 3, value = .1902441600000000000e19
+key = 3, value = .19024416e19
 key = 4, value = (empty maybe)
         )", WithMvcc);
     }

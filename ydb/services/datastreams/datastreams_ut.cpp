@@ -32,6 +32,9 @@ static constexpr const char NON_CHARGEABLE_USER[] = "superuser@builtin";
 static constexpr const char NON_CHARGEABLE_USER_X[] = "superuser_x@builtin";
 static constexpr const char NON_CHARGEABLE_USER_Y[] = "superuser_y@builtin";
 
+static constexpr const char DEFAULT_CLOUD_ID[] = "somecloud";
+static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
+
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
 public:
@@ -83,7 +86,9 @@ public:
 
         TClient client(*(KikimrServer->ServerSettings));
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-                                 client.AlterUserAttributes("/", "Root", {{"folder_id", "somefolder"},{"cloud_id", "somecloud"}, {"database_id", "root"}}));
+                                 client.AlterUserAttributes("/", "Root", {{"folder_id", DEFAULT_FOLDER_ID},
+                                                                          {"cloud_id", DEFAULT_CLOUD_ID},
+                                                                          {"database_id", "root"}}));
     }
 
 public:
@@ -126,8 +131,8 @@ ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
         UNIT_ASSERT(map.contains("labels"));
         UNIT_ASSERT(map.contains("source_id"));
         UNIT_ASSERT(map.contains("source_wt"));
-        UNIT_ASSERT(map.find("cloud_id")->second.GetString() == "somecloud");
-        UNIT_ASSERT(map.find("folder_id")->second.GetString() == "somefolder");
+        UNIT_ASSERT(map.find("cloud_id")->second.GetString() == DEFAULT_CLOUD_ID);
+        UNIT_ASSERT(map.find("folder_id")->second.GetString() == DEFAULT_FOLDER_ID);
         UNIT_ASSERT(map.find("resource_id")->second.GetString() == streamPath);
         tags_check(map);
         labels_check(map);

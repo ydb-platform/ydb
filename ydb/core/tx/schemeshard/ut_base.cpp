@@ -10075,4 +10075,152 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::MinPartitionsCountEqual(1),
                             NLs::MaxPartitionsCountEqual(100)});
     }
+
+    template <typename TCreateFn, typename TDropFn>
+    void DisablePublicationsOfDropping(NSchemeCache::TSchemeCacheNavigate::EOp op, TCreateFn&& createFn, TDropFn&& dropFn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // disable publications
+        {
+            TAtomic unused;
+            runtime.GetAppData().Icb->SetValue("SchemeShard_DisablePublicationsOfDropping", true, unused);
+        }
+
+        createFn(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto nav = Navigate(runtime, "/MyRoot/Obj", op);
+            const auto& entry = nav->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+        }
+
+        dropFn(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        // still ok
+        {
+            auto nav = Navigate(runtime, "/MyRoot/Obj", op);
+            const auto& entry = nav->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+        }
+
+        // check after reboot (should be removed in process of sync)
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        while (true) {
+            auto nav = Navigate(runtime, "/MyRoot/Obj", op);
+            const auto& entry = nav->ResultSet.at(0);
+            if ((entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown)) {
+                break;
+            }
+
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+
+        // enable publications
+        {
+            TAtomic unused;
+            runtime.GetAppData().Icb->SetValue("SchemeShard_DisablePublicationsOfDropping", false, unused);
+        }
+
+        createFn(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto nav = Navigate(runtime, "/MyRoot/Obj", op);
+            const auto& entry = nav->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+        }
+
+        dropFn(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto nav = Navigate(runtime, "/MyRoot/Obj", op);
+            const auto& entry = nav->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown);
+        }
+    }
+
+    Y_UNIT_TEST(DisablePublicationsOfDropping_Dir) {
+        DisablePublicationsOfDropping(NSchemeCache::TSchemeCacheNavigate::EOp::OpPath,
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestMkDir(runtime, ++txId, "/MyRoot", "Obj");
+            },
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestRmDir(runtime, ++txId, "/MyRoot", "Obj");
+            }
+        );
+    }
+
+    Y_UNIT_TEST(DisablePublicationsOfDropping_Table) {
+        DisablePublicationsOfDropping(NSchemeCache::TSchemeCacheNavigate::EOp::OpTable,
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                    Name: "Obj"
+                    Columns { Name: "key"   Type: "Uint64" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+            },
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestDropTable(runtime, ++txId, "/MyRoot", "Obj");
+            }
+        );
+    }
+
+    Y_UNIT_TEST(DisablePublicationsOfDropping_IndexedTable) {
+        DisablePublicationsOfDropping(NSchemeCache::TSchemeCacheNavigate::EOp::OpTable,
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+                    TableDescription {
+                      Name: "Obj"
+                      Columns { Name: "key"   Type: "Uint64" }
+                      Columns { Name: "value" Type: "Utf8" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "UserDefinedIndexByValue"
+                      KeyColumnNames: ["value"]
+                    }
+                )");
+            },
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestDropTable(runtime, ++txId, "/MyRoot", "Obj");
+            }
+        );
+    }
+
+    Y_UNIT_TEST(DisablePublicationsOfDropping_Pq) {
+        DisablePublicationsOfDropping(NSchemeCache::TSchemeCacheNavigate::EOp::OpTopic,
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
+                    Name: "Obj"
+                    TotalGroupCount: 1
+                    PartitionPerTablet: 1
+                    PQTabletConfig: { PartitionConfig { LifetimeSeconds: 10 } }
+                )");
+            },
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestDropPQGroup(runtime, ++txId, "/MyRoot", "Obj");
+            }
+        );
+    }
+
+    Y_UNIT_TEST(DisablePublicationsOfDropping_Solomon) {
+        DisablePublicationsOfDropping(NSchemeCache::TSchemeCacheNavigate::EOp::OpPath,
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+                    Name: "Obj"
+                    PartitionCount: 1
+                )");
+            },
+            [](TTestBasicRuntime& runtime, ui64& txId) {
+                return TestDropSolomon(runtime, ++txId, "/MyRoot", "Obj");
+            }
+        );
+    }
 }

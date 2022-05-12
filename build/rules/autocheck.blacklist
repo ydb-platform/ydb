@@ -1336,6 +1336,7 @@ classifieds/sphinx-configs
 classifieds/php-cron
 classifieds/php-catalog-cron
 adv/pcode/mobileadssdk/tests/mock-data
+weather/frontend/ci
 weather/frontend/front
 weather/frontend/render
 weather/frontend/tools

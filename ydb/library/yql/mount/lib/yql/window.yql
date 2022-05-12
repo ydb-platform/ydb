@@ -79,8 +79,12 @@
 (let bool_or_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (Or one two)))))
 (let first_value_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) two))))
 (let last_value_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) one))))
-(let first_value_ignore_nulls_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (IfPresent two (lambda '(value) two) one)))))
-(let last_value_ignore_nulls_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (IfPresent one (lambda '(value) one) two)))))
+(let first_value_ignore_nulls_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type
+  (lambda '(one two) (MatchType (TypeOf two) 'Optional (lambda '() (IfPresent two (lambda '(value) two) one)) (lambda '() two)))
+)))
+(let last_value_ignore_nulls_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type
+  (lambda '(one two) (MatchType (TypeOf one) 'Optional (lambda '() (IfPresent one (lambda '(value) one) two)) (lambda '() one)))
+)))
 
 (let bool_xor_traits_factory_opt (lambda '(list_type) (Apply easy_traits_factory list_type (lambda '(one two) (Xor one two)) (lambda '(val state) (Xor state val)))))
 

@@ -54,7 +54,7 @@ void Init(
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& iyqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
-    const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
+    const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig, const NMonitoring::TDynamicCounterPtr& counters)>& auditServiceFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort
     )
@@ -83,7 +83,9 @@ void Init(
     }
 
     if (protoConfig.GetAudit().GetEnabled()) {
-        auto* auditSerive = auditServiceFactory(protoConfig.GetAudit());
+        auto* auditSerive = auditServiceFactory(
+            protoConfig.GetAudit(),
+            appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "audit"));
         actorRegistrator(NYq::YqAuditServiceActorId(), auditSerive);
     }
 
@@ -265,7 +267,7 @@ void Init(
             protoConfig.GetQuotasManager(),
             /* yqSharedResources, */
             serviceCounters.Counters,
-            { 
+            {
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_RESULT_LIMIT, 20_MB),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_COUNT_LIMIT, 100, NYq::ControlPlaneStorageServiceActorId())
             });

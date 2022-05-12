@@ -22,6 +22,7 @@
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/test_tablet/test_tablet.h>
+#include <ydb/core/blob_sack/blob_sack.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -222,6 +223,9 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         break;
     case TTabletTypes::ReplicationController:
         createFunc = &NReplication::CreateController;
+        break;
+    case TTabletTypes::BlobSack:
+        createFunc = &NBlobSack::CreateBlobSack;
         break;
     default:
         return nullptr;

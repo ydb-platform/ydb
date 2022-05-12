@@ -682,7 +682,8 @@ public:
              TTabletTypes::PersQueue,
              TTabletTypes::PersQueueReadBalancer,
              TTabletTypes::NodeBroker,
-             TTabletTypes::TestShard}) {
+             TTabletTypes::TestShard,
+             TTabletTypes::BlobSack}) {
             if (shortType == LongToShortTabletName(TTabletTypes::TypeToStr(tabletType))) {
                 return tabletType;
             }
@@ -930,7 +931,8 @@ public:
              TTabletTypes::PersQueue,
              TTabletTypes::PersQueueReadBalancer,
              TTabletTypes::NodeBroker,
-             TTabletTypes::TestShard}) {
+             TTabletTypes::TestShard,
+             TTabletTypes::BlobSack}) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
                    "<td>" << LongToShortTabletName(TTabletTypes::TypeToStr(tabletType)) << "</td>";
@@ -1096,6 +1098,8 @@ public:
             return "S";
         case TTabletTypes::ReplicationController:
             return "RC";
+        case TTabletTypes::BlobSack:
+            return "BS";
         default:
             return Sprintf("%d", (int)type);
         }

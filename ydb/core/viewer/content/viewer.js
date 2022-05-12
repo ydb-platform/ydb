@@ -1506,6 +1506,10 @@ function tabletTypeToSymbol(type) {
         return "S";
     case "ReplicationController":
         return "RC";
+    case "TestShard":
+        return "TS";
+    case "BlobSack":
+        return "BL";
     }
     return "XX";
 }
@@ -1906,6 +1910,10 @@ function getTabletTypeFromHiveTabletType(type) {
         return "OlapShard";
     case 35:
         return "ColumnShard";
+    case 36:
+        return "TestShard";
+    case 39:
+        return "BlobSack";
     }
     return type;
 }

@@ -1,6 +1,6 @@
 --- contrib/python/botocore/py3/botocore/data/endpoints.json	(index)
 +++ contrib/python/botocore/py3/botocore/data/endpoints.json	(working tree)
-@@ -18343,6 +18343,46 @@
+@@ -18584,6 +18584,46 @@
          }
        }
      }

@@ -570,7 +570,7 @@ private:
 
     TUsersInfoStorage UsersInfoStorage;
 
-    std::deque<TString> UpdateUserInfoTimestamp;
+    std::deque<std::pair<TString, ui64>> UpdateUserInfoTimestamp;
     bool ReadingTimestamp;
     TString ReadingForUser;
     ui64 ReadingForUserReadRuleGeneration;

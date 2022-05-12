@@ -16,7 +16,7 @@ def safety_warden_factory(cluster):
     wardens = [AllPDisksAreInValidStateSafetyWarden(cluster)]
     wardens.extend(kikimr_grep_dmesg_safety_warden_factory(list_of_host_names))
     by_directory = {}
-    for node in cluster.slots.values() + cluster.nodes.values():
+    for node in list(cluster.slots.values()) + list(cluster.nodes.values()):
         if node.logs_directory not in by_directory:
             by_directory[node.logs_directory] = []
         by_directory[node.logs_directory].append(node.host)

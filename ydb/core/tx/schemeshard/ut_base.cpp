@@ -10070,7 +10070,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/table/indexByValue/indexImplTable", true, true, true),
                            {NLs::PathExist,
-                            NLs::PathVersionOneOf({8}),
                             NLs::PartitionCount(1),
                             NLs::MinPartitionsCountEqual(1),
                             NLs::MaxPartitionsCountEqual(100)});

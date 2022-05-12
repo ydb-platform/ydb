@@ -34,8 +34,4 @@
 
   {% include [install/cmd_php.md](install/cmd_php.md) %}
 
-- Node.JS
-
-  {% include [install/cmd_nodejs.md](install/cmd_nodejs.md) %}
-
 {% endlist %}

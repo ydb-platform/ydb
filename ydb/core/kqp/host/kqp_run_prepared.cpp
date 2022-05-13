@@ -29,6 +29,9 @@ public:
 
         const auto& kql = TransformCtx->GetPreparedKql();
 
+        // TODO: Enable after switch to NewEngine
+        // YQL_ENSURE(!TransformCtx->Config->HasKqpForceNewEngine());
+
         if (CurrentMkqlIndex >= kql.MkqlsSize()) {
             return Finish(ctx);
         }

@@ -945,10 +945,10 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             calcWorldRoot.Drop();
             fullTransformer->Rewind();
             auto prevSteps = ctx.Step;
-            types.EvaluationInProgress = true;
+            ++types.EvaluationInProgress;
             status = SyncTransform(*fullTransformer, clonedArg, ctx);
             ctx.Step = prevSteps;
-            types.EvaluationInProgress = false;
+            --types.EvaluationInProgress;
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }

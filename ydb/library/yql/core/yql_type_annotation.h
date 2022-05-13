@@ -200,7 +200,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
     bool Diagnostics = false;
     THashMap<ui64, ui32> NodeToOperationId; // UniqueId->PublicId translation
-    bool EvaluationInProgress = false;
+    ui64 EvaluationInProgress = 0;
     THashMap<ui64, const TTypeAnnotationNode*> ExpectedTypes;
     THashMap<ui64, std::vector<const TConstraintNode*>> ExpectedConstraints;
     THashMap<ui64, TColumnOrder> ExpectedColumnOrders;

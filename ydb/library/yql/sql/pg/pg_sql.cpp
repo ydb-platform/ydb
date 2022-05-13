@@ -938,6 +938,19 @@ public:
         return { ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), true), alias, colnames, false };
     }
 
+    TAstNode* ParseNullTestExpr(const NullTest* value, const TExprSettings& settings) {
+        if (value->argisrow) {
+            AddError("NullTest: unsupported argisrow");
+            return nullptr;
+        }
+        auto arg = ParseExpr((const Node*)value->arg, settings);
+        auto result = L(A("Exists"), arg);
+        if (value->nulltesttype == IS_NULL) {
+            result = L(A("Not"), result);
+        }
+        return L(A("ToPg"), result);
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
         case T_A_Const: {
@@ -959,6 +972,9 @@ public:
         }
         case T_BoolExpr: {
             return ParseBoolExpr(CAST_NODE(BoolExpr, node), settings);
+        }
+        case T_NullTest: {
+            return ParseNullTestExpr(CAST_NODE(NullTest, node), settings);
         }
         case T_FuncCall: {
             return ParseFuncCall(CAST_NODE(FuncCall, node), settings);

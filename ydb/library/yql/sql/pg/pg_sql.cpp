@@ -506,7 +506,7 @@ public:
                 }
 
                 auto lambda = L(A("lambda"), QL(), x);
-                auto columnName = QA(name);
+                auto columnName = QAX(name);
                 res.push_back(L(A("PgResultItem"), columnName, L(A("Void")), lambda));
             }
 
@@ -745,10 +745,10 @@ public:
     }
 
     void AddFrom(const TFromDesc& p, TVector<TAstNode*>& fromList) {
-        auto aliasNode = QA(p.Alias);
+        auto aliasNode = QAX(p.Alias);
         TVector<TAstNode*> colNamesNodes;
         for (const auto& c : p.ColNames) {
-            colNamesNodes.push_back(QA(c));
+            colNamesNodes.push_back(QAX(c));
         }
 
         auto colNamesTuple = QVL(colNamesNodes.data(), colNamesNodes.size());
@@ -805,8 +805,8 @@ public:
             return {};
         }
 
-        auto sink = L(A("DataSink"), QA(*p), QA(value->schemaname));
-        auto key = L(A("Key"), QL(QA("table"), L(A("String"), QA(value->relname))));
+        auto sink = L(A("DataSink"), QAX(*p), QAX(value->schemaname));
+        auto key = L(A("Key"), QL(QA("table"), L(A("String"), QAX(value->relname))));
         return { sink, key };
     }
 
@@ -840,9 +840,9 @@ public:
             return {};
         }
 
-        auto source = L(A("DataSource"), QA(*p), QA(value->schemaname));
+        auto source = L(A("DataSource"), QAX(*p), QAX(value->schemaname));
         return { L(A("Read!"), A("world"), source, L(A("Key"),
-            QL(QA("table"), L(A("String"), QA(value->relname)))),
+            QL(QA("table"), L(A("String"), QAX(value->relname)))),
             L(A("Void")),
             QL()), alias, colnames, true };
     }
@@ -979,7 +979,7 @@ public:
             return L(A("PgConst"), QA(ToString(StrFloatVal(val))), L(A("PgType"), QA("float8")));
         }
         case T_String: {
-            return L(A("PgConst"), QA(ToString(StrVal(val))), L(A("PgType"), QA("text")));
+            return L(A("PgConst"), QAX(ToString(StrVal(val))), L(A("PgType"), QA("text")));
         }
         case T_Null: {
             return L(A("Null"));
@@ -1024,7 +1024,7 @@ public:
             }
 
             if (StrLength(value->over->name)) {
-                window = QA(value->over->name);
+                window = QAX(value->over->name);
             } else {
                 auto index = settings.WindowItems->size();
                 auto def = ParseWindowDef(value->over);
@@ -1094,7 +1094,7 @@ public:
         }
 
         args.push_back(A(callable));
-        args.push_back(QA(name));
+        args.push_back(QAX(name));
         if (window) {
             args.push_back(window);
         }
@@ -1161,7 +1161,7 @@ public:
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
                 auto str = StrVal(CAST_NODE(A_Const, arg)->val);
-                return L(A("PgConst"), QA(str), L(A("PgType"), QA("bool")));
+                return L(A("PgConst"), QAX(str), L(A("PgType"), QA("bool")));
             }
         }
 
@@ -1177,42 +1177,43 @@ public:
                 finalType = "_" + finalType;
             }
 
-            return L(A("PgCast"), input, L(A("PgType"), QA(finalType)));
+            return L(A("PgCast"), input, L(A("PgType"), QAX(finalType)));
         }
 
         AddError("Unsupported form of type cast");
         return nullptr;
     }
 
+    TAstNode* ParseAndOrExpr(const BoolExpr* value, const TExprSettings& settings, const TString& pgOpName) {
+        auto length = ListLength(value->args);
+        if (length < 2) {
+            AddError(TStringBuilder() << "Expected >1 args for " << pgOpName << " but have " << length << " args");
+            return nullptr;
+        }
+
+        auto lhs = ParseExpr(ListNodeNth(value->args, 0), settings);
+        if (!lhs) {
+            return nullptr;
+        }
+
+        for (auto i = 1; i < length; ++i) {
+            auto rhs = ParseExpr(ListNodeNth(value->args, i), settings);
+            if (!rhs) {
+                return nullptr;
+            }
+            lhs = L(A(pgOpName), lhs, rhs);
+        }
+
+        return lhs;
+    }
+
     TAstNode* ParseBoolExpr(const BoolExpr* value, const TExprSettings& settings) {
         switch (value->boolop) {
         case AND_EXPR: {
-            if (ListLength(value->args) != 2) {
-                AddError("Expected 2 args for AND");
-                return nullptr;
-            }
-
-            auto lhs = ParseExpr(ListNodeNth(value->args, 0), settings);
-            auto rhs = ParseExpr(ListNodeNth(value->args, 1), settings);
-            if (!lhs || !rhs) {
-                return nullptr;
-            }
-
-            return L(A("PgAnd"), lhs, rhs);
+            return ParseAndOrExpr(value, settings, "PgAnd");
         }
         case OR_EXPR: {
-            if (ListLength(value->args) != 2) {
-                AddError("Expected 2 args for OR");
-                return nullptr;
-            }
-
-            auto lhs = ParseExpr(ListNodeNth(value->args, 0), settings);
-            auto rhs = ParseExpr(ListNodeNth(value->args, 1), settings);
-            if (!lhs || !rhs) {
-                return nullptr;
-            }
-
-            return L(A("PgOr"), lhs, rhs);
+            return ParseAndOrExpr(value, settings, "PgOr");
         }
         case NOT_EXPR: {
             if (ListLength(value->args) != 1) {
@@ -1234,8 +1235,8 @@ public:
     }
 
     TAstNode* ParseWindowDef(const WindowDef* value) {
-        auto name = QA(value->name);
-        auto refName = QA(value->refname);
+        auto name = QAX(value->name);
+        auto refName = QAX(value->refname);
         TVector<TAstNode*> sortItems;
         for (int i = 0; i < ListLength(value->orderClause); ++i) {
             auto node = ListNodeNth(value->orderClause, i);
@@ -1456,9 +1457,9 @@ public:
                 return nullptr;
             }
 
-            optionItems.push_back(QL(QA("type"), QA(type)));
-            optionItems.push_back(QL(QA("from"), QA(from)));
-            optionItems.push_back(QL(QA("to"), QA(to)));
+            optionItems.push_back(QL(QA("type"), QAX(type)));
+            optionItems.push_back(QL(QA("from"), QAX(from)));
+            optionItems.push_back(QL(QA("to"), QAX(to)));
         }
 
         auto options = QVL(optionItems.data(), optionItems.size());
@@ -1553,21 +1554,16 @@ public:
             if (fields.size() == 0) {
                 return L(A("PgStar"));
             } else {
-                return L(A("PgQualifiedStar"), QA(fields[0]));
+                return L(A("PgQualifiedStar"), QAX(fields[0]));
             }
         } else if (fields.size() == 1) {
-            return L(A("PgColumnRef"), QA(fields[0]));
+            return L(A("PgColumnRef"), QAX(fields[0]));
         } else {
-            return L(A("PgColumnRef"), QA(fields[0]), QA(fields[1]));
+            return L(A("PgColumnRef"), QAX(fields[0]), QAX(fields[1]));
         }
     }
 
-    TAstNode* ParseAExpr(const A_Expr* value, const TExprSettings& settings) {
-        if (value->kind != AEXPR_OP) {
-            AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
-            return nullptr;
-        }
-
+    TAstNode* ParseAExprOp(const A_Expr* value, const TExprSettings& settings) {
         if (ListLength(value->name) != 1) {
             AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
             return nullptr;
@@ -1591,16 +1587,96 @@ public:
                 return nullptr;
             }
 
-            return L(A("PgOp"), QA(op), rhs);
-        } else {
-            auto lhs = ParseExpr(value->lexpr, settings);
-            auto rhs = ParseExpr(value->rexpr, settings);
-            if (!lhs || !rhs) {
-                return nullptr;
-            }
-
-            return L(A("PgOp"), QA(op), lhs, rhs);
+            return L(A("PgOp"), QAX(op), rhs);
         }
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        auto rhs = ParseExpr(value->rexpr, settings);
+        if (!lhs || !rhs) {
+            return nullptr;
+        }
+
+        return L(A("PgOp"), QAX(op), lhs, rhs);
+    }
+
+    TAstNode* ParseAExprBetween(const A_Expr* value, const TExprSettings& settings) {
+        if (!value->lexpr || !value->rexpr) {
+            AddError("Missing operands");
+            return nullptr;
+        }
+
+        if (NodeTag(value->rexpr) != T_List) {
+            AddError(TStringBuilder() << "Expected T_List tag, but have " << NodeTag(value->rexpr));
+            return nullptr;
+        }
+
+        const List* rexprList = CAST_NODE(List, value->rexpr);
+        if (ListLength(rexprList) != 2) {
+            AddError(TStringBuilder() << "Expected 2 args in BETWEEN range, but have " << ListLength(rexprList));
+            return nullptr;
+        }
+
+        auto b = ListNodeNth(rexprList, 0);
+        auto e = ListNodeNth(rexprList, 1);
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        auto rbhs = ParseExpr(b, settings);
+        auto rehs = ParseExpr(e, settings);
+        if (!lhs || !rbhs || !rehs) {
+            return nullptr;
+        }
+
+        if (IsIn({ AEXPR_BETWEEN_SYM, AEXPR_NOT_BETWEEN_SYM }, value->kind)) {
+            auto minmax = L(A("If"),
+                L(A("Coalesce"),
+                    L(A("FromPg"),
+                        L(A("PgOp"), QA("<"), rbhs, rehs)
+                    ),
+                    L(A("Bool"), QA("false"))
+                ), QL(rbhs, rehs), QL(rehs, rbhs)
+            );
+
+            rbhs = L(A("Nth"), minmax, QA("0"));
+            rehs = L(A("Nth"), minmax, QA("1"));
+        }
+
+        switch (value->kind) {
+        case AEXPR_BETWEEN:
+            [[fallthrough]];
+        case AEXPR_BETWEEN_SYM:
+        {
+            auto gte = L(A("PgOp"), QA(">="), lhs, rbhs);
+            auto lte = L(A("PgOp"), QA("<="), lhs, rehs);
+            return L(A("PgAnd"), gte, lte);
+        }
+        case AEXPR_NOT_BETWEEN:
+            [[fallthrough]];
+        case AEXPR_NOT_BETWEEN_SYM:
+        {
+            auto lt = L(A("PgOp"), QA("<"), lhs, rbhs);
+            auto gt = L(A("PgOp"), QA(">"), lhs, rehs);
+            return L(A("PgOr"), lt, gt);
+        }
+        default:
+            AddError(TStringBuilder() << "BETWEEN kind unsupported value: " << (int)value->kind);
+            return nullptr;
+        }
+    }
+
+    TAstNode* ParseAExpr(const A_Expr* value, const TExprSettings& settings) {
+        switch (value->kind) {
+        case AEXPR_OP:
+            return ParseAExprOp(value, settings);
+        case AEXPR_BETWEEN:
+        case AEXPR_NOT_BETWEEN:
+        case AEXPR_BETWEEN_SYM:
+        case AEXPR_NOT_BETWEEN_SYM:
+            return ParseAExprBetween(value, settings);
+        default:
+            AddError(TStringBuilder() << "A_Expr_Kind unsupported value: " << (int)value->kind);
+            return nullptr;
+        }
+
     }
 
     template <typename T>
@@ -1642,19 +1718,27 @@ public:
     }
 
     TAstNode* QVL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
-        return Q(VL(nodes, size, pos));
+        return Q(VL(nodes, size, pos), pos);
     }
 
-    TAstNode* A(const TString& str, TPosition pos = {}) {
-        return TAstNode::NewAtom(pos, str, *AstParseResult.Pool);
+    TAstNode* A(const TString& str, TPosition pos = {}, ui32 flags = 0) {
+        return TAstNode::NewAtom(pos, str, *AstParseResult.Pool, flags);
+    }
+
+    TAstNode* AX(const TString& str, TPosition pos = {}) {
+    	return A(str, pos, TNodeFlags::ArbitraryContent);
     }
 
     TAstNode* Q(TAstNode* node, TPosition pos = {}) {
-        return L(A("quote"), node, pos);
+        return L(A("quote", pos), node, pos);
     }
 
-    TAstNode* QA(const TString& str, TPosition pos = {}) {
-        return Q(A(str, pos));
+    TAstNode* QA(const TString& str, TPosition pos = {}, ui32 flags = 0) {
+        return Q(A(str, pos, flags), pos);
+    }
+
+    TAstNode* QAX(const TString& str, TPosition pos = {}) {
+        return QA(str, pos, TNodeFlags::ArbitraryContent);
     }
 
     template <typename... TNodes>

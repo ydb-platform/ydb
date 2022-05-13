@@ -1,5 +1,14 @@
 ## HISTOGRAM {#histogram}
 
+**Сигнатура**
+```
+HISTOGRAM(Double?)->HistogramStruct?
+HISTOGRAM(Double?, weight:Double)->HistogramStruct?
+HISTOGRAM(Double?, intervals:Uint32)->HistogramStruct?
+HISTOGRAM(Double?, weight:Double, intervals:Uint32)->HistogramStruct?
+```
+В описании сигнатур под HistogramStruct подразумевается результат работы агрегатной функции, который является структурой определенного вида.
+
 Построение примерной гистограммы по числовому выражению с автоматическим выбором корзин.
 
 [Вспомогательные функции](../../../udf/list/histogram.md)
@@ -93,6 +102,17 @@ FROM my_table;
 ## LinearHistogram, LogarithmicHistogram и LogHistogram {#linearhistogram}
 
 Построение гистограммы по явно указанной фиксированной шкале корзин.
+
+**Сигнатура**
+```
+LinearHistogram(Double?)->HistogramStruct?
+LinearHistogram(Double? [, binSize:Double [, min:Double [, max:Double]]])->HistogramStruct?
+
+LogarithmicHistogram(Double?)->HistogramStruct?
+LogarithmicHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->HistogramStruct?
+LogHistogram(Double?)->HistogramStruct?
+LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->HistogramStruct?
+```
 
 Аргументы:
 

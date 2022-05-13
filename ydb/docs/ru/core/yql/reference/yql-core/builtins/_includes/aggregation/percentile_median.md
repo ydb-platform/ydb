@@ -1,5 +1,12 @@
 ## PERCENTILE и MEDIAN {#percentile-median}
 
+**Сигнатура**
+```
+PERCENTILE(Double?, Double)->Double?
+
+MEDIAN(Double? [, Double])->Double?
+```
+
 Подсчет процентилей по амортизированной версии алгоритма [TDigest](https://github.com/tdunning/t-digest). `MEDIAN` — алиас для `PERCENTILE(N, 0.5)`.
 
 {% note info "Ограничение" %}

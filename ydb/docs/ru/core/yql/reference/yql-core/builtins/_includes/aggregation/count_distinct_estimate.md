@@ -1,5 +1,12 @@
 ## CountDistinctEstimate, HyperLogLog и HLL {#countdistinctestimate}
 
+**Сигнатура**
+```
+CountDistinctEstimate(T)->Uint64?
+HyperLogLog(T)->Uint64?
+HLL(T)->Uint64?
+```
+
 Примерная оценка числа уникальных значений по алгоритму [HyperLogLog](https://en.wikipedia.org/wiki/HyperLogLog). Логически делает то же самое, что и [COUNT(DISTINCT ...)](#count), но работает значительно быстрее ценой некоторой погрешности.
 
 Аргументы:

@@ -702,6 +702,12 @@
 (let double_traits_factory_opt (lambda '(factory list_type first second) (block '(
     (let item_type (ListItemType list_type))
     (let key_type (TypeOf (Apply first (InstanceOf item_type))))
+    (let value_type (TypeOf (Apply second (InstanceOf item_type))))
+    (let null_value (MatchType value_type
+        'Optional (lambda '() (Nothing value_type))
+        'Null (lambda '() (Null))
+        (lambda '() (Nothing (OptionalType value_type)))
+    ))
     (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type)))
     (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type)))
         (lambda '(row) (MatchType key_type 'Optional
@@ -718,24 +724,25 @@
     (let finish (NthArg '6 traits))
     (let defval (NthArg '7 traits))
 
-    (let init_opt (lambda '(row) (MatchType test_type 'Optional
-        (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row))))
+    (let init_opt (lambda '(row) (MatchType test_type
+        'Optional (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row))))
+        'Null (lambda '() null_value)
         (lambda '() (Apply init row))
     )))
-    (let update_opt (lambda '(row state)
-        (MatchType test_type 'Optional
-            (lambda '() (IfPresent state (lambda '(state) (Just (If (Exists (Apply first row)) (Apply update row state) state))) (Apply init_opt row)))
-            (lambda '() (Apply update row state))
-        )
-    ))
-    (let save_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state save)) (lambda '() (Apply save state)))))
-    (let load_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state load)) (lambda '() (Apply load state)))))
-    (let merge_opt (lambda '(one two) (MatchType test_type 'Optional (lambda '() (OptionalReduce one two merge)) (lambda '() (Apply merge one two)))))
-    (let finish_opt (lambda '(state) (MatchType test_type 'Optional
-        (lambda '() (MatchType (TypeOf (Apply finish (InstanceOf (OptionalItemType (TypeOf state))))) 'Optional
+    (let update_opt (lambda '(row state) (MatchType test_type
+        'Optional (lambda '() (IfPresent state (lambda '(state) (Just (If (Exists (Apply first row)) (Apply update row state) state))) (Apply init_opt row)))
+        'Null (lambda '() null_value)
+        (lambda '() (Apply update row state))
+    )))
+    (let save_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state save)) 'Null (lambda '() null_value) (lambda '() (Apply save state)))))
+    (let load_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state load)) 'Null (lambda '() null_value) (lambda '() (Apply load state)))))
+    (let merge_opt (lambda '(one two) (MatchType test_type 'Optional (lambda '() (OptionalReduce one two merge)) 'Null (lambda '() null_value) (lambda '() (Apply merge one two)))))
+    (let finish_opt (lambda '(state) (MatchType test_type
+        'Optional (lambda '() (MatchType (TypeOf (Apply finish (InstanceOf (OptionalItemType (TypeOf state))))) 'Optional
             (lambda '() (FlatMap state finish))
             (lambda '() (Map state finish))
         ))
+        'Null (lambda '() null_value)
         (lambda '() (Apply finish state))
     )))
     (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval))
@@ -746,6 +753,12 @@
 (let double_traits_factory_opt_parent (lambda '(factory list_type first second) (block '(
     (let item_type (ListItemType list_type))
     (let key_type (TypeOf (Apply first (InstanceOf item_type))))
+    (let value_type (TypeOf (Apply second (InstanceOf item_type))))
+    (let null_value (MatchType value_type
+        'Optional (lambda '() (Nothing value_type))
+        'Null (lambda '() (Null))
+        (lambda '() (Nothing (OptionalType value_type)))
+    ))
     (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type)))
     (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type)))
         (lambda '(row) (MatchType key_type 'Optional
@@ -762,20 +775,20 @@
     (let finish (NthArg '6 traits))
     (let defval (NthArg '7 traits))
 
-    (let init_opt (lambda '(row parent) (MatchType test_type 'Optional
-        (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row parent))))
+    (let init_opt (lambda '(row parent) (MatchType test_type
+        'Optional (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row parent))))
+        'Null (lambda '() null_value)
         (lambda '() (Apply init row parent))
     )))
-    (let update_opt (lambda '(row state parent)
-        (MatchType test_type 'Optional
-            (lambda '() (IfPresent state (lambda '(state) (Just (If (Exists (Apply first row)) (Apply update row state parent) state))) (Apply init_opt row parent)))
-            (lambda '() (Apply update row state parent))
-        )
-    ))
-    (let save_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state save)) (lambda '() (Apply save state)))))
-    (let load_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state load)) (lambda '() (Apply load state)))))
-    (let merge_opt (lambda '(one two) (MatchType test_type 'Optional (lambda '() (OptionalReduce one two merge)) (lambda '() (Apply merge one two)))))
-    (let finish_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state finish)) (lambda '() (Apply finish state)))))
+    (let update_opt (lambda '(row state parent) (MatchType test_type
+        'Optional (lambda '() (IfPresent state (lambda '(state) (Just (If (Exists (Apply first row)) (Apply update row state parent) state))) (Apply init_opt row parent)))
+        'Null (lambda '() null_value)
+        (lambda '() (Apply update row state parent))
+    )))
+    (let save_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state save)) 'Null (lambda '() null_value) (lambda '() (Apply save state)))))
+    (let load_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state load)) 'Null (lambda '() null_value) (lambda '() (Apply load state)))))
+    (let merge_opt (lambda '(one two) (MatchType test_type 'Optional (lambda '() (OptionalReduce one two merge)) 'Null (lambda '() null_value) (lambda '() (Apply merge one two)))))
+    (let finish_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state finish)) 'Null (lambda '() null_value) (lambda '() (Apply finish state)))))
     (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval))
 ))))
 

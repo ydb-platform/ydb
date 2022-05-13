@@ -26,7 +26,7 @@ TabletCell.prototype.tabletTypes = {
     'SequenceShard': 'S',
     'ReplicationController': 'RC',
     'TestShard': 'TS',
-    'BlobSack': 'BL',
+    'BlobDepot': 'BD',
 };
 
 TabletCell.prototype.getTabletType = function() {

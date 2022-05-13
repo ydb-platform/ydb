@@ -7,12 +7,12 @@
 
 
 
-add_library(ydb-core-blob_sack)
-target_link_libraries(ydb-core-blob_sack PUBLIC
+add_library(ydb-core-blob_depot)
+target_link_libraries(ydb-core-blob_depot PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-tablet_flat
 )
-target_sources(ydb-core-blob_sack PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_sack/blob_sack.cpp
+target_sources(ydb-core-blob_depot PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
 )

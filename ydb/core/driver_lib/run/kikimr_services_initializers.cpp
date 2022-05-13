@@ -55,7 +55,7 @@
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/test_tablet/state_server_interface.h>
 
-#include <ydb/core/blob_sack/blob_sack.h>
+#include <ydb/core/blob_depot/blob_depot.h>
 
 #include <ydb/core/health_check/health_check.h>
 
@@ -975,8 +975,8 @@ void TLocalServiceInitializer::InitializeServices(
         new TTabletSetupInfo(&NSequenceShard::CreateSequenceShard, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[TTabletTypes::ReplicationController] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NReplication::CreateController, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[TTabletTypes::BlobSack] = TLocalConfig::TTabletClassInfo(
-        new TTabletSetupInfo(&NBlobSack::CreateBlobSack, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
+    localConfig->TabletClassInfo[TTabletTypes::BlobDepot] = TLocalConfig::TTabletClassInfo(
+        new TTabletSetupInfo(&NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
 
     TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(Config.GetTenantPoolConfig(), localConfig);
     if (!tenantPoolConfig->IsEnabled

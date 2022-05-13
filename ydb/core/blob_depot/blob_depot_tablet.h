@@ -2,16 +2,16 @@
 
 #include "defs.h"
 
-namespace NKikimr::NBlobSack {
+namespace NKikimr::NBlobDepot {
 
     using NTabletFlatExecutor::TTabletExecutedFlat;
 
-    class TBlobSack
-        : public TActor<TBlobSack>
+    class TBlobDepot
+        : public TActor<TBlobDepot>
         , public TTabletExecutedFlat
     {
     public:
-        TBlobSack(TActorId tablet, TTabletStorageInfo *info)
+        TBlobDepot(TActorId tablet, TTabletStorageInfo *info)
             : TActor(&TThis::StateFunc)
             , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         {}
@@ -33,4 +33,4 @@ namespace NKikimr::NBlobSack {
         }
     };
 
-} // NKikimr::NBlobSack
+} // NKikimr::NBlobDepot

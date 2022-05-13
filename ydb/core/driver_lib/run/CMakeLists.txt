@@ -36,7 +36,7 @@ target_link_libraries(run PUBLIC
   library-cpp-svnversion
   ydb-core-actorlib_impl
   ydb-core-base
-  ydb-core-blob_sack
+  ydb-core-blob_depot
   ydb-core-blobstorage
   core-blobstorage-backpressure
   core-blobstorage-nodewarden

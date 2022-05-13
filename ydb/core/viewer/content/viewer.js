@@ -1508,8 +1508,8 @@ function tabletTypeToSymbol(type) {
         return "RC";
     case "TestShard":
         return "TS";
-    case "BlobSack":
-        return "BL";
+    case "BlobDepot":
+        return "BD";
     }
     return "XX";
 }
@@ -1913,7 +1913,7 @@ function getTabletTypeFromHiveTabletType(type) {
     case 36:
         return "TestShard";
     case 39:
-        return "BlobSack";
+        return "BlobDepot";
     }
     return type;
 }

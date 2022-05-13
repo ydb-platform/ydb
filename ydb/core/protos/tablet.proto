@@ -46,7 +46,7 @@ message TTabletTypes {
         TestShard = 36;
         SequenceShard = 37;
         ReplicationController = 38;
-        BlobSack = 39;
+        BlobDepot = 39;
 
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to

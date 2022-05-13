@@ -124,7 +124,7 @@ ui64 TMetricsEncoder::Append(const NUdf::TUnboxedValue& value)
         SolomonEncoder->OnLabel("name", sensor.GetKey());
         for (const auto& label : Scheme.GetLabels()) {
             const NUdf::TUnboxedValue& labelValue = value.GetElement(label.GetIndex());
-            SolomonEncoder->OnLabel(label.GetKey(), TString(labelValue.AsStringRef()));
+            SolomonEncoder->OnLabel(label.GetKey(), TStringBuf(labelValue.AsStringRef()));
         }
         SolomonEncoder->OnLabelsEnd();
 

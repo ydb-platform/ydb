@@ -351,10 +351,10 @@ private:
                 HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
             }
 
-            const auto metricsToSend = std::get<TMetricsToSend>(variant);
+            const auto& metricsToSend = std::get<TMetricsToSend>(variant);
             const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(metricsToSend.Data);
 
-            const auto bodySize = httpRequest->Body.Size();
+            const size_t bodySize = metricsToSend.Data.size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId));
             Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
             SINK_LOG_D("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
@@ -417,7 +417,7 @@ private:
         }
 
         FreeSpace += ptr->second.BodySize;
-        if (ShouldNotifyNewFreeSpace) {
+        if (ShouldNotifyNewFreeSpace && FreeSpace > 0) {
             Callbacks->ResumeExecution();
             ShouldNotifyNewFreeSpace = false;
         }

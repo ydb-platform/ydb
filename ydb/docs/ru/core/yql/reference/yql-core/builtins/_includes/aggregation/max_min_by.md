@@ -2,9 +2,11 @@
 
 **Сигнатура**
 ```
+MAX_BY(T1?, T2)->T1?
 MAX_BY(T1, T2)->T1?
 MAX_BY(T1, T2, limit:Uint64)->List<T1>?
 
+MIN_BY(T1?, T2)->T1?
 MIN_BY(T1, T2)->T1?
 MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 ```

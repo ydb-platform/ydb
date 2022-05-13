@@ -49,8 +49,9 @@ SELECT MIN(value), MAX(value) FROM my_table;
 
 **Сигнатура**
 ```
-SUN(Unsigned?)->Uint64?
-SUN(Signed?)->Int64?
+SUM(Unsigned?)->Uint64?
+SUM(Signed?)->Int64?
+SUM(Decimal(N, M)?)->Decimal(35, M)?
 ```
 
 Сумма чисел.
@@ -68,6 +69,7 @@ SELECT SUM(value) FROM my_table;
 **Сигнатура**
 ```
 AVG(Double?)->Double?
+AVG(Decimal(N, M)?)->Decimal(N, M)?
 ```
 
 Арифметическое среднее.

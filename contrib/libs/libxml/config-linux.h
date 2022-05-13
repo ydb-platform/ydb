@@ -78,7 +78,7 @@
 /* #undef HAVE_LZMA_H */
 
 /* Define to 1 if you have the <malloc.h> header file. */
-// #define HAVE_MALLOC_H 1
+#define HAVE_MALLOC_H 1
 
 /* Define to 1 if you have the <math.h> header file. */
 #define HAVE_MATH_H 1
@@ -117,6 +117,9 @@
 
 /* Define to 1 if you have the `rand' function. */
 #define HAVE_RAND 1
+
+/* Define to 1 if you have the `rand_r' function. */
+#define HAVE_RAND_R 1
 
 /* Define to 1 if you have the <resolv.h> header file. */
 #define HAVE_RESOLV_H 1

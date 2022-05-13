@@ -58,7 +58,6 @@ typedef unsigned __int32 uint32_t;
 #include <libxml/xmlmemory.h>
 #include <libxml/xmlerror.h>
 #include <libxml/globals.h>
-#include "rand.h"
 
 /* #define DEBUG_GROW */
 /* #define DICT_DEBUG_PATTERNS */
@@ -140,6 +139,15 @@ static xmlRMutexPtr xmlDictMutex = NULL;
  */
 static int xmlDictInitialized = 0;
 
+#ifdef DICT_RANDOMIZATION
+#ifdef HAVE_RAND_R
+/*
+ * Internal data for random function
+ */
+static _Thread_local unsigned int rand_seed = 0;
+#endif
+#endif
+
 /**
  * xmlInitializeDict:
  *
@@ -173,6 +181,11 @@ int __xmlInitializeDict(void) {
         return(0);
     xmlRMutexLock(xmlDictMutex);
 
+#ifdef DICT_RANDOMIZATION
+#ifndef HAVE_RAND_R
+    srand(time(NULL));
+#endif
+#endif
     xmlDictInitialized = 1;
     xmlRMutexUnlock(xmlDictMutex);
     return(1);
@@ -185,7 +198,16 @@ int __xmlRandom(void) {
     if (xmlDictInitialized == 0)
         __xmlInitializeDict();
 
-    return utilRandom();
+#ifdef HAVE_RAND_R
+    if (rand_seed == 0)
+        rand_seed = time(NULL);
+    ret = rand_r(& rand_seed);
+#else
+    xmlRMutexLock(xmlDictMutex);
+    ret = rand();
+    xmlRMutexUnlock(xmlDictMutex);
+#endif
+    return(ret);
 }
 #endif
 

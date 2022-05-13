@@ -53,7 +53,6 @@ target_sources(contrib-libs-libxml PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/parser.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/parserInternals.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/pattern.c
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/rand.cpp
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/relaxng.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/schematron.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/threads.c

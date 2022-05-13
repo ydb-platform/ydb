@@ -26,17 +26,17 @@ This configuration can be specified as follows:
 ```bash
 host_configs:
 - drive:
-  - path: /dev/disk/by-partlabel/ydb_ssd_01
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
     type: SSD
-  - path: /dev/disk/by-partlabel/ydb_ssd_02
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
     type: SSD
   host_config_id: 1
 - drive:
-  - path: /dev/disk/by-partlabel/ydb_ssd_01
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
     type: SSD
-  - path: /dev/disk/by-partlabel/ydb_ssd_02
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
     type: SSD
-  - path: /dev/disk/by-partlabel/ydb_ssd_03
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
     type: SSD
   host_config_id: 2
 ```
@@ -197,7 +197,7 @@ blob_storage_config:
       - fail_domains:
         - vdisk_locations:
           - node_id: 1
-            path: /dev/disk/by-partlabel/ydb_ssd_02
+            path: /dev/disk/by-partlabel/ydb_disk_ssd_02
             pdisk_category: SSD
 ....
 ```

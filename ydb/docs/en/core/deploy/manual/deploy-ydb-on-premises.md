@@ -57,13 +57,13 @@ Make sure that you specified the disks that have no other data!
 ```bash
 sudo parted /dev/nvme0n1 mklabel gpt -s
 sudo parted -a optimal /dev/nvme0n1 mkpart primary 0% 100%
-sudo parted /dev/nvme0n1 name 1 ydb_disk_01
+sudo parted /dev/nvme0n1 name 1 ydb_disk_ssd_01
 sudo partx --u /dev/nvme0n1
 ```
 
-As a result, a disk labeled as `/dev/disk/by-partlabel/ydb_disk_01` will appear in the system.
+As a result, a disk labeled as `/dev/disk/by-partlabel/ydb_disk_ssd_01` will appear in the system.
 
-If you plan to use more than one disk on each server, specify a label that is unique for each of them instead of `ydb_disk_01`. You'll need to use these disks later in the configuration files.
+If you plan to use more than one disk on each server, specify a label that is unique for each of them instead of `ydb_disk_ssd_01`. You'll need to use these disks later in the configuration files.
 
 Download an archive with the `ydbd` executable file and the libraries necessary for working with YDB:
 
@@ -92,7 +92,7 @@ sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
 3. Format the disk with the built-in command
 
 ```bash
-sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_01 
+sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01 
 ```
 
 Perform this operation for each disk that will be used for data storage.

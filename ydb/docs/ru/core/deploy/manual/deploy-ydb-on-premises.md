@@ -49,13 +49,13 @@ sudo usermod -aG disk ydb
 ```bash
 sudo parted /dev/nvme0n1 mklabel gpt -s
 sudo parted -a optimal /dev/nvme0n1 mkpart primary 0% 100%
-sudo parted /dev/nvme0n1 name 1 ydb_disk_01
+sudo parted /dev/nvme0n1 name 1 ydb_disk_ssd_01
 sudo partx --u /dev/nvme0n1
 ```
-После выполнения в системе появится диск с лейблом `/dev/disk/by-partlabel/ydb_disk_01` 
+После выполнения в системе появится диск с лейблом `/dev/disk/by-partlabel/ydb_disk_ssd_01` 
 
 
-Если вы планируете использовать более одного диска на каждом сервере - укажите для каждого свой уникальный лейбл вместо `ydb_disk_01`. Эти диски необходимо будет использовать в конфигурационных файлах далее.
+Если вы планируете использовать более одного диска на каждом сервере - укажите для каждого свой уникальный лейбл вместо `ydb_disk_ssd_01`. Эти диски необходимо будет использовать в конфигурационных файлах далее.
 
 Скачайте архив с исполняемым файлом `ydbd` и необходимыми для работы YDB библиотеками:
 ```bash
@@ -78,7 +78,7 @@ sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
 ```
 3. Отформатируйте диск встроенной командой 
 ```bash
-sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_01 
+sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01 
 ```
 Проделайте данную операцию для каждого диска, который будет использоваться для хранения данных.
 

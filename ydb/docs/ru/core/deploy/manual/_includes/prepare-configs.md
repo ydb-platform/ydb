@@ -8,7 +8,7 @@
 ```text
 host_configs:
 - drive:
-  - path: /dev/disk/by-partlabel/ydb_disk_01
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
     type: SSD
   host_config_id: 1
 ```
@@ -37,3 +37,4 @@ hosts:
     data_center: 'zone-c'
     rack: '1'
 ```
+Более подробная информация по созданию конфигурации приведена в статье [Конфигурация кластера](../../configuration/config.md)

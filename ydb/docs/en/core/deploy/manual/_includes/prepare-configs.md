@@ -11,7 +11,7 @@ Download a sample config for the appropriate failure model of your cluster:
 ```text
 host_configs:
 - drive:
-  - path: /dev/disk/by-partlabel/ydb_disk_01
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
     type: SSD
   host_config_id: 1
 ```
@@ -42,4 +42,4 @@ hosts:
     data_center: 'zone-c'
     rack: '1'
 ```
-
+Full cluster coniguration options are given in [Cluster configuration](../../configuration/config.md) article.

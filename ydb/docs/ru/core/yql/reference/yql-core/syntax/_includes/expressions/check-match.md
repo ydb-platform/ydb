@@ -1,6 +1,6 @@
 ## Проверка строки на соответствие шаблону {#check-match}
 
-`REGEXP` и `RLIKE` являются алиасами и представляют собой короткий способ записи для вызова [Hyperscan::Grep](../../../udf/list/hyperscan.md#grep). `MATCH` — аналогично для [Hyperscan::Match](../../../udf/list/hyperscan.md#match).
+`REGEXP` и `RLIKE` являются алиасами и представляют собой короткий способ записи для вызова [Re2::Grep](../../../udf/list/re2.md#match). `MATCH` — аналогично для [Re2::Match](../../../udf/list/re2.md#match).
 
 `LIKE` работает по следующим принципам:
 

@@ -8,14 +8,14 @@
 
 **Список функций**
 
-* ```Hyperscan::Grep(String) -> (String?) -> Bool```
-* ```Hyperscan::Match(String) -> (String?) -> Bool```
-* ```Hyperscan::BacktrackingGrep(String) -> (String?) -> Bool```
-* ```Hyperscan::BacktrackingMatch(String) -> (String?) -> Bool```
-* ```Hyperscan::MultiGrep(String) -> (String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::MultiMatch(String) -> (String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::Capture(String) -> (String?) -> String?```
-* ```Hyperscan::Replace(String) -> (String?, String) -> String?```
+* ```Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::Match(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
+* ```Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
+* ```Hyperscan::Capture(pattern:String) -> (string:String?) -> String?```
+* ```Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
 
 ## Синтаксис вызова {#syntax}
 
@@ -31,17 +31,9 @@ SELECT * FROM table WHERE $re(key); -- используем его для фил
 Есть возможность отключить чувствительность к регистру (то есть включить case-insensitive режим), указав в начале регулярного выражения флаг `(?i)`.
 
 
-
 ## Grep {#grep}
 
 Проверяет совпадение регулярного выражения с **частью строки** (произвольной подстрокой).
-
-Функцию `Hyperscan::Grep` можно вызвать с помощью выражения `REGEXP` (см. [описание базового синтаксиса выражений](../../syntax/expressions.md#regexp)).
-
-Например, следующие два запроса эквивалентны (в том числе по эффективности вычислений):
-
-* ```$grep = Hyperscan::Grep("b+"); SELECT $grep("aaabccc");```
-* ```SELECT "aaabccc" REGEXP "b+";```
 
 ## Match {#match}
 
@@ -53,8 +45,6 @@ SELECT * FROM table WHERE $re(key); -- используем его для фил
 
 По принципу работы данные функции полностью совпадают с одноимёнными функциями без префикса `Backtracking`, но поддерживают более широкий ассортимент регулярных выражений. Это происходит за счет того, что если конкретное регулярное выражение в полном объёме не поддерживается Hyperscan, то библиотека переключается в режим предварительной фильтрации (prefilter). В этом случае она отвечает не «да» или «нет», а «точно нет» или «может быть да». Ответы «может быть да» затем автоматически перепроверяются с помощью медленной, но более функциональной библиотеки [libpcre](https://www.pcre.org).
 
-Именно эти функции на данный момент вызываются в бинарных операторах [REGEXP](../../syntax/expressions.md#regexp) и [MATCH](../../syntax/expressions.md#match).
-
 ## MultiGrep / MultiMatch {#multigrep}
 
 Библиотека Hyperscan предоставляет возможность за один проход по тексту проверить несколько регулярных выражений и получить по каждому из них отдельный ответ.
@@ -64,22 +54,20 @@ SELECT * FROM table WHERE $re(key); -- используем его для фил
 При вызове функций `MultiGrep`/`MultiMatch` регулярные выражения передаются по одному на строку с использованием [многострочных строковых литералов](../../syntax/expressions.md#named-nodes):
 
 **Пример**
-``` sql
+
+```sql
 $multi_match = Hyperscan::MultiMatch(@@a.*
 .*x.*
 .*axa.*@@);
 
 SELECT
-    $multi_match("a") AS a,
-    $multi_match("axa") AS axa;
-
-/*
-- a: `(true, false, false)`
-- axa: `(true, true, true)`
-*/
+    $multi_match("a") AS a,     -- (true, false, false)
+    $multi_match("axa") AS axa; -- (true, true, true)
 ```
 
 ## Capture и Replace {#capture}
+
+`Hyperscan::Capture` при совпадении строки с указанным регулярным выражением возвращает последнюю подстроку, совпавшую с регулярным выражением. `Hyperscan::Replace` заменяет все вхождения указанного регулярного выражения на заданную строку.
 
 В библиотеке Hyperscan отсутствует развитая функциональность для подобных операций, так что `Hyperscan::Capture` и `Hyperscan::Replace` хоть и реализованы для единообразия, но для сколько-либо нетривиальных поисков и замен лучше использовать одноимённые функции из библиотеки Re2:
 
@@ -88,6 +76,7 @@ SELECT
 
 
 ## Пример использования.
+
 ```sql
 $value = "xaaxaaXaa";
 
@@ -104,24 +93,13 @@ $capture_many = Hyperscan::Capture(".*x(a+).*");
 $replace = Hyperscan::Replace("xa");
 
 SELECT
-    $match($value) AS match,
-    $grep($value) AS grep,
-    $insensitive_grep($value) AS insensitive_grep,
-    $multi_match($value) AS multi_match,
-    $multi_match($value).0 AS some_multi_match,
-    $capture($value) AS capture,
-    $capture_many($value) AS capture_many,
-    $replace($value, "b") AS replace
+    $match($value) AS match,                        -- false
+    $grep($value) AS grep,                          -- true
+    $insensitive_grep($value) AS insensitive_grep,  -- true
+    $multi_match($value) AS multi_match,            -- (false, true, true, true)
+    $multi_match($value).0 AS some_multi_match,     -- false
+    $capture($value) AS capture,                    -- "xaa"
+    $capture_many($value) AS capture_many,          -- "xa"
+    $replace($value, "b") AS replace                -- "babaXaa"
 ;
-
-/*
-- match: false
-- grep: true
-- insensitive_grep: true
-- multi_match: (false, true, true, true)
-- some_multi_match: false
-- capture: "xaaa"
-- capture_many: "xaa"
-- replace: "babaXaa"
-*/
 ```

@@ -2,15 +2,15 @@
 
 **Список функций**
 
-* ```Re2::Grep(String) -> (String?) -> Bool```
-* ```Re2::Match(String) -> (String?) -> Bool```
-* ```Re2::Capture(String) -> (String?) -> Struct<_1:String?,foo:String?,...>```
-* ```Re2::FindAndConsume(String) -> (String?) -> List<String>```
-* ```Re2::Replace(String) -> (String?, String) -> String?```
-* ```Re2::Count(String) -> (String?) -> Uint32```
+* ```Re2::Grep(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool```
+* ```Re2::Match(pattern:String, options:Struct<...>?) -> (string:String?) -> Bool```
+* ```Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct<_1:String?,foo:String?,...>```
+* ```Re2::FindAndConsume(pattern:String, options:Struct<...>?) -> (string:String?) -> List<String>```
+* ```Re2::Replace(pattern:String, options:Struct<...>?) -> (string:String?, replacement:String) -> String?```
+* ```Re2::Count(pattern:String, options:Struct<...>?) -> (string:String?) -> Uint32```
 * ```Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,LongestMatch:Bool?,MaxMem:Uint64?,NeverCapture:Bool?,NeverNl:Bool?,OneLine:Bool?,PerlClasses:Bool?,PosixSyntax:Bool?,Utf8:Bool?,WordBoundary:Bool?]) -> Struct<CaseSensitive:Bool,DotNl:Bool,Literal:Bool,LogErrors:Bool,LongestMatch:Bool,MaxMem:Uint64,NeverCapture:Bool,NeverNl:Bool,OneLine:Bool,PerlClasses:Bool,PosixSyntax:Bool,Utf8:Bool,WordBoundary:Bool>```
 
-В силу ограничений библиотеки Pire, связанных с оптимизацией для эффективной проверки строк на соответствие регулярным выражениям, бывают ситуации, когда решить задачу с помощью [Pire](pire.md) неоправданно сложно или невозможно. Для таких ситуаций мы добавили ещё один модуль для работы с регулярными выражениями на основе [google::RE2](https://github.com/google/re2), где предоставляется более широкий ассортимент возможностей ([см. официальную документацию](https://github.com/google/re2/wiki/Syntax)).
+Модуль Re2 реализует поддержку регулярных выражений на основе [google::RE2](https://github.com/google/re2), где предоставляется широкий ассортимент возможностей ([см. официальную документацию](https://github.com/google/re2/wiki/Syntax)).
 
 По умолчанию UTF-8 режим включается автоматически, если регулярное выражение является валидной строкой в кодировке UTF-8, но не является валидной ASCII-строкой. Вручную настройками библиотеки re2 можно управлять с помощью передачи результата функции `Re2::Options` вторым аргументом другим функциям модуля, рядом с регулярным выражением.
 
@@ -32,26 +32,24 @@ $replace = Re2::Replace("x(a+)x");
 $count = Re2::Count("a", $options);
 
 SELECT
-  $match($value) AS match,
-  $grep($value) AS grep,
-  $capture($value) AS capture,
-  $capture($value)._1 AS capture_member,
-  $replace($value, "b\\1z") AS replace,
-  $count($value) AS count;
-
-/*
-- match: `false`
-- grep: `true`
-- capture: `(_0: 'xaaxaaxaa', _1: 'aa', foo: 'x')`
-- capture_member: `"aa"`
-- replace: `"baazaaxaa"`
-- count:: `6`
-*/
+  $match($value) AS match,                -- false
+  $grep($value) AS grep,                  -- true
+  $capture($value) AS capture,            -- (_0: 'xaaxaaxaa', _1: 'aa', foo: 'x')
+  $capture($value)._1 AS capture_member,  -- "aa"
+  $replace($value, "b\\1z") AS replace,   -- "baazaaxaa"
+  $count($value) AS count;                -- 6
 ```
 
 ## Re2::Grep / Re2::Match {#match}
 
-Если вынести за скобки детали реализации и синтаксиса регулярных выражений, эти функции полностью аналогичны [аналогичным функциям](pire.md#match) из модулей Pire. При прочих равных и отсутствии каких-либо специфических предпочтений мы рекомендуем пользоваться `Pire::Grep / Pire::Match`.
+Если вынести за скобки детали реализации и синтаксиса регулярных выражений, эти функции полностью аналогичны [одноименным функциям](pire.md#match) из модуля Pire. При прочих равных и отсутствии каких-либо специфических предпочтений мы рекомендуем пользоваться `Pire::Grep / Pire::Match`.
+
+Функцию `Re2::Grep` можно вызвать с помощью выражения `REGEXP` (см. [описание базового синтаксиса выражений](../../syntax/expressions.md#regexp)).
+
+Например, следующие два запроса эквивалентны (в том числе по эффективности вычислений):
+
+* ```$grep = Re2::Grep("b+"); SELECT $grep("aaabccc");```
+* ```SELECT "aaabccc" REGEXP "b+";```
 
 ## Re2::Capture {#capture}
 
@@ -103,18 +101,19 @@ SELECT
 Не рекомендуется Re2::Options использовать в коде. Большинство параметров можно заменить на флаги регулярного выражения.
 
 **Пример использования флагов**
+
 ```sql
 $value = "Foo bar FOO"u;
 -- включить режим без учета регистра
 $capture = Re2::Capture(@@(?i)(foo)@@);
 
 SELECT
-    $capture($value) AS capture;
+    $capture($value) AS capture; -- ("_0": "Foo", "_1": "Foo")
 
-$capture = Re2::Capture(@@(?i)(?P<vasya>FOO).*(?P<banan>bar)@@);
+$capture = Re2::Capture(@@(?i)(?P<foo>FOO).*(?P<bar>bar)@@);
 
 SELECT
-    $capture($value) AS capture;
+    $capture($value) AS capture; -- ("_0": "Foo bar", "bar": "bar", "foo": "Foo")
 ```
 
-В обоих случаях слово ВАСЯ будет найдено. Применение raw строки @@regexp@@ позволяет не удваивать слеши.
+В обоих случаях слово FOO будет найдено. Применение raw строки @@regexp@@ позволяет не удваивать слеши.

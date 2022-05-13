@@ -218,6 +218,7 @@ namespace Tests {
             Runtime->GetAppData(nodeIdx).DomainsConfig.MergeFrom(Settings->AppConfig.GetDomainsConfig());
             Runtime->GetAppData(nodeIdx).PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             Runtime->GetAppData(nodeIdx).DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
+            Runtime->GetAppData(nodeIdx).PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
 
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);

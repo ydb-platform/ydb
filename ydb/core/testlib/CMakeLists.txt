@@ -46,6 +46,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   core-mind-hive
   ydb-core-node_whiteboard
   ydb-core-protos
+  ydb-core-persqueue
   ydb-core-security
   core-sys_view-processor
   core-sys_view-service

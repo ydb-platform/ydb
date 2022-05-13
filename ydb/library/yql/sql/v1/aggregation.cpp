@@ -495,7 +495,7 @@ private:
                 break;
             case 3U:
                 if (!integer) {
-                    ctx.Error(Pos) << "Aggregation function " << Name << " for case with 3 argument should have second interger argument";
+                    ctx.Error(Pos) << "Aggregation function " << Name << " for case with 3 arguments should have third argument of integer type";
                     return false;
                 }
                 Weight = exprs[1];

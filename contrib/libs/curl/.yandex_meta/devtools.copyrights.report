@@ -186,7 +186,6 @@ BELONGS ya.make
         lib/md4.c [8:8]
         lib/memdebug.c [8:8]
         lib/multihandle.h [10:10]
-        lib/multiif.h [10:10]
         lib/netrc.c [8:8]
         lib/pingpong.h [10:10]
         lib/progress.c [8:8]
@@ -204,7 +203,6 @@ BELONGS ya.make
         lib/vauth/cram.c [8:8]
         lib/vauth/ntlm_sspi.c [8:8]
         lib/vauth/oauth2.c [8:8]
-        lib/vssh/ssh.h [10:10]
         lib/vtls/gtls.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1b9e8d9d7c9588e9a9cbcbd17572b2e4
@@ -503,6 +501,7 @@ BELONGS ya.make
         lib/mime.c [8:8]
         lib/mime.h [10:10]
         lib/multi.c [8:8]
+        lib/multiif.h [10:10]
         lib/nonblock.c [8:8]
         lib/pingpong.c [8:8]
         lib/pop3.c [8:8]
@@ -540,6 +539,7 @@ BELONGS ya.make
         lib/vquic/quiche.c [8:8]
         lib/vquic/vquic.c [8:8]
         lib/vssh/libssh2.c [8:8]
+        lib/vssh/ssh.h [10:10]
         lib/vtls/gskit.c [8:8]
         lib/vtls/gtls.c [8:8]
         lib/vtls/hostcheck.c [8:8]

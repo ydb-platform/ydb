@@ -146,7 +146,6 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
   /opt/ydb/bin/ydbd server --log-level 3 --syslog --tcp --yaml-config /opt/ydb/cfg/config.yaml  \
   --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
   ```
-  TBD: как и куда писать логи? Ротация логов
 
 - С использованием systemd
   

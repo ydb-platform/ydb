@@ -164,8 +164,6 @@ Prepare the configuration files:
   --grpc-port 2135 --ic-port 19001 --mon-port 8765 --node static
   ```
 
-  TBD: how and where to write logs? Log rotation
-
 - Using systemd
   1. On each node, create a configuration file named `/etc/systemd/system/ydbd-storage.service` with the following content:
 

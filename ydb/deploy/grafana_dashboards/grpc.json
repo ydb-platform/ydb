@@ -21,7 +21,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1649414640864,
+  "iteration": 1650550253540,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -36,7 +36,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -53,7 +53,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -85,7 +85,9 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": [],
+          "calcs": [
+            "last"
+          ],
           "displayMode": "table",
           "placement": "right"
         },
@@ -102,6 +104,7 @@
           },
           "exemplar": true,
           "expr": "sum by (method) (rate(ydb_api_grpc_request_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "instant": false,
           "interval": "",
           "legendFormat": "{{method}}",
           "refId": "A"
@@ -121,7 +124,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -138,7 +141,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -170,12 +173,14 @@
       "id": 3,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
           "placement": "right"
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -185,10 +190,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "exemplar": true,
-          "expr": "sum(rate(ydb_api_grpc_request_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "exemplar": false,
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "interval": "",
-          "legendFormat": "bytes",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],
@@ -206,7 +211,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -214,6 +219,9 @@
               "viz": false
             },
             "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
             "lineWidth": 1,
             "pointSize": 1,
             "scaleDistribution": {
@@ -223,7 +231,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -255,12 +263,14 @@
       "id": 4,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
           "placement": "right"
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -270,10 +280,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "exemplar": true,
-          "expr": "sum(rate(ydb_api_grpc_response_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "exemplar": false,
+          "expr": "sum by (method) (rate(ydb_api_grpc_response_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "interval": "",
-          "legendFormat": "bytes",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],
@@ -291,7 +301,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -308,7 +318,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -340,12 +350,14 @@
       "id": 5,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
           "placement": "right"
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -355,10 +367,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "exemplar": true,
-          "expr": "sum(rate(ydb_api_grpc_request_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "exemplar": false,
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "interval": "",
-          "legendFormat": "count",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],
@@ -376,7 +388,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -393,7 +405,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -425,12 +437,14 @@
       "id": 6,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
           "placement": "right"
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -440,10 +454,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "exemplar": true,
-          "expr": "sum(rate(ydb_api_grpc_response_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "exemplar": false,
+          "expr": "sum by (method) (rate(ydb_api_grpc_response_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "interval": "",
-          "legendFormat": "count",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],
@@ -461,7 +475,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -478,7 +492,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -510,12 +524,14 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
           "placement": "right"
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -525,10 +541,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "exemplar": true,
-          "expr": "sum(rate(ydb_api_grpc_request_inflight_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "exemplar": false,
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "interval": "",
-          "legendFormat": "count",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],
@@ -546,7 +562,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 50,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -563,7 +579,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -595,12 +611,14 @@
       "id": 8,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "hidden",
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
           "placement": "right"
         },
         "tooltip": {
-          "mode": "multi",
+          "mode": "single",
           "sort": "none"
         }
       },
@@ -610,10 +628,10 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "exemplar": true,
-          "expr": "sum(rate(ydb_api_grpc_request_inflight_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
+          "exemplar": false,
+          "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "interval": "",
-          "legendFormat": "bytes",
+          "legendFormat": "{{method}}",
           "refId": "A"
         }
       ],

@@ -1180,6 +1180,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
         response,
         YdbConnection->TablePathPrefix));
 
+    validators.push_back(CreateQueryComputeStatusValidator(
+        { YandexQuery::QueryMeta::STARTING, YandexQuery::QueryMeta::ABORTED_BY_USER, YandexQuery::QueryMeta::ABORTED_BY_SYSTEM, YandexQuery::QueryMeta::COMPLETED, YandexQuery::QueryMeta::FAILED },
+        scope,
+        queryId,
+        "Can't delete running query",
+        YdbConnection->TablePathPrefix));
+
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = Write(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo, validators);

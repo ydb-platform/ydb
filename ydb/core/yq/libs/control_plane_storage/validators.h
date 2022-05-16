@@ -94,6 +94,12 @@ TValidationQuery CreateTtlValidator(const TString& tableName,
                                     const TString& error,
                                     const TString& tablePathPrefix);
 
+TValidationQuery CreateQueryComputeStatusValidator(const std::vector<YandexQuery::QueryMeta::ComputeStatus>& computeStatuses,
+                                                   const TString& scope,
+                                                   const TString& id,
+                                                   const TString& error,
+                                                   const TString& tablePathPrefix);
+
 template<typename T>
 TValidationQuery CreateIdempotencyKeyValidator(const TString& scope,
                                                const TString& idempotencyKey,

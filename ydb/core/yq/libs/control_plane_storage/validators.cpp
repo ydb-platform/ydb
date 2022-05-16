@@ -360,4 +360,45 @@ TValidationQuery CreateTtlValidator(const TString& tableName,
     return {query.Sql, query.Params, validator};
 }
 
+TValidationQuery CreateQueryComputeStatusValidator(const std::vector<YandexQuery::QueryMeta::ComputeStatus>& computeStatuses,
+                                                   const TString& scope,
+                                                   const TString& id,
+                                                   const TString& error,
+                                                   const TString& tablePathPrefix) {
+    TSqlQueryBuilder queryBuilder(tablePathPrefix, "ComputeStatusValidator");
+    queryBuilder.AddString("scope", scope);
+    queryBuilder.AddString("query_id", id);
+
+    queryBuilder.AddText(
+        "SELECT `" QUERY_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+    );
+
+    auto validator = [error, computeStatuses](NYdb::NTable::TDataQueryResult result) {
+        const auto& resultSets = result.GetResultSets();
+        if (resultSets.size() != 1) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+        }
+
+        TResultSetParser parser(resultSets.front());
+        if (!parser.TryNextRow()) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+        }
+
+        YandexQuery::Query query;
+        if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+        }
+
+        const YandexQuery::QueryMeta::ComputeStatus status = query.meta().status();
+        if (!IsIn(computeStatuses, status)) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << error;
+        }
+
+        return false;
+    };
+    const auto query = queryBuilder.Build();
+    return {query.Sql, query.Params, validator};
+}
+
 } // namespace NYq

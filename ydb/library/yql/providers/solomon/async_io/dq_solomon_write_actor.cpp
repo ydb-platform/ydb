@@ -142,7 +142,9 @@ public:
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool) override
     {
-        SINK_LOG_D("Got " << batch.size() << " items to send");
+        SINK_LOG_D("Got " << batch.size() << " items to send. Checkpoint: " << checkpoint.Defined()
+                   << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
+                   << ". Checkpoint in progress: " << CheckpointInProgress.has_value());
 
         ui64 metricsCount = 0;
         for (const auto& item : batch) {
@@ -365,6 +367,7 @@ private:
         }
 
         if (std::holds_alternative<NDqProto::TCheckpoint>(variant)) {
+            SINK_LOG_D("Process checkpoint. Inflight before checkpoint: " << InflightBuffer.size());
             CheckpointInProgress = std::get<NDqProto::TCheckpoint>(std::move(variant));
             if (InflightBuffer.empty()) {
                 DoCheckpoint();

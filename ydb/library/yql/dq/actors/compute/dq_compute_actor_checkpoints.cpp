@@ -456,6 +456,7 @@ void TDqComputeActorCheckpoints::OnSinkStateSaved(NDqProto::TSinkState&& state, 
     *sinkState = std::move(state);
     sinkState->SetOutputIndex(outputIndex); // Set index explicitly to avoid errors
     ++PendingCheckpoint.SavedSinkStatesCount;
+    LOG_D("Sink[" << outputIndex << "] state saved");
 
     TryToSavePendingCheckpoint();
 }

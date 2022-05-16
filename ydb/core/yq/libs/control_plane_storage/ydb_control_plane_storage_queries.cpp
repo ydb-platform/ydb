@@ -568,7 +568,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         YandexQuery::DescribeQueryResult result;
@@ -583,7 +583,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         const auto queryUser = result.query().meta().common().created_by();
         const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
         if (!hasViewAccess) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         if (!permissions.Check(TPermissions::VIEW_AST)) {
@@ -667,7 +667,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         YandexQuery::GetQueryStatusResult result;
@@ -678,7 +678,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
         const auto queryUser = *parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString();
         const bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
         if (!hasViewAccess) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         return result;
@@ -796,7 +796,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         TResultSetParser parser(resultSets.back());
 
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         YandexQuery::Query query;
@@ -815,7 +815,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         const auto queryUser = query.meta().common().created_by();
         const bool hasManageAccess = HasManageAccess(permissions, queryVisibility, queryUser, user);
         if (!hasManageAccess) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         if (query.content().type() != request.content().type()) {
@@ -1039,7 +1039,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         scope,
         queryId,
         user,
-        "Query does not exist or permission denied. Please check the id query or your access rights",
+        "Query does not exist or permission denied. Please check the id of the query or your access rights",
         permissions,
         YdbConnection->TablePathPrefix);
     validators.push_back(accessValidator);
@@ -1049,7 +1049,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         QUERY_ID_COLUMN_NAME,
         scope,
         queryId,
-        "Query does not exist or permission denied. Please check the id query or your access rights",
+        "Query does not exist or permission denied. Please check the id of the query or your access rights",
         YdbConnection->TablePathPrefix);
     validators.push_back(ttlValidator);
 
@@ -1154,7 +1154,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
         scope,
         queryId,
         user,
-        "Query does not exist or permission denied. Please check the id query or your access rights",
+        "Query does not exist or permission denied. Please check the id of the query or your access rights",
         permissions,
         YdbConnection->TablePathPrefix);
     validators.push_back(accessValidator);
@@ -1269,7 +1269,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         {
             TResultSetParser parser(resultSets[0]);
             if (!parser.TryNextRow()) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
@@ -1298,7 +1298,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
 
             const bool hasManageAccess = HasManageAccess(permissions, query.content().acl().visibility(), query.meta().common().created_by(), user);
             if (!hasManageAccess) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
         }
 
@@ -1393,7 +1393,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         scope,
         queryId,
         user,
-        "Query does not exist or permission denied. Please check the id query or your access rights",
+        "Query does not exist or permission denied. Please check the id of the query or your access rights",
         permissions,
         YdbConnection->TablePathPrefix);
     validators.push_back(accessValidator);
@@ -1506,7 +1506,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
             const auto& resultSet = (*resultSets)[0];
             TResultSetParser parser(resultSet);
             if (!parser.TryNextRow()) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             YandexQuery::Query query;
@@ -1519,7 +1519,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
 
             bool hasViewAccess = HasViewAccess(permissions, queryVisibility, queryUser, user);
             if (!hasViewAccess) {
-                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id query or your access rights";
+                ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
             }
 
             if (resultSetIndex >= query.result_set_meta_size()) {

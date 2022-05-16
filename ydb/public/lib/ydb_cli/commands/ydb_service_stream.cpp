@@ -209,6 +209,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("consumer-name", "New consumer for stream")
                 .Required()
                 .StoreResult(&ConsumerName_);
+        config.Opts->AddLongOption("service-type", "Service type of reader")
+                .Optional()
+                .StoreResult(&ServiceType_);
         config.Opts->AddLongOption("starting-message-timestamp", "Unix timestamp starting from '1970-01-01 00:00:00' from which read is allowed")
                 .Optional()
                 .StoreResult(&StartingMessageTimestamp_);
@@ -229,6 +232,9 @@ namespace NYdb::NConsoleClient {
         readRuleSettings.ConsumerName(ConsumerName_);
         if (StartingMessageTimestamp_.Defined()) {
             readRuleSettings.StartingMessageTimestamp(TInstant::Seconds(*StartingMessageTimestamp_.Get()));
+        }
+        if (ServiceType_.Defined()) {
+            readRuleSettings.ServiceType(ServiceType_.GetRef());
         }
 
         auto addReadRuleSettings = NYdb::NPersQueue::TAddReadRuleSettings();

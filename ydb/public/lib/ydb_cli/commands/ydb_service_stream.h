@@ -74,6 +74,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString ConsumerName_;
+        TMaybe<TString> ServiceType_;
         TMaybe<ui64> StartingMessageTimestamp_;
     };
 

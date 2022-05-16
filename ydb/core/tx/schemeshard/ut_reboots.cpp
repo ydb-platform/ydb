@@ -145,21 +145,6 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateDirWithIntermediateDirsForceDropMiddle) {
-        TTestWithReboots t;
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "x/y/z");
-            TestForceDropUnsafe(runtime, ++t.TxId, 4, TVector<NKikimrScheme::EStatus>{NKikimrScheme::StatusMultipleModifications});
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
-
-            {
-                TInactiveZone inactive(activeZone);
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/x/y/z"),
-                                   {NLs::PathExist});
-            }
-        });
-    }
-
     Y_UNIT_TEST(CreateSubDomainWithIntermediateDirs) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
@@ -182,7 +167,7 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
     Y_UNIT_TEST(CreateWithIntermediateDirs) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
-            PartitionsCount: 1
+            PartitionsCount: 0
         )";
         const TString invalidScheme = R"(
             Name: "Invalid/wr0ng n@me"

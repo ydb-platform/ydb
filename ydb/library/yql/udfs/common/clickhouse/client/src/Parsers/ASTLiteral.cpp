@@ -6,7 +6,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void ASTLiteral::updateTreeHashImpl(SipHash & hash_state) const

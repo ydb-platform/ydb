@@ -5,7 +5,7 @@
 #include <IO/copyData.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

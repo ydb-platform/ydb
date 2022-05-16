@@ -4,7 +4,7 @@
 #include <Parsers/ASTQueryWithOnCluster.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** DROP query

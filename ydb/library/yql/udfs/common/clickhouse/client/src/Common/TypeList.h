@@ -4,7 +4,7 @@
 #include <utility>
 #include <Core/Defines.h>
 
-namespace DB
+namespace NDB
 {
 
 template <typename... TTail>

@@ -8,7 +8,7 @@
 #include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Interpreters/StorageID.h>
 
-namespace DB
+namespace NDB
 {
 
 class ASTFunction;

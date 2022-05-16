@@ -4,7 +4,7 @@
 #include <IO/ReadHelpers.h>
 #include <IO/WriteHelpers.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

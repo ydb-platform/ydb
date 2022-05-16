@@ -21,7 +21,7 @@ namespace llvm
 }
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

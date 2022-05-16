@@ -2,7 +2,7 @@
 
 #include <Common/FieldVisitors.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Print readable and unique text dump of field type and value. */

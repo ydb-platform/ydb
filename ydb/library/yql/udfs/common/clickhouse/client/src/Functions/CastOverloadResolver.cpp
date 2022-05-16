@@ -2,7 +2,7 @@
 #include <Functions/CastOverloadResolver.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void registerCastOverloadResolvers(FunctionFactory & factory)

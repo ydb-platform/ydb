@@ -4,7 +4,7 @@
 
 class DateLUTImpl;
 
-namespace DB
+namespace NDB
 {
 
 class SerializationDateTime final : public SerializationNumber<UInt32>

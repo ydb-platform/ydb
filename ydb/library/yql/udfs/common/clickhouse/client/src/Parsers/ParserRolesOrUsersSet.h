@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Parses a string like this:
   * {user_name | role_name | CURRENT_USER | ALL | NONE} [,...]

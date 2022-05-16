@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 #include <Parsers/ExpressionElementParsers.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Query like this:

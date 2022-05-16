@@ -29,7 +29,7 @@ namespace Poco::Net { class IPAddress; }
 namespace zkutil { class ZooKeeper; }
 
 
-namespace DB
+namespace NDB
 {
 
 struct ContextSharedPart;

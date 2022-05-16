@@ -10,7 +10,7 @@
 #include <queue>
 #include <utility>
 
-namespace DB
+namespace NDB
 {
 template <size_t MaxNumHints>
 class NamePrompter

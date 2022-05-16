@@ -12,7 +12,7 @@
 #include <Parsers/ParserWithElement.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

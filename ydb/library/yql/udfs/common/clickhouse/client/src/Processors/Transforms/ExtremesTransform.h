@@ -1,7 +1,7 @@
 #pragma once
 #include <Processors/ISimpleTransform.h>
 
-namespace DB
+namespace NDB
 {
 
 class ExtremesTransform : public ISimpleTransform

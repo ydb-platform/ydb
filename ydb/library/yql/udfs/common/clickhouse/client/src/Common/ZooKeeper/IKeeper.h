@@ -19,7 +19,7 @@
 namespace Coordination
 {
 
-using namespace DB;
+using namespace NDB;
 
 
 struct ACL
@@ -383,7 +383,7 @@ enum Event
 };
 
 
-class Exception : public DB::Exception
+class Exception : public NDB::Exception
 {
 private:
     /// Delegate constructor, used to minimize repetition; last parameter used for overload resolution.

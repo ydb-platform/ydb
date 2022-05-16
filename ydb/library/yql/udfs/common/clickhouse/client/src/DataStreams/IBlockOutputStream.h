@@ -11,7 +11,7 @@
 #include <vector>
 
 
-namespace DB
+namespace NDB
 {
 
 struct Progress;

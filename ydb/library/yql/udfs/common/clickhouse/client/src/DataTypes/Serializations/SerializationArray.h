@@ -2,7 +2,7 @@
 
 #include <DataTypes/Serializations/SimpleTextSerialization.h>
 
-namespace DB
+namespace NDB
 {
 
 class SerializationArray final : public SimpleTextSerialization

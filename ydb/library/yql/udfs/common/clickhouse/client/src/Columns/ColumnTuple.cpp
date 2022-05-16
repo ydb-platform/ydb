@@ -14,7 +14,7 @@
 #include <common/range.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -125,7 +125,7 @@ void ColumnTuple::insertData(const char *, size_t)
 
 void ColumnTuple::insert(const Field & x)
 {
-    const auto & tuple = DB::get<const Tuple &>(x);
+    const auto & tuple = NDB::get<const Tuple &>(x);
 
     const size_t tuple_size = columns.size();
     if (tuple.size() != tuple_size)

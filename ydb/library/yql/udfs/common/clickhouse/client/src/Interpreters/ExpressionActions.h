@@ -12,7 +12,7 @@
 //#endif
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

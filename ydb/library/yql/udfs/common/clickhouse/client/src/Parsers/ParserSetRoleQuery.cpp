@@ -5,7 +5,7 @@
 #include <Parsers/ParserRolesOrUsersSet.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace
 {

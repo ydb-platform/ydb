@@ -14,7 +14,7 @@
 #include <limits>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

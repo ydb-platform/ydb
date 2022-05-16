@@ -14,7 +14,7 @@
 #include <DataTypes/Serializations/SerializationTupleElement.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

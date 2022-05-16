@@ -9,7 +9,7 @@
 
 #include <Parsers/ParserSetQuery.h>
 
-namespace DB
+namespace NDB
 {
 
 /// AST for external dictionary lifetime:

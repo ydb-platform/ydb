@@ -1,7 +1,7 @@
 #include <Processors/ISimpleTransform.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ISimpleTransform::ISimpleTransform(Block input_header_, Block output_header_, bool skip_empty_chunks_)
@@ -88,7 +88,7 @@ void ISimpleTransform::work()
     {
         transform(input_data.chunk, output_data.chunk);
     }
-    catch (DB::Exception &)
+    catch (Exception &)
     {
         output_data.exception = std::current_exception();
         has_output = true;

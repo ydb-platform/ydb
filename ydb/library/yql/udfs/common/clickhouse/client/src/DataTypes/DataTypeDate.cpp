@@ -9,7 +9,7 @@
 #include <Common/assert_cast.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool DataTypeDate::equals(const IDataType & rhs) const

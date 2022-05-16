@@ -19,7 +19,7 @@ namespace ProfileEvents
     extern const Event ArenaAllocBytes;
 }
 
-namespace DB
+namespace NDB
 {
 
 

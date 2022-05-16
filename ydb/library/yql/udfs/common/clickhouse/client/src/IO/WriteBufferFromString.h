@@ -5,7 +5,7 @@
 #include <common/StringRef.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Writes the data to a string.

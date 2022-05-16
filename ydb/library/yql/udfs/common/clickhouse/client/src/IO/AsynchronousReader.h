@@ -6,7 +6,7 @@
 #include <future>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Interface for asynchronous reads from file descriptors.

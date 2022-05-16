@@ -1,7 +1,7 @@
 #include <Processors/ISource.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

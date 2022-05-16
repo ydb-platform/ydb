@@ -4,7 +4,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/DatabaseAndTableWithAlias.h>
 
-namespace DB
+namespace NDB
 {
 
 struct ASTTableExpression;

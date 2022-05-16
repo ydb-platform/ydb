@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** KILL QUERY WHERE <logical expression upon system.processes fields> [SYNC|ASYNC|TEST]

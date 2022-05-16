@@ -8,7 +8,7 @@
 #include <IO/WriteHelpers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 template <typename T>

@@ -12,7 +12,7 @@
 #include <Functions/FunctionHelpers.h>  /// TODO Core should not depend on Functions
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

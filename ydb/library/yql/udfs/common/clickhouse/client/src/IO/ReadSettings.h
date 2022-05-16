@@ -5,7 +5,7 @@
 #include <Core/Defines.h>
 
 
-namespace DB
+namespace NDB
 {
 
 #define FOR_EACH_READ_METHOD(M) \

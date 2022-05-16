@@ -11,7 +11,7 @@
 #include <Processors/Sources/NullSource.h>
 #include <Columns/ColumnConst.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

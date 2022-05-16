@@ -4,7 +4,7 @@
 #include <string>
 
 
-namespace DB
+namespace NDB
 {
 
 bool SizeLimits::check(UInt64 rows, UInt64 bytes, const char * what, int too_many_rows_exception_code, int too_many_bytes_exception_code) const

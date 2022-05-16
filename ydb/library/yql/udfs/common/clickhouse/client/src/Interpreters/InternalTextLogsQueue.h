@@ -3,7 +3,7 @@
 #include <Core/Block.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class InternalTextLogsQueue : public ConcurrentBoundedQueue<MutableColumns>

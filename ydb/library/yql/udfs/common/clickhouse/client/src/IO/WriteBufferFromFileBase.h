@@ -6,7 +6,7 @@
 #include <IO/WriteBuffer.h>
 #include <IO/BufferWithOwnMemory.h>
 
-namespace DB
+namespace NDB
 {
 
 class WriteBufferFromFileBase : public BufferWithOwnMemory<WriteBuffer>

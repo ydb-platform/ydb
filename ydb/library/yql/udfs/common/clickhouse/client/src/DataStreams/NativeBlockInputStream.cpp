@@ -12,7 +12,7 @@
 #include <DataTypes/DataTypeLowCardinality.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

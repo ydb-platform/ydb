@@ -9,7 +9,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

@@ -3,7 +3,7 @@
 #include <DataTypes/IDataTypeDummy.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Special data type, representing lambda expression.

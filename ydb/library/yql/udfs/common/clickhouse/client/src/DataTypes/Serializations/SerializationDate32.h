@@ -2,7 +2,7 @@
 
 #include <DataTypes/Serializations/SerializationNumber.h>
 
-namespace DB
+namespace NDB
 {
 class SerializationDate32 final : public SerializationNumber<Int32>
 {

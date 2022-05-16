@@ -6,7 +6,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -52,7 +52,7 @@ void ASTColumnsMatcher::setPattern(String pattern)
     original_pattern = std::move(pattern);
     column_matcher = std::make_shared<RE2>(original_pattern, RE2::Quiet);
     if (!column_matcher->ok())
-        throw DB::Exception("COLUMNS pattern " + original_pattern + " cannot be compiled: " + column_matcher->error(), DB::ErrorCodes::CANNOT_COMPILE_REGEXP);
+        throw Exception("COLUMNS pattern " + original_pattern + " cannot be compiled: " + column_matcher->error(), ErrorCodes::CANNOT_COMPILE_REGEXP);
 }
 
 bool ASTColumnsMatcher::isColumnMatching(const String & column_name) const

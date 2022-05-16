@@ -2,7 +2,7 @@
 
 #include <Parsers/IAST.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Name, type, default-specifier, default-expression, comment-expression.

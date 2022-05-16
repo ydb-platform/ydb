@@ -47,12 +47,12 @@ public:
     }
 
 
-    void readAndMerge(DB::ReadBuffer & rb)
+    void readAndMerge(NDB::ReadBuffer & rb)
     {
         Cell::State::read(rb);
 
         size_t new_size = 0;
-        DB::readVarUInt(new_size, rb);
+        NDB::readVarUInt(new_size, rb);
 
         this->resize(new_size);
 

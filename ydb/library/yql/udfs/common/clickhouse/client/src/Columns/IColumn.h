@@ -11,7 +11,7 @@
 class SipHash;
 class Collator;
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

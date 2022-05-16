@@ -7,7 +7,7 @@
 #include <cstring>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Result array could be indexed with all possible uint8 values without extra check.

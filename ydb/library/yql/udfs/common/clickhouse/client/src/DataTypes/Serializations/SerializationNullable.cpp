@@ -12,7 +12,7 @@
 #include <Common/typeid_cast.h>
 #include <Common/assert_cast.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -392,11 +392,11 @@ ReturnType SerializationNullable::deserializeTextCSVImpl(IColumn & column, ReadB
                 /// or if someone uses 'U' or 'L' as delimiter in CSV.
                 /// In the first case we cannot continue reading anyway. The second case seems to be unlikely.
                 if (settings.csv.delimiter == 'U' || settings.csv.delimiter == 'L')
-                    throw DB::ParsingException("Enabled setting input_format_csv_unquoted_null_literal_as_null may not work correctly "
+                    throw ParsingException("Enabled setting input_format_csv_unquoted_null_literal_as_null may not work correctly "
                                         "with format_csv_delimiter = 'U' or 'L' for large input.", ErrorCodes::CANNOT_READ_ALL_DATA);
                 WriteBufferFromOwnString parsed_value;
                 nested->serializeTextCSV(nested_column, nested_column.size() - 1, parsed_value, settings);
-                throw DB::ParsingException("Error while parsing \"" + std::string(null_literal, null_prefix_len)
+                throw ParsingException("Error while parsing \"" + std::string(null_literal, null_prefix_len)
                                     + std::string(istr.position(), std::min(size_t{10}, istr.available())) + "\" as Nullable"
                                     + " at position " + std::to_string(istr.count()) + ": got \"" + std::string(null_literal, buf.count())
                                     + "\", which was deserialized as \""

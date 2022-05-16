@@ -1,7 +1,7 @@
 #include <Parsers/TokenIterator.h>
 
 
-namespace DB
+namespace NDB
 {
 
 UnmatchedParentheses checkUnmatchedParentheses(TokenIterator begin)

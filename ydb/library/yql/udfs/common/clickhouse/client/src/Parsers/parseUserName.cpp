@@ -4,7 +4,7 @@
 #include <Parsers/CommonParsers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool parseUserName(IParser::Pos & pos, Expected & expected, String & user_name)

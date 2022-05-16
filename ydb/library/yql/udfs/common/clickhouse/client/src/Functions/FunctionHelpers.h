@@ -12,7 +12,7 @@
 #include <Core/callOnTypeIndex.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class IFunction;

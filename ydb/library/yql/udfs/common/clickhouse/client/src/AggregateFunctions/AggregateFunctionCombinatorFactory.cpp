@@ -1,7 +1,7 @@
 #include <AggregateFunctions/AggregateFunctionCombinatorFactory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

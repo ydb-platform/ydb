@@ -5,7 +5,7 @@
 #include <Parsers/ParserRenameQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

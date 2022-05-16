@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ArrowBufferedOutputStream::ArrowBufferedOutputStream(WriteBuffer & out_) : out{out_}, is_open{true}

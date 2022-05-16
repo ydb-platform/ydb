@@ -4,7 +4,7 @@
 #include <Columns/IColumnUnique.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class DataTypeLowCardinality : public IDataType

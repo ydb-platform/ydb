@@ -3,7 +3,7 @@
 #include <Processors/IProcessor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ISource : public IProcessor

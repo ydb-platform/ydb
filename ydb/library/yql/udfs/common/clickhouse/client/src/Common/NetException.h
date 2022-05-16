@@ -3,7 +3,7 @@
 #include <Common/Exception.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class NetException : public Exception

@@ -2,7 +2,7 @@
 #include <IO/ReadBuffer.h>
 #include <IO/BufferWithOwnMemory.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -29,7 +29,7 @@ public:
     {
 #ifndef NDEBUG
         if (checkpoint)
-            throw DB::Exception("Does not support recursive checkpoints.", ErrorCodes::LOGICAL_ERROR);
+            throw Exception("Does not support recursive checkpoints.", ErrorCodes::LOGICAL_ERROR);
 #endif
         checkpoint_in_own_memory = currentlyReadFromOwnMemory();
         if (!checkpoint_in_own_memory)

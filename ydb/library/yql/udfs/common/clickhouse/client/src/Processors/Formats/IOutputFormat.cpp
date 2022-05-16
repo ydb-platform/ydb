@@ -2,7 +2,7 @@
 #include <IO/WriteBuffer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 IOutputFormat::IOutputFormat(const Block & header_, WriteBuffer & out_)

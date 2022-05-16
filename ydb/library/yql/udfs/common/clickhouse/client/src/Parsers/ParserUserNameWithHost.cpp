@@ -6,7 +6,7 @@
 #include <boost/algorithm/string.hpp>
 
 
-namespace DB
+namespace NDB
 {
 namespace
 {

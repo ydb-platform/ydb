@@ -9,7 +9,7 @@
 #   include <Common/PODArray.h>
 
 
-namespace DB
+namespace NDB
 {
 class WriteBuffer;
 

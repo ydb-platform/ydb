@@ -17,7 +17,7 @@ namespace Poco::Net
 class Socket;
 }
 
-namespace DB
+namespace NDB
 {
 
 class MultiplexedConnections;
@@ -70,7 +70,7 @@ public:
 
 #else
 
-namespace DB
+namespace NDB
 {
 class RemoteQueryExecutorReadContext
 {

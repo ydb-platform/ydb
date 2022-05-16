@@ -31,7 +31,7 @@ template <typename T, typename U>
 constexpr bool memcpy_can_be_used_for_assignment = std::is_same_v<T, U>
     || (std::is_integral_v<T> && std::is_integral_v<U> && sizeof(T) == sizeof(U));
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

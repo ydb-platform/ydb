@@ -2,7 +2,7 @@
 
 #include <Disks/IDisk.h>
 
-namespace DB
+namespace NDB
 {
 
 class IDisk;

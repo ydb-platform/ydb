@@ -8,7 +8,7 @@
 #include <Formats/FormatSettings.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** A stream for inputting data in csv format.

@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 #include <Interpreters/InDepthNodeVisitor.h>
 
-namespace DB
+namespace NDB
 {
 
 class ASTSelectQuery;

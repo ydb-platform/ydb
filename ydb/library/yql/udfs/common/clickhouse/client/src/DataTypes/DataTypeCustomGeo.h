@@ -2,7 +2,7 @@
 
 #include <DataTypes/DataTypeCustom.h>
 
-namespace DB
+namespace NDB
 {
 
 class DataTypePointName : public DataTypeCustomFixedName

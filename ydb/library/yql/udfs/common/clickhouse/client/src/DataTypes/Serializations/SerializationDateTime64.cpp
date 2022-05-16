@@ -13,7 +13,7 @@
 #include <IO/WriteHelpers.h>
 #include <IO/parseDateTimeBestEffort.h>
 
-namespace DB
+namespace NDB
 {
 
 SerializationDateTime64::SerializationDateTime64(

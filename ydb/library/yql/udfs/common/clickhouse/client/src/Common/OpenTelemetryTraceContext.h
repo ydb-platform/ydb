@@ -1,6 +1,6 @@
 #pragma once
 
-namespace DB
+namespace NDB
 {
 
 // The runtime info we need to create new OpenTelemetry spans.

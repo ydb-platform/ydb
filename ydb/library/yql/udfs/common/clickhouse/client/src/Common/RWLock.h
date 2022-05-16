@@ -12,7 +12,7 @@
 #include <unordered_map>
 
 
-namespace DB
+namespace NDB
 {
 
 class RWLockImpl;

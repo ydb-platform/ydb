@@ -4,7 +4,7 @@
 #include <Parsers/IAST_fwd.h>
 #include <Storages/ColumnsDescription.h>
 
-namespace DB
+namespace NDB
 {
 /// Common structure for primary, partition and other storage keys
 struct KeyDescription

@@ -7,7 +7,7 @@
 #include <unordered_map>
 
 
-namespace DB
+namespace NDB
 {
 class ReadBuffer;
 class WriteBuffer;

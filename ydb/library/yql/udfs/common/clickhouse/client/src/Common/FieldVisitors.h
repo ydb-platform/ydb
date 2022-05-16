@@ -3,7 +3,7 @@
 #include <Core/Field.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** StaticVisitor (and its descendants) - class with overloaded operator() for all types of fields.

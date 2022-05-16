@@ -23,7 +23,7 @@ namespace
 }
 
 
-namespace DB
+namespace NDB
 {
 
 namespace detail

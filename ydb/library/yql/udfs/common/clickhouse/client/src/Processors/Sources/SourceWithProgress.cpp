@@ -9,7 +9,7 @@ namespace ProfileEvents
     extern const Event SelectedBytes;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

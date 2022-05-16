@@ -14,7 +14,7 @@ namespace ProfileEvents
     extern const Event OpenedFileCacheMisses;
 }
 
-namespace DB
+namespace NDB
 {
 
 

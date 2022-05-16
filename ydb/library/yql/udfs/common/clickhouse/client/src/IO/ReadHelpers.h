@@ -40,7 +40,7 @@
 #define DEFAULT_MAX_STRING_SIZE (1ULL << 30)
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -799,7 +799,7 @@ inline ReturnType readDateTimeTextImpl(DateTime64 & datetime64, UInt32 scale, Re
         return ReturnType(false);
     }
 
-    DB::DecimalUtils::DecimalComponents<DateTime64> components{static_cast<DateTime64::NativeType>(whole), 0};
+    DecimalUtils::DecimalComponents<DateTime64> components{static_cast<DateTime64::NativeType>(whole), 0};
 
     if (!buf.eof() && *buf.position() == '.')
     {

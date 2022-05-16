@@ -4,7 +4,7 @@
 #include <Core/Names.h>
 
 
-namespace DB
+namespace NDB
 {
 
 struct ASTTablesInSelectQueryElement;

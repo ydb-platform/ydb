@@ -7,7 +7,7 @@
 #include <IO/WriteBuffer.h>
 #include <IO/ReadBuffer.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

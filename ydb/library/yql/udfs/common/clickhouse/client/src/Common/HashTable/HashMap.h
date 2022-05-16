@@ -89,31 +89,31 @@ struct HashMapCell
     void setMapped(const value_type & value_) { value.second = value_.second; }
 
     /// Serialization, in binary and text form.
-    void write(DB::WriteBuffer & wb) const
+    void write(NDB::WriteBuffer & wb) const
     {
-        DB::writeBinary(value.first, wb);
-        DB::writeBinary(value.second, wb);
+        NDB::writeBinary(value.first, wb);
+        NDB::writeBinary(value.second, wb);
     }
 
-    void writeText(DB::WriteBuffer & wb) const
+    void writeText(NDB::WriteBuffer & wb) const
     {
-        DB::writeDoubleQuoted(value.first, wb);
-        DB::writeChar(',', wb);
-        DB::writeDoubleQuoted(value.second, wb);
+        NDB::writeDoubleQuoted(value.first, wb);
+        NDB::writeChar(',', wb);
+        NDB::writeDoubleQuoted(value.second, wb);
     }
 
     /// Deserialization, in binary and text form.
-    void read(DB::ReadBuffer & rb)
+    void read(NDB::ReadBuffer & rb)
     {
-        DB::readBinary(value.first, rb);
-        DB::readBinary(value.second, rb);
+        NDB::readBinary(value.first, rb);
+        NDB::readBinary(value.second, rb);
     }
 
-    void readText(DB::ReadBuffer & rb)
+    void readText(NDB::ReadBuffer & rb)
     {
-        DB::readDoubleQuoted(value.first, rb);
-        DB::assertChar(',', rb);
-        DB::readDoubleQuoted(value.second, rb);
+        NDB::readDoubleQuoted(value.first, rb);
+        NDB::assertChar(',', rb);
+        NDB::readDoubleQuoted(value.second, rb);
     }
 
     static bool constexpr need_to_notify_cell_during_move = false;

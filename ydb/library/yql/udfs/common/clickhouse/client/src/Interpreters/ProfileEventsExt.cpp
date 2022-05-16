@@ -12,9 +12,9 @@ namespace ProfileEvents
 {
 
 /// Put implementation here to avoid extra linking dependencies for clickhouse_common_io
-void dumpToMapColumn(const Counters & counters, DB::IColumn * column, bool nonzero_only)
+void dumpToMapColumn(const Counters & counters, NDB::IColumn * column, bool nonzero_only)
 {
-    auto * column_map = column ? &typeid_cast<DB::ColumnMap &>(*column) : nullptr;
+    auto * column_map = column ? &typeid_cast<NDB::ColumnMap &>(*column) : nullptr;
     if (!column_map)
         return;
 

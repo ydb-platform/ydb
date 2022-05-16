@@ -8,7 +8,7 @@
 #include <Poco/Message.h>
 
 
-namespace DB
+namespace NDB
 {
 
 InternalTextLogsQueue::InternalTextLogsQueue()

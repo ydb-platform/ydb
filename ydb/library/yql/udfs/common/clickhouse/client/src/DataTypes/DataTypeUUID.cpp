@@ -3,7 +3,7 @@
 #include <DataTypes/Serializations/SerializationUUID.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool DataTypeUUID::equals(const IDataType & rhs) const

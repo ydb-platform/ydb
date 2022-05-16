@@ -7,7 +7,7 @@
 #include <Parsers/ExpressionListParsers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool ParserOptimizeQueryColumnsSpecification::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

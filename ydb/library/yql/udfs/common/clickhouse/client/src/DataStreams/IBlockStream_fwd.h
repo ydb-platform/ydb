@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 
-namespace DB
+namespace NDB
 {
 
 class IBlockInputStream;

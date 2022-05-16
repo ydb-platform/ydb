@@ -1,7 +1,7 @@
 #pragma once
 #include <Parsers/IParserBase.h>
 
-namespace DB
+namespace NDB
 {
 
 class ParserDatabaseOrNone : public IParserBase

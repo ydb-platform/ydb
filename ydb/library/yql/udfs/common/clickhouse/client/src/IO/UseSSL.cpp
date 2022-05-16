@@ -8,7 +8,7 @@
 #    include <Poco/Net/SSLManager.h>
 #endif
 
-namespace DB
+namespace NDB
 {
 UseSSL::UseSSL()
 {

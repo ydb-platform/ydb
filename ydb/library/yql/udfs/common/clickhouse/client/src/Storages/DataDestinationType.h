@@ -1,7 +1,7 @@
 #pragma once
 
 
-namespace DB
+namespace NDB
 {
 
 enum class DataDestinationType

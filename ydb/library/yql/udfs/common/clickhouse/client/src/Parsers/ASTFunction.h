@@ -5,7 +5,7 @@
 #include <Parsers/ASTSelectWithUnionQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ASTIdentifier;

@@ -8,7 +8,7 @@
 #include <Core/BlockInfo.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

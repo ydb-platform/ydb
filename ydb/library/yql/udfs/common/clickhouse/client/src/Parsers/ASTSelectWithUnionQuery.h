@@ -3,7 +3,7 @@
 #include <Parsers/ASTQueryWithOutput.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Single SELECT query or multiple SELECT queries with UNION
  * or UNION or UNION DISTINCT

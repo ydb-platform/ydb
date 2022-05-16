@@ -662,18 +662,18 @@ std::string JSON::getName() const
     return getString();
 }
 
-StringRef JSON::getRawString() const
+NDB::StringRef JSON::getRawString() const
 {
     Pos s = ptr_begin;
     if (*s != '"')
         throw JSONException(std::string("JSON: expected \", got ") + *s);
     while (++s != ptr_end && *s != '"');
     if (s != ptr_end)
-        return StringRef(ptr_begin + 1, s - ptr_begin - 1);
+        return NDB::StringRef(ptr_begin + 1, s - ptr_begin - 1);
     throw JSONException("JSON: incorrect syntax (expected end of string, found end of JSON).");
 }
 
-StringRef JSON::getRawName() const
+NDB::StringRef JSON::getRawName() const
 {
     return getRawString();
 }

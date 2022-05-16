@@ -4,7 +4,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Parsers/IAST_fwd.h>
 
-namespace DB
+namespace NDB
 {
 
 struct QueryLogElement;

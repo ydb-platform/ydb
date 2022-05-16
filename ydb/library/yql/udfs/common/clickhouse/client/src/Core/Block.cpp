@@ -13,7 +13,7 @@
 #include <iterator>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

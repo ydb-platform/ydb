@@ -10,7 +10,7 @@ namespace CurrentMetrics
 }
 
 
-namespace DB
+namespace NDB
 {
 
 /// MMaps a region in file (or a whole file) into memory. Unmaps in destructor.

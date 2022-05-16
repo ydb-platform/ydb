@@ -1,6 +1,6 @@
 #pragma once
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

@@ -2,7 +2,7 @@
 #include <Common/thread_local_rng.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace UUIDHelpers

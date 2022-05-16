@@ -5,7 +5,7 @@
 #include <IO/Progress.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class QueryStatus;

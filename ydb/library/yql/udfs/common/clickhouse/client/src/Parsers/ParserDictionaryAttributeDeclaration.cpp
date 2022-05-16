@@ -4,7 +4,7 @@
 #include <Parsers/ExpressionListParsers.h>
 #include <Parsers/ParserDataType.h>
 
-namespace DB
+namespace NDB
 {
 
 bool ParserDictionaryAttributeDeclaration::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

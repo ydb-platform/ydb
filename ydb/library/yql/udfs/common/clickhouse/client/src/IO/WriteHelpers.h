@@ -42,7 +42,7 @@
 #include <Formats/FormatSettings.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

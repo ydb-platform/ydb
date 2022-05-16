@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class WriteBuffer;
@@ -30,7 +30,7 @@ inline WriteBuffer & operator<<(WriteBuffer & buf, const ASTPtr & ast)
 }
 
 template<>
-struct fmt::formatter<DB::ASTPtr>
+struct fmt::formatter<NDB::ASTPtr>
 {
     template<typename ParseContext>
     constexpr auto parse(ParseContext & context)
@@ -39,9 +39,9 @@ struct fmt::formatter<DB::ASTPtr>
     }
 
     template<typename FormatContext>
-    auto format(const DB::ASTPtr & ast, FormatContext & context)
+    auto format(const NDB::ASTPtr & ast, FormatContext & context)
     {
-        return fmt::format_to(context.out(), "{}", DB::serializeAST(*ast));
+        return fmt::format_to(context.out(), "{}", NDB::serializeAST(*ast));
     }
 };
 

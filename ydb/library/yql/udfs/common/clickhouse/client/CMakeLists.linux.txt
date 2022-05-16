@@ -114,7 +114,6 @@ target_sources(clickhouse_client_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Common/CurrentMetrics.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Common/Epoll.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Common/escapeForFileName.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Common/filesystemHelpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Common/formatIPv6.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Common/formatReadable.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src/Common/getMultipleKeysFromConfig.cpp

@@ -4,7 +4,7 @@
 #include <common/StringRef.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Either a (possibly compound) expression representing a partition value or a partition ID.

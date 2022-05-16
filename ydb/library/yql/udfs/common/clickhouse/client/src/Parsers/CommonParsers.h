@@ -2,7 +2,7 @@
 
 #include <Parsers/IParserBase.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Parse specified keyword such as SELECT or compound keyword such as ORDER BY.

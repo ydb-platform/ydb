@@ -7,7 +7,7 @@
 #include <Storages/IStorage_fwd.h>
 #include <Storages/TableLockHolder.h>
 
-namespace DB
+namespace NDB
 {
 
 class IOutputFormat;

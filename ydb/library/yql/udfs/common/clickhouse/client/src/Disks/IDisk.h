@@ -33,7 +33,7 @@ namespace CurrentMetrics
     extern const Metric DiskSpaceReservedForMerge;
 }
 
-namespace DB
+namespace NDB
 {
 
 class IDiskDirectoryIterator;

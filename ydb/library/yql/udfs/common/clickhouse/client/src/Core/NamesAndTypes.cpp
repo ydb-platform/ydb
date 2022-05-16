@@ -9,7 +9,7 @@
 #include <IO/WriteBufferFromString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -49,7 +49,7 @@ void NamesAndTypesList::readText(ReadBuffer & buf)
 
     assertString("columns format version: 1\n", buf);
     size_t count;
-    DB::readText(count, buf);
+    NDB::readText(count, buf);
     assertString(" columns:\n", buf);
 
     String column_name;
@@ -70,7 +70,7 @@ void NamesAndTypesList::readText(ReadBuffer & buf)
 void NamesAndTypesList::writeText(WriteBuffer & buf) const
 {
     writeString("columns format version: 1\n", buf);
-    DB::writeText(size(), buf);
+    NDB::writeText(size(), buf);
     writeString(" columns:\n", buf);
     for (const auto & it : *this)
     {

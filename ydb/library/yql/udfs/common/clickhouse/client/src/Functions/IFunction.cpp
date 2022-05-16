@@ -27,7 +27,7 @@
 //#    pragma GCC diagnostic pop
 //#endif
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

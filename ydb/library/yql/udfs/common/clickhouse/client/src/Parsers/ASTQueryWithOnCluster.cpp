@@ -8,7 +8,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 std::string ASTQueryWithOnCluster::getRewrittenQueryWithoutOnCluster(const std::string & new_database) const

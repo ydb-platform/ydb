@@ -11,7 +11,7 @@ namespace parquet::arrow { class FileReader; }
 
 namespace arrow { class Buffer; }
 
-namespace DB
+namespace NDB
 {
 
 class ArrowColumnToCHColumn;

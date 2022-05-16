@@ -15,7 +15,7 @@
 namespace accurate
 {
 
-using namespace DB;
+using namespace NDB;
 
 
 template <typename A, typename B>
@@ -198,7 +198,7 @@ inline bool NO_SANITIZE_UNDEFINED convertNumeric(From value, To & result)
 }
 
 
-namespace DB
+namespace NDB
 {
 
 template <typename A, typename B> struct EqualsOp

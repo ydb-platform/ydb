@@ -3,7 +3,7 @@
 #include <Core/Block.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Converts columns-constants to full columns ("materializes" them).

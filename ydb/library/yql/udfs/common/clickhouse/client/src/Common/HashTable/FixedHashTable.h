@@ -2,7 +2,7 @@
 
 #include <Common/HashTable/HashTable.h>
 
-namespace DB
+namespace NDB
 {
     namespace ErrorCodes
     {

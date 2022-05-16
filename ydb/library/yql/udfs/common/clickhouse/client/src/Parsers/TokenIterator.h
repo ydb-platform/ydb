@@ -4,7 +4,7 @@
 #include <Parsers/Lexer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Parser operates on lazy stream of tokens.

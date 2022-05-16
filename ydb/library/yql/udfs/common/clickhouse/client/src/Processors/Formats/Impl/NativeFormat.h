@@ -6,7 +6,7 @@
 #include <Processors/Formats/IOutputFormat.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class NativeInputFormatFromNativeBlockInputStream : public IInputFormat

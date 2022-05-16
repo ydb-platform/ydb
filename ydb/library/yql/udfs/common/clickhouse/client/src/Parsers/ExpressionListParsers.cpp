@@ -12,7 +12,7 @@
 #include <Parsers/ParserUnionQueryElement.h>
 
 
-namespace DB
+namespace NDB
 {
 
 const char * ParserMultiplicativeExpression::operators[] =

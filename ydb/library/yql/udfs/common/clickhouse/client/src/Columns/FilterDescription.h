@@ -3,7 +3,7 @@
 #include <Columns/IColumn.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Support methods for implementation of WHERE, PREWHERE and HAVING.

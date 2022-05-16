@@ -5,7 +5,7 @@
 #include <Parsers/ExpressionListParsers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

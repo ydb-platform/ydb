@@ -130,8 +130,8 @@ public:
     std::string getName() const;    /// Получить имя name-value пары.
     JSON        getValue() const;    /// Получить значение name-value пары.
 
-    StringRef getRawString() const;
-    StringRef getRawName() const;
+    NDB::StringRef getRawString() const;
+    NDB::StringRef getRawName() const;
 
     /// Получить значение элемента; если элемент - строка, то распарсить значение из строки; если не строка или число - то исключение.
     double      toDouble() const;

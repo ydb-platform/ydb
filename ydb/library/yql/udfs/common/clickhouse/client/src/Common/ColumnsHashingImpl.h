@@ -7,7 +7,7 @@
 #include <Interpreters/AggregationCommon.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

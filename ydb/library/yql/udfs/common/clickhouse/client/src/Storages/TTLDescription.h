@@ -7,7 +7,7 @@
 #include <Interpreters/AggregateDescription.h>
 #include <Storages/TTLMode.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Assignment expression in TTL with GROUP BY

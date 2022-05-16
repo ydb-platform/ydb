@@ -1,6 +1,6 @@
 #include <Common/PODArray.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Used for left padding of PODArray when empty

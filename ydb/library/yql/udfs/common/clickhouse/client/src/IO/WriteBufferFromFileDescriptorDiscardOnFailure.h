@@ -3,7 +3,7 @@
 #include <IO/WriteBufferFromFileDescriptor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Write to file descriptor but drop the data if write would block or fail.

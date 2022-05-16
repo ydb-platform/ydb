@@ -9,7 +9,7 @@
 #include "ColumnsCommon.h"
 
 
-namespace DB
+namespace NDB
 {
 
 #if defined(__SSE2__) && defined(__POPCNT__)

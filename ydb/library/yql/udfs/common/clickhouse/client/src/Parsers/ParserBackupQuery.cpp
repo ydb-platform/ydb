@@ -10,7 +10,7 @@
 #include <Parsers/parseDatabaseAndTableName.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace

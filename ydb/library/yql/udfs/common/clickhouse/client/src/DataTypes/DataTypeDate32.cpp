@@ -2,7 +2,7 @@
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/Serializations/SerializationDate32.h>
 
-namespace DB
+namespace NDB
 {
 bool DataTypeDate32::equals(const IDataType & rhs) const
 {

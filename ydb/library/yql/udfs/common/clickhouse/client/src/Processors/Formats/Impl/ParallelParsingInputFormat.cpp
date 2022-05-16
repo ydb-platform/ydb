@@ -4,7 +4,7 @@
 #include <Common/setThreadName.h>
 #include <common/scope_guard_safe.h>
 
-namespace DB
+namespace NDB
 {
 
 void ParallelParsingInputFormat::segmentatorThreadFunction(ThreadGroupStatusPtr thread_group)

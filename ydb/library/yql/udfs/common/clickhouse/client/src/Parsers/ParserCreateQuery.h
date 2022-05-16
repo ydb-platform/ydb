@@ -12,7 +12,7 @@
 #include <Poco/String.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** A nested table. For example, Nested(UInt32 CounterID, FixedString(2) UserAgentMajor)

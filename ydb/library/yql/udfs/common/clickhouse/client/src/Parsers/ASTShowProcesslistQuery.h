@@ -3,7 +3,7 @@
 #include <Parsers/ASTQueryWithOutput.h>
 
 
-namespace DB
+namespace NDB
 {
 
 struct ASTShowProcesslistIDAndQueryNames

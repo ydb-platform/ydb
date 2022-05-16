@@ -1,6 +1,6 @@
 #pragma once
 
-namespace DB
+namespace NDB
 {
 
 /// A result code for the KILL QUERY/KILL MUTATION statement.

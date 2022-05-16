@@ -1,7 +1,7 @@
 #include <Processors/IAccumulatingTransform.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

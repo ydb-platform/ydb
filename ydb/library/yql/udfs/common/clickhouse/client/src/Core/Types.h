@@ -8,7 +8,7 @@
 #include <common/defines.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Data types for representing elementary values from a database in RAM.
@@ -316,22 +316,22 @@ inline constexpr const char * getTypeName(TypeIndex idx)
 namespace std
 {
     template <typename T>
-    struct hash<DB::Decimal<T>> { size_t operator()(const DB::Decimal<T> & x) const { return hash<T>()(x.value); } };
+    struct hash<NDB::Decimal<T>> { size_t operator()(const NDB::Decimal<T> & x) const { return hash<T>()(x.value); } };
 
     template <>
-    struct hash<DB::Decimal128>
+    struct hash<NDB::Decimal128>
     {
-        size_t operator()(const DB::Decimal128 & x) const
+        size_t operator()(const NDB::Decimal128 & x) const
         {
-            return std::hash<DB::Int64>()(x.value >> 64)
-                ^ std::hash<DB::Int64>()(x.value & std::numeric_limits<DB::UInt64>::max());
+            return std::hash<NDB::Int64>()(x.value >> 64)
+                ^ std::hash<NDB::Int64>()(x.value & std::numeric_limits<NDB::UInt64>::max());
         }
     };
 
     template <>
-    struct hash<DB::DateTime64>
+    struct hash<NDB::DateTime64>
     {
-        size_t operator()(const DB::DateTime64 & x) const
+        size_t operator()(const NDB::DateTime64 & x) const
         {
             return std::hash<std::decay_t<decltype(x)>::NativeType>()(x);
         }
@@ -339,14 +339,14 @@ namespace std
 
 
     template <>
-    struct hash<DB::Decimal256>
+    struct hash<NDB::Decimal256>
     {
-        size_t operator()(const DB::Decimal256 & x) const
+        size_t operator()(const NDB::Decimal256 & x) const
         {
             // temp solution
-            static constexpr DB::UInt64 max_uint_mask = std::numeric_limits<DB::UInt64>::max();
-            return std::hash<DB::Int64>()(static_cast<DB::Int64>(x.value >> 64 & max_uint_mask))
-                ^ std::hash<DB::Int64>()(static_cast<DB::Int64>(x.value & max_uint_mask));
+            static constexpr NDB::UInt64 max_uint_mask = std::numeric_limits<NDB::UInt64>::max();
+            return std::hash<NDB::Int64>()(static_cast<NDB::Int64>(x.value >> 64 & max_uint_mask))
+                ^ std::hash<NDB::Int64>()(static_cast<NDB::Int64>(x.value & max_uint_mask));
         }
     };
 }

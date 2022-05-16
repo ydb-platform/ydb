@@ -14,7 +14,7 @@
 #include <Common/randomSeed.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

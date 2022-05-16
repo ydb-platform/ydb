@@ -14,7 +14,7 @@
 #include "Parsers/IAST_fwd.h"
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

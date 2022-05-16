@@ -3,7 +3,7 @@
 #include <Formats/FormatFactory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void registerInputFormatNative(FormatFactory & factory)

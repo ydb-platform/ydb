@@ -9,7 +9,7 @@
 #include <type_traits>
 
 
-namespace DB
+namespace NDB
 {
 
 template <typename T>

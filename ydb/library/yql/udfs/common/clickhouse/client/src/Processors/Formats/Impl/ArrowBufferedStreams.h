@@ -7,7 +7,7 @@
 
 #include <arrow/io/interfaces.h>
 
-namespace DB
+namespace NDB
 {
 
 class ReadBuffer;

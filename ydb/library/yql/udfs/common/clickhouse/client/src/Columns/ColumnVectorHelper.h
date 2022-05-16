@@ -4,7 +4,7 @@
 #include <Common/PODArray.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Allows to access internal array of ColumnVector or ColumnFixedString without cast to concrete type.

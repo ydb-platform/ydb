@@ -6,7 +6,7 @@
 #include <Core/Field.h>
 
 
-namespace DB
+namespace NDB
 {
 
 String IColumn::dumpStructure() const

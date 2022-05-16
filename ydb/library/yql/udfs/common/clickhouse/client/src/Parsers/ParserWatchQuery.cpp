@@ -6,7 +6,7 @@
 #include <Parsers/ExpressionElementParsers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool ParserWatchQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

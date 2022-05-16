@@ -31,7 +31,7 @@
 #include <Interpreters/ExpressionActions.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

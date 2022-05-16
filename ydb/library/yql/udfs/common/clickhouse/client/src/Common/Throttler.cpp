@@ -10,7 +10,7 @@ namespace ProfileEvents
     extern const Event ThrottlerSleepMicroseconds;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

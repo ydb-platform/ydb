@@ -4,7 +4,7 @@
 #include <openssl/err.h>
 #include <openssl/sha.h>
 
-namespace DB
+namespace NDB
 {
 #pragma GCC diagnostic warning "-Wold-style-cast"
 

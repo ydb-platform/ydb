@@ -8,7 +8,7 @@
 #include <DataTypes/DataTypeNothing.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -335,7 +335,7 @@ bool CSVRowInputFormat::parseRowAndPrintDiagnosticInfo(MutableColumns & columns,
             {
                 assertChar(delimiter, in);
             }
-            catch (const DB::Exception &)
+            catch (const Exception &)
             {
                 if (*in.position() == '\n' || *in.position() == '\r')
                 {
@@ -435,7 +435,7 @@ void registerInputFormatProcessorCSV(FormatFactory & factory)
     }
 }
 
-static std::pair<bool, size_t> fileSegmentationEngineCSVImpl(ReadBuffer & in, DB::Memory<> & memory, size_t min_chunk_size)
+static std::pair<bool, size_t> fileSegmentationEngineCSVImpl(ReadBuffer & in, Memory<> & memory, size_t min_chunk_size)
 {
     char * pos = in.position();
     bool quotes = false;

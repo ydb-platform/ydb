@@ -3,7 +3,7 @@
 #include <IO/Operators.h>
 #include <Common/JSONBuilder.h>
 
-namespace DB
+namespace NDB
 {
 
 void dumpSortDescription(const SortDescription & description, const Block & header, WriteBuffer & out)

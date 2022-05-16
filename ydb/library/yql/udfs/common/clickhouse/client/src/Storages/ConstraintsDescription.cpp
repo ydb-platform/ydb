@@ -11,7 +11,7 @@
 #include <Core/Defines.h>
 
 
-namespace DB
+namespace NDB
 {
 
 String ConstraintsDescription::toString() const

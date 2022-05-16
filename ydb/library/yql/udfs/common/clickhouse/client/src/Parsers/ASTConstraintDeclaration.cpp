@@ -3,7 +3,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTConstraintDeclaration::clone() const

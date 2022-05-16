@@ -5,7 +5,7 @@
 #include <Parsers/ASTFunction.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTIndexDeclaration::clone() const

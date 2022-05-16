@@ -38,7 +38,7 @@ bool inline memoryTrackerCanThrow(VariableContext level, bool fault_injection)
 
 }
 
-namespace DB
+namespace NDB
 {
     namespace ErrorCodes
     {
@@ -130,7 +130,7 @@ void MemoryTracker::logMemoryUsage(Int64 current) const
 void MemoryTracker::allocImpl(Int64 size, bool throw_if_memory_exceeded)
 {
     if (size < 0)
-        throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Negative size ({}) is passed to MemoryTracker. It is a bug.", size);
+        throw NDB::Exception(NDB::ErrorCodes::LOGICAL_ERROR, "Negative size ({}) is passed to MemoryTracker. It is a bug.", size);
 
     if (BlockerInThread::isBlocked(level))
     {
@@ -175,7 +175,7 @@ void MemoryTracker::allocImpl(Int64 size, bool throw_if_memory_exceeded)
     if (unlikely(_memory_tracker_always_throw_logical_error_on_allocation))
     {
         _memory_tracker_always_throw_logical_error_on_allocation = false;
-        throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Memory tracker: allocations not allowed.");
+        throw NDB::Exception(NDB::ErrorCodes::LOGICAL_ERROR, "Memory tracker: allocations not allowed.");
     }
 #endif
 
@@ -188,14 +188,14 @@ void MemoryTracker::allocImpl(Int64 size, bool throw_if_memory_exceeded)
         ProfileEvents::increment(ProfileEvents::QueryMemoryLimitExceeded);
         const auto * description = description_ptr.load(std::memory_order_relaxed);
         amount.fetch_sub(size, std::memory_order_relaxed);
-        throw DB::Exception(
-            DB::ErrorCodes::MEMORY_LIMIT_EXCEEDED,
+        throw NDB::Exception(
+            NDB::ErrorCodes::MEMORY_LIMIT_EXCEEDED,
             "Memory tracker{}{}: fault injected. Would use {} (attempt to allocate chunk of {} bytes), maximum: {}",
             description ? " " : "",
             description ? description : "",
-            formatReadableSizeWithBinarySuffix(will_be),
+            NDB::formatReadableSizeWithBinarySuffix(will_be),
             size,
-            formatReadableSizeWithBinarySuffix(current_hard_limit));
+            NDB::formatReadableSizeWithBinarySuffix(current_hard_limit));
     }
 
 
@@ -217,14 +217,14 @@ void MemoryTracker::allocImpl(Int64 size, bool throw_if_memory_exceeded)
         BlockerInThread untrack_lock(VariableContext::Global);
         ProfileEvents::increment(ProfileEvents::QueryMemoryLimitExceeded);
         const auto * description = description_ptr.load(std::memory_order_relaxed);
-        throw DB::Exception(
-            DB::ErrorCodes::MEMORY_LIMIT_EXCEEDED,
+        throw NDB::Exception(
+            NDB::ErrorCodes::MEMORY_LIMIT_EXCEEDED,
             "Memory limit{}{} exceeded: would use {} (attempt to allocate chunk of {} bytes), maximum: {}",
             description ? " " : "",
             description ? description : "",
-            formatReadableSizeWithBinarySuffix(will_be),
+            NDB::formatReadableSizeWithBinarySuffix(will_be),
             size,
-            formatReadableSizeWithBinarySuffix(current_hard_limit));
+            NDB::formatReadableSizeWithBinarySuffix(current_hard_limit));
     }
 
     if (throw_if_memory_exceeded)

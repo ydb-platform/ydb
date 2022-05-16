@@ -8,7 +8,7 @@
 #include <common/scope_guard.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

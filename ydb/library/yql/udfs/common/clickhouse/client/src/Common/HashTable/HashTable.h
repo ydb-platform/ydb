@@ -35,7 +35,7 @@
   */
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -56,12 +56,12 @@ namespace ErrorCodes
 struct HashTableNoState
 {
     /// Serialization, in binary and text form.
-    void write(DB::WriteBuffer &) const         {}
-    void writeText(DB::WriteBuffer &) const     {}
+    void write(NDB::WriteBuffer &) const         {}
+    void writeText(NDB::WriteBuffer &) const     {}
 
     /// Deserialization, in binary and text form.
-    void read(DB::ReadBuffer &)                 {}
-    void readText(DB::ReadBuffer &)             {}
+    void read(NDB::ReadBuffer &)                 {}
+    void readText(NDB::ReadBuffer &)             {}
 };
 
 
@@ -199,12 +199,12 @@ struct HashTableCell
     void setMapped(const value_type & /*value*/) {}
 
     /// Serialization, in binary and text form.
-    void write(DB::WriteBuffer & wb) const         { DB::writeBinary(key, wb); }
-    void writeText(DB::WriteBuffer & wb) const     { DB::writeDoubleQuoted(key, wb); }
+    void write(NDB::WriteBuffer & wb) const         { NDB::writeBinary(key, wb); }
+    void writeText(NDB::WriteBuffer & wb) const     { NDB::writeDoubleQuoted(key, wb); }
 
     /// Deserialization, in binary and text form.
-    void read(DB::ReadBuffer & rb)        { DB::readBinary(key, rb); }
-    void readText(DB::ReadBuffer & rb)    { DB::readDoubleQuoted(key, rb); }
+    void read(NDB::ReadBuffer & rb)        { NDB::readBinary(key, rb); }
+    void readText(NDB::ReadBuffer & rb)    { NDB::readDoubleQuoted(key, rb); }
 
     /// When cell pointer is moved during erase, reinsert or resize operations
 
@@ -334,7 +334,7 @@ template <typename Cell>
 struct ZeroValueStorage<false, Cell>
 {
     bool hasZero() const { return false; }
-    void setHasZero() { throw DB::Exception("HashTable: logical error", DB::ErrorCodes::LOGICAL_ERROR); }
+    void setHasZero() { throw NDB::Exception("HashTable: logical error", NDB::ErrorCodes::LOGICAL_ERROR); }
     void clearHasZero() {}
 
     Cell * zeroValue()             { return nullptr; }
@@ -724,7 +724,7 @@ public:
     class Reader final : private Cell::State
     {
     public:
-        Reader(DB::ReadBuffer & in_)
+        Reader(NDB::ReadBuffer & in_)
             : in(in_)
         {
         }
@@ -737,7 +737,7 @@ public:
             if (!is_initialized)
             {
                 Cell::State::read(in);
-                DB::readVarUInt(size, in);
+                NDB::readVarUInt(size, in);
                 is_initialized = true;
             }
 
@@ -756,13 +756,13 @@ public:
         inline const value_type & get() const
         {
             if (!is_initialized || is_eof)
-                throw DB::Exception("No available data", DB::ErrorCodes::NO_AVAILABLE_DATA);
+                throw NDB::Exception("No available data", NDB::ErrorCodes::NO_AVAILABLE_DATA);
 
             return cell.getValue();
         }
 
     private:
-        DB::ReadBuffer & in;
+        NDB::ReadBuffer & in;
         Cell cell;
         size_t read_count = 0;
         size_t size = 0;
@@ -1173,10 +1173,10 @@ public:
     }
 
 
-    void write(DB::WriteBuffer & wb) const
+    void write(NDB::WriteBuffer & wb) const
     {
         Cell::State::write(wb);
-        DB::writeVarUInt(m_size, wb);
+        NDB::writeVarUInt(m_size, wb);
 
         if (this->hasZero())
             this->zeroValue()->write(wb);
@@ -1189,14 +1189,14 @@ public:
                 ptr->write(wb);
     }
 
-    void writeText(DB::WriteBuffer & wb) const
+    void writeText(NDB::WriteBuffer & wb) const
     {
         Cell::State::writeText(wb);
-        DB::writeText(m_size, wb);
+        NDB::writeText(m_size, wb);
 
         if (this->hasZero())
         {
-            DB::writeChar(',', wb);
+            NDB::writeChar(',', wb);
             this->zeroValue()->writeText(wb);
         }
 
@@ -1207,13 +1207,13 @@ public:
         {
             if (!ptr->isZero(*this))
             {
-                DB::writeChar(',', wb);
+                NDB::writeChar(',', wb);
                 ptr->writeText(wb);
             }
         }
     }
 
-    void read(DB::ReadBuffer & rb)
+    void read(NDB::ReadBuffer & rb)
     {
         Cell::State::read(rb);
 
@@ -1222,7 +1222,7 @@ public:
         m_size = 0;
 
         size_t new_size = 0;
-        DB::readVarUInt(new_size, rb);
+        NDB::readVarUInt(new_size, rb);
 
         free();
         Grower new_grower = grower;
@@ -1237,7 +1237,7 @@ public:
         }
     }
 
-    void readText(DB::ReadBuffer & rb)
+    void readText(NDB::ReadBuffer & rb)
     {
         Cell::State::readText(rb);
 
@@ -1246,7 +1246,7 @@ public:
         m_size = 0;
 
         size_t new_size = 0;
-        DB::readText(new_size, rb);
+        NDB::readText(new_size, rb);
 
         free();
         Grower new_grower = grower;
@@ -1256,7 +1256,7 @@ public:
         for (size_t i = 0; i < new_size; ++i)
         {
             Cell x;
-            DB::assertChar(',', rb);
+            NDB::assertChar(',', rb);
             x.readText(rb);
             insert(x.getValue());
         }

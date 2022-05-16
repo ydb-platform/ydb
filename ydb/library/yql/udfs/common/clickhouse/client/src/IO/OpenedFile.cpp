@@ -11,7 +11,7 @@ namespace ProfileEvents
     extern const Event FileOpen;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

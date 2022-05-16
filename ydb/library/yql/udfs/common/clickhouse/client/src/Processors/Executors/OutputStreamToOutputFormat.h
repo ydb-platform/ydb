@@ -1,7 +1,7 @@
 #pragma once
 #include <DataStreams/IBlockOutputStream.h>
 
-namespace DB
+namespace NDB
 {
 
 

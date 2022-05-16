@@ -7,7 +7,7 @@
 #include <common/types.h>
 #include <Common/Allocator_fwd.h>
 
-namespace DB
+namespace NDB
 {
 
 inline constexpr size_t integerRoundUp(size_t value, size_t dividend)

@@ -12,7 +12,7 @@
 #include <Core/Field.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -64,7 +64,7 @@ MutableColumnPtr ColumnMap::cloneResized(size_t new_size) const
 
 Field ColumnMap::operator[](size_t n) const
 {
-    auto array = DB::get<Array>((*nested)[n]);
+    auto array = NDB::get<Array>((*nested)[n]);
     return Map(std::make_move_iterator(array.begin()), std::make_move_iterator(array.end()));
 }
 
@@ -75,7 +75,7 @@ void ColumnMap::get(size_t n, Field & res) const
     size_t size = offsets[n] - offsets[n - 1];
 
     res = Map(size);
-    auto & map = DB::get<Map &>(res);
+    auto & map = NDB::get<Map &>(res);
 
     for (size_t i = 0; i < size; ++i)
         getNestedData().get(offset + i, map[i]);
@@ -93,7 +93,7 @@ void ColumnMap::insertData(const char *, size_t)
 
 void ColumnMap::insert(const Field & x)
 {
-    const auto & map = DB::get<const Map &>(x);
+    const auto & map = NDB::get<const Map &>(x);
     nested->insert(Array(map.begin(), map.end()));
 }
 

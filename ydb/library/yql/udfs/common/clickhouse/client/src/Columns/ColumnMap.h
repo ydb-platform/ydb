@@ -5,7 +5,7 @@
 #include <Columns/ColumnVector.h>
 #include <Columns/ColumnTuple.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Column, that stores a nested Array(Tuple(key, value)) column.

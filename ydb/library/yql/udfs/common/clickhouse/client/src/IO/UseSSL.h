@@ -2,7 +2,7 @@
 
 #include <boost/noncopyable.hpp>
 
-namespace DB
+namespace NDB
 {
 // http://stackoverflow.com/questions/18315472/https-request-in-c-using-poco
 struct UseSSL : private boost::noncopyable

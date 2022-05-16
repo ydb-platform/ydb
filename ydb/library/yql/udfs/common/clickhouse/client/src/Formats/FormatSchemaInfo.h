@@ -2,7 +2,7 @@
 
 #include <common/types.h>
 
-namespace DB
+namespace NDB
 {
 class Context;
 

@@ -1,7 +1,7 @@
 #include <Processors/LimitTransform.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

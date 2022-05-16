@@ -17,7 +17,7 @@
 #include <Common/ClickHouseRevision.h>
 
 
-namespace DB
+namespace NDB
 {
 
 NamesAndTypesList QueryThreadLogElement::getNamesAndTypes()

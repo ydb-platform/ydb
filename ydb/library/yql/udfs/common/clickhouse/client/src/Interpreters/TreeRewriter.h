@@ -8,7 +8,7 @@
 #include <Interpreters/SelectQueryOptions.h>
 #include <Storages/IStorage_fwd.h>
 
-namespace DB
+namespace NDB
 {
 
 class ASTFunction;

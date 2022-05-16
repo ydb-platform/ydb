@@ -3,7 +3,7 @@
 #include "SeekableReadBuffer.h"
 
 
-namespace DB
+namespace NDB
 {
 /** Allows to read from memory range.
   * In comparison with just ReadBuffer, it only adds convenient constructors, that do const_cast.

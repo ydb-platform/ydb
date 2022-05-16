@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 #include <Parsers/ASTFunction.h>
 
-namespace DB
+namespace NDB
 {
 
 class ASTExternalDDLQuery : public IAST

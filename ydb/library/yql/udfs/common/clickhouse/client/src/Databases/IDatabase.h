@@ -15,7 +15,7 @@
 #include <map>
 
 
-namespace DB
+namespace NDB
 {
 
 struct Settings;

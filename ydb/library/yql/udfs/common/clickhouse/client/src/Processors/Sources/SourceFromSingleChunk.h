@@ -2,7 +2,7 @@
 #include <Processors/Sources/SourceWithProgress.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class SourceFromSingleChunk : public SourceWithProgress

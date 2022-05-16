@@ -5,7 +5,7 @@
 #include <lz4.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

@@ -6,7 +6,7 @@
 #include <unordered_map>
 
 
-namespace DB
+namespace NDB
 {
 
 enum class ColumnDefaultKind

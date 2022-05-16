@@ -2,7 +2,7 @@
 
 #include "IParserBase.h"
 
-namespace DB
+namespace NDB
 {
 /// DROP FUNCTION function1
 class ParserDropFunctionQuery : public IParserBase

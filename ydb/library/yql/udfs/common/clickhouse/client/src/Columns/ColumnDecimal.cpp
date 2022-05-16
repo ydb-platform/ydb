@@ -21,7 +21,7 @@
 
 template <typename T> bool decimalLess(T x, T y, UInt32 x_scale, UInt32 y_scale);
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

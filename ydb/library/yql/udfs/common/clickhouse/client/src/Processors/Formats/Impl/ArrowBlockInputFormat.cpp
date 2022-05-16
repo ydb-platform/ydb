@@ -13,7 +13,7 @@
 #include "ArrowColumnToCHColumn.h"
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -138,7 +138,7 @@ void registerInputFormatProcessorArrow(FormatFactory & factory)
 }
 #else
 
-namespace DB
+namespace NDB
 {
 class FormatFactory;
 void registerInputFormatProcessorArrow(FormatFactory &)

@@ -4,7 +4,7 @@
 #include <Common/quoteString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -300,7 +300,7 @@ void ASTAlterCommand::formatImpl(
                       << (part ? "PART " : "PARTITION ") << (settings.hilite ? hilite_none : "");
         partition->formatImpl(settings, state, frame);
         settings.ostr << (settings.hilite ? hilite_keyword : "")
-                      << " FROM " << (settings.hilite ? hilite_none : "") << DB::quote << from;
+                      << " FROM " << (settings.hilite ? hilite_none : "") << quote << from;
     }
     else if (type == ASTAlterCommand::FREEZE_PARTITION)
     {
@@ -310,7 +310,7 @@ void ASTAlterCommand::formatImpl(
         if (!with_name.empty())
         {
             settings.ostr << " " << (settings.hilite ? hilite_keyword : "") << "WITH NAME" << (settings.hilite ? hilite_none : "")
-                          << " " << DB::quote << with_name;
+                          << " " << quote << with_name;
         }
     }
     else if (type == ASTAlterCommand::FREEZE_ALL)
@@ -320,7 +320,7 @@ void ASTAlterCommand::formatImpl(
         if (!with_name.empty())
         {
             settings.ostr << " " << (settings.hilite ? hilite_keyword : "") << "WITH NAME" << (settings.hilite ? hilite_none : "")
-                          << " " << DB::quote << with_name;
+                          << " " << quote << with_name;
         }
     }
     else if (type == ASTAlterCommand::UNFREEZE_PARTITION)
@@ -331,7 +331,7 @@ void ASTAlterCommand::formatImpl(
         if (!with_name.empty())
         {
             settings.ostr << " " << (settings.hilite ? hilite_keyword : "") << "WITH NAME" << (settings.hilite ? hilite_none : "")
-                          << " " << DB::quote << with_name;
+                          << " " << quote << with_name;
         }
     }
     else if (type == ASTAlterCommand::UNFREEZE_ALL)
@@ -341,7 +341,7 @@ void ASTAlterCommand::formatImpl(
         if (!with_name.empty())
         {
             settings.ostr << " " << (settings.hilite ? hilite_keyword : "") << "WITH NAME" << (settings.hilite ? hilite_none : "")
-                          << " " << DB::quote << with_name;
+                          << " " << quote << with_name;
         }
     }
     else if (type == ASTAlterCommand::DELETE)

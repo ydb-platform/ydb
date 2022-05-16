@@ -6,7 +6,7 @@
 
 struct taskstats;
 
-namespace DB
+namespace NDB
 {
 
 /// Get taskstat info from OS kernel via Netlink protocol.

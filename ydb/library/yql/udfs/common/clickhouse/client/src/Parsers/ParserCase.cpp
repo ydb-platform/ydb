@@ -5,7 +5,7 @@
 #include <Parsers/ASTLiteral.h>
 #include <Core/Field.h>
 
-namespace DB
+namespace NDB
 {
 
 bool ParserCase::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

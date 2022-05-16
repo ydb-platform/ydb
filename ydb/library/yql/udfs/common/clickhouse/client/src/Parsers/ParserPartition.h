@@ -2,7 +2,7 @@
 
 #include <Parsers/IParserBase.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Parse either a partition value as a (possibly compound) literal or a partition ID.

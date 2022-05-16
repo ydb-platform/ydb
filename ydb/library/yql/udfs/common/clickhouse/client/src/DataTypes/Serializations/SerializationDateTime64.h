@@ -4,7 +4,7 @@
 
 class DateLUTImpl;
 
-namespace DB
+namespace NDB
 {
 
 class SerializationDateTime64 final : public SerializationDecimalBase<DateTime64>

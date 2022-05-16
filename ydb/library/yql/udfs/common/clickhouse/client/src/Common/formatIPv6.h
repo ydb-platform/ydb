@@ -13,7 +13,7 @@ constexpr size_t IPV6_BINARY_LENGTH = 16;
 constexpr size_t IPV4_MAX_TEXT_LENGTH = 15;     /// Does not count tail zero byte.
 constexpr size_t IPV6_MAX_TEXT_LENGTH = 39;
 
-namespace DB
+namespace NDB
 {
 
 

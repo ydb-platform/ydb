@@ -11,9 +11,10 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
-namespace DB
+namespace NDB
 {
 
 class Block;
@@ -56,7 +57,7 @@ public:
       */
     using FileSegmentationEngine = std::function<std::pair<bool, size_t>(
         ReadBuffer & buf,
-        DB::Memory<> & memory,
+        Memory<> & memory,
         size_t min_chunk_bytes)>;
 
     /// This callback allows to perform some additional actions after writing a single row.
@@ -187,9 +188,12 @@ public:
         return dict;
     }
 
+    std::mutex& getSync() {
+        return sync;
+    }
 private:
     FormatsDictionary dict;
-
+    std::mutex sync;
     const Creators & getCreators(const String & name) const;
 };
 

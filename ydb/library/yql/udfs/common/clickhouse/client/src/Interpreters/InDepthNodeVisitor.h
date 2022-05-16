@@ -5,7 +5,7 @@
 #include <Common/typeid_cast.h>
 #include <Parsers/DumpASTNode.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Visits AST tree in depth, call functions for nodes according to Matcher type data.

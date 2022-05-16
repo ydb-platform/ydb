@@ -8,7 +8,7 @@
 #include <Parsers/ParserProjectionSelectQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 bool ParserProjectionSelectQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {

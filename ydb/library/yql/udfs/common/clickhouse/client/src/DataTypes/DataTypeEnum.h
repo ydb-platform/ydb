@@ -9,7 +9,7 @@
 #include <unordered_map>
 
 
-namespace DB
+namespace NDB
 {
 
 class IDataTypeEnum : public IDataType

@@ -12,7 +12,7 @@ namespace ProfileEvents
     extern const Event CompiledFunctionExecute;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

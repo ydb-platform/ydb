@@ -5,7 +5,7 @@
 #include <Parsers/IAST.h>
 #include <Compression/ICompressionCodec.h>
 
-namespace DB
+namespace NDB
 {
     using ColumnCodecs = std::unordered_map<std::string, CompressionCodecPtr>;
 }

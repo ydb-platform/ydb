@@ -4,7 +4,7 @@
 
 #include <Poco/Timespan.h>
 
-namespace DB
+namespace NDB
 {
 
 struct Settings;

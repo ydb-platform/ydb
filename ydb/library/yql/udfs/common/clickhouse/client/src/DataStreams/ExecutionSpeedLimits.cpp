@@ -12,7 +12,7 @@ namespace ProfileEvents
 }
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

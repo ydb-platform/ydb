@@ -24,7 +24,7 @@ namespace CurrentMetrics
     extern const Metric ActiveSyncDrainedConnections;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

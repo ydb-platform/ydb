@@ -4,7 +4,7 @@
 #include <Parsers/ExpressionElementParsers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 struct SettingChange;

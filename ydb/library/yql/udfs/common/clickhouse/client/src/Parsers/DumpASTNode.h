@@ -6,7 +6,7 @@
 
 #include <Parsers/IAST.h>
 
-namespace DB
+namespace NDB
 {
 
 /// If output stream set dumps node with indents and some additional info. Do nothing otherwise.

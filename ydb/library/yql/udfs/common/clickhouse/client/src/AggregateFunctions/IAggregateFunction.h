@@ -25,7 +25,7 @@ namespace llvm
     class IRBuilderBase;
 }
 
-namespace DB
+namespace NDB
 {
 struct Settings;
 

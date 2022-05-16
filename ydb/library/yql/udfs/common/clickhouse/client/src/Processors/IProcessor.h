@@ -7,7 +7,7 @@
 class EventCounter;
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

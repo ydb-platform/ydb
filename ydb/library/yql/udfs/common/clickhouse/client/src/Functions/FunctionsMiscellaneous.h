@@ -9,7 +9,7 @@
 #include <DataTypes/DataTypesNumber.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -37,7 +37,7 @@ public:
 
     ColumnPtr executeImpl(const ColumnsWithTypeAndName & arguments, const DataTypePtr &, size_t /*input_rows_count*/) const override
     {
-        DB::Block expr_columns;
+        Block expr_columns;
         for (size_t i = 0; i < arguments.size(); ++i)
         {
             const auto & argument = arguments[i];

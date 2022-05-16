@@ -4,7 +4,7 @@
 #include <Core/NamesAndTypes.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace Nested

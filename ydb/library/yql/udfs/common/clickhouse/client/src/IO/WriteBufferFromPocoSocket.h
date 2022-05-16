@@ -6,7 +6,7 @@
 #include <IO/BufferWithOwnMemory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Works with the ready Poco::Net::Socket. Blocking operations.

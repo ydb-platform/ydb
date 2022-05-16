@@ -14,7 +14,7 @@ class AbstractConfiguration;
 }
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

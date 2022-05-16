@@ -2,7 +2,7 @@
 #include <Parsers/ASTWithAlias.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTWithElement::clone() const

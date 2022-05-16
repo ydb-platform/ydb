@@ -4,7 +4,7 @@
 #include <Common/FieldVisitorToString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTDictionaryRange::clone() const

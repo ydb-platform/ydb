@@ -7,7 +7,7 @@
 #include <DataTypes/DataTypeLowCardinality.h>
 
 
-namespace DB
+namespace NDB
 {
 
 struct PreparedSetKey

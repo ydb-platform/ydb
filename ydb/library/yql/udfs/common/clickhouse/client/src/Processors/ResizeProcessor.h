@@ -4,7 +4,7 @@
 #include <queue>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Has arbitrary non zero number of inputs and arbitrary non zero number of outputs.

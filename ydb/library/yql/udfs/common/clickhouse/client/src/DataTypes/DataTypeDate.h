@@ -3,7 +3,7 @@
 #include <DataTypes/DataTypeNumberBase.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class DataTypeDate final : public DataTypeNumberBase<UInt16>

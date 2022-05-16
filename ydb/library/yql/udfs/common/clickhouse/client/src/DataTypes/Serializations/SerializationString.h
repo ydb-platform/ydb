@@ -2,7 +2,7 @@
 
 #include <DataTypes/Serializations/ISerialization.h>
 
-namespace DB
+namespace NDB
 {
 
 class SerializationString final : public ISerialization

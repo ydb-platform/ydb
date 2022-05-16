@@ -3,7 +3,7 @@
 #include <IO/Operators.h>
 #include <Common/SipHash.h>
 
-namespace DB
+namespace NDB
 {
 
 void ASTSubquery::appendColumnNameImpl(WriteBuffer & ostr) const

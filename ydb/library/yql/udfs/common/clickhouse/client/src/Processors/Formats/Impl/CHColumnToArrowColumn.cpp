@@ -48,7 +48,7 @@
         M(DOUBLE, arrow::DoubleType) \
         M(BINARY, arrow::BinaryType)
 
-namespace DB
+namespace NDB
 {
     namespace ErrorCodes
     {

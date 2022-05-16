@@ -7,7 +7,7 @@
 #include <DataTypes/NestedUtils.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

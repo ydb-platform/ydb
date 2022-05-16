@@ -21,7 +21,7 @@
 #include <Parsers/ASTIdentifier.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

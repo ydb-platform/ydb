@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Query USE db

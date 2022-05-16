@@ -2,7 +2,7 @@
 
 #include <Interpreters/SystemLog.h>
 
-namespace DB
+namespace NDB
 {
 
 struct OpenTelemetrySpan

@@ -5,7 +5,7 @@
 #include <DataTypes/IDataType.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Type - the state of the aggregate function.

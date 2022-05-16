@@ -14,7 +14,7 @@
 #include <Parsers/parseDatabaseAndTableName.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool ParserAlterCommand::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

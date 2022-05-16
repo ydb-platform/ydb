@@ -3,7 +3,7 @@
 #include <DataTypes/Serializations/ISerialization.h>
 #include <Common/Exception.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Wrapper for serialization, which calls methods, which are not overridden, from nested serialization.

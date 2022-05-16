@@ -3,7 +3,7 @@
 #include <Core/Types.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace UUIDHelpers

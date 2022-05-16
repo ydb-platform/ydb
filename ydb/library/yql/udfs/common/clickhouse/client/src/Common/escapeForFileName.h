@@ -3,7 +3,7 @@
 #include <string>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Convert a string, so result could be used as a file name.

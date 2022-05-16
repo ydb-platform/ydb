@@ -11,7 +11,7 @@ namespace Poco
 class Logger;
 }
 
-namespace DB
+namespace NDB
 {
 
 class ReplicatedMergeTreeSink;

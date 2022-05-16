@@ -2,7 +2,7 @@
 
 #include <Parsers/IParser.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Parses a name of an object which could be written in 3 forms:

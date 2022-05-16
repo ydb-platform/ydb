@@ -9,7 +9,7 @@
 #include <Common/assert_cast.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -278,7 +278,7 @@ public:
 
     void insert(const Field & x) override
     {
-        data.push_back(DB::get<T>(x));
+        data.push_back(NDB::get<T>(x));
     }
 
     void insertRangeFrom(const IColumn & src, size_t start, size_t length) override;

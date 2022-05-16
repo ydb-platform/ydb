@@ -4,7 +4,7 @@
 #include <DataTypes/Serializations/SerializationArray.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

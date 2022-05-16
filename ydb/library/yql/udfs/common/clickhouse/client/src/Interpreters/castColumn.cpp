@@ -3,7 +3,7 @@
 #include <Functions/FunctionsConversion.h>
 #include <Functions/CastOverloadResolver.h>
 
-namespace DB
+namespace NDB
 {
 
 template <CastType cast_type = CastType::nonAccurate>

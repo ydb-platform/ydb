@@ -11,7 +11,7 @@
 #include <unordered_map>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Creates function by name.

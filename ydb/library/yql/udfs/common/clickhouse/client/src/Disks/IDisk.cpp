@@ -7,7 +7,7 @@
 #include <common/logger_useful.h>
 #include <Common/setThreadName.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

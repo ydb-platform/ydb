@@ -15,7 +15,7 @@
 #include <IO/WriteBufferFromString.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 void SerializationAggregateFunction::serializeBinary(const Field & field, WriteBuffer & ostr) const

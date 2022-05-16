@@ -2,7 +2,7 @@
 #include <Processors/IProcessor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void IProcessor::dump() const

@@ -5,7 +5,7 @@
 #include <Processors/ResizeProcessor.h>
 #include <Processors/Pipe.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

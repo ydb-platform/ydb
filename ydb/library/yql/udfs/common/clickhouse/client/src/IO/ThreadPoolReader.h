@@ -4,7 +4,7 @@
 #include <Common/ThreadPool.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Perform reads from separate thread pool of specified size.

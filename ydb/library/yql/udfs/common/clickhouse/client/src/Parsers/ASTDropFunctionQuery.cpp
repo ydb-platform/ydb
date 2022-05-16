@@ -2,7 +2,7 @@
 #include <Common/quoteString.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTDropFunctionQuery::clone() const

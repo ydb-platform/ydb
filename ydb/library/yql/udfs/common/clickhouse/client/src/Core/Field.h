@@ -16,7 +16,7 @@
 #include <common/strong_typedef.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -970,7 +970,7 @@ String toString(const Field & x);
 }
 
 template <>
-struct fmt::formatter<DB::Field>
+struct fmt::formatter<NDB::Field>
 {
     constexpr auto parse(format_parse_context & ctx)
     {
@@ -985,7 +985,7 @@ struct fmt::formatter<DB::Field>
     }
 
     template <typename FormatContext>
-    auto format(const DB::Field & x, FormatContext & ctx)
+    auto format(const NDB::Field & x, FormatContext & ctx)
     {
         return format_to(ctx.out(), "{}", toString(x));
     }

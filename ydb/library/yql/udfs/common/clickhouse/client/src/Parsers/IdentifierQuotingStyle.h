@@ -1,7 +1,7 @@
 #pragma once
 
 
-namespace DB
+namespace NDB
 {
 
 /// Method to quote identifiers.

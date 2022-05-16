@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace DB
+namespace NDB
 {
 class MergeTreeData;
 

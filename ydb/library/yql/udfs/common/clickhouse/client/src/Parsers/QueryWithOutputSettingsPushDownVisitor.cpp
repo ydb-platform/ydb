@@ -8,7 +8,7 @@
 #include <iterator>
 #include <algorithm>
 
-namespace DB
+namespace NDB
 {
 
 bool QueryWithOutputSettingsPushDownMatcher::needChildVisit(ASTPtr & node, const ASTPtr & child)

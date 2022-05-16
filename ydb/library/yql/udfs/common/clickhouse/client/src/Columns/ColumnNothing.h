@@ -3,7 +3,7 @@
 #include <Columns/IColumnDummy.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ColumnNothing final : public COWHelper<IColumnDummy, ColumnNothing>

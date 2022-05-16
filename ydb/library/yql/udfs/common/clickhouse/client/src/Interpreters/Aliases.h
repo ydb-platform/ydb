@@ -5,7 +5,7 @@
 
 #include <unordered_map>
 
-namespace DB
+namespace NDB
 {
 
 using Aliases = std::unordered_map<String, ASTPtr>;

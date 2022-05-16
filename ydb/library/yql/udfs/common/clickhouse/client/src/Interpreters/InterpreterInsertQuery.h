@@ -6,7 +6,7 @@
 #include <Parsers/ASTInsertQuery.h>
 #include <Storages/StorageInMemoryMetadata.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Interprets the INSERT query.

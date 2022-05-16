@@ -3,7 +3,7 @@
 #include <atomic>
 
 
-namespace DB
+namespace NDB
 {
 
 class ActionBlocker;

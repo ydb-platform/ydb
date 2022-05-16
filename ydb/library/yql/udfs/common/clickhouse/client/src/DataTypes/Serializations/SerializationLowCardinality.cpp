@@ -12,7 +12,7 @@
 #include <Common/assert_cast.h>
 #include <Core/Field.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

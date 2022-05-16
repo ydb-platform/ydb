@@ -7,7 +7,7 @@
 #include <DataTypes/NestedUtils.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

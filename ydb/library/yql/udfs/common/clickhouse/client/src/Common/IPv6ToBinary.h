@@ -4,7 +4,7 @@
 
 namespace Poco { namespace Net { class IPAddress; }}
 
-namespace DB
+namespace NDB
 {
 
 /// Convert IP address to raw binary with IPv6 data (big endian). If it's an IPv4, map it to IPv6.

@@ -20,7 +20,7 @@
 #include <optional>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

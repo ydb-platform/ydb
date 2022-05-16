@@ -4,7 +4,7 @@
 #include <Columns/ColumnVector.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Columns with numbers. */

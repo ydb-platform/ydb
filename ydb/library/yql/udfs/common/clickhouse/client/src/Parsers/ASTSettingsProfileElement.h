@@ -4,7 +4,7 @@
 #include <Core/Field.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Represents a settings profile's element like the following
   * {variable [= value] [MIN [=] min_value] [MAX [=] max_value] [READONLY|WRITABLE]} | PROFILE 'profile_name'

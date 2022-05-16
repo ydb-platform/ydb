@@ -5,7 +5,7 @@
 #include <string.h>        /// strncmp, strncasecmp
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

@@ -10,7 +10,7 @@
 #include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/Serializations/SerializationNullable.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -278,7 +278,7 @@ bool TabSeparatedRowInputFormat::parseRowAndPrintDiagnosticInfo(MutableColumns &
                 {
                     assertChar('\n', in);
                 }
-                catch (const DB::Exception &)
+                catch (const Exception &)
                 {
                     if (*in.position() == '\t')
                     {
@@ -307,7 +307,7 @@ bool TabSeparatedRowInputFormat::parseRowAndPrintDiagnosticInfo(MutableColumns &
             {
                 assertChar('\t', in);
             }
-            catch (const DB::Exception &)
+            catch (const Exception &)
             {
                 if (*in.position() == '\n')
                 {
@@ -434,7 +434,7 @@ void registerInputFormatProcessorTabSeparated(FormatFactory & factory)
     }
 }
 
-static std::pair<bool, size_t> fileSegmentationEngineTabSeparatedImpl(ReadBuffer & in, DB::Memory<> & memory, size_t min_chunk_size)
+static std::pair<bool, size_t> fileSegmentationEngineTabSeparatedImpl(ReadBuffer & in, Memory<> & memory, size_t min_chunk_size)
 {
     bool need_more_data = true;
     char * pos = in.position();

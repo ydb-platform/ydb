@@ -5,7 +5,7 @@
 
 /// Common helper methods for implementation of different columns.
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

@@ -5,7 +5,7 @@
 #include <IO/BufferWithOwnMemory.h>
 #include <Parsers/StringRange.h>
 
-namespace DB
+namespace NDB
 {
 
 class CompressionCodecNone : public ICompressionCodec

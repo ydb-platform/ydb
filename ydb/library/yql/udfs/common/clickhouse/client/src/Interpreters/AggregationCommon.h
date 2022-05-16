@@ -18,7 +18,7 @@
 #include <tmmintrin.h>
 #endif
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

@@ -5,7 +5,7 @@
 #include <IO/ReadBuffer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class CompressedReadBuffer : public CompressedReadBufferBase, public BufferWithOwnMemory<ReadBuffer>

@@ -12,7 +12,7 @@
 
 #include <Common/MultiVersion.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Common metadata for all storages. Contains all possible parts of CREATE

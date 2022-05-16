@@ -22,7 +22,7 @@ namespace ProfileEvents
     extern const Event CompressedReadBufferBytes;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

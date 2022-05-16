@@ -2,7 +2,7 @@
 
 #include <Poco/Util/AbstractConfiguration.h>
 
-namespace DB
+namespace NDB
 {
 std::vector<std::string> getMultipleKeysFromConfig(const Poco::Util::AbstractConfiguration & config, const std::string & root, const std::string & name)
 {
@@ -22,7 +22,7 @@ std::vector<std::string> getMultipleKeysFromConfig(const Poco::Util::AbstractCon
 std::vector<std::string> getMultipleValuesFromConfig(const Poco::Util::AbstractConfiguration & config, const std::string & root, const std::string & name)
 {
     std::vector<std::string> values;
-    for (const auto & key : DB::getMultipleKeysFromConfig(config, root, name))
+    for (const auto & key : NDB::getMultipleKeysFromConfig(config, root, name))
         values.emplace_back(config.getString(root.empty() ? key : root + "." + key));
     return values;
 }

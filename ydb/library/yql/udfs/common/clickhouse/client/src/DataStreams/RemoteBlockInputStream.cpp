@@ -1,7 +1,7 @@
 #include <DataStreams/RemoteBlockInputStream.h>
 #include <Interpreters/Context.h>
 
-namespace DB
+namespace NDB
 {
 
 RemoteBlockInputStream::RemoteBlockInputStream(

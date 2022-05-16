@@ -3,7 +3,7 @@
 #include <Parsers/ASTQueryWithOnCluster.h>
 #include <Parsers/IAST.h>
 
-namespace DB
+namespace NDB
 {
 
 class ASTSystemQuery : public IAST, public ASTQueryWithOnCluster

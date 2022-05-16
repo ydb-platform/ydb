@@ -2,7 +2,7 @@
 
 #include <Compression/ICompressionCodec.h>
 
-namespace DB
+namespace NDB
 {
 
 class CompressionCodecMultiple final : public ICompressionCodec

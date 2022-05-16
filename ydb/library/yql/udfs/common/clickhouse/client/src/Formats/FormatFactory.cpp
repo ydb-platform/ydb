@@ -16,7 +16,7 @@
 
 #include <IO/ReadHelpers.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

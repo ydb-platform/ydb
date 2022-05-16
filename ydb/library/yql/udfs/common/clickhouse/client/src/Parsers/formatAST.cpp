@@ -1,7 +1,7 @@
 #include <Parsers/formatAST.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void formatAST(const IAST & ast, WriteBuffer & buf, bool hilite, bool one_line)

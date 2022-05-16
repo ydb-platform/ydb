@@ -3,7 +3,7 @@
 #include <IO/AsynchronousReader.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Implementation of IAsynchronousReader that in fact synchronous.

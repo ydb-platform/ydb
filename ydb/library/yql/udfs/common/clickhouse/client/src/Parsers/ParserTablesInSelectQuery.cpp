@@ -8,7 +8,7 @@
 #include <Parsers/ParserTablesInSelectQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

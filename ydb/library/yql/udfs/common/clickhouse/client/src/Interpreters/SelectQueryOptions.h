@@ -3,7 +3,7 @@
 #include <Core/QueryProcessingStage.h>
 #include <optional>
 
-namespace DB
+namespace NDB
 {
 
 /**

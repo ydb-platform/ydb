@@ -14,7 +14,7 @@ namespace ProfileEvents
     extern const Event MMappedFileCacheMisses;
 }
 
-namespace DB
+namespace NDB
 {
 
 

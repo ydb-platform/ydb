@@ -13,7 +13,7 @@ namespace CurrentMetrics
 }
 
 
-namespace DB
+namespace NDB
 {
 
 /** Implements query priorities in very primitive way.

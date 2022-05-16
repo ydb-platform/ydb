@@ -9,7 +9,7 @@
 
 class Collator;
 
-namespace DB
+namespace NDB
 {
 
 namespace JSONBuilder

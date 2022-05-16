@@ -178,7 +178,7 @@ public:
 
             /// Thread status holds raw pointer on query context, thus it always must be destroyed
             /// before sending signal that permits to join this thread.
-            DB::ThreadStatus thread_status;
+            NDB::ThreadStatus thread_status;
             std::apply(function, arguments);
         });
     }

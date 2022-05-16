@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

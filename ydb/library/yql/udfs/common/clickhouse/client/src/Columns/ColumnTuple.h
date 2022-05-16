@@ -3,7 +3,7 @@
 #include <Columns/IColumn.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Column, that is just group of few another columns.

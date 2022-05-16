@@ -4,7 +4,7 @@
 #include <Poco/Timespan.h>
 
 
-namespace DB
+namespace NDB
 {
 /// Temporarily overrides socket send/receive timeouts and reset them back into destructor
 /// If "limit_max_timeout" is true, timeouts could be only decreased (maxed by previous value).

@@ -6,7 +6,7 @@
 #include <common/types.h>
 #include <Core/QualifiedTableName.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

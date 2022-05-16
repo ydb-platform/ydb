@@ -9,7 +9,7 @@
 #include <Parsers/ExpressionElementParsers.h>
 #include <Common/IntervalKind.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Consequent pairs of rows: the operator and the corresponding function. For example, "+" -> "plus".

@@ -13,7 +13,7 @@ struct AliasNames
 
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

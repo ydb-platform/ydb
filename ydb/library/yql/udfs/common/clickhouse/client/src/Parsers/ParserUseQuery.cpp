@@ -5,7 +5,7 @@
 #include <Parsers/ASTUseQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool ParserUseQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

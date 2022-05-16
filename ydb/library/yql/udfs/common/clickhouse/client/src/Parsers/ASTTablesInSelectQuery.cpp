@@ -5,7 +5,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 #define CLONE(member) \

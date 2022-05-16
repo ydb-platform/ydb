@@ -2,7 +2,7 @@
 #include <IO/WriteHelpers.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 String ASTPartition::getID(char delim) const

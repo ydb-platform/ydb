@@ -4,7 +4,7 @@
 #include <Common/HashTable/HashMap.h>
 #include <Common/NamePrompter.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

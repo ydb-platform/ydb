@@ -8,7 +8,7 @@
 #include <Parsers/ParserWithElement.h>
 
 
-namespace DB
+namespace NDB
 {
 bool ParserWithElement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {

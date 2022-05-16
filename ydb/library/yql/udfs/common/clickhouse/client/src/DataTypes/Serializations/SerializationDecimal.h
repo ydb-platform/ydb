@@ -2,7 +2,7 @@
 
 #include <DataTypes/Serializations/SerializationDecimalBase.h>
 
-namespace DB
+namespace NDB
 {
 
 template <typename T>

@@ -13,7 +13,7 @@
 #include <Parsers/ParserExternalDDLQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

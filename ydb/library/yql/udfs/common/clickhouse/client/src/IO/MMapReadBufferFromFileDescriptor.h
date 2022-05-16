@@ -4,7 +4,7 @@
 #include <IO/MMappedFileDescriptor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** MMap range in a file and represent it as a ReadBuffer.

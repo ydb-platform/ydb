@@ -3,7 +3,7 @@
 #include <DataTypes/Serializations/SimpleTextSerialization.h>
 #include <DataTypes/Serializations/SerializationTupleElement.h>
 
-namespace DB
+namespace NDB
 {
 
 class SerializationTuple final : public SimpleTextSerialization

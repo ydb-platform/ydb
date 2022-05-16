@@ -23,7 +23,7 @@ namespace Poco
 }
 
 
-namespace DB
+namespace NDB
 {
 
 class QueryStatus;

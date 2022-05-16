@@ -6,7 +6,7 @@
 #include <Interpreters/AddDefaultDatabaseVisitor.h>
 #include <Interpreters/Context.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

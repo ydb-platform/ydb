@@ -62,7 +62,7 @@ extern const size_t MMAP_THRESHOLD;
 
 static constexpr size_t MALLOC_MIN_ALIGNMENT = 8;
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -107,7 +107,7 @@ public:
         }
         catch (...)
         {
-            DB::tryLogCurrentException("Allocator::free");
+            NDB::tryLogCurrentException("Allocator::free");
             throw;
         }
     }
@@ -133,7 +133,7 @@ public:
 
             void * new_buf = ::realloc(buf, new_size);
             if (nullptr == new_buf)
-                DB::throwFromErrno(fmt::format("Allocator: Cannot realloc from {} to {}.", ReadableSize(old_size), ReadableSize(new_size)), DB::ErrorCodes::CANNOT_ALLOCATE_MEMORY);
+                NDB::throwFromErrno(fmt::format("Allocator: Cannot realloc from {} to {}.", ReadableSize(old_size), ReadableSize(new_size)), NDB::ErrorCodes::CANNOT_ALLOCATE_MEMORY);
 
             buf = new_buf;
             if constexpr (clear_memory)
@@ -149,8 +149,8 @@ public:
             buf = clickhouse_mremap(buf, old_size, new_size, MREMAP_MAYMOVE,
                                     PROT_READ | PROT_WRITE, mmap_flags, -1, 0);
             if (MAP_FAILED == buf)
-                DB::throwFromErrno(fmt::format("Allocator: Cannot mremap memory chunk from {} to {}.",
-                    ReadableSize(old_size), ReadableSize(new_size)), DB::ErrorCodes::CANNOT_MREMAP);
+                NDB::throwFromErrno(fmt::format("Allocator: Cannot mremap memory chunk from {} to {}.",
+                    ReadableSize(old_size), ReadableSize(new_size)), NDB::ErrorCodes::CANNOT_MREMAP);
 
             /// No need for zero-fill, because mmap guarantees it.
         }
@@ -207,13 +207,13 @@ private:
         if (size >= MMAP_THRESHOLD)
         {
             if (alignment > mmap_min_alignment)
-                throw DB::Exception(fmt::format("Too large alignment {}: more than page size when allocating {}.",
-                    ReadableSize(alignment), ReadableSize(size)), DB::ErrorCodes::BAD_ARGUMENTS);
+                throw NDB::Exception(fmt::format("Too large alignment {}: more than page size when allocating {}.",
+                    ReadableSize(alignment), ReadableSize(size)), NDB::ErrorCodes::BAD_ARGUMENTS);
 
             buf = mmap(getMmapHint(), size, PROT_READ | PROT_WRITE,
                        mmap_flags, -1, 0);
             if (MAP_FAILED == buf)
-                DB::throwFromErrno(fmt::format("Allocator: Cannot mmap {}.", ReadableSize(size)), DB::ErrorCodes::CANNOT_ALLOCATE_MEMORY);
+                NDB::throwFromErrno(fmt::format("Allocator: Cannot mmap {}.", ReadableSize(size)), NDB::ErrorCodes::CANNOT_ALLOCATE_MEMORY);
 
             /// No need for zero-fill, because mmap guarantees it.
         }
@@ -227,7 +227,7 @@ private:
                     buf = ::malloc(size);
 
                 if (nullptr == buf)
-                    DB::throwFromErrno(fmt::format("Allocator: Cannot malloc {}.", ReadableSize(size)), DB::ErrorCodes::CANNOT_ALLOCATE_MEMORY);
+                    NDB::throwFromErrno(fmt::format("Allocator: Cannot malloc {}.", ReadableSize(size)), NDB::ErrorCodes::CANNOT_ALLOCATE_MEMORY);
             }
             else
             {
@@ -235,8 +235,8 @@ private:
                 int res = posix_memalign(&buf, alignment, size);
 
                 if (0 != res)
-                    DB::throwFromErrno(fmt::format("Cannot allocate memory (posix_memalign) {}.", ReadableSize(size)),
-                        DB::ErrorCodes::CANNOT_ALLOCATE_MEMORY, res);
+                    NDB::throwFromErrno(fmt::format("Cannot allocate memory (posix_memalign) {}.", ReadableSize(size)),
+                        NDB::ErrorCodes::CANNOT_ALLOCATE_MEMORY, res);
 
                 if constexpr (clear_memory)
                     memset(buf, 0, size);
@@ -250,7 +250,7 @@ private:
         if (size >= MMAP_THRESHOLD)
         {
             if (0 != munmap(buf, size))
-                DB::throwFromErrno(fmt::format("Allocator: Cannot munmap {}.", ReadableSize(size)), DB::ErrorCodes::CANNOT_MUNMAP);
+                NDB::throwFromErrno(fmt::format("Allocator: Cannot munmap {}.", ReadableSize(size)), NDB::ErrorCodes::CANNOT_MUNMAP);
         }
         else
         {
@@ -262,7 +262,7 @@ private:
     {
         /// More obvious exception in case of possible overflow (instead of just "Cannot mmap").
         if (size >= 0x8000000000000000ULL)
-            throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "Too large size ({}) passed to allocator. It indicates an error.", size);
+            throw NDB::Exception(NDB::ErrorCodes::LOGICAL_ERROR, "Too large size ({}) passed to allocator. It indicates an error.", size);
     }
 
 #ifndef NDEBUG

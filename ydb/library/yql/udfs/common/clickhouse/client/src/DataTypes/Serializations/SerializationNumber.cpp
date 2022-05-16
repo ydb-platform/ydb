@@ -11,7 +11,7 @@
 #include <Formats/ProtobufWriter.h>
 #include <Core/Field.h>
 
-namespace DB
+namespace NDB
 {
 
 template <typename T>

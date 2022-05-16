@@ -2,7 +2,7 @@
 #include <IO/WriteBuffer.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTAsterisk::clone() const

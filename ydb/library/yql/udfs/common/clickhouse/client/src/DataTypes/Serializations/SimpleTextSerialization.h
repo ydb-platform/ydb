@@ -1,7 +1,7 @@
 #pragma once
 #include <DataTypes/Serializations/ISerialization.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Helper class to define same ISerialization text (de)serialization for all the variants (escaped, quoted, JSON, CSV).

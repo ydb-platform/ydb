@@ -6,7 +6,7 @@
 #include <Client/IConnections.h>
 #include <sys/epoll.h>
 
-namespace DB
+namespace NDB
 {
 
 struct RemoteQueryExecutorRoutine

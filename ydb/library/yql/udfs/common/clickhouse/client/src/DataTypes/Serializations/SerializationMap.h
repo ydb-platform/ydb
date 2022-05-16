@@ -3,7 +3,7 @@
 #include <DataTypes/Serializations/SimpleTextSerialization.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class SerializationMap final : public SimpleTextSerialization

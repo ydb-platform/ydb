@@ -4,7 +4,7 @@
 #include <Common/StringUtils/StringUtils.h>
 
 
-namespace DB
+namespace NDB
 {
 
 template <typename IteratorSrc, typename IteratorDst>

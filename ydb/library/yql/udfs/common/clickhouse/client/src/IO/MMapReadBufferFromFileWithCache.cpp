@@ -1,7 +1,7 @@
 #include <IO/MMapReadBufferFromFileWithCache.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

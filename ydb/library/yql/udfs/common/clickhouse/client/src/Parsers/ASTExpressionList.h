@@ -4,7 +4,7 @@
 #include <Parsers/Lexer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** List of expressions, for example "a, b + c, f(d)"

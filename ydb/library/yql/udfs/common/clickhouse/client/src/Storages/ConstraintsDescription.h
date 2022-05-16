@@ -3,7 +3,7 @@
 #include <Parsers/ASTConstraintDeclaration.h>
 #include <Interpreters/ExpressionActions.h>
 
-namespace DB
+namespace NDB
 {
 
 using ConstraintsExpressions = std::vector<ExpressionActionsPtr>;

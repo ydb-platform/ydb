@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

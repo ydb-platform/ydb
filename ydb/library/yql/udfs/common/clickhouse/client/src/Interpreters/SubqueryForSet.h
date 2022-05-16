@@ -4,7 +4,7 @@
 #include <Storages/IStorage_fwd.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class QueryPlan;

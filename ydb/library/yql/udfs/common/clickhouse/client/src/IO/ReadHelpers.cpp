@@ -14,7 +14,7 @@
     #include <emmintrin.h>
 #endif
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -1119,7 +1119,7 @@ void skipToUnescapedNextLineOrEOF(ReadBuffer & buf)
     }
 }
 
-void saveUpToPosition(ReadBuffer & in, DB::Memory<> & memory, char * current)
+void saveUpToPosition(ReadBuffer & in, Memory<> & memory, char * current)
 {
     assert(current >= in.position());
     assert(current <= in.buffer().end());
@@ -1139,7 +1139,7 @@ void saveUpToPosition(ReadBuffer & in, DB::Memory<> & memory, char * current)
     in.position() = current;
 }
 
-bool loadAtPosition(ReadBuffer & in, DB::Memory<> & memory, char * & current)
+bool loadAtPosition(ReadBuffer & in, Memory<> & memory, char * & current)
 {
     assert(current <= in.buffer().end());
 

@@ -22,7 +22,7 @@
 #include <boost/algorithm/string/case_conv.hpp>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

@@ -19,7 +19,7 @@
 #include "Columns/ColumnConst.h"
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

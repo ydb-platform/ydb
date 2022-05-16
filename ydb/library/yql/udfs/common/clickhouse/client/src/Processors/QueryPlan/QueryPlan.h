@@ -9,7 +9,7 @@
 #include <set>
 #include <vector>
 
-namespace DB
+namespace NDB
 {
 
 class DataStream;

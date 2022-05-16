@@ -4,7 +4,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void ASTOrderByElement::updateTreeHashImpl(SipHash & hash_state) const

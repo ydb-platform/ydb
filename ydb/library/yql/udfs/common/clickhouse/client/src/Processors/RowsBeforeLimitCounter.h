@@ -2,7 +2,7 @@
 #include <atomic>
 #include <memory>
 
-namespace DB
+namespace NDB
 {
 
 /// This class helps to calculate rows_before_limit_at_least.

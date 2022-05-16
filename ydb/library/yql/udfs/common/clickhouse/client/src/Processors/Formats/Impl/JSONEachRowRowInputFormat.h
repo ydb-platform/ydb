@@ -6,7 +6,7 @@
 #include <Common/HashTable/HashMap.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ReadBuffer;

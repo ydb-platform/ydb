@@ -10,7 +10,7 @@ namespace CurrentMetrics
 }
 
 
-namespace DB
+namespace NDB
 {
 
 /// RAII for readonly opened file descriptor.

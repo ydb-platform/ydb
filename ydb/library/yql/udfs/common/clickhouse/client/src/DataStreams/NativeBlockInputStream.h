@@ -4,7 +4,7 @@
 #include <DataStreams/MarkInCompressedFile.h>
 #include <Common/PODArray.h>
 
-namespace DB
+namespace NDB
 {
 
 class CompressedReadBufferFromFile;

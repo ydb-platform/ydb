@@ -5,7 +5,7 @@
 #include <DataStreams/IBlockInputStream.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class IBlockInputStream;

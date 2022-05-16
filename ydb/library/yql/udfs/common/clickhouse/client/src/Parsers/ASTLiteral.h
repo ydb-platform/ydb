@@ -8,7 +8,7 @@
 #include <optional>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Literal (atomic) - number, string, NULL

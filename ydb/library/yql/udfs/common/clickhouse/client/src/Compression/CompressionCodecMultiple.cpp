@@ -11,7 +11,7 @@
 #include <Common/hex.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

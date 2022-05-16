@@ -8,7 +8,7 @@
 namespace Poco { class URI; }
 namespace Poco { namespace Util { class AbstractConfiguration; } }
 
-namespace DB
+namespace NDB
 {
 class RemoteHostFilter
 {

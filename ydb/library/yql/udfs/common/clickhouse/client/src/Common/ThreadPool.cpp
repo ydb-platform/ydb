@@ -8,7 +8,7 @@
 #include <Poco/Util/Application.h>
 #include <Poco/Util/LayeredConfiguration.h>
 
-namespace DB
+namespace NDB
 {
     namespace ErrorCodes
     {
@@ -91,7 +91,7 @@ ReturnType ThreadPoolImpl<Thread>::scheduleImpl(Job job, int priority, std::opti
                 std::swap(exception, first_exception);
                 std::rethrow_exception(exception);
             }
-            throw DB::Exception(DB::ErrorCodes::CANNOT_SCHEDULE_TASK,
+            throw NDB::Exception(NDB::ErrorCodes::CANNOT_SCHEDULE_TASK,
                 "Cannot schedule a task: {} (threads={}, jobs={})", reason,
                 threads.size(), scheduled_jobs);
         }
@@ -320,7 +320,7 @@ void GlobalThreadPool::initialize(size_t max_threads)
 {
     if (the_instance)
     {
-        throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR,
+        throw NDB::Exception(NDB::ErrorCodes::LOGICAL_ERROR,
             "The global thread pool is initialized twice");
     }
 

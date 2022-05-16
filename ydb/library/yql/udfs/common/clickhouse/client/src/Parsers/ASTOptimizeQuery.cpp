@@ -2,7 +2,7 @@
 #include <Common/quoteString.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 void ASTOptimizeQuery::formatQueryImpl(const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const

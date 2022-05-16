@@ -4,7 +4,7 @@
 #include <Common/formatReadable.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

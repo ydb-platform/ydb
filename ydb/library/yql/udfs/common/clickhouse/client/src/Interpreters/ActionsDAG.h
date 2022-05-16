@@ -9,7 +9,7 @@
 //#    include "config_core.h"
 //#endif
 
-namespace DB
+namespace NDB
 {
 
 class ActionsDAG;

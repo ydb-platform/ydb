@@ -6,7 +6,7 @@
 #include <DataStreams/SizeLimits.h>
 #include <Storages/TableLockHolder.h>
 
-namespace DB
+namespace NDB
 {
 
 struct StreamLocalLimits;

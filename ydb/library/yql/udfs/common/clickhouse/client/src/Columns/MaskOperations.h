@@ -5,7 +5,7 @@
 #include <Core/Field.h>
 #include <Common/PODArray.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Expand data by mask. After expanding data will satisfy the following: if we filter data

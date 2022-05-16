@@ -2,7 +2,7 @@
 #include <Common/ActionBlocker.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ActionLock::ActionLock(const ActionBlocker & blocker) : counter_ptr(blocker.counter)

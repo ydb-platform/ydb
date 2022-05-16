@@ -4,7 +4,7 @@
 #include <Common/IntervalKind.h>
 
 
-namespace DB
+namespace NDB
 {
 /// Parses an interval kind.
 bool parseIntervalKind(IParser::Pos & pos, Expected & expected, IntervalKind & result);

@@ -5,7 +5,7 @@
 
 #include <Parsers/ParserSetQuery.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Parser for dictionary lifetime part. It should contain "lifetime" keyword,

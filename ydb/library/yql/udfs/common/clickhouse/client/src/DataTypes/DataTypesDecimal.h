@@ -7,7 +7,7 @@
 #include <DataTypes/DataTypeDecimalBase.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

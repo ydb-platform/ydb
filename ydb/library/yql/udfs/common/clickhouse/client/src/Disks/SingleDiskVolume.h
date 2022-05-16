@@ -2,7 +2,7 @@
 
 #include <Disks/IVolume.h>
 
-namespace DB
+namespace NDB
 {
 
 class SingleDiskVolume : public IVolume

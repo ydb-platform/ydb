@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Element of expression with ASC or DESC,
   *  and possibly with COLLATE.

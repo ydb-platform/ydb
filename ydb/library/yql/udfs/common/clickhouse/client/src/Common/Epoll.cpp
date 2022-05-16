@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <common/logger_useful.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -18,7 +18,7 @@ Epoll::Epoll() : events_count(0)
 {
     epoll_fd = epoll_create1(0);
     if (epoll_fd == -1)
-        throwFromErrno("Cannot open epoll descriptor", DB::ErrorCodes::EPOLL_ERROR);
+        throwFromErrno("Cannot open epoll descriptor", ErrorCodes::EPOLL_ERROR);
 }
 
 Epoll::Epoll(Epoll && other) : epoll_fd(other.epoll_fd), events_count(other.events_count.load())
@@ -46,7 +46,7 @@ void Epoll::add(int fd, void * ptr)
     ++events_count;
 
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event) == -1)
-        throwFromErrno("Cannot add new descriptor to epoll", DB::ErrorCodes::EPOLL_ERROR);
+        throwFromErrno("Cannot add new descriptor to epoll",ErrorCodes::EPOLL_ERROR);
 }
 
 void Epoll::remove(int fd)
@@ -54,7 +54,7 @@ void Epoll::remove(int fd)
     --events_count;
 
     if (epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr) == -1)
-        throwFromErrno("Cannot remove descriptor from epoll", DB::ErrorCodes::EPOLL_ERROR);
+        throwFromErrno("Cannot remove descriptor from epoll",ErrorCodes::EPOLL_ERROR);
 }
 
 size_t Epoll::getManyReady(int max_events, epoll_event * events_out, bool blocking) const
@@ -69,7 +69,7 @@ size_t Epoll::getManyReady(int max_events, epoll_event * events_out, bool blocki
         ready_size = epoll_wait(epoll_fd, events_out, max_events, timeout);
 
         if (ready_size == -1 && errno != EINTR)
-            throwFromErrno("Error in epoll_wait", DB::ErrorCodes::EPOLL_ERROR);
+            throwFromErrno("Error in epoll_wait",ErrorCodes::EPOLL_ERROR);
     }
     while (ready_size <= 0 && (ready_size != 0 || blocking));
 

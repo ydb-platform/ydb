@@ -9,7 +9,7 @@
 #include <Formats/FormatSettings.h>
 #include <Formats/ProtobufReader.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

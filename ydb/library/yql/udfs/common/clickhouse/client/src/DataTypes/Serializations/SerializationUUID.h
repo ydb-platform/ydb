@@ -2,7 +2,7 @@
 
 #include <DataTypes/Serializations/SerializationNumber.h>
 
-namespace DB
+namespace NDB
 {
 
 class SerializationUUID : public SimpleTextSerialization

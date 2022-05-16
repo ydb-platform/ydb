@@ -3,7 +3,7 @@
 #include <IO/WriteHelpers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void FieldVisitorWriteBinary::operator() (const Null &, WriteBuffer &) const {}

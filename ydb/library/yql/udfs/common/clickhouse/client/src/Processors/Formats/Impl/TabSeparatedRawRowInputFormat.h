@@ -6,7 +6,7 @@
 #include <Processors/Formats/RowInputFormatWithDiagnosticInfo.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** A stream to input data in tsv format, but without escaping individual values.

@@ -13,7 +13,7 @@
 #include <valgrind/valgrind.h>
 #endif
 
-namespace DB::ErrorCodes
+namespace NDB::ErrorCodes
 {
     extern const int CANNOT_ALLOCATE_MEMORY;
 }

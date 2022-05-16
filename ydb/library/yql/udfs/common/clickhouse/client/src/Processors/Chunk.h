@@ -3,7 +3,7 @@
 #include <Columns/IColumn.h>
 #include <unordered_map>
 
-namespace DB
+namespace NDB
 {
 
 class ChunkInfo

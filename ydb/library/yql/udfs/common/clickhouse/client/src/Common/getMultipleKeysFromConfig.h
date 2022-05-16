@@ -9,7 +9,7 @@ namespace Util
     class AbstractConfiguration;
 }
 }
-namespace DB
+namespace NDB
 {
 /// get all internal key names for given key
 std::vector<std::string> getMultipleKeysFromConfig(const Poco::Util::AbstractConfiguration & config, const std::string & root, const std::string & name);

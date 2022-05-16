@@ -7,7 +7,7 @@
 #include <optional>
 
 
-namespace DB
+namespace NDB
 {
 
 struct IdentifierSemantic;

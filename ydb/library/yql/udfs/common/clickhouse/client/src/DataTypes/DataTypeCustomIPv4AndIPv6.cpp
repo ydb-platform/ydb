@@ -2,7 +2,7 @@
 #include <DataTypes/DataTypeFactory.h>
 #include <DataTypes/DataTypeCustom.h>
 
-namespace DB
+namespace NDB
 {
 
 void registerDataTypeDomainIPv4AndIPv6(DataTypeFactory & factory)

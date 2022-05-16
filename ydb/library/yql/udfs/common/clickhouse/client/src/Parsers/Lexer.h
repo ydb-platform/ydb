@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 
-namespace DB
+namespace NDB
 {
 
 #define APPLY_FOR_TOKENS(M) \

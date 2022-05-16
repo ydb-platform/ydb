@@ -1,7 +1,7 @@
 #pragma once
 #include <Parsers/IParser.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Parses [db.]name

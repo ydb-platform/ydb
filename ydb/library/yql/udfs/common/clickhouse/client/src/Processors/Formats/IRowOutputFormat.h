@@ -6,7 +6,7 @@
 #include <string>
 
 
-namespace DB
+namespace NDB
 {
 
 struct RowOutputFormatParams

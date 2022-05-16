@@ -7,7 +7,7 @@
 #include <string.h>
 #include <boost/program_options/options_description.hpp>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

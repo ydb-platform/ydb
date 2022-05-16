@@ -3,7 +3,7 @@
 #include <Common/IntervalKind.h>
 
 
-namespace DB
+namespace NDB
 {
 bool parseIntervalKind(IParser::Pos & pos, Expected & expected, IntervalKind & result)
 {

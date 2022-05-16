@@ -4,7 +4,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void formatSettingName(const String & setting_name, WriteBuffer & out)

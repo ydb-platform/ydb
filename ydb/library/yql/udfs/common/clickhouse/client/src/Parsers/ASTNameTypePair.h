@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** A pair of the name and type. For example, browser FixedString(2).

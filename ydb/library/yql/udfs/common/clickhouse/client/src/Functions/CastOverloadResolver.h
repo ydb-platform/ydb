@@ -1,7 +1,7 @@
 #pragma once
 #include <Functions/FunctionsConversion.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

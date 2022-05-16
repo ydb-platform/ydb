@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <Common/Epoll.h>
 
-namespace DB
+namespace NDB
 {
 
 #if defined(OS_LINUX)

@@ -38,7 +38,7 @@ namespace Util
 ///    and it actually recreates OwnSplitChannel when reconfiguration happen,
 ///    so that makes it's quite tricky. So it a bad candidate for owning masker too.
 
-namespace DB
+namespace NDB
 {
 class SensitiveDataMasker
 {

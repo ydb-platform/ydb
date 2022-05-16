@@ -3,7 +3,7 @@
 #include <IO/ReadBufferFromMemory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Allows to read from std::string-like object.

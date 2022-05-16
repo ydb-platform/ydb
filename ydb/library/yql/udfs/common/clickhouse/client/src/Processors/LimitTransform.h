@@ -4,7 +4,7 @@
 #include <Processors/RowsBeforeLimitCounter.h>
 #include <Core/SortDescription.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Implementation for LIMIT N OFFSET M

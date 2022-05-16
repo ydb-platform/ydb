@@ -1,7 +1,7 @@
 #include <Processors/Formats/OutputStreamToOutputFormat.h>
 #include <Processors/Formats/IOutputFormat.h>
 
-namespace DB
+namespace NDB
 {
 
 Block OutputStreamToOutputFormat::getHeader() const

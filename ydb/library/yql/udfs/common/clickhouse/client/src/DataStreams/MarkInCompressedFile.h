@@ -7,7 +7,7 @@
 #include <Common/PODArray.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Mark is the position in the compressed file. The compressed file consists of adjacent compressed blocks.
@@ -30,12 +30,12 @@ struct MarkInCompressedFile
 
     String toString() const
     {
-        return "(" + DB::toString(offset_in_compressed_file) + "," + DB::toString(offset_in_decompressed_block) + ")";
+        return "(" + NDB::toString(offset_in_compressed_file) + "," + NDB::toString(offset_in_decompressed_block) + ")";
     }
 
     String toStringWithRows(size_t rows_num)
     {
-        return "(" + DB::toString(offset_in_compressed_file) + "," + DB::toString(offset_in_decompressed_block) + "," + DB::toString(rows_num) + ")";
+        return "(" + NDB::toString(offset_in_compressed_file) + "," + NDB::toString(offset_in_decompressed_block) + "," + NDB::toString(rows_num) + ")";
     }
 
 };

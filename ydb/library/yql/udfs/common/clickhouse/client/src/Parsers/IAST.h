@@ -15,7 +15,7 @@
 class SipHash;
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

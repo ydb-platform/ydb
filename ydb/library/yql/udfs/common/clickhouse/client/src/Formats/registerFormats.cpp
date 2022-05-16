@@ -5,7 +5,7 @@
 #include <Formats/FormatFactory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void registerInputFormatProcessorNative(FormatFactory & factory);
@@ -23,16 +23,19 @@ void registerFormats()
 {
     auto & factory = FormatFactory::instance();
 
-    registerInputFormatProcessorNative(factory);
-    registerInputFormatProcessorJSONEachRow(factory);
-    registerInputFormatProcessorRawBLOB(factory);
-    registerInputFormatProcessorORC(factory);
-    registerInputFormatProcessorArrow(factory);
-    registerInputFormatProcessorParquet(factory);
-    registerInputFormatProcessorAvro(factory);
-    registerInputFormatProcessorCSV(factory);
-    registerInputFormatProcessorTSKV(factory);
-    registerInputFormatProcessorTabSeparated(factory);
+    const std::unique_lock lock(factory.getSync());
+    if (factory.getAllFormats().empty()) {
+        registerInputFormatProcessorNative(factory);
+        registerInputFormatProcessorJSONEachRow(factory);
+        registerInputFormatProcessorRawBLOB(factory);
+        registerInputFormatProcessorORC(factory);
+        registerInputFormatProcessorArrow(factory);
+        registerInputFormatProcessorParquet(factory);
+        registerInputFormatProcessorAvro(factory);
+        registerInputFormatProcessorCSV(factory);
+        registerInputFormatProcessorTSKV(factory);
+        registerInputFormatProcessorTabSeparated(factory);
+    }
 }
 
 }

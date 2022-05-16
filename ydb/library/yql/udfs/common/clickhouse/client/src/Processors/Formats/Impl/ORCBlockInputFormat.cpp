@@ -11,7 +11,7 @@
 #include "ArrowColumnToCHColumn.h"
 #include <DataTypes/NestedUtils.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -141,7 +141,7 @@ void registerInputFormatProcessorORC(FormatFactory &factory)
 }
 #else
 
-namespace DB
+namespace NDB
 {
     class FormatFactory;
     void registerInputFormatProcessorORC(FormatFactory &)

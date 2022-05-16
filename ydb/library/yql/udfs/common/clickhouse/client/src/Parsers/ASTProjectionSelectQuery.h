@@ -4,7 +4,7 @@
 #include <Parsers/IAST.h>
 
 
-namespace DB
+namespace NDB
 {
 /** PROJECTION SELECT query
   */

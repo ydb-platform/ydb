@@ -4,7 +4,7 @@
 #include <Parsers/ExpressionElementParsers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Query (EXISTS | SHOW CREATE) [DATABASE|TABLE|DICTIONARY] [db.]name [FORMAT format]

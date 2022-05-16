@@ -2,7 +2,7 @@
 
 #include <DataTypes/Serializations/SerializationWrapper.h>
 
-namespace DB
+namespace NDB
 {
 
 class SerializationTupleElement final : public SerializationWrapper

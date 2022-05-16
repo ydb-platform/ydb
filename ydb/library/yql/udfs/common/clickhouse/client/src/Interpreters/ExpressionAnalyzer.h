@@ -12,7 +12,7 @@
 #include <Storages/IStorage_fwd.h>
 #include <Storages/SelectQueryInfo.h>
 
-namespace DB
+namespace NDB
 {
 
 class Block;

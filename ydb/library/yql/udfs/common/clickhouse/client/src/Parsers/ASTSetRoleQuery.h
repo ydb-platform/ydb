@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 
 
-namespace DB
+namespace NDB
 {
 class ASTRolesOrUsersSet;
 

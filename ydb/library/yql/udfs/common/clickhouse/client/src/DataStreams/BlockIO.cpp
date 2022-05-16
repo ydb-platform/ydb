@@ -2,7 +2,7 @@
 #include <Interpreters/ProcessList.h>
 #include <Processors/Executors/PipelineExecutingBlockInputStream.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

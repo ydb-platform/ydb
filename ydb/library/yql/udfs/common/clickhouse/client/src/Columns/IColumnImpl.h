@@ -9,7 +9,7 @@
 #include <Columns/IColumn.h>
 #include <Common/PODArray.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

@@ -13,7 +13,7 @@
 #include <shared_mutex>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

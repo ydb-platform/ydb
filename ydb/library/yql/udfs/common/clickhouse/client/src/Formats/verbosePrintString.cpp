@@ -3,7 +3,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void verbosePrintString(const char * begin, const char * end, WriteBuffer & out)

@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Parses queries like
   * BACKUP { TABLE [db.]table_name [AS [db.]table_name_in_backup] [PARTITION[S] partition_expr [,...]] |

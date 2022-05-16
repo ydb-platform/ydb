@@ -5,7 +5,7 @@
 #    include <common/types.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Encodes `text` and returns it.

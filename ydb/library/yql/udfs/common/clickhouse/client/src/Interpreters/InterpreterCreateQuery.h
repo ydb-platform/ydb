@@ -8,7 +8,7 @@
 #include <Storages/StorageInMemoryMetadata.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ASTCreateQuery;

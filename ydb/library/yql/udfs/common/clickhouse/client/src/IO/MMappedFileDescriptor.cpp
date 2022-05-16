@@ -11,7 +11,7 @@
 #include <IO/MMappedFileDescriptor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

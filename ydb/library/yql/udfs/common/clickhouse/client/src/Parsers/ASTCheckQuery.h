@@ -4,7 +4,7 @@
 #include <Common/quoteString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 struct ASTCheckQuery : public ASTQueryWithTableAndOutput

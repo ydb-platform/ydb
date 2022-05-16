@@ -3,7 +3,7 @@
 #include <Parsers/ASTWithAlias.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Parameter in query with name and type of substitution ({name:type}).

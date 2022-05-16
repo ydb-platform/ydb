@@ -9,7 +9,7 @@
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTSelectQuery.h>
 
-namespace DB
+namespace NDB
 {
 
 struct IdentifierSemanticImpl

@@ -10,7 +10,7 @@
 #include <IO/BufferBase.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

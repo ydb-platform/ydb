@@ -5,7 +5,7 @@
 #include <Parsers/ExpressionElementParsers.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Query (DESCRIBE | DESC) ([TABLE] [db.]name | tableFunction) [FORMAT format]

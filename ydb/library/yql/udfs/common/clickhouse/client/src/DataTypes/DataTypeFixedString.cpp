@@ -18,7 +18,7 @@
 #include <Common/assert_cast.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

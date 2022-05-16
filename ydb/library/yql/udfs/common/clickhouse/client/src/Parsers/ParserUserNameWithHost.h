@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Parses a user name.
   * It can be a simple string or identifier or something like `name@host`.

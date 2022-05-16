@@ -3,7 +3,7 @@
 #include <IO/WriteHelpers.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -20,7 +20,7 @@ IRowOutputFormat::IRowOutputFormat(const Block & header, WriteBuffer & out_, con
         serializations.push_back(type->getDefaultSerialization());
 }
 
-void IRowOutputFormat::consume(DB::Chunk chunk)
+void IRowOutputFormat::consume(Chunk chunk)
 {
     writePrefixIfNot();
 
@@ -41,7 +41,7 @@ void IRowOutputFormat::consume(DB::Chunk chunk)
     }
 }
 
-void IRowOutputFormat::consumeTotals(DB::Chunk chunk)
+void IRowOutputFormat::consumeTotals(Chunk chunk)
 {
     writePrefixIfNot();
     writeSuffixIfNot();
@@ -57,7 +57,7 @@ void IRowOutputFormat::consumeTotals(DB::Chunk chunk)
     writeAfterTotals();
 }
 
-void IRowOutputFormat::consumeExtremes(DB::Chunk chunk)
+void IRowOutputFormat::consumeExtremes(Chunk chunk)
 {
     writePrefixIfNot();
     writeSuffixIfNot();
@@ -98,17 +98,17 @@ void IRowOutputFormat::write(const Columns & columns, size_t row_num)
     writeRowEndDelimiter();
 }
 
-void IRowOutputFormat::writeMinExtreme(const DB::Columns & columns, size_t row_num)
+void IRowOutputFormat::writeMinExtreme(const Columns & columns, size_t row_num)
 {
     write(columns, row_num);
 }
 
-void IRowOutputFormat::writeMaxExtreme(const DB::Columns & columns, size_t row_num) //-V524
+void IRowOutputFormat::writeMaxExtreme(const Columns & columns, size_t row_num) //-V524
 {
     write(columns, row_num);
 }
 
-void IRowOutputFormat::writeTotals(const DB::Columns & columns, size_t row_num)
+void IRowOutputFormat::writeTotals(const Columns & columns, size_t row_num)
 {
     write(columns, row_num);
 }

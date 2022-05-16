@@ -15,7 +15,7 @@
 #include <common/DateLUT.h>
 #include <common/types.h>
 
-namespace DB
+namespace NDB
 {
 NamesAndTypesList QueryViewsLogElement::getNamesAndTypes()
 {

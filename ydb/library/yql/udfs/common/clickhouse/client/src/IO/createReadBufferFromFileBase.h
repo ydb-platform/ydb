@@ -6,7 +6,7 @@
 #include <memory>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Create an object to read data from a file.

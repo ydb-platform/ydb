@@ -65,7 +65,7 @@
 #include <Poco/URI.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -817,7 +817,7 @@ void registerInputFormatProcessorAvro(FormatFactory & factory)
 
 #else
 
-namespace DB
+namespace NDB
 {
 class FormatFactory;
 void registerInputFormatProcessorAvro(FormatFactory &)

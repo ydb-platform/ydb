@@ -29,7 +29,7 @@
 #include <Poco/Util/AbstractConfiguration.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

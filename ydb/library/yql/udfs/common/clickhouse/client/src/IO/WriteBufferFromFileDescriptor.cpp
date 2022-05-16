@@ -27,7 +27,7 @@ namespace CurrentMetrics
     extern const Metric Write;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

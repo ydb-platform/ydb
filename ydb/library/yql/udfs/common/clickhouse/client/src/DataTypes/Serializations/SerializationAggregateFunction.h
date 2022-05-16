@@ -5,7 +5,7 @@
 #include <DataTypes/Serializations/ISerialization.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class SerializationAggregateFunction final : public ISerialization

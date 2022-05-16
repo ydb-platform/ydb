@@ -10,7 +10,7 @@
 #include <Poco/Logger.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

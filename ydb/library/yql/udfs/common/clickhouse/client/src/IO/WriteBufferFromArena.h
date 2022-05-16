@@ -5,7 +5,7 @@
 #include <IO/WriteBuffer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Writes data contiguously into Arena.

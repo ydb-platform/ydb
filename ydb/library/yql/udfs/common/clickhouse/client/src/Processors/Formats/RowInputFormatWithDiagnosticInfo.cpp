@@ -4,7 +4,7 @@
 #include <IO/WriteBufferFromString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

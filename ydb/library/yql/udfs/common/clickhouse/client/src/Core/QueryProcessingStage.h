@@ -3,7 +3,7 @@
 #include <common/types.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Up to what stage the SELECT query is executed or needs to be executed.

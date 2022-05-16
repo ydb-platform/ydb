@@ -5,7 +5,7 @@
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypesNumber.h>
 
-namespace DB
+namespace NDB
 {
 
 void registerDataTypeDomainGeo(DataTypeFactory & factory)

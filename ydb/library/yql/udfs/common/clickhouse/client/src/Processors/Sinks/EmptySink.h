@@ -1,7 +1,7 @@
 #pragma once
 #include <Processors/ISink.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Sink which reads everything and do nothing with it.

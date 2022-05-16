@@ -3,7 +3,7 @@
 #include <DataTypes/IDataTypeDummy.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Data type that cannot have any values.

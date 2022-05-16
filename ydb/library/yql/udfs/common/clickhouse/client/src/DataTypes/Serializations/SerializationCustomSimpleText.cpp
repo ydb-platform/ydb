@@ -8,7 +8,7 @@
 namespace
 {
 
-using namespace DB;
+using namespace NDB;
 
 String serializeToString(const SerializationCustomSimpleText & domain, const IColumn & column, size_t row_num, const FormatSettings & settings)
 {
@@ -26,7 +26,7 @@ void deserializeFromString(const SerializationCustomSimpleText & domain, IColumn
 
 }
 
-namespace DB
+namespace NDB
 {
 
 SerializationCustomSimpleText::SerializationCustomSimpleText(const SerializationPtr & nested_)

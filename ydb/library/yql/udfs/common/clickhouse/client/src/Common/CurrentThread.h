@@ -16,7 +16,7 @@ class Counters;
 class MemoryTracker;
 
 
-namespace DB
+namespace NDB
 {
 
 class QueryStatus;

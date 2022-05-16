@@ -17,7 +17,7 @@
 #include <cassert>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

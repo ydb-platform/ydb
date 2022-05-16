@@ -5,7 +5,7 @@
 #include <Core/Types.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Allows get the result type of the functions +, -, *, /, %, intDiv (integer division).

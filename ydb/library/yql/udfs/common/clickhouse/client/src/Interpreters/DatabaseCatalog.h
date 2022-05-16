@@ -21,7 +21,7 @@
 #include <unordered_set>
 
 
-namespace DB
+namespace NDB
 {
 
 class IDatabase;

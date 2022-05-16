@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTSelectWithUnionQuery::clone() const

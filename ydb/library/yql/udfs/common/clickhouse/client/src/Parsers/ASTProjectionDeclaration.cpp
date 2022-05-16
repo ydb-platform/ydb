@@ -2,7 +2,7 @@
 #include <Common/quoteString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTProjectionDeclaration::clone() const

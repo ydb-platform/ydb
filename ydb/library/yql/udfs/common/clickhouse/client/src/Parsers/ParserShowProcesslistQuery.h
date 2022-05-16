@@ -6,7 +6,7 @@
 #include <Parsers/ASTShowProcesslistQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Query SHOW PROCESSLIST

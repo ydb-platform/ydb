@@ -12,7 +12,7 @@ namespace ErrorCodes
 }
 
 
-namespace DB
+namespace NDB
 {
 
 static bool parseQueryWithOnClusterAndMaybeTable(std::shared_ptr<ASTSystemQuery> & res, IParser::Pos & pos,

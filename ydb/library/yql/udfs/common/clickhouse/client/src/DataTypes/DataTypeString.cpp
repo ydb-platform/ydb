@@ -25,7 +25,7 @@
 #endif
 
 
-namespace DB
+namespace NDB
 {
 
 

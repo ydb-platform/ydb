@@ -7,7 +7,7 @@
 #include <Parsers/ASTIdentifier.h>
 
 
-namespace DB
+namespace NDB
 {
 /// Parser for dictionary attribute declaration, similar with parser for table
 /// column, but attributes has less parameters. Produces

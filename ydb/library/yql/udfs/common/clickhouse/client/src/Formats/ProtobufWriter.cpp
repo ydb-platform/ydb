@@ -4,7 +4,7 @@
 #   include <IO/WriteHelpers.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace
 {

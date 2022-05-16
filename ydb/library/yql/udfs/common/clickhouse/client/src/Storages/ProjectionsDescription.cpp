@@ -16,7 +16,7 @@
 
 #include <DataStreams/SquashingBlockInputStream.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

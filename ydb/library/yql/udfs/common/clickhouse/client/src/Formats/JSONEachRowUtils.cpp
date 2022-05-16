@@ -1,7 +1,7 @@
 #include <IO/ReadHelpers.h>
 #include <common/find_symbols.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -9,7 +9,7 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-std::pair<bool, size_t> fileSegmentationEngineJSONEachRowImpl(ReadBuffer & in, DB::Memory<> & memory, size_t min_chunk_size)
+std::pair<bool, size_t> fileSegmentationEngineJSONEachRowImpl(ReadBuffer & in, Memory<> & memory, size_t min_chunk_size)
 {
     skipWhitespaceIfAny(in);
 

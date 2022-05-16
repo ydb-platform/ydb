@@ -8,7 +8,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTStorage::clone() const

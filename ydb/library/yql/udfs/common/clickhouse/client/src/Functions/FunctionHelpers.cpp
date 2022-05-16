@@ -9,7 +9,7 @@
 #include <DataTypes/DataTypeNullable.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

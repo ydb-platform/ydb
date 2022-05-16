@@ -11,7 +11,7 @@
 #include <string_view>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

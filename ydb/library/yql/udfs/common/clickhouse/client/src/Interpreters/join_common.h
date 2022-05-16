@@ -6,7 +6,7 @@
 #include <Interpreters/ActionsDAG.h>
 #include <Interpreters/ExpressionActions.h>
 
-namespace DB
+namespace NDB
 {
 
 struct ColumnWithTypeAndName;

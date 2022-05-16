@@ -7,7 +7,7 @@
 #include <IO/WriteBuffer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 MutableColumnPtr DataTypeNothing::createColumn() const

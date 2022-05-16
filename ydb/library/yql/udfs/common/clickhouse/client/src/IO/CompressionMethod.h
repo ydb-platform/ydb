@@ -6,7 +6,7 @@
 #include <Core/Defines.h>
 
 
-namespace DB
+namespace NDB
 {
 class ReadBuffer;
 class WriteBuffer;

@@ -1,7 +1,7 @@
 #include <Parsers/queryToString.h>
 #include <Parsers/formatAST.h>
 
-namespace DB
+namespace NDB
 {
     String queryToString(const ASTPtr & query)
     {

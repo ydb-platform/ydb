@@ -5,7 +5,7 @@
 #include <Compression/CompressedReadBuffer.h>
 #include <Common/Stopwatch.h>
 
-namespace DB
+namespace NDB
 {
 
 class AggregatedArenasChunkInfo : public ChunkInfo

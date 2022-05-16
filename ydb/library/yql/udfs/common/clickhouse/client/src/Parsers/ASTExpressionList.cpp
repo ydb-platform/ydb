@@ -2,7 +2,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ASTPtr ASTExpressionList::clone() const

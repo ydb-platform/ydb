@@ -13,7 +13,7 @@
 #include <Poco/Event.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

@@ -4,7 +4,7 @@
 #include <Parsers/ASTRenameQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class AccessRightsElements;

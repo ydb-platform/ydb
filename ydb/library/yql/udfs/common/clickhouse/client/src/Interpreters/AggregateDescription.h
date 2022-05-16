@@ -5,7 +5,7 @@
 #include <Core/Names.h>
 #include <Core/Types.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace JSONBuilder { class JSONMap; }

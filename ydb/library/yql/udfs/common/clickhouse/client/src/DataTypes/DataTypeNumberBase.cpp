@@ -10,7 +10,7 @@
 #include <Formats/FormatSettings.h>
 
 
-namespace DB
+namespace NDB
 {
 
 template <typename T>

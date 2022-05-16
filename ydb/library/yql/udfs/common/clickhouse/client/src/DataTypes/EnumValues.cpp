@@ -1,6 +1,6 @@
 #include <DataTypes/EnumValues.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

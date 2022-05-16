@@ -7,7 +7,7 @@
 #include <Parsers/ASTFunction.h>
 #include <Common/typeid_cast.h>
 
-namespace DB
+namespace NDB
 {
 
 bool ParserPartition::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

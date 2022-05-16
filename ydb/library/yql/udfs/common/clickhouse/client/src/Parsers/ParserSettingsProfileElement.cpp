@@ -9,7 +9,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 
-namespace DB
+namespace NDB
 {
 namespace
 {

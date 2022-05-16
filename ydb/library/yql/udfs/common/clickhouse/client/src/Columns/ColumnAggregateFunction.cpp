@@ -15,7 +15,7 @@
 #include <Common/HashTable/Hash.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

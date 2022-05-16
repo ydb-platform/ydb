@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 #include <Parsers/IParser.h>
 
-namespace DB
+namespace NDB
 {
 
 /// TODO: Quite messy.

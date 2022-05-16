@@ -6,7 +6,7 @@
 #include <limits>
 
 
-namespace DB
+namespace NDB
 {
 
 class RowInputFormatWithDiagnosticInfo : public IRowInputFormat

@@ -10,7 +10,7 @@
 #include <Compression/CompressionFactory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class CompressedWriteBuffer : public BufferWithOwnMemory<WriteBuffer>

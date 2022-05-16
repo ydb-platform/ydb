@@ -3,7 +3,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Interpreters/StorageID.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Select query for different view in storages

@@ -7,7 +7,7 @@
 #include <DataTypes/DataTypeDateTime64.h>
 #include <DataTypes/DataTypeFactory.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

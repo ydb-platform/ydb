@@ -19,7 +19,7 @@
 #endif
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -53,7 +53,7 @@ MutableColumnPtr ColumnFixedString::cloneResized(size_t size) const
 
 void ColumnFixedString::insert(const Field & x)
 {
-    const String & s = DB::get<const String &>(x);
+    const String & s = NDB::get<const String &>(x);
 
     if (s.size() > n)
         throw Exception("Too large string '" + s + "' for FixedString column", ErrorCodes::TOO_LARGE_STRING_SIZE);

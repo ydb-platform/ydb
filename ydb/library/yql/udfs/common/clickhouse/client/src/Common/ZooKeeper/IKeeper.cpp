@@ -2,7 +2,7 @@
 #include <Common/ZooKeeper/IKeeper.h>
 
 
-namespace DB
+namespace NDB
 {
     namespace ErrorCodes
     {
@@ -22,7 +22,7 @@ namespace Coordination
 {
 
 Exception::Exception(const std::string & msg, const Error code_, int)
-    : DB::Exception(msg, DB::ErrorCodes::KEEPER_EXCEPTION), code(code_)
+    : NDB::Exception(msg, NDB::ErrorCodes::KEEPER_EXCEPTION), code(code_)
 {
     if (Coordination::isUserError(code))
         ProfileEvents::increment(ProfileEvents::ZooKeeperUserExceptions);
@@ -50,7 +50,7 @@ Exception::Exception(const Error code_, const std::string & path)
 Exception::Exception(const Exception & exc) = default;
 
 
-using namespace DB;
+using namespace NDB;
 
 
 static void addRootPath(String & path, const String & root_path)

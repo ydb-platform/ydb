@@ -35,7 +35,7 @@ extern const Event InsertedBytes;
 /// Implement some methods of ThreadStatus and CurrentThread here to avoid extra linking dependencies in clickhouse_common_io
 /// TODO It doesn't make sense.
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

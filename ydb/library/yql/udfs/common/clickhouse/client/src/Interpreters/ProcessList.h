@@ -30,7 +30,7 @@ namespace CurrentMetrics
     extern const Metric Query;
 }
 
-namespace DB
+namespace NDB
 {
 
 struct Settings;

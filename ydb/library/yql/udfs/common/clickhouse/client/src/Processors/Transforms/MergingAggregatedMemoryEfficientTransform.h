@@ -6,7 +6,7 @@
 #include <Processors/ResizeProcessor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Pre-aggregates data from ports, holding in RAM only one or more (up to merging_threads) blocks from each source.

@@ -5,7 +5,7 @@
 
 #include <cstddef>
 
-namespace DB
+namespace NDB
 {
 
 struct Settings;

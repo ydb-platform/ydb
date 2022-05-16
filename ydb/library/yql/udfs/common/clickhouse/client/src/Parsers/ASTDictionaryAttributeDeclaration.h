@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 #include <Parsers/ASTExpressionList.h>
 
-namespace DB
+namespace NDB
 {
 
 /// AST for single dictionary attribute in dictionary DDL query

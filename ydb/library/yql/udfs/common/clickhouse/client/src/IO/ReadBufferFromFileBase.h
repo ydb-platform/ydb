@@ -16,7 +16,7 @@
 #endif
 
 
-namespace DB
+namespace NDB
 {
 class ReadBufferFromFileBase : public BufferWithOwnMemory<SeekableReadBuffer>
 {

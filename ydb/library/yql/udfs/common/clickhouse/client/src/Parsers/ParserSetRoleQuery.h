@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Parses queries like
   * SET ROLE {DEFAULT | NONE | role [,...] | ALL | ALL EXCEPT role [,...]}

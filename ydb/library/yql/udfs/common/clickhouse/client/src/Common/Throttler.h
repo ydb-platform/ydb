@@ -5,7 +5,7 @@
 #include <common/sleep.h>
 #include <atomic>
 
-namespace DB
+namespace NDB
 {
 
 /** Allows you to limit the speed of something (in entities per second) using sleep.

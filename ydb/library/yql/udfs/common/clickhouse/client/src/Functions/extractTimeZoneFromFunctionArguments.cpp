@@ -7,7 +7,7 @@
 #include <common/DateLUT.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

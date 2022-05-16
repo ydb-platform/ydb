@@ -17,7 +17,7 @@
 #include <DataTypes/Serializations/SerializationLowCardinality.h>
 #include <Parsers/IAST.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

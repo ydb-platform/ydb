@@ -4,7 +4,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 String ASTShowGrantsQuery::getID(char) const
 {

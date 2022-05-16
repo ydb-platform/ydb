@@ -13,7 +13,6 @@
 #include <common/demangle.h>
 #include <common/errnoToString.h>
 #include <Common/formatReadable.h>
-#include <Common/filesystemHelpers.h>
 #include <Common/ErrorCodes.h>
 #include <filesystem>
 
@@ -25,7 +24,7 @@
 
 namespace fs = std::filesystem;
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -174,31 +173,6 @@ void tryLogCurrentException(Poco::Logger * logger, const std::string & start_of_
     tryLogCurrentExceptionImpl(logger, start_of_message);
 }
 
-static void getNoSpaceLeftInfoMessage(std::filesystem::path path, String & msg)
-{
-    path = std::filesystem::absolute(path);
-    /// It's possible to get ENOSPC for non existent file (e.g. if there are no free inodes and creat() fails)
-    /// So try to get info for existent parent directory.
-    while (!std::filesystem::exists(path) && path.has_relative_path())
-        path = path.parent_path();
-
-    auto fs = getStatVFS(path);
-    auto mount_point = getMountPoint(path).string();
-
-    fmt::format_to(std::back_inserter(msg),
-        "\nTotal space: {}\nAvailable space: {}\nTotal inodes: {}\nAvailable inodes: {}\nMount point: {}",
-        ReadableSize(fs.f_blocks * fs.f_bsize),
-        ReadableSize(fs.f_bavail * fs.f_bsize),
-        formatReadableQuantity(fs.f_files),
-        formatReadableQuantity(fs.f_favail),
-        mount_point);
-
-#if defined(__linux__)
-    msg += "\nFilesystem: " + getFilesystemName(mount_point);
-#endif
-}
-
-
 /** It is possible that the system has enough memory,
   *  but we have shortage of the number of available memory mappings.
   * Provide good diagnostic to user in that case.
@@ -263,16 +237,11 @@ static std::string getExtraExceptionInfo(const std::exception & e)
     {
         if (const auto * file_exception = dynamic_cast<const fs::filesystem_error *>(&e))
         {
-            if (file_exception->code() == std::errc::no_space_on_device)
-                getNoSpaceLeftInfoMessage(file_exception->path1(), msg);
-            else
-                msg += "\nCannot print extra info for Poco::Exception";
+            msg += "\nCannot print extra info for Poco::Exception";
         }
-        else if (const auto * errno_exception = dynamic_cast<const DB::ErrnoException *>(&e))
+        else if (const auto * errno_exception = dynamic_cast<const NDB::ErrnoException *>(&e))
         {
-            if (errno_exception->getErrno() == ENOSPC && errno_exception->getPath())
-                getNoSpaceLeftInfoMessage(errno_exception->getPath().value(), msg);
-            else if (errno_exception->code() == ErrorCodes::CANNOT_ALLOCATE_MEMORY
+            if (errno_exception->code() == ErrorCodes::CANNOT_ALLOCATE_MEMORY
                 || errno_exception->code() == ErrorCodes::CANNOT_MREMAP)
                 getNotEnoughMemoryMessage(msg);
         }

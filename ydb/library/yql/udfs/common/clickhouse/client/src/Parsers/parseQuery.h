@@ -3,7 +3,7 @@
 #include <Parsers/IParser.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// Parse query or set 'out_error_message'.

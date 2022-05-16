@@ -2,7 +2,7 @@
 #include <DataTypes/DataTypeAggregateFunction.h>
 
 
-namespace DB
+namespace NDB
 {
 
 DataTypePtr IAggregateFunction::getStateType() const

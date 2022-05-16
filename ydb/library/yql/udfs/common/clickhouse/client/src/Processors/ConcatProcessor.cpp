@@ -1,7 +1,7 @@
 #include <Processors/ConcatProcessor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ConcatProcessor::ConcatProcessor(const Block & header, size_t num_inputs)

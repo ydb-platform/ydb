@@ -5,7 +5,7 @@
 #include <Common/typeid_cast.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool ParserUnionQueryElement::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

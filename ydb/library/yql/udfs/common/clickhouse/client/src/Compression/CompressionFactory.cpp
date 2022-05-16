@@ -12,7 +12,7 @@
 
 #include <boost/algorithm/string/join.hpp>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

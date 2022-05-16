@@ -20,7 +20,7 @@
     #include <emmintrin.h>
 #endif
 
-namespace DB
+namespace NDB
 {
 
 void SerializationString::serializeBinary(const Field & field, WriteBuffer & ostr) const

@@ -10,7 +10,7 @@
 #include <type_traits>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

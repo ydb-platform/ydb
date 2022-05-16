@@ -12,7 +12,7 @@
 #include <vector>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Container for set of columns for bunch of rows in memory.

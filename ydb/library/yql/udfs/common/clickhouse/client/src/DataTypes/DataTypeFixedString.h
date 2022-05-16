@@ -6,7 +6,7 @@
 #define MAX_FIXEDSTRING_SIZE 0xFFFFFF
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

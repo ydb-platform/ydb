@@ -2,7 +2,7 @@
 
 #include <Common/RWLock.h>
 
-namespace DB
+namespace NDB
 {
 
 using TableLockHolder = RWLockImpl::LockHolder;

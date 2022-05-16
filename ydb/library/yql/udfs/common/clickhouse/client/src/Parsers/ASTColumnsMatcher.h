@@ -9,7 +9,7 @@ namespace re2
 }
 
 
-namespace DB
+namespace NDB
 {
 
 class WriteBuffer;

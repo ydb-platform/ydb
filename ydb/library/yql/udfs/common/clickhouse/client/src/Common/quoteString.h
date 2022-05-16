@@ -4,7 +4,7 @@
 #include <common/StringRef.h>
 
 
-namespace DB
+namespace NDB
 {
 /// Quote the string.
 String quoteString(const StringRef & x);

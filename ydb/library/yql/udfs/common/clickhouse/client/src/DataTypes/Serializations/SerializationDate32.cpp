@@ -6,7 +6,7 @@
 
 #include <Common/assert_cast.h>
 
-namespace DB
+namespace NDB
 {
 void SerializationDate32::serializeText(const IColumn & column, size_t row_num, WriteBuffer & ostr, const FormatSettings &) const
 {

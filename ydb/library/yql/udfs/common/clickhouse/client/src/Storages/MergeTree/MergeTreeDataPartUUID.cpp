@@ -2,7 +2,7 @@
 #include <Storages/MergeTree/MergeTreeDataPartUUID.h>
 
 
-namespace DB
+namespace NDB
 {
 
 std::vector<UUID> PartUUIDs::add(const std::vector<UUID> & new_uuids)

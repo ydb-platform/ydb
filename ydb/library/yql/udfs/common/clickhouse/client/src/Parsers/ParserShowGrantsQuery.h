@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 /** Parses queries like
   * SHOW GRANTS [FOR user_name]

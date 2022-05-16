@@ -3,7 +3,7 @@
 #include <common/types.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /// What to do if the limit is exceeded.

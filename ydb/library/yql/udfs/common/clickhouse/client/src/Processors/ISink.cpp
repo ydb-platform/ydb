@@ -1,7 +1,7 @@
 #include <Processors/ISink.h>
 
 
-namespace DB
+namespace NDB
 {
 
 ISink::ISink(Block header)

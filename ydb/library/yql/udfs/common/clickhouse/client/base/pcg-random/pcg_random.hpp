@@ -113,7 +113,7 @@
 
 #include "pcg_extras.hpp"
 
-namespace DB
+namespace NDB
 {
     struct PcgSerializer;
     struct PcgDeserializer;
@@ -564,8 +564,8 @@ public:
                         output_mixin1, output_previous1,
                         stream_mixin1, multiplier_mixin1>& rng);
 
-    friend ::DB::PcgSerializer;
-    friend ::DB::PcgDeserializer;
+    friend ::NDB::PcgSerializer;
+    friend ::NDB::PcgDeserializer;
 };
 
 template <typename CharT, typename Traits,

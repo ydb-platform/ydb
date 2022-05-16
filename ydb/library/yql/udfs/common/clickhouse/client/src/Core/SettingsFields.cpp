@@ -10,7 +10,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -65,7 +65,7 @@ SettingFieldNumber<T> & SettingFieldNumber<T>::operator=(const Field & f)
 template <typename T>
 String SettingFieldNumber<T>::toString() const
 {
-    return ::DB::toString(value);
+    return ::NDB::toString(value);
 }
 
 template <typename T>
@@ -84,7 +84,7 @@ void SettingFieldNumber<T>::writeBinary(WriteBuffer & out) const
     else
     {
         static_assert(std::is_floating_point_v<T>);
-        writeStringBinary(::DB::toString(value), out);
+        writeStringBinary(::NDB::toString(value), out);
     }
 }
 
@@ -108,7 +108,7 @@ void SettingFieldNumber<T>::readBinary(ReadBuffer & in)
         static_assert(std::is_floating_point_v<T>);
         String str;
         readStringBinary(str, in);
-        *this = ::DB::parseFromString<T>(str);
+        *this = ::NDB::parseFromString<T>(str);
     }
 }
 
@@ -149,9 +149,9 @@ SettingFieldMaxThreads & SettingFieldMaxThreads::operator=(const Field & f)
 String SettingFieldMaxThreads::toString() const
 {
     if (is_auto)
-        return "'auto(" + ::DB::toString(value) + ")'";
+        return "'auto(" + ::NDB::toString(value) + ")'";
     else
-        return ::DB::toString(value);
+        return ::NDB::toString(value);
 }
 
 void SettingFieldMaxThreads::parseFromString(const String & str)
@@ -192,7 +192,7 @@ SettingFieldTimespan<unit_> & SettingFieldTimespan<unit_>::operator=(const Field
 template <SettingFieldTimespanUnit unit_>
 String SettingFieldTimespan<unit_>::toString() const
 {
-    return ::DB::toString(operator UInt64());
+    return ::NDB::toString(operator UInt64());
 }
 
 template <SettingFieldTimespanUnit unit_>

@@ -10,7 +10,7 @@
 #include <Compression/CompressionCodecMultiple.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

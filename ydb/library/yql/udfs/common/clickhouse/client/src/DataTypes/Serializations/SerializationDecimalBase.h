@@ -3,7 +3,7 @@
 #include <DataTypes/Serializations/SimpleTextSerialization.h>
 #include <Columns/ColumnDecimal.h>
 
-namespace DB
+namespace NDB
 {
 
 template <typename T>

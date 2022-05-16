@@ -64,7 +64,7 @@ namespace ProfileEvents
 #endif
 }
 
-namespace DB
+namespace NDB
 {
 
 /// Handles overflow

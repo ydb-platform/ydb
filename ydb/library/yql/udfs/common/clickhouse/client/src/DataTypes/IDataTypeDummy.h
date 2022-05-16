@@ -4,7 +4,7 @@
 #include <Core/Field.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

@@ -17,7 +17,7 @@ namespace ProfileEvents
 class Counters;
 }
 
-namespace DB
+namespace NDB
 {
 class ThreadStatus;
 

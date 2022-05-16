@@ -20,7 +20,7 @@
 #include <avro/ValidSchema.hh>
 
 
-namespace DB
+namespace NDB
 {
 class AvroDeserializer
 {

@@ -6,7 +6,7 @@
 #include <Parsers/ParserPartition.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool ParserCheckQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

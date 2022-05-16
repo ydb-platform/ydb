@@ -3,7 +3,7 @@
 #include <DataTypes/IDataType.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Map data type.

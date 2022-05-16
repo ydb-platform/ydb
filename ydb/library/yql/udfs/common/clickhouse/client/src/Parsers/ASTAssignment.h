@@ -2,7 +2,7 @@
 
 #include <Parsers/IAST.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Part of the ALTER UPDATE statement of the form: column = expr

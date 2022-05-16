@@ -2,7 +2,7 @@
 
 #include <DataTypes/IDataType.h>
 
-namespace DB
+namespace NDB
 {
 
 /// A nullable data type is an ordinary data type provided with a tag

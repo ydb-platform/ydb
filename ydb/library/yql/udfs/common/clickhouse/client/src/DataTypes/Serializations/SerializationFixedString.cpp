@@ -15,7 +15,7 @@
 #include <Common/typeid_cast.h>
 #include <Common/assert_cast.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

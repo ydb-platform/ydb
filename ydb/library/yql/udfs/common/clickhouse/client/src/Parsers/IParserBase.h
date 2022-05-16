@@ -3,7 +3,7 @@
 #include <Parsers/IParser.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Base class for most parsers

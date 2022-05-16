@@ -11,7 +11,7 @@
 #include <arrow/table.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class CHColumnToArrowColumn

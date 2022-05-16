@@ -6,7 +6,7 @@
 #include <Parsers/ASTShowAccessQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Query SHOW ACCESS

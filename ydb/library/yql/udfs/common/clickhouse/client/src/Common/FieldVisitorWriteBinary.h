@@ -2,7 +2,7 @@
 
 #include <Common/FieldVisitors.h>
 
-namespace DB
+namespace NDB
 {
 
 class FieldVisitorWriteBinary

@@ -4,7 +4,7 @@
 #include <Poco/Util/AbstractConfiguration.h>
 #include <Interpreters/Context.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Timeouts for the case when we have just single attempt to connect.

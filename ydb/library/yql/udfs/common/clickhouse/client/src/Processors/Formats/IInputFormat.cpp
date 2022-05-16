@@ -2,7 +2,7 @@
 #include <IO/ReadBuffer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 IInputFormat::IInputFormat(Block header, ReadBuffer & in_)

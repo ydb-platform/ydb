@@ -13,7 +13,7 @@
 #include <stack>
 #include <mutex>
 
-namespace DB
+namespace NDB
 {
 
 class QueryStatus;

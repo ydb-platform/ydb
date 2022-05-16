@@ -3,7 +3,7 @@
 #include <common/types.h>
 
 
-namespace DB
+namespace NDB
 {
 /// Kind of a temporal interval.
 struct IntervalKind

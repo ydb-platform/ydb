@@ -4,7 +4,7 @@
 #include <DataTypes/Serializations/SerializationNumber.h>
 
 
-namespace DB
+namespace NDB
 {
 
 template <typename T>

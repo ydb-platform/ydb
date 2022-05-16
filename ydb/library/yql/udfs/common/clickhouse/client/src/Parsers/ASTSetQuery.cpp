@@ -5,7 +5,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void ASTSetQuery::updateTreeHashImpl(SipHash & hash_state) const

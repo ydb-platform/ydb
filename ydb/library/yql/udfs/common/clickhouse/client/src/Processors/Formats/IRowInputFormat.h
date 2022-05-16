@@ -8,7 +8,7 @@
 
 class Stopwatch;
 
-namespace DB
+namespace NDB
 {
 
 /// Contains extra information about read data.

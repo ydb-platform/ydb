@@ -5,7 +5,7 @@
 #include <Storages/TTLMode.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Element of TTL expression.

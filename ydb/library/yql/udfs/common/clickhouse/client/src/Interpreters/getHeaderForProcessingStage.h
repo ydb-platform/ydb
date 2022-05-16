@@ -6,7 +6,7 @@
 #include <Interpreters/Context_fwd.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class IStorage;

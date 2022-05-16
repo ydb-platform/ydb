@@ -5,7 +5,7 @@
 #include <Parsers/ParserDropQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace

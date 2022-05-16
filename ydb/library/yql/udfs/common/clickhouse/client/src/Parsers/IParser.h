@@ -10,7 +10,7 @@
 #include <Parsers/TokenIterator.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

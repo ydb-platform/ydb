@@ -7,7 +7,7 @@
 #include <Core/ColumnWithTypeAndName.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

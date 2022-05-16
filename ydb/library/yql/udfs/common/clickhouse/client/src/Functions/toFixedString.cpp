@@ -2,7 +2,7 @@
 #include <Functions/toFixedString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void registerFunctionFixedString(FunctionFactory & factory)

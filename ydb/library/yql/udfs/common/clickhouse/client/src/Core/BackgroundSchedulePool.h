@@ -17,7 +17,7 @@
 #include <Common/ThreadPool.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class TaskNotification;

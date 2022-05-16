@@ -7,7 +7,7 @@
 #include <Parsers/ExpressionListParsers.h>
 #include <Common/typeid_cast.h>
 
-namespace DB
+namespace NDB
 {
 bool parseIdentifierOrStringLiteral(IParser::Pos & pos, Expected & expected, String & result)
 {

@@ -18,7 +18,7 @@
 #include <string>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

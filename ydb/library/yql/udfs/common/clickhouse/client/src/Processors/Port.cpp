@@ -1,7 +1,7 @@
 #include <Processors/Port.h>
 #include <Processors/IProcessor.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

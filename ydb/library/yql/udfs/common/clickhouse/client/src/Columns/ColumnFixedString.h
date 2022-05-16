@@ -10,7 +10,7 @@
 #include <Core/Field.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** A column of values of "fixed-length string" type.

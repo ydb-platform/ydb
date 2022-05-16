@@ -3,7 +3,7 @@
 #include <IO/WriteBufferFromString.h>
 
 
-namespace DB
+namespace NDB
 {
 String quoteString(const StringRef & x)
 {

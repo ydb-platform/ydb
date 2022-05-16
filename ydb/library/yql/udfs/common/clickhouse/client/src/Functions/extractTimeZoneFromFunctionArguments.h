@@ -7,7 +7,7 @@
 
 class DateLUTImpl;
 
-namespace DB
+namespace NDB
 {
 
 class Block;

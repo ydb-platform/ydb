@@ -1,7 +1,7 @@
 #include <Processors/ResizeProcessor.h>
 #include <iostream>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

@@ -9,7 +9,7 @@
 /** one byte for method, 4 bytes for compressed size, 4 bytes for uncompressed size */
 #define COMPRESSED_BLOCK_HEADER_SIZE 9
 
-namespace DB
+namespace NDB
 {
 
 /** The compressed block format is as follows:

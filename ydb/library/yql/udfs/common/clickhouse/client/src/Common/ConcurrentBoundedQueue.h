@@ -10,7 +10,7 @@
 #include <common/MoveOrCopyIfThrow.h>
 #include <Common/Exception.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {
@@ -73,7 +73,7 @@ public:
     {
         empty_count.wait();
         if (!tryEmplaceImpl(x))
-            throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "tryPush/tryEmplace must be used with close()");
+            throw NDB::Exception(NDB::ErrorCodes::LOGICAL_ERROR, "tryPush/tryEmplace must be used with close()");
     }
 
     template <typename... Args>
@@ -81,7 +81,7 @@ public:
     {
         empty_count.wait();
         if (!tryEmplaceImpl(std::forward<Args>(args)...))
-            throw DB::Exception(DB::ErrorCodes::LOGICAL_ERROR, "tryPush/tryEmplace must be used with close()");
+            throw NDB::Exception(NDB::ErrorCodes::LOGICAL_ERROR, "tryPush/tryEmplace must be used with close()");
     }
 
     void pop(T & x)

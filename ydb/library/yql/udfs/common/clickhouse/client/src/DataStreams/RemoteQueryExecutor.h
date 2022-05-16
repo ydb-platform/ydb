@@ -10,7 +10,7 @@
 #include <variant>
 
 
-namespace DB
+namespace NDB
 {
 
 class Context;

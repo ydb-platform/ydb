@@ -7,7 +7,7 @@
 #include <Parsers/ParserCreateQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace

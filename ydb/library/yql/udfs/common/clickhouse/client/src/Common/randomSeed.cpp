@@ -8,7 +8,7 @@
 #include <common/types.h>
 
 
-namespace DB
+namespace NDB
 {
     namespace ErrorCodes
     {
@@ -17,11 +17,11 @@ namespace DB
 }
 
 
-DB::UInt64 randomSeed()
+NDB::UInt64 randomSeed()
 {
     struct timespec times;
     if (clock_gettime(CLOCK_MONOTONIC, &times))
-        DB::throwFromErrno("Cannot clock_gettime.", DB::ErrorCodes::CANNOT_CLOCK_GETTIME);
+        NDB::throwFromErrno("Cannot clock_gettime.", NDB::ErrorCodes::CANNOT_CLOCK_GETTIME);
 
     /// Not cryptographically secure as time, pid and stack address can be predictable.
 

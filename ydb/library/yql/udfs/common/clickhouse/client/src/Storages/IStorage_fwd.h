@@ -5,7 +5,7 @@
 #include <map>
 #include <memory>
 
-namespace DB
+namespace NDB
 {
 
 class IStorage;

@@ -2,7 +2,7 @@
 #include <Compression/LZ4_decompress_faster.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool CompressedReadBuffer::nextImpl()

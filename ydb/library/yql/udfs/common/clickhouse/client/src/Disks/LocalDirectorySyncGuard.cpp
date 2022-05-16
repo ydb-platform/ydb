@@ -8,7 +8,7 @@
 #define O_DIRECTORY O_RDWR
 #endif
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

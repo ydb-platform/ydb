@@ -20,7 +20,7 @@
 #include <DataTypes/DataTypesDecimal.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

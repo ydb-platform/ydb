@@ -11,7 +11,7 @@
 #include <Processors/Chunk.h>
 #include <Common/Exception.h>
 
-namespace DB
+namespace NDB
 {
 
 class InputPort;

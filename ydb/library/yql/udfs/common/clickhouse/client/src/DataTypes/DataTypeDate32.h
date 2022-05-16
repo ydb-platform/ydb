@@ -3,7 +3,7 @@
 #include <DataTypes/DataTypeNumberBase.h>
 #include <common/DateLUT.h>
 
-namespace DB
+namespace NDB
 {
 class DataTypeDate32 final : public DataTypeNumberBase<Int32>
 {

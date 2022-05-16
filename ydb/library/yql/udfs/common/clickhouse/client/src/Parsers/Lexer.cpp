@@ -2,7 +2,7 @@
 #include <Common/StringUtils/StringUtils.h>
 #include <common/find_symbols.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace

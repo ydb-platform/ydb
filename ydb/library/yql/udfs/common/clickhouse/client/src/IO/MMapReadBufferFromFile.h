@@ -10,7 +10,7 @@ namespace CurrentMetrics
 }
 
 
-namespace DB
+namespace NDB
 {
 
 class MMapReadBufferFromFile : public MMapReadBufferFromFileDescriptor

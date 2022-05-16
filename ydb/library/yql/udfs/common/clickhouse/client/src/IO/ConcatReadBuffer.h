@@ -5,7 +5,7 @@
 #include <IO/ReadBuffer.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Reads from the concatenation of multiple ReadBuffers

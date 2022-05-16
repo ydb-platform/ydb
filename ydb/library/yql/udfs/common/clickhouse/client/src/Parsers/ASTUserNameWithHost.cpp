@@ -3,7 +3,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void ASTUserNameWithHost::formatImpl(const FormatSettings & settings, FormatState &, FormatStateStacked) const

@@ -10,7 +10,7 @@ namespace ProfileEvents
 }
 
 
-namespace DB
+namespace NDB
 {
 
 

@@ -13,7 +13,7 @@
 #include <Storages/AlterCommands.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

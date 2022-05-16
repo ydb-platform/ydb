@@ -1,7 +1,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool IParserBase::parse(Pos & pos, ASTPtr & node, Expected & expected)

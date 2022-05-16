@@ -12,7 +12,7 @@
 #include <AggregateFunctions/AggregateFunctionFactory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

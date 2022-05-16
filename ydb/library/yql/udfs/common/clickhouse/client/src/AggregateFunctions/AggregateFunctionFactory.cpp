@@ -21,7 +21,7 @@
 #include <Functions/FunctionFactory.h>
 
 
-namespace DB
+namespace NDB
 {
 struct Settings;
 

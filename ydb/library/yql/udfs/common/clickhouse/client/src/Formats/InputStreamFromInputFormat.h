@@ -2,7 +2,7 @@
 #include <DataStreams/IBlockInputStream.h>
 #include <Processors/Formats/IInputFormat.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

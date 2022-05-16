@@ -3,7 +3,7 @@
 #include <Parsers/ASTShowPrivilegesQuery.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool ParserShowPrivilegesQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

@@ -1,7 +1,7 @@
 #include <DataStreams/materializeBlock.h>
 
 
-namespace DB
+namespace NDB
 {
 
 Block materializeBlock(const Block & block)

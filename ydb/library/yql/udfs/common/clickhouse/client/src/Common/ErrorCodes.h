@@ -12,7 +12,7 @@
   * See also Exception.cpp for incrementing part.
   */
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

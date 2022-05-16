@@ -2,7 +2,7 @@
 #include <DataTypes/DataTypeFactory.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool DataTypeInterval::equals(const IDataType & rhs) const

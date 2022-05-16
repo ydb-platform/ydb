@@ -6,7 +6,7 @@
 #include <vector>
 
 
-namespace DB
+namespace NDB
 {
 
 class ReadBuffer;

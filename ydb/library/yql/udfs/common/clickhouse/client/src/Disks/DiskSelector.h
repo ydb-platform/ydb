@@ -7,7 +7,7 @@
 
 #include <map>
 
-namespace DB
+namespace NDB
 {
 
 class DiskSelector;

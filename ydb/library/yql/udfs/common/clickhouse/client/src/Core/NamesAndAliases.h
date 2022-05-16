@@ -10,7 +10,7 @@
 #include <DataTypes/IDataType.h>
 #include <Core/Names.h>
 
-namespace DB
+namespace NDB
 {
 
 class NameAndAliasPair
@@ -46,8 +46,8 @@ using NamesAndAliases = std::vector<NameAndAliasPair>;
 
 namespace std
 {
-    template <> struct tuple_size<DB::NameAndAliasPair> : std::integral_constant<size_t, 2> {};
-    template <> struct tuple_element<0, DB::NameAndAliasPair> { using type = DB::String; };
-    template <> struct tuple_element<1, DB::NameAndAliasPair> { using type = DB::DataTypePtr; };
-    template <> struct tuple_element<2, DB::NameAndAliasPair> { using type = DB::String; };
+    template <> struct tuple_size<NDB::NameAndAliasPair> : std::integral_constant<size_t, 2> {};
+    template <> struct tuple_element<0, NDB::NameAndAliasPair> { using type = NDB::String; };
+    template <> struct tuple_element<1, NDB::NameAndAliasPair> { using type = NDB::DataTypePtr; };
+    template <> struct tuple_element<2, NDB::NameAndAliasPair> { using type = NDB::String; };
 }

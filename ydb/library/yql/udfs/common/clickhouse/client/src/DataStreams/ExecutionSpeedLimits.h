@@ -6,7 +6,7 @@
 
 class Stopwatch;
 
-namespace DB
+namespace NDB
 {
 
 /// Limits for query execution speed.

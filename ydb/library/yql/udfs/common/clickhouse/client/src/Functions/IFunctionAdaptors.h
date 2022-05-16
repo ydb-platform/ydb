@@ -2,7 +2,7 @@
 
 #include <Functions/IFunction.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Following class implement IExecutableFunction via IFunction.

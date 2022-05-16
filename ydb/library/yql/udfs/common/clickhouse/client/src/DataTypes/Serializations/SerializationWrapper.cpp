@@ -1,7 +1,7 @@
 #include <DataTypes/Serializations/SerializationWrapper.h>
 #include <Columns/IColumn.h>
 
-namespace DB
+namespace NDB
 {
 
 void SerializationWrapper::enumerateStreams(const StreamCallback & callback, SubstreamPath & path) const

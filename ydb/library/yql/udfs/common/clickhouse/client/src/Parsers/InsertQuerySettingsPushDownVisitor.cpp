@@ -8,7 +8,7 @@
 #include <iterator>
 #include <algorithm>
 
-namespace DB
+namespace NDB
 {
 
 bool InsertQuerySettingsPushDownMatcher::needChildVisit(ASTPtr & node, const ASTPtr & child)

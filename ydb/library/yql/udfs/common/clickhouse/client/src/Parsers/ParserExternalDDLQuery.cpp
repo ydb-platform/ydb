@@ -11,7 +11,7 @@
 // #    include <Parsers/MySQL/ASTCreateQuery.h>
 // #endif
 
-namespace DB
+namespace NDB
 {
 
 // #ifdef USE_MYSQL

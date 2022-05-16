@@ -3,7 +3,7 @@
 #include <common/types.h>
 #include <vector>
 
-namespace DB
+namespace NDB
 {
 
 /// Result of CHECK TABLE query for single part of table

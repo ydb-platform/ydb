@@ -9,7 +9,7 @@
 #include <Parsers/IAST_fwd.h>
 #include <Storages/ColumnsDescription.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Description of non-primary index for Storage

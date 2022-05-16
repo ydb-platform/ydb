@@ -5,7 +5,7 @@
 #include <Core/ColumnWithTypeAndName.h>
 
 
-namespace DB
+namespace NDB
 {
 
 using ColumnsWithTypeAndName = std::vector<ColumnWithTypeAndName>;

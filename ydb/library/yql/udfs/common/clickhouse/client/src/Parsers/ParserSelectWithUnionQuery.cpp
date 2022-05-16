@@ -4,7 +4,7 @@
 #include <Parsers/ParserUnionQueryElement.h>
 #include <Parsers/ASTExpressionList.h>
 
-namespace DB
+namespace NDB
 {
 
 bool ParserSelectWithUnionQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

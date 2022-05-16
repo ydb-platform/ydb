@@ -7,7 +7,7 @@ namespace re2
     class RE2;
 }
 
-namespace DB
+namespace NDB
 {
 class IASTColumnsTransformer : public IAST
 {

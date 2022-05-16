@@ -9,7 +9,7 @@
 #include <IO/WriteHelpers.h>
 #include <IO/readDecimalText.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

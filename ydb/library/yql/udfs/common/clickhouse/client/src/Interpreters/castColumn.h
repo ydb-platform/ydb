@@ -2,7 +2,7 @@
 
 #include <Core/ColumnWithTypeAndName.h>
 
-namespace DB
+namespace NDB
 {
 
 ColumnPtr castColumn(const ColumnWithTypeAndName & arg, const DataTypePtr & type);

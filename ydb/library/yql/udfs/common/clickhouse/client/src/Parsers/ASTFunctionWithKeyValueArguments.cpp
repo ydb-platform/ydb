@@ -4,7 +4,7 @@
 #include <Common/SipHash.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 String ASTPair::getID(char) const

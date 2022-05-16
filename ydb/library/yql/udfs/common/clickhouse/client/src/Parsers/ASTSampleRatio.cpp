@@ -1,7 +1,7 @@
 #include <Parsers/ASTSampleRatio.h>
 #include <IO/Operators.h>
 
-namespace DB
+namespace NDB
 {
 
 

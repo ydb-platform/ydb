@@ -2,7 +2,7 @@
 
 #include <Common/setThreadName.h>
 
-namespace DB
+namespace NDB
 {
     void ParallelFormattingOutputFormat::finalize()
     {

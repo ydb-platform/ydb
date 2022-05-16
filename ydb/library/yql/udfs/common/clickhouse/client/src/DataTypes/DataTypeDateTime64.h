@@ -6,7 +6,7 @@
 
 class DateLUTImpl;
 
-namespace DB
+namespace NDB
 {
 
 /** DateTime64 is same as DateTime, but it stores values as Int64 and has configurable sub-second part.

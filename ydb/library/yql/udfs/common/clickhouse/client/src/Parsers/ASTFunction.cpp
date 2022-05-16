@@ -16,7 +16,7 @@
 #include <Parsers/queryToString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

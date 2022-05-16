@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <Core/UUID.h>
 
-namespace DB
+namespace NDB
 {
 
 /** PartUUIDs is a uuid set to control query deduplication.

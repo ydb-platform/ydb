@@ -24,7 +24,7 @@
 #include <common/errnoToString.h>
 
 
-namespace DB
+namespace NDB
 {
 
 bool TasksStatsCounters::checkIfAvailable()
@@ -127,7 +127,7 @@ void TasksStatsCounters::incrementProfileEvents(const ::taskstats & prev, const 
 
 #if defined(__linux__)
 
-namespace DB
+namespace NDB
 {
 
 thread_local PerfEventsCounters current_thread_counters;
@@ -565,7 +565,7 @@ void PerfDescriptorsHolder::releaseResources()
 
 #else
 
-namespace DB
+namespace NDB
 {
 
 // the functionality is disabled when we are not running on Linux.

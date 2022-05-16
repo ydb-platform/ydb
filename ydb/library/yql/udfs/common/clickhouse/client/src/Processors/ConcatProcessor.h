@@ -3,7 +3,7 @@
 #include <Processors/IProcessor.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Has arbitrary non zero number of inputs and one output.

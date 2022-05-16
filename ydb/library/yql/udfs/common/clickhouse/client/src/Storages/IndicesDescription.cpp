@@ -12,7 +12,7 @@
 #include <Core/Defines.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

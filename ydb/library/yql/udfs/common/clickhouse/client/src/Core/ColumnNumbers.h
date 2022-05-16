@@ -4,7 +4,7 @@
 #include <string>
 
 
-namespace DB
+namespace NDB
 {
 
 using ColumnNumbers = std::vector<size_t>;

@@ -3,7 +3,7 @@
 #include <Processors/IProcessor.h>
 #include <mutex>
 
-namespace DB
+namespace NDB
 {
 
 /// Graph of executing pipeline.

@@ -13,7 +13,7 @@
 #include <IO/parseDateTimeBestEffort.h>
 #include <Parsers/ASTLiteral.h>
 
-namespace DB
+namespace NDB
 {
 
 TimezoneMixin::TimezoneMixin(const String & time_zone_name)

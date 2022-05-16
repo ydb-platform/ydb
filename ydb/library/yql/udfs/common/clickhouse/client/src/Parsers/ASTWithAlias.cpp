@@ -3,7 +3,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 static void writeAlias(const String & name, const ASTWithAlias::FormatSettings & settings)

@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 /** WITH (scalar query) AS identifier
   *  or WITH identifier AS (subquery)

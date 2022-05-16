@@ -6,7 +6,7 @@
 #include <IO/WriteHelpers.h>
 
 
-namespace DB
+namespace NDB
 {
 void ProgressValues::read(ReadBuffer & in, UInt64 server_revision)
 {

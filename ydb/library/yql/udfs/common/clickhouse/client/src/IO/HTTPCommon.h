@@ -14,7 +14,7 @@
 #include <IO/ConnectionTimeouts.h>
 
 
-namespace DB
+namespace NDB
 {
 
 constexpr int HTTP_TOO_MANY_REQUESTS = 429;

@@ -3,7 +3,7 @@
 #include <DataTypes/Serializations/SerializationNumber.h>
 #include <DataTypes/EnumValues.h>
 
-namespace DB
+namespace NDB
 {
 
 template <typename Type>

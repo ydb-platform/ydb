@@ -3,7 +3,7 @@
 #include <Parsers/ASTWithAlias.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

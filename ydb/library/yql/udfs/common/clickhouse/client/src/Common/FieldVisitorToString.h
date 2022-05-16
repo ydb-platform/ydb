@@ -2,7 +2,7 @@
 
 #include <Common/FieldVisitors.h>
 
-namespace DB
+namespace NDB
 {
 
 /** Prints Field as literal in SQL query */

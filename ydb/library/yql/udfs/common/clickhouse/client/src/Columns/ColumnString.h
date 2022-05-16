@@ -16,7 +16,7 @@
 class Collator;
 
 
-namespace DB
+namespace NDB
 {
 
 /** Column for String values.
@@ -118,7 +118,7 @@ public:
 
     void insert(const Field & x) override
     {
-        const String & s = DB::get<const String &>(x);
+        const String & s = NDB::get<const String &>(x);
         const size_t old_size = chars.size();
         const size_t size_to_append = s.size() + 1;
         const size_t new_size = old_size + size_to_append;

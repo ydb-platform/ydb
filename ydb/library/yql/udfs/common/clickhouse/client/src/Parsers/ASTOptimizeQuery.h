@@ -4,7 +4,7 @@
 #include <Parsers/ASTQueryWithTableAndOutput.h>
 #include <Parsers/ASTQueryWithOnCluster.h>
 
-namespace DB
+namespace NDB
 {
 
 

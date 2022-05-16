@@ -25,7 +25,7 @@ namespace CurrentMetrics
     extern const Metric Read;
 }
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

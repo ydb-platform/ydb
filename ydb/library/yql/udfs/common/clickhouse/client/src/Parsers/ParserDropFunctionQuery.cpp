@@ -4,7 +4,7 @@
 #include <Parsers/ExpressionElementParsers.h>
 #include <Parsers/ParserDropFunctionQuery.h>
 
-namespace DB
+namespace NDB
 {
 
 bool ParserDropFunctionQuery::parseImpl(IParser::Pos & pos, ASTPtr & node, Expected & expected)

@@ -2,7 +2,7 @@
 #include <vector>
 #include <queue>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

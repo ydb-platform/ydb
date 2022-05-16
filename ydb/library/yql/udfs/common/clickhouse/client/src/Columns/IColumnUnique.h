@@ -2,7 +2,7 @@
 #include <optional>
 #include <Columns/IColumn.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

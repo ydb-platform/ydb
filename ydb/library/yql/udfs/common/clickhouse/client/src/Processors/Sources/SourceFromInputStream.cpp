@@ -3,7 +3,7 @@
 #include <DataTypes/DataTypeAggregateFunction.h>
 #include <DataStreams/RemoteBlockInputStream.h>
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

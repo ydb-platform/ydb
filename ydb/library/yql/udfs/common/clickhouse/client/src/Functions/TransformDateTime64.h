@@ -3,7 +3,7 @@
 #include <Core/Types.h>
 #include <Core/DecimalFunctions.h>
 
-namespace DB
+namespace NDB
 {
 /** Tansform-type wrapper for DateTime64, simplifies DateTime64 support for given Transform.
  *

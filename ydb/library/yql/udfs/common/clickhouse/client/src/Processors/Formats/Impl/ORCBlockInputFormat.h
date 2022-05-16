@@ -9,7 +9,7 @@
 
 namespace arrow::adapters::orc { class ORCFileReader; }
 
-namespace DB
+namespace NDB
 {
 
 class ArrowColumnToCHColumn;

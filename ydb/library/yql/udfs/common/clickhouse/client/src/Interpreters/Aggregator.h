@@ -36,7 +36,7 @@
 #include <Columns/ColumnLowCardinality.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

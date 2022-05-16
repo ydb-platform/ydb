@@ -5,7 +5,7 @@
 
 #include <IO/ReadHelpers.h>
 
-namespace DB
+namespace NDB
 {
 
 /** The type SimpleAggregateFunction(fct, type) is meant to be used in an AggregatingMergeTree. It behaves like a standard

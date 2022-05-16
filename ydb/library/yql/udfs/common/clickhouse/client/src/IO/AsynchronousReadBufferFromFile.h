@@ -4,7 +4,7 @@
 #include <IO/OpenedFileCache.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class AsynchronousReadBufferFromFile : public AsynchronousReadBufferFromFileDescriptor

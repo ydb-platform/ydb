@@ -1,6 +1,6 @@
 #include <Parsers/ASTQueryWithOutput.h>
 
-namespace DB
+namespace NDB
 {
 
 void ASTQueryWithOutput::cloneOutputOptions(ASTQueryWithOutput & cloned) const

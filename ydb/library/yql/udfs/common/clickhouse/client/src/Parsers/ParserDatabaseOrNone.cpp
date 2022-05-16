@@ -3,7 +3,7 @@
 #include <Parsers/ASTDatabaseOrNone.h>
 #include <Parsers/CommonParsers.h>
 
-namespace DB
+namespace NDB
 {
 bool ParserDatabaseOrNone::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {

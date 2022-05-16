@@ -5,7 +5,7 @@
 #include <memory>
 
 
-namespace DB
+namespace NDB
 {
 /// Used to pass info from header between different InputFormats in ParallelParsing
 struct ColumnMapping

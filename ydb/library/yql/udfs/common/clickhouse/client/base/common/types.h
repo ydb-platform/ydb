@@ -25,7 +25,7 @@ using UInt64 = uint64_t;
 
 using String = std::string;
 
-namespace DB
+namespace NDB
 {
 
 using UInt8 = ::UInt8;

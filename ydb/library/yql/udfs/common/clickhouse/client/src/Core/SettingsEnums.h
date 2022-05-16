@@ -5,7 +5,7 @@
 #include <Formats/FormatSettings.h>
 
 
-namespace DB
+namespace NDB
 {
 enum class LoadBalancing
 {

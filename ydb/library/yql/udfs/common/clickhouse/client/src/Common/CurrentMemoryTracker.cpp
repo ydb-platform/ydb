@@ -9,13 +9,13 @@ namespace
 
 MemoryTracker * getMemoryTracker()
 {
-    if (auto * thread_memory_tracker = DB::CurrentThread::getMemoryTracker())
+    if (auto * thread_memory_tracker = NDB::CurrentThread::getMemoryTracker())
         return thread_memory_tracker;
 
     /// Once the main thread is initialized,
     /// total_memory_tracker is initialized too.
     /// And can be used, since MainThreadStatus is required for profiling.
-    if (DB::MainThreadStatus::get())
+    if (NDB::MainThreadStatus::get())
         return &total_memory_tracker;
 
     return nullptr;
@@ -26,7 +26,7 @@ MemoryTracker * getMemoryTracker()
 namespace CurrentMemoryTracker
 {
 
-using DB::current_thread;
+using NDB::current_thread;
 
 namespace
 {

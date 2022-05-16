@@ -4,7 +4,7 @@
 #include <Parsers/ASTIdentifier.h>
 
 
-namespace DB
+namespace NDB
 {
 
 CompressionCodecNone::CompressionCodecNone()

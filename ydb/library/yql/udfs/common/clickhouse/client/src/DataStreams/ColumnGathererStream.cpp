@@ -6,7 +6,7 @@
 #include <iomanip>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

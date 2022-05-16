@@ -8,7 +8,7 @@
 #include <Common/assert_cast.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** A column of array values.

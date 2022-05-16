@@ -4,7 +4,7 @@
 #include <algorithm>
 
 
-namespace DB
+namespace NDB
 {
 
 

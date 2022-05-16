@@ -5,7 +5,7 @@
 #include <array>
 #include <algorithm>
 
-namespace DB
+namespace NDB
 {
 
 // To be used in formatIPv4, maps a byte to it's string form prefixed with length (so save strlen call).

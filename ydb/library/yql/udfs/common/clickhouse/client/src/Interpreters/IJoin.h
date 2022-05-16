@@ -6,7 +6,7 @@
 #include <Core/Names.h>
 #include <Columns/IColumn.h>
 
-namespace DB
+namespace NDB
 {
 
 class Block;

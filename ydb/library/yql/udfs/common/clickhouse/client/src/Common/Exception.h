@@ -17,7 +17,7 @@
 namespace Poco { class Logger; }
 
 
-namespace DB
+namespace NDB
 {
 
 class Exception : public Poco::Exception

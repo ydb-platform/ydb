@@ -4,7 +4,7 @@
 #include <common/types.h>
 #include <unordered_set>
 
-namespace DB
+namespace NDB
 {
 
 /// Represents dependency from other column.

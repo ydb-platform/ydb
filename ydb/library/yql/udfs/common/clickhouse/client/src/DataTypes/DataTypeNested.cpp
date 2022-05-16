@@ -7,7 +7,7 @@
 #include <Common/quoteString.h>
 #include <Parsers/ASTNameTypePair.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

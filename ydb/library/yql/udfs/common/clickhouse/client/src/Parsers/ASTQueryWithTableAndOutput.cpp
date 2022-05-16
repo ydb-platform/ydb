@@ -3,7 +3,7 @@
 #include <IO/Operators.h>
 
 
-namespace DB
+namespace NDB
 {
 
 void ASTQueryWithTableAndOutput::formatHelper(const FormatSettings & settings, const char * name) const

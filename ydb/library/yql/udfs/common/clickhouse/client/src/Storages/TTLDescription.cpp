@@ -21,7 +21,7 @@
 #include <DataTypes/DataTypeDateTime.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

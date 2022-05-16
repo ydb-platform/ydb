@@ -17,7 +17,7 @@ namespace boost::program_options
 }
 
 
-namespace DB
+namespace NDB
 {
 class IColumn;
 

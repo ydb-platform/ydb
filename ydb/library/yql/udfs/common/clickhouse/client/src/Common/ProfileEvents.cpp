@@ -339,7 +339,7 @@ Event end() { return END; }
 
 void increment(Event event, Count amount)
 {
-    DB::CurrentThread::getProfileEvents().increment(event, amount);
+    NDB::CurrentThread::getProfileEvents().increment(event, amount);
 }
 
 }

@@ -595,7 +595,7 @@
 
 /* See END */
 
-namespace DB
+namespace NDB
 {
 namespace ErrorCodes
 {

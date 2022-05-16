@@ -3,7 +3,7 @@
 #include <Parsers/IParserBase.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Sampling factor of the form 0.1 or 1/10.

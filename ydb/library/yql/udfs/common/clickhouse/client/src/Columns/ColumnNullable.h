@@ -8,7 +8,7 @@
 
 class Collator;
 
-namespace DB
+namespace NDB
 {
 
 using NullMap = ColumnUInt8::Container;

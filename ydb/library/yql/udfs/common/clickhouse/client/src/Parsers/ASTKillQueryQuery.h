@@ -3,7 +3,7 @@
 #include <Parsers/ASTQueryWithOutput.h>
 #include <Parsers/ASTQueryWithOnCluster.h>
 
-namespace DB
+namespace NDB
 {
 
 class ASTKillQueryQuery : public ASTQueryWithOutput, public ASTQueryWithOnCluster

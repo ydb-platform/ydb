@@ -98,7 +98,7 @@ LIMIT 100
   */
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

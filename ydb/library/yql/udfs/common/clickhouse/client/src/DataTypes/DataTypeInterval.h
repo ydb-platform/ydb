@@ -4,7 +4,7 @@
 #include <Common/IntervalKind.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Data type to deal with INTERVAL in SQL (arithmetic on time intervals).

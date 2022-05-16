@@ -48,7 +48,7 @@
 #include <Interpreters/Context.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

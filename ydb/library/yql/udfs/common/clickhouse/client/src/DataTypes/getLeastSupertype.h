@@ -3,7 +3,7 @@
 #include <DataTypes/IDataType.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Get data type that covers all possible values of passed data types.

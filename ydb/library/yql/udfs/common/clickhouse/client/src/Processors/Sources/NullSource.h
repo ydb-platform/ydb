@@ -2,7 +2,7 @@
 #include <Processors/ISource.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class NullSource : public ISource

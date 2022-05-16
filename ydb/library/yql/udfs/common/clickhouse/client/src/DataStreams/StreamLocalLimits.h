@@ -2,7 +2,7 @@
 #include <DataStreams/SizeLimits.h>
 #include <DataStreams/ExecutionSpeedLimits.h>
 
-namespace DB
+namespace NDB
 {
 
 /** What limitations and quotas should be checked.

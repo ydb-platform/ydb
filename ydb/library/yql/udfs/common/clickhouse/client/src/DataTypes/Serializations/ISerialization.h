@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <memory>
 
-namespace DB
+namespace NDB
 {
 
 class IDataType;

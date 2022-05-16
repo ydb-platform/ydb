@@ -8,7 +8,7 @@
 #include <boost/range/algorithm/find.hpp>
 
 
-namespace DB
+namespace NDB
 {
 namespace
 {

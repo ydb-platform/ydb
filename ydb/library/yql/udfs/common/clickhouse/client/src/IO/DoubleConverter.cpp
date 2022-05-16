@@ -1,6 +1,6 @@
 #include <IO/DoubleConverter.h>
 
-namespace DB
+namespace NDB
 {
 template <bool emit_decimal_point>
 const double_conversion::DoubleToStringConverter & DoubleConverter<emit_decimal_point>::instance()

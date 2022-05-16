@@ -10,7 +10,7 @@
 #include <Core/UUID.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ASTSelectQuery;

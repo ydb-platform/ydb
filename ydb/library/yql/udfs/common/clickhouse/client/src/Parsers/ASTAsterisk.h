@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 
 
-namespace DB
+namespace NDB
 {
 
 /** SELECT * is expanded to all visible columns of the source table.

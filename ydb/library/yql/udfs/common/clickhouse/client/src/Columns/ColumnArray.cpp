@@ -24,7 +24,7 @@
 #include <Common/HashTable/Hash.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -153,7 +153,7 @@ void ColumnArray::get(size_t n, Field & res) const
             size, max_array_size_as_field);
 
     res = Array(size);
-    Array & res_arr = DB::get<Array &>(res);
+    Array & res_arr = NDB::get<Array &>(res);
 
     for (size_t i = 0; i < size; ++i)
         getData().get(offset + i, res_arr[i]);
@@ -300,7 +300,7 @@ void ColumnArray::updateHashFast(SipHash & hash) const
 
 void ColumnArray::insert(const Field & x)
 {
-    const Array & array = DB::get<const Array &>(x);
+    const Array & array = NDB::get<const Array &>(x);
     size_t size = array.size();
     for (size_t i = 0; i < size; ++i)
         getData().insert(array[i]);

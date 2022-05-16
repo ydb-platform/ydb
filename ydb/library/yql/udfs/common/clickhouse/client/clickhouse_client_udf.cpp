@@ -93,10 +93,10 @@ bool GetDataType(const ITypeInfoHelper& typeHelper, const TType* type, TColumnMe
     return false;
 }
 
-DB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
+NDB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
     if (!meta.Enum.empty()) {
         if (meta.Enum.size() < 256) {
-            DB::DataTypeEnum8::Values values;
+            NDB::DataTypeEnum8::Values values;
             if (!meta.EnumVar.size()) {
                 for (ui32 i = 0; i < meta.Enum.size(); ++i) {
                     std::string name(meta.Enum[i]);
@@ -110,10 +110,10 @@ DB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
                 }
             }
 
-            return std::make_shared<DB::DataTypeEnum8>(values);
+            return std::make_shared<NDB::DataTypeEnum8>(values);
         }
         else {
-            DB::DataTypeEnum16::Values values;
+            NDB::DataTypeEnum16::Values values;
             if (!meta.EnumVar.size()) {
                 for (ui32 i = 0; i < meta.Enum.size(); ++i) {
                     std::string name(meta.Enum[i]);
@@ -127,81 +127,81 @@ DB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
                 }
             }
 
-            return std::make_shared<DB::DataTypeEnum16>(values);
+            return std::make_shared<NDB::DataTypeEnum16>(values);
         }
     }
 
     if (meta.Aggregation) {
-        return DB::DataTypeFactory::instance().get(*meta.Aggregation);
+        return NDB::DataTypeFactory::instance().get(*meta.Aggregation);
     }
 
     if (meta.IsEmptyList) {
-        return std::make_shared<DB::DataTypeArray>(std::make_shared<DB::DataTypeNothing>());
+        return std::make_shared<NDB::DataTypeArray>(std::make_shared<NDB::DataTypeNothing>());
     }
 
     if (meta.IsList) {
-        return std::make_shared<DB::DataTypeArray>(MetaToClickHouse(meta.Items.front()));
+        return std::make_shared<NDB::DataTypeArray>(MetaToClickHouse(meta.Items.front()));
     }
 
     if (meta.IsTuple) {
-        DB::DataTypes elems;
+        NDB::DataTypes elems;
         for (const auto& e : meta.Items) {
             elems.push_back(MetaToClickHouse(e));
         }
 
-        return std::make_shared<DB::DataTypeTuple>(elems);
+        return std::make_shared<NDB::DataTypeTuple>(elems);
     }
 
-    DB::DataTypePtr ret;
+    NDB::DataTypePtr ret;
     if (!meta.Slot) {
-        ret = makeNullable(std::make_shared<DB::DataTypeNothing>());
+        ret = makeNullable(std::make_shared<NDB::DataTypeNothing>());
     }
     else {
         switch (*meta.Slot) {
         case EDataSlot::Int8:
-            ret = std::make_shared<DB::DataTypeInt8>();
+            ret = std::make_shared<NDB::DataTypeInt8>();
             break;
         case EDataSlot::Bool:
         case EDataSlot::Uint8:
-            ret = std::make_shared<DB::DataTypeUInt8>();
+            ret = std::make_shared<NDB::DataTypeUInt8>();
             break;
         case EDataSlot::Int16:
-            ret = std::make_shared<DB::DataTypeInt16>();
+            ret = std::make_shared<NDB::DataTypeInt16>();
             break;
         case EDataSlot::Uint16:
-            ret = std::make_shared<DB::DataTypeUInt16>();
+            ret = std::make_shared<NDB::DataTypeUInt16>();
             break;
         case EDataSlot::Int32:
-            ret = std::make_shared<DB::DataTypeInt32>();
+            ret = std::make_shared<NDB::DataTypeInt32>();
             break;
         case EDataSlot::Uint32:
-            ret = std::make_shared<DB::DataTypeUInt32>();
+            ret = std::make_shared<NDB::DataTypeUInt32>();
             break;
         case EDataSlot::Int64:
-            ret = std::make_shared<DB::DataTypeInt64>();
+            ret = std::make_shared<NDB::DataTypeInt64>();
             break;
         case EDataSlot::Uint64:
-            ret = std::make_shared<DB::DataTypeUInt64>();
+            ret = std::make_shared<NDB::DataTypeUInt64>();
             break;
         case EDataSlot::Float:
-            ret = std::make_shared<DB::DataTypeFloat32>();
+            ret = std::make_shared<NDB::DataTypeFloat32>();
             break;
         case EDataSlot::Double:
-            ret = std::make_shared<DB::DataTypeFloat64>();
+            ret = std::make_shared<NDB::DataTypeFloat64>();
             break;
         case EDataSlot::String:
-            ret = std::make_shared<DB::DataTypeString>();
+            ret = std::make_shared<NDB::DataTypeString>();
             break;
         case EDataSlot::Date:
         case EDataSlot::TzDate:
-            ret = std::make_shared<DB::DataTypeDate>();
+            ret = std::make_shared<NDB::DataTypeDate>();
             break;
         case EDataSlot::Datetime:
         case EDataSlot::TzDatetime:
-            ret = std::make_shared<DB::DataTypeDateTime>();
+            ret = std::make_shared<NDB::DataTypeDateTime>();
             break;
         case EDataSlot::Uuid:
-            ret = std::make_shared<DB::DataTypeUUID>();
+            ret = std::make_shared<NDB::DataTypeUUID>();
             break;
         default:
             throw yexception() << "Unsupported argument type: " << GetDataTypeInfo(*meta.Slot).Name;
@@ -220,15 +220,15 @@ void PermuteUuid(const char* src, char* dst, bool forward) {
     }
 }
 
-TUnboxedValuePod ConvertOutputValue(const DB::IColumn* col, const TColumnMeta& meta, ui32 tzId,
+TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& meta, ui32 tzId,
     const IValueBuilder* valueBuilder, ssize_t externalIndex = 0) {
     if (!meta.Enum.empty()) {
         auto ref = col->getDataAt(externalIndex);
         i16 value;
-        if (col->getDataType() == DB::TypeIndex::Int8) {
+        if (col->getDataType() == NDB::TypeIndex::Int8) {
             value = *(const i8*)ref.data;
         }
-        else if (col->getDataType() == DB::TypeIndex::Int16) {
+        else if (col->getDataType() == NDB::TypeIndex::Int16) {
             value = *(const i16*)ref.data;
         }
         else {
@@ -247,7 +247,7 @@ TUnboxedValuePod ConvertOutputValue(const DB::IColumn* col, const TColumnMeta& m
 
     if (meta.Aggregation) {
         auto field = (*col)[externalIndex];
-        const auto& state = field.get<DB::AggregateFunctionStateData &>();
+        const auto& state = field.get<NDB::AggregateFunctionStateData &>();
         return valueBuilder->NewString({ state.data.data(), (ui32)state.data.size() }).Release();
     }
 
@@ -255,10 +255,10 @@ TUnboxedValuePod ConvertOutputValue(const DB::IColumn* col, const TColumnMeta& m
         return valueBuilder->NewEmptyList().Release();
     }
 
-    const DB::IColumn* data = col;
+    const NDB::IColumn* data = col;
     if (meta.IsList) {
-        const DB::ColumnArray& res = static_cast<const DB::ColumnArray&>(*col);
-        const DB::IColumn::Offsets& offsets = res.getOffsets();
+        const NDB::ColumnArray& res = static_cast<const NDB::ColumnArray&>(*col);
+        const NDB::IColumn::Offsets& offsets = res.getOffsets();
         data = &res.getData();
         ui64 start = offsets[externalIndex - 1];
         ui64 limit = offsets[externalIndex] - start;
@@ -276,7 +276,7 @@ TUnboxedValuePod ConvertOutputValue(const DB::IColumn* col, const TColumnMeta& m
         auto count = meta.Items.size();
         TUnboxedValue* items = nullptr;
         TUnboxedValue ret = valueBuilder->NewArray(count, items);
-        const DB::ColumnTuple& res = static_cast<const DB::ColumnTuple&>(*col);
+        const NDB::ColumnTuple& res = static_cast<const NDB::ColumnTuple&>(*col);
         for (ui32 i = 0; i < count; ++i) {
             items[i] = ConvertOutputValue(&res.getColumn(i), meta.Items[i], tzId, valueBuilder, externalIndex);
         }
@@ -288,13 +288,13 @@ TUnboxedValuePod ConvertOutputValue(const DB::IColumn* col, const TColumnMeta& m
         return {};
     }
 
-    StringRef ref;
+    NDB::StringRef ref;
     if (meta.IsOptional) {
         if (data->isNullAt(externalIndex)) {
             return {};
         }
 
-        ref = static_cast<const DB::ColumnNullable*>(data)->getNestedColumn().getDataAt(externalIndex);
+        ref = static_cast<const NDB::ColumnNullable*>(data)->getNestedColumn().getDataAt(externalIndex);
     }
     else {
         ref = data->getDataAt(externalIndex);
@@ -374,8 +374,8 @@ public:
                         return status;
 
                     const std::string_view buffer = Input.AsStringRef();
-                    Buffer = std::make_unique<DB::ReadBufferFromMemory>(buffer.data(), buffer.size());
-                    BlockStream = std::make_unique<DB::NativeBlockInputStream>(*Buffer, DBMS_MIN_REVISION_WITH_CURRENT_AGGREGATION_VARIANT_SELECTION_METHOD);
+                    Buffer = std::make_unique<NDB::ReadBufferFromMemory>(buffer.data(), buffer.size());
+                    BlockStream = std::make_unique<NDB::NativeBlockInputStream>(*Buffer, DBMS_MIN_REVISION_WITH_CURRENT_AGGREGATION_VARIANT_SELECTION_METHOD);
                 }
 
                 if (CurrentRow >= CurrentBlock.rows()) {
@@ -413,9 +413,9 @@ public:
         TPlainArrayCache Cache;
 
         TUnboxedValue Input;
-        std::unique_ptr<DB::ReadBuffer> Buffer;
-        std::unique_ptr<DB::IBlockInputStream> BlockStream;
-        DB::Block CurrentBlock;
+        std::unique_ptr<NDB::ReadBuffer> Buffer;
+        std::unique_ptr<NDB::IBlockInputStream> BlockStream;
+        NDB::Block CurrentBlock;
         size_t CurrentRow = 0;
     };
 
@@ -444,41 +444,62 @@ private:
     const std::vector<TColumnMeta> OutMeta; // in struct order
 };
 
-template<bool WithYields>
 class TStreamValue : public TBoxedValue {
-    class TReadBufferFromStream : public DB::ReadBuffer {
-    public:
-        TReadBufferFromStream(TUnboxedValue stream)
-            : DB::ReadBuffer(nullptr, 0ULL), Stream(std::move(stream))
-        {}
-    private:
-        bool nextImpl() final {
-            switch (Stream.Fetch(Value)) {
-                case EFetchStatus::Finish:
-                    return false;
-                case EFetchStatus::Yield:
-                    throw yexception() << "Enexpected yield.";
-                case EFetchStatus::Ok:
-                    break;
-            }
-            const std::string_view view(Value.AsStringRef());
-            working_buffer = DB::BufferBase::Buffer(const_cast<char*>(view.cbegin()), const_cast<char*>(view.cend()));
-            return true;
-        }
-
-        const TUnboxedValue Stream;
-        TUnboxedValue Value;
-    };
 public:
-    TStreamValue(const std::string& type, const DB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
-        const std::vector<TColumnMeta> outMeta, const DB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos, ui32 tzId);
+    TStreamValue(const std::string& type, const NDB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
+    const std::vector<TColumnMeta> outMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos, ui32 tzId)
+        : ValueBuilder(valueBuilder)
+        , Stream(stream)
+        , OutMeta(outMeta)
+        , Columns(columns)
+        , Pos(pos)
+        , TzId(tzId)
+        , Cache(OutMeta.size())
+        , Type(type)
+        , Settings(settings)
+    {}
 private:
-    EFetchStatus Fetch(TUnboxedValue& result) final;
+    EFetchStatus Fetch(TUnboxedValue& result) final try {
+        for (;;) {
+            if (!BlockStream) {
+                if (const auto status = Stream.Fetch(Input); EFetchStatus::Ok != status)
+                    return status;
+
+                const std::string_view buffer = Input.AsStringRef();
+                Buffer = std::make_unique<NDB::ReadBufferFromMemory>(buffer.data(), buffer.size());
+                BlockStream = std::make_unique<NDB::InputStreamFromInputFormat>(NDB::FormatFactory::instance().getInputFormat(Type, *Buffer, NDB::Block(Columns), nullptr, buffer.size(),  Settings));
+            }
+
+            if (CurrentRow >= CurrentBlock.rows()) {
+                CurrentRow = 0;
+                if (CurrentBlock = BlockStream->read(); !CurrentBlock) {
+                    BlockStream.reset();
+                    Buffer.reset();
+                    continue;
+                }
+            }
+
+            TUnboxedValue* items = nullptr;
+            result = Cache.NewArray(*ValueBuilder, items);
+            for (ui32 i = 0; i < OutMeta.size(); ++i) {
+                *items++ = ConvertOutputValue(CurrentBlock.getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
+            }
+
+            ++CurrentRow;
+            return EFetchStatus::Ok;
+        }
+    }
+    catch (const Poco::Exception& e) {
+        UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
+    }
+    catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
+    }
 
     const IValueBuilder* ValueBuilder;
     const TUnboxedValue Stream;
     const std::vector<TColumnMeta> OutMeta;
-    const DB::ColumnsWithTypeAndName Columns;
+    const NDB::ColumnsWithTypeAndName Columns;
     const TSourcePosition Pos;
     const ui32 TzId;
 
@@ -486,113 +507,17 @@ private:
 
     TUnboxedValue Input;
     const TString Type;
-    const DB::FormatSettings Settings;
+    const NDB::FormatSettings Settings;
 
-    std::unique_ptr<DB::ReadBuffer> Buffer;
-    std::unique_ptr<DB::IBlockInputStream> BlockStream;
-    DB::Block CurrentBlock;
+    std::unique_ptr<NDB::ReadBuffer> Buffer;
+    std::unique_ptr<NDB::IBlockInputStream> BlockStream;
+    NDB::Block CurrentBlock;
     size_t CurrentRow = 0U;
 };
 
-template<>
-TStreamValue<true>::TStreamValue(const std::string& type, const DB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
-    const std::vector<TColumnMeta> outMeta, const DB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos, ui32 tzId)
-    : ValueBuilder(valueBuilder)
-    , Stream(stream)
-    , OutMeta(outMeta)
-    , Columns(columns)
-    , Pos(pos)
-    , TzId(tzId)
-    , Cache(OutMeta.size())
-    , Type(type)
-    , Settings(settings)
-{}
-
-template<>
-TStreamValue<false>::TStreamValue(const std::string& type, const DB::FormatSettings& settings, const IValueBuilder* valueBuilder, const TUnboxedValue& stream,
-    const std::vector<TColumnMeta> outMeta, const DB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos, ui32 tzId)
-    : ValueBuilder(valueBuilder)
-    , Stream(stream)
-    , OutMeta(outMeta)
-    , Columns(columns)
-    , Pos(pos)
-    , TzId(tzId)
-    , Cache(OutMeta.size())
-    , Type(type)
-    , Settings(settings)
-    , Buffer(std::make_unique<TReadBufferFromStream>(std::move(stream)))
-    , BlockStream(std::make_unique<DB::InputStreamFromInputFormat>(DB::FormatFactory::instance().getInputFormat(Type, *Buffer, DB::Block(Columns), nullptr, 1024 * 1024,  Settings)))
-    , CurrentBlock(BlockStream->read())
-{}
-
-template<>
-EFetchStatus TStreamValue<true>::Fetch(TUnboxedValue& result) try {
-    for (;;) {
-        if (!BlockStream) {
-            if (const auto status = Stream.Fetch(Input); EFetchStatus::Ok != status)
-                return status;
-
-            const std::string_view buffer = Input.AsStringRef();
-            Buffer = std::make_unique<DB::ReadBufferFromMemory>(buffer.data(), buffer.size());
-            BlockStream = std::make_unique<DB::InputStreamFromInputFormat>(DB::FormatFactory::instance().getInputFormat(Type, *Buffer, DB::Block(Columns), nullptr, buffer.size(),  Settings));
-        }
-
-        if (CurrentRow >= CurrentBlock.rows()) {
-            CurrentRow = 0;
-            if (CurrentBlock = BlockStream->read(); !CurrentBlock) {
-                BlockStream.reset();
-                Buffer.reset();
-                continue;
-            }
-        }
-
-        TUnboxedValue* items = nullptr;
-        result = Cache.NewArray(*ValueBuilder, items);
-        for (ui32 i = 0; i < OutMeta.size(); ++i) {
-            *items++ = ConvertOutputValue(CurrentBlock.getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
-        }
-
-        ++CurrentRow;
-        return EFetchStatus::Ok;
-    }
-}
-catch (const Poco::Exception& e) {
-    UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
-}
-catch (const std::exception& e) {
-    UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
-}
-
-template<>
-EFetchStatus TStreamValue<false>::Fetch(TUnboxedValue& result) try {
-    if (CurrentRow >= CurrentBlock.rows()) {
-        CurrentRow = 0;
-        CurrentBlock = BlockStream->read();
-
-        if (!CurrentBlock)
-            return EFetchStatus::Finish;
-    }
-
-    TUnboxedValue* items = nullptr;
-    result = Cache.NewArray(*ValueBuilder, items);
-    for (ui32 i = 0; i < OutMeta.size(); ++i) {
-        *items++ = ConvertOutputValue(CurrentBlock.getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
-    }
-
-    ++CurrentRow;
-    return EFetchStatus::Ok;
-}
-catch (const Poco::Exception& e) {
-    UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
-}
-catch (const std::exception& e) {
-    UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
-}
-
-template<bool WithYields>
 class TParseFormat : public TBoxedValue {
 public:
-    TParseFormat(const std::string_view& type, const std::string_view& settings, const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta, DB::ColumnsWithTypeAndName&& columns)
+    TParseFormat(const std::string_view& type, const std::string_view& settings, const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta, NDB::ColumnsWithTypeAndName&& columns)
         : Type(type), Settings(GetFormatSettings(settings)), Pos(pos), OutMeta(std::move(outMeta)), Columns(std::move(columns))
     {}
 
@@ -604,7 +529,7 @@ public:
             }
         }
 
-        return TUnboxedValuePod(new TStreamValue<WithYields>(Type, Settings, valueBuilder, *args, OutMeta, Columns, Pos, tzId));
+        return TUnboxedValuePod(new TStreamValue(Type, Settings, valueBuilder, *args, OutMeta, Columns, Pos, tzId));
     }
     catch (const Poco::Exception& e) {
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
@@ -613,36 +538,118 @@ public:
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
     }
 private:
-    static DB::FormatSettings GetFormatSettings(const std::string_view& view) {
-        DB::FormatSettings settings;
+    static NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
+        NDB::FormatSettings settings;
         settings.skip_unknown_fields = true;
         settings.with_names_use_header = true;
         if (!view.empty()) {
             const std::string str(view);
             const JSON json(str);
-#define SUPPORTED_FLAGS(xx) \
+    #define SUPPORTED_FLAGS(xx) \
             xx(skip_unknown_fields) \
             xx(import_nested_json) \
             xx(with_names_use_header) \
             xx(null_as_default) \
 
-#define SET_FLAG(flag) \
+    #define SET_FLAG(flag) \
             if (json.has(#flag)) \
                 settings.flag = json[#flag].get<bool>();
 
             SUPPORTED_FLAGS(SET_FLAG)
 
-#undef SET_FLAG
-#undef SUPPORTED_FLAGS
+    #undef SET_FLAG
+    #undef SUPPORTED_FLAGS
         }
         return settings;
     }
 
     const std::string Type;
-    const DB::FormatSettings Settings;
+    const NDB::FormatSettings Settings;
     const TSourcePosition Pos;
     const std::vector<TColumnMeta> OutMeta;
-    const DB::ColumnsWithTypeAndName Columns;
+    const NDB::ColumnsWithTypeAndName Columns;
+};
+
+class TParseBlocks : public TBoxedValue {
+    class TStreamValue : public TBoxedValue {
+    public:
+        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::vector<TColumnMeta> outMeta, const TSourcePosition& pos, ui32 tzId)
+            : ValueBuilder(valueBuilder)
+            , Stream(stream)
+            , OutMeta(outMeta)
+            , Pos(pos)
+            , TzId(tzId)
+            , Cache(OutMeta.size())
+        {}
+    private:
+        EFetchStatus Fetch(TUnboxedValue& result) final try {
+            while (true) {
+                if (!Input) {
+                    if (const auto status = Stream.Fetch(Input); EFetchStatus::Ok != status)
+                        return status;
+                }
+
+                const auto block = static_cast<NDB::Block*>(Input.GetResource());
+
+                if (CurrentRow >= block->rows()) {
+                    CurrentRow = 0;
+                    Input = NUdf::TUnboxedValuePod();
+                    continue;
+                }
+
+                TUnboxedValue* items = nullptr;
+                result = Cache.NewArray(*ValueBuilder, items);
+                for (ui32 i = 0; i < OutMeta.size(); ++i) {
+                    *items++ = ConvertOutputValue(block->getByPosition(i).column.get(), OutMeta[i], TzId, ValueBuilder, CurrentRow);
+                }
+
+                ++CurrentRow;
+                return EFetchStatus::Ok;
+            }
+        }
+        catch (const Poco::Exception& e) {
+            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
+        }
+        catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
+        }
+
+        const IValueBuilder* ValueBuilder;
+        const TUnboxedValue Stream;
+        const std::vector<TColumnMeta> OutMeta;
+        const TSourcePosition Pos;
+        const ui32 TzId;
+
+        TPlainArrayCache Cache;
+
+        TUnboxedValue Input;
+        size_t CurrentRow = 0U;
+    };
+
+public:
+    TParseBlocks(const TSourcePosition& pos, std::vector<TColumnMeta>&& outMeta)
+        : Pos(pos), OutMeta(std::move(outMeta))
+    {}
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
+        ui32 tzId = 0U;
+        if (const auto& tz = args[1U]) {
+            if (!valueBuilder->GetDateBuilder().FindTimezoneId(tz.AsStringRef(), tzId)) {
+                tzId = 0U;
+            }
+        }
+
+        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, OutMeta, Pos, tzId));
+    }
+    catch (const Poco::Exception& e) {
+        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
+    }
+    catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
+    }
+private:
+    const TSourcePosition Pos;
+    const std::vector<TColumnMeta> OutMeta;
 };
 
 struct TCHInitializer {
@@ -651,7 +658,7 @@ struct TCHInitializer {
 
     TCHInitializer()
     {
-        DB::registerFormats();
+        NDB::registerFormats();
     }
 };
 
@@ -675,25 +682,25 @@ TString MakeEnumImpl(const T& values) {
     return str;
 }
 
-std::optional<TString> MakeYqlType(DB::DataTypePtr type, bool validTz) {
-    if (type->getTypeId() == DB::TypeIndex::Enum8) {
-        const DB::DataTypeEnum8* enum8 = DB::checkAndGetDataType<DB::DataTypeEnum8>(type.get());
+std::optional<TString> MakeYqlType(NDB::DataTypePtr type, bool validTz) {
+    if (type->getTypeId() == NDB::TypeIndex::Enum8) {
+        const NDB::DataTypeEnum8* enum8 = NDB::checkAndGetDataType<NDB::DataTypeEnum8>(type.get());
         return MakeEnumImpl(enum8->getValues());
     }
 
-    if (type->getTypeId() == DB::TypeIndex::Enum16) {
-        const DB::DataTypeEnum16* enum16 = DB::checkAndGetDataType<DB::DataTypeEnum16>(type.get());
+    if (type->getTypeId() == NDB::TypeIndex::Enum16) {
+        const NDB::DataTypeEnum16* enum16 = NDB::checkAndGetDataType<NDB::DataTypeEnum16>(type.get());
         return MakeEnumImpl(enum16->getValues());
     }
 
-    if (type->getTypeId() == DB::TypeIndex::AggregateFunction) {
+    if (type->getTypeId() == NDB::TypeIndex::AggregateFunction) {
         return "Tagged<String,'" + TString(type->getName()) + "'>";
     }
 
-    if (type->getTypeId() == DB::TypeIndex::Array) {
-        const DB::DataTypeArray* array = DB::checkAndGetDataType<DB::DataTypeArray>(type.get());
+    if (type->getTypeId() == NDB::TypeIndex::Array) {
+        const NDB::DataTypeArray* array = NDB::checkAndGetDataType<NDB::DataTypeArray>(type.get());
         type = array->getNestedType();
-        if (type->getTypeId() == DB::TypeIndex::Nothing) {
+        if (type->getTypeId() == NDB::TypeIndex::Nothing) {
             return "EmptyList";
         }
 
@@ -705,8 +712,8 @@ std::optional<TString> MakeYqlType(DB::DataTypePtr type, bool validTz) {
         return "List<" + *inner + '>';
     }
 
-    if (type->getTypeId() == DB::TypeIndex::Tuple) {
-        const DB::DataTypeTuple* tuple = DB::checkAndGetDataType<DB::DataTypeTuple>(type.get());
+    if (type->getTypeId() == NDB::TypeIndex::Tuple) {
+        const NDB::DataTypeTuple* tuple = NDB::checkAndGetDataType<NDB::DataTypeTuple>(type.get());
         const auto& elems = tuple->getElements();
         TStringBuilder str;
         str << "Tuple<";
@@ -732,7 +739,7 @@ std::optional<TString> MakeYqlType(DB::DataTypePtr type, bool validTz) {
 
     if (type->isNullable()) {
        type = removeNullable(type);
-       if (type->getTypeId() == DB::TypeIndex::Nothing) {
+       if (type->getTypeId() == NDB::TypeIndex::Nothing) {
           return "Null";
        }
 
@@ -744,21 +751,21 @@ std::optional<TString> MakeYqlType(DB::DataTypePtr type, bool validTz) {
        return "Optional<" + *inner + '>';
    }
 
-   if (type->getTypeId() == DB::TypeIndex::UInt8) return "Uint8";
-   else if (type->getTypeId() == DB::TypeIndex::Int8) return "Int8";
-   else if (type->getTypeId() == DB::TypeIndex::UInt16) return "Uint16";
-   else if (type->getTypeId() == DB::TypeIndex::Int16) return "Int16";
-   else if (type->getTypeId() == DB::TypeIndex::UInt32) return "Uint32";
-   else if (type->getTypeId() == DB::TypeIndex::Int32) return "Int32";
-   else if (type->getTypeId() == DB::TypeIndex::UInt64) return "Uint64";
-   else if (type->getTypeId() == DB::TypeIndex::Int64) return "Int64";
-   else if (type->getTypeId() == DB::TypeIndex::Float32) return "Float";
-   else if (type->getTypeId() == DB::TypeIndex::Float64) return "Double";
-   else if (type->getTypeId() == DB::TypeIndex::String) return "String";
-   else if (type->getTypeId() == DB::TypeIndex::FixedString) return "String";
-   else if (validTz && type->getTypeId() == DB::TypeIndex::Date) return "TzDate";
-   else if (validTz && type->getTypeId() == DB::TypeIndex::DateTime) return "TzDatetime";
-   else if (type->getTypeId() == DB::TypeIndex::UUID) return "Uuid";
+   if (type->getTypeId() == NDB::TypeIndex::UInt8) return "Uint8";
+   else if (type->getTypeId() == NDB::TypeIndex::Int8) return "Int8";
+   else if (type->getTypeId() == NDB::TypeIndex::UInt16) return "Uint16";
+   else if (type->getTypeId() == NDB::TypeIndex::Int16) return "Int16";
+   else if (type->getTypeId() == NDB::TypeIndex::UInt32) return "Uint32";
+   else if (type->getTypeId() == NDB::TypeIndex::Int32) return "Int32";
+   else if (type->getTypeId() == NDB::TypeIndex::UInt64) return "Uint64";
+   else if (type->getTypeId() == NDB::TypeIndex::Int64) return "Int64";
+   else if (type->getTypeId() == NDB::TypeIndex::Float32) return "Float";
+   else if (type->getTypeId() == NDB::TypeIndex::Float64) return "Double";
+   else if (type->getTypeId() == NDB::TypeIndex::String) return "String";
+   else if (type->getTypeId() == NDB::TypeIndex::FixedString) return "String";
+   else if (validTz && type->getTypeId() == NDB::TypeIndex::Date) return "TzDate";
+   else if (validTz && type->getTypeId() == NDB::TypeIndex::DateTime) return "TzDatetime";
+   else if (type->getTypeId() == NDB::TypeIndex::UUID) return "Uuid";
    else return std::nullopt;
 }
 
@@ -767,8 +774,8 @@ SIMPLE_UDF(TToYqlType, TOptional<TUtf8>(TUtf8, TUtf8)) {
     const auto tzRef = args[1].AsStringRef();
     ui32 tzId;
     const bool validTz = valueBuilder->GetDateBuilder().FindTimezoneId(tzRef, tzId);
-    const DB::String typeStr(ref.Data(), ref.Data() + ref.Size());
-    const auto type = DB::DataTypeFactory::instance().get(typeStr);
+    const NDB::String typeStr(ref.Data(), ref.Data() + ref.Size());
+    const auto type = NDB::DataTypeFactory::instance().get(typeStr);
     if (const auto ret = MakeYqlType(type, validTz)) {
         return valueBuilder->NewString(*ret);
     }
@@ -792,7 +799,7 @@ public:
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TStringRef::Of("ToYqlType"));
         sink.Add(TStringRef::Of("ParseFormat"))->SetTypeAwareness();
-        sink.Add(TStringRef::Of("ParseSource"))->SetTypeAwareness();
+        sink.Add(TStringRef::Of("ParseBlocks"))->SetTypeAwareness();
         sink.Add(TStringRef::Of("ParseFromYdb"))->SetTypeAwareness();
     }
 
@@ -818,7 +825,53 @@ public:
         }
 
         const auto typeHelper = builder.TypeInfoHelper();
-        if (name == "ParseFormat" || name == "ParseSource") {
+        if (name == "ParseBlocks") {
+            const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
+            if (!userTypeInspector || userTypeInspector.GetElementsCount() < 3) {
+                return builder.SetError("Invalid user type.");
+            }
+
+            const auto argsTypeTuple = userTypeInspector.GetElementType(0);
+            const auto argsTypeInspector = TTupleTypeInspector(*typeHelper, argsTypeTuple);
+            if (!argsTypeInspector) {
+                return builder.SetError("Invalid user type - expected tuple.");
+            }
+
+            if (const auto argsCount = argsTypeInspector.GetElementsCount(); argsCount < 1 || argsCount > 2) {
+                ::TStringBuilder sb;
+                sb << "Invalid user type - expected one or two arguments, got: " << argsCount;
+                return builder.SetError(sb);
+            }
+
+            const auto resultType = userTypeInspector.GetElementType(2);
+
+            builder.UserType(userType);
+            builder.Args()->Add(builder.Stream()->Item(builder.Resource("ClickHouseClient.Block"))).Add<TOptional<TUtf8>>().Done();
+            builder.OptionalArgs(1U);
+            builder.Returns(builder.Stream()->Item(resultType));
+
+            if (const auto structType = TStructTypeInspector(*typeHelper, resultType)) {
+                std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
+                for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
+                    if (auto& meta = outMeta[i]; !GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
+                        ::TStringBuilder sb;
+                        sb << "Incompatible column '" << structType.GetMemberName(i) << "' type: ";
+                        TTypePrinter(*typeHelper, structType.GetMemberType(i)).Out(sb.Out);
+                        return builder.SetError(sb);
+                    }
+                }
+
+                if (!(flags & TFlags::TypesOnly)) {
+                    builder.Implementation(new TParseBlocks(builder.GetSourcePosition(), std::move(outMeta)));
+                }
+                return;
+            } else {
+                ::TStringBuilder sb;
+                sb << "Incompatible row type: ";
+                TTypePrinter(*typeHelper, resultType).Out(sb.Out);
+                return builder.SetError(sb);
+            }
+        } else if (name == "ParseFormat") {
             const auto userTypeInspector = TTupleTypeInspector(*typeHelper, userType);
             if (!userTypeInspector || userTypeInspector.GetElementsCount() < 3) {
                 return builder.SetError("Invalid user type.");
@@ -845,7 +898,7 @@ public:
 
             if (const auto structType = TStructTypeInspector(*typeHelper, resultType)) {
                 std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
-                DB::ColumnsWithTypeAndName columns(structType.GetMembersCount());
+                NDB::ColumnsWithTypeAndName columns(structType.GetMembersCount());
                 for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
                     if (auto& meta = outMeta[i]; GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
                         auto& colsumn = columns[i];
@@ -862,10 +915,7 @@ public:
                 if (!(flags & TFlags::TypesOnly)) {
                     const std::string_view& typeCfg = typeConfig;
                     const auto jsonFrom = typeCfg.find('{');
-                    if (name == "ParseFormat")
-                        builder.Implementation(new TParseFormat<true>(typeCfg.substr(0U, jsonFrom), std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),  builder.GetSourcePosition(), std::move(outMeta), std::move(columns)));
-                    else
-                        builder.Implementation(new TParseFormat<false>(typeCfg.substr(0U, jsonFrom), std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),  builder.GetSourcePosition(), std::move(outMeta), std::move(columns)));
+                    builder.Implementation(new TParseFormat(typeCfg.substr(0U, jsonFrom), std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom),  builder.GetSourcePosition(), std::move(outMeta), std::move(columns)));
                 }
                 return;
             } else {

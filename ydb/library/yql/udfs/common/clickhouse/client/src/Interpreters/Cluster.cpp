@@ -13,7 +13,7 @@
 #include <common/range.h>
 #include <boost/range/algorithm_ext/erase.hpp>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

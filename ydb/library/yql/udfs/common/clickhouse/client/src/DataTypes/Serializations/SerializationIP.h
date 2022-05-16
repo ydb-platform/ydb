@@ -2,7 +2,7 @@
 
 #include <DataTypes/Serializations/SerializationCustomSimpleText.h>
 
-namespace DB
+namespace NDB
 {
 
 class SerializationIPv4 final : public SerializationCustomSimpleText

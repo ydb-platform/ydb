@@ -16,7 +16,7 @@
 #include <deque>
 #include <atomic>
 
-namespace DB
+namespace NDB
 {
 
 /**

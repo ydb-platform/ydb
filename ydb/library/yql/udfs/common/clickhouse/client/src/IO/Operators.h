@@ -8,7 +8,7 @@
 #include <functional>
 
 
-namespace DB
+namespace NDB
 {
 
 /** Implements the ability to write and read data in/from WriteBuffer/ReadBuffer

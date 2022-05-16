@@ -6,7 +6,7 @@
 #include <Parsers/parseUserName.h>
 
 
-namespace DB
+namespace NDB
 {
 bool ParserShowGrantsQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {

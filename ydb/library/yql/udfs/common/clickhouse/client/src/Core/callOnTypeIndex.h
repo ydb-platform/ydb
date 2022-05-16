@@ -4,7 +4,7 @@
 
 #include <Core/Types.h>
 
-namespace DB
+namespace NDB
 {
 
 template <typename T, typename U>

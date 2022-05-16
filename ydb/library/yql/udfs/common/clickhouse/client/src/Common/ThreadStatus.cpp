@@ -11,7 +11,7 @@
 #include <csignal>
 
 
-namespace DB
+namespace NDB
 {
 
 
@@ -134,7 +134,7 @@ ThreadStatus::~ThreadStatus()
         else
             memory_tracker.free(-untracked_memory);
     }
-    catch (const DB::Exception &)
+    catch (const Exception &)
     {
         /// It's a minor tracked memory leak here (not the memory itself but it's counter).
         /// We've already allocated a little bit more than the limit and cannot track it in the thread memory tracker or its parent.

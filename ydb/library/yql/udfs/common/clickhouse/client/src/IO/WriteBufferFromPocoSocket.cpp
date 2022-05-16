@@ -22,7 +22,7 @@ namespace CurrentMetrics
 }
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

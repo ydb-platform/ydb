@@ -107,7 +107,7 @@ TRuntimeNode BuildParseCall(
     TRuntimeNode input,
     const std::string_view& format,
     const std::string_view& compression,
-    TType* inputItemType,
+    TType* inputType,
     TType* outputItemType,
     NCommon::TMkqlBuildContext& ctx)
 {
@@ -140,8 +140,10 @@ TRuntimeNode BuildParseCall(
                 return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType), {dom});
             });
     } else {
-        const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputItemType}), ctx.ProgramBuilder.NewStructType({}), outputItemType});
-        input = ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format), {input}));
+        const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputType}), ctx.ProgramBuilder.NewStructType({}), outputItemType});
+        input = TType::EKind::Resource == static_cast<TStreamType*>(inputType)->GetItemType()->GetKind() ?
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input})):
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format), {input}));
     }
 
     return ctx.ProgramBuilder.ExpandMap(input,

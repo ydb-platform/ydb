@@ -7,7 +7,7 @@
 #include <Parsers/ParserSetQuery.h>
 #include <Parsers/ParserQuery.h>
 
-namespace DB
+namespace NDB
 {
 
 bool ParserExplainQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)

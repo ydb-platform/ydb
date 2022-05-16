@@ -5,7 +5,7 @@
 #include <AggregateFunctions/IAggregateFunction.h>
 
 
-namespace DB
+namespace NDB
 {
 struct Settings;
 

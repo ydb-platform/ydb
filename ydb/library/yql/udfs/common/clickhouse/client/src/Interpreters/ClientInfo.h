@@ -5,7 +5,7 @@
 #include <common/types.h>
 #include <Common/OpenTelemetryTraceContext.h>
 
-namespace DB
+namespace NDB
 {
 
 class WriteBuffer;

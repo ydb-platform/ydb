@@ -3,7 +3,7 @@
 #include <Processors/Formats/IRowInputFormat.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ReadBuffer;

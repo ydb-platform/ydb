@@ -27,7 +27,7 @@
 /// More info: https://www.kernel.org/doc/Documentation/accounting/taskstats.txt
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -299,7 +299,7 @@ TaskStatsInfoGetter::~TaskStatsInfoGetter()
 
 #else
 
-namespace DB
+namespace NDB
 {
 
 bool TaskStatsInfoGetter::checkPermissions()

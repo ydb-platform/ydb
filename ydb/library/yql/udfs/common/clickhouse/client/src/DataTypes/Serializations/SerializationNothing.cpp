@@ -3,7 +3,7 @@
 #include <IO/ReadBuffer.h>
 #include <IO/WriteBuffer.h>
 
-namespace DB
+namespace NDB
 {
 
 void SerializationNothing::serializeBinaryBulk(const IColumn & column, WriteBuffer & ostr, size_t offset, size_t limit) const

@@ -2,7 +2,7 @@
 
 #include <common/types.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Create a hard link `destination_path` pointing to `source_path`.

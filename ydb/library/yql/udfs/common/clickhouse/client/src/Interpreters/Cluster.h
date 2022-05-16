@@ -15,7 +15,7 @@ namespace Poco
     }
 }
 
-namespace DB
+namespace NDB
 {
 
 struct Settings;

@@ -2,7 +2,7 @@
 
 #include "IAST.h"
 
-namespace DB
+namespace NDB
 {
 
 class ASTDropFunctionQuery : public IAST

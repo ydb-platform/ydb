@@ -3,7 +3,7 @@
 #include <Parsers/IAST.h>
 #include <common/types.h>
 
-namespace DB
+namespace NDB
 {
 
 /// Pair with name and value in lisp programming langugate style. It contain

@@ -5,7 +5,7 @@
 #include <Core/UUID.h>
 
 
-namespace DB
+namespace NDB
 {
 
 

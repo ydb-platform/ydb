@@ -85,7 +85,7 @@ public:
             return TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(type));
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TResourceExprType>("ClickHouseClient.Block")));
         return TStatus::Ok;
     }
 

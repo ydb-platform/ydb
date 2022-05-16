@@ -1,6 +1,6 @@
 #include <DataTypes/Serializations/SerializationTupleElement.h>
 
-namespace DB
+namespace NDB
 {
 
 void SerializationTupleElement::enumerateStreams(

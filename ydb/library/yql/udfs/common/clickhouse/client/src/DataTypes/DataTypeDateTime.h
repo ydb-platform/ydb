@@ -5,7 +5,7 @@
 
 class DateLUTImpl;
 
-namespace DB
+namespace NDB
 {
 
 /** Mixin-class that manages timezone info for timezone-aware DateTime implementations

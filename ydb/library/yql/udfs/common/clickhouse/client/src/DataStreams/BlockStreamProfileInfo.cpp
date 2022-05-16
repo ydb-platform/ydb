@@ -6,7 +6,7 @@
 
 #include <Core/Block.h>
 
-namespace DB
+namespace NDB
 {
 
 void BlockStreamProfileInfo::read(ReadBuffer & in)

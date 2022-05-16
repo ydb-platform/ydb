@@ -7,7 +7,7 @@
 #include <Processors/QueryPipeline.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class ProcessListEntry;

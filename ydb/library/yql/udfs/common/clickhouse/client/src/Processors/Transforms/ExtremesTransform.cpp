@@ -2,7 +2,7 @@
 
 #include <Core/Field.h>
 
-namespace DB
+namespace NDB
 {
 
 ExtremesTransform::ExtremesTransform(const Block & header)

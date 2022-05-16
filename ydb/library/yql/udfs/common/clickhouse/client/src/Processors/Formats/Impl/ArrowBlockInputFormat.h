@@ -11,7 +11,7 @@
 namespace arrow { class RecordBatchReader; }
 namespace arrow::ipc { class RecordBatchFileReader; }
 
-namespace DB
+namespace NDB
 {
 
 class ReadBuffer;

@@ -15,7 +15,7 @@
 
 #include <common/logger_useful.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes
@@ -144,7 +144,7 @@ void registerInputFormatProcessorParquet(FormatFactory &factory)
 
 #else
 
-namespace DB
+namespace NDB
 {
 class FormatFactory;
 void registerInputFormatProcessorParquet(FormatFactory &)

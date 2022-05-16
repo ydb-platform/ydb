@@ -3,7 +3,7 @@
 #include <widechar_width.h>
 
 
-namespace DB
+namespace NDB
 {
 namespace UTF8
 {

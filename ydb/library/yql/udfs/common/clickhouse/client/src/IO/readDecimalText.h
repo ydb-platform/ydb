@@ -6,7 +6,7 @@
 #include <common/wide_integer_to_string.h>
 
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

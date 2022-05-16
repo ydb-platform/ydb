@@ -4,7 +4,7 @@
 #include <common/types.h>
 
 
-namespace DB
+namespace NDB
 {
 
 class WriteBuffer;

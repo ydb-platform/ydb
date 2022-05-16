@@ -4,7 +4,7 @@
 #include <tuple>
 #include <Common/SipHash.h>
 
-namespace DB
+namespace NDB
 {
 
 //TODO replace with StorageID
@@ -37,9 +37,9 @@ struct QualifiedTableName
 namespace std
 {
 
-template <> struct hash<DB::QualifiedTableName>
+template <> struct hash<NDB::QualifiedTableName>
 {
-    using argument_type = DB::QualifiedTableName;
+    using argument_type = NDB::QualifiedTableName;
     using result_type = size_t;
 
     result_type operator()(const argument_type & qualified_table) const

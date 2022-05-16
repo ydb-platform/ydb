@@ -41,7 +41,7 @@
 
 #include <Interpreters/StorageID.h>
 
-namespace DB
+namespace NDB
 {
 
 namespace ErrorCodes

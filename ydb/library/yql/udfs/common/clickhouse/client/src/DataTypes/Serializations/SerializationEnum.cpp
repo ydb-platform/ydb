@@ -6,7 +6,7 @@
 #include <Formats/ProtobufWriter.h>
 #include <Common/assert_cast.h>
 
-namespace DB
+namespace NDB
 {
 
 template <typename Type>

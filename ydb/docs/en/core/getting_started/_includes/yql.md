@@ -210,8 +210,7 @@ For a full description of the ways to pass parameters, see [the {{ ydb-short-nam
 
 You can learn more about YQL use cases by completing tasks from the [YQL tutorial](../../yql/tutorial/index.md).
 
-## Next step {#next}
+## Learn more about YDB {#next}
 
-Go to [YDB SDK - Getting started](../sdk.md) to proceed with the 'Getting started' scenario.
-
+Proceed to the [YDB SDK - Getting started](../sdk.md) article to learn more about YDB.
 

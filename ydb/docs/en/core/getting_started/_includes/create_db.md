@@ -12,7 +12,7 @@ There are three methods you can use to deploy {{ ydb-short-name }}:
 * [In Kubernetes](../../deploy/orchestrated/concepts.md).
 * [Locally, from a downloaded executable file](../self_hosted/ydb_local.md).
 
-## Next step {#next}
+## Learn more about YDB {#next}
 
-After creating your database, proceed to the [Authentication - Getting started](../auth.md) article.
+After creating your database, proceed to the [Authentication - Getting started](../auth.md) article to learn more about YDB.
 

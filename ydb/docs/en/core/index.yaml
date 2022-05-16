@@ -16,20 +16,20 @@ links:
   - title: Recommendations
     description: A set of recommendations for practical service use
     href: best_practices/
-  - title: YQL Reference
-    description: YDB Query Language reference, syntax and built-in functions
+  - title: YQL reference guide
+    description: Description of YQL syntax and built-in functions
     href: yql/reference/
-  - title: CLI Reference
-    description: YDB Command-Line Interface reference
+  - title: Working with the CLI
+    description: YDB CLI reference
     href: reference/ydb-cli/
-  - title: SDK Reference
-    description: YDB Software Development Kits reference
+  - title: Working with the SDK
+    description: YDB SDK reference
     href: reference/ydb-sdk/
-  - title: Manage databases
-    description: Configuration, maintenance, monitoring and troubleshooting of the YDB databases
+  - title: Managing databases
+    description: Configuring, maintaining, monitoring, and performing diagnostics of YDB databases
     href: db/
-  - title: Cluster management
-    description: Configuration, maintenance, monitoring and troubleshooting of the YDB clusters
+  - title: Managing a cluster
+    description: Configuring, maintaining, monitoring, and performing diagnostics of YDB clusters
     href: cluster/
   - title: Useful links
     description: Links to various resources related to YDB

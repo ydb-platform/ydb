@@ -22,7 +22,7 @@ curl https://binaries.ydb.tech/local_scripts/install.sh | bash
 
 ## Starting {#start}
 
-The local YDB server can be started in two modes:
+The local YDB server can be started in disk or in-memory mode:
 
 {% list tabs %}
 

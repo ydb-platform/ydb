@@ -30,7 +30,7 @@ If started successfully, you'll see the ID of the created container.
 - `/ydb_data` for storing data. If this directory is not mounted, the container will be started without saving data to the host system disk.
 - `/ydb_certs` for storing certificates to establish a TLS connection. The started container will write to this directory the certificates to be used for a TLS client connection. If this directory is not mounted, you won't be able to connect via TLS due to having no certificate information.
 
-`-e` means setting environment variables in `<name>=<value>`. The YDB container uses the following environment variables:
+`-e`: means setting environment variables in `<name>=<value>` format. The YDB container uses the following environment variables:
 
 - `YDB_DEFAULT_LOG_LEVEL`: The logging level. Acceptable values: `CRIT`, `ERROR`, `WARN`, `NOTICE`, and `INFO`. Defaults to `NOTICE`.
 - `GRPC_PORT`: The port for unencrypted connections. Defaults to 2136.

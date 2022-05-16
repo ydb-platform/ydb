@@ -1,7 +1,7 @@
 | Type | Description | Notes |
 | ----- | ----- | ----- |
 | `String` | A string that can contain any binary data |
-| `Utf8` | Text encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) |
+| `Utf8` | Text encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) |
 | `Json` | [JSON](https://en.wikipedia.org/wiki/JSON) represented as text | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) in an indexed binary representation | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `Yson` | [YSON](../../udf/list/yson.md) in a textual or binary representation. | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |

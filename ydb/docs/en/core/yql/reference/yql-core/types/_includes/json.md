@@ -28,7 +28,7 @@ Unsigned integer types.
 
 Real 4-byte number.
 
-* Type in JSON — `number`.
+* Type in JSON: `number`.
 * Sample {{ backend_name }} value: `0.12345679`.
 * Sample JSON value: `0.12345679`.
 

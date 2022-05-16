@@ -46,7 +46,7 @@ If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries t
                 }
                 fmt.Println(whoAmI)
             },
-            retry.WithIdempotent(),
+            retry.WithIdempotent(true),
         )
         if err != nil {
             panic(err)

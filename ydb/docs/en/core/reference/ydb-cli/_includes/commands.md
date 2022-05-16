@@ -31,8 +31,8 @@ Any command can be run from the command line with the `--help` option to get hel
 | [discovery list](../commands/discovery-list.md) | List of endpoints |
 | [discovery whoami](../commands/discovery-whoami.md) | Authentication |
 | [export s3](../export_import/s3_export.md) | Exporting data to S3 storage |
-| import file csv | Importing data from a CSV file |
-| import file tsv | Importing data from a TSV file |
+| [import file csv](../export_import/import-file.md) | Importing data from a CSV file |
+| [import file tsv](../export_import/import-file.md) | Importing data from a TSV file |
 | [import s3](../export_import/s3_import.md) | Importing data from S3 storage |
 | [init](../profile/create.md) | Initializing the CLI, creating a [profile](../profile/index.md) |
 | operation cancel | Aborting a background operation |

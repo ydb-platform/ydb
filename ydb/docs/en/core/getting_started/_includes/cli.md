@@ -102,7 +102,7 @@ Executing commands via `ydb yql` is a nice and easy way to get started. However,
 
 The YDB CLI supports individual commands with complete sets of options for any existing YDB API. For a full list of commands, see the [YDB CLI reference](../../reference/ydb-cli/index.md).
 
-## Next step {#next}
+## Learn more about YDB {#next}
 
-Go to [YQL - Getting started](../yql.md) to proceed with the 'Getting started' scenario.
+Proceed to the [YQL - Getting started](../yql.md) article to learn more about YDB.
 

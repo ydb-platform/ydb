@@ -49,9 +49,6 @@ func main() {
 		os.Getenv("YDB_CONNECTION_STRING"),
 		tracing.WithTraces(
 			tracing.WithDetails(trace.DetailsAll),
-		),
-		ydb.WithTraceTable(tracing.Table(
-			tracing.WithDetails(trace.DetailsAll),
 		)),
 	)
 	if err != nil {

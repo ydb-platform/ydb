@@ -341,6 +341,69 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     return true;
 }
 
+void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+
+    for (const auto& stream : in.GetCdcStreams()) {
+        auto changefeed = out.add_changefeeds();
+
+        changefeed->set_name(stream.GetName());
+        changefeed->set_state(Ydb::Table::ChangefeedDescription::STATE_ENABLED);
+
+        switch (stream.GetMode()) {
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeKeysOnly:
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeUpdate:
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewImage:
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeOldImage:
+        case NKikimrSchemeOp::ECdcStreamMode::ECdcStreamModeNewAndOldImages:
+            changefeed->set_mode(static_cast<Ydb::Table::ChangefeedMode::Mode>(stream.GetMode()));
+            break;
+        default:
+            break;
+        }
+
+        switch (stream.GetFormat()) {
+        case NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson:
+            changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+        const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+
+    out.SetName(in.name());
+
+    switch (in.mode()) {
+    case Ydb::Table::ChangefeedMode::MODE_KEYS_ONLY:
+    case Ydb::Table::ChangefeedMode::MODE_UPDATES:
+    case Ydb::Table::ChangefeedMode::MODE_NEW_IMAGE:
+    case Ydb::Table::ChangefeedMode::MODE_OLD_IMAGE:
+    case Ydb::Table::ChangefeedMode::MODE_NEW_AND_OLD_IMAGES:
+        out.SetMode(static_cast<NKikimrSchemeOp::ECdcStreamMode>(in.mode()));
+        break;
+    default:
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid changefeed mode";
+        return false;
+    }
+
+    switch (in.format()) {
+    case Ydb::Table::ChangefeedFormat::FORMAT_JSON:
+        out.SetFormat(NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson);
+        break;
+    default:
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid changefeed format";
+        return false;
+    }
+
+    return true;
+}
+
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
         const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic) {
 

@@ -18,6 +18,8 @@ namespace Table {
 class StorageSettings;
 class ColumnFamily;
 class CreateTableRequest;
+class Changefeed;
+class ChangefeedDescription;
 class DescribeTableResult;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
@@ -188,6 +190,39 @@ public:
 private:
     TMetadata Metadata_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Represents index description
+class TChangefeedDescription {
+    friend class NYdb::TProtoAccessor;
+
+public:
+    TChangefeedDescription(const TString& name, EChangefeedMode mode, EChangefeedFormat format);
+
+    const TString& GetName() const;
+    EChangefeedMode GetMode() const;
+    EChangefeedFormat GetFormat() const;
+
+    void SerializeTo(Ydb::Table::Changefeed& proto) const;
+    TString ToString() const;
+    void Out(IOutputStream& o) const;
+
+private:
+    explicit TChangefeedDescription(const Ydb::Table::Changefeed& proto);
+    explicit TChangefeedDescription(const Ydb::Table::ChangefeedDescription& proto);
+
+    template <typename TProto>
+    static TChangefeedDescription FromProto(const TProto& proto);
+
+private:
+    TString Name_;
+    EChangefeedMode Mode_;
+    EChangefeedFormat Format_;
+};
+
+bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);
+bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -397,6 +432,7 @@ public:
     TVector<TColumn> GetColumns() const;
     TVector<TTableColumn> GetTableColumns() const;
     TVector<TIndexDescription> GetIndexDescriptions() const;
+    TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
 
     const TString& GetOwner() const;
@@ -1343,9 +1379,11 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
 
     FLUENT_SETTING_VECTOR(TAlterTableColumn, AlterColumns);
 
+    FLUENT_SETTING_VECTOR(TIndexDescription, AddIndexes);
     FLUENT_SETTING_VECTOR(TString, DropIndexes);
 
-    FLUENT_SETTING_VECTOR(TIndexDescription, AddIndexes);
+    FLUENT_SETTING_VECTOR(TChangefeedDescription, AddChangefeeds);
+    FLUENT_SETTING_VECTOR(TString, DropChangefeeds);
 
     TSelf& AlterColumnFamily(TString name, TString family) {
         AlterColumns_.emplace_back(std::move(name), std::move(family));
@@ -1870,6 +1908,10 @@ public:
 } // namespace NYdb
 
 Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TIndexDescription, o, x) {
+    return x.Out(o);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NYdb::NTable::TChangefeedDescription, o, x) {
     return x.Out(o);
 }
 

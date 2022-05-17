@@ -117,6 +117,55 @@ message IndexBuildMetadata {
     float progress = 3;
 }
 
+message ChangefeedMode {
+    enum Mode {
+        MODE_UNSPECIFIED = 0;
+        // Only the key component of the modified row
+        MODE_KEYS_ONLY = 1;
+        // Updated columns
+        MODE_UPDATES = 2;
+        // The entire row, as it appears after it was modified
+        MODE_NEW_IMAGE = 3;
+        // The entire row, as it appeared before it was modified
+        MODE_OLD_IMAGE = 4;
+        // Both new and old images of the row
+        MODE_NEW_AND_OLD_IMAGES = 5;
+    }
+}
+
+message ChangefeedFormat {
+    enum Format {
+        FORMAT_UNSPECIFIED = 0;
+        FORMAT_JSON = 1;
+    }
+}
+
+message Changefeed {
+    // Name of the feed
+    string name = 1;
+    // Mode specifies the information that will be written to the feed
+    ChangefeedMode.Mode mode = 2;
+    // Format of the data
+    ChangefeedFormat.Format format = 3;
+}
+
+message ChangefeedDescription {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_ENABLED = 1;
+        STATE_DISABLED = 2;
+    }
+
+    // Name of the feed
+    string name = 1;
+    // Mode specifies the information that will be written to the feed
+    ChangefeedMode.Mode mode = 2;
+    // Format of the data
+    ChangefeedFormat.Format format = 3;
+    // State of the feed
+    State state = 4;
+}
+
 message StoragePool {
     string media = 1;
 }
@@ -490,6 +539,10 @@ message AlterTableRequest {
     Ydb.FeatureFlag.Status set_key_bloom_filter = 17;
     // Set read replicas settings for table
     ReadReplicasSettings set_read_replicas_settings = 18;
+    // Add change feeds
+    repeated Changefeed add_changefeeds = 19;
+    // Remove change feeds (by its names)
+    repeated string drop_changefeeds = 20;
 }
 
 message AlterTableResponse {
@@ -604,6 +657,8 @@ message DescribeTableResult {
     Ydb.FeatureFlag.Status key_bloom_filter = 13;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 14;
+    // List of changefeeds
+    repeated ChangefeedDescription changefeeds = 15;
 }
 
 message Query {

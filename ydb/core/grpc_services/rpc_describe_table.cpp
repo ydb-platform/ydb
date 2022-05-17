@@ -79,6 +79,7 @@ private:
                 }
 
                 FillIndexDescription(describeTableResult, tableDescription);
+                FillChangefeedDescription(describeTableResult, tableDescription);
 
                 if (GetProtoRequest()->include_table_stats()) {
                     FillTableStats(describeTableResult, pathDescription,

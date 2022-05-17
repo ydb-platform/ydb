@@ -28,6 +28,14 @@ NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndex
     return NTable::TIndexDescription(tableIndexDesc);
 }
 
+NTable::TChangefeedDescription TProtoAccessor::FromProto(const Ydb::Table::Changefeed& changefeed) {
+    return NTable::TChangefeedDescription(changefeed);
+}
+
+NTable::TChangefeedDescription TProtoAccessor::FromProto(const Ydb::Table::ChangefeedDescription& changefeed) {
+    return NTable::TChangefeedDescription(changefeed);
+}
+
 Ydb::Table::ValueSinceUnixEpochModeSettings::Unit TProtoAccessor::GetProto(NTable::TValueSinceUnixEpochModeSettings::EUnit value) {
     switch (value) {
     case NTable::TValueSinceUnixEpochModeSettings::EUnit::Seconds:

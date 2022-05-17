@@ -182,8 +182,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         cookies.Set("cookie2", "45678");
         headers.Set("Cookie", cookies.Render());
         request->Set(headers);
-        TString requestData;
-        request->AsString(requestData);
+        TString requestData = request->AsString();
         UNIT_ASSERT_VALUES_EQUAL(requestData, "GET /data/url HTTP/1.1\r\nHost: www.yandex.ru\r\nAccept: */*\r\nCookie: cookie1=123456; cookie2=45678;\r\n");
     }
 

@@ -16,9 +16,30 @@
 
 #include <util/system/hostname.h>
 
+#include <ydb/core/protos/mon.pb.h>
+
 #include "mon_impl.h"
 
 namespace NActors {
+
+struct TEvMon {
+    enum {
+        EvMonitoringRequest = NActors::NMon::HttpInfo + 10,
+        EvMonitoringResponse,
+        End
+    };
+
+    static_assert(EvMonitoringRequest > NMon::End, "expect EvMonitoringRequest > NMon::End");
+    static_assert(End < EventSpaceEnd(NActors::TEvents::ES_MON), "expect End < EventSpaceEnd(NActors::TEvents::ES_MON)");
+
+    struct TEvMonitoringRequest : TEventPB<TEvMonitoringRequest, NKikimrMonProto::TEvMonitoringRequest, EvMonitoringRequest> {
+        TEvMonitoringRequest() = default;
+    };
+
+    struct TEvMonitoringResponse : TEventPB<TEvMonitoringResponse, NKikimrMonProto::TEvMonitoringResponse, EvMonitoringResponse> {
+        TEvMonitoringResponse() = default;
+    };
+};
 
 // compatibility layer
 class THttpMonRequest : public NMonitoring::IMonHttpRequest {
@@ -39,11 +60,11 @@ public:
     {
     }
 
-    static TString GetPathFromUrl(TStringBuf url) {
-        return TString(url.Before('?'));
+    static TStringBuf GetPathFromUrl(TStringBuf url) {
+        return url.Before('?');
     }
 
-    static TString GetPathInfoFromUrl(NMonitoring::IMonPage* page, TStringBuf url) {
+    static TStringBuf GetPathInfoFromUrl(NMonitoring::IMonPage* page, TStringBuf url) {
         TString path = GetPageFullPath(page);
         url.SkipPrefix(path);
         return GetPathFromUrl(url);
@@ -145,7 +166,7 @@ public:
 class THttpMonRequestContainer : public TStringStream, public THttpMonRequest {
 public:
     THttpMonRequestContainer(NHttp::THttpIncomingRequestPtr request, NMonitoring::IMonPage* index)
-        : THttpMonRequest(request, *this, index, GetPathInfoFromUrl(index, request->URL))
+        : THttpMonRequest(request, *this, index, TString(GetPathInfoFromUrl(index, request->URL)))
     {
     }
 };
@@ -371,16 +392,13 @@ public:
 };
 
 // receives everyhing not related to actor communcation, converts them to request-actors
-class THttpMonServiceLegacyIndex : public TActorBootstrapped<THttpMonServiceLegacyIndex> {
+class THttpMonServiceLegacyIndex : public TActor<THttpMonServiceLegacyIndex> {
 public:
     THttpMonServiceLegacyIndex(TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage, const TString& redirectRoot = {})
-        : IndexMonPage(std::move(indexMonPage))
+        : TActor(&THttpMonServiceLegacyIndex::StateWork)
+        , IndexMonPage(std::move(indexMonPage))
         , RedirectRoot(redirectRoot)
     {
-    }
-
-    void Bootstrap() {
-        Become(&THttpMonServiceLegacyIndex::StateWork);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
@@ -388,9 +406,28 @@ public:
             TStringBuilder response;
             response << "HTTP/1.1 302 Found\r\nLocation: " << RedirectRoot << "\r\n\r\n";
             Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
-        } else {
-            Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
+            return;
+        } else if (!ev->Get()->Request->URL.ends_with("/") && ev->Get()->Request->URL.find('?') == TStringBuf::npos) {
+            TString url(ev->Get()->Request->URL);
+            bool index = false;
+            auto itPage = IndexPages.find(url);
+            if (itPage == IndexPages.end()) {
+                auto page = IndexMonPage->FindPageByAbsolutePath(url);
+                if (page) {
+                    index = page->IsIndex();
+                    IndexPages[url] = index;
+                }
+            } else {
+                index = itPage->second;
+            }
+            if (index) {
+                TStringBuilder response;
+                response << "HTTP/1.1 302 Found\r\nLocation: " << url + "/" << "\r\n\r\n";
+                Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
+                return;
+            }
         }
+        Register(new THttpMonLegacyIndexRequest(std::move(ev), IndexMonPage.Get()));
     }
 
     STATEFN(StateWork) {
@@ -401,6 +438,159 @@ public:
 
     TIntrusivePtr<NMonitoring::TIndexMonPage> IndexMonPage;
     TString RedirectRoot;
+    std::unordered_map<TString, bool> IndexPages;
+};
+
+inline TActorId MakeNodeProxyId(ui32 node) {
+    char x[12] = "nodeproxy";
+    return TActorId(node, TStringBuf(x, 12));
+}
+
+class THttpMonServiceNodeRequest : public TActorBootstrapped<THttpMonServiceNodeRequest> {
+public:
+    std::shared_ptr<NHttp::THttpEndpointInfo> Endpoint;
+    TEvMon::TEvMonitoringRequest::TPtr Event;
+    TActorId HttpProxyActorId;
+
+    THttpMonServiceNodeRequest(std::shared_ptr<NHttp::THttpEndpointInfo> endpoint, TEvMon::TEvMonitoringRequest::TPtr event, TActorId httpProxyActorId)
+        : Endpoint(std::move(endpoint))
+        , Event(std::move(event))
+        , HttpProxyActorId(httpProxyActorId)
+    {}
+
+    static void FromProto(NHttp::THttpConfig::SocketAddressType& address, const NKikimrMonProto::TSockAddr& proto) {
+        switch (proto.GetFamily()) {
+            case AF_INET:
+                //address = TSockAddrInet(proto.GetSockAddr4().GetAddress(), proto.GetSockAddr4().GetPort());
+                break;
+            case AF_INET6:
+                address = TSockAddrInet6(proto.GetSockAddr6().GetAddress().data(), proto.GetSockAddr6().GetPort());
+                break;
+        }
+    }
+
+    void Bootstrap() {
+        NHttp::THttpConfig::SocketAddressType address;
+        FromProto(address, Event->Get()->Record.GetAddress());
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(Event->Get()->Record.GetHttpRequest(), Endpoint, address);
+        TStringBuilder prefix;
+        prefix << "/node/" << TActivationContext::ActorSystem()->NodeId;
+        if (request->URL.SkipPrefix(prefix)) {
+            Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(std::move(request)));
+            Become(&THttpMonServiceNodeRequest::StateWork);
+        } else {
+            auto response = std::make_unique<TEvMon::TEvMonitoringResponse>();
+            auto httpResponse = request->CreateResponseBadRequest();
+            response->Record.SetHttpResponse(httpResponse->AsString());
+            Send(Event->Sender, response.release(), 0, Event->Cookie);
+            PassAway();
+        }
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
+        auto response = std::make_unique<TEvMon::TEvMonitoringResponse>();
+        response->Record.SetHttpResponse(ev->Get()->Response->AsString());
+        Send(Event->Sender, response.release(), 0, Event->Cookie);
+        PassAway();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse, Handle);
+        }
+    }
+};
+
+class THttpMonServiceMonRequest : public TActorBootstrapped<THttpMonServiceMonRequest> {
+public:
+    NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
+    ui32 NodeId;
+
+    THttpMonServiceMonRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, ui32 nodeId)
+        : Event(std::move(event))
+        , NodeId(nodeId)
+    {}
+
+    static void ToProto(NKikimrMonProto::TSockAddr& proto, const NHttp::THttpConfig::SocketAddressType& address) {
+        proto.SetFamily(AF_INET6);
+        proto.MutableSockAddr6()->SetAddress(address.GetIp());
+        proto.MutableSockAddr6()->SetPort(address.GetPort());
+    }
+
+    void Bootstrap() {
+        TActorId monServiceNodeProxy = MakeNodeProxyId(NodeId);
+        auto request = std::make_unique<TEvMon::TEvMonitoringRequest>();
+        request->Record.SetHttpRequest(Event->Get()->Request->AsString());
+        // TODO address
+        Send(monServiceNodeProxy, request.release(), IEventHandle::FlagTrackDelivery);
+        Become(&THttpMonServiceMonRequest::StateWork);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        TString reason;
+        switch (ev->Get()->Reason) {
+            case TEvents::TEvUndelivered::ReasonUnknown:
+                reason = "ReasonUnknown";
+                break;
+            case TEvents::TEvUndelivered::ReasonActorUnknown:
+                reason = "ReasonActorUnknown";
+                break;
+            case TEvents::TEvUndelivered::Disconnected:
+                reason = "Disconnected";
+                break;
+        }
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Event->Get()->Request->CreateResponseServiceUnavailable(reason)), 0, Event->Cookie);
+        PassAway();
+    }
+
+    void Handle(TEvMon::TEvMonitoringResponse::TPtr& ev) {
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Event->Get()->Request->CreateResponseString(ev->Get()->Record.GetHttpResponse())), 0, Event->Cookie);
+        PassAway();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvMon::TEvMonitoringResponse, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
+        }
+    }
+};
+
+// receives requests to another nodes
+class THttpMonServiceNodeProxy : public TActor<THttpMonServiceNodeProxy> {
+public:
+    THttpMonServiceNodeProxy(TActorId httpProxyActorId)
+        : TActor(&THttpMonServiceNodeProxy::StateWork)
+        , HttpProxyActorId(httpProxyActorId)
+        , Endpoint(std::make_shared<NHttp::THttpEndpointInfo>())
+    {
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+        TStringBuf url = ev->Get()->Request->URL;
+        TStringBuf node;
+        ui32 nodeId;
+        if (url.SkipPrefix("/node/") && url.NextTok('/', node) && TryFromStringWithDefault<ui32>(node, nodeId)) {
+            Register(new THttpMonServiceMonRequest(std::move(ev), nodeId));
+            return;
+        }
+        Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseBadRequest("bad request")), 0, ev->Cookie);
+    }
+
+    void Handle(TEvMon::TEvMonitoringRequest::TPtr& ev) {
+        Register(new THttpMonServiceNodeRequest(Endpoint, ev, HttpProxyActorId));
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(TEvMon::TEvMonitoringRequest, Handle);
+        }
+    }
+
+protected:
+    TActorId HttpProxyActorId;
+    std::shared_ptr<NHttp::THttpEndpointInfo> Endpoint;
 };
 
 TAsyncHttpMon::TAsyncHttpMon(TConfig config)
@@ -427,6 +617,13 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
             new THttpMonServiceLegacyIndex(IndexMonPage, Config.RedirectMainPageTo),
             TMailboxType::ReadAsFilled,
             ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
+        auto nodeProxyActorId = ActorSystem->Register(
+            new THttpMonServiceNodeProxy(HttpProxyActorId),
+            TMailboxType::ReadAsFilled,
+            ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
+        NodeProxyServiceActorId = MakeNodeProxyId(ActorSystem->NodeId);
+        ActorSystem->RegisterLocalService(NodeProxyServiceActorId, nodeProxyActorId);
+
         TStringBuilder workerName;
         workerName << FQDNHostName() << ":" << Config.Port;
         auto addPort = std::make_unique<NHttp::TEvHttpProxy::TEvAddListeningPort>();
@@ -437,11 +634,12 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
             "text/plain",
             "text/html",
             "text/css",
-            "application/javascript",
+            "text/javascript",
             "application/json",
         };
         ActorSystem->Send(HttpProxyActorId, addPort.release());
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
+        ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/node", NodeProxyServiceActorId));
         for (NMonitoring::IMonPage* page : ActorMonPages) {
             RegisterActorMonPage(page);
         }
@@ -455,6 +653,7 @@ void TAsyncHttpMon::Stop() {
         for (const TActorId& actorId : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }
+        ActorSystem->Send(NodeProxyServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpMonServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpProxyActorId, new TEvents::TEvPoisonPill);
     }

@@ -116,6 +116,11 @@ public:
         }
         return true;
     }
+
+    // non-destructive variant of AsString
+    TString AsString() const {
+        return TString(Data(), Size());
+    }
 };
 
 class THttpRequest {
@@ -671,6 +676,12 @@ public:
 
     THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
         : Endpoint(std::move(endpoint))
+        , Address(address)
+    {}
+
+    THttpIncomingRequest(TStringBuf content, std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
+        : THttpParser(content)
+        , Endpoint(std::move(endpoint))
         , Address(address)
     {}
 

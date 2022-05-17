@@ -89,6 +89,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/long_tx_service.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/metrics.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/minikql_engine.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/mon.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/msgbus.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/msgbus_health.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/msgbus_kv.proto

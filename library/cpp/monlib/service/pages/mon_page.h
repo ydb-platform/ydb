@@ -61,6 +61,10 @@ namespace NMonitoring {
             return !Title.empty();
         }
 
+        virtual bool IsIndex() const {
+            return false;
+        }
+
         virtual void Output(IMonHttpRequest& request) = 0;
     };
 

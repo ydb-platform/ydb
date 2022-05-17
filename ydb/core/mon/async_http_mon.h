@@ -32,6 +32,7 @@ protected:
     TActorSystem* ActorSystem = {};
     TActorId HttpProxyActorId;
     TActorId HttpMonServiceActorId;
+    TActorId NodeProxyServiceActorId;
     std::vector<NMonitoring::IMonPage*> ActorMonPages;
     std::vector<TActorId> ActorServices;
 

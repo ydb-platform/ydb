@@ -18,6 +18,10 @@ namespace NMonitoring {
         ~TIndexMonPage() override {
         }
 
+        bool IsIndex() const override {
+            return true;
+        }
+
         void Output(IMonHttpRequest& request) override;
         void OutputIndexPage(IMonHttpRequest& request);
         virtual void OutputIndex(IOutputStream& out, bool pathEndsWithSlash);
@@ -30,6 +34,7 @@ namespace NMonitoring {
 
         IMonPage* FindPage(const TString& relativePath);
         TIndexMonPage* FindIndexPage(const TString& relativePath);
+        IMonPage* FindPageByAbsolutePath(const TString& absolutePath);
 
         void SortPages();
         void ClearPages();

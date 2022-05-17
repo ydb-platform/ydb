@@ -106,6 +106,39 @@ IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {
     }
 }
 
+IMonPage* TIndexMonPage::FindPageByAbsolutePath(const TString& absolutePath) {
+    TIndexMonPage* page = this;
+    TString path = absolutePath;
+    if (path.StartsWith("/")) {
+        path.erase(0, 1);
+    }
+    while (!path.empty()) {
+        TString tryPath = path;
+        while (!tryPath.empty()) {
+            IMonPage* found = page->FindPage(tryPath);
+            if (found == nullptr) {
+                size_t slash = tryPath.find_last_of('/');
+                if (slash == TString::npos) {
+                    return nullptr;
+                }
+                tryPath.resize(slash);
+            } else {
+                if (tryPath.size() == path.size()) {
+                    return found;
+                }
+                if (found->IsIndex()) {
+                    path = path.substr(tryPath.size() + 1);
+                    page = static_cast<TIndexMonPage*>(found);
+                    break;
+                } else {
+                    return found;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
 TIndexMonPage* TIndexMonPage::FindIndexPage(const TString& relativePath) {
     return VerifyDynamicCast<TIndexMonPage*>(FindPage(relativePath));
 }

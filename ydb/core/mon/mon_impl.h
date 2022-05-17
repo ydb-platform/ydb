@@ -319,7 +319,22 @@ public:
     }
 
     void Output(IMonHttpRequest& request) override {
-        IndexMonPage->Output(request);
+        auto& out = request.Output();
+        out << HTTPOKHTML;
+        out << "<html>\n";
+        IndexMonPage->OutputHead(out);
+
+        out << "<body>\n";
+
+        // part of common navbar
+        IndexMonPage->OutputNavBar(out);
+
+        out << "<div class='container'>\n"
+                << "<h2>" << IndexMonPage->Title << "</h2>\n";
+        IndexMonPage->OutputIndex(out, true);
+        out << "</div>\n"
+            << "</body>\n";
+        out << "</html>\n";
     }
 
     TIntrusivePtr<TIndexMonPage> IndexMonPage;

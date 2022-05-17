@@ -124,7 +124,6 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
 
             AsyncRmDir(runtime, ++t.TxId, "/MyRoot", "Victim");
             AsyncRmDir(runtime, ++t.TxId, "/MyRoot", "Victim");
-            TestModificationResults(runtime, t.TxId, {NKikimrScheme::StatusMultipleModifications});
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
 
@@ -167,12 +166,10 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                             UniformPartitionsCount: 2
                         )");
             AsyncDropTable(runtime, ++t.TxId, "/MyRoot", "DropMe");
-            TestModificationResult(runtime, t.TxId-1, NKikimrScheme::StatusAccepted);
-            TestModificationResult(runtime, t.TxId, NKikimrScheme::StatusMultipleModifications);
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
 
-            AsyncDropTable(runtime, ++t.TxId, "/MyRoot", "DropMe");
 
+            TestDropTable(runtime, ++t.TxId, "/MyRoot", "DropMe");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+4));
 

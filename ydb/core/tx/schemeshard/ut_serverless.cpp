@@ -104,6 +104,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
 
         SetAllowServerlessStorageBilling(&runtime, true);
 
+        // Set a large enough idle mem compaction interval, so data size and billing are predictable
+        runtime.GetAppData().DataShardConfig.SetIdleMemCompactionIntervalSeconds(600);
+
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);

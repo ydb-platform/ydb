@@ -29,7 +29,7 @@ class TColumnShardScanIterator : public TScanIteratorBase {
     THashMap<TBlobRange, ui64> IndexedBlobs; // blobId -> granule
     THashSet<TBlobRange> WaitIndexed;
     THashMap<ui64, THashSet<TBlobRange>> GranuleBlobs; // granule -> blobs
-    THashMap<TUnifiedBlobId, ui32> WaitCommitted;
+    std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
     TVector<TBlobRange> BlobsToRead;
     ui64 NextBlobIdxToRead = 0;
     TDeque<NOlap::TPartialReadResult> ReadyResults;
@@ -44,8 +44,8 @@ public:
     {
         ui32 batchNo = 0;
         for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++batchNo) {
-            const TUnifiedBlobId& blobId = ReadMetadata->CommittedBlobs[i];
-            WaitCommitted.emplace(blobId, batchNo);
+            const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
+            WaitCommitted.emplace(cmtBlob, batchNo);
         }
         IndexedBlobs = IndexedData.InitRead(batchNo, true);
         for (auto& [blobId, granule] : IndexedBlobs) {
@@ -54,7 +54,8 @@ public:
         }
 
         // Read all committed blobs
-        for (const auto& blobId : ReadMetadata->CommittedBlobs) {
+        for (const auto& cmtBlob : ReadMetadata->CommittedBlobs) {
+            auto& blobId = cmtBlob.BlobId;
             BlobsToRead.push_back(TBlobRange(blobId, 0, blobId.BlobSize()));
         }
 
@@ -77,12 +78,15 @@ public:
                 return; // ignore duplicate parts
             }
             WaitIndexed.erase(blobRange);
-            IndexedData.AddIndexedColumn(blobRange, data);
-        } else if (WaitCommitted.count(blobId)) {
-            ui32 batchNo = WaitCommitted[blobId];
-            WaitCommitted.erase(blobId);
-
-            IndexedData.AddNotIndexed(batchNo, data);
+            IndexedData.AddIndexed(blobRange, data);
+        } else {
+            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
+            if (cmt.empty()) {
+                return; // ignore duplicates
+            }
+            const NOlap::TCommittedBlob& cmtBlob = cmt.key();
+            ui32 batchNo = cmt.mapped();
+            IndexedData.AddNotIndexed(batchNo, data, cmtBlob.PlanStep, cmtBlob.TxId);
         }
     }
 

@@ -54,24 +54,15 @@ ui64 ExtractTimestamp(const std::shared_ptr<TPredicate>& pkPredicate, const std:
 std::shared_ptr<arrow::RecordBatch> AddSpecials(const TIndexInfo& indexInfo, const TInsertedData& inserted,
                                                 const TString& data)
 {
-    auto schema = indexInfo.ArrowSchema();
     Y_VERIFY(!data.empty(), "Blob data not present");
-    auto batch = NArrow::DeserializeBatch(data, schema);
-    Y_VERIFY(batch, "Deserialization failed");
-    i64 numRows = batch->num_rows();
 
-    auto columns = indexInfo.MakeSpecialColumns(inserted, numRows);
-    columns.reserve(columns.size() + schema->num_fields());
+    auto batch = NArrow::DeserializeBatch(data, indexInfo.ArrowSchema());
+    Y_VERIFY(batch);
 
-    for (auto& field : schema->fields()) {
-        Y_VERIFY(!indexInfo.IsSpecialColumn(*field));
-        columns.push_back(batch->GetColumnByName(field->name()));
-    }
+    batch = TIndexInfo::AddSpecialColumns(batch, inserted.PlanStep(), inserted.TxId());
+    Y_VERIFY(batch);
 
-    auto extendedSchema = indexInfo.ArrowSchemaWithSpecials();
-    Y_VERIFY(extendedSchema->num_fields() == (i64)columns.size());
-
-    return arrow::RecordBatch::Make(extendedSchema, numRows, columns);
+    return NArrow::ExtractColumns(batch, indexInfo.ArrowSchemaWithSpecials());
 }
 
 bool UpdateEvictedPortion(TPortionInfo& portionInfo, const TIndexInfo& indexInfo, const TString& tierName,

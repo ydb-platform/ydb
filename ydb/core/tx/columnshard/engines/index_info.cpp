@@ -233,12 +233,21 @@ std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchemaSnapshot() {
     return std::make_shared<arrow::Schema>(snap);
 }
 
-std::vector<std::shared_ptr<arrow::Array>> TIndexInfo::MakeSpecialColumns(const TInsertedData& blob, ui64 size) {
-    std::shared_ptr<arrow::UInt64Array> planStep = NArrow::MakeUI64Array(blob.PlanStep(), size);
-    std::shared_ptr<arrow::UInt64Array> txId = NArrow::MakeUI64Array(blob.TxId(), size);
+std::shared_ptr<arrow::RecordBatch> TIndexInfo::AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                                  ui64 planStep, ui64 txId)
+{
+    Y_VERIFY(batch);
+    i64 numColumns = batch->num_columns();
+    i64 numRows = batch->num_rows();
 
-    std::vector<std::shared_ptr<arrow::Array>> columns{planStep, txId};
-    return columns;
+    auto res = batch->AddColumn(numColumns, arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
+                                NArrow::MakeUI64Array(planStep, numRows));
+    Y_VERIFY(res.ok());
+    res = (*res)->AddColumn(numColumns + 1, arrow::field(SPEC_COL_TX_ID, arrow::uint64()),
+                            NArrow::MakeUI64Array(txId, numRows));
+    Y_VERIFY(res.ok());
+    Y_VERIFY((*res)->num_columns() == numColumns + 2);
+    return *res;
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::ArrowSchema(const TVector<ui32>& columnIds) const {

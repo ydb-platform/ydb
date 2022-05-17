@@ -66,7 +66,7 @@ public:
             --ReservedGranuleIds;
             ui64 ts = 0;
             NewGranules.emplace(granule, std::make_pair(pathId, ts));
-            PathToGranule[pathId].emplace(ts, granule);
+            PathToGranule[pathId].emplace_back(ts, granule);
             return true;
         }
 
@@ -105,7 +105,7 @@ public:
             return numSplitInto;
         }
 
-        THashMap<ui64, TMap<ui64, ui64>> PathToGranule; // pathId -> {timestamp, granule}
+        THashMap<ui64, std::vector<std::pair<ui64, ui64>>> PathToGranule; // pathId -> {timestamp, granule}
         TSrcGranule SrcGranule;
         THashMap<ui64, std::pair<ui64, ui64>> NewGranules; // granule -> {pathId, key}
         THashMap<ui64, ui32> TmpGranuleIds; // ts -> tmp granule id
@@ -260,6 +260,9 @@ std::shared_ptr<arrow::TimestampArray> GetTimestampColumn(const TIndexInfo& inde
                                                           const std::shared_ptr<arrow::RecordBatch>& batch);
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
 SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const TMap<ui64, ui64>& tsGranules,
+                  const TIndexInfo& indexInfo);
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
+SliceIntoGranules(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::pair<ui64, ui64>>& tsGranules,
                   const TIndexInfo& indexInfo);
 
 }

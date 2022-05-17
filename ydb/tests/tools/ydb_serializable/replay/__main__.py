@@ -13,8 +13,8 @@ def main():
     parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
 
-    with open(args.file, 'r') as f:
-        history = History.from_json(json.load(f, encoding='utf8'))
+    with open(args.file, 'r', encoding='utf8') as f:
+        history = History.from_json(json.load(f))
 
     logger = DummyLogger()
     checker = SerializabilityChecker(logger=logger, debug=args.debug, explain=True)

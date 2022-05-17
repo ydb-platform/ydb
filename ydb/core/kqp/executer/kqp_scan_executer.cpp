@@ -524,10 +524,11 @@ private:
                  * So we may sort ranges based solely on the their rightmost point.
                  */
                 std::sort(taskReads.begin(), taskReads.end(), [&](const auto& lhs, const auto& rhs){
-                    YQL_ENSURE(lhs.ShardId != rhs.ShardId);
+                    if (lhs.ShardId == rhs.ShardId)
+                        return false;
 
                     const std::pair<const TSerializedCellVec*, bool> k1 = lhs.Ranges.GetRightBorder();
-                    const std::pair<const TSerializedCellVec*, bool> k2 = lhs.Ranges.GetRightBorder();
+                    const std::pair<const TSerializedCellVec*, bool> k2 = rhs.Ranges.GetRightBorder();
 
                     const int cmp = CompareBorders<false, false>(
                         k1.first->GetCells(),

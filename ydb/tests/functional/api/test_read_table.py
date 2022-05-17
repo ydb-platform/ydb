@@ -54,7 +54,7 @@ class AbstractReadTableTest(object):
         self.logger.debug("received chunk data, %s", chunk_or_future)
         return chunk_or_future
 
-    def _prepare_test(self, name):
+    def _prepare_test(self, name, partitions=8):
         session = ydb.retry_operation_sync(lambda: self.driver.table_client.session().create())
         table_name = '/Root/{}'.format(name)
         self.logger.debug("Preparing data for test %s", name)
@@ -72,7 +72,7 @@ class AbstractReadTableTest(object):
                 .with_partitioning_policy(
                     ydb.PartitioningPolicy()
                     .with_uniform_partitions(
-                        8
+                        partitions
                     )
                 )
             )
@@ -89,14 +89,14 @@ class AbstractReadTableTest(object):
         data_by_shard_id = {}
         with session.transaction() as tx:
             max_value = 2 ** 64
-            shard_key_bound = max_value >> 3
+            shard_key_bound = max_value // partitions
             data = []
 
-            for shard_id in range(8):
+            for shard_id in range(partitions):
                 data_by_shard_id[shard_id] = []
 
-            for idx in range(8 * 8):
-                shard_id = idx % 8
+            for idx in range(partitions * partitions):
+                shard_id = idx % partitions
                 table_row = {'Key1': shard_id * shard_key_bound + idx, 'Key2': idx + 1000, 'Value': str(idx ** 4)}
                 data_by_shard_id[shard_id].append(table_row)
                 data.append(table_row)
@@ -253,17 +253,25 @@ class TestReadTableSuccessStories(AbstractReadTableTest):
 class TestReadTableTruncatedResults(AbstractReadTableTest):
     @pytest.mark.parametrize('method_kind', ['async_read_table', 'read_table'])
     def test_truncated_results(self, method_kind):
-        session, table_name, prepared_data, _ = self._prepare_test('test_truncated_results')
+        session, table_name, prepared_data, _ = self._prepare_test('test_truncated_results', partitions=32)
 
-        sall_it = self.driver.table_client.scan_query('select * from `%s`' % table_name)
+        sall_it = self.driver.table_client.scan_query('select * from `%s` order by Key1' % table_name)
+        prev_key = None
         while True:
             try:
                 next_response = next(sall_it)
             except StopIteration:
                 break
 
+            self._kill_tablets()
+
             for row in next_response.result_set.rows:
                 self.logger.debug("Processing row %s", row)
+
+                if prev_key is not None:
+                    assert prev_key <= row.Key1
+
+                prev_key = row.Key1
 
         for _ in range(6):
             stream = self._prepare_stream(method_kind, session, table_name)

@@ -237,6 +237,9 @@ namespace NKikimr::NStorage {
                     if (group.ProxyRunning) {
                         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, MakeBlobStorageProxyID(groupId), {}, nullptr, 0));
                     }
+                    if (group.GroupResolver) {
+                        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+                    }
                     Groups.erase(groupId);
 
                     // report group deletion to whiteboard

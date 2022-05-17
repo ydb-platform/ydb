@@ -39,8 +39,7 @@ public:
                 TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
                     permissions,
                     {
-                        {"folder_id", folderId},
-                        {"database_id", "db"}
+                        {"folder_id", folderId}
                     }
                 }};
                 std::transform(permissions.begin(), permissions.end(), std::back_inserter(Sids),
@@ -51,8 +50,7 @@ public:
                     entries.push_back({
                         {{NPerms::Required("iam.serviceAccounts.use")}},
                         {
-                            {"service_account_id", serviceAccountId},
-                            {"database_id", "db"}
+                            {"service_account_id", serviceAccountId}
                         }});
                     Sids.push_back("iam.serviceAccounts.use@as");
                 }

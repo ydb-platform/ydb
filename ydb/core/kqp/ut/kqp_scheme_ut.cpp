@@ -305,12 +305,108 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    template <bool UseNewEngine>
+    void SchemaVersionMissmatchWithIndexTest(bool write) {
+        //KIKIMR-14282
+        //YDBREQUESTS-1324
+        //some cases fail
+
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query;
+        if (write) {
+            query = Q_(R"(
+                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            )");
+        } else {
+            query = Q1_(R"(
+                SELECT * FROM `/Root/KeyValue` VIEW `value_index` WHERE Value = "New";
+            )");
+        }
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            TString create_index_query = Q1_(R"(
+                ALTER TABLE `/Root/KeyValue` ADD INDEX value_index GLOBAL SYNC ON (`Value`);
+            )");
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                execSettings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        }
+
+        {
+            kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+            TString alter_scheme = R"(
+                    Name: "indexImplTable"
+                    PartitionConfig {
+                        PartitioningPolicy {
+                            SizeToSplit: 1000
+                            MinPartitionsCount: 1
+                            MaxPartitionsCount: 100
+                        }
+                    }
+            )";
+            auto reply = kikimr.GetTestClient().AlterTable("/Root/KeyValue/value_index", alter_scheme, "root@builtin");
+            const NKikimrClient::TResponse &response = reply->Record;
+            UNIT_ASSERT_VALUES_EQUAL((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithRead) {
         SchemaVersionMissmatchWithTest<UseNewEngine>(false);
     }
 
     Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithWrite) {
         SchemaVersionMissmatchWithTest<UseNewEngine>(true);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithIndexRead) {
+        SchemaVersionMissmatchWithIndexTest<UseNewEngine>(false);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithIndexWrite) {
+        SchemaVersionMissmatchWithIndexTest<UseNewEngine>(true);
     }
 
     void CheckInvalidationAfterDropCreateTable(bool withCompatSchema) {

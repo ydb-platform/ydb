@@ -343,7 +343,7 @@ def deploy(arguments):
     recipe.write_database(cluster.domain_name)
     recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoint + "?database=/" + cluster.domain_name)
     if enable_tls():
-        recipe.write_certificates_path(configuration.grpc_tls_ca())
+        recipe.write_certificates_path(configuration.grpc_tls_ca.decode("utf-8"))
     return endpoint, database
 
 

@@ -266,7 +266,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
             << ", messages in write request " << WriteInFlight.size()
             << ", queue to write: " << Queue.size());
         LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
-            << "[STATE] read futures inflight  " << ReadFuturesInFlight << ", last id=" << ReadFeatureId);
+            << "[STATE] wait new reader event=" << WaitNextReaderEventInFlight << ", read futures inflight  " << ReadFuturesInFlight << ", last id=" << ReadFeatureId);
         if (!ReadFeatures.empty()) { 
             const auto& oldest = *ReadFeatures.begin();
             const auto& info = oldest.second;
@@ -535,6 +535,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         return;
     }
     TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " got next reader event: " << bool(event)); 
 
     if (wakeup && !event) {
         return;

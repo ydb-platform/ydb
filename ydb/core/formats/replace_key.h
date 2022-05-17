@@ -286,10 +286,12 @@ private:
         if constexpr (std::is_same_v<T, arrow::util::string_view>) {
             size_t minSize = (x.size() < y.size()) ? x.size() : y.size();
             int cmp = memcmp(x.data(), y.data(), minSize);
-            if (!cmp) {
-                return CompareValueNotNull(x.size(), y.size());
+            if (cmp < 0) {
+                return -1; // avoid INT_MIN as negative cmp. We require "-negative is positive" for result.
+            } else if (cmp > 0) {
+                return 1;
             }
-            return cmp;
+            return CompareValueNotNull(x.size(), y.size());
         } else {
             if (x < y) {
                 return -1;

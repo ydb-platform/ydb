@@ -159,7 +159,7 @@ class TTestActorSystem {
     };
 
 public:
-    std::function<bool(ui32, IEventHandle&)> FilterFunction;
+    std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> FilterFunction;
     IOutputStream *LogStream = &Cerr;
 
 public:
@@ -491,7 +491,7 @@ public:
             if (witness) {
                 witness(*event);
             }
-            if (FilterFunction && !FilterFunction(item->NodeId, *event)) {
+            if (FilterFunction && !FilterFunction(item->NodeId, event)) {
                 continue;
             }
             WrapInActorContext(TransformEvent(event.get(), item->NodeId), [&](IActor *actor) {

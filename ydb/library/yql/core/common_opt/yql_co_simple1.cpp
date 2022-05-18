@@ -4847,6 +4847,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         TDynBitMap usedIndicies;
         TExprNode::TListType lambdas;
+        TExprNode::TListType switchLambdaArgs;
         TExprNode::TListType indicies;
         TExprNode::TListType castStructs;
         ETypeAnnotationKind targetType = singleInput ? ETypeAnnotationKind::List : ETypeAnnotationKind::Optional;
@@ -4876,6 +4877,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
 
             auto lambda = node->Child(i + 1);
+            switchLambdaArgs.push_back(lambda->Head().HeadPtr());
             if (&lambda->Head().Head() == &lambda->Tail()) {
                 // Trivial lambda
                 ordered = ordered || lambda->GetConstraint<TSortedConstraintNode>();
@@ -4966,6 +4968,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                         return builder;
                                     })
                                 .Done()
+                                .WithNode(*switchLambdaArgs.front(), node->HeadPtr())
                             .Seal()
                         .Seal()
                     .Seal()
@@ -5010,6 +5013,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                                     return builder;
                                 })
                             .Done()
+                            .WithNode(*switchLambdaArgs[i], node->HeadPtr())
                         .Seal()
                         .Lambda(1)
                             .Param("mapItem")

@@ -20,7 +20,15 @@ public:
         FailForcedNewEngineCompilationForTests(false);
         FailForcedNewEngineExecutionForTests(false);
 
-        Kikimr.reset(new TKikimrRunner);
+        TVector<NKikimrKqp::TKqpSetting> settings;
+        NKikimrKqp::TKqpSetting setting;
+        setting.SetName("_KqpForceNewEngine");
+        setting.SetValue("false");
+        settings.push_back(setting);
+
+        TKikimrRunner kikimr(settings);
+
+        Kikimr.reset(new TKikimrRunner(settings));
         Counters = Kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters;
         KqpCounters.reset(new TKqpCounters(Counters));
     }

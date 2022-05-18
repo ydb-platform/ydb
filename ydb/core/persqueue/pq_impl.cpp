@@ -816,7 +816,16 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
 
     auto& pqConfig = AppData(ctx)->PQConfig;
     if (pqConfig.HasBillingMeteringConfig() && pqConfig.GetBillingMeteringConfig().GetEnabled()) {
-        TSet<EMeteringJson> whichToFlush {EMeteringJson::ResourcesReservedV1, EMeteringJson::PutEventsV1};
+        TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
+        ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
+            Config.GetPartitionConfig().GetLifetimeSeconds()};
+
+        if (Config.GetPartitionConfig().HasStorageLimitBytes()) {
+            storageLimitBytes = Config.GetPartitionConfig().GetStorageLimitBytes();
+            whichToFlush = TSet<EMeteringJson>{EMeteringJson::PutEventsV1,
+                                               EMeteringJson::ThroughputV1,
+                                               EMeteringJson::StorageV1};
+        }
 
         MeteringSink.Create(ctx.Now(), {
                 .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
@@ -828,8 +837,7 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
                 .ResourceId     = streamPath,
                 .PartitionsSize = Config.PartitionsSize(),
                 .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
-                .ReservedSpace  = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
-                                  Config.GetPartitionConfig().GetLifetimeSeconds(),
+                .ReservedSpace  = storageLimitBytes,
                 .ConsumersThroughput = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
                                        Config.ReadRulesSize(),
             }, whichToFlush, std::bind(NMetering::SendMeteringJson, ctx, std::placeholders::_1));

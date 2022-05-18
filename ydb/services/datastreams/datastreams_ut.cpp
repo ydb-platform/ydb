@@ -103,7 +103,7 @@ using TInsecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAnd
 using TSecureDatastreamsTestServer = TDatastreamsTestServer<TKikimrWithGrpcAndRootSchemaSecure, true>;
 
 ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath, const TString& schema,
-                      std::function<void(const NJson::TJsonValue::TMapType& map)> tags_check,
+                       std::function<void(const NJson::TJsonValue::TMapType& map)> tags_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> labels_check,
                        std::function<void(const NJson::TJsonValue::TMapType& map)> usage_check) {
     Sleep(TDuration::Seconds(1));
@@ -128,9 +128,13 @@ ui32 CheckMeteringFile(TTempFileHandle* meteringFile, const TString& streamPath,
         UNIT_ASSERT(map.contains("cloud_id"));
         UNIT_ASSERT(map.contains("folder_id"));
         UNIT_ASSERT(map.contains("resource_id"));
-        UNIT_ASSERT(map.contains("labels"));
         UNIT_ASSERT(map.contains("source_id"));
         UNIT_ASSERT(map.contains("source_wt"));
+        // Following 3 fields are mandatory:
+        UNIT_ASSERT(map.contains("tags"));
+        UNIT_ASSERT(map.contains("labels"));
+        UNIT_ASSERT(map.contains("usage"));
+
         UNIT_ASSERT(map.find("cloud_id")->second.GetString() == DEFAULT_CLOUD_ID);
         UNIT_ASSERT(map.find("folder_id")->second.GetString() == DEFAULT_FOLDER_ID);
         UNIT_ASSERT(map.find("resource_id")->second.GetString() == streamPath);
@@ -214,19 +218,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
 
-        // for metering purposes
-        {
-            std::vector<NYDS_V1::TDataRecord> records;
-            for (ui32 i = 1; i <= 30; ++i) {
-                TString data = Sprintf("%04u", i);
-                records.push_back({data, data, ""});
-            }
-            auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
-            Cerr << result.GetResult().DebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
         {
             auto result = testServer.DataStreamsClient->ListStreams().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -263,6 +254,34 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         }
+    }
+
+    Y_UNIT_TEST(TestReservedResourcesMetering) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                                .RetentionPeriodHours(20)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            for (int i = 0; i < 5; ++i) {
+                std::vector<NYDS_V1::TDataRecord> records;
+                for (ui32 i = 1; i <= 30; ++i) {
+                    TString data = Sprintf("%04u", i);
+                    records.push_back({data, data, ""});
+                }
+                auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
+                Cerr << result.GetResult().DebugString() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                sleep(1);
+            }
+        }
+
         auto putUnitsSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.events.puts.v1",
                           [](const NJson::TJsonValue::TMapType& map) {
@@ -281,9 +300,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                               UNIT_ASSERT(map.contains("usage"));
                               auto& usage = map.find("usage")->second.GetMap();
                               UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
+                              UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                             TInstant::Now().Seconds() - 10);
+                              UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                             TInstant::Now().Seconds() - 9);
                               UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "put_events");
                           });
-        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 3);
+        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 36);
 
         auto resourcesReservedSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.resources.reserved.v1",
@@ -305,11 +328,131 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                           [](const NJson::TJsonValue::TMapType& map) {
                               UNIT_ASSERT(map.contains("usage"));
                               auto& usage = map.find("usage")->second.GetMap();
-                              UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
+                              UNIT_ASSERT_GE(usage.find("quantity")->second.GetInteger(), 1);
+                              UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                             TInstant::Now().Seconds() - 10);
+                              UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                             TInstant::Now().Seconds() - 9);
                               UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "second");
                           });
-        UNIT_ASSERT_GT(resourcesReservedSchemaFound, 16);
-        UNIT_ASSERT_LT(resourcesReservedSchemaFound, 20);
+        UNIT_ASSERT_VALUES_EQUAL(resourcesReservedSchemaFound, 37);
+    }
+
+    Y_UNIT_TEST(TestReservedStorageMetering) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        const ui64 storageMb = 55_GB / 1_MB;
+        const ui32 shardCount = 5;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
+                                                .RetentionStorageMegabytes(storageMb)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            for (int i = 0; i < 5; ++i) {
+                std::vector<NYDS_V1::TDataRecord> records;
+                for (ui32 i = 1; i <= 30; ++i) {
+                    TString data = Sprintf("%04u", i);
+                    records.push_back({data, data, ""});
+                }
+                auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
+                Cerr << result.GetResult().DebugString() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                sleep(1);
+            }
+        }
+
+        auto storageSchemaFound =
+            CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.storage.reserved.v1",
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("tags"));
+                                UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().size(), 0);
+                            },
+                            [streamName](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("labels"));
+                                auto& labels = map.find("labels")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("datastreams_stream_name")->second.GetString(), streamName);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("ydb_database")->second.GetString(), "root");
+                            },
+                            [storageMb](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("usage"));
+                                auto& usage = map.find("usage")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetUInteger(),
+                                               storageMb);
+                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 10);
+                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 9);
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
+                                                         "mbyte*second");
+                            });
+        UNIT_ASSERT_VALUES_EQUAL(storageSchemaFound, 20);
+
+        auto throughputSchemaFound =
+            CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName,
+                            "yds.throughput.reserved.v1",
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("tags"));
+                                auto& tags = map.find("tags")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    tags.find("reserved_throughput_bps")->second.GetUInteger(), 1_MB);
+                            },
+                            [streamName](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("labels"));
+                                auto& labels = map.find("labels")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("datastreams_stream_name")->second.GetString(), streamName);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("ydb_database")->second.GetString(), "root");
+                            },
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("usage"));
+                                auto& usage = map.find("usage")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetInteger(), 1);
+                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 10);
+                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 9);
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
+                                                         "second");
+                            });
+        UNIT_ASSERT_VALUES_EQUAL(throughputSchemaFound, 20);
+
+        auto putUnitsSchemaFound =
+            CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.events.puts.v1",
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("tags"));
+                                UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().size(), 0);
+                            },
+                            [streamName](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("labels"));
+                                auto& labels = map.find("labels")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("datastreams_stream_name")->second.GetString(), streamName);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("ydb_database")->second.GetString(), "root");
+                            },
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("usage"));
+                                auto& usage = map.find("usage")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetInteger(), 1);
+                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 10);
+                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 9);
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
+                                                         "put_events");
+                            });
+        UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 20);
     }
 
     Y_UNIT_TEST(TestNonChargeableUser) {
@@ -371,28 +514,120 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         auto resourcesReservedSchemaFound =
             CheckMeteringFile(testServer.MeteringFile.Get(), streamPath, "yds.resources.reserved.v1",
-                          [](const NJson::TJsonValue::TMapType& map) {
-                              UNIT_ASSERT(map.contains("tags"));
-                              auto& tags = map.find("tags")->second.GetMap();
-                              UNIT_ASSERT(tags.contains("reserved_throughput_bps"));
-                              UNIT_ASSERT(tags.contains("shard_enhanced_consumers_throughput"));
-                              UNIT_ASSERT(tags.contains("reserved_storage_bytes"));
-                          },
-                          [streamName](const NJson::TJsonValue::TMapType& map) {
-                              UNIT_ASSERT(map.contains("labels"));
-                              auto& labels = map.find("labels")->second.GetMap();
-                              UNIT_ASSERT_VALUES_EQUAL(
-                                  labels.find("datastreams_stream_name")->second.GetString(), streamName);
-                              UNIT_ASSERT_VALUES_EQUAL(
-                                  labels.find("ydb_database")->second.GetString(), "root");
-                          },
-                          [](const NJson::TJsonValue::TMapType& map) {
-                              UNIT_ASSERT(map.contains("usage"));
-                              auto& usage = map.find("usage")->second.GetMap();
-                              UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
-                              UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "second");
-                          });
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("tags"));
+                                auto& tags = map.find("tags")->second.GetMap();
+                                UNIT_ASSERT(tags.contains("reserved_throughput_bps"));
+                                UNIT_ASSERT(tags.contains("shard_enhanced_consumers_throughput"));
+                                UNIT_ASSERT(tags.contains("reserved_storage_bytes"));
+                            },
+                            [streamName](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("labels"));
+                                auto& labels = map.find("labels")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("datastreams_stream_name")->second.GetString(), streamName);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("ydb_database")->second.GetString(), "root");
+                            },
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("usage"));
+                                auto& usage = map.find("usage")->second.GetMap();
+                                UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
+                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 10);
+                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 9);
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "second");
+                            });
         UNIT_ASSERT_VALUES_EQUAL(resourcesReservedSchemaFound, 3);
+    }
+
+    Y_UNIT_TEST(TestStreamStorageRetention) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                                .RetentionStorageMegabytes(40_GB / 1_MB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10).RetentionPeriodHours(0)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10).RetentionPeriodHours(25)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                                .RetentionPeriodHours(2)
+                                                .RetentionStorageMegabytes(55_GB / 1_MB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                                .RetentionPeriodHours(100)
+                                                .RetentionStorageMegabytes(55_GB / 1_MB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                                .RetentionPeriodHours(20)
+                                                .RetentionStorageMegabytes(5_GB / 1_MB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                                .RetentionStorageMegabytes(50_GB / 1_MB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10).RetentionPeriodHours(25)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(10).RetentionPeriodHours(2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ALREADY_EXISTS);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
+                                     YDS_V1::StreamDescription::ACTIVE);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_name(), streamName);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1_KB);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(),
+                                     TDuration::Days(7).Hours());
+        }
     }
 
     Y_UNIT_TEST(TestCreateExistingStream) {
@@ -420,7 +655,10 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         for (ui32 folderIdx = 0; folderIdx < 4; folderIdx++) {
             for (ui32 streamIdx = 0; streamIdx < 5; streamIdx++) {
                 TStringBuilder streamNameX = TStringBuilder() <<  folderIdx  << streamName << streamIdx;
-                auto result = testServer.DataStreamsClient->CreateStream(streamNameX, NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
+                auto result = testServer.DataStreamsClient->CreateStream(
+                    streamNameX,
+                    NYDS_V1::TCreateStreamSettings().ShardCount(10)
+                                                    ).ExtractValueSync();
                 Cerr << result.GetIssues().ToString() << "\n";
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -569,14 +807,56 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
     }
 
-    Y_UNIT_TEST(TestStreamRetention) {
+    Y_UNIT_TEST(TestUpdateStorage) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
-                NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
+                NYDS_V1::TCreateStreamSettings().ShardCount(1).RetentionStorageMegabytes(50_GB / 1_MB))
+                .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->UpdateStream(streamName,
+                 NYDS_V1::TUpdateStreamSettings().TargetShardCount(10)
+                                                 .WriteQuotaKbPerSec(128)
+                                                 .RetentionStorageMegabytes(55_GB / 1_MB)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards_size(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(),
+                                     TDuration::Days(7).Hours());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 128);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().owner(), "user@builtin");
+            UNIT_ASSERT(result.GetResult().stream_description().stream_creation_timestamp() > 0);
+        }
+    }
+
+    Y_UNIT_TEST(TestStreamTimeRetention) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->DescribeStream(streamName,
+                NYDS_V1::TDescribeStreamSettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24);
         }
 
         {
@@ -611,13 +891,50 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
+        {
+            for (int i = 0; i < 5; ++i) {
+                std::vector<NYDS_V1::TDataRecord> records;
+                for (ui32 i = 1; i <= 30; ++i) {
+                    TString data = Sprintf("%04u", i);
+                    records.push_back({data, data, ""});
+                }
+                auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
+                Cerr << result.GetResult().DebugString() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                sleep(1);
+            }
+        }
+
+        CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName,
+                          "yds.throughput.reserved.v1",
+                          [](const NJson::TJsonValue::TMapType& map) {
+                              UNIT_ASSERT(map.contains("labels"));
+                              UNIT_ASSERT_VALUES_EQUAL(map.find("labels")->second.GetMap().size(), 2);
+                          },
+                          [](const NJson::TJsonValue::TMapType& map) {
+                              UNIT_ASSERT(map.contains("tags"));
+                              auto& tags = map.find("tags")->second.GetMap();
+                              UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
+                              UNIT_ASSERT_VALUES_EQUAL(
+                                  tags.find("reserved_throughput_bps")->second.GetInteger(), 1_MB);
+                          },
+                          [](const NJson::TJsonValue::TMapType& map) {
+                              UNIT_ASSERT(map.contains("usage"));
+                              auto& usage = map.find("usage")->second.GetMap();
+                              UNIT_ASSERT(usage.find("quantity")->second.GetInteger() >= 0);
+                              UNIT_ASSERT(usage.find("start")->second.GetUInteger() >= 0);
+                              UNIT_ASSERT(usage.find("finish")->second.GetUInteger() >= 0);
+                              UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(), "second");
+                          });
     }
 
     Y_UNIT_TEST(TestShardPagination) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         {
-            auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName, NYDS_V1::TCreateStreamSettings().ShardCount(9)).ExtractValueSync();
+            auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(9)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -647,8 +964,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 auto result = testServer.DataStreamsClient->DescribeStream(streamName,
                                                     NYDS_V1::TDescribeStreamSettings()
                                                             .Limit(2)
-                                                            .ExclusiveStartShardId(
-                                                                    exclusiveStartShardId)
+                                                            .ExclusiveStartShardId(exclusiveStartShardId)
                 ).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -770,10 +1086,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         const TString streamPath = "/Root/" + streamName;
         SET_YDS_LOCALS;
         {
-            auto result = testServer.DataStreamsClient->CreateStream(
-                streamName,
-                NYDS_V1::TCreateStreamSettings().ShardCount(5)
-            ).ExtractValueSync();
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -796,7 +1110,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         // Test for too long data
-        TString longData = TString(1048577, '1');
+        TString longData = TString(1_MB + 1, '1');
         TString shortEnoughData = TString(1_MB, '1');
 
         result = client.PutRecords(streamName,
@@ -1343,7 +1657,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         {
-            auto result = testServer.DataStreamsClient->CreateStream(streamName, NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -1475,7 +1790,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         SET_YDS_LOCALS;
         {
-            auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName, NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+            auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -1506,7 +1822,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
         {
             auto result = client.GetShardIterator(
-                    "/Root/" + streamName, "shard-000000",
+                    "/Root/" + streamName, "Shard-000000",
                     YDS_V1::ShardIteratorType::TRIM_HORIZON
                 ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -1659,7 +1975,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         {
-            auto result = testServer.DataStreamsClient->CreateStream(streamName, NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }

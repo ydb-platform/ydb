@@ -46,13 +46,6 @@ bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool s
         }
     }
 
-    const auto& partCfg = config.GetPartitionConfig();
-    if (!partCfg.HasLifetimeSeconds()) {
-        if (error)
-            *error = "no lifetimeSeconds specified in TPartitionConfig";
-        return false;
-    }
-
     return true;
 }
 

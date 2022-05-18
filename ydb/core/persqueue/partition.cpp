@@ -1107,19 +1107,34 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, bool hasWrites, 
     bool hasDrop = false;
     ui64 endOffset = StartOffset;
 
-    if (DataKeysBody.size() > 1) {
+    const std::optional<ui64> storageLimit = partConfig.HasStorageLimitBytes()
+        ? std::optional<ui64>{partConfig.GetStorageLimitBytes()} : std::nullopt;
+    const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
-        while (DataKeysBody.size() > 1 && ctx.Now() >= DataKeysBody.front().Timestamp + TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds())
-                && (minOffset > DataKeysBody[1].Key.GetOffset() || minOffset == DataKeysBody[1].Key.GetOffset() && DataKeysBody[1].Key.GetPartNo() == 0)) {//all offsets from blob[0] are readed, and don't delete last blob
+    if (DataKeysBody.size() > 1) {
+        auto retentionCondition = [&]() -> bool {
+            const auto bodySize = BodySize - DataKeysBody.front().Size;
+            const bool timeRetention = (ctx.Now() >= (DataKeysBody.front().Timestamp + lifetimeLimit));
+            return storageLimit.has_value()
+                ? ((bodySize >= *storageLimit) || timeRetention)
+                : timeRetention;
+        };
+
+        while (DataKeysBody.size() > 1 &&
+               retentionCondition() &&
+               (minOffset > DataKeysBody[1].Key.GetOffset() ||
+                (minOffset == DataKeysBody[1].Key.GetOffset() &&
+                 DataKeysBody[1].Key.GetPartNo() == 0))) { // all offsets from blob[0] are readed, and don't delete last blob
             BodySize -= DataKeysBody.front().Size;
 
             DataKeysBody.pop_front();
-            if (!GapOffsets.empty() && !DataKeysBody.empty() && DataKeysBody.front().Key.GetOffset() == GapOffsets.front().second) {
+            if (!GapOffsets.empty() && DataKeysBody.front().Key.GetOffset() == GapOffsets.front().second) {
                 GapSize -= GapOffsets.front().second - GapOffsets.front().first;
                 GapOffsets.pop_front();
             }
             hasDrop = true;
         }
+
         Y_VERIFY(!DataKeysBody.empty());
 
         endOffset = DataKeysBody.front().Key.GetOffset();
@@ -1131,7 +1146,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, bool hasWrites, 
     TDataKey lastKey = HeadKeys.empty() ? DataKeysBody.back() : HeadKeys.back();
 
     if (!hasWrites &&
-        ctx.Now() >= lastKey.Timestamp + TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) &&
+        ctx.Now() >= lastKey.Timestamp + lifetimeLimit &&
         minOffset == EndOffset &&
         false) { // disable drop of all data
         Y_VERIFY(!HeadKeys.empty() || !DataKeysBody.empty());

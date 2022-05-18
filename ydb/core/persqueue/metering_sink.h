@@ -39,16 +39,17 @@ public:
     TString GetMeteringJson(const TString& metricBillingId, const TString& schemeName,
                             const THashMap<TString, ui64>& tags, const TString& quantityUnit, ui64 quantity,
                             TInstant start, TInstant end, TInstant now);
+    ui32 GetMeteringCounter() const;
 
 private:
     TParameters Parameters_{};
     bool Created_{false};
-    TInstant LastShardsMetricsFlush_{TInstant::Zero()};
-    TInstant LastRequestsMetricsFlush_{TInstant::Zero()};
     ui64 CurrentPutUnitsQuantity_{0};
-    ui32 MeteringCounter_{0};
     TSet<EMeteringJson> WhichToFlush_{};
+    TMap<EMeteringJson, TInstant> LastFlush_;
     std::function<void(TString)> FlushFunction_;
+
+    static ui32 MeteringCounter_;
 
 private:
     void Flush(TInstant now, bool force);

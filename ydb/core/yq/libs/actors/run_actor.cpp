@@ -871,27 +871,29 @@ private:
         attr->SetName("EnableComputeActor");
         attr->SetValue("1");
 
-        // Streaming queries:
-        // - turn off timeout;
-        // - turn on check that query has one graph.
-        if (Params.QueryType == YandexQuery::QueryContent::STREAMING) {
-            attr = dqSettings.Add();
-            attr->SetName("_TableTimeout");
-            attr->SetValue("0");
+        TString queryTimeoutSec = (Params.QueryType == YandexQuery::QueryContent::STREAMING) ? "0" : ToString(TDuration::Days(7).Seconds());
+        attr = dqSettings.Add();
+        attr->SetName("_TableTimeout");
+        attr->SetValue(queryTimeoutSec);
 
-            attr = dqSettings.Add();
-            attr->SetName("_LiteralTimeout");
-            attr->SetValue("0");
+        attr = dqSettings.Add();
+        attr->SetName("_LiteralTimeout");
+        attr->SetValue(queryTimeoutSec);
 
+        switch (Params.QueryType) {
+        case YandexQuery::QueryContent::STREAMING:
+            // - turn on check that query has one graph.
             attr = dqSettings.Add();
             attr->SetName("_OneGraphPerQuery");
             attr->SetValue("1");
-        }
-
-        if (Params.QueryType == YandexQuery::QueryContent_QueryType_ANALYTICS) {
+            break;
+        case YandexQuery::QueryContent_QueryType_ANALYTICS:
             attr = dqSettings.Add();
             attr->SetName("AnalyticsHopping");
             attr->SetValue("1");
+            break;
+        default:
+            Y_UNREACHABLE();
         }
     }
 

@@ -107,7 +107,7 @@ DENY .* -> contrib/libs/sophos
 
 # contrib/python/backports should not be used in new projects because we want
 # to start new projects on Py3
-ALLOW contrib/python/backports.tempfile ->  contrib/deprecated/python/backports.weakref
+ALLOW contrib/deprecated/python/backports.tempfile ->  contrib/deprecated/python/backports.weakref
 DENY .* ->  contrib/deprecated/python/backports.weakref
 
 ALLOW contrib/python/thrift/tests -> contrib/python/thrift

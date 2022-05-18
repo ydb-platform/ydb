@@ -94,7 +94,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.DbId = pqDescr.GetPQTabletConfig().GetYdbDatabaseId();
     topicsIter->second.FolderId = pqDescr.GetPQTabletConfig().GetYcFolderId();
     topicsIter->second.FullConverter = topicsIter->second.DiscoveryConverter->UpgradeToFullConverter(
-            pqDescr.GetPQTabletConfig()
+            pqDescr.GetPQTabletConfig(), AppData(ctx)->PQConfig.GetTestDatabaseRoot()
     );
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }

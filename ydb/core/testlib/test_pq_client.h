@@ -836,28 +836,33 @@ public:
 
 
     void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true,
-                             const TMaybe<TString>& dc = Nothing(), TVector<TString> rr = {"user"}
+                             const TMaybe<TString>& dc = Nothing(), TVector<TString> rr = {"user"},
+                             const TMaybe<TString>& account = Nothing(), bool expectFail = false
     ) {
         TString path = name;
-        if (UseConfigTables && !path.StartsWith("/Root")) {
+        if (UseConfigTables && !path.StartsWith("/Root") && !account.Defined()) {
             path = TStringBuilder() << "/Root/PQ/" << name;
         }
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(partsCount).ClientWriteDisabled(!canWrite);
+        settings.FederationAccount(account);
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
         for (auto &user : rr) {
             rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(user)});
         }
         settings.ReadRules(rrSettings);
 
-        Cerr << "===Create topic: " << path << Endl;
+        Cerr << "Create topic: " << path << Endl;
         auto res = pqClient.CreateTopic(path, settings);
         //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server
-        if (UseConfigTables) {
+        if (UseConfigTables && !expectFail) {
             AddTopic(name, dc);
         }
-        if (doWait) {
+        if (expectFail) {
+            res.Wait();
+            UNIT_ASSERT(!res.GetValue().IsSuccess());
+        } else if (doWait) {
             res.Wait();
             Cerr << "Create topic result: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
             UNIT_ASSERT(res.GetValue().IsSuccess());
@@ -976,21 +981,6 @@ public:
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
 
-    }
-
-    void DeleteTopicNoLegacy (const TString& name) {
-        TString path = name;
-        if (!UseConfigTables) {
-            path = TStringBuilder() << "/Root/PQ/" << name;
-        } else {
-            RemoveTopic(name); // ToDo - also legacy
-        }
-        auto settings = NYdb::NPersQueue::TDropTopicSettings();
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
-        auto res = pqClient.DropTopic(path, settings);
-        res.Wait();
-        Cerr << "Drop topic response: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << Endl;
-        return;
     }
 
     void DeleteTopic2(const TString& name, NPersQueue::NErrorCode::EErrorCode expectedStatus = NPersQueue::NErrorCode::OK, bool waitForTopicDeletion = true) {

@@ -86,7 +86,7 @@ void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQDropTopicRequest::TPtr
 
 void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAlterTopicRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new Alter topic request");
-    ctx.Register(new TAlterTopicActor(ev->Release().Release()));
+    ctx.Register(new TAlterTopicActor(ev->Release().Release(), LocalCluster));
 }
 
 void TPQSchemaService::Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx) {

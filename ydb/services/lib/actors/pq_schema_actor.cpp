@@ -174,8 +174,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         return "";
     }
 
-    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedClientServiceTypes,
-                                TString& error) {
+    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config,
+                              const TClientServiceTypes& supportedClientServiceTypes,
+                              TString& error) {
 
         if (config.GetReadRules().size() > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "read rules count cannot be more than "
@@ -216,9 +217,13 @@ namespace NKikimr::NGRpcProxy::V1 {
         return res;
     }
 
-    Ydb::StatusIds::StatusCode FillProposeRequestImpl(const TString& name, const Ydb::PersQueue::V1::TopicSettings& settings,
-                                                      NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx, bool alter, TString& error)
-    {
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+            const TString& name, const Ydb::PersQueue::V1::TopicSettings& settings,
+            NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx,
+            bool alter, TString& error, const TString& path, const TString& database, const TString& localDc
+    ) {
+        const auto& pqConfig = AppData(ctx)->PQConfig;
+
         modifyScheme.SetOperationType(alter ? NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup : NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
 
         auto pqDescr = alter ? modifyScheme.MutableAlterPersQueueGroup() : modifyScheme.MutableCreatePersQueueGroup();
@@ -266,6 +271,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 }
             } else if (pair.first == "_abc_slug") {
                 config->SetAbcSlug(pair.second);
+            }  else if (pair.first == "_federation_account") {
+                config->SetFederationAccount(pair.second);
             } else if (pair.first == "_abc_id") {
                 try {
                     config->SetAbcId(!FromString<ui32>(pair.second));
@@ -279,16 +286,33 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         bool local = !settings.client_write_disabled();
-        config->SetLocalDC(local);
-        config->SetDC(NPersQueue::GetDC(name));
+
+        auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
+        if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
+            auto converter = NPersQueue::TTopicNameConverter::ForFederation(
+                    pqConfig.GetRoot(), pqConfig.GetTestDatabaseRoot(), name, path, database, local, localDc,
+                    config->GetFederationAccount()
+            );
+
+            if (!converter->IsValid()) {
+                error = TStringBuilder() << "Bad topic: " << converter->GetReason();
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+            config->SetLocalDC(local);
+            config->SetDC(converter->GetCluster());
+            config->SetProducer(converter->GetLegacyProducer());
+            config->SetTopic(converter->GetLegacyLogtype());
+            config->SetIdent(converter->GetLegacyProducer());
+        }
+
         config->SetTopicName(name);
-        config->SetTopicPath(NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name}));
-        config->SetProducer(NPersQueue::GetProducer(name));
-        config->SetTopic(LegacySubstr(NPersQueue::GetRealTopic(name), config->GetProducer().size() + 2));
-        config->SetIdent(config->GetProducer());
+        config->SetTopicPath(topicPath);
+
+        //Sets legacy 'logtype'.
+
         auto partConfig = config->MutablePartitionConfig();
 
-        const auto& channelProfiles = AppData(ctx)->PQConfig.GetChannelProfiles();
+        const auto& channelProfiles = pqConfig.GetChannelProfiles();
         if (channelProfiles.size() > 2) {
             partConfig->SetNumChannels(channelProfiles.size() - 2); // channels 0,1 are reserved in tablet
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);

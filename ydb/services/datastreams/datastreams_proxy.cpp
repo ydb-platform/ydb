@@ -194,7 +194,8 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         TString error;
-        auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error);
+        auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error,
+                                                                      workingDir, proposal.Record.GetDatabaseName());
         modifyScheme.SetWorkingDir(workingDir);
 
         if (!error.Empty()) {

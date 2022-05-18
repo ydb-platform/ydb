@@ -93,7 +93,7 @@ class TAlterTopicActor : public TPQGrpcSchemaBase<TAlterTopicActor, NKikimr::NGR
 using TBase = TPQGrpcSchemaBase<TAlterTopicActor, TEvPQAlterTopicRequest>;
 
 public:
-     TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request);
+     TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request, const TString& localCluster);
     ~TAlterTopicActor() = default;
 
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
@@ -102,6 +102,9 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
+
+private:
+    TString LocalCluster;
 };
 
 }

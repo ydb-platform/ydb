@@ -86,6 +86,9 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         if (config.HasAbcSlug()) {
             (*settings->mutable_attributes())["_abc_slug"] = config.GetAbcSlug();
         }
+        if (config.HasFederationAccount()) {
+            (*settings->mutable_attributes())["_federation_account"] = config.GetFederationAccount();
+        }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
         const auto &partConfig = config.GetPartitionConfig();
@@ -277,8 +280,9 @@ void TCreateTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 }
 
 
-TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request)
+TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvPQAlterTopicRequest* request, const TString& localCluster)
     : TBase(request, request->GetProtoRequest()->path())
+    , LocalCluster(localCluster)
 {
     Y_ASSERT(request);
 }
@@ -298,7 +302,8 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
 
     {
         TString error;
-        auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, false, error);
+        auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, false, error,
+                                             workingDir, proposal.Record.GetDatabaseName(), LocalCluster);
         if (!error.empty()) {
             Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
             return ReplyWithResult(status, ctx);
@@ -325,7 +330,8 @@ void TAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction&
     NKikimrSchemeOp::TModifyScheme &modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
     modifyScheme.SetWorkingDir(workingDir);
     TString error;
-    auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error);
+    auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, true, error, workingDir,
+                                         proposal.Record.GetDatabaseName(), LocalCluster);
     if (!error.empty()) {
         Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
 

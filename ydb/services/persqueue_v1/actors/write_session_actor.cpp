@@ -411,7 +411,8 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
     Y_VERIFY(description.PartitionsSize() > 0);
     Y_VERIFY(description.HasPQTabletConfig());
     InitialPQTabletConfig = description.GetPQTabletConfig();
-    FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig);
+    FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig,
+                                                               AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     InitAfterDiscovery(ctx);
 
     BalancerTabletId = description.GetBalancerTabletID();

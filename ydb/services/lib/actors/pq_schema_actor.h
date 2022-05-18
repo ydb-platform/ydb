@@ -18,7 +18,10 @@ namespace NKikimr::NGRpcProxy::V1 {
         NKikimrSchemeOp::TModifyScheme& modifyScheme,
         const TActorContext& ctx,
         bool alter,
-        TString& error
+        TString& error,
+        const TString& path,
+        const TString& database = TString(),
+        const TString& localDc = TString()
     );
 
     struct TClientServiceType {

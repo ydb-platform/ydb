@@ -84,7 +84,7 @@ message TPQConfig {
     optional bool RoundRobinPartitionMapping = 26 [default = true];
 
     optional string Root = 27 [default = "/Root/PQ"];
-    repeated string RootDatabases = 47;
+    optional string TestDatabaseRoot = 47; // For unit-tests only
 
     message TPQLibSettings {
         optional uint32 ThreadsCount = 1 [default = 1];
@@ -153,7 +153,6 @@ message TPQConfig {
         optional bool LBFrontEnabled = 3 [default = true];
         optional bool UseLbAccountAlias = 4 [default = true];
         optional string LbUserDatabaseRoot = 5 [default = ""];
-        repeated string RootDatabases = 6;
     }
     optional TPQDiscoveryConfig PQDiscoveryConfig = 46;
 }

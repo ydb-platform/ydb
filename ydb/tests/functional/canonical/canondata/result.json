@@ -86,9 +86,6 @@
     "test_sql.TestCanonicalFolder1.test_case[dynumber/select_params.sql-result_sets]": {
         "result_sets": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_params.sql-result_sets_/dynumber_select_params.sql.results"
-        },
-        "result_sets_scan_query": {
-            "uri": "file://test_sql.TestCanonicalFolder1.test_case_dynumber_select_params.sql-result_sets_/dynumber_select_params.sql_scan_query.results"
         }
     },
     "test_sql.TestCanonicalFolder1.test_case[explain.script-script]": {
@@ -454,9 +451,6 @@
     "test_sql.TestCanonicalFolder1.test_case[json/select_params.sql-result_sets]": {
         "result_sets": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_params.sql-result_sets_/json_select_params.sql.results"
-        },
-        "result_sets_scan_query": {
-            "uri": "file://test_sql.TestCanonicalFolder1.test_case_json_select_params.sql-result_sets_/json_select_params.sql_scan_query.results"
         }
     },
     "test_sql.TestCanonicalFolder1.test_case[order_by/order_by_pk.sql-plan]": {

@@ -422,7 +422,7 @@ class BaseSuiteRunner(object):
 
             return
 
-        actual_output, expected_output = safe_execute(get_actual_and_expected, statement)
+        actual_output, expected_output = safe_execute(get_actual_and_expected, statement, query_name)
 
         if len(actual_output) > 0:
             self.files[query_name] = write_canonical_response(
@@ -502,6 +502,16 @@ class BaseSuiteRunner(object):
     def execute_query(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
         old_engine_result = self.pool.retry_operation_sync(lambda s: s.transaction().execute(yql_text, commit_tx=True))
+
+        if len(old_engine_result) == 1:
+            scan_query_result = self.execute_scan_query(yql_text)
+            for i in range(len(old_engine_result)):
+                self.execute_assert(
+                    old_engine_result[i].rows,
+                    scan_query_result,
+                    "Results are not same",
+                )
+
         if self.check_new_engine_query_results and self.table_path_prefix not in self.ignored_results_matching:
             new_engine_yql_text = self.format_new_engine(format_yql_statement(statement_text, self.table_path_prefix_ne))
             new_engine_result = self.pool.retry_operation_sync(lambda s: s.transaction().execute(new_engine_yql_text, commit_tx=True))

@@ -10,6 +10,7 @@ from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 import ydb
+import ydb.issues
 from ydb.public.api.protos import ydb_table_pb2
 from google.protobuf import text_format
 import logging
@@ -502,10 +503,24 @@ class BaseCanonicalTest(object):
             result_sets = self.serializable_execute(query, config.get('parameters', {}))
             canons['result_sets'] = self.canonical_results(query_name, self.pretty_json(result_sets))
 
-            check_scan_query = config.get('check_scan_query', False)
-            if check_scan_query:
+            try:
                 query_rows = self.scan_query(query, config.get('parameters', {}))
-                canons['result_sets_scan_query'] = self.canonical_results(query_name + '_scan_query', self.pretty_json(query_rows))
+                assert self.pretty_json(query_rows) == self.pretty_json(result_sets), "Results mismatch: scan query result != data query."
+            except ydb.issues.Error as e:
+                incompatible_messages = [
+                    "Secondary index is not supported for ScanQuery",
+                    "Scan query should have a single result set",
+                ]
+
+                scan_query_incompatible = False
+
+                for incompatible_message in incompatible_messages:
+
+                    if incompatible_message in str(e):
+                        scan_query_incompatible = True
+
+                if not scan_query_incompatible:
+                    raise
 
             self.initialize_common(query_name, 'new_engine')
             new_engine_query = self.format_query(self.read_query_text(query_name), use_new_engine=True)

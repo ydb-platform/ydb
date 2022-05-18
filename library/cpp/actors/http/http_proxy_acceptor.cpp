@@ -22,9 +22,9 @@ public:
         , Socket(new TSocketDescriptor())
     {
         // for unit tests :(
-        CheckedSetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true, "reuse address");
+        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEADDR, (int)true);
 #ifdef SO_REUSEPORT
-        CheckedSetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true, "reuse port");
+        SetSockOpt(Socket->Socket, SOL_SOCKET, SO_REUSEPORT, (int)true);
 #endif
     }
 
@@ -45,7 +45,7 @@ protected:
     }
 
     void HandleInit(TEvHttpProxy::TEvAddListeningPort::TPtr event, const NActors::TActorContext& ctx) {
-        SocketAddressType bindAddress(event->Get()->Address ? event->Get()->Address.data() : "::", event->Get()->Port);
+        SocketAddressType bindAddress(Socket->Socket.MakeAddress(event->Get()->Address,event->Get()->Port));
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
         Endpoint->Owner = ctx.SelfID;
         Endpoint->Proxy = Owner;
@@ -64,12 +64,12 @@ protected:
             }
         }
         if (err == 0) {
-            err = Socket->Socket.Bind(&bindAddress);
+            err = Socket->Socket.Bind(bindAddress.get());
         }
         if (err == 0) {
             err = Socket->Socket.Listen(LISTEN_QUEUE);
             if (err == 0) {
-                LOG_INFO_S(ctx, HttpLog, "Listening on " << bindAddress.ToString());
+                LOG_INFO_S(ctx, HttpLog, "Listening on " << bindAddress->ToString());
                 SetNonBlock(Socket->Socket);
                 ctx.Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 TBase::Become(&TAcceptorActor::StateListening);
@@ -77,7 +77,7 @@ protected:
                 return;
             }
         }
-        LOG_WARN_S(ctx, HttpLog, "Failed to listen on " << bindAddress.ToString() << " - retrying...");
+        LOG_WARN_S(ctx, HttpLog, "Failed to listen on " << bindAddress->ToString() << " - retrying...");
         ctx.ExecutorThread.Schedule(TDuration::Seconds(1), event.Release());
     }
 
@@ -94,10 +94,13 @@ protected:
     }
 
     void Handle(NActors::TEvPollerReady::TPtr, const NActors::TActorContext& ctx) {
-        TIntrusivePtr<TSocketDescriptor> socket = new TSocketDescriptor();
-        SocketAddressType addr;
-        int err;
-        while ((err = Socket->Socket.Accept(&socket->Socket, &addr)) == 0) {
+        for (;;) {
+            SocketAddressType addr;
+            std::optional<SocketType> s = Socket->Socket.Accept(addr);
+            if (!s) {
+                break;
+            }
+            TIntrusivePtr<TSocketDescriptor> socket = new TSocketDescriptor(std::move(s).value());
             NActors::IActor* connectionSocket = nullptr;
             if (RecycledRequests.empty()) {
                 connectionSocket = CreateIncomingConnectionActor(Endpoint, socket, addr);
@@ -108,9 +111,9 @@ protected:
             NActors::TActorId connectionId = ctx.Register(connectionSocket);
             ctx.Send(Poller, new NActors::TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
-            socket = new TSocketDescriptor();
         }
-        if (err == -EAGAIN || err == -EWOULDBLOCK) { // request poller for further connection polling
+        int err = errno;
+        if (err == EAGAIN || err == EWOULDBLOCK) { // request poller for further connection polling
             Y_VERIFY(PollerToken);
             PollerToken->Request(true, false);
         }

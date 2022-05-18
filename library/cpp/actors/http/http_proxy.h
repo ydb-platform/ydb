@@ -11,12 +11,24 @@
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/variant.h>
 #include "http.h"
+#include "http_proxy_sock64.h"
 #include "http_proxy_ssl.h"
 
 namespace NHttp {
 
 struct TSocketDescriptor : NActors::TSharedDescriptor, THttpConfig {
     SocketType Socket;
+
+    TSocketDescriptor() = default;
+    
+    TSocketDescriptor(int af)
+        : Socket(af)
+    {
+    }
+
+    TSocketDescriptor(SocketType&& s)
+        : Socket(std::move(s))
+    {}
 
     int GetDescriptor() override {
         return static_cast<SOCKET>(Socket);
@@ -188,10 +200,10 @@ struct TEvHttpProxy {
 
     struct TEvResolveHostResponse : NActors::TEventLocal<TEvResolveHostResponse, EvResolveHostResponse> {
         TString Host;
-        TSockAddrInet6 Address;
+        THttpConfig::SocketAddressType Address;
         TString Error;
 
-        TEvResolveHostResponse(const TString& host, const TSockAddrInet6& address)
+        TEvResolveHostResponse(const TString& host, THttpConfig::SocketAddressType address)
             : Host(host)
             , Address(address)
         {}

@@ -3,6 +3,8 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 
+class TInet64StreamSocket;
+
 namespace NHttp {
 
 struct THttpConfig {
@@ -12,8 +14,8 @@ struct THttpConfig {
     static constexpr int LISTEN_QUEUE = 10;
     static constexpr TDuration SOCKET_TIMEOUT = TDuration::MilliSeconds(60000);
     static constexpr TDuration CONNECTION_TIMEOUT = TDuration::MilliSeconds(60000);
-    using SocketType = TInet6StreamSocket;
-    using SocketAddressType = TSockAddrInet6;
+    using SocketType = TInet64StreamSocket;
+    using SocketAddressType = std::shared_ptr<ISockAddr>;
 };
 
 }

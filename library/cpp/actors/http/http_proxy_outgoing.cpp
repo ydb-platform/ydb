@@ -25,8 +25,6 @@ public:
         , Poller(poller)
         , Host(host)
     {
-        TSocketImpl::SetNonBlock();
-        TSocketImpl::SetTimeout(SOCKET_TIMEOUT);
     }
 
     void Die(const NActors::TActorContext& ctx) override {
@@ -35,18 +33,30 @@ public:
         TBase::Die(ctx);
     }
 
+    TString GetSocketName() {
+        TStringBuilder builder;
+        if (TSocketImpl::Socket) {
+            builder << "(#" << TSocketImpl::GetRawSocket();
+            if (Address && Address->SockAddr()->sa_family) {
+                builder << "," << Address;
+            }
+            builder << ") ";
+        }
+        return builder;
+    }
+
     void ReplyAndDie(const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << Response->Status << " " << Response->Message << ")");
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "-> (" << Response->Status << " " << Response->Message << ")");
         ctx.Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
         RequestOwner = TActorId();
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildOutgoingRequestSensors(Request, Response));
         ctx.Send(Owner, sensors.Release());
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "connection closed");
         Die(ctx);
     }
 
     void ReplyErrorAndDie(const NActors::TActorContext& ctx, const TString& error) {
-        LOG_ERROR_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed with error: " << error);
+        LOG_ERROR_S(ctx, HttpLog, GetSocketName() << "connection closed with error: " << error);
         if (RequestOwner) {
             ctx.Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response, error));
             RequestOwner = TActorId();
@@ -65,7 +75,10 @@ protected:
     }
 
     void Connect(const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connecting");
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "connecting");
+        TSocketImpl::Create(Address->SockAddr()->sa_family);
+        TSocketImpl::SetNonBlock();
+        TSocketImpl::SetTimeout(ConnectionTimeout);
         int res = TSocketImpl::Connect(Address);
         RegisterPoller(ctx);
         switch (-res) {
@@ -162,10 +175,31 @@ protected:
                 return ReplyErrorAndDie(ctx, strerror(-res));
             }
         }
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") outgoing connection opened");
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "outgoing connection opened");
         TBase::Become(&TOutgoingConnectionActor::StateConnected);
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (" << Request->Method << " " << Request->URL << ")");
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "<- (" << Request->Method << " " << Request->URL << ")");
         ctx.Send(ctx.SelfID, new NActors::TEvPollerReady(nullptr, true, true));
+    }
+
+    static int GetPort(SocketAddressType address) {
+        switch (address->SockAddr()->sa_family) {
+            case AF_INET:
+                return ntohs(reinterpret_cast<sockaddr_in*>(address->SockAddr())->sin_port);
+            case AF_INET6:
+                return ntohs(reinterpret_cast<sockaddr_in6*>(address->SockAddr())->sin6_port);
+        }
+        return {};
+    }
+
+    static void SetPort(SocketAddressType address, int port) {
+        switch (address->SockAddr()->sa_family) {
+            case AF_INET:
+                reinterpret_cast<sockaddr_in*>(address->SockAddr())->sin_port = htons(port);
+                break;
+            case AF_INET6:
+                reinterpret_cast<sockaddr_in6*>(address->SockAddr())->sin6_port = htons(port);
+                break;
+        }
     }
 
     void HandleResolving(TEvHttpProxy::TEvResolveHostResponse::TPtr event, const NActors::TActorContext& ctx) {
@@ -174,8 +208,8 @@ protected:
             return FailConnection(ctx, event->Get()->Error);
         }
         Address = event->Get()->Address;
-        if (Address.GetPort() == 0) {
-            Address.SetPort(Request->Secure ? 443 : 80);
+        if (GetPort(Address) == 0) {
+            SetPort(Address, Request->Secure ? 443 : 80);
         }
         Connect(ctx);
     }
@@ -205,13 +239,12 @@ protected:
         LastActivity = ctx.Now();
         Request = std::move(event->Get()->Request);
         Host = Request->Host;
-        LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << ") resolving " << Host);
+        LOG_DEBUG_S(ctx, HttpLog, GetSocketName() << "resolving " << Host);
         Request->Timer.Reset();
         RequestOwner = event->Sender;
         ctx.Send(Owner, new TEvHttpProxy::TEvResolveHostRequest(Host));
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
-            TSocketImpl::SetTimeout(ConnectionTimeout);
         }
         ctx.Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = ctx.Now();
@@ -220,11 +253,11 @@ protected:
 
     void HandleConnected(NActors::TEvPollerReady::TPtr event, const NActors::TActorContext& ctx) {
         LastActivity = ctx.Now();
-        if (event->Get()->Read) {
-            PullInput(ctx);
-        }
-        if (event->Get()->Write) {
+        if (event->Get()->Write && RequestOwner) {
             FlushOutput(ctx);
+        }
+        if (event->Get()->Read && RequestOwner) {
+            PullInput(ctx);
         }
     }
 

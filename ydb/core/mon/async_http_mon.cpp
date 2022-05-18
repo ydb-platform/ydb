@@ -146,7 +146,7 @@ public:
     }
 
     virtual TString GetRemoteAddr() const override {
-        return Request->Address.ToString();
+        return Request->Address->ToString();
     }
 
     virtual TString GetServiceTitle() const override {
@@ -278,7 +278,7 @@ public:
         if (ActorMonPage->Authorizer) {
             TString user = authorizeResult ? authorizeResult->Token->GetUserSID() : "anonymous";
             LOG_NOTICE_S(*TlsActivationContext, NActorsServices::HTTP,
-                request->Address.ToString()
+                request->Address->ToString()
                 << " " << user
                 << " " << request->Method
                 << " " << request->URL);
@@ -461,10 +461,10 @@ public:
     static void FromProto(NHttp::THttpConfig::SocketAddressType& address, const NKikimrMonProto::TSockAddr& proto) {
         switch (proto.GetFamily()) {
             case AF_INET:
-                //address = TSockAddrInet(proto.GetSockAddr4().GetAddress(), proto.GetSockAddr4().GetPort());
+                address = std::make_shared<TSockAddrInet>(proto.GetAddress().data(), proto.GetPort());
                 break;
             case AF_INET6:
-                address = TSockAddrInet6(proto.GetSockAddr6().GetAddress().data(), proto.GetSockAddr6().GetPort());
+                address = std::make_shared<TSockAddrInet6>(proto.GetAddress().data(), proto.GetPort());
                 break;
         }
     }
@@ -512,9 +512,26 @@ public:
     {}
 
     static void ToProto(NKikimrMonProto::TSockAddr& proto, const NHttp::THttpConfig::SocketAddressType& address) {
-        proto.SetFamily(AF_INET6);
-        proto.MutableSockAddr6()->SetAddress(address.GetIp());
-        proto.MutableSockAddr6()->SetPort(address.GetPort());
+        switch (address->SockAddr()->sa_family) {
+            case AF_INET: {
+                    proto.SetFamily(AF_INET);
+                    sockaddr_in* addr = (sockaddr_in*)address->SockAddr();
+                    char ip[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, (void*)&addr->sin_addr, ip, INET_ADDRSTRLEN);
+                    proto.SetAddress(ip);
+                    proto.SetPort(htons(addr->sin_port));
+                }
+                break;
+            case AF_INET6: {
+                    proto.SetFamily(AF_INET6);
+                    sockaddr_in6* addr = (sockaddr_in6*)address->SockAddr();
+                    char ip6[INET6_ADDRSTRLEN];
+                    inet_ntop(AF_INET6, (void*)&addr->sin6_addr, ip6, INET6_ADDRSTRLEN);
+                    proto.SetAddress(ip6);
+                    proto.SetPort(htons(addr->sin6_port));
+                }
+                break;
+        }
     }
 
     void Bootstrap() {

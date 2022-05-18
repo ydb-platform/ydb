@@ -119,7 +119,7 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr event, const NActors::TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
+        LOG_TRACE_S(ctx, HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
         Handlers[event->Get()->Path] = event->Get()->Handler;
     }
 
@@ -131,11 +131,16 @@ protected:
             TIpPort portPart = 0;
             CrackAddress(host, addressPart, portPart);
             if (IsIPv6(addressPart)) {
-                TSockAddrInet6 address(addressPart.c_str(), portPart);
                 if (it == Hosts.end()) {
                     it = Hosts.emplace(host, THostEntry()).first;
                 }
-                it->second.Address = address;
+                it->second.Address = std::make_shared<TSockAddrInet6>(addressPart.data(), portPart);
+                it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+            } else if (IsIPv4(addressPart)) {
+                if (it == Hosts.end()) {
+                    it = Hosts.emplace(host, THostEntry()).first;
+                }
+                it->second.Address = std::make_shared<TSockAddrInet>(addressPart.data(), portPart);
                 it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
             } else {
                 // TODO(xenoxeno): move to another, possible blocking actor
@@ -143,21 +148,31 @@ protected:
                     const NDns::TResolvedHost* result = NDns::CachedResolve(NDns::TResolveInfo(addressPart, portPart));
                     if (result != nullptr) {
                         auto pAddr = result->Addr.Begin();
-                        while (pAddr != result->Addr.End() && pAddr->ai_family != AF_INET6) {
+                        while (pAddr != result->Addr.End() && pAddr->ai_family != AF_INET && pAddr->ai_family != AF_INET6) {
                             ++pAddr;
                         }
                         if (pAddr == result->Addr.End()) {
                             ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Invalid address family resolved"));
                             return;
                         }
-                        TSockAddrInet6 address = {};
-                        static_cast<sockaddr_in6&>(address) = *reinterpret_cast<sockaddr_in6*>(pAddr->ai_addr);
-                        LOG_DEBUG_S(ctx, HttpLog, "Host " << host << " resolved to " << address.ToString());
-                        if (it == Hosts.end()) {
-                            it = Hosts.emplace(host, THostEntry()).first;
+                        THttpConfig::SocketAddressType address;
+                        switch (pAddr->ai_family) {
+                            case AF_INET:
+                                address = std::make_shared<TSockAddrInet>();
+                                break;
+                            case AF_INET6:
+                                address = std::make_shared<TSockAddrInet6>();
+                                break;
                         }
-                        it->second.Address = address;
-                        it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                        if (address) {
+                            memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
+                            LOG_DEBUG_S(ctx, HttpLog, "Host " << host << " resolved to " << address->ToString());
+                            if (it == Hosts.end()) {
+                                it = Hosts.emplace(host, THostEntry()).first;
+                            }
+                            it->second.Address = address;
+                            it->second.DeadlineTime = ctx.Now() + HostsTimeToLive;
+                        }
                     } else {
                         ctx.Send(event->Sender, new TEvHttpProxy::TEvResolveHostResponse("Error resolving host"));
                         return;
@@ -222,7 +237,7 @@ protected:
     TVector<TActorId> Acceptors;
 
     struct THostEntry {
-        TSockAddrInet6 Address;
+        THttpConfig::SocketAddressType Address;
         TInstant DeadlineTime;
     };
 
@@ -259,7 +274,23 @@ NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::TMetricRegistry> reg
 }
 
 bool IsIPv6(const TString& host) {
-    return host.find_first_not_of(":0123456789abcdef") == TString::npos;
+    if (host.find_first_not_of(":0123456789abcdef") != TString::npos) {
+        return false;
+    }
+    if (std::count(host.begin(), host.end(), ':') < 2) {
+        return false;
+    }
+    return true;
+}
+
+bool IsIPv4(const TString& host) {
+    if (host.find_first_not_of(".0123456789") != TString::npos) {
+        return false;
+    }
+    if (std::count(host.begin(), host.end(), '.') != 3) {
+        return false;
+    }
+    return true;
 }
 
 bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& uri) {

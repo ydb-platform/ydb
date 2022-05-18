@@ -15,13 +15,14 @@ struct THash<TIntrusivePtr<Type>> {
 };
 
 template<>
-inline void Out<TSockAddrInet6>(IOutputStream& o, const TSockAddrInet6& x) {
-    o << x.ToString();
+inline void Out<NHttp::THttpConfig::SocketAddressType>(IOutputStream& o, const NHttp::THttpConfig::SocketAddressType& x) {
+    o << x->ToString();
 }
 
 namespace NHttp {
 
 bool IsIPv6(const TString& host);
+bool IsIPv4(const TString& host);
 bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& uri);
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port);
 void TrimBegin(TStringBuf& target, char delim);

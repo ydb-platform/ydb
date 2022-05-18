@@ -8,9 +8,11 @@ namespace NHttp {
 struct TPlainSocketImpl : virtual public THttpConfig {
     TIntrusivePtr<TSocketDescriptor> Socket;
 
-    TPlainSocketImpl()
-        : Socket(new TSocketDescriptor())
-    {}
+    TPlainSocketImpl() = default;
+
+    void Create(int af) {
+        Socket = new TSocketDescriptor(af);
+    }
 
     TPlainSocketImpl(TIntrusivePtr<TSocketDescriptor> socket)
         : Socket(std::move(socket))
@@ -41,8 +43,8 @@ struct TPlainSocketImpl : virtual public THttpConfig {
         ::shutdown(Socket->Socket, SHUT_RDWR);
     }
 
-    int Connect(const SocketAddressType& address) {
-        return Socket->Socket.Connect(&address);
+    int Connect(SocketAddressType address) {
+        return Socket->Socket.Connect(address.get());
     }
 
     static constexpr int OnConnect(bool&, bool&) {

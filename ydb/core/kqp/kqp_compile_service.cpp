@@ -54,7 +54,10 @@ public:
             }
 
             QueryIndex.erase(*removedItem->Value.CompileResult->Query);
-            Index.erase(*removedItem);
+            auto indexIt = Index.find(*removedItem);
+            if (indexIt != Index.end()) {
+                Index.erase(indexIt);
+            }
         }
 
         Y_VERIFY(List.GetSize() == Index.size());

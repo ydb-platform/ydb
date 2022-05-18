@@ -251,7 +251,7 @@ private:
             }
 
             TIssues issues { TIssue(errorBuilder) };
-            SINK_LOG_W("Got error response from solomon " << issues.ToOneLineString());
+            SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
             Callbacks->OnSinkError(OutputIndex, issues, res->IsTerminal);
             return;
         }
@@ -380,7 +380,7 @@ private:
     }
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
-        SINK_LOG_D("Solomon response: " << response.Response->GetObfuscatedData());
+        SINK_LOG_D("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
         NJson::TJsonParser parser;
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
@@ -397,15 +397,17 @@ private:
         TVector<TString> res;
         if (!parser.Parse(TString(response.Response->Body), &res)) {
             TIssues issues { TIssue(TStringBuilder() << "Invalid monitoring response: " << response.Response->GetObfuscatedData()) };
+            SINK_LOG_E("Failed to parse response[" << cookie << "] from solomon: " << issues.ToOneLineString());
             Callbacks->OnSinkError(OutputIndex, issues, true);
             return;
         }
         Y_VERIFY(res.size() == 2);
 
         auto ptr = InflightBuffer.find(cookie);
-        // TODO: YQ-1025
-        // Y_VERIFY(ptr != InflightBuffer.end());
         if (ptr == InflightBuffer.end()) {
+            SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
+            TIssues issues { TIssue(TStringBuilder() << "Internal error in monitoring writer") };
+            Callbacks->OnSinkError(OutputIndex, issues, true);
             return;
         }
 

@@ -34,20 +34,25 @@ private:
         hFunc(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest, Handle);
         hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
         hFunc(TEvents::TEvPoison, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
     )
+
+    void SendRequestToProxy() {
+        Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate(), Timeout));
+    }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& ev) {
         Request = ev->Get()->Request;
         Timeout = ev->Get()->Timeout;
         Cookie = ev->Cookie;
-        Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate(), Timeout));
+        SendRequestToProxy();
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
         const auto* res = ev->Get();
         const TString& error = res->GetError();
 
-        const bool isTerminal = error.empty() || MaxRetries && RetryCount >= MaxRetries;
+        const bool isTerminal = error.empty() || MaxRetries && RetryCount >= *MaxRetries;
         Send(SenderId, new TEvHttpBase::TEvSendResult(ev, RetryCount++, isTerminal), /*flags=*/0, Cookie);
 
         if (isTerminal) {
@@ -55,11 +60,15 @@ private:
             return;
         }
 
-        Schedule(GetRetryDelay(), new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(Request->Duplicate(), Timeout));
+        Schedule(GetRetryDelay(), new TEvents::TEvWakeup());
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
         PassAway();
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        SendRequestToProxy();
     }
 
 private:

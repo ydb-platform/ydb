@@ -335,7 +335,172 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
-    Y_UNIT_TEST(SetupLockSessionMigrated) {
+
+    Y_UNIT_TEST(StreamingReadCreateAndDestroyMsgs) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB;
+        server.EnablePQLogs({ NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY });
+        server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
+
+        auto readStream = StubP_->StreamingRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        // add 2nd partition in this topic
+        pqClient->AlterTopic("rt3.dc1--acc--topic1", 2);
+
+        // init 1st read session
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_topic("acc/topic1");
+
+            req.mutable_init_request()->set_consumer("user");
+            req.mutable_init_request()->set_read_only_original(true);
+            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kInitResponse);
+            //send some reads
+            req.Clear();
+            req.mutable_read_request();
+            for (ui32 i = 0; i < 10; ++i) {
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+            }
+        }
+
+        // await both CreatePartitionStreamRequest from Server
+        // confirm both
+        ui64 assignId = 0;
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            TVector<i64> partition_ids;
+            //lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
+            partition_ids.push_back(resp.create_partition_stream_request().partition_stream().partition_id());
+
+            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            req.Clear();
+            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            resp.Clear();
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
+            partition_ids.push_back(resp.create_partition_stream_request().partition_stream().partition_id());
+
+            std::sort(partition_ids.begin(), partition_ids.end());
+            UNIT_ASSERT((partition_ids == TVector<i64>{0, 1}));
+
+            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            req.Clear();
+            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        Cerr << "=== Create second stream" << Endl;
+        grpc::ClientContext rcontextSecond;
+        auto readStreamSecond = StubP_->StreamingRead(&rcontextSecond);
+        UNIT_ASSERT(readStreamSecond);
+        Cerr << "=== Second stream created" << Endl;
+
+        // init 2nd read session
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_topic("acc/topic1");
+
+            req.mutable_init_request()->set_consumer("user");
+            req.mutable_init_request()->set_read_only_original(true);
+            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
+
+            if (!readStreamSecond->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStreamSecond->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kInitResponse);
+        }
+
+        // await DestroyPartitionStreamRequest
+        // confirm it
+        // await CreatePartitionStream
+        {
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            //lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "=== Got response (expect destroy): " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kDestroyPartitionStreamRequest);
+            UNIT_ASSERT(resp.destroy_partition_stream_request().graceful());
+            auto stream_id = resp.destroy_partition_stream_request().partition_stream_id();
+
+            req.Clear();
+            req.mutable_destroy_partition_stream_response()->set_partition_stream_id(stream_id);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            resp.Clear();
+            UNIT_ASSERT(readStreamSecond->Read(&resp));
+            Cerr << "=== Got response (expect create): " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
+
+            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            req.Clear();
+            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+
+            if (!readStreamSecond->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+
+        // kill balancer and await forceful parition stream destroy signal
+        pqClient->RestartBalancerTablet(runtime, "rt3.dc1--acc--topic1");
+        Cerr << "Balancer killed\n";
+        {
+            StreamingReadServerMessage resp;
+
+            //lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "=== Got response (expect forceful destroy): " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kDestroyPartitionStreamRequest);
+            UNIT_ASSERT(!resp.destroy_partition_stream_request().graceful());
+
+            resp.Clear();
+            UNIT_ASSERT(readStreamSecond->Read(&resp));
+            Cerr << "=== Got response (expect forceful destroy): " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kDestroyPartitionStreamRequest);
+            UNIT_ASSERT(!resp.destroy_partition_stream_request().graceful());
+        }
+    }
+
+
+    Y_UNIT_TEST(StreamingReadCommitAndStatusMsgs) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
         MAKE_INSECURE_STUB;
@@ -362,64 +527,42 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             }
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.response_case() == StreamingReadServerMessage::kInitResponse);
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kInitResponse);
             //send some reads
             req.Clear();
-            req.mutable_read();
+            req.mutable_read_request();
             for (ui32 i = 0; i < 10; ++i) {
                 if (!readStream->Write(req)) {
                     ythrow yexception() << "write fail";
                 }
             }
         }
-        Cerr << "===First block done\n";
-        {
-            Sleep(TDuration::Seconds(10));
-            ReadInfoRequest request;
-            ReadInfoResponse response;
-            request.mutable_consumer()->set_path("user");
-            request.set_get_only_original(true);
-            request.add_topics()->set_path("acc/topic1");
-            grpc::ClientContext rcontext;
-            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            ReadInfoResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << "Read info response: " << response << Endl << res << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
-            UNIT_ASSERT(res.topics(0).status() == Ydb::StatusIds::SUCCESS);
-        }
-        Cerr << "===Second block done\n";
 
-        ui64 assignId = 0;
+        // await and confirm CreatePartitionStreamRequest from server
+        i64 assignId = 0;
         {
             StreamingReadClientMessage  req;
             StreamingReadServerMessage resp;
 
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT(resp.response_case() == StreamingReadServerMessage::kAssigned);
-            UNIT_ASSERT(resp.assigned().topic().path() == "acc/topic1");
-            UNIT_ASSERT(resp.assigned().cluster() == "dc1");
-            UNIT_ASSERT(resp.assigned().partition() == 0);
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
+            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().partition_id() == 0);
 
-            assignId = resp.assigned().assign_id();
+            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
             req.Clear();
-            req.mutable_start_read()->mutable_topic()->set_path("acc/topic1");
-            req.mutable_start_read()->set_cluster("dc1");
-            req.mutable_start_read()->set_partition(0);
-            req.mutable_start_read()->set_assign_id(assignId);
+            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
 
-            req.mutable_start_read()->set_read_offset(10);
+            req.mutable_create_partition_stream_response()->set_read_offset(10);
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
-
         }
-        Cerr << "===Third block done\n";
 
-        auto driver = server.Server->AnnoyingClient->GetDriver();
-
+        // write to partition in 1 session
+        auto driver = pqClient->GetDriver();
         {
             auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source");
             for (int i = 1; i < 17; ++i) {
@@ -429,77 +572,77 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             bool res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
         }
-        Cerr << "===4th block done\n";
 
         //check read results
         StreamingReadServerMessage resp;
         for (ui32 i = 10; i < 16; ++i) {
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "Got read response " << resp << "\n";
-            UNIT_ASSERT_C(resp.response_case() == StreamingReadServerMessage::kDataBatch, resp);
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kDataBatch, resp);
             UNIT_ASSERT(resp.data_batch().partition_data_size() == 1);
             UNIT_ASSERT(resp.data_batch().partition_data(0).batches_size() == 1);
             UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data_size() == 1);
             UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data(0).offset() == i);
         }
-        //TODO: restart here readSession and read from position 10
+
+        // send commit, await commitDone
         {
             StreamingReadClientMessage  req;
             StreamingReadServerMessage resp;
 
-            auto cookie = req.mutable_commit()->add_cookies();
-            cookie->set_assign_id(assignId);
-            cookie->set_partition_cookie(1);
+            auto commit = req.mutable_commit_request()->add_commits();
+            commit->set_partition_stream_id(assignId);
+
+            auto offsets = commit->add_offsets();
+            offsets->set_start_offset(0);
+            offsets->set_end_offset(13);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT_C(resp.response_case() == StreamingReadServerMessage::kCommitted, resp);
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kCommitResponse, resp);
+            UNIT_ASSERT(resp.commit_response().partitions_committed_offsets_size() == 1);
+            UNIT_ASSERT(resp.commit_response().partitions_committed_offsets(0).partition_stream_id() == assignId);
+            UNIT_ASSERT(resp.commit_response().partitions_committed_offsets(0).committed_offset() == 13);
         }
 
-
-        Cerr << "=== ===AlterTopic\n";
-        pqClient->AlterTopic("rt3.dc1--acc--topic1", 10);
+        // send status request, await status
         {
-            ReadInfoRequest request;
-            ReadInfoResponse response;
-            request.mutable_consumer()->set_path("user");
-            request.set_get_only_original(false);
-            request.add_topics()->set_path("acc/topic1");
-            grpc::ClientContext rcontext;
-            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            ReadInfoResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << "Get read session info response: " << response << "\n" << res << "\n";
-//            UNIT_ASSERT(res.sessions_size() == 1);
-            UNIT_ASSERT_VALUES_EQUAL(res.topics_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(res.topics(0).partitions_size(), 10);
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
+
+            req.mutable_partition_stream_status_request()->set_partition_stream_id(assignId);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kPartitionStreamStatusResponse, resp);
+            UNIT_ASSERT(resp.partition_stream_status_response().partition_stream_id() == assignId);
+            UNIT_ASSERT(resp.partition_stream_status_response().committed_offset() == 13);
+            UNIT_ASSERT(resp.partition_stream_status_response().end_offset() == 16);
+            UNIT_ASSERT(resp.partition_stream_status_response().written_at_watermark_ms() > 0);
         }
-        Cerr << "=== ===AlterTopic block done\n";
+
+        // send update token request, await response
         {
-            ReadInfoRequest request;
-            ReadInfoResponse response;
-            request.mutable_consumer()->set_path("user");
-            request.set_get_only_original(false);
-            request.add_topics()->set_path("acc/topic1");
-            grpc::ClientContext rcontext;
+            StreamingReadClientMessage  req;
+            StreamingReadServerMessage resp;
 
-            pqClient->MarkNodeInHive(runtime, 0, false);
-            pqClient->MarkNodeInHive(runtime, 1, false);
+            const TString token = TString("test_user_0@") + BUILTIN_ACL_DOMAIN;;
 
-            pqClient->RestartBalancerTablet(runtime, "rt3.dc1--acc--topic1");
-            auto status = StubP_->GetReadSessionsInfo(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            ReadInfoResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << "Read sessions info response: " << response << "\nResult: " << res << "\n";
-            UNIT_ASSERT(res.topics().size() == 1);
-            UNIT_ASSERT(res.topics(0).partitions(0).status() == Ydb::StatusIds::UNAVAILABLE);
+            req.mutable_update_token_request()->set_token(token);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect UpdateTokenResponse, got response: " << resp.ShortDebugString() << Endl;
+
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kUpdateTokenResponse, resp);
         }
     }
-
 
     void SetupWriteSessionImpl(bool rr) {
         NPersQueue::TTestServer server{PQSettings(0, 2, rr), false};
@@ -822,13 +965,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "Read server response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.response_case() == StreamingReadServerMessage::kInitResponse);
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kInitResponse);
 
             //send some reads
             Sleep(TDuration::Seconds(5));
             for (ui32 i = 0; i < 10; ++i) {
                 req.Clear();
-                req.mutable_read();
+                req.mutable_read_request();
 
                 if (!readStream->Write(req)) {
                     ythrow yexception() << "write fail";
@@ -841,17 +984,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 2;) {
             StreamingReadServerMessage resp;
             UNIT_ASSERT(readStream->Read(&resp));
-            if (resp.response_case() == StreamingReadServerMessage::kAssigned) {
-                auto assignId = resp.assigned().assign_id();
+            if (resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest) {
+                auto assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
                 StreamingReadClientMessage req;
-                req.mutable_start_read()->mutable_topic()->set_path(SHORT_TOPIC_NAME);
-                req.mutable_start_read()->set_cluster("dc1");
-                req.mutable_start_read()->set_assign_id(assignId);
+                req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
                 UNIT_ASSERT(readStream->Write(req));
                 continue;
             }
 
-            UNIT_ASSERT_C(resp.response_case() == StreamingReadServerMessage::kDataBatch, resp);
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kDataBatch, resp);
             i += resp.data_batch().partition_data_size();
         }
     }

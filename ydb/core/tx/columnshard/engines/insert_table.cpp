@@ -181,20 +181,24 @@ void TInsertTable::SetOverloaded(ui64 pathId, bool overload) {
     }
 }
 
-void TInsertTable::GetCounters(TCounters& prepared, TCounters& committed) const {
-    prepared = TCounters();
+TInsertTable::TCounters TInsertTable::GetCountersPrepared() const {
+    TCounters prepared;
     prepared.Rows = Inserted.size();
     for (auto& [_, data] : Inserted) {
         prepared.Bytes += data.BlobSize();
     }
+    return prepared;
+}
 
-    committed = TCounters();
+TInsertTable::TCounters TInsertTable::GetCountersCommitted() const {
+    TCounters committed;
     for (auto& [_, set] : CommittedByPathId) {
         committed.Rows += set.size();
         for (auto& data : set) {
             committed.Bytes += data.BlobSize();
         }
     }
+    return committed;
 }
 
 }

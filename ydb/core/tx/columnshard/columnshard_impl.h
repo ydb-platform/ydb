@@ -443,7 +443,7 @@ private:
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();
 
     void UpdateBlobMangerCounters();
-    void UpdateInsertTableCounters();
+    void UpdateInsertTableCounters(bool updateCommitted = true);
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TUsage& usage);
 

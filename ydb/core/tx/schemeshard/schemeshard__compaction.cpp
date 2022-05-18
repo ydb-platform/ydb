@@ -166,7 +166,6 @@ void TSchemeShard::EnqueueCompaction(
         << " with partCount# " << stats.PartCount
         << ", rowCount# " << stats.RowCount
         << ", searchHeight# " << stats.SearchHeight
-        << ", memDataSize# " << stats.MemDataSize
         << ", lastFullCompaction# " << TInstant::Seconds(stats.FullCompactionTs)
         << " at schemeshard " << TabletID());
 
@@ -204,7 +203,6 @@ void TSchemeShard::UpdateCompaction(
         << " with partCount# " << newStats.PartCount
         << ", rowCount# " << newStats.RowCount
         << ", searchHeight# " << newStats.SearchHeight
-        << ", memDataSize# " << newStats.MemDataSize
         << ", lastFullCompaction# " << TInstant::Seconds(newStats.FullCompactionTs)
         << " at schemeshard " << TabletID());
 

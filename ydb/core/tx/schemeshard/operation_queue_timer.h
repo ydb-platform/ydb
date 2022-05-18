@@ -109,7 +109,6 @@ struct TShardCompactionInfo {
     ui64 RowDeletes = 0;
 
     ui64 PartCount = 0;
-    ui64 MemDataSize = 0;
 
     explicit TShardCompactionInfo(const TShardIdx& id)
         : ShardIdx(id)
@@ -122,7 +121,6 @@ struct TShardCompactionInfo {
         , RowCount(stats.RowCount)
         , RowDeletes(stats.RowDeletes)
         , PartCount(stats.PartCount)
-        , MemDataSize(stats.MemDataSize)
     {}
 
     TShardCompactionInfo(const TShardCompactionInfo&) = default;
@@ -251,13 +249,14 @@ public:
     const TConfig& GetConfig() const { return Config; }
 
     bool Enqueue(const TShardCompactionInfo& info) {
-        // ignore empty shard, note that Config.RowDeletesThreshold == 0
-        // is expected in tests only
-        if (info.PartCount == 0 && info.MemDataSize == 0 && Config.RowCountThreshold != 0)
+        // ignore empty shard (we don't check memtable, because it's up to DS to compact it),
+        // note that Config.RowDeletesThreshold == 0 is expected in tests only
+        //
+        if (info.PartCount == 0 && Config.RowCountThreshold != 0)
             return false;
 
         // ignore single parted shard if needed
-        bool isSingleParted = info.PartCount == 1 && info.MemDataSize == 0;
+        bool isSingleParted = info.PartCount == 1;
         if (!Config.CompactSinglePartedShards && isSingleParted)
             return false;
 

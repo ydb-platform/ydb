@@ -191,6 +191,7 @@ message TVDiskStateInfo {
     optional fixed64 IncarnationGuid = 25;
     optional bool DonorMode = 26;
     optional fixed64 InstanceGuid = 27; // VDisk actor instance guid
+    repeated NKikimrBlobStorage.TVSlotId Donors = 29;
 
     // VDisk (Skeleton) Front Queue Status
     optional EFlag FrontQueues = 18;

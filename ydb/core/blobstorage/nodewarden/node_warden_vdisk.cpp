@@ -144,9 +144,16 @@ namespace NKikimr::NStorage {
         const ui64 scrubCookie = ++LastScrubCookie;
 
         std::vector<std::pair<TVDiskID, TActorId>> donorDiskIds;
+        std::vector<NKikimrBlobStorage::TVSlotId> donors;
         for (const auto& donor : vdisk.Config.GetDonors()) {
-            const TVSlotId donorSlot(donor.GetVDiskLocation());
+            const auto& location = donor.GetVDiskLocation();
+            const TVSlotId donorSlot(location);
             donorDiskIds.emplace_back(VDiskIDFromVDiskID(donor.GetVDiskId()), donorSlot.GetVDiskServiceId());
+            NKikimrBlobStorage::TVSlotId slotId;
+            slotId.SetNodeId(location.GetNodeID());
+            slotId.SetPDiskId(location.GetPDiskID());
+            slotId.SetVSlotId(location.GetVDiskSlotID());
+            donors.emplace_back(slotId);
         }
 
         TVDiskConfig::TBaseInfo baseInfo(vdiskId, pdiskServiceId, pdiskGuid, vslotId.PDiskId, deviceType,
@@ -166,7 +173,7 @@ namespace NKikimr::NStorage {
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
-            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid));
+            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));
         vdisk.WhiteboardVDiskId.emplace(vdiskId);
 
         // create an actor

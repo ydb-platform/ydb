@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(KqpFlowControl) {
 
 #if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 9u
 
-void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
+void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity, bool useSessionActor) {
     NKikimrConfig::TAppConfig appCfg;
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(limit);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(limit);
@@ -59,7 +59,8 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(200ul << 20);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(20ul << 30);
 
-    TKikimrRunner kikimr{appCfg, "", KikimrDefaultUtDomainRoot};
+    //TKikimrRunner kikimr{appCfg, "", KikimrDefaultUtDomainRoot};
+    auto kikimr = KikimrRunnerEnableSessionActor(useSessionActor, {}, appCfg);
 
     CreateSampleTables(kikimr);
     NExperimental::TStreamQueryClient db(kikimr.GetDriver());
@@ -111,16 +112,16 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     UNIT_ASSERT_EQUAL(hasBlockedByCapacity, blockedByCapacity > 0);
 }
 
-Y_UNIT_TEST(FlowControl_Unlimited) {
-    DoFlowControlTest(100ul << 20, false);
+Y_UNIT_TEST_TWIN(FlowControl_Unlimited, UseSessionActor) {
+    DoFlowControlTest(100ul << 20, false, UseSessionActor);
 }
 
-Y_UNIT_TEST(FlowControl_BigLimit) {
-    DoFlowControlTest(1ul << 10, false);
+Y_UNIT_TEST_TWIN(FlowControl_BigLimit, UseSessionActor) {
+    DoFlowControlTest(1ul << 10, false, UseSessionActor);
 }
 
-Y_UNIT_TEST(FlowControl_SmallLimit) {
-    DoFlowControlTest(1ul, true);
+Y_UNIT_TEST_TWIN(FlowControl_SmallLimit, UseSessionActor) {
+    DoFlowControlTest(1ul, true, UseSessionActor);
 }
 
 //Y_UNIT_TEST(SlowClient) {

@@ -9,12 +9,12 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpWrite) {
-    Y_UNIT_TEST_NEW_ENGINE(UpsertNullKey) {
+    Y_UNIT_TEST_QUAD(UpsertNullKey, UseNewEngine, UseSessionActor) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
         setting.SetValue("1");
 
-        TKikimrRunner kikimr({setting});
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor, {setting});
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -284,8 +284,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Insert) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_QUAD(Insert, UseNewEngine, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -401,8 +401,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(InsertRevert) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_QUAD(InsertRevert, UseNewEngine, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -528,8 +528,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[1u]];[[2u]];[[3u]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(ProjectReplace) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_QUAD(ProjectReplace, UseNewEngine, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -622,8 +622,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         CompareYson(R"([[[127u]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CastValues) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_QUAD(CastValues, UseNewEngine, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -657,8 +657,8 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(CastValuesOptional) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_QUAD(CastValuesOptional, UseNewEngine, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

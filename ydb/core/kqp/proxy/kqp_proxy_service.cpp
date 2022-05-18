@@ -9,12 +9,13 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/kqp_worker_common.h>
 #include <ydb/core/kqp/node/kqp_node.h>
 #include <ydb/core/kqp/rm/kqp_rm.h>
 #include <ydb/core/kqp/runtime/kqp_spilling_file.h>
 #include <ydb/core/kqp/runtime/kqp_spilling.h>
-#include <ydb/core/kqp/common/kqp_timeouts.h>
-#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -1223,7 +1224,9 @@ private:
         TKqpWorkerSettings workerSettings(cluster, database, TableServiceConfig, dbCounters);
         workerSettings.LongSession = longSession;
 
-        IActor* workerActor = AppData()->FeatureFlags.GetEnableKqpSessionActor()
+        auto config = CreateConfig(KqpSettings, workerSettings);
+
+        IActor* workerActor = AppData()->FeatureFlags.GetEnableKqpSessionActor() && config->HasKqpForceNewEngine()
                 ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
                 : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);

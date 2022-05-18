@@ -32,13 +32,14 @@ bool HasIssue(const TIssues& issues, ui32 code, TStringBuf message, std::functio
 
 } // anonymous namespace
 
-class TFixture : public NUnitTest::TBaseFixture {
+class TLocalFixture {
 public:
-    void SetUp(NUnitTest::TTestContext&) override {
+    TLocalFixture(bool useNewEngine = false) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
+            .SetEnableKqpSessionActor(useNewEngine)
             .SetUseRealThreads(false);
 
         Server = new TServer(serverSettings);
@@ -72,18 +73,15 @@ public:
         Client = Runtime->AllocateEdgeActor();
     }
 
-    void TearDown(NUnitTest::TTestContext&) override {
-        Server.Reset();
-    }
-
     Tests::TServer::TPtr Server;
     TTestActorRuntime* Runtime;
     TActorId Client;
 };
 
-Y_UNIT_TEST_SUITE_F(KqpErrors, TFixture) {
+Y_UNIT_TEST_SUITE(KqpErrors) {
 
 Y_UNIT_TEST(ResolveTableError) {
+    TLocalFixture fixture;
     int skip = 1; // compile
     auto mitm = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
@@ -97,11 +95,11 @@ Y_UNIT_TEST(ResolveTableError) {
         }
         return TTestActorRuntime::EEventAction::PROCESS;
     };
-    Runtime->SetObserverFunc(mitm);
+    fixture.Runtime->SetObserverFunc(mitm);
 
-    SendRequest(*Runtime, Client, MakeSQLRequest("pragma kikimr.UseNewEngine='true'; select * from `/Root/table-1`"));
+    SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest("pragma kikimr.UseNewEngine='true'; select * from `/Root/table-1`"));
 
-    auto ev = Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(Client);
+    auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fixture.Client);
     auto& record = ev->Get()->Record.GetRef();
 
     // Cerr << record.DebugString() << Endl;
@@ -115,12 +113,13 @@ Y_UNIT_TEST(ResolveTableError) {
 }
 
 Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
+    TLocalFixture fixture(UseNewEngine);
     THashSet<TActorId> knownExecuters;
 
     using TMod = std::function<void(NKikimrTxDataShard::TEvProposeTransactionResult&)>;
 
     auto test = [&](auto proposeStatus, auto ydbStatus, auto issue, auto issueMessage, TMod mod = {}) {
-        auto client = Runtime->AllocateEdgeActor();
+        auto client = fixture.Runtime->AllocateEdgeActor();
 
         bool done = false;
         auto mitm = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) {
@@ -137,11 +136,11 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         };
-        Runtime->SetObserverFunc(mitm);
+        fixture.Runtime->SetObserverFunc(mitm);
 
-        SendRequest(*Runtime, client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
+        SendRequest(*fixture.Runtime, client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
 
-        auto ev = Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
+        auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(client);
         auto& record = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), ydbStatus, record.DebugString());
 
@@ -240,6 +239,7 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeError) {
 }
 
 Y_UNIT_TEST_NEW_ENGINE(ProposeRequestUndelivered) {
+    TLocalFixture fixture(UseNewEngine);
     auto mitm = [&](TTestActorRuntimeBase& rt, TAutoPtr<IEventHandle> &ev) {
         if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
             auto forwardEvent = ev.Get()->Get<TEvPipeCache::TEvForward>();
@@ -251,11 +251,11 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeRequestUndelivered) {
         }
         return TTestActorRuntime::EEventAction::PROCESS;
     };
-    Runtime->SetObserverFunc(mitm);
+    fixture.Runtime->SetObserverFunc(mitm);
 
-    SendRequest(*Runtime, Client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
+    SendRequest(*fixture.Runtime, fixture.Client, MakeSQLRequest(Q_("select * from `/Root/table-1`")));
 
-    auto ev = Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(Client);
+    auto ev = fixture.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fixture.Client);
     auto& record = ev->Get()->Record.GetRef();
     UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
 
@@ -315,7 +315,8 @@ void TestProposeResultLost(TTestActorRuntime& runtime, TActorId client, const TS
 }
 
 Y_UNIT_TEST_NEW_ENGINE(ProposeResultLost_RoTx) {
-    TestProposeResultLost(*Runtime, Client,
+    TLocalFixture fixture(UseNewEngine);
+    TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_("select * from `/Root/table-1`"),
         [](const NKikimrKqp::TEvQueryResponse& record) {
             UNIT_ASSERT_VALUES_EQUAL_C(record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE, record.DebugString());
@@ -334,7 +335,8 @@ Y_UNIT_TEST_NEW_ENGINE(ProposeResultLost_RoTx) {
 }
 
 Y_UNIT_TEST_NEW_ENGINE(ProposeResultLost_RwTx) {
-    TestProposeResultLost(*Runtime, Client,
+    TLocalFixture fixture(UseNewEngine);
+    TestProposeResultLost(*fixture.Runtime, fixture.Client,
         Q_(R"(
             upsert into `/Root/table-1` (key, value) VALUES
                 (1, 1), (1073741823, 1073741823), (2147483647, 2147483647), (4294967295, 4294967295)

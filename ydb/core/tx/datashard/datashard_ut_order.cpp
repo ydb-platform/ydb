@@ -1234,6 +1234,7 @@ Y_UNIT_TEST_QUAD(TestDelayedTxWaitsForWriteActiveTxOnly, UseMvcc, UseNewEngine) 
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1330,6 +1331,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1339,6 +1341,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
 
     runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
     runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_EXECUTER : NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(UseNewEngine ? NKikimrServices::KQP_SESSION : NKikimrServices::KQP_WORKER, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NActors::NLog::PRI_DEBUG);
 
     InitRoot(server, sender);
@@ -1370,19 +1373,27 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
     ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"));
 
     // Send SQL request which should hang due to lost RS.
-    auto captureRS = [](TTestActorRuntimeBase&,
+    TVector<THolder<IEventHandle>> readSets;
+    auto captureRS = [&](TTestActorRuntimeBase&,
                         TAutoPtr<IEventHandle> &event) -> auto {
-        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet)
+        if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
+            readSets.push_back(std::move(event));
             return TTestActorRuntime::EEventAction::DROP;
+        }
         return TTestActorRuntime::EEventAction::PROCESS;
     };
     runtime.SetObserverFunc(captureRS);
 
     SendSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1`"));
+
     {
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(IsTxResultComplete(), 2);
+        options.FinalEvents.emplace_back(
+            [&](IEventHandle &) -> bool {
+                return readSets.size() >= 2;
+            });
         runtime.DispatchEvents(options);
+        UNIT_ASSERT_VALUES_EQUAL(readSets.size(), 2u);
     }
 
     // Now move time forward and check we can still execute data txs.
@@ -1394,7 +1405,7 @@ Y_UNIT_TEST_QUAD(TestOnlyDataTxLagCausesRejects, UseMvcc, UseNewEngine) {
         runtime.DispatchEvents(options);
     }
 
-    ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"), true, Ydb::StatusIds::UNAVAILABLE);
+    ExecSQL(server, sender, Q_("SELECT COUNT(*) FROM `/Root/table-1`"), true, Ydb::StatusIds::OVERLOADED);
 }
 
 }
@@ -1406,6 +1417,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderLockLost, UseMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1539,6 +1551,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestMvccReadDoesntBlockWrites) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1677,6 +1690,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderReadOnlyAllowed, UseMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1787,6 +1801,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNonConflictingWrites, UseMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -1903,6 +1918,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(false) // intentionally, because we test non-mvcc locks logic
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2048,6 +2064,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestOutOfOrderRestartLocksSingleWithoutBarrier) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2189,6 +2206,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderRestartLocksReorderedWithoutBarrier, UseMvcc, Use
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2335,6 +2353,7 @@ Y_UNIT_TEST_QUAD(TestOutOfOrderNoBarrierRestartImmediateLongTail, UseMvcc, UseNe
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2524,6 +2543,7 @@ Y_UNIT_TEST_QUAD(TestCopyTableNoDeadlock, UseMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2707,6 +2727,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestPlannedCancelSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -2895,6 +2916,7 @@ Y_UNIT_TEST_QUAD(TestPlannedTimeoutSplit, UseMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3014,6 +3036,7 @@ Y_UNIT_TEST_QUAD(TestPlannedHalfOverloadedSplit, UseMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3180,6 +3203,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3330,6 +3354,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableImmediateWriteBlock) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3401,6 +3426,7 @@ Y_UNIT_TEST_QUAD(TestReadTableSingleShardImmediate, WithMvcc, UseNewEngine) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3448,6 +3474,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestImmediateQueueThenSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3740,6 +3767,7 @@ Y_UNIT_TEST_NEW_ENGINE(MvccTestSnapshotRead) {
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3866,6 +3894,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestSecondaryClearanceAfterShardRestartRace) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -3952,6 +3981,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartNoUndeterminedImmediate, UseMvcc, UseNewEngine)
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4071,6 +4101,7 @@ Y_UNIT_TEST_QUAD(TestShardRestartPlannedCommitShouldSucceed, UseMvcc, UseNewEngi
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(WithMvcc)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4175,6 +4206,7 @@ Y_UNIT_TEST_NEW_ENGINE(TestShardSnapshotReadNoEarlyReply) {
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
         .SetEnableMvccSnapshotReads(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4319,6 +4351,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, UseNewEngine) {
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
         .SetEnableMvccSnapshotReads(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4391,6 +4424,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLockOutOfOrder, UseNewEngine) {
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
         .SetEnableMvccSnapshotReads(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4519,6 +4553,7 @@ Y_UNIT_TEST_TWIN(TestSnapshotReadAfterStuckRW, UseNewEngine) {
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
         .SetEnableMvccSnapshotReads(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetUseRealThreads(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -4617,6 +4652,7 @@ Y_UNIT_TEST_QUAD(TestSnapshotReadPriority, UnprotectedReads, UseNewEngine) {
     serverSettings.SetDomainName("Root")
         .SetEnableMvcc(true)
         .SetEnableMvccSnapshotReads(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetControls(controls)
         .SetUseRealThreads(false);
 
@@ -4935,6 +4971,7 @@ Y_UNIT_TEST_TWIN(TestUnprotectedReadsThenWriteVisibility, UseNewEngine) {
         .SetNodeCount(2)
         .SetEnableMvcc(true)
         .SetEnableMvccSnapshotReads(true)
+        .SetEnableKqpSessionActor(UseNewEngine)
         .SetControls(controls)
         .SetUseRealThreads(false);
 

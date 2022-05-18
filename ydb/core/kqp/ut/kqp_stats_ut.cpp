@@ -14,8 +14,8 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpStats) {
 
-Y_UNIT_TEST(MultiTxStatsFullExp) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_TWIN(MultiTxStatsFullExp, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     NExperimental::TStreamQueryClient db{kikimr.GetDriver()};
     auto settings = NExperimental::TExecuteStreamQuerySettings();
     settings.ProfileMode(NYdb::NExperimental::EStreamQueryProfileMode::Full);
@@ -35,8 +35,8 @@ Y_UNIT_TEST(MultiTxStatsFullExp) {
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
 
-Y_UNIT_TEST(JoinNoStats) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_TWIN(JoinNoStats, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::None);
@@ -53,8 +53,8 @@ Y_UNIT_TEST(JoinNoStats) {
     UNIT_ASSERT(!res.PlanJson);
 }
 
-Y_UNIT_TEST(JoinStatsBasic) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_TWIN(JoinStatsBasic, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
@@ -85,8 +85,8 @@ Y_UNIT_TEST(JoinStatsBasic) {
     UNIT_ASSERT(!res.PlanJson);
 }
 
-Y_UNIT_TEST(MultiTxStatsFull) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_TWIN(MultiTxStatsFull, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
@@ -114,8 +114,8 @@ Y_UNIT_TEST(MultiTxStatsFull) {
     UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe(), 2);
 }
 
-Y_UNIT_TEST(DeferredEffects) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_TWIN(DeferredEffects, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     TString planJson;
@@ -181,8 +181,8 @@ Y_UNIT_TEST(DeferredEffects) {
     UNIT_ASSERT(std::atoi(ru->second.c_str()) > 1);
 }
 
-Y_UNIT_TEST(DataQueryWithEffects) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -206,7 +206,7 @@ Y_UNIT_TEST(DataQueryWithEffects) {
 }
 
 Y_UNIT_TEST(DataQueryOldEngine) {
-    TKikimrRunner kikimr;
+    auto kikimr = KikimrRunnerEnableSessionActor(false);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -223,8 +223,8 @@ Y_UNIT_TEST(DataQueryOldEngine) {
     AssertSuccessResult(result);
 }
 
-Y_UNIT_TEST(DataQueryMulti) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_TWIN(DataQueryMulti, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -247,8 +247,8 @@ Y_UNIT_TEST(DataQueryMulti) {
     UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
 }
 
-Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExecute) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_QUAD(RequestUnitForBadRequestExecute, UseNewEngine, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -265,8 +265,8 @@ Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExecute) {
     UNIT_ASSERT(result.GetConsumedRu() > 0);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExplicitPrepare) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_QUAD(RequestUnitForBadRequestExplicitPrepare, UseNewEngine, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -282,8 +282,8 @@ Y_UNIT_TEST_NEW_ENGINE(RequestUnitForBadRequestExplicitPrepare) {
     UNIT_ASSERT(result.GetConsumedRu() > 0);
 }
 
-Y_UNIT_TEST_NEW_ENGINE(RequestUnitForSuccessExplicitPrepare) {
-    TKikimrRunner kikimr;
+Y_UNIT_TEST_QUAD(RequestUnitForSuccessExplicitPrepare, UseNewEngine, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

@@ -64,4 +64,21 @@ inline bool IsQueryAllowedToLog(const TString& text) {
     return itPassword == text.end();
 }
 
+inline TIntrusivePtr<NYql::TKikimrConfiguration> CreateConfig(const TKqpSettings::TConstPtr& kqpSettings,
+    const TKqpWorkerSettings& workerSettings)
+{
+    auto cfg = MakeIntrusive<NYql::TKikimrConfiguration>();
+    cfg->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), workerSettings.Cluster,
+            kqpSettings->Settings, false);
+
+    if (!workerSettings.Database.empty()) {
+        cfg->_KqpTablePathPrefix = workerSettings.Database;
+    }
+
+    ApplyServiceConfig(*cfg, workerSettings.Service);
+
+    cfg->FreezeDefaults();
+    return cfg;
+}
+
 }

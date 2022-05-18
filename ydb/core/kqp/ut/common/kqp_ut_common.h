@@ -83,6 +83,12 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
 
+    TKikimrSettings()
+    {
+        // default value for tests, can be overwritten by SetFeatureFlags()
+        this->SetEnableKqpSessionActor(false);
+    }
+
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
     TKikimrSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
     TKikimrSettings& SetPQConfig(const NKikimrPQ::TPQConfig& value) { PQConfig = value; return *this; };
@@ -151,6 +157,17 @@ private:
     NYdb::TDriverConfig DriverConfig;
     THolder<NYdb::TDriver> Driver;
 };
+
+inline TKikimrRunner KikimrRunnerEnableSessionActor(bool enable, TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
+    const NKikimrConfig::TAppConfig& appConfig = {})
+{
+    auto settings = TKikimrSettings()
+        .SetAppConfig(appConfig)
+        .SetEnableKqpSessionActor(enable)
+        .SetKqpSettings(kqpSettings);
+
+    return TKikimrRunner{settings};
+}
 
 struct TCollectedStreamResult {
     TString ResultSetYson;

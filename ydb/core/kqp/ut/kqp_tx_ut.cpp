@@ -10,7 +10,7 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpTx) {
     Y_UNIT_TEST_NEW_ENGINE(DeferredEffects) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ExplicitTcl) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(InteractiveTx) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -117,8 +117,8 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         CompareYson(R"([[[500u];#;[10u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(BeginTransactionBadMode) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_NEW_ENGINE(BeginTransactionBadMode) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(CommitRequired) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(RollbackTx) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(RollbackTx2) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -203,12 +203,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(HasIssue(rollbackResult.GetIssues(), NYql::TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND));
     }
 
-    Y_UNIT_TEST(RollbackManyTx) {
+    Y_UNIT_TEST_TWIN(RollbackManyTx, UseSessionActor) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpMaxActiveTxPerSession");
         setting.SetValue("10");
 
-        TKikimrRunner kikimr({setting});
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {setting});
         auto db = kikimr.GetTableClient();
 
         auto query = R"(
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(RollbackRoTx) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(CommitRoTx) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(CommitRoTx_TLI) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(EmptyTxOnCommit) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -341,12 +341,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(!tx->IsActive());
     }
 
-    Y_UNIT_TEST(TooManyTx) {
+    Y_UNIT_TEST_NEW_ENGINE(TooManyTx) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpMaxActiveTxPerSession");
         setting.SetValue("2");
 
-        TKikimrRunner kikimr({setting});
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine, {setting});
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_VALUES_EQUAL(rollbackResult.GetStatus(), EStatus::BAD_SESSION);
     }
 
-    Y_UNIT_TEST(RollbackByIdle) {
+    Y_UNIT_TEST_NEW_ENGINE(RollbackByIdle) {
         TVector<NKikimrKqp::TKqpSetting> settings;
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpMaxActiveTxPerSession");
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         setting.SetValue("0");
         settings.push_back(setting);
 
-        TKikimrRunner kikimr(settings);
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine, settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(RollbackInvalidated) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(CommitPrepared) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(InvalidateOnError) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(CommitStats) {
-        TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -497,8 +497,9 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
     }
 
-    Y_UNIT_TEST(MixEnginesOldNew) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(MixEnginesOldNew, UseSessionActor) {
+        //TKikimrRunner kikimr;
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

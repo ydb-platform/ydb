@@ -13,6 +13,7 @@ namespace {
 TKikimrRunner RunnerWithArrowFormatEnabled() {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableArrowFormatAtDatashard(true);
+    featureFlags.SetEnableKqpSessionActor(true);
 
     return TKikimrRunner{featureFlags};
 }

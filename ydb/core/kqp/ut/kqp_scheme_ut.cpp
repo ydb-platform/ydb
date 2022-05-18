@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         {
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(),
                 execSettings).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto result = session.ExecuteDataQuery(query,
-                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+                TTxControl::BeginTx(), execSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
@@ -378,19 +378,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             auto result = session.ExecuteDataQuery(query,
-                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+                TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), write ? EStatus::SUCCESS : EStatus::ABORTED, result.GetIssues().ToString());
+
+            if (write) {
+                auto commit = result.GetTransaction()->Commit().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), UseNewEngine ? EStatus::SUCCESS : EStatus::ABORTED, commit.GetIssues().ToString());
+            }
         }
 
         {
             auto result = session.ExecuteDataQuery(query,
-                TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+                TTxControl::BeginTx(), execSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+            auto commit = result.GetTransaction()->Commit().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
         }
-
     }
 
     Y_UNIT_TEST_NEW_ENGINE(SchemaVersionMissmatchWithRead) {

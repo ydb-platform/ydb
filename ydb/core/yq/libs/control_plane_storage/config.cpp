@@ -51,6 +51,8 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
         TaskLeaseRetryPolicy.RetryCount = Proto.GetTaskLeaseRetryPolicy().GetRetryCount();
         TaskLeaseRetryPolicy.RetryPeriod = GetDuration(Proto.GetTaskLeaseRetryPolicy().GetRetryPeriod(), TDuration::Days(1));
     }
+
+    QuotaTtl = GetDuration(Proto.GetQuotaTtl(), TDuration::Zero());
 }
 
 } // NYq

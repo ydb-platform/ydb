@@ -121,6 +121,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RTC_WRITE_RESULT_DATA,
         RTC_GET_TASK,
         RTC_NODES_HEALTH_CHECK,
+        RTS_QUOTA_USAGE,
         RTC_MAX,
     };
 
@@ -142,6 +143,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             { MakeIntrusive<TRequestCounters>("WriteResultData") },
             { MakeIntrusive<TRequestCounters>("GetTask") },
             { MakeIntrusive<TRequestCounters>("NodesHealthCheck") },
+            { MakeIntrusive<TRequestCounters>("GetQuotaUsage") },
         });
 
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
@@ -234,6 +236,13 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
     TString TenantName;
 
+    // Query Quota
+    THashMap<TString, ui32> QueryQuotas;
+    THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
+    TInstant QuotasUpdatedAt = TInstant::Zero();
+    ui32 QuotaGeneration = 0;
+    bool QuotasUpdating = false;
+
 public:
     TYdbControlPlaneStorageActor(
         const NConfig::TControlPlaneStorageConfig& config,
@@ -281,6 +290,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvNodesHealthCheckRequest, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
         hFunc(TEvQuotaService::TQuotaUsageRequest, Handle);
+        hFunc(TEvQuotaService::TQuotaUsageResponse, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
@@ -313,6 +323,7 @@ public:
     void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev);
 
     void Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev);
+    void Handle(TEvQuotaService::TQuotaUsageResponse::TPtr& ev);
 
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)

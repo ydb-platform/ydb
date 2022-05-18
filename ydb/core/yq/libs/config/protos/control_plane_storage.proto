@@ -65,4 +65,5 @@ message TControlPlaneStorageConfig {
     string ResultSetsTtl = 24;
     TQueryMapping Mapping = 25;
     repeated TRetryPolicyMapping RetryPolicyMapping = 26;
+    string QuotaTtl = 28;
 }

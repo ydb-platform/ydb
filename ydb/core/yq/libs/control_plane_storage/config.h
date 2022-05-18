@@ -25,6 +25,7 @@ struct TControlPlaneStorageConfig {
     TSet<YandexQuery::BindingSetting::BindingCase> AvailableBindings;
     THashMap<ui64, TRetryPolicyItem> RetryPolicies;
     TRetryPolicyItem TaskLeaseRetryPolicy;
+    TDuration QuotaTtl;
 
     TControlPlaneStorageConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common);
 };

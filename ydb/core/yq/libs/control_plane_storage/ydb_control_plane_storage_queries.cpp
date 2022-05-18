@@ -115,7 +115,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             auto& quota = it->second;
             if (!quota.Usage) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::NOT_READY, "Control Plane is not ready yet. Please retry later."));
-            } else if (*quota.Usage > quota.Limit) {
+            } else if (*quota.Usage >= quota.Limit) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::QUOTA_EXCEEDED, Sprintf("Too many queries (%lu of %lu). Please delete other queries or increase limits.", *quota.Usage, quota.Limit)));
             }
         }

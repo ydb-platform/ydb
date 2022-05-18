@@ -900,6 +900,13 @@ message TBackupTask {
 
     optional TScanSettings ScanSettings = 11;
     optional bool NeedToBill = 12;
+
+    message TCompressionOptions {
+        optional string Codec = 1;
+        optional int32 Level = 2;
+    }
+
+    optional TCompressionOptions Compression = 13; // currently available for s3
 }
 
 message TRestoreTask {

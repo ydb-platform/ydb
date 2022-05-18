@@ -8,7 +8,11 @@
 namespace NKikimr {
 namespace NDataShard {
 
-NExportScan::IBuffer* CreateS3ExportBuffer(const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit);
+NExportScan::IBuffer* CreateS3ExportBufferRaw(
+    const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit);
+
+NExportScan::IBuffer* CreateS3ExportBufferZstd(int compressionLevel,
+    const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit);
 
 } // NDataShard
 } // NKikimr

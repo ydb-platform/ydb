@@ -13,10 +13,12 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
+#include <util/generic/buffer.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -38,7 +40,7 @@ class TS3UploaderBase: public TActorBootstrapped<TDerived>
                      , public IProxyOps
 {
     using TEvS3Wrapper = NWrappers::TEvS3Wrapper;
-    using TEvBuffer = TEvExportScan::TEvBuffer<TString>;
+    using TEvBuffer = TEvExportScan::TEvBuffer<TBuffer>;
 
 protected:
     void Restart() {
@@ -52,7 +54,7 @@ protected:
             this->Send(std::exchange(Client, TActorId()), new TEvents::TEvPoisonPill());
         }
 
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(Settings.Credentials, Settings.Config));
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(Settings.GetCredentials(), Settings.GetConfig()));
 
         if (!SchemeUploaded) {
             this->Become(&TDerived::StateUploadScheme);
@@ -79,9 +81,9 @@ protected:
         google::protobuf::TextFormat::PrintToString(Scheme.GetRef(), &Buffer);
 
         auto request = Model::PutObjectRequest()
-            .WithBucket(Settings.Bucket)
-            .WithKey(Settings.SchemeKey)
-            .WithStorageClass(Settings.StorageClass);
+            .WithBucket(Settings.GetBucket())
+            .WithKey(Settings.GetSchemeKey())
+            .WithStorageClass(Settings.GetStorageClass());
         this->Send(Client, new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(Buffer)));
     }
 
@@ -137,7 +139,7 @@ protected:
 
         Last = ev->Get()->Last;
         MultiPart = MultiPart || !Last;
-        Buffer.swap(ev->Get()->Buffer);
+        ev->Get()->Buffer.AsString(Buffer);
 
         UploadData();
     }
@@ -145,9 +147,9 @@ protected:
     void UploadData() {
         if (!MultiPart) {
             auto request = Model::PutObjectRequest()
-                .WithBucket(Settings.Bucket)
-                .WithKey(Settings.DataKey)
-                .WithStorageClass(Settings.StorageClass);
+                .WithBucket(Settings.GetBucket())
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
+                .WithStorageClass(Settings.GetStorageClass());
             this->Send(Client, new TEvS3Wrapper::TEvPutObjectRequest(request, std::move(Buffer)));
         } else {
             if (!UploadId) {
@@ -156,8 +158,8 @@ protected:
             }
 
             auto request = Model::UploadPartRequest()
-                .WithBucket(Settings.Bucket)
-                .WithKey(Settings.DataKey)
+                .WithBucket(Settings.GetBucket())
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                 .WithUploadId(*UploadId)
                 .WithPartNumber(Parts.size() + 1);
             this->Send(Client, new TEvS3Wrapper::TEvUploadPartRequest(request, std::move(Buffer)));
@@ -187,9 +189,9 @@ protected:
 
         if (!upload) {
             auto request = Model::CreateMultipartUploadRequest()
-                .WithBucket(Settings.Bucket)
-                .WithKey(Settings.DataKey)
-                .WithStorageClass(Settings.StorageClass);
+                .WithBucket(Settings.GetBucket())
+                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
+                .WithStorageClass(Settings.GetStorageClass());
             this->Send(Client, new TEvS3Wrapper::TEvCreateMultipartUploadRequest(request));
         } else {
             UploadId = upload->Id;
@@ -209,8 +211,8 @@ protected:
                     }
 
                     auto request = Model::CompleteMultipartUploadRequest()
-                        .WithBucket(Settings.Bucket)
-                        .WithKey(Settings.DataKey)
+                        .WithBucket(Settings.GetBucket())
+                        .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                         .WithUploadId(*UploadId)
                         .WithMultipartUpload(Model::CompletedMultipartUpload().WithParts(std::move(parts)));
                     this->Send(Client, new TEvS3Wrapper::TEvCompleteMultipartUploadRequest(request));
@@ -224,8 +226,8 @@ protected:
                     }
 
                     auto request = Model::AbortMultipartUploadRequest()
-                        .WithBucket(Settings.Bucket)
-                        .WithKey(Settings.DataKey)
+                        .WithBucket(Settings.GetBucket())
+                        .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec))
                         .WithUploadId(*UploadId);
                     this->Send(Client, new TEvS3Wrapper::TEvAbortMultipartUploadRequest(request));
                     break;
@@ -379,6 +381,8 @@ public:
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme)
         : Settings(TS3Settings::FromBackupTask(task))
+        , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
+        , CompressionCodec(NBackupRestoreTraits::CodecFromTask(task))
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
@@ -436,6 +440,8 @@ public:
 
 protected:
     TS3Settings Settings;
+    const NBackupRestoreTraits::EDataFormat DataFormat;
+    const NBackupRestoreTraits::ECompressionCodec CompressionCodec;
     bool ProxyResolved;
 
 private:

@@ -1,5 +1,6 @@
 #include "export_iface.h"
 #include "backup_restore_common.h"
+#include "backup_restore_traits.h"
 #include "execution_unit_ctors.h"
 #include "export_scan.h"
 #include "export_s3.h"
@@ -45,6 +46,11 @@ protected:
         std::shared_ptr<::NKikimr::NDataShard::IExport> exp;
 
         if (backup.HasYTSettings()) {
+            if (backup.HasCompression()) {
+                Abort(op, ctx, "Exports to YT do not support compression");
+                return false;
+            }
+
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToYt(backup, columns)).swap(exp);
             } else {
@@ -52,6 +58,13 @@ protected:
                 return false;
             }
         } else if (backup.HasS3Settings()) {
+            NBackupRestoreTraits::ECompressionCodec codec;
+            if (!TryCodecFromTask(backup, codec)) {
+                Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
+                    << ": " << backup.GetCompression().GetCodec());
+                return false;
+            }
+
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
             } else {

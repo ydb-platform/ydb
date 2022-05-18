@@ -16,6 +16,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   yutil
   tools-enum_parser-enum_serialization_runtime
   library-cpp-resource
+  contrib-libs-zstd
   cpp-actors-core
   cpp-containers-flat_hash
   cpp-digest-md5
@@ -50,6 +51,7 @@ target_link_libraries(core-tx-datashard PUBLIC
 target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_cdc_stream_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/alter_table_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_and_wait_dependencies_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/build_data_tx_out_rs_unit.cpp
@@ -197,9 +199,15 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/upload_stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_zstd.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_uploader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/import_s3.cpp
+)
+generate_enum_serilization(core-tx-datashard
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/backup_restore_traits.h
+  INCLUDE_HEADERS
+  ydb/core/tx/datashard/backup_restore_traits.h
 )
 generate_enum_serilization(core-tx-datashard
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/change_exchange.h
@@ -251,6 +259,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   yutil
   tools-enum_parser-enum_serialization_runtime
   library-cpp-resource
+  contrib-libs-zstd
   cpp-actors-core
   cpp-containers-flat_hash
   cpp-digest-md5

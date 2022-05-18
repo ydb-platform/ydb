@@ -35,7 +35,7 @@ struct TEvExportScan {
 
         TEvBuffer() = default;
 
-        explicit TEvBuffer(TBuffer buffer, bool last)
+        explicit TEvBuffer(TBuffer&& buffer, bool last)
             : Buffer(std::move(buffer))
             , Last(last)
         {
@@ -92,17 +92,21 @@ class IBuffer {
 public:
     using TPtr = THolder<IBuffer>;
 
+    struct TStats {
+        ui64 Rows = 0;
+        ui64 BytesRead = 0;
+        ui64 BytesSent = 0;
+    };
+
 public:
     virtual ~IBuffer() = default;
 
     virtual void ColumnsOrder(const TVector<ui32>& tags) = 0;
-    virtual void Collect(const NTable::IScan::TRow& row) = 0;
-    virtual IEventBase* PrepareEvent(bool last) = 0;
+    virtual bool Collect(const NTable::IScan::TRow& row) = 0;
+    virtual IEventBase* PrepareEvent(bool last, TStats& stats) = 0;
     virtual void Clear() = 0;
     virtual bool IsFilled() const = 0;
-    virtual ui64 GetRows() const = 0;
-    virtual ui64 GetBytesRead() const = 0;
-    virtual ui64 GetBytesSent() const = 0;
+    virtual TString GetError() const = 0;
 };
 
 } // NExportScan

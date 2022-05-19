@@ -45,6 +45,8 @@ struct TTypeDesc {
     ui32 ElementTypeId = 0;
     bool PassByValue = false;
     char Category = '\0';
+    char TypeAlign = '\0';
+    char TypeDelim = ',';
     ui32 InFuncId = 0;
     ui32 OutFuncId = 0;
     ui32 SendFuncId = 0;

@@ -631,6 +631,7 @@ public:
     TRuntimeNode ToPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode WithContext(TRuntimeNode input, const std::string_view& contextType);
     TRuntimeNode PgInternal0(TType* returnType);
+    TRuntimeNode PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType);
 
 protected:
     TRuntimeNode Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args);

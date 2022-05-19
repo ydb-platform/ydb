@@ -2298,6 +2298,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.WithContext(input, node.Child(1)->Content());
     });
 
+    AddCallable("PgArray", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        std::vector<TRuntimeNode> args;
+        args.reserve(node.ChildrenSize());
+        for (ui32 i = 0; i < node.ChildrenSize(); ++i) {
+            args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
+        }
+
+        auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.PgArray(args, returnType);
+    });
+
     AddCallable("QueueCreate", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto initCapacity = MkqlBuildExpr(*node.Child(1), ctx);
         const auto initSize = MkqlBuildExpr(*node.Child(2), ctx);

@@ -1063,6 +1063,9 @@ public:
         case T_FuncCall: {
             return ParseFuncCall(CAST_NODE(FuncCall, node), settings);
         }
+        case T_A_ArrayExpr: {
+            return ParseAArrayExpr(CAST_NODE(A_ArrayExpr, node), settings);
+        }
         default:
             NodeNotImplemented(node);
             return nullptr;
@@ -1088,6 +1091,21 @@ public:
             ValueNotImplemented(value, val);
             return nullptr;
         }
+    }
+
+    TAstNode* ParseAArrayExpr(const A_ArrayExpr* value, const TExprSettings& settings) {
+        TVector<TAstNode*> args;
+        args.push_back(A("PgArray"));
+        for (int i = 0; i < ListLength(value->elements); ++i) {
+            auto elem = ParseExpr(ListNodeNth(value->elements, i), settings);
+            if (!elem) {
+                return nullptr;
+            }
+
+            args.push_back(elem);
+        }
+
+        return VL(args.data(), args.size());
     }
 
     TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings) {

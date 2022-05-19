@@ -2269,7 +2269,7 @@ getTypeIOParam(HeapTuple typeTuple)
  *					returned is controlled by IOFuncSelector
  */
 void
-get_type_io_data(Oid typid,
+get_type_io_data_original(Oid typid,
 				 IOFuncSelector which_func,
 				 int16 *typlen,
 				 bool *typbyval,

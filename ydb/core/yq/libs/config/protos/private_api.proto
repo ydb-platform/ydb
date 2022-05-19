@@ -13,4 +13,5 @@ message TPrivateApiConfig {
     bool SecureTaskService = 4;
     string SaKeyFile = 5;
     string IamEndpoint = 6;
+    bool Loopback = 7;
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "events.h"
 #include "private_client.h"
 
 #include <library/cpp/actors/core/actor.h>
@@ -14,59 +15,6 @@
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 
 namespace NYq {
-
-struct TEvInternalService {
-    // Event ids.
-    enum EEv : ui32 {
-        EvHealthCheckRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::InternalService),
-        EvHealthCheckResponse,
-        EvGetTaskRequest,
-        EvGetTaskResponse,
-        EvPingTaskRequest,
-        EvPingTaskResponse,
-        EvWriteResultRequest,
-        EvWriteResultResponse,
-        EvEnd,
-    };
-
-    static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::InternalService), "All events must be in their subspace");
-
-    template <class TProtoRequest, ui32 TEventType>
-    struct TInternalServiceRequestEvent : public NActors::TEventLocal<TInternalServiceRequestEvent<TProtoRequest, TEventType>, TEventType> {
-        TProtoRequest Request;
-        TInstant SentAt;
-        explicit TInternalServiceRequestEvent(const TProtoRequest& request) 
-            : Request(request), SentAt(Now())
-        { }
-    };
-
-    using TEvHealthCheckRequest = TInternalServiceRequestEvent<Yq::Private::NodesHealthCheckRequest, EvHealthCheckRequest>;
-    using TEvGetTaskRequest = TInternalServiceRequestEvent<Yq::Private::GetTaskRequest, EvGetTaskRequest>;
-    using TEvPingTaskRequest = TInternalServiceRequestEvent<Yq::Private::PingTaskRequest, EvPingTaskRequest>;
-    using TEvWriteResultRequest = TInternalServiceRequestEvent<Yq::Private::WriteTaskResultRequest, EvWriteResultRequest>;
-
-    template <class TProtoResult, ui32 TEventType>
-    struct TInternalServiceResponseEvent : public NActors::TEventLocal<TInternalServiceResponseEvent<TProtoResult, TEventType>, TEventType> {
-        NYdb::TStatus Status;
-        TProtoResult Result;
-        TInternalServiceResponseEvent(const TProtoResultInternalWrapper<TProtoResult>& wrappedResult) : Status(wrappedResult)
-        { 
-            if (wrappedResult.IsResultSet()) {
-                Result = wrappedResult.GetResult();
-            }
-        }
-        TInternalServiceResponseEvent(const TString& errorMessage) : Status(NYdb::EStatus::INTERNAL_ERROR, {NYql::TIssue(errorMessage).SetCode(NYql::UNEXPECTED_ERROR, NYql::TSeverityIds::S_ERROR)})
-        { 
-        }
-    };
-
-    using TEvHealthCheckResponse = TInternalServiceResponseEvent<Yq::Private::NodesHealthCheckResult, EvHealthCheckResponse>;
-    using TEvGetTaskResponse = TInternalServiceResponseEvent<Yq::Private::GetTaskResult, EvGetTaskResponse>;
-    using TEvPingTaskResponse = TInternalServiceResponseEvent<Yq::Private::PingTaskResult, EvPingTaskResponse>;
-    using TEvWriteResultResponse = TInternalServiceResponseEvent<Yq::Private::WriteTaskResultResult, EvWriteResultResponse>;
-};
-
-NActors::TActorId MakeInternalServiceActorId();
 
 NActors::IActor* CreateInternalServiceActor(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,

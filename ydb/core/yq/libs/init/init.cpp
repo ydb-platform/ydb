@@ -9,6 +9,7 @@
 #include <ydb/core/yq/libs/health/health.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/yq/libs/private_client/internal_service.h>
+#include <ydb/core/yq/libs/private_client/loopback_service.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/folder_service/folder_service.h>
@@ -178,11 +179,13 @@ void Init(
     ::NYql::NCommon::TServiceCounters serviceCounters(appData->Counters);
 
     if (protoConfig.GetNodesManager().GetEnabled() || protoConfig.GetPendingFetcher().GetEnabled()) {
-        auto internal = CreateInternalServiceActor(
-            yqSharedResources,
-            credentialsProviderFactory,
-            protoConfig.GetPrivateApi(),
-            clientCounters
+        auto internal = protoConfig.GetPrivateApi().GetLoopback() 
+            ? CreateLoopbackServiceActor(clientCounters)
+            : CreateInternalServiceActor(
+                yqSharedResources,
+                credentialsProviderFactory,
+                protoConfig.GetPrivateApi(),
+                clientCounters
             );
         actorRegistrator(MakeInternalServiceActorId(), internal);
     }

@@ -9,8 +9,6 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <utility>
 
-#include <cxxabi.h>
-
 // https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/nicedb/
 
 namespace NKikimr {

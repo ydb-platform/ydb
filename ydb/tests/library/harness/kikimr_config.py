@@ -199,6 +199,7 @@ class KikimrConfigGenerator(object):
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
 
+        # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['pqconfig']['topics_are_first_class_citizen'] = enable_pq and enable_datastreams
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
         self.yaml_config['pqcluster_discovery_config']['enabled'] = enable_pqcd

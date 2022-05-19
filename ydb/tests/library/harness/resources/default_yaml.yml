@@ -176,9 +176,17 @@ sqs_config:
   enable_dead_letter_queues: True
 pqconfig:
   clusters_update_timeout_sec: 1
-  enabled: false
+  # NOTE(shmel1k@): KIKIMR-14221
+  enabled: true
   meta_cache_timeout_sec: 1
   topics_are_first_class_citizen: false
+  check_acl: false
+  require_credentials_in_new_protocol: false
+  cluster_table_path: "/Root/PQ/Config/V2/Cluster"
+  version_table_path: "/Root/PQ/Config/V2/Versions"
+  root: "/Root/PQ"
+  quoting_config:
+    enable_quoting: false
 pqcluster_discovery_config:
   enabled: false
 net_classifier_config:

@@ -564,6 +564,10 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         NKikimrPQ::TPQConfig pqConfig;
         pqConfig.SetEnableProtoSourceIdInfo(true);
         pqConfig.SetTopicsAreFirstClassCitizen(true);
+        // NOTE(shmel1k@): KIKIMR-14221
+        pqConfig.SetCheckACL(false);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
+        pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
         return pqConfig;
     }
 

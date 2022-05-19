@@ -752,6 +752,9 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         TTestBasicRuntime runtime(1);
 
         runtime.Initialize(TAppPrepare().Unwrap());
+        // NOTE(shmel1k@): KIKIMR-14221
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+
         TActorId edge = runtime.AllocateEdgeActor();
 
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 3, "rt3.*--*,cons*/*/rt.*--*", 3);

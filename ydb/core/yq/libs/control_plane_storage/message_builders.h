@@ -7,6 +7,8 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+
 namespace NYq {
 
 // Queries
@@ -956,7 +958,13 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvWriteResultDataRequest> Build()
     {
-        return std::make_unique<TEvControlPlaneStorage::TEvWriteResultDataRequest>(ResultId, ResultSetId, StartRowId, Deadline, ResultSet);
+        auto request = std::make_unique<TEvControlPlaneStorage::TEvWriteResultDataRequest>();
+        request->Request.mutable_result_id()->set_value(ResultId);
+        *request->Request.mutable_result_set() = ResultSet;
+        request->Request.set_result_set_id(ResultSetId);
+        request->Request.set_offset(StartRowId);
+        *request->Request.mutable_deadline() = NProtoInterop::CastToProto(Deadline);
+        return request;
     }
 };
 

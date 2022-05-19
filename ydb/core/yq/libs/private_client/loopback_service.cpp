@@ -43,6 +43,7 @@ private:
         hFunc(TEvInternalService::TEvWriteResultRequest, Handle)
 
         hFunc(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Handle)
+        hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, Handle)
     );
 
     void Handle(TEvInternalService::TEvHealthCheckRequest::TPtr& ev) {
@@ -83,13 +84,24 @@ private:
     */
     }
 
-    void Handle(TEvInternalService::TEvWriteResultRequest::TPtr& /*ev*/) {
-    /*
+    void Handle(TEvInternalService::TEvWriteResultRequest::TPtr& ev) {
         Cookie++;
         Senders[Cookie] = ev->Sender;
         auto request = ev->Get()->Request;
-        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvWriteResultRequest(std::move(request)), 0, Cookie);
-    */
+        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, Cookie);
+    }
+
+    void Handle(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse::TPtr& ev) {
+        auto it = Senders.find(ev->Cookie);
+        if (it != Senders.end()) {
+            if (ev->Get()->Issues.Size() == 0) {
+                Send(it->second, new TEvInternalService::TEvWriteResultResponse(ev->Get()->Record));
+            } else {
+                auto issues = ev->Get()->Issues;
+                Send(it->second, new TEvInternalService::TEvWriteResultResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)));
+            }
+            Senders.erase(it);
+        }
     }
 
     const NMonitoring::TDynamicCounterPtr ServiceCounters;

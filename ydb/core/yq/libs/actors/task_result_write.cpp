@@ -73,19 +73,13 @@ public:
 
     void Bootstrap(const TActorContext&) {
         Become(&TWriteTaskRequestActor::StateFunc);
-        const auto& req = Ev->Record;
-
-        Deadline = NProtoInterop::CastFromProto(req.deadline());
-
-        const auto& resultSet = req.result_set();
-        ResultId = req.result_id().value();
-        const auto& resultSetId = req.result_set_id();
-        const auto& startRowIndex = req.offset();
-        RequestId = req.request_id();
-        LOG_D("Request CP::WriteTaskResult with size: " << req.ByteSize() << " bytes");
-        RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
+        auto request = Ev->Record;
+        ResultId = request.result_id().value();
+        RequestId = request.request_id();
+        LOG_D("Request CP::WriteTaskResult with size: " << request.ByteSize() << " bytes");
+        RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
         Send(NYq::ControlPlaneStorageServiceActorId(),
-            new NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest(ResultId, resultSetId, startRowIndex, Deadline, resultSet), 0, RequestId);
+            new NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest(std::move(request)), 0, RequestId);
     }
 
 private:
@@ -122,7 +116,6 @@ private:
 
     TString ResultId;
     ui64 RequestId = 0;
-    TInstant Deadline;
 
     NYql::TIssues Issues;
 

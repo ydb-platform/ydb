@@ -342,54 +342,43 @@ struct TEvControlPlaneStorage {
 
     // internal messages
     struct TEvWriteResultDataRequest : NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {
-        explicit TEvWriteResultDataRequest(const TString& resultId,
-                                           const int32_t resultSetId,
-                                           const int64_t startRowId,
-                                           const TInstant& deadline,
-                                           const Ydb::ResultSet& resultSet)
-            : ResultId(resultId)
-            , ResultSetId(resultSetId)
-            , StartRowId(startRowId)
-            , Deadline(deadline)
-            , ResultSet(resultSet)
-        {
-        }
+
+        TEvWriteResultDataRequest() = default;
+
+        explicit TEvWriteResultDataRequest(
+            Yq::Private::WriteTaskResultRequest&& request)
+            : Request(std::move(request))
+        {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + ResultId.Size()
-                    + ResultSet.ByteSizeLong();
+                    + Request.ByteSizeLong();
         }
 
-        TString ResultId;
-        int32_t ResultSetId = 0;
-        int64_t StartRowId = 0;
-        TInstant Deadline;
-        Ydb::ResultSet ResultSet;
+        Yq::Private::WriteTaskResultRequest Request;
     };
 
     struct TEvWriteResultDataResponse : NActors::TEventLocal<TEvWriteResultDataResponse, EvWriteResultDataResponse> {
-        explicit TEvWriteResultDataResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
 
         explicit TEvWriteResultDataResponse(
-            const NYql::TIssues& issues,
-            const ui64 requestId)
+            const Yq::Private::WriteTaskResultResult& record)
+            : Record(record)
+        {}
+
+        explicit TEvWriteResultDataResponse(
+            const NYql::TIssues& issues)
             : Issues(issues)
-            , RequestId(requestId)
-        {
-        }
+        {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
+                    + Record.ByteSizeLong()
                     + GetIssuesByteSize(Issues)
                     + GetDebugInfoByteSize(DebugInfo);
         }
 
+        Yq::Private::WriteTaskResultResult Record;
         NYql::TIssues Issues;
-        const ui64 RequestId = 0;
         TDebugInfoPtr DebugInfo;
     };
 
@@ -602,6 +591,9 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, EvNodesHealthCheckRequest> {
+        
+        TEvNodesHealthCheckRequest() = default;
+
         explicit TEvNodesHealthCheckRequest(
             Yq::Private::NodesHealthCheckRequest&& request)
             : Request(std::move(request))

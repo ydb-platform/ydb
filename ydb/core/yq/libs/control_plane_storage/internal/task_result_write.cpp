@@ -8,13 +8,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     TRequestCountersPtr requestCounters = Counters.GetCommonCounters(RTC_WRITE_RESULT_DATA);
     requestCounters->InFly->Inc();
 
-    TEvControlPlaneStorage::TEvWriteResultDataRequest& request = *ev->Get();
-    requestCounters->RequestBytes->Add(request.GetByteSize());
-    const TString resultId = request.ResultId;
-    const int32_t resultSetId = request.ResultSetId;
-    const int64_t startRowId = request.StartRowId;
-    const TInstant deadline = request.Deadline;
-    const Ydb::ResultSet& resultSet = request.ResultSet;
+    requestCounters->RequestBytes->Add(ev->Get()->GetByteSize());
+    auto& request = ev->Get()->Request;
+    const TString resultId = request.result_id().value();
+    const int32_t resultSetId = request.result_set_id();
+    const int64_t startRowId = request.offset();
+    const TInstant deadline = NProtoInterop::CastFromProto(request.deadline());
+    const Ydb::ResultSet& resultSet = request.result_set();
     const int byteSize = resultSet.ByteSize();
 
     CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
@@ -27,6 +27,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
         LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSet.rows().size(), delta, deadline, byteSize, false);
         return;
     }
+
+    std::shared_ptr<Yq::Private::WriteTaskResultResult> response = std::make_shared<Yq::Private::WriteTaskResultResult>();
+    response->set_request_id(request.request_id());
 
     NYdb::TValueBuilder itemsAsList;
     itemsAsList.BeginList();
@@ -63,8 +66,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = []() { return std::make_tuple<NYql::TIssues>(NYql::TIssues{}); };
-    auto success = SendResponseTuple<TEvControlPlaneStorage::TEvWriteResultDataResponse, std::tuple<NYql::TIssues>>(
+    auto prepare = [response] { return *response; };
+    auto success = SendResponse<TEvControlPlaneStorage::TEvWriteResultDataResponse, Yq::Private::WriteTaskResultResult>(
         "WriteResultDataRequest",
         NActors::TActivationContext::ActorSystem(),
         result,

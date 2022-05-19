@@ -70,7 +70,8 @@ public:
         : State(state)
     { }
 
-    NThreading::TFuture<IDqGateway::TResult> Execute(TPosition pos, const TString& lambda, const TVector<TString>& columns,
+    // TODO: move this to separate thread-pool
+    IDqGateway::TResult Execute(TPosition pos, const TString& lambda, const TVector<TString>& columns,
         const THashMap<TString, TString>& secureParams, const IDataProvider::TFillSettings& fillSettings)
     {
         try {
@@ -78,17 +79,17 @@ public:
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             auto res = ResultFromError<IDqGateway::TResult>(TStringBuilder()
                 << "DQ computation exceeds the memory limit " << State->Settings->MemoryLimit.Get().GetOrElse(0) << ". Try to increase the limit using PRAGMA dq.MemoryLimit", pos);
-            return NThreading::MakeFuture(res);
+            return res;
         } catch (const std::exception& e) {
-            return NThreading::MakeFuture(ResultFromException<IDqGateway::TResult>(e, pos));
+            return ResultFromException<IDqGateway::TResult>(e, pos);
         } catch (...) {
             auto res = ResultFromError<IDqGateway::TResult>(CurrentExceptionMessage(), pos);
             res.SetStatus(TIssuesIds::UNEXPECTED);
-            return NThreading::MakeFuture(res);
+            return res;
         }
     }
 
-    NThreading::TFuture<IDqGateway::TResult> ExecuteUnsafe(const TString& lambda, const TVector<TString>& columns,
+    IDqGateway::TResult ExecuteUnsafe(const TString& lambda, const TVector<TString>& columns,
         const THashMap<TString, TString>& secureParams, const IDataProvider::TFillSettings& fillSettings)
     {
         auto t = TInstant::Now();
@@ -179,18 +180,11 @@ public:
 
         AddCounter("LocalRun", TInstant::Now() - t);
 
-
         FlushStatisticsToState();
-
-        // TODO: move this to separate thread-pool
-        auto promise = NThreading::NewPromise<IDqGateway::TResult>();
-        auto future = promise.GetFuture();
 
         result.SetSuccess();
 
-        promise.SetValue(result);
-
-        return future;
+        return result;
     }
 
 private:
@@ -701,18 +695,27 @@ private:
                 enableFullResultWrite = type->GetKind() == ETypeAnnotationKind::List
                     && type->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct
                     && !fillSettings.Discard
+                    && State->DqGateway
                     && integration
                     && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
 
+            NThreading::TFuture<IDqGateway::TResult> future;
             // bool executeUdfLocallyIfPossible ?
             bool localRun = !State->DqGateway || (!untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams);
-            auto future = localRun
-                ? TLocalExecutor(State).Execute(ctx.GetPosition(input->Pos()), lambda, columns, secureParams, fillSettings)
-                : State->DqGateway->ExecutePlan(
-                            State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
-                            settings, progressWriter, ModulesMapping, fillSettings.Discard);
+            if (localRun) {
+                auto result = TLocalExecutor(State).Execute(ctx.GetPosition(input->Pos()), lambda, columns, secureParams, fillSettings);
+                if (enableFullResultWrite && result.Success() && result.Truncated) {
+                    localRun = false;
+                } else {
+                    future = NThreading::MakeFuture<IDqGateway::TResult>(std::move(result));
+                }
+            }
+            if (!localRun) {
+                future = State->DqGateway->ExecutePlan(State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
+                    settings, progressWriter, ModulesMapping, fillSettings.Discard);
+            }
 
             if (State->Metrics) {
                 State->Metrics->IncCounter("dq", localRun

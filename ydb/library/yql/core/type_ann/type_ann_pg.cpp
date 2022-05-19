@@ -783,9 +783,34 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
     auto targetTypeId = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>()->GetId();
 
     if (inputTypeId != 0 && inputTypeId != targetTypeId) {
-        if (NPg::LookupType(inputTypeId).Category != 'S' &&
-            NPg::LookupType(targetTypeId).Category != 'S') {
-            Y_UNUSED(NPg::LookupCast(inputTypeId, targetTypeId));
+        bool fail = false;
+        const auto& inputDesc = NPg::LookupType(inputTypeId);
+        const auto& targetDesc = NPg::LookupType(targetTypeId);
+        const bool isInputArray = (inputDesc.TypeId == inputDesc.ArrayTypeId);
+        const bool isTargetArray = (targetDesc.TypeId == targetDesc.ArrayTypeId);
+        if ((isInputArray && !isTargetArray && targetDesc.Category != 'S')
+            || (!isInputArray && isTargetArray && inputDesc.Category != 'S')) {
+            fail = true;
+        } else if (inputDesc.Category != 'S' && targetDesc.Category != 'S') {
+            auto elemInput = inputTypeId;
+            if (isInputArray) {
+                elemInput = inputDesc.ElementTypeId;
+            }
+
+            auto elemTarget = targetTypeId;
+            if (isTargetArray) {
+                elemTarget = targetDesc.ElementTypeId;
+            }
+
+            if (!NPg::HasCast(elemInput, elemTarget)) {
+                fail = true;
+            }
+        }
+
+        if (fail) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Cannot cast type " << inputDesc.Name << " into type " << targetDesc.Name));
+            return IGraphTransformer::TStatus::Error;
         }
     }
 

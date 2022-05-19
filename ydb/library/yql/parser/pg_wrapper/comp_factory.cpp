@@ -695,6 +695,10 @@ public:
         , Arg(arg)
         , SourceTypeDesc(SourceId ? NPg::LookupType(SourceId) : NPg::TTypeDesc())
         , TargetTypeDesc(NPg::LookupType(targetId))
+        , IsSourceArray(SourceId && SourceTypeDesc.TypeId == SourceTypeDesc.ArrayTypeId)
+        , IsTargetArray(TargetTypeDesc.TypeId == TargetTypeDesc.ArrayTypeId)
+        , SourceElemDesc(SourceId ? NPg::LookupType(IsSourceArray ? SourceTypeDesc.ElementTypeId : SourceTypeDesc.TypeId) : NPg::TTypeDesc())
+        , TargetElemDesc(NPg::LookupType(IsTargetArray ? TargetTypeDesc.ElementTypeId : TargetTypeDesc.TypeId))
     {
         TypeIOParam = MakeTypeIOParam(TargetTypeDesc);
 
@@ -706,15 +710,28 @@ public:
 
         ui32 funcId;
         ui32 funcId2 = 0;
-        if (!NPg::HasCast(SourceId, TargetId)) {
-            if (SourceTypeDesc.Category == 'S') {
-                funcId = TargetTypeDesc.InFuncId;
+        if (!NPg::HasCast(SourceElemDesc.TypeId, TargetElemDesc.TypeId)) {
+            if (SourceElemDesc.Category == 'S') {
+                ArrayCast = IsSourceArray;
+                if (!IsTargetArray || IsSourceArray) {
+                    funcId = TargetElemDesc.InFuncId;
+                } else {
+                    funcId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
+                }
             } else {
                 Y_ENSURE(TargetTypeDesc.Category == 'S');
-                funcId = SourceTypeDesc.OutFuncId;
+                ArrayCast = IsTargetArray;
+                if (!IsSourceArray || IsTargetArray) {
+                    funcId = SourceElemDesc.OutFuncId;
+                } else {
+                    funcId = NPg::LookupProc("array_out", { 0 }).ProcId;
+                }
             }
         } else {
-            const auto& cast = NPg::LookupCast(SourceId, TargetId);
+            Y_ENSURE(IsSourceArray == IsTargetArray);
+            ArrayCast = IsSourceArray;
+
+            const auto& cast = NPg::LookupCast(SourceElemDesc.TypeId, TargetElemDesc.TypeId);
             switch (cast.Method) {
                 case NPg::ECastMethod::Binary:
                     return;
@@ -724,8 +741,8 @@ public:
                     break;
                 }
                 case NPg::ECastMethod::InOut: {
-                    funcId = SourceTypeDesc.OutFuncId;
-                    funcId2 = TargetTypeDesc.InFuncId;
+                    funcId = SourceElemDesc.OutFuncId;
+                    funcId2 = TargetElemDesc.InFuncId;
                     break;
                 }
             }
@@ -738,7 +755,7 @@ public:
         Y_ENSURE(FInfo1.fn_nargs >= 1 && FInfo1.fn_nargs <= 3);
         Func1Lookup = NPg::LookupProc(funcId);
         Y_ENSURE(Func1Lookup.ArgTypes.size() >= 1 && Func1Lookup.ArgTypes.size() <= 3);
-        if (Func1Lookup.ArgTypes[0] == CSTRINGOID && SourceTypeDesc.Category == 'S') {
+        if (Func1Lookup.ArgTypes[0] == CSTRINGOID && SourceElemDesc.Category == 'S') {
             ConvertArgToCString = true;
         }
 
@@ -753,7 +770,7 @@ public:
         }
 
         if (!funcId2) {
-            if (Func1Lookup.ResultType == CSTRINGOID && TargetTypeDesc.Category == 'S') {
+            if (Func1Lookup.ResultType == CSTRINGOID && TargetElemDesc.Category == 'S') {
                 ConvertResFromCString = true;
             }
         } else {
@@ -762,7 +779,7 @@ public:
                 ConvertResFromCString = true;
             }
 
-            if (Func2Lookup.ResultType == CSTRINGOID && TargetTypeDesc.Category == 'S') {
+            if (Func2Lookup.ResultType == CSTRINGOID && TargetElemDesc.Category == 'S') {
                 ConvertResFromCString2 = true;
             }
         }
@@ -770,85 +787,68 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         auto value = Arg->GetValue(compCtx);
-        if (!value || !FInfo1.fn_addr) {
+        if (!value) {
             return value.Release();
+        }
+
+        if (!FInfo1.fn_addr) {
+            // binary compatible
+            if (!ArrayCast) {
+                return value.Release();
+            } else {
+                // clone array with new target type in the header
+                auto datum = PointerDatumFromPod(value);
+                ArrayType* arr = DatumGetArrayTypePCopy(datum);
+                ARR_ELEMTYPE(arr) = TargetElemDesc.TypeId;
+                return PointerDatumToPod(PointerGetDatum(arr));
+            }
         }
 
         TPAllocScope call;
         auto& state = GetState(compCtx);
-        auto& callInfo1 = state.CallInfo1.Ref();
-        callInfo1.isnull = false;
-        NullableDatum argDatum = { SourceTypeDesc.PassByValue ?
-            ScalarDatumFromPod(value) :
-            PointerDatumFromPod(value), false };
-        if (ConvertArgToCString) {
-            argDatum.value = (Datum)MakeCString(GetVarBuf((const text*)argDatum.value));
+        if (ArrayCast) {
+            auto arr = (ArrayType*)DatumGetPointer(PointerDatumFromPod(value));
+            auto ndim = ARR_NDIM(arr);
+            auto dims = ARR_DIMS(arr);
+            auto lb = ARR_LBOUND(arr);
+            auto nitems = ArrayGetNItems(ndim, dims);
+
+            Datum* elems = (Datum*)MKQLAllocWithSize(nitems * sizeof(Datum));
             Y_DEFER {
-                pfree((void*)argDatum.value);
+                MKQLFreeWithSize(elems, nitems * sizeof(Datum));
             };
-        }
 
-        callInfo1.args[0] = argDatum;
-        callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-        callInfo1.args[2] = { Int32GetDatum(-1), false };
+            bool* nulls = (bool*)MKQLAllocWithSize(nitems);
+            Y_DEFER{
+                MKQLFreeWithSize(nulls, nitems);
+            };
 
-        void* freeMem = nullptr;
-        void* freeMem2 = nullptr;
-        Y_DEFER {
-            if (freeMem) {
-                pfree(freeMem);
-            }
-
-            if (freeMem2) {
-                pfree(freeMem2);
-            }
-        };
-
-        PG_TRY();
-        {
-            auto ret = FInfo1.fn_addr(&callInfo1);
-            if (callInfo1.isnull) {
-                return NUdf::TUnboxedValuePod();
-            }
-
-            if (ConvertResFromCString) {
-                freeMem = (void*)ret;
-                ret = (Datum)MakeVar((const char*)ret);
-            }
-
-            if (FInfo2.fn_addr) {
-                auto& callInfo2 = state.CallInfo1.Ref();
-                callInfo2.isnull = false;
-                NullableDatum argDatum2 = { ret, false };
-                callInfo2.args[0] = argDatum2;
-
-                auto ret2 = FInfo2.fn_addr(&callInfo2);
-                pfree((void*)ret);
-
-                if (callInfo2.isnull) {
-                    return NUdf::TUnboxedValuePod();
+            array_iter iter;
+            array_iter_setup(&iter, (AnyArrayType*)arr);
+            for (ui32 i = 0; i < nitems; ++i) {
+                bool isNull;
+                auto datum = array_iter_next(&iter, &isNull, i, SourceElemDesc.TypeLen,
+                    SourceElemDesc.PassByValue, SourceElemDesc.TypeAlign);
+                if (isNull) {
+                    nulls[i] = true;
+                    continue;
+                } else {
+                    nulls[i] = false;
+                    elems[i] = ConvertDatum(datum, state);
                 }
-
-                ret = ret2;
             }
 
-            if (ConvertResFromCString2) {
-                freeMem2 = (void*)ret;
-                ret = (Datum)MakeVar((const char*)ret);
-            }
+            auto ret = construct_md_array(elems, nulls, ndim, dims, lb, TargetElemDesc.TypeId,
+                TargetElemDesc.TypeLen, TargetElemDesc.PassByValue, TargetElemDesc.TypeAlign);
 
+            return PointerDatumToPod(PointerGetDatum(ret));
+        } else {
+            auto datum = SourceTypeDesc.PassByValue ?
+                ScalarDatumFromPod(value) :
+                PointerDatumFromPod(value);
+            auto ret = ConvertDatum(datum, state);
             return TargetTypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);
         }
-        PG_CATCH();
-        {
-            auto error_data = CopyErrorData();
-            TStringBuilder errMsg;
-            errMsg << "Error in cast, reason: " << error_data->message;
-            FreeErrorData(error_data);
-            FlushErrorState();
-            UdfTerminate(errMsg.c_str());
-        }
-        PG_END_TRY();
     }
 
 private:
@@ -876,6 +876,74 @@ private:
         return *static_cast<TState*>(result.AsBoxed().Get());
     }
 
+    Datum ConvertDatum(Datum datum, TState& state) const {
+        auto& callInfo1 = state.CallInfo1.Ref();
+        callInfo1.isnull = false;
+        NullableDatum argDatum = { datum, false };
+        if (ConvertArgToCString) {
+            argDatum.value = (Datum)MakeCString(GetVarBuf((const text*)argDatum.value));
+            Y_DEFER{
+                pfree((void*)argDatum.value);
+            };
+        }
+
+        callInfo1.args[0] = argDatum;
+        callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
+        callInfo1.args[2] = { Int32GetDatum(-1), false };
+
+        void* freeMem = nullptr;
+        void* freeMem2 = nullptr;
+        Y_DEFER{
+            if (freeMem) {
+                pfree(freeMem);
+            }
+
+            if (freeMem2) {
+                pfree(freeMem2);
+            }
+        };
+
+        PG_TRY();
+        {
+            auto ret = FInfo1.fn_addr(&callInfo1);
+            Y_ENSURE(!callInfo1.isnull);
+
+            if (ConvertResFromCString) {
+                freeMem = (void*)ret;
+                ret = (Datum)MakeVar((const char*)ret);
+            }
+
+            if (FInfo2.fn_addr) {
+                auto& callInfo2 = state.CallInfo1.Ref();
+                callInfo2.isnull = false;
+                NullableDatum argDatum2 = { ret, false };
+                callInfo2.args[0] = argDatum2;
+
+                auto ret2 = FInfo2.fn_addr(&callInfo2);
+                pfree((void*)ret);
+
+                Y_ENSURE(!callInfo2.isnull);
+                ret = ret2;
+            }
+
+            if (ConvertResFromCString2) {
+                freeMem2 = (void*)ret;
+                ret = (Datum)MakeVar((const char*)ret);
+            }
+
+            return ret;
+        }
+        PG_CATCH();
+        {
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error in cast, reason: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            UdfTerminate(errMsg.c_str());
+        }
+        PG_END_TRY();
+    }
 
     const ui32 StateIndex;
     const ui32 SourceId;
@@ -883,12 +951,17 @@ private:
     IComputationNode* const Arg;
     const NPg::TTypeDesc SourceTypeDesc;
     const NPg::TTypeDesc TargetTypeDesc;
+    const bool IsSourceArray;
+    const bool IsTargetArray;
+    const NPg::TTypeDesc SourceElemDesc;
+    const NPg::TTypeDesc TargetElemDesc;
     FmgrInfo FInfo1, FInfo2;
     NPg::TProcDesc Func1Lookup, Func2Lookup;
     bool ConvertArgToCString = false;
     bool ConvertResFromCString = false;
     bool ConvertResFromCString2 = false;
     ui32 TypeIOParam = 0;
+    bool ArrayCast = false;
 };
 
 template <NUdf::EDataSlot Slot, bool IsCString>

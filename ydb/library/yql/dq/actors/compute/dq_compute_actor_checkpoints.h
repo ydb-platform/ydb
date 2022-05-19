@@ -98,6 +98,8 @@ public:
     bool SaveState();
     NDqProto::TCheckpoint GetPendingCheckpoint() const;
     void RegisterCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId);
+    void StartCheckpoint(const NDqProto::TCheckpoint& checkpoint);
+    void AbortCheckpoint();
 
     // Sink support.
     void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint);
@@ -126,6 +128,7 @@ private:
     void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
     void HandleException(const std::exception& err);
 
     void PassAway() override;
@@ -153,6 +156,10 @@ private:
     NYql::NDqProto::NDqStateLoadPlan::TTaskPlan TaskLoadPlan;
     NDqProto::TCheckpoint RestoringTaskRunnerForCheckpoint;
     ui64 RestoringTaskRunnerForEvent;
+
+    bool SlowCheckpointsMonitoringStarted = false;
+    TInstant CheckpointStartTime;
+    bool SavingToDatabase = false;
 };
 
 } // namespace NYql::NDq

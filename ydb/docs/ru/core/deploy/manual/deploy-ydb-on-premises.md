@@ -1,8 +1,11 @@
-## Deploy YDB On-Premises {# deploy-on-premise}
+# Рзавертывание кластера YDB на виртуальных или железных серверах
+
 Данный документ описывает способ развернуть мультитенантный кластер YDB на нескольких серверах.
 
-## Перед началом работы {# before-start}
-### Требования {# requirements}
+## Перед началом работы {#before-start}
+
+### Требования {#requirements}
+
 У вас должен быть ssh доступ на все сервера. Это необходимо для установки артефактов и запуска бинарника YDB.
 Ваша сетевая конфигурация должна разрешать TCP соединения по следующим портам (по умолчанию):
  * 2135, 2136 - grpc для клиент-кластерного взаимодействия;
@@ -17,7 +20,7 @@
 
 Запускайте каждую статическую ноду на отдельном сервере. 
 
-## Создайте системного пользователя и группу, от имени которого будет работать {{ ydb-short-name }} {# create-user}
+## Создайте системного пользователя и группу, от имени которого будет работать {{ ydb-short-name }} {#create-user}
 На каждом сервере, где будет запущен YDB выполните:
 ```bash
 sudo groupadd ydb
@@ -29,7 +32,7 @@ sudo useradd ydb -g ydb
 sudo usermod -aG disk ydb
 ```
 
-## Подготовьте и отформатируйте диски на каждом сервере {# prepare-disks}
+## Подготовьте и отформатируйте диски на каждом сервере {#prepare-disks}
 
 {% note warning %}
 
@@ -57,7 +60,7 @@ sudo partx --u /dev/nvme0n1
 
 Если вы планируете использовать более одного диска на каждом сервере - укажите для каждого свой уникальный лейбл вместо `ydb_disk_ssd_01`. Эти диски необходимо будет использовать в конфигурационных файлах далее.
 
-Скачайте архив с исполняемым файлом `ydbd` и необходимыми для работы YDB библиотеками:
+Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы YDB библиотеками:
 ```bash
 curl https://binaries.ydb.tech/ydbd-main-linux-amd64.tar.gz | tar -xz
 ```
@@ -184,20 +187,24 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
   ```
 {% endlist %}
 
-## Инициализируйте кластер {# initialize-cluster}
-На одной из нод кластера выполните команду:
-```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml ; echo $?
-```
-Код завершения команды должен быть нулевым.
+## Инициализируйте кластер {#initialize-cluster}
 
-## Создание первой базы данных {# create-fist-db}
+На одной из нод кластера выполните команду:
+
+```bash
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
+```
+
+Код завершения команды должен быть нулевым, выполните команду `echo $?` для его проверки.
+
+## Создание первой базы данных {#create-fist-db}
+
 Для работы с таблицами необходимо создать как минимум одну базу данных и поднять процесс, обслуживающий эту базу данных (динамическую ноду).
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
 ```
 
-## Запустите динамическую ноду базы {# start-dynnode}
+## Запустите динамическую ноду базы {#start-dynnode}
 {% list tabs %}
 - Вручную
 
@@ -233,7 +240,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   SyslogFacility=daemon
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  ExecStart=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker --node-broker --node-broker
+  ExecStart=/opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker --node-broker --node-broker
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720
@@ -250,14 +257,16 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
 
 {% endlist %}
 
-## Протестируйте работу с созданной базой {# try-first-db}
+## Протестируйте работу с созданной базой {#try-first-db}
+
 1. Установите YDB CLI, как описано в статье [Установка YDB CLI](../../reference/ydb-cli/install.md)
 2. Создайте тестовую таблицу `test_table`:
-```bash
-ydb -e grpc://<node1.domain>:2136 -d /Root/testdb scripting yql \
---script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
-```
-Где node.domain - FQDN сервера, на котором запущены динамические ноды, обслуживающие базу `/Root/testdb`
+
+   ```bash
+   ydb -e grpc://<node1.domain>:2136 -d /Root/testdb scripting yql \
+   --script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
+   ```
+   Где `<node1.domain>` - FQDN сервера, на котором запущены динамические ноды, обслуживающие базу `/Root/testdb`
 
 
 

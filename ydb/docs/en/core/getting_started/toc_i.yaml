@@ -10,7 +10,7 @@ items:
   href: yql.md
 - name: YDB SDK
   href: sdk.md
-- name: Self-hosted deployment
+- name: Single-node cluster deployment
   include: { mode: link, path: self_hosted/toc_p.yaml }
 - name: Useful links
   href: useful_links.md

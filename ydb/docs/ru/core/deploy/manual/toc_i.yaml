@@ -1,5 +1,5 @@
 items:
 #- name: Обзор
 #  href: concepts.md
-- name: Локальная установка
+- name: Развертывание
   href: deploy-ydb-on-premises.md

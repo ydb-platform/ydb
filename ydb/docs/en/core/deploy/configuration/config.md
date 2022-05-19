@@ -1,57 +1,109 @@
-# Creating a configuration for deploying a cluster
+# Cluster configuration
 
-To deploy a {{ ydb-short-name }} cluster, you need to create a cluster configuration.
-This section describes how to create a {{ ydb-short-name }} cluster configuration in YAML format.
+A cluster configuration is in a YAML-file, provided in a `--yaml-config` option when starting cluster nodes.
 
-## Description of storage host configurations
+This section describes basic configration parameter groups of that file.
 
-Create and describe a host configuration. For each host configuration, specify the sequence number and a list of paths to disks and their types.
-The following disk types are available: `SSD`, `NVME`, and `ROT` (in this case, `ROT` disks are `HDD`).
+## host_configs - Host configuration templates {#host-configs}
 
-For example:
+YDB cluster comprise number of nodes typically deployed over one or more standard server configurations. To avoid duplication of its descriptions for each node, the configuration file containts a `host_configs` section where configuration templates are listed and assigned an identifier.
 
-```bash
+**Syntax**
+
+``` yaml
 host_configs:
-- drive:
-  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
-    type: SSD
-  host_config_id: 1
+- host_config_id: 1
+  drive:
+  - path: <path_to_device>
+    type: <type>
+  - path: ...
+- host_config_id: 2
+  ...  
 ```
 
-In this example, we can find exactly one type of host whose sequence number is 1. In this host configuration, exactly one disk is specified, its type is `SSD` and path is `/dev/disk/by-partlabel/ydb_disk_ssd_01`.
+The `host_config_id` attribute sets a numeric template identifier. The `drive` attribute contains a collection of attached disks descriptions. Each  description contains two attributes:
 
-Below is another configuration example. Let's assume that we have two types of host configurations, one of them with 2 disks available on the host and the other one with 3 disks.
-This configuration can be specified as follows:
+- `path` : Path to a mounted block device, for instance `/dev/disk/by-partlabel/ydb_disk_ssd_01`
+- `type` : Device physical media type: `ssd`, `nvme` или `rot` (rotational - HDD)
 
-```bash
+**Examples**
+
+A sole template identified as 1, with a single disk of SSD type, available on `/dev/disk/by-partlabel/ydb_disk_ssd_01` path:
+
+``` yaml
 host_configs:
-- drive:
+- host_config_id: 1
+  drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+    type: SSD
+```
+
+Two templates identified as 1 and 2, with two and three SSD disks, respectively:
+
+``` yaml
+host_configs:
+- host_config_id: 1
+  drive:
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
     type: SSD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
     type: SSD
-  host_config_id: 1
-- drive:
+- host_config_id: 2
+  drive:
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
     type: SSD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
     type: SSD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
     type: SSD
-  host_config_id: 2
 ```
 
-## Description of cluster hosts
+### Kubernetes specifics {#host-configs-k8s}
 
-List the hosts to run a cluster on. For each host, specify the sequence number and the port where `Interconnect` will be run on this host.
-You also need to specify the physical location of the host and the unique ID of the host configuration.
+A YDB Kubernetes operator mounts NBS disks for storage nodes on the `/dev/kikimr_ssd_00` path. A following template must be specified in the `host_configs` to use them:
 
-For example,
+``` yaml
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: /dev/kikimr_ssd_00
+    type: SSD
+```
 
-```bash
+Such section is already included in the configuration example files supplied with the YDB Kubernetes operator, and may not be changed.
+
+## hosts - Cluster static nodes {#hosts}
+
+This group contains a list of cluster static nodes where storage processes are running, and sets its attributes:
+
+- Numeric node identified
+- DNS hostname and port where connection over IP network can be estalished
+- [Host configuration template](#host-configs) identifier 
+- Placement in a particular rack and availability zone
+- Server serial number (optional)
+
+**Syntax**
+
+``` yaml
+hosts:
+- host: <DNS hostname>
+  host_config_id: <numeric host configuration template identifier>
+  port: <port> # 19001 by default
+  location:
+    unit: <string representing a server serial number>
+    data_center: <string representing an availability zone identifier>
+    rack: <string representing a rack identifier>
+- host: <DNS hostname>
+  ...
+```
+
+**Examples**
+
+``` yaml
 hosts:
 - host: hostname1
   host_config_id: 1
+  node_id: 1
   port: 19001
   location:
     unit: '1'
@@ -67,9 +119,13 @@ hosts:
     rack: '1'
 ```
 
-## Description of a cluster domain configuration
+### Kubernetes specifics {#hosts-k8s}
 
-Describe a cluster domain configuration. Specify the domain name, storage types, the numbers of the hosts that will be included in `StateStorage`, and the `nto_select` parameter.
+The whole section `hosts` content is generated automatically when using YDB Kubernetes operator, overwriting any user content provided as input to an operator call. All storage nodes use `host_config_id` = `1`, for which a correct [configuration template](#host-configs-k8s) must be provided.
+
+## domains_config - Cluster domain {#domains-config}
+
+Specify the domain name, storage types, the numbers of the hosts that will be included in `StateStorage`, and the `nto_select` parameter.
 In the storage configuration, specify the type of storage and the type of storage fault tolerance (`erasure`), which will be used to initialize the database storage.
 You should also specify what types of disks this storage type will correspond to. The following models of storage fault tolerance are available:
 
@@ -141,7 +197,7 @@ domains_config:
 
 In this case, a domain is named `global` and storage of the `SSD` type is also created in it. The `erasure_species: mirror-3-dc` line indicates that storage is created with the `mirror-3-dc` fault tolerance model. `StateStorage` will include 9 servers with the `nto_select` parameter set to 9.
 
-## Description of an actor system configuration
+## actor_system_config - Actor system {#actor-system}
 
 Create an actor system configuration. Specify how processor cores will be distributed across the pools of cores available in the system.
 
@@ -181,7 +237,7 @@ Make sure the total number of cores assigned to the IC, Batch, System, and User 
 
 {% endnote %}
 
-## Description of a static cluster group
+## blob_storage_config - Сluster static group {#blob-storage-config}
 
 Specify a static cluster group's configuration. A static group is necessary for the operation of the basic cluster tablets, including `Hive`, `SchemeShard`, and `BlobstorageContoller`.
 As a rule, these tablets do not store a lot of data, so we don't recommend creating more than one static group.
@@ -204,7 +260,7 @@ blob_storage_config:
 
 For a configuration located in 3 availability zones, specify 3 rings. For a configuration within a single availability zone, specify exactly one ring.
 
-## Sample cluster configurations
+## Sample cluster configurations {#examples}
 
 The [repository](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/) provides model examples of cluster configurations for self-deployment. Check them out before deploying a cluster.
 

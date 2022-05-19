@@ -10,7 +10,7 @@ items:
   href: yql.md
 - name: YDB SDK
   href: sdk.md
-- name: Самостоятельное развертывание
+- name: Развертывание одноузлового кластера
   include: { mode: link, path: self_hosted/toc_p.yaml }
 - name: Полезные ссылки
   href: useful_links.md

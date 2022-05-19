@@ -1,6 +1,6 @@
 # Running {{ ydb-short-name }} from a binary file
 
-This section describes how to deploy a local {{ ydb-short-name }} cluster using a compiled binary file. Currently, the system **only supports builds for Linux**. Support for Windows and MacOS builds will be added later.
+This section describes how to deploy a local single-node {{ ydb-short-name }} cluster using a compiled binary file. Currently, the system **only supports builds for Linux**. Support for Windows and MacOS builds will be added later.
 
 ## Connection parameters {#conn}
 
@@ -72,7 +72,7 @@ ydb -e grpc://localhost:2136 -d /Root/test scheme ls
 
 To work with the DB structure and data, you can also use the web interface embedded in the `ydbd` process. It is available at `http://localhost:8765`. For more information about the embedded web interface, see [Embedded UI](../../../maintenance/embedded_monitoring/ydb_monitoring.md).
 
-## Additional information {#advanced}
+## Advanced options {#advanced}
 
-Instructions for administrators on how to deploy clusters from multiple nodes and configure them are given in [Deploy YDB on-premises](../../../deploy/manual/deploy-ydb-on-premises.md) in the "Administration" section.
+Instructions on how to deploy multi-node clusters and configure them are given in [Deploy YDB on-premises](../../../deploy/manual/deploy-ydb-on-premises.md) in the "Cluster management" section.
 

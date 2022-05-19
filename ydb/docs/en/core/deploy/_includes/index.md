@@ -1,14 +1,11 @@
 # Deploying databases and clusters
 
-This section provides information on the deployment and configuration of YDB databases and clusters.
+This section provides information on the deployment and configuration of multiple nodes YDB clusters servicing a number of databases.
 
-Step-by-step tutorials for self-deployment of local DBs intended for application developers are given in [Getting started - Self-deployment](../../getting_started/self_hosted/index.md).
+- [Deployment in Kubernetes](../orchestrated/concepts.md)
+- [Deployment on virtual machines and baremetal servers](../manual/deploy-ydb-on-premises.md)
+- [Configuaration](../configuration/config.md)
 
-Information on cluster deployment and configuration is intended for administrators.
+Step-by-step instructions for rapid deployment of a local single-node cluster for the purposes of development and functional teseting are given in the [Getting started](../../getting_started/self_hosted/index.md) section.
 
-{% note warning "Warning" %}
-
-The section is under development.
-
-{% endnote %}
 

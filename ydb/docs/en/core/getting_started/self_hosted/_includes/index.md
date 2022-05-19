@@ -1,10 +1,8 @@
-# Self-hosted deployment of a database {{ ydb-short-name }}
+# Deployment of a single-node {{ ydb-short-name }} cluster 
 
-This section contains articles describing simple YDB deployment scenarios. They can be used by application developers to quickly deploy their own YDB database for development or testing purposes.
+This section contains articles describing simple scenarios to deploy a local single-node YDB cluster running a single database. Such database can be used for development and functional testing purposes.
 
-- [Running YDB in Docker](../ydb_docker.md)
-- [Running YDB from a binary file](../ydb_local.md)
-- [Running YDB in Minikube](../ydb_minikube.md)
+{% include [simple_options](simple_options.md) %}
 
-For information about deploying YDB clusters for administrators, see [Managing a cluster](../../../cluster/index.md).
+Single-node deployments of YDB are not recommended for performance testing, as YDB architecture is designed for horizontal scalability, with relevant impact to applied algorithms and computing overhead. Deployment of a mutli-node cluster is described in the [Cluster management](../../../deploy/index.md) section.
 

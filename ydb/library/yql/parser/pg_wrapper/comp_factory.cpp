@@ -1105,6 +1105,7 @@ public:
             MKQLFreeWithSize(dnulls, nelems);
         };
 
+        TPAllocScope call;
         for (ui32 i = 0; i < nelems; ++i) {
             const auto& value = args[i];
             if (value) {
@@ -1141,18 +1142,7 @@ public:
             int outer_nelems = 0;
             int elem_ndims = 0;
             int *elem_dims = NULL;
-            Y_DEFER {
-                if (elem_dims) {
-                    pfree(elem_dims);
-                }
-            };
-
             int *elem_lbs = NULL;
-            Y_DEFER{
-                if (elem_lbs) {
-                    pfree(elem_lbs);
-                }
-            };
 
             bool firstone = true;
             bool havenulls = false;

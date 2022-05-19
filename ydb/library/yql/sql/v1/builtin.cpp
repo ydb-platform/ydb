@@ -2733,6 +2733,7 @@ struct TBuiltinFuncData {
             {"pgor", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgOr", 2, 2) },
             {"pgand", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgAnd", 2, 2) },
             {"pgnot", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgNot", 1, 1) },
+            {"pgarray", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgArray", 1, -1) },
             {"typeof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeOf", 1, 1) },
             {"instanceof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1) },
             {"datatype", BuildSimpleBuiltinFactoryCallback<TYqlDataType>() },

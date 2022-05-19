@@ -10,6 +10,8 @@
 namespace NKiwiAggr {
     TAdaptiveHistogram::TAdaptiveHistogram(size_t intervals, ui64 id, TQualityFunction qualityFunc)
         : Id(id)
+        , MinValue(0.0)
+        , MaxValue(0.0)
         , Sum(0.0)
         , Intervals(intervals)
         , CalcQuality(qualityFunc)

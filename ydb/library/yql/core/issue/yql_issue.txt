@@ -601,6 +601,10 @@ ids {
   severity: S_WARNING
 }
 ids {
+  code: YQL_DEPRECATED_POSITIONAL_SCHEMA
+  severity: S_WARNING
+}
+ids {
   code: DQ_GATEWAY_ERROR
   severity: S_ERROR
 }

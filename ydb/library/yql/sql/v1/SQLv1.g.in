@@ -253,7 +253,9 @@ integer_or_bind: integer | bind_parameter;
 type_name_tag: id | STRING_VALUE | bind_parameter;
 
 struct_arg: type_name_tag COLON type_name_or_bind;
-struct_arg_as: type_name_or_bind AS type_name_tag;
+struct_arg_positional:
+    type_name_tag type_name_or_bind
+  | type_name_or_bind AS type_name_tag; //deprecated
 variant_arg: (type_name_tag COLON)? type_name_or_bind;
 callable_arg: variant_arg (LBRACE_CURLY AUTOMAP RBRACE_CURLY)?;
 callable_arg_list: callable_arg (COMMA callable_arg)*;
@@ -577,7 +579,7 @@ table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
 table_hint:
       an_id_hint (EQUALS type_name_tag)?
     | (SCHEMA | COLUMNS) type_name_or_bind
-    | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN
+    | SCHEMA LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
 ;
 
 simple_table_ref: (((cluster_expr DOT)? id_or_at) | AT? bind_parameter) table_hints?;

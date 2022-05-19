@@ -2948,7 +2948,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     // table_hint:
     //      an_id_hint (EQUALS type_name_tag)?
     //    | (SCHEMA | COLUMNS) type_name_or_bind
-    //    | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN
+    //    | SCHEMA LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
         const auto& alt = rule.GetAlt_table_hint1();
@@ -2982,15 +2982,31 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         TVector<TNodePtr> labels;
         TVector<TNodePtr> structTypeItems;
         if (alt.HasBlock3()) {
-            auto processItem = [&](const TRule_struct_arg_as& arg) {
-                auto typeNode = TypeNodeOrBind(arg.GetRule_type_name_or_bind1());
+            bool warn = false;
+            auto processItem = [&](const TRule_struct_arg_positional& arg) {
+                // struct_arg_positional:
+                //     type_name_tag type_name_or_bind
+                //   | type_name_or_bind AS type_name_tag; //deprecated
+                const bool altCurrent = arg.Alt_case() == TRule_struct_arg_positional::kAltStructArgPositional1;
+                auto& typeNameOrBind = altCurrent ?
+                    arg.GetAlt_struct_arg_positional1().GetRule_type_name_or_bind2() :
+                    arg.GetAlt_struct_arg_positional2().GetRule_type_name_or_bind1();
+                auto typeNode = TypeNodeOrBind(typeNameOrBind);
                 if (!typeNode) {
                     return false;
                 }
 
                 auto pos = Ctx.Pos();
+                if (!altCurrent && !warn) {
+                    Ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_POSITIONAL_SCHEMA)
+                        << "Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column'";
+                    warn = true;
+                }
 
-                auto tag = TypeNameTag(arg.GetRule_type_name_tag3());
+                auto& typeNameTag = altCurrent ?
+                    arg.GetAlt_struct_arg_positional1().GetRule_type_name_tag1() :
+                    arg.GetAlt_struct_arg_positional2().GetRule_type_name_tag3();
+                auto tag = TypeNameTag(typeNameTag);
                 if (!tag) {
                     return false;
                 }
@@ -3000,12 +3016,12 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
                 return true;
             };
 
-            if (!processItem(alt.GetBlock3().GetRule_struct_arg_as1())) {
+            if (!processItem(alt.GetBlock3().GetRule_struct_arg_positional1())) {
                 return false;
             }
 
             for (auto& entry : alt.GetBlock3().GetBlock2()) {
-                if (!processItem(entry.GetRule_struct_arg_as2())) {
+                if (!processItem(entry.GetRule_struct_arg_positional2())) {
                     return false;
                 }
             }

@@ -3275,6 +3275,12 @@ select FormatType($f());
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:23: Warning: Hint foo will not be used, code: 4534\n");
     }
+
+    Y_UNIT_TEST(WarnForDeprecatedSchema) {
+        NYql::TAstParseResult res = SqlToYql("select * from plato.T with schema (col1 Int32, String as col2, Int64 as col3);");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:48: Warning: Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column', code: 4535\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

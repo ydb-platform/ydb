@@ -54,6 +54,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"UnorderedSubqueries", &TContext::UnorderedSubqueries},
     {"FlexibleTypes", &TContext::FlexibleTypes},
     {"AnsiCurrentRow", &TContext::AnsiCurrentRow},
+    {"EmitStartsWith", &TContext::EmitStartsWith},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

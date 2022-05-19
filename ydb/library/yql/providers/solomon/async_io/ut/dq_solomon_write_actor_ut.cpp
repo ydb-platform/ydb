@@ -19,10 +19,10 @@ namespace {
     CleanupSolomon("cloudId1", "folderId1", "custom", isCloud);
 
     TFakeCASetup setup;
-    InitSink(setup, BuildSolomonShardSettings(isCloud));
+    InitAsyncOutput(setup, BuildSolomonShardSettings(isCloud));
 
-    auto issue = setup.SinkPromises.Issue.GetFuture();
-    setup.SinkWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
+    auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+    setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
         TUnboxedValueVector res;
         res.reserve(batchSize);
 
@@ -48,10 +48,10 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         CleanupSolomon("cloudId1", "folderId1", "custom", true);
 
         TFakeCASetup setup;
-        InitSink(setup, BuildSolomonShardSettings(true));
+        InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto issue = setup.SinkPromises.Issue.GetFuture();
-        setup.SinkWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
+        auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+        setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             NUdf::TUnboxedValue val1 = CreateStruct(holderFactory, {
               NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(1624811684)),
               NKikimr::NMiniKQL::MakeString("123"),
@@ -94,10 +94,10 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
       CleanupSolomon("cloudId1", "folderId1", "custom", true);
 
       TFakeCASetup setup;
-      InitSink(setup, BuildSolomonShardSettings(true));
+      InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-      auto issue = setup.SinkPromises.Issue.GetFuture();
-      setup.SinkWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
+      auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+      setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
           TUnboxedValueVector res;
           res.reserve(batchSize);
 
@@ -123,10 +123,10 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
       {
         TFakeCASetup setup;
         CleanupSolomon("cloudId1", "folderId1", "custom", true);
-        InitSink(setup, BuildSolomonShardSettings(true));
+        InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto stateSaved = setup.SinkPromises.StateSaved.GetFuture();
-        setup.SinkWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
+        auto stateSaved = setup.AsyncOutputPromises.StateSaved.GetFuture();
+        setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueVector res;
             res.reserve(batchSize);
 
@@ -151,10 +151,10 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
       {
         TFakeCASetup setup;
         CleanupSolomon("cloudId1", "folderId1", "custom", true);
-        InitSink(setup, BuildSolomonShardSettings(true));
+        InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto stateSaved = setup.SinkPromises.StateSaved.GetFuture();
-        setup.SinkWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
+        auto stateSaved = setup.AsyncOutputPromises.StateSaved.GetFuture();
+        setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             return TUnboxedValueVector {
               CreateStruct(holderFactory, {
                 NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(200000)),
@@ -164,8 +164,8 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         }, CreateCheckpoint(1));
         UNIT_ASSERT(stateSaved.Wait(WaitTimeout));
 
-        auto issue = setup.SinkPromises.Issue.GetFuture();
-        setup.SinkWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
+        auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+        setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             return TUnboxedValueVector {
               CreateStruct(holderFactory, {
                 NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(200001)),

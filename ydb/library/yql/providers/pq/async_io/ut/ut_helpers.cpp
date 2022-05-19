@@ -73,24 +73,24 @@ void TPqIoTestFixture::InitSource(
     });
 }
 
-void TPqIoTestFixture::InitSink(
+void TPqIoTestFixture::InitAsyncOutput(
     NPq::NProto::TDqPqTopicSink&& settings,
     i64 freeSpace)
 {
     const THashMap<TString, TString> secureParams;
 
     CaSetup->Execute([&](TFakeActor& actor) {
-        auto [dqSink, dqSinkAsActor] = CreateDqPqWriteActor(
+        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqPqWriteActor(
             std::move(settings),
             0,
             "query_1",
             secureParams,
             Driver,
             nullptr,
-            &actor.GetSinkCallbacks(),
+            &actor.GetAsyncOutputCallbacks(),
             freeSpace);
 
-        actor.InitSink(dqSink, dqSinkAsActor);
+        actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });
 }
 
@@ -168,8 +168,8 @@ std::vector<TString> UVParser(const NUdf::TUnboxedValue& item) {
     return { TString(item.AsStringRef()) };
 }
 
-void TPqIoTestFixture::SinkWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint) {
-    CaSetup->SinkWrite([data](NKikimr::NMiniKQL::THolderFactory& factory) {
+void TPqIoTestFixture::AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint) {
+    CaSetup->AsyncOutputWrite([data](NKikimr::NMiniKQL::THolderFactory& factory) {
         NKikimr::NMiniKQL::TUnboxedValueVector batch;
         batch.reserve(data.size());
         for (const auto& item : data) {

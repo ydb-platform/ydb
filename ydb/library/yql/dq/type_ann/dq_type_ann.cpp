@@ -188,14 +188,6 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             }
         }
 
-        if (!transforms.empty() && !sinks.empty()
-            && transforms.size() != sinks.size()) {
-
-            ctx.AddError(TIssue(ctx.GetPosition(stage->Pos()), TStringBuilder()
-                << "Not every transform has a corresponding sink"));
-            return TStatus::Error;
-        }
-
         if (!sinks.empty()) {
             for (auto sink : sinks) {
                 sink->SetTypeAnn(resultType);

@@ -17,7 +17,7 @@
 
 namespace NYql::NDq {
 
-void InitSink(
+void InitAsyncOutput(
     TFakeCASetup& caSetup,
     NSo::NProto::TDqSolomonShard&& settings,
     i64 freeSpace = 100000);

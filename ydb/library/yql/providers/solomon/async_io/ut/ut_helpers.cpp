@@ -36,7 +36,7 @@ void FillDqSolomonScheme(NSo::NProto::TDqSolomonShardScheme& scheme) {
 
 }
 
-void InitSink(
+void InitAsyncOutput(
     TFakeCASetup& caSetup,
     NSo::NProto::TDqSolomonShard&& settings,
     i64 freeSpace)
@@ -45,17 +45,17 @@ void InitSink(
     const THashMap<TString, TString> secureParams;
 
     caSetup.Execute([&](TFakeActor& actor) {
-        auto [dqSink, dqSinkAsActor] = CreateDqSolomonWriteActor(
+        auto [dqAsyncOutput, dqAsyncOutputAsActor] = CreateDqSolomonWriteActor(
             std::move(settings),
             0,
             "TxId-42",
             secureParams,
-            &actor.GetSinkCallbacks(),
+            &actor.GetAsyncOutputCallbacks(),
             counters,
             nullptr,
             freeSpace);
 
-        actor.InitSink(dqSink, dqSinkAsActor);
+        actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });
 }
 

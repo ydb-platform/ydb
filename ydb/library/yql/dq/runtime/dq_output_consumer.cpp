@@ -1,5 +1,6 @@
 #include "dq_output_consumer.h"
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
@@ -38,6 +39,12 @@ public:
         Consumers[index]->Consume(std::move(variantItem));
     }
 
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        for (auto& consumer : Consumers) {
+            consumer->Consume(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
     void Finish() override {
         for (auto& consumer : Consumers) {
             consumer->Finish();
@@ -59,6 +66,10 @@ public:
 
     void Consume(TUnboxedValue&& value) override {
         Output->Push(std::move(value));
+    }
+
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        Output->Push(std::move(checkpoint));
     }
 
     void Finish() override {
@@ -103,6 +114,12 @@ public:
     void Consume(TUnboxedValue&& value) final {
         ui32 partitionIndex = GetHashPartitionIndex(value);
         Outputs[partitionIndex]->Push(std::move(value));
+    }
+
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
     }
 
     void Finish() final {
@@ -165,6 +182,12 @@ public:
         for (auto& output : Outputs) {
             TUnboxedValue copy{ value };
             output->Push(std::move(copy));
+        }
+    }
+
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TCheckpoint(checkpoint));
         }
     }
 

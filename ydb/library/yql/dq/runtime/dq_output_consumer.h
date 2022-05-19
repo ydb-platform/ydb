@@ -19,6 +19,7 @@ public:
 
     virtual bool IsFull() const = 0;
     virtual void Consume(NKikimr::NUdf::TUnboxedValue&& value) = 0;
+    virtual void Consume(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
 };
 

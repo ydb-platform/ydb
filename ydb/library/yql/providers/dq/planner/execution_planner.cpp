@@ -205,7 +205,7 @@ namespace NYql::NDqs {
                             transform->Type = outputTransform.Type;
                             transform->InputType = outputTransform.InputType;
                             transform->OutputType = outputTransform.OutputType;
-                            //transform->Settings = outputTransform.Settings;
+                            transform->Settings = outputTransform.Settings;
                         }
                     }
                 }

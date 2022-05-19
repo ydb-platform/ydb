@@ -153,7 +153,7 @@ public:
 
         if (checkpoint) {
             if (Buffer.empty()) {
-                Callbacks->OnSinkStateSaved(BuildState(), OutputIndex, *checkpoint);
+                Callbacks->OnAsyncOutputStateSaved(BuildState(), OutputIndex, *checkpoint);
             } else {
                 DeferredCheckpoints.emplace(NextSeqNo + Buffer.size() - 1, *checkpoint);
             }
@@ -273,7 +273,7 @@ private:
             if (issues) {
                 WriteSession->Close(TDuration::Zero());
                 WriteSession.reset();
-                Callbacks->OnSinkError(OutputIndex, *issues, true);
+                Callbacks->OnAsyncOutputError(OutputIndex, *issues, true);
                 break;
             }
 
@@ -308,8 +308,7 @@ private:
     void Fail(TString message) {
         TIssues issues;
         issues.AddIssue(message);
-        Callbacks->OnSinkError(OutputIndex, issues, true);
-        return;
+        Callbacks->OnAsyncOutputError(OutputIndex, issues, true);
     }
 
     struct TPQEventProcessor {
@@ -340,7 +339,7 @@ private:
 
                 if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == it->SeqNo) {
                     Self.ConfirmedSeqNo = it->SeqNo;
-                    Self.Callbacks->OnSinkStateSaved(Self.BuildState(), Self.OutputIndex, std::get<1>(Self.DeferredCheckpoints.front()));
+                    Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(), Self.OutputIndex, std::get<1>(Self.DeferredCheckpoints.front()));
                     Self.DeferredCheckpoints.pop();
                 }
             }

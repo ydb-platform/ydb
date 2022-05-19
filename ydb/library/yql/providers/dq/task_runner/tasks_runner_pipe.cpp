@@ -1501,6 +1501,10 @@ public:
         return sink;
     }
 
+    std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 /*outputIndex*/) override {
+        return {};
+    }
+
     const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
         return Delegate->GetTypeEnv();
     }

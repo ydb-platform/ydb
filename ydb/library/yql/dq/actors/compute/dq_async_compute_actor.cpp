@@ -29,10 +29,11 @@ public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
 
     TDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
-        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory,
+        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
-        : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkFactory), settings, memoryLimits, /* ownMemoryQuota = */ false)
+        : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , ReadyToCheckpointFlag(false)
         , SentStatsRequest(false)
@@ -121,7 +122,7 @@ private:
         WaitingForStateResponse.clear();
     }
 
-    const TDqAsyncOutputBufferStats* GetSinkStats(ui64 outputIdx, const TSinkInfo& sinkInfo) const override {
+    const TDqAsyncOutputBufferStats* GetSinkStats(ui64 outputIdx, const TAsyncOutputInfoBase& sinkInfo) const override {
         Y_UNUSED(sinkInfo);
         return TaskRunnerStats.GetSinkStats(outputIdx);
     }
@@ -167,7 +168,7 @@ private:
         this->Send(TaskRunnerActorId, new NTaskRunnerActor::TEvPop(channelId, wasFinished, toSend));
     }
 
-    void DrainSink(ui64 outputIndex, TSinkInfo& sinkInfo) override {
+    void DrainAsyncOutput(ui64 outputIndex, TAsyncOutputInfoBase& sinkInfo) override {
         if (sinkInfo.Finished && !Checkpoints) {
             return;
         }
@@ -176,23 +177,23 @@ private:
             return;
         }
 
-        Y_VERIFY(sinkInfo.Sink);
+        Y_VERIFY(sinkInfo.AsyncOutput);
         Y_VERIFY(sinkInfo.Actor);
 
         const ui32 allowedOvercommit = AllowedChannelsOvercommit();
-        const i64 sinkFreeSpaceBeforeSend = sinkInfo.Sink->GetFreeSpace();
+        const i64 sinkFreeSpaceBeforeSend = sinkInfo.AsyncOutput->GetFreeSpace();
 
         i64 toSend = sinkFreeSpaceBeforeSend + allowedOvercommit;
         CA_LOG_D("About to drain sink " << outputIndex
             << ". FreeSpace: " << sinkFreeSpaceBeforeSend
             << ", allowedOvercommit: " << allowedOvercommit
             << ", toSend: " << toSend
-                 //<< ", finished: " << sinkInfo.SinkBuffer->IsFinished());
+                 //<< ", finished: " << sinkInfo.Buffer->IsFinished());
             );
 
         sinkInfo.PopStarted = true;
         ProcessOutputsState.Inflight ++;
-        sinkInfo.SinkFreeSpaceBeforeSend = sinkFreeSpaceBeforeSend;
+        sinkInfo.FreeSpaceBeforeSend = sinkFreeSpaceBeforeSend;
         this->Send(TaskRunnerActorId, new NTaskRunnerActor::TEvSinkPop(outputIndex, sinkFreeSpaceBeforeSend));
     }
 
@@ -478,7 +479,7 @@ private:
         auto it = SinksMap.find(outputIndex);
         Y_VERIFY(it != SinksMap.end());
 
-        TSinkInfo& sinkInfo = it->second;
+        TAsyncOutputInfoBase& sinkInfo = it->second;
         sinkInfo.Finished = finished;
         if (finished) {
             FinishedSinks.insert(outputIndex);
@@ -493,11 +494,11 @@ private:
         ProcessOutputsState.HasDataToSend |= !sinkInfo.Finished;
 
         auto guard = BindAllocator();
-        sinkInfo.Sink->SendData(std::move(batch), size, std::move(checkpoint), finished);
+        sinkInfo.AsyncOutput->SendData(std::move(batch), size, std::move(checkpoint), finished);
         CA_LOG_D("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
 
         CA_LOG_D("Drain sink " << outputIndex
-            << ". Free space decreased: " << (sinkInfo.SinkFreeSpaceBeforeSend - sinkInfo.Sink->GetFreeSpace())
+            << ". Free space decreased: " << (sinkInfo.FreeSpaceBeforeSend - sinkInfo.AsyncOutput->GetFreeSpace())
             << ", sent data from buffer: " << dataSize);
 
         ProcessOutputsState.DataWasSent |= dataWasSent;
@@ -572,12 +573,13 @@ private:
 
 
 IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task,
-    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory,
+    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
 {
     return new TDqAsyncComputeActor(executerId, txId, std::move(task), std::move(sourceActorFactory),
-        std::move(sinkFactory), settings, memoryLimits, taskRunnerActorFactory);
+        std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits, taskRunnerActorFactory);
 }
 
 } // namespace NDq

@@ -49,12 +49,17 @@ private:
 };
 
 template <class T>
-concept TCastsToSinkPair =
+concept TCastsToAsyncOutputPair =
     std::is_convertible_v<T, std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>>;
 
 template <class T, class TProto>
 concept TSinkCreatorFunc = requires(T f, TProto&& settings, IDqSinkFactory::TArguments&& args) {
-    { f(std::move(settings), std::move(args)) } -> TCastsToSinkPair;
+    { f(std::move(settings), std::move(args)) } -> TCastsToAsyncOutputPair;
+};
+
+template <class T, class TProto>
+concept TOutputTransformCreatorFunc = requires(T f, TProto&& settings, IDqOutputTransformFactory::TArguments&& args) {
+    { f(std::move(settings), std::move(args)) } -> TCastsToAsyncOutputPair;
 };
 
 class TDqSinkFactory : public IDqSinkFactory {
@@ -82,6 +87,33 @@ public:
 
 private:
     THashMap<TString, TCreatorFunction> CreatorsByType;
+};
+
+class TDqOutputTransformFactory : public IDqOutputTransformFactory {
+public:
+    using TCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TArguments&& args)>;
+
+    std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqOutputTransform(TArguments&& args) override;
+
+    void Register(const TString& type, TCreatorFunction creator);
+
+    template <class TProtoMsg, TOutputTransformCreatorFunc<TProtoMsg> TCreatorFunc>
+    void Register(const TString& type, TCreatorFunc creator) {
+        Register(type,
+            [creator = std::move(creator), type](TArguments&& args)
+            {
+                const google::protobuf::Any& settingsAny = args.OutputDesc.GetTransform().GetSettings();
+                YQL_ENSURE(settingsAny.Is<TProtoMsg>(),
+                    "Output transform \"" << type << "\" settings are expected to have protobuf type " << TProtoMsg::descriptor()->full_name()
+                    << ", but got " << settingsAny.type_url());
+                TProtoMsg settings;
+                YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings of type \"" << type << "\"");
+                return creator(std::move(settings), std::move(args));
+        });
+    }
+
+private:
+    std::unordered_map<TString, TCreatorFunction> CreatorsByType;
 };
 
 } // namespace NYql::NDq

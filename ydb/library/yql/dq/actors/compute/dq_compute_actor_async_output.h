@@ -1,5 +1,7 @@
 #pragma once
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
+#include <ydb/library/yql/dq/runtime/dq_sink.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -18,13 +20,17 @@ namespace NActors {
 class IActor;
 } // namespace NActors
 
+namespace NKikimr::NMiniKQL {
+class TProgramBuilder;
+} // namespace NKikimr::NMiniKQL
+
 namespace NYql::NDq {
 
-// Sink.
+// Sink/transform.
 // Must be IActor.
 //
 // Protocol:
-// 1. CA starts sink.
+// 1. CA starts sink/transform.
 // 2. CA runs program and gets results.
 // 3. CA calls IDqComputeActorAsyncOutput::SendData().
 // 4. If SendData() returns value less than 0, loop stops running until free space appears.
@@ -33,19 +39,19 @@ namespace NYql::NDq {
 // Checkpointing:
 // 1. InjectCheckpoint event arrives to CA.
 // 2. CA saves its state and injects special checkpoint event to all outputs (TDqComputeActorCheckpoints::ICallbacks::InjectBarrierToOutputs()).
-// 3. Sink writes all data before checkpoint.
-// 4. Sink waits all external sink's acks for written data.
-// 5. Sink gathers its state and passes it into callback ICallbacks::OnSinkStateSaved(state, outputIndex).
+// 3. Sink/transform writes all data before checkpoint.
+// 4. Sink/transform waits all external sink's acks for written data.
+// 5. Sink/transform gathers its state and passes it into callback ICallbacks::OnAsyncOutputStateSaved(state, outputIndex).
 // 6. Checkpoints actor builds state for all task node as sum of the state of CA and all its sinks and saves it.
 // 7. ...
 // 8. When checkpoint is written into database, checkpoints actor calls IDqComputeActorAsyncOutput::CommitState() to apply all side effects.
 struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
         virtual void ResumeExecution() = 0;
-        virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
+        virtual void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
 
         // Checkpointing
-        virtual void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+        virtual void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
 
         virtual ~ICallbacks() = default;
     };
@@ -78,8 +84,8 @@ struct IDqSinkFactory : public TThrRefBase {
         const NDqProto::TTaskOutput& OutputDesc;
         ui64 OutputIndex;
         TTxId TxId;
-        const THashMap<TString, TString>& SecureParams;
         IDqComputeActorAsyncOutput::ICallbacks* Callback;
+        const THashMap<TString, TString>& SecureParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     };
@@ -88,6 +94,25 @@ struct IDqSinkFactory : public TThrRefBase {
     // Could throw YQL errors.
     // IActor* and IDqComputeActorAsyncOutput* returned by method must point to the objects with consistent lifetime.
     virtual std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSink(TArguments&& args) const = 0;
+};
+
+struct IDqOutputTransformFactory : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IDqOutputTransformFactory>;
+
+    struct TArguments {
+        const NDqProto::TTaskOutput& OutputDesc;
+        const ui64 OutputIndex;
+        TTxId TxId;
+        const IDqOutputConsumer::TPtr TransformOutput;
+        IDqComputeActorAsyncOutput::ICallbacks* Callback;
+        const THashMap<TString, TString>& SecureParams;
+        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
+        const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
+    };
+
+    virtual std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqOutputTransform(TArguments&& args) = 0;
 };
 
 } // namespace NYql::NDq

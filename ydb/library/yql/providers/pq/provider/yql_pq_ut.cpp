@@ -8,6 +8,8 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 
@@ -38,6 +40,18 @@
 #include <util/string/cast.h>
 
 namespace NYql {
+
+NDq::IDqSourceActorFactory::TPtr CreateSourceFactory(const NYdb::TDriver& driver) {
+    auto factory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
+    RegisterDqPqReadActorFactory(*factory, driver, nullptr);
+    return factory;
+}
+
+NDq::IDqSinkFactory::TPtr CreateSinkFactory(const NYdb::TDriver& driver) {
+    auto factory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
+    RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+    return factory;
+}
 
 bool RunPqProgram(
     const TString& code,
@@ -110,7 +124,7 @@ bool RunPqProgram(
 
     const auto driverConfig = NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"));
     NYdb::TDriver driver(driverConfig);
-    auto dqGateway = CreateLocalDqGateway(driver, functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {});
+    auto dqGateway = CreateLocalDqGateway(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}, CreateSourceFactory(driver), CreateSinkFactory(driver));
 
     auto storage = NYql::CreateFileStorage({});
     dataProvidersInit.push_back(NYql::GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));

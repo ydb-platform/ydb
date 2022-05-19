@@ -33,10 +33,11 @@ public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
 
     TDqComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
-        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory,
+        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const TTaskRunnerFactory& taskRunnerFactory)
-        : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkFactory), settings, memoryLimits)
+        : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits)
         , TaskRunnerFactory(taskRunnerFactory)
     {}
 
@@ -67,11 +68,12 @@ private:
 
 
 IActor* CreateDqComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task,
-    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory,
+    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, const TTaskRunnerFactory& taskRunnerFactory)
 {
     return new TDqComputeActor(executerId, txId, std::move(task), std::move(sourceActorFactory),
-        std::move(sinkFactory), settings, memoryLimits, taskRunnerFactory);
+        std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits, taskRunnerFactory);
 }
 
 } // namespace NDq

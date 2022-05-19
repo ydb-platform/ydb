@@ -32,6 +32,17 @@ public:
     ~THTTPMockGateway() {
     }
 
+    static TString PrintKey(const TKeyType& key) {
+        TStringBuilder ret;
+        ret << "{ Url: \"" << std::get<0>(key) << "\"";
+        ret << " Headers: [";
+        for (const TString& header : std::get<1>(key)) {
+            ret << " \"" << header << "\"";
+        }
+        ret << " ] Data: \"" << std::get<2>(key) << "\" }";
+        return std::move(ret);
+    }
+
     void Download(
             TString url,
             IHTTPGateway::THeaders headers,
@@ -52,7 +63,7 @@ public:
         } else if (DefaultResponse) {
             callback(DefaultResponse(url, headers, data));
         } else {
-            YQL_ENSURE(false, "There isn't any response callback at url "  + url);
+            YQL_ENSURE(false, "There isn't any response callback for " + PrintKey(key));
         }
     }
 

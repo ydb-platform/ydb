@@ -7,13 +7,7 @@
 #include <ydb/library/yql/providers/dq/service/service_node.h>
 
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
-#include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
-#include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/utils/range_walker.h>
 #include <ydb/library/yql/utils/bind_in_range.h>
 
@@ -24,28 +18,11 @@ namespace NYql {
 using namespace NActors;
 using NDqs::MakeWorkerManagerActorID;
 
-namespace {
-    // TODO: Use the only driver for both sources.
-    NDq::IDqSourceActorFactory::TPtr CreateSourceActorFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
-        auto factory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
-        RegisterDqPqReadActorFactory(*factory, driver, nullptr);
-        RegisterYdbReadActorFactory(*factory, driver, nullptr);
-        RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
-        RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
-        return factory;
-    }
-
-    NDq::IDqSinkFactory::TPtr CreateSinkFactory(const NYdb::TDriver& driver) {
-        auto factory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
-        RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
-        return factory;
-    }
-}
-
 class TLocalServiceHolder {
 public:
-    TLocalServiceHolder(NYdb::TDriver driver, IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-        TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort)
+    TLocalServiceHolder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+        TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort,
+        NDq::IDqSourceActorFactory::TPtr sourceFactory, NDq::IDqSinkFactory::TPtr sinkFactory, NDq::IDqOutputTransformFactory::TPtr transformFactory)
     {
         ui32 nodeId = 1;
 
@@ -71,8 +48,10 @@ public:
 
         NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, true);
-        lwmOptions.SourceActorFactory = CreateSourceActorFactory(driver, std::move(httpGateway));
-        lwmOptions.SinkFactory = CreateSinkFactory(driver);
+        lwmOptions.SourceActorFactory = std::move(sourceFactory);
+        lwmOptions.SinkFactory = std::move(sinkFactory);
+        lwmOptions.TransformFactory = std::move(transformFactory);
+        lwmOptions.FunctionRegistry = functionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.TaskRunnerActorFactory = NDq::NTaskRunnerActor::CreateLocalTaskRunnerActorFactory(
             [=](const NDqProto::TDqTask& task, const NDq::TLogFunc& )
@@ -130,18 +109,19 @@ private:
     IDqGateway::TPtr Gateway;
 };
 
-THolder<TLocalServiceHolder> CreateLocalServiceHolder(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-    TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, IHTTPGateway::TPtr gateway,
-    NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort)
-{
-    return MakeHolder<TLocalServiceHolder>(driver, std::move(gateway), functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, interconnectPort, grpcPort);
-}
-
-TIntrusivePtr<IDqGateway> CreateLocalDqGateway(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
-    IHTTPGateway::TPtr gateway)
+    NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort,
+    NDq::IDqSourceActorFactory::TPtr sourceFactory, NDq::IDqSinkFactory::TPtr sinkFactory, NDq::IDqOutputTransformFactory::TPtr transformFactory)
+{
+    return MakeHolder<TLocalServiceHolder>(functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, interconnectPort, grpcPort, std::move(sourceFactory), std::move(sinkFactory), std::move(transformFactory));
+}
+
+TIntrusivePtr<IDqGateway> CreateLocalDqGateway(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+    TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
+    NDq::IDqSourceActorFactory::TPtr sourceFactory, NDq::IDqSinkFactory::TPtr sinkFactory, NDq::IDqOutputTransformFactory::TPtr transformFactory)
 {
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);
@@ -149,7 +129,7 @@ TIntrusivePtr<IDqGateway> CreateLocalDqGateway(NYdb::TDriver driver, const NKiki
     auto grpcPort = BindInRange(portWalker)[1];
 
     return new TDqGatewayLocal(
-        CreateLocalServiceHolder(driver, functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, std::move(gateway), interconnectPort, grpcPort),
+        CreateLocalServiceHolder(functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, interconnectPort, grpcPort, std::move(sourceFactory), std::move(sinkFactory), std::move(transformFactory)),
         CreateDqGateway(std::get<0>(NDqs::GetLocalAddress()), grpcPort.Addr.GetPort(), 8));
 }
 

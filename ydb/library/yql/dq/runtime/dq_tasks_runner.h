@@ -301,6 +301,7 @@ public:
     virtual IDqSource::TPtr GetSource(ui64 inputIndex) = 0;
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
+    virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
     // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any)
     // if memoryLimit = 0          then set unlimited

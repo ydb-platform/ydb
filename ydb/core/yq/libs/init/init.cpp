@@ -161,6 +161,7 @@ void Init(
         lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false);
         lwmOptions.SourceActorFactory = sourceActorFactory;
         lwmOptions.SinkFactory = sinkFactory;
+        lwmOptions.FunctionRegistry = appData->FunctionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit;
         lwmOptions.MkqlTotalMemoryLimit = mkqlTotalMemoryLimit;

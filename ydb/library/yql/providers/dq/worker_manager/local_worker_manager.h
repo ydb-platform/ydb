@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
-
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 
@@ -24,6 +24,8 @@ namespace NYql::NDqs {
         NTaskRunnerProxy::IProxyFactory::TPtr Factory;
         NDq::IDqSourceActorFactory::TPtr SourceActorFactory;
         NDq::IDqSinkFactory::TPtr SinkFactory;
+        NDq::IDqOutputTransformFactory::TPtr TransformFactory;
+        const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
         TWorkerRuntimeData* RuntimeData = nullptr;
         TTaskRunnerInvokerFactory::TPtr TaskRunnerInvokerFactory;
         NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;

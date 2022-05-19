@@ -45,6 +45,10 @@ public:
         Outputs[partitionIndex]->Push(std::move(value));
     }
 
+    void Consume(NDqProto::TCheckpoint&&) final {
+        Y_FAIL("Shouldn't be called");
+    }
+
     void Finish() final {
         for (auto& output : Outputs) {
             output->Finish();

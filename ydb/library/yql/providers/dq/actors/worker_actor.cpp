@@ -311,8 +311,8 @@ private:
                                 .OutputDesc = output,
                                 .OutputIndex = static_cast<ui64>(outputId),
                                 .TxId = TraceId,
-                                .SecureParams = secureParams,
                                 .Callback = this,
+                                .SecureParams = secureParams,
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory
                             });
@@ -696,12 +696,12 @@ private:
         Send(SelfId(), new TEvContinueRun());
     }
 
-    void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
+    void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
         Y_UNUSED(outputIndex);
         SendFailure(MakeHolder<TEvDqFailure>(isFatal ? NYql::NDqProto::StatusIds::UNSPECIFIED : NYql::NDqProto::StatusIds::INTERNAL_ERROR, issues.ToString()));
     }
 
-    void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
+    void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
         Y_UNUSED(state);
         Y_UNUSED(outputIndex);
         Y_UNUSED(checkpoint);

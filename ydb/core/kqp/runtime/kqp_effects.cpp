@@ -23,6 +23,10 @@ public:
         value.Apply(*ApplyCtx);
     }
 
+    void Consume(NDqProto::TCheckpoint&&) final {
+        Y_FAIL("Shouldn't be called");
+    }
+
     void Finish() final {}
 
 private:

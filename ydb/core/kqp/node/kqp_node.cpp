@@ -311,11 +311,11 @@ private:
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 computeActor = CreateKqpScanComputeActor(msg.GetSnapshot(), request.Executer, txId, std::move(dqTask),
-                                                         nullptr, nullptr, runtimeSettings, memoryLimits, Counters);
+                                                         nullptr, nullptr, nullptr, nullptr, runtimeSettings, memoryLimits, Counters);
                 taskCtx.ComputeActorId = Register(computeActor);
             } else {
                 if (Y_LIKELY(!CaFactory)) {
-                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), nullptr, nullptr, runtimeSettings,
+                    computeActor = CreateKqpComputeActor(request.Executer, txId, std::move(dqTask), nullptr, nullptr, nullptr, nullptr, runtimeSettings,
                                                          memoryLimits);
                     taskCtx.ComputeActorId = Register(computeActor);
                 } else {

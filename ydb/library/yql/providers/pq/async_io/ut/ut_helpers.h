@@ -65,22 +65,22 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
     }
 
 
-    void InitSink(
+    void InitAsyncOutput(
         NYql::NPq::NProto::TDqPqTopicSink&& settings,
         i64 freeSpace = 1_MB);
 
-    void InitSink(
+    void InitAsyncOutput(
         const TString& topic,
         i64 freeSpace = 1_MB)
     {
-        InitSink(BuildPqTopicSinkSettings(topic), freeSpace);
+        InitAsyncOutput(BuildPqTopicSinkSettings(topic), freeSpace);
     }
 
     void LoadSink(const NDqProto::TSinkState& state) {
         CaSetup->LoadSink(state);
     }
 
-    void SinkWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing());
+    void AsyncOutputWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing());
 };
 
 TString GetDefaultPqEndpoint();

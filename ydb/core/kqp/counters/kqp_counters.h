@@ -180,6 +180,7 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedError;
     NMonitoring::TDynamicCounters::TCounterPtr SessionActorsClosedRequest;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveSessionActors;
+    NMonitoring::THistogramPtr SessionActorCleanupLatency;
 
     // Transactions
     NMonitoring::TDynamicCounters::TCounterPtr TxCreated;

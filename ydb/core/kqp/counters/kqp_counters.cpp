@@ -203,6 +203,8 @@ void TKqpCountersBase::Init() {
     SessionActorsClosedError = KqpGroup->GetCounter("SessionActors/ClosedError", true);
     SessionActorsClosedRequest = KqpGroup->GetCounter("SessionActors/ClosedRequest", true);
     ActiveSessionActors = KqpGroup->GetCounter("SessionActors/Active", false);
+    SessionActorCleanupLatency = KqpGroup->GetHistogram(
+        "SessionActors/CleanupLatencyMs", NMonitoring::ExponentialHistogram(10, 2, 1));
 
     SessionBalancerCV = KqpGroup->GetCounter("SessionBalancer/CV", false);
     SessionBalancerShutdowns = KqpGroup->GetCounter("SessionBalancer/Shutdown", true);
@@ -452,7 +454,6 @@ void TKqpCountersBase::ReportWorkerFinished(TDuration lifeSpan) {
     YdbSessionsActiveCount->Dec();
 }
 
-
 void TKqpCountersBase::ReportWorkerCleanupLatency(TDuration cleanupTime) {
     WorkerCleanupLatency->Collect(cleanupTime.MilliSeconds());
 }
@@ -489,6 +490,10 @@ void TKqpCountersBase::ReportSessionActorFinished(TDuration lifeSpan) {
     SessionActorLifeSpan->Collect(lifeSpan.MilliSeconds());
     ActiveSessionActors->Dec();
     YdbSessionsActiveCount->Dec();
+}
+
+void TKqpCountersBase::ReportSessionActorCleanupLatency(TDuration cleanupTime) {
+    SessionActorCleanupLatency->Collect(cleanupTime.MilliSeconds());
 }
 
 void TKqpCountersBase::ReportSessionActorClosedError() {
@@ -1015,6 +1020,13 @@ void TKqpCounters::ReportSessionActorFinished(TKqpDbCountersPtr dbCounters, TDur
     TKqpCountersBase::ReportSessionActorFinished(lifeSpan);
     if (dbCounters) {
         dbCounters->ReportSessionActorFinished(lifeSpan);
+    }
+}
+
+void TKqpCounters::ReportSessionActorCleanupLatency(TKqpDbCountersPtr dbCounters, TDuration cleanupTime) {
+    TKqpCountersBase::ReportSessionActorCleanupLatency(cleanupTime);
+    if (dbCounters) {
+        dbCounters->ReportSessionActorCleanupLatency(cleanupTime);
     }
 }
 

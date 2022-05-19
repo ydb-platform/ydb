@@ -93,7 +93,7 @@ struct TKqpCleanupCtx {
     ui64 TransactionsToBeAborted = 0;
     std::vector<IKqpGateway::TExecPhysicalRequest> ExecuterAbortRequests;
     bool Final = false;
-    TInstant Start;
+    TInstant Start = TInstant::Now();
 };
 
 EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest, EKikimrStatsMode minMode) {
@@ -558,6 +558,7 @@ public:
                 it.Value()->Invalidate();
                 TransactionsToBeAborted.emplace_back(std::move(it.Value()));
                 ExplicitTransactions.Erase(it);
+                ++EvictedTx;
             } else {
                 auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
                 std::vector<TIssue> issues{
@@ -581,6 +582,10 @@ public:
         QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false);
         SetIsolationLevel(settings);
         CreateNewTx();
+
+        Counters->ReportTxCreated(Settings.DbCounters);
+        Counters->ReportBeginTransaction(Settings.DbCounters, EvictedTx, ExplicitTransactions.Size(),
+            TransactionsToBeAborted.size());
     }
 
     std::pair<bool, TIssues> ApplyTableOperations(TKqpTransactionContext* txCtx, const NKqpProto::TKqpPhyQuery& query) {
@@ -1033,7 +1038,6 @@ public:
             TransactionsToBeAborted.emplace_back(txCtx);
             RemoveTransaction(QueryState->TxId);
 
-
             TIssues issues;
             issues.AddIssue(YqlIssue({}, TIssuesIds::CORE_EXEC, "Execution"));
             TIssues subIssues;
@@ -1271,6 +1275,41 @@ public:
         }
     }
 
+    void UpdateQueryExecutionCountes() {
+        auto now = TInstant::Now();
+        auto queryDuration = now - QueryState->StartTime;
+
+        Counters->ReportQueryLatency(Settings.DbCounters, QueryState->Request.GetAction(), queryDuration);
+
+        auto& stats = QueryState->Stats;
+        auto plan = SerializeAnalyzePlan(stats);
+
+        auto maxReadType = ExtractMostHeavyReadType(plan);
+        if (maxReadType == ETableReadType::FullScan) {
+            Counters->ReportQueryWithFullScan(Settings.DbCounters);
+        } else if (maxReadType == ETableReadType::Scan) {
+            Counters->ReportQueryWithRangeScan(Settings.DbCounters);
+        }
+
+        ui32 affectedShardsCount = 0;
+        ui64 readBytesCount = 0;
+        ui64 readRowsCount = 0;
+        for (const auto& exec : stats.GetExecutions()) {
+            for (const auto& table : exec.GetTables()) {
+                affectedShardsCount = std::max(affectedShardsCount, table.GetAffectedPartitions());
+                readBytesCount += table.GetReadBytes();
+                readRowsCount += table.GetReadRows();
+            }
+        }
+
+        Counters->ReportQueryAffectedShards(Settings.DbCounters, affectedShardsCount);
+        Counters->ReportQueryReadRows(Settings.DbCounters, readRowsCount);
+        Counters->ReportQueryReadBytes(Settings.DbCounters, readBytesCount);
+        Counters->ReportQueryReadSets(Settings.DbCounters, stats.GetReadSetsCount());
+        Counters->ReportQueryMaxShardReplySize(Settings.DbCounters, stats.GetMaxShardReplySize());
+        Counters->ReportQueryMaxShardProgramSize(Settings.DbCounters, stats.GetMaxShardProgramSize());
+    }
+
     void ReplySuccess() {
         auto resEv = std::make_unique<TEvKqp::TEvQueryResponse>();
         std::shared_ptr<google::protobuf::Arena> arena(new google::protobuf::Arena());
@@ -1290,6 +1329,8 @@ public:
         }
 
         FillTxInfo(response);
+
+        UpdateQueryExecutionCountes();
 
         bool replyQueryId = false;
         bool replyQueryParameters = false;
@@ -1422,10 +1463,7 @@ public:
         YQL_ENSURE(QueryState);
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
 
-        auto& queryRequest = QueryState->Request;
-        auto queryDuration = TInstant::Now() - QueryState->StartTime;
         YQL_ENSURE(Counters);
-        Counters->ReportQueryLatency(Settings.DbCounters, queryRequest.GetAction(), queryDuration);
 
         auto& record = QueryResponse->Record.GetRef();
         auto& response = *record.MutableResponse();
@@ -1444,11 +1482,8 @@ public:
         LOG_D(requestInfo << "Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
 
-        if (status == Ydb::StatusIds::INTERNAL_ERROR) {
-            LOG_D(requestInfo << "SessionActor destroyed due to internal error");
-            Counters->ReportSessionActorClosedError(Settings.DbCounters);
-        } else if (status == Ydb::StatusIds::BAD_SESSION) {
-            LOG_D(requestInfo << "SessionActor destroyed due to session error");
+        if (IsFatalError(status)) {
+            LOG_N(requestInfo << "SessionActor destroyed due to " << status);
             Counters->ReportSessionActorClosedError(Settings.DbCounters);
         }
     }
@@ -1608,11 +1643,15 @@ public:
     void Cleanup(bool isFinal = false) {
         isFinal = isFinal || !QueryState->KeepSession;
 
+        if (isFinal)
+            Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
+
         if (isFinal) {
             for (auto it = ExplicitTransactions.Begin(); it != ExplicitTransactions.End(); ++it) {
                 it.Value()->Invalidate();
                 TransactionsToBeAborted.emplace_back(std::move(it.Value()));
             }
+            Counters->ReportTxAborted(Settings.DbCounters, TransactionsToBeAborted.size());
             ExplicitTransactions.Clear();
         }
 
@@ -1660,6 +1699,9 @@ public:
 
         if (QueryResponse)
             Reply();
+
+        if (CleanupCtx)
+            Counters->ReportSessionActorCleanupLatency(Settings.DbCounters, TInstant::Now() - CleanupCtx->Start);
 
         if (isFinal) {
             auto lifeSpan = TInstant::Now() - CreationTime;
@@ -1831,7 +1873,7 @@ private:
             auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
             ReplyQueryError(requestInfo, Ydb::StatusIds::INTERNAL_ERROR, message);
         } else {
-            PassAway();
+            FinalCleanup();
         }
     }
 
@@ -1854,6 +1896,7 @@ private:
     TKikimrConfiguration::TPtr Config;
     TLRUCache<TString, TIntrusivePtr<TKqpTransactionContext>> ExplicitTransactions;
     std::vector<TIntrusivePtr<TKqpTransactionContext>> TransactionsToBeAborted;
+    ui64 EvictedTx = 0;
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
 
     TActorId IdleTimerActorId;

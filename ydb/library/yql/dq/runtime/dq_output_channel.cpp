@@ -146,7 +146,7 @@ public:
         }
 
         bytes = std::min(bytes, MaxChunkBytes);
-        ui64 takeRows = std::max<ui64>(bytes / EstimatedRowBytes, 1);
+        ui64 takeRows = EstimatedRowBytes ? std::max<ui64>(bytes / EstimatedRowBytes, 1) : 1;
         takeRows = std::min<ui64>(takeRows, Data.size());
 
         DLOG("About to take " << takeRows << " rows");
@@ -161,8 +161,10 @@ public:
             data = DataSerializer.Serialize(Data.begin(), last, OutputType);
         }
 
-        EstimatedRowBytes = EstimatedRowBytes * 0.6 + std::max<ui64>(data.GetRaw().Size() / takeRows, 1) * 0.4;
-        DLOG("Recalc estimated row size: " << EstimatedRowBytes);
+        if (EstimatedRowBytes) {
+            EstimatedRowBytes = EstimatedRowBytes * 0.6 + std::max<ui64>(data.GetRaw().Size() / takeRows, 1) * 0.4;
+            DLOG("Recalc estimated row size: " << EstimatedRowBytes);
+        }
 
         while (data.GetRaw().size() >= ChunkSizeHardLimit && takeRows > 1) {
             ui64 newTakeRows = std::max<ui64>(bytes / EstimatedRowBytes, 1);

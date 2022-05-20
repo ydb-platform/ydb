@@ -36,7 +36,7 @@ class TOperationQueueWithTimer
 private:
     NKikimrServices::EServiceKikimr ServiceId = NKikimrServices::EServiceKikimr(LogServiceId);
     TActorId LongTimerId;
-    TInstant When;
+    TMonotonic When;
 
 public:
     TOperationQueueWithTimer(const typename TBase::TConfig& config,
@@ -60,31 +60,32 @@ public:
         TActorBase::PassAway();
     }
 
-    TInstant GetWakeupTime() const { return When; }
+    TDuration GetWakeupDelta() const { return When - const_cast<TThis*>(this)->Now(); }
 
 private:
     // ITimer, note that it is made private,
     // since it should be called only from TBase
-    void SetWakeupTimer(TInstant t) override {
-        if (When > t)
+    void SetWakeupTimer(TDuration delta) override {
+        if (LongTimerId)
             this->Send(LongTimerId, new TEvents::TEvPoison);
 
-        When = t;
-        auto delta = t - this->Now();
+        When = this->Now() + delta;
         auto ctx = TActivationContext::ActorContextFor(TActorBase::SelfId());
         LongTimerId = CreateLongTimer(ctx, delta,
             new IEventHandle(TActorBase::SelfId(), TActorBase::SelfId(), new TEvWakeupQueue));
 
         LOG_DEBUG_S(ctx, ServiceId,
-            "Operation queue set NextWakeup# " << When << ", delta# " << delta.Seconds() << " seconds");
+            "Operation queue set wakeup after delta# " << delta.Seconds() << " seconds");
     }
 
-    TInstant Now() override {
-        return AppData()->TimeProvider->Now();
+    TMonotonic Now() override {
+        return AppData()->MonotonicTimeProvider->Now();
     }
 
     void HandleWakeup(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, ServiceId, "Operation queue wakeup# " << this->Now());
+        LOG_DEBUG_S(ctx, ServiceId, "Operation queue wakeup");
+        When = {};
+        LongTimerId = {};
         TBase::Wakeup();
     }
 

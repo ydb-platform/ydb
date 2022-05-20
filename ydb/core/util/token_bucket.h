@@ -6,16 +6,17 @@
 
 namespace NKikimr {
 
-class TTokenBucket {
+template<typename TTime>
+class TTokenBucketBase {
     double Tokens = 0.0; // tokens currenty in bucket
     double Rate = 0.0; // tokens filling rate [tokens/sec]
     double Capacity = 0.0; // maximum amount of tokens allowed in bucket
-    TInstant LastFill = TInstant::Zero();
+    TTime LastFill;
 
 public:
     // Create unlimited bucket
     // NOTE: any bucket is created fully filled
-    TTokenBucket() {
+    TTokenBucketBase() {
         SetUnlimited();
     }
 
@@ -46,7 +47,7 @@ public:
     }
 
     // Fill bucket with tokens, should be done just before Take()
-    void Fill(TInstant now) {
+    void Fill(TTime now) {
         // NOTE: LastFill is allowed to be zero, the following code will work OK
         TDuration elapsed = now - LastFill;
         Tokens += elapsed.SecondsFloat() * Rate;
@@ -62,7 +63,7 @@ public:
     }
 
     // Fill and take if available, returns taken amount
-    double FillAndTryTake(TInstant now, double amount) {
+    double FillAndTryTake(TTime now, double amount) {
         Fill(now);
         amount = Min(amount, Tokens);
         Take(amount);
@@ -78,7 +79,7 @@ public:
         return TDuration::MicroSeconds(std::ceil(Available() * -1000000.0 / Rate));
     }
 
-    TDuration FillAndNextAvailableDelay(TInstant now) {
+    TDuration FillAndNextAvailableDelay(TTime now) {
         Fill(now);
         return NextAvailableDelay();
     }
@@ -100,5 +101,7 @@ public:
         return LastFill;
     }
 };
+
+using TTokenBucket = TTokenBucketBase<TInstant>;
 
 }   // namespace NKikimr

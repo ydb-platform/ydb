@@ -21,3 +21,11 @@ namespace NActors {
     }
 
 } // namespace NActors
+
+template<>
+void Out<NActors::TMonotonic>(
+    IOutputStream& o,
+    NActors::TMonotonic t)
+{
+    o << t - NActors::TMonotonic::Zero();
+}

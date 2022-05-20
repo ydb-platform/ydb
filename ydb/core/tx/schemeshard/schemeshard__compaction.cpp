@@ -24,7 +24,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RunBackgroundCompaction "
         "for pathId# " << pathId << ", datashard# " << datashardId
         << ", compactionInfo# " << info
-        << ", next wakeup# " << CompactionQueue->GetWakeupTime()
+        << ", next wakeup in# " << CompactionQueue->GetWakeupDelta()
         << ", rate# " << CompactionQueue->GetRate()
         << ", in queue# " << CompactionQueue->Size() << " shards"
         << ", waiting after compaction# " << CompactionQueue->WaitingSize() << " shards"
@@ -65,7 +65,7 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Background compaction timeout "
         "for pathId# " << pathId << ", datashard# " << datashardId
         << ", compactionInfo# " << info
-        << ", next wakeup# " << CompactionQueue->GetWakeupTime()
+        << ", next wakeup in# " << CompactionQueue->GetWakeupDelta()
         << ", rate# " << CompactionQueue->GetRate()
         << ", in queue# " << CompactionQueue->Size() << " shards"
         << ", waiting after compaction# " << CompactionQueue->WaitingSize() << " shards"
@@ -94,7 +94,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished background compaction of unknown shard "
             "for pathId# " << pathId << ", datashard# " << tabletId
             << " in# " << duration.MilliSeconds() << " ms, with status# " << (int)record.GetStatus()
-            << ", next wakeup# " << CompactionQueue->GetWakeupTime()
+            << ", next wakeup in# " << CompactionQueue->GetWakeupDelta()
             << ", rate# " << CompactionQueue->GetRate()
             << ", in queue# " << CompactionQueue->Size() << " shards"
             << ", waiting after compaction# " << CompactionQueue->WaitingSize() << " shards"
@@ -105,7 +105,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
             "for pathId# " << pathId << ", datashard# " << tabletId
             << ", shardIdx# " << shardIdx
             << " in# " << duration.MilliSeconds() << " ms, with status# " << (int)record.GetStatus()
-            << ", next wakeup# " << CompactionQueue->GetWakeupTime()
+            << ", next wakeup in# " << CompactionQueue->GetWakeupDelta()
             << ", rate# " << CompactionQueue->GetRate()
             << ", in queue# " << CompactionQueue->Size() << " shards"
             << ", waiting after compaction# " << CompactionQueue->WaitingSize() << " shards"

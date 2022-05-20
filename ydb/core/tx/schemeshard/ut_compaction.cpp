@@ -12,6 +12,9 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
+constexpr TDuration DefaultTimeout = TDuration::Seconds(30);
+constexpr TDuration RetryDelay = TDuration::Seconds(1);
+
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
 TShardCompactionInfo MakeCompactionInfo(ui64 idx, ui64 ts, ui64 sh = 0, ui64 d = 0) {
@@ -123,6 +126,8 @@ void SetFeatures(
     compactionConfig->MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig->MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig->MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetTimeoutSeconds(DefaultTimeout.Seconds());
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(RetryDelay.Seconds());
 
     // 1 compaction / second
     compactionConfig->MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
@@ -163,6 +168,8 @@ void DisableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetTimeoutSeconds(DefaultTimeout.Seconds());
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(RetryDelay.Seconds());
 
     // 1 compaction / second
     compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
@@ -188,6 +195,8 @@ void EnableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetTimeoutSeconds(DefaultTimeout.Seconds());
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(RetryDelay.Seconds());
 
     // 1 compaction / second
     compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
@@ -566,9 +575,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         TTestEnv env(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        //runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_TRACE);
 
         // disable for the case, when compaction is enabled by default
         SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
@@ -609,6 +616,50 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
 
         // original table should not be compacted as well
         CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldHandleCompactionTimeouts) {
+        // note that this test is good to test TOperationQueueWithTimer
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        size_t compactionResultCount = 0;
+
+        // capture original observer func by setting dummy one
+        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // now set our observer backed up by original
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactTableResult: {
+                Y_UNUSED(ev.Release());
+                ++compactionResultCount;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return originalObserver(runtime, ev);
+            }
+        });
+        ui64 txId = 1000;
+
+        // note that we create 1-sharded table to avoid complications
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        env.SimulateSleep(runtime, DefaultTimeout + RetryDelay + TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(compactionResultCount, 1UL);
+
+        env.SimulateSleep(runtime, DefaultTimeout + RetryDelay + TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(compactionResultCount, 2UL);
+
+        env.SimulateSleep(runtime, DefaultTimeout + RetryDelay + TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(compactionResultCount, 3UL);
     }
 };
 

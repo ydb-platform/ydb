@@ -11,6 +11,7 @@ add_library(ydb-core-util)
 target_link_libraries(ydb-core-util PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-actors-core
   actors-interconnect-mock
   cpp-actors-util
   cpp-containers-stack_vector

@@ -2,6 +2,7 @@
 
 #include "circular_queue.h"
 
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ptr.h>
@@ -14,9 +15,9 @@ namespace {
 
 TDuration Timeout = TDuration::Minutes(10);
 
-class TSimpleTimeProvider : public ITimeProvider {
+class TSimpleTimeProvider : public NActors::IMonotonicTimeProvider {
 public:
-    TInstant Now() override {
+    TMonotonic Now() override {
         return Now_;
     }
 
@@ -24,12 +25,12 @@ public:
         Now_ += delta;
     }
 
-    void Move(TInstant now) {
+    void Move(TMonotonic now) {
         Now_ = now;
     }
 
 private:
-    TInstant Now_;
+    TMonotonic Now_;
 };
 
 using TQueue = TOperationQueue<int, TFifoQueue<int>>;
@@ -38,7 +39,7 @@ struct TOperationStarter : public TQueue::IStarter, public NOperationQueue::ITim
     TSimpleTimeProvider TimeProvider;
 
     TVector<int> StartHistory;
-    TVector<TInstant> WakeupHistory;
+    TVector<TMonotonic> WakeupHistory;
 
     NOperationQueue::EStartStatus StartResult = NOperationQueue::EStartStatus::EOperationRunning;
 
@@ -48,15 +49,15 @@ struct TOperationStarter : public TQueue::IStarter, public NOperationQueue::ITim
         return StartResult;
     }
 
-    void SetWakeupTimer(TInstant t) override
+    void SetWakeupTimer(TDuration delta) override
     {
-        WakeupHistory.push_back(t);
+        WakeupHistory.push_back(this->Now() + delta);
     }
 
     void OnTimeout(const int&) override
     {}
 
-    TInstant Now() override
+    TMonotonic Now() override
     {
         return TimeProvider.Now();
     }
@@ -68,7 +69,7 @@ void CheckQueue(
     TVector<TQueue::TItemWithTs> runningGold,
     TVector<int> inQueueGold,
     TVector<int> startHistory,
-    TVector<TInstant> wakeupHistory)
+    TVector<TMonotonic> wakeupHistory)
 {
     auto running = queue.GetRunning();
     auto inQueue = queue.GetQueue();
@@ -107,7 +108,7 @@ void TestStartInflightBeforeStart(int inflight, int pushN = 10) {
         runningGold.push_back({i, now});
     }
 
-    TVector<TInstant> wakeupsGold =
+    TVector<TMonotonic> wakeupsGold =
         { starter.TimeProvider.Now() + config.Timeout };
 
     CheckQueue(
@@ -131,7 +132,7 @@ void TestInflightWithEnqueue(int inflight, int pushN = 10) {
     TVector<TQueue::TItemWithTs> runningGold;
     TVector<int> queuedGold;
 
-    TVector<TInstant> wakeupsGold =
+    TVector<TMonotonic> wakeupsGold =
         { starter.TimeProvider.Now() + TDuration::Seconds(1) + config.Timeout };
 
     int lastStarted = 0;
@@ -987,6 +988,36 @@ Y_UNIT_TEST_SUITE(TCircularOperationQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 3UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2UL);
         UNIT_ASSERT(starter.WakeupHistory.back() > starter.TimeProvider.Now());
+    }
+
+    Y_UNIT_TEST(ShouldTolerateInaccurateTimer) {
+        // should properly work when wokeup earlier than requested (i.e. properly set new timer)
+        // regression test: woke up earlier and didn't set new wakeup
+
+        TQueue::TConfig config;
+        config.IsCircular = true;
+        config.InflightLimit = 1;
+        config.MaxRate = 0.0;
+        config.Timeout = Timeout;
+        TOperationStarter starter;
+
+        TQueue queue(config, starter, starter);
+        queue.Start();
+
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 0UL);
+
+        queue.Enqueue(1);
+
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 1UL);
+
+        // expect to wakeup on Timeout, but wakeup earlier
+        starter.TimeProvider.Move(Timeout - TDuration::Seconds(1));
+        queue.Wakeup();
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+
+        UNIT_ASSERT_VALUES_EQUAL(starter.WakeupHistory.size(), 2UL);
     }
 };
 

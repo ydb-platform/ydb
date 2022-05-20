@@ -248,8 +248,13 @@ public:
         , TypeDesc(NPg::LookupType(TypeId))
     {
         Zero(FInfo);
-        Y_ENSURE(TypeDesc.InFuncId);
-        fmgr_info(TypeDesc.InFuncId, &FInfo);
+        ui32 inFuncId = TypeDesc.InFuncId;
+        if (TypeDesc.TypeId == TypeDesc.ArrayTypeId) {
+            inFuncId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
+        }
+
+        Y_ENSURE(inFuncId);
+        fmgr_info(inFuncId, &FInfo);
         Y_ENSURE(!FInfo.fn_retset);
         Y_ENSURE(FInfo.fn_addr);
         Y_ENSURE(FInfo.fn_nargs >=1 && FInfo.fn_nargs <= 3);
@@ -687,12 +692,13 @@ public:
 class TPgCast : public TMutableComputationNode<TPgCast> {
     typedef TMutableComputationNode<TPgCast> TBaseComputation;
 public:
-    TPgCast(TComputationMutables& mutables, ui32 sourceId, ui32 targetId, IComputationNode* arg)
+    TPgCast(TComputationMutables& mutables, ui32 sourceId, ui32 targetId, IComputationNode* arg, IComputationNode* typeMod)
         : TBaseComputation(mutables)
         , StateIndex(mutables.CurValueIndex++)
         , SourceId(sourceId)
         , TargetId(targetId)
         , Arg(arg)
+        , TypeMod(typeMod)
         , SourceTypeDesc(SourceId ? NPg::LookupType(SourceId) : NPg::TTypeDesc())
         , TargetTypeDesc(NPg::LookupType(targetId))
         , IsSourceArray(SourceId && SourceTypeDesc.TypeId == SourceTypeDesc.ArrayTypeId)
@@ -791,6 +797,11 @@ public:
             return value.Release();
         }
 
+        i32 typeMod = -1;
+        if (TypeMod) {
+            typeMod = DatumGetInt32(ScalarDatumFromPod(TypeMod->GetValue(compCtx)));
+        }
+
         if (!FInfo1.fn_addr) {
             // binary compatible
             if (!ArrayCast) {
@@ -834,7 +845,7 @@ public:
                     continue;
                 } else {
                     nulls[i] = false;
-                    elems[i] = ConvertDatum(datum, state);
+                    elems[i] = ConvertDatum(datum, state, typeMod);
                 }
             }
 
@@ -846,7 +857,7 @@ public:
             auto datum = SourceTypeDesc.PassByValue ?
                 ScalarDatumFromPod(value) :
                 PointerDatumFromPod(value);
-            auto ret = ConvertDatum(datum, state);
+            auto ret = ConvertDatum(datum, state, typeMod);
             return TargetTypeDesc.PassByValue ? ScalarDatumToPod(ret) : PointerDatumToPod(ret);
         }
     }
@@ -854,6 +865,9 @@ public:
 private:
     void RegisterDependencies() const final {
         DependsOn(Arg);
+        if (TypeMod) {
+            DependsOn(TypeMod);
+        }
     }
 
     struct TState : public TComputationValue<TState> {
@@ -876,7 +890,7 @@ private:
         return *static_cast<TState*>(result.AsBoxed().Get());
     }
 
-    Datum ConvertDatum(Datum datum, TState& state) const {
+    Datum ConvertDatum(Datum datum, TState& state, i32 typeMod) const {
         auto& callInfo1 = state.CallInfo1.Ref();
         callInfo1.isnull = false;
         NullableDatum argDatum = { datum, false };
@@ -889,7 +903,7 @@ private:
 
         callInfo1.args[0] = argDatum;
         callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-        callInfo1.args[2] = { Int32GetDatum(-1), false };
+        callInfo1.args[2] = { Int32GetDatum(typeMod), false };
 
         void* freeMem = nullptr;
         void* freeMem2 = nullptr;
@@ -949,6 +963,7 @@ private:
     const ui32 SourceId;
     const ui32 TargetId;
     IComputationNode* const Arg;
+    IComputationNode* const TypeMod;
     const NPg::TTypeDesc SourceTypeDesc;
     const NPg::TTypeDesc TargetTypeDesc;
     const bool IsSourceArray;
@@ -1119,193 +1134,207 @@ public:
             }
         }
 
-        int ndims = 0;
-        int dims[MAXDIM];
-        int lbs[MAXDIM];
-        if (!MultiDims) {
-            // 1D array
-            ndims = 1;
-            dims[0] = nelems;
-            lbs[0] = 1;
+        PG_TRY();
+        {
+            int ndims = 0;
+            int dims[MAXDIM];
+            int lbs[MAXDIM];
+            if (!MultiDims) {
+                // 1D array
+                ndims = 1;
+                dims[0] = nelems;
+                lbs[0] = 1;
 
-            auto result = construct_md_array(dvalues, dnulls, ndims, dims, lbs,
-                ElemTypeDesc.TypeId,
-                ElemTypeDesc.TypeLen,
-                ElemTypeDesc.PassByValue,
-                ElemTypeDesc.TypeAlign);
-            return PointerDatumToPod(PointerGetDatum(result));
-        } else {
-            /* Must be nested array expressions */
-            auto element_type = ElemTypeDesc.TypeId;
-            int nbytes = 0;
-            int nitems = 0;
-            int outer_nelems = 0;
-            int elem_ndims = 0;
-            int *elem_dims = NULL;
-            int *elem_lbs = NULL;
+                auto result = construct_md_array(dvalues, dnulls, ndims, dims, lbs,
+                    ElemTypeDesc.TypeId,
+                    ElemTypeDesc.TypeLen,
+                    ElemTypeDesc.PassByValue,
+                    ElemTypeDesc.TypeAlign);
+                return PointerDatumToPod(PointerGetDatum(result));
+            }
+            else {
+                /* Must be nested array expressions */
+                auto element_type = ElemTypeDesc.TypeId;
+                int nbytes = 0;
+                int nitems = 0;
+                int outer_nelems = 0;
+                int elem_ndims = 0;
+                int *elem_dims = NULL;
+                int *elem_lbs = NULL;
 
-            bool firstone = true;
-            bool havenulls = false;
-            bool haveempty = false;
-            char **subdata;
-            bits8 **subbitmaps;
-            int *subbytes;
-            int *subnitems;
-            int32 dataoffset;
-            char *dat;
-            int iitem;
+                bool firstone = true;
+                bool havenulls = false;
+                bool haveempty = false;
+                char **subdata;
+                bits8 **subbitmaps;
+                int *subbytes;
+                int *subnitems;
+                int32 dataoffset;
+                char *dat;
+                int iitem;
 
-            subdata = (char **)palloc(nelems * sizeof(char *));
-            subbitmaps = (bits8 **)palloc(nelems * sizeof(bits8 *));
-            subbytes = (int *)palloc(nelems * sizeof(int));
-            subnitems = (int *)palloc(nelems * sizeof(int));
+                subdata = (char **)palloc(nelems * sizeof(char *));
+                subbitmaps = (bits8 **)palloc(nelems * sizeof(bits8 *));
+                subbytes = (int *)palloc(nelems * sizeof(int));
+                subnitems = (int *)palloc(nelems * sizeof(int));
 
-            /* loop through and get data area from each element */
-            for (int elemoff = 0; elemoff < nelems; elemoff++)
-            {
-                Datum arraydatum;
-                bool eisnull;
-                ArrayType *array;
-                int this_ndims;
-
-                arraydatum = dvalues[elemoff];
-                eisnull = dnulls[elemoff];
-
-                /* temporarily ignore null subarrays */
-                if (eisnull)
+                /* loop through and get data area from each element */
+                for (int elemoff = 0; elemoff < nelems; elemoff++)
                 {
-                    haveempty = true;
-                    continue;
+                    Datum arraydatum;
+                    bool eisnull;
+                    ArrayType *array;
+                    int this_ndims;
+
+                    arraydatum = dvalues[elemoff];
+                    eisnull = dnulls[elemoff];
+
+                    /* temporarily ignore null subarrays */
+                    if (eisnull)
+                    {
+                        haveempty = true;
+                        continue;
+                    }
+
+                    array = DatumGetArrayTypeP(arraydatum);
+
+                    /* run-time double-check on element type */
+                    if (element_type != ARR_ELEMTYPE(array))
+                        ereport(ERROR,
+                        (errcode(ERRCODE_DATATYPE_MISMATCH),
+                            errmsg("cannot merge incompatible arrays"),
+                            errdetail("Array with element type %s cannot be "
+                                "included in ARRAY construct with element type %s.",
+                                format_type_be(ARR_ELEMTYPE(array)),
+                                format_type_be(element_type))));
+
+                    this_ndims = ARR_NDIM(array);
+                    /* temporarily ignore zero-dimensional subarrays */
+                    if (this_ndims <= 0)
+                    {
+                        haveempty = true;
+                        continue;
+                    }
+
+                    if (firstone)
+                    {
+                        /* Get sub-array details from first member */
+                        elem_ndims = this_ndims;
+                        ndims = elem_ndims + 1;
+                        if (ndims <= 0 || ndims > MAXDIM)
+                            ereport(ERROR,
+                            (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+                                errmsg("number of array dimensions (%d) exceeds the maximum allowed (%d)",
+                                    ndims, MAXDIM)));
+
+                        elem_dims = (int *)palloc(elem_ndims * sizeof(int));
+                        memcpy(elem_dims, ARR_DIMS(array), elem_ndims * sizeof(int));
+                        elem_lbs = (int *)palloc(elem_ndims * sizeof(int));
+                        memcpy(elem_lbs, ARR_LBOUND(array), elem_ndims * sizeof(int));
+
+                        firstone = false;
+                    }
+                    else
+                    {
+                        /* Check other sub-arrays are compatible */
+                        if (elem_ndims != this_ndims ||
+                            memcmp(elem_dims, ARR_DIMS(array),
+                                elem_ndims * sizeof(int)) != 0 ||
+                            memcmp(elem_lbs, ARR_LBOUND(array),
+                                elem_ndims * sizeof(int)) != 0)
+                            ereport(ERROR,
+                            (errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+                                errmsg("multidimensional arrays must have array "
+                                    "expressions with matching dimensions")));
+                    }
+
+                    subdata[outer_nelems] = ARR_DATA_PTR(array);
+                    subbitmaps[outer_nelems] = ARR_NULLBITMAP(array);
+                    subbytes[outer_nelems] = ARR_SIZE(array) - ARR_DATA_OFFSET(array);
+                    nbytes += subbytes[outer_nelems];
+                    subnitems[outer_nelems] = ArrayGetNItems(this_ndims,
+                        ARR_DIMS(array));
+                    nitems += subnitems[outer_nelems];
+                    havenulls |= ARR_HASNULL(array);
+                    outer_nelems++;
                 }
 
-                array = DatumGetArrayTypeP(arraydatum);
-
-                /* run-time double-check on element type */
-                if (element_type != ARR_ELEMTYPE(array))
+                /*
+                 * If all items were null or empty arrays, return an empty array;
+                 * otherwise, if some were and some weren't, raise error.  (Note: we
+                 * must special-case this somehow to avoid trying to generate a 1-D
+                 * array formed from empty arrays.  It's not ideal...)
+                 */
+                if (haveempty)
+                {
+                    if (ndims == 0) /* didn't find any nonempty array */
+                    {
+                        return PointerDatumToPod(PointerGetDatum(construct_empty_array(element_type)));
+                    }
                     ereport(ERROR,
-                    (errcode(ERRCODE_DATATYPE_MISMATCH),
-                        errmsg("cannot merge incompatible arrays"),
-                        errdetail("Array with element type %s cannot be "
-                            "included in ARRAY construct with element type %s.",
-                            format_type_be(ARR_ELEMTYPE(array)),
-                            format_type_be(element_type))));
-
-                this_ndims = ARR_NDIM(array);
-                /* temporarily ignore zero-dimensional subarrays */
-                if (this_ndims <= 0)
-                {
-                    haveempty = true;
-                    continue;
-                }
-
-                if (firstone)
-                {
-                    /* Get sub-array details from first member */
-                    elem_ndims = this_ndims;
-                    ndims = elem_ndims + 1;
-                    if (ndims <= 0 || ndims > MAXDIM)
-                        ereport(ERROR,
-                        (errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-                            errmsg("number of array dimensions (%d) exceeds the maximum allowed (%d)",
-                                ndims, MAXDIM)));
-
-                    elem_dims = (int *)palloc(elem_ndims * sizeof(int));
-                    memcpy(elem_dims, ARR_DIMS(array), elem_ndims * sizeof(int));
-                    elem_lbs = (int *)palloc(elem_ndims * sizeof(int));
-                    memcpy(elem_lbs, ARR_LBOUND(array), elem_ndims * sizeof(int));
-
-                    firstone = false;
-                }
-                else
-                {
-                    /* Check other sub-arrays are compatible */
-                    if (elem_ndims != this_ndims ||
-                        memcmp(elem_dims, ARR_DIMS(array),
-                            elem_ndims * sizeof(int)) != 0 ||
-                        memcmp(elem_lbs, ARR_LBOUND(array),
-                            elem_ndims * sizeof(int)) != 0)
-                        ereport(ERROR,
                         (errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
                             errmsg("multidimensional arrays must have array "
                                 "expressions with matching dimensions")));
                 }
 
-                subdata[outer_nelems] = ARR_DATA_PTR(array);
-                subbitmaps[outer_nelems] = ARR_NULLBITMAP(array);
-                subbytes[outer_nelems] = ARR_SIZE(array) - ARR_DATA_OFFSET(array);
-                nbytes += subbytes[outer_nelems];
-                subnitems[outer_nelems] = ArrayGetNItems(this_ndims,
-                    ARR_DIMS(array));
-                nitems += subnitems[outer_nelems];
-                havenulls |= ARR_HASNULL(array);
-                outer_nelems++;
-            }
-
-            /*
-             * If all items were null or empty arrays, return an empty array;
-             * otherwise, if some were and some weren't, raise error.  (Note: we
-             * must special-case this somehow to avoid trying to generate a 1-D
-             * array formed from empty arrays.  It's not ideal...)
-             */
-            if (haveempty)
-            {
-                if (ndims == 0) /* didn't find any nonempty array */
+                /* setup for multi-D array */
+                dims[0] = outer_nelems;
+                lbs[0] = 1;
+                for (int i = 1; i < ndims; i++)
                 {
-                    return PointerDatumToPod(PointerGetDatum(construct_empty_array(element_type)));
+                    dims[i] = elem_dims[i - 1];
+                    lbs[i] = elem_lbs[i - 1];
                 }
-                ereport(ERROR,
-                    (errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
-                        errmsg("multidimensional arrays must have array "
-                            "expressions with matching dimensions")));
-            }
 
-            /* setup for multi-D array */
-            dims[0] = outer_nelems;
-            lbs[0] = 1;
-            for (int i = 1; i < ndims; i++)
-            {
-                dims[i] = elem_dims[i - 1];
-                lbs[i] = elem_lbs[i - 1];
-            }
+                /* check for subscript overflow */
+                (void)ArrayGetNItems(ndims, dims);
+                ArrayCheckBounds(ndims, dims, lbs);
 
-            /* check for subscript overflow */
-            (void)ArrayGetNItems(ndims, dims);
-            ArrayCheckBounds(ndims, dims, lbs);
-
-            if (havenulls)
-            {
-                dataoffset = ARR_OVERHEAD_WITHNULLS(ndims, nitems);
-                nbytes += dataoffset;
-            }
-            else
-            {
-                dataoffset = 0; /* marker for no null bitmap */
-                nbytes += ARR_OVERHEAD_NONULLS(ndims);
-            }
-
-            ArrayType* result = (ArrayType *)palloc(nbytes);
-            SET_VARSIZE(result, nbytes);
-            result->ndim = ndims;
-            result->dataoffset = dataoffset;
-            result->elemtype = element_type;
-            memcpy(ARR_DIMS(result), dims, ndims * sizeof(int));
-            memcpy(ARR_LBOUND(result), lbs, ndims * sizeof(int));
-
-            dat = ARR_DATA_PTR(result);
-            iitem = 0;
-            for (int i = 0; i < outer_nelems; i++)
-            {
-                memcpy(dat, subdata[i], subbytes[i]);
-                dat += subbytes[i];
                 if (havenulls)
-                    array_bitmap_copy(ARR_NULLBITMAP(result), iitem,
-                        subbitmaps[i], 0,
-                        subnitems[i]);
-                iitem += subnitems[i];
-            }
+                {
+                    dataoffset = ARR_OVERHEAD_WITHNULLS(ndims, nitems);
+                    nbytes += dataoffset;
+                }
+                else
+                {
+                    dataoffset = 0; /* marker for no null bitmap */
+                    nbytes += ARR_OVERHEAD_NONULLS(ndims);
+                }
 
-            return PointerDatumToPod(PointerGetDatum(result));
+                ArrayType* result = (ArrayType *)palloc(nbytes);
+                SET_VARSIZE(result, nbytes);
+                result->ndim = ndims;
+                result->dataoffset = dataoffset;
+                result->elemtype = element_type;
+                memcpy(ARR_DIMS(result), dims, ndims * sizeof(int));
+                memcpy(ARR_LBOUND(result), lbs, ndims * sizeof(int));
+
+                dat = ARR_DATA_PTR(result);
+                iitem = 0;
+                for (int i = 0; i < outer_nelems; i++)
+                {
+                    memcpy(dat, subdata[i], subbytes[i]);
+                    dat += subbytes[i];
+                    if (havenulls)
+                        array_bitmap_copy(ARR_NULLBITMAP(result), iitem,
+                            subbitmaps[i], 0,
+                            subnitems[i]);
+                    iitem += subnitems[i];
+                }
+
+                return PointerDatumToPod(PointerGetDatum(result));
+            }
         }
+        PG_CATCH();
+        {
+            auto error_data = CopyErrorData();
+            TStringBuilder errMsg;
+            errMsg << "Error in PgArray, reason: " << error_data->message;
+            FreeErrorData(error_data);
+            FlushErrorState();
+            UdfTerminate(errMsg.c_str());
+        }
+        PG_END_TRY();
     }
 
 private:
@@ -1375,7 +1404,12 @@ TComputationNodeFactory GetPgFactory() {
 
                 auto returnType = callable.GetType()->GetReturnType();
                 auto targetId = AS_TYPE(TPgType, returnType)->GetTypeId();
-                return new TPgCast(ctx.Mutables, sourceId, targetId, arg);
+                IComputationNode* typeMod = nullptr;
+                if (callable.GetInputsCount() >= 2) {
+                    typeMod = LocateNode(ctx.NodeLocator, callable, 1);
+                }
+
+                return new TPgCast(ctx.Mutables, sourceId, targetId, arg, typeMod);
             }
 
             if (name == "FromPg") {

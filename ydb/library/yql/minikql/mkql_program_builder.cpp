@@ -5075,13 +5075,17 @@ TRuntimeNode TProgramBuilder::PgArray(const TArrayRef<const TRuntimeNode>& args,
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType) {
+TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType, TRuntimeNode typeMod) {
     if constexpr (RuntimeVersion < 30U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(input);
+    if (typeMod) {
+        callableBuilder.Add(typeMod);
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

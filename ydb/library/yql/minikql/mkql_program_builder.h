@@ -626,7 +626,7 @@ public:
     TRuntimeNode PgConst(TPgType* pgType, const std::string_view& value);
     TRuntimeNode PgResolvedCall(bool useContext, const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
-    TRuntimeNode PgCast(TRuntimeNode input, TType* returnType);
+    TRuntimeNode PgCast(TRuntimeNode input, TType* returnType, TRuntimeNode typeMod = {});
     TRuntimeNode FromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode ToPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode WithContext(TRuntimeNode input, const std::string_view& contextType);

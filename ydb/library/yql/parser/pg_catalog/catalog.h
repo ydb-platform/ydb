@@ -51,6 +51,8 @@ struct TTypeDesc {
     ui32 OutFuncId = 0;
     ui32 SendFuncId = 0;
     ui32 ReceiveFuncId = 0;
+    ui32 TypeModInFuncId = 0;
+    ui32 TypeModOutFuncId = 0;
     i32 TypeLen = 0;
     // from opclass
     ui32 LessProcId = 0;

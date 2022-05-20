@@ -88,6 +88,29 @@ const char* StrVal(const Node* node) {
     return strVal((const Value*)node);
 }
 
+bool ValueAsString(const Value& val, TString& ret) {
+    switch (NodeTag(val)) {
+    case T_Integer: {
+        ret = ToString(IntVal(val));
+        return true;
+    }
+    case T_Float: {
+        ret = StrFloatVal(val);
+        return true;
+    }
+    case T_String: {
+        ret = StrVal(val);
+        return true;
+    }
+    case T_Null: {
+        ret = "NULL";
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
 int ListLength(const List* list) {
     return list_length(list);
 }
@@ -1264,17 +1287,17 @@ public:
         auto supportedTypeName = typeName->typeOid == 0 &&
             !typeName->setof &&
             !typeName->pct_type &&
-            ListLength(typeName->typmods) == 0 &&
             (ListLength(typeName->names) == 2 &&
                 NodeTag(ListNodeNth(typeName->names, 0)) == T_String &&
                 !StrCompare(StrVal(ListNodeNth(typeName->names, 0)), "pg_catalog") || ListLength(typeName->names) == 1) &&
-            NodeTag(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)) == T_String &&
-            typeName->typemod == -1;
+            NodeTag(ListNodeNth(typeName->names, ListLength(typeName->names) - 1)) == T_String;
 
         if (NodeTag(arg) == T_A_Const &&
             (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String ||
             NodeTag(CAST_NODE(A_Const, arg)->val) == T_Null) &&
             supportedTypeName &&
+            typeName->typemod == -1 &&
+            ListLength(typeName->typmods) == 0 &&
             ListLength(typeName->arrayBounds) == 0) {
             TStringBuf targetType = StrVal(ListNodeNth(typeName->names, ListLength(typeName->names) - 1));
             if (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String && targetType == "bool") {
@@ -1295,7 +1318,50 @@ public:
                 finalType = "_" + finalType;
             }
 
-            return L(A("PgCast"), input, L(A("PgType"), QAX(finalType)));
+            if (!NPg::HasType(finalType)) {
+                AddError(TStringBuilder() << "Unknown type: " << finalType);
+                return nullptr;
+            }
+
+            if (ListLength(typeName->typmods) == 0 && typeName->typemod == -1) {
+                return L(A("PgCast"), input, L(A("PgType"), QAX(finalType)));
+            } else {
+                const auto& typeDesc = NPg::LookupType(finalType);
+                if (!typeDesc.TypeModInFuncId) {
+                    AddError(TStringBuilder() << "Type " << finalType << " doesn't support modifiers");
+                    return nullptr;
+                }
+
+                const auto& procDesc = NPg::LookupProc(typeDesc.TypeModInFuncId);
+
+                TAstNode* typeMod;
+                if (typeName->typemod != -1) {
+                    typeMod = L(A("PgConst"), QA(ToString(typeName->typemod)), L(A("PgType"), QA("int4")));
+                } else {
+                    TVector<TAstNode*> args;
+                    args.push_back(A("PgArray"));
+                    for (int i = 0; i < ListLength(typeName->typmods); ++i) {
+                        auto typeMod = ListNodeNth(typeName->typmods, i);
+                        if (NodeTag(typeMod) != T_A_Const) {
+                            AddError("Expected T_A_Const as typmod");
+                            return nullptr;
+                        }
+
+                        auto aConst = CAST_NODE(A_Const, typeMod);
+                        TString s;
+                        if (!ValueAsString(aConst->val, s)) {
+                            AddError("Unsupported format of typmod");
+                            return nullptr;
+                        }
+
+                        args.push_back(L(A("PgConst"), QAX(s), L(A("PgType"), QA("cstring"))));
+                    }
+
+                    typeMod = L(A("PgCall"), QA(procDesc.Name), VL(args.data(), args.size()));
+                }
+
+                return L(A("PgCast"), input, L(A("PgType"), QAX(finalType)), typeMod);
+            }
         }
 
         AddError("Unsupported form of type cast");

@@ -761,7 +761,11 @@ IGraphTransformer::TStatus PgInternal0Wrapper(const TExprNode::TPtr& input, TExp
 
 IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+    if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureMaxArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -777,10 +781,10 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    if (!EnsureTypePg(input->Tail(), ctx.Expr)) {
+    if (!EnsureTypePg(*input->Child(1), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    auto targetTypeId = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>()->GetId();
+    auto targetTypeId = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TPgExprType>()->GetId();
 
     if (inputTypeId != 0 && inputTypeId != targetTypeId) {
         bool fail = false;
@@ -810,6 +814,26 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
         if (fail) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Cannot cast type " << inputDesc.Name << " into type " << targetDesc.Name));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (input->ChildrenSize() >= 3) {
+        auto type = input->Child(2)->GetTypeAnn();
+        ui32 typeModType;
+        bool convertToPg;
+        if (!ExtractPgType(type, typeModType, convertToPg, input->Child(2)->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            input->ChildRef(2) = ctx.Expr.NewCallable(input->Child(2)->Pos(), "ToPg", { input->ChildPtr(2) });
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (typeModType != NPg::LookupType("int4").TypeId) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected pg int4 as typemod, but got " << NPg::LookupType(typeModType).Name));
             return IGraphTransformer::TStatus::Error;
         }
     }

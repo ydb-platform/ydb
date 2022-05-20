@@ -331,6 +331,8 @@ struct TLazyTypeInfo {
     TString OutFunc;
     TString SendFunc;
     TString ReceiveFunc;
+    TString ModInFunc;
+    TString ModOutFunc;
 };
 
 class TTypesParser : public TParser {
@@ -378,6 +380,10 @@ public:
             LastLazyTypeInfo.SendFunc = value; // resolve later
         } else if (key == "typreceive") {
             LastLazyTypeInfo.ReceiveFunc = value; // resolve later
+        } else if (key == "typmodin") {
+            LastLazyTypeInfo.ModInFunc = value; // resolve later
+        } else if (key == "typmodout") {
+            LastLazyTypeInfo.ModOutFunc = value; // resolve later
         } else if (key == "typbyval") {
             if (value == "f") {
                 LastType.PassByValue = false;
@@ -1019,6 +1025,26 @@ struct TCatalog {
                 Y_ENSURE(sendFuncPtr->ArgTypes.size() == 1);
                 Y_ENSURE(sendFuncPtr->ResultType == byteaId);
                 typePtr->SendFuncId = sendFuncIdPtr->at(0);
+            }
+
+            if (v.ModInFunc) {
+                auto modInFuncIdPtr = ProcByName.FindPtr(v.ModInFunc);
+                Y_ENSURE(modInFuncIdPtr);
+                Y_ENSURE(modInFuncIdPtr->size() == 1);
+                auto modInFuncPtr = Procs.FindPtr(modInFuncIdPtr->at(0));
+                Y_ENSURE(modInFuncPtr);
+                Y_ENSURE(modInFuncPtr->ArgTypes.size() == 1);
+                typePtr->TypeModInFuncId = modInFuncIdPtr->at(0);
+            }
+
+            if (v.ModOutFunc) {
+                auto modOutFuncIdPtr = ProcByName.FindPtr(v.ModOutFunc);
+                Y_ENSURE(modOutFuncIdPtr);
+                Y_ENSURE(modOutFuncIdPtr->size() == 1);
+                auto modOutFuncPtr = Procs.FindPtr(modOutFuncIdPtr->at(0));
+                Y_ENSURE(modOutFuncPtr);
+                Y_ENSURE(modOutFuncPtr->ArgTypes.size() == 1);
+                typePtr->TypeModOutFuncId = modOutFuncIdPtr->at(0);
             }
         }
 

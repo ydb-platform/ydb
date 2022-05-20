@@ -314,11 +314,11 @@ public:
         LOG_D(requestInfo << "Received request,"
             << " selfId : " << SelfId()
             << " proxyRequestId: " << proxyRequestId
-            << " query: " << (queryRequest.HasQuery() ? queryRequest.GetQuery().Quote() : "")
             << " prepared: " << queryRequest.HasPreparedQuery()
             << " tx_control: " << queryRequest.HasTxControl()
             << " action: " << action
             << " type: " << (queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED)
+            << " text: " << (queryRequest.HasQuery() ? queryRequest.GetQuery() : "")
         );
 
         QueryState->Sender = ev->Sender;
@@ -1086,7 +1086,12 @@ public:
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         YQL_ENSURE(QueryState && QueryState->RequestActorId);
-        LOG_D("TEvStreamData: " << ev->Get()->Record.DebugString());
+        TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
+    }
+
+    void HandleExecute(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        YQL_ENSURE(QueryState);
+        // note: RequestActorId may be TActorId{};
         TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
     }
 
@@ -1821,7 +1826,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvStreamData, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
-                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop);
+                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, HandleExecute);
 

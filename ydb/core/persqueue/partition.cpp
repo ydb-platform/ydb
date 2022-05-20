@@ -1238,9 +1238,7 @@ void TPartition::Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContex
 
 void TPartition::Handle(NReadSpeedLimiterEvents::TEvCounters::TPtr& ev, const TActorContext& /*ctx*/) {
     auto userInfo = UsersInfoStorage.GetIfExists(ev->Get()->User);
-    Y_VERIFY(userInfo);
-    if (userInfo) {
-        Y_VERIFY(userInfo->ReadSpeedLimiter);
+    if (userInfo && userInfo->ReadSpeedLimiter) {
         auto diff = ev->Get()->Counters.MakeDiffForAggr(userInfo->ReadSpeedLimiter->Baseline);
         Counters.Populate(*diff.Get());
         ev->Get()->Counters.RememberCurrentStateAsBaseline(userInfo->ReadSpeedLimiter->Baseline);

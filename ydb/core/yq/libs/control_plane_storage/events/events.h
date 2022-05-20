@@ -383,77 +383,43 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, EvGetTaskRequest> {
+
+        TEvGetTaskRequest() = default;
+
         explicit TEvGetTaskRequest(
-            const TString& owner,
-            const TString& hostName,
-            const TString& tenantName)
-            : Owner(owner)
-            , HostName(hostName)
-            , TenantName(tenantName)
-        {
-        }
+            Yq::Private::GetTaskRequest&& request)
+            : Request(std::move(request))
+        {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + Owner.Size()
-                    + HostName.Size()
-                    + TenantName.Size();
+                    + Request.ByteSizeLong();
         }
 
-        TString Owner;
-        TString HostName;
-        TString TenantName;
-    };
-
-    struct TTask {
-        TString Scope;
-        TString QueryId;
-        YandexQuery::Query Query;
-        YandexQuery::Internal::QueryInternal Internal;
-        ui64 Generation = 0;
-        TInstant Deadline;
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.Size()
-                    + QueryId.Size()
-                    + Query.ByteSizeLong()
-                    + Internal.ByteSizeLong();
-        }
+        Yq::Private::GetTaskRequest Request;
     };
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
-        explicit TEvGetTaskResponse(const TVector<TTask>& tasks, const TString& owner)
-            : Tasks(tasks)
-            , Owner(owner)
-        {
-        }
 
-        explicit TEvGetTaskResponse(const NYql::TIssues& issues)
+        explicit TEvGetTaskResponse(
+            const Yq::Private::GetTaskResult& record)
+            : Record(record)
+        {}
+
+        explicit TEvGetTaskResponse(
+            const NYql::TIssues& issues)
             : Issues(issues)
-        {
-        }
+        {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + TasksByteSizeLong()
+                    + Record.ByteSizeLong()
                     + GetIssuesByteSize(Issues)
-                    + Owner.Size()
                     + GetDebugInfoByteSize(DebugInfo);
         }
 
-        size_t TasksByteSizeLong() const {
-            size_t size = 0;
-            for (const auto& task: Tasks) {
-                size += task.GetByteSize();
-            }
-            size += Tasks.size() * sizeof(TTask);
-            return size;
-        }
-
+        Yq::Private::GetTaskResult Record;
         NYql::TIssues Issues;
-        TVector<TTask> Tasks;
-        TString Owner;
         TDebugInfoPtr DebugInfo;
     };
 

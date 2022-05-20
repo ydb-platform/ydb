@@ -298,9 +298,8 @@ private:
     void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev)
     {
         CPS_LOG_I("GetTaskRequest");
-        TVector<TEvControlPlaneStorage::TTask> tasks;
-        TString owner;
-        auto event = std::make_unique<TEvControlPlaneStorage::TEvGetTaskResponse>(tasks, owner);
+        Yq::Private::GetTaskResult result;
+        auto event = std::make_unique<TEvControlPlaneStorage::TEvGetTaskResponse>(result);
         NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
     }
 

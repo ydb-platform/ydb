@@ -5,11 +5,20 @@
 
 namespace NYq {
 
+struct TTask {
+    TString Scope;
+    TString QueryId;
+    YandexQuery::Query Query;
+    YandexQuery::Internal::QueryInternal Internal;
+    ui64 Generation = 0;
+    TInstant Deadline;
+};
+
 class TResponseTasks {
 public:
-    void AddTaskNonBlocking(const TString& key, const TEvControlPlaneStorage::TTask& task);
+    void AddTaskNonBlocking(const TString& key, const TTask& task);
 
-    void AddTaskBlocking(const TString& key, const TEvControlPlaneStorage::TTask& task);
+    void AddTaskBlocking(const TString& key, const TTask& task);
 
     void SafeEraseTaskNonBlocking(const TString& key);
 
@@ -19,13 +28,13 @@ public:
 
     bool EmptyBlocking();
 
-    const THashMap<TString, TEvControlPlaneStorage::TTask>& GetTasksNonBlocking();
+    const THashMap<TString, TTask>& GetTasksNonBlocking();
 
-    const THashMap<TString, TEvControlPlaneStorage::TTask>& GetTasksBlocking();
+    const THashMap<TString, TTask>& GetTasksBlocking();
 
 private:
     TMutex Mutex;
-    THashMap<TString, TEvControlPlaneStorage::TTask> Tasks;
+    THashMap<TString, TTask> Tasks;
 };
 
 } //NYq

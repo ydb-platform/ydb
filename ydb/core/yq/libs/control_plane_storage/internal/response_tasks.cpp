@@ -2,11 +2,11 @@
 
 namespace NYq {
 
-void TResponseTasks::AddTaskNonBlocking(const TString& key, const TEvControlPlaneStorage::TTask& task) {
+void TResponseTasks::AddTaskNonBlocking(const TString& key, const TTask& task) {
     Tasks[key] = task;
 }
 
-void TResponseTasks::AddTaskBlocking(const TString& key, const TEvControlPlaneStorage::TTask& task) {
+void TResponseTasks::AddTaskBlocking(const TString& key, const TTask& task) {
     with_lock (Mutex) {
         Tasks[key] = task;
     }
@@ -34,11 +34,11 @@ bool TResponseTasks::EmptyBlocking() {
     }
 }
 
-const THashMap<TString, TEvControlPlaneStorage::TTask>& TResponseTasks::GetTasksNonBlocking() {
+const THashMap<TString, TTask>& TResponseTasks::GetTasksNonBlocking() {
     return Tasks;
 }
 
-const THashMap<TString, TEvControlPlaneStorage::TTask>& TResponseTasks::GetTasksBlocking() {
+const THashMap<TString, TTask>& TResponseTasks::GetTasksBlocking() {
     with_lock (Mutex) {
         return Tasks;
     }

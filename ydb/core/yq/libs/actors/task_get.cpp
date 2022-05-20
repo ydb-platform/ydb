@@ -19,9 +19,9 @@
 #include <ydb/library/security/util.h>
 
 #define LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", "<< stream)
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " << stream)
 #define LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", " << stream)
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateGetTask - Owner: " << OwnerId << ", " << "Host: " << Host << ", Tenant: " << Tenant << ", " << stream)
 
 namespace NYq {
 
@@ -56,10 +56,10 @@ public:
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev, const NActors::TActorContext& ctx) {
         LOG_E("TGetTaskRequestActor::OnUndelivered");
-        auto Res = MakeHolder<TEvents::TEvGetTaskResponse>();
-        Res->Status = Ydb::StatusIds::GENERIC_ERROR;
-        Res->Issues.AddIssue("UNDELIVERED");
-        ctx.Send(ev->Sender, Res.Release());
+        auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
+        response->Status = Ydb::StatusIds::GENERIC_ERROR;
+        response->Issues.AddIssue("UNDELIVERED");
+        ctx.Send(ev->Sender, response.Release());
         Die(ctx);
     }
 
@@ -74,61 +74,29 @@ public:
         LOG_E(TStringBuilder()
             << "Failed with code: " << codeStr
             << " Details: " << Issues.ToString());
-        auto Res = MakeHolder<TEvents::TEvGetTaskResponse>();
-        Res->Status = reqStatus;
-        Res->Issues.AddIssues(Issues);
-        Send(Sender, Res.Release());
+        auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
+        response->Status = reqStatus;
+        response->Issues.AddIssues(Issues);
+        Send(Sender, response.Release());
         PassAway();
     }
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TGetTaskRequestActor::StateFunc);
-        const auto& req = Ev->Record;
-        OwnerId = req.owner_id();
-        Host = req.host();
-        Tenant = req.tenant();
-        LOG_D("Request CP::GetTask with size: " << req.ByteSize() << " bytes");
-        RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
+        auto request = Ev->Record;
+        LOG_D("Request CP::GetTask with size: " << request.ByteSize() << " bytes");
+        RequestedMBytes->Collect(request.ByteSize() / 1024 / 1024);
+        OwnerId = request.owner_id();
+        Host = request.host();
+        Tenant = request.tenant();
         ctx.Send(NYq::ControlPlaneStorageServiceActorId(),
-            new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(OwnerId, Host, Tenant));
-    }
-
-    static TString GetServiceAccountId(const YandexQuery::IamAuth& auth) {
-        return auth.has_service_account()
-                ? auth.service_account().id()
-                : TString{};
-    }
-
-    static TString ExtractServiceAccountId(const YandexQuery::Connection& c) {
-        switch (c.content().setting().connection_case()) {
-        case YandexQuery::ConnectionSetting::kYdbDatabase: {
-            return GetServiceAccountId(c.content().setting().ydb_database().auth());
-        }
-        case YandexQuery::ConnectionSetting::kDataStreams: {
-            return GetServiceAccountId(c.content().setting().data_streams().auth());
-        }
-        case YandexQuery::ConnectionSetting::kObjectStorage: {
-            return GetServiceAccountId(c.content().setting().object_storage().auth());
-        }
-        case YandexQuery::ConnectionSetting::kMonitoring: {
-            return GetServiceAccountId(c.content().setting().monitoring().auth());
-        }
-        case YandexQuery::ConnectionSetting::kClickhouseCluster: {
-            return GetServiceAccountId(c.content().setting().clickhouse_cluster().auth());
-        }
-        // Do not replace with default. Adding a new connection should cause a compilation error
-        case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET:
-        break;
-        }
-        return {};
+            new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(std::move(request)));
     }
 
 private:
     void HandleResponse(NYq::TEvControlPlaneStorage::TEvGetTaskResponse::TPtr& ev, const TActorContext& ctx) { // YQ
         LOG_D("Got CP::GetTask Response");
-        const auto& tasks = ev->Get()->Tasks;
-        Res->Record.ConstructInPlace();
-        Res->Status = Ydb::StatusIds::SUCCESS;
+
         const auto& issues = ev->Get()->Issues;
         if (issues) {
             Issues.AddIssues(issues);
@@ -136,61 +104,24 @@ private:
             return;
         }
 
+        auto response = MakeHolder<TEvents::TEvGetTaskResponse>();
+        response->Status = Ydb::StatusIds::SUCCESS;
+        response->Record.ConstructInPlace();
+        auto& record = *response->Record;
+        record = ev->Get()->Record;
         try {
-            for (const auto& task : tasks) {
-                const auto& queryType = task.Query.content().type();
-                if (queryType != YandexQuery::QueryContent::ANALYTICS && queryType != YandexQuery::QueryContent::STREAMING) { //TODO: fix
-                    ythrow yexception()
-                        << "query type "
-                        << YandexQuery::QueryContent::QueryType_Name(queryType)
-                        << " unsupported";
-                }
-                auto* newTask = Res->Record->add_tasks();
-                newTask->set_query_type(queryType);
-                newTask->set_execute_mode(task.Query.meta().execute_mode());
-                newTask->set_state_load_mode(task.Internal.state_load_mode());
-                auto* queryId = newTask->mutable_query_id();
-                queryId->set_value(task.Query.meta().common().id());
-                newTask->set_streaming(queryType == YandexQuery::QueryContent::STREAMING);
-                newTask->set_text(task.Query.content().text());
-                *newTask->mutable_connection() = task.Internal.connection();
-                *newTask->mutable_binding() = task.Internal.binding();
-                newTask->set_user_token(task.Internal.token());
-                newTask->set_user_id(task.Query.meta().common().created_by());
-                newTask->set_generation(task.Generation);
-                newTask->set_status(task.Query.meta().status());
-                *newTask->mutable_created_topic_consumers() = task.Internal.created_topic_consumers();
-                newTask->mutable_sensor_labels()->insert({"cloud_id", task.Internal.cloud_id()});
-                newTask->mutable_sensor_labels()->insert({"scope", task.Scope});
-                newTask->set_automatic(task.Query.content().automatic());
-                newTask->set_query_name(task.Query.content().name());
-                *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);
-                newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
-                newTask->set_result_limit(task.Internal.result_limit());
-
+            for (auto& task : *record.mutable_tasks()) {
                 THashMap<TString, TString> accountIdSignatures;
-                for (const auto& connection: task.Internal.connection()) {
-                    const auto serviceAccountId = ExtractServiceAccountId(connection);
-                    if (!serviceAccountId) {
-                        continue;
-                    }
-
+                for (auto& account : *task.mutable_service_accounts()) {
+                    const auto serviceAccountId = account.value();
                     auto& signature = accountIdSignatures[serviceAccountId];
                     if (!signature && Signer) {
                         signature = Signer->SignAccountId(serviceAccountId);
                     }
-                    auto* account = newTask->add_service_accounts();
-                    account->set_value(serviceAccountId);
-                    account->set_signature(signature);
+                    account.set_signature(signature);
                 }
-
-                *newTask->mutable_dq_graph() = task.Internal.dq_graph();
-                newTask->set_dq_graph_index(task.Internal.dq_graph_index());
-
-                *newTask->mutable_result_set_meta() = task.Query.result_set_meta();
-                newTask->set_scope(task.Scope);
             }
-            ctx.Send(Sender, Res.Release());
+            ctx.Send(Sender, response.Release());
             Die(ctx);
         } catch (...) {
             const auto msg = TStringBuilder() << "Can't do GetTask: " << CurrentExceptionMessage();
@@ -221,8 +152,6 @@ private:
     TString OwnerId;
     TString Host;
     TString Tenant;
-
-    THolder<TEvents::TEvGetTaskResponse> Res = MakeHolder<TEvents::TEvGetTaskResponse>();
 };
 
 IActor* CreateGetTaskRequestActor(

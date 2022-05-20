@@ -8,6 +8,7 @@ import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/validation.proto";
 
 import "ydb/public/api/protos/yq.proto";
 
@@ -20,6 +21,11 @@ message GetTaskRequest {
     string owner_id = 2; // guid, should be refreshed on node restart
     string host = 3;
     Ydb.Operations.OperationParams operation_params = 4;
+
+    message Filter {
+        string query_executor = 1 [(Ydb.length).le = 100];
+    }
+    Filter filter = 5;
 }
 
 message SignedIdentity {

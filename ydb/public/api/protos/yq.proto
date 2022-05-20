@@ -111,6 +111,10 @@ message QueryContent {
     string text = 5 [(Ydb.length).le = 102400]; // The text of the query itself
     bool automatic = 6; // Is used for queries that are created by automatic systems (robots, jdbc driver, ...)
     string description = 7 [(Ydb.length).le = 10240]; // Description of the query, there can be any text
+    // Specified settings for query's executor
+    // Well known settings are:
+    // "executor" - type of executor for this query
+    map<string, string> execution_settings = 10 [(Ydb.map_key).length.range = {min: 1, max: 100}, (Ydb.length).le = 4096];
 }
 
 message CommonMeta {

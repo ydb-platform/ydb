@@ -47,8 +47,11 @@ namespace NActors {
     }
 
     void TSyncHttpMon::Stop() {
-        IndexMonPage->ClearPages(); // it's required to avoid loop-reference
-        TBase::Stop();
+        if (IndexMonPage) {
+            IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+            TBase::Stop();
+            IndexMonPage.Drop();
+        }
     }
 
     void TSyncHttpMon::Register(NMonitoring::IMonPage* page) {

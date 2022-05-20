@@ -146,7 +146,10 @@ public:
     }
 
     virtual TString GetRemoteAddr() const override {
-        return Request->Address->ToString();
+        if (Request->Address) {
+            return Request->Address->ToString();
+        }
+        return {};
     }
 
     virtual TString GetServiceTitle() const override {
@@ -278,7 +281,7 @@ public:
         if (ActorMonPage->Authorizer) {
             TString user = authorizeResult ? authorizeResult->Token->GetUserSID() : "anonymous";
             LOG_NOTICE_S(*TlsActivationContext, NActorsServices::HTTP,
-                request->Address->ToString()
+                (request->Address ? request->Address->ToString() : "")
                 << " " << user
                 << " " << request->Method
                 << " " << request->URL);
@@ -512,25 +515,27 @@ public:
     {}
 
     static void ToProto(NKikimrMonProto::TSockAddr& proto, const NHttp::THttpConfig::SocketAddressType& address) {
-        switch (address->SockAddr()->sa_family) {
-            case AF_INET: {
-                    proto.SetFamily(AF_INET);
-                    sockaddr_in* addr = (sockaddr_in*)address->SockAddr();
-                    char ip[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, (void*)&addr->sin_addr, ip, INET_ADDRSTRLEN);
-                    proto.SetAddress(ip);
-                    proto.SetPort(htons(addr->sin_port));
-                }
-                break;
-            case AF_INET6: {
-                    proto.SetFamily(AF_INET6);
-                    sockaddr_in6* addr = (sockaddr_in6*)address->SockAddr();
-                    char ip6[INET6_ADDRSTRLEN];
-                    inet_ntop(AF_INET6, (void*)&addr->sin6_addr, ip6, INET6_ADDRSTRLEN);
-                    proto.SetAddress(ip6);
-                    proto.SetPort(htons(addr->sin6_port));
-                }
-                break;
+        if (address) {
+            switch (address->SockAddr()->sa_family) {
+                case AF_INET: {
+                        proto.SetFamily(AF_INET);
+                        sockaddr_in* addr = (sockaddr_in*)address->SockAddr();
+                        char ip[INET_ADDRSTRLEN];
+                        inet_ntop(AF_INET, (void*)&addr->sin_addr, ip, INET_ADDRSTRLEN);
+                        proto.SetAddress(ip);
+                        proto.SetPort(htons(addr->sin_port));
+                    }
+                    break;
+                case AF_INET6: {
+                        proto.SetFamily(AF_INET6);
+                        sockaddr_in6* addr = (sockaddr_in6*)address->SockAddr();
+                        char ip6[INET6_ADDRSTRLEN];
+                        inet_ntop(AF_INET6, (void*)&addr->sin6_addr, ip6, INET6_ADDRSTRLEN);
+                        proto.SetAddress(ip6);
+                        proto.SetPort(htons(addr->sin6_port));
+                    }
+                    break;
+            }
         }
     }
 
@@ -538,7 +543,7 @@ public:
         TActorId monServiceNodeProxy = MakeNodeProxyId(NodeId);
         auto request = std::make_unique<TEvMon::TEvMonitoringRequest>();
         request->Record.SetHttpRequest(Event->Get()->Request->AsString());
-        // TODO address
+        ToProto(*request->Record.MutableAddress(), Event->Get()->Request->Address);
         Send(monServiceNodeProxy, request.release(), IEventHandle::FlagTrackDelivery);
         Become(&THttpMonServiceMonRequest::StateWork);
     }
@@ -561,7 +566,26 @@ public:
     }
 
     void Handle(TEvMon::TEvMonitoringResponse::TPtr& ev) {
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Event->Get()->Request->CreateResponseString(ev->Get()->Record.GetHttpResponse())), 0, Event->Cookie);
+        TString responseTxt = ev->Get()->Record.GetHttpResponse();
+        NHttp::THttpOutgoingResponsePtr responseObj = Event->Get()->Request->CreateResponseString(responseTxt);
+        if (responseObj->Status == "301" || responseObj->Status == "302") {
+            NHttp::THttpParser<NHttp::THttpResponse, NHttp::TSocketBuffer> parser(responseTxt);
+            NHttp::THeadersBuilder headers(parser.Headers);
+            if (headers["Location"].starts_with('/')) {
+                NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(Event->Get()->Request);
+                response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
+
+                headers.Set("Location", TStringBuilder() << "/node/" << NodeId << headers["Location"]);
+
+                response->Set(headers);
+                if (parser.HaveBody()) {
+                    response->SetBody(parser.Body);
+                }
+                responseObj = response;
+            }
+        }
+
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(responseObj.Release()), 0, Event->Cookie);
         PassAway();
     }
 

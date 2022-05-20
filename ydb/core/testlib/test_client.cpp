@@ -884,10 +884,6 @@ namespace Tests {
     }
 
     TServer::~TServer() {
-        if (Runtime->GetAppData().Mon) {
-            Runtime->GetAppData().Mon->Stop();
-        }
-
         if (GRpcServer) {
             GRpcServer->Stop();
         }

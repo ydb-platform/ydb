@@ -374,7 +374,7 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
     if (parser.HaveBody()) {
         if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
             TStringBuf contentType = parser.ContentType.Before(';');
-            Trim(ContentType, ' ');
+            Trim(contentType, ' ');
             if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
                 if (response->EnableCompression()) {
                     headers.Erase("Content-Length"); // we will need new length after compression
@@ -432,6 +432,13 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status,
     }
     if (!contentType.empty() && !body.empty()) {
         response->Set<&THttpResponse::ContentType>(contentType);
+        if (!Endpoint->CompressContentTypes.empty()) {
+            contentType = contentType.Before(';');
+            Trim(contentType, ' ');
+            if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
+                response->EnableCompression();
+            }
+        }
     }
     if (lastModified) {
         response->Set<&THttpResponse::LastModified>(lastModified.FormatGmTime("%a, %d %b %Y %H:%M:%S GMT"));

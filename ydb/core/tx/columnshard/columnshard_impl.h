@@ -158,7 +158,7 @@ class TColumnShard
     }
 
     void IncCounter(NColumnShard::EPercentileCounters counter, const TDuration& latency) const {
-        TabletCounters->Percentile()[counter].IncrementFor(latency.MilliSeconds());
+        TabletCounters->Percentile()[counter].IncrementFor(latency.MicroSeconds());
     }
 
 protected:

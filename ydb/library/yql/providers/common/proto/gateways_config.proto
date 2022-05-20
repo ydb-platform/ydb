@@ -180,6 +180,7 @@ message TClickHouseClusterConfig {
     optional uint32 NativeHostPort = 11 [default = 9000];
     optional bool NativeSecure = 12 [default = false];
     optional string Id = 13;
+    repeated string GroupAllowed = 14;
 }
 
 message TClickHouseGatewayConfig {

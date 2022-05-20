@@ -99,7 +99,6 @@ protected:
 public:
     void Bootstrap() {
         try {
-            Cerr << "Start CA: " << Task.Utf8DebugString() << Endl;
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
             Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,

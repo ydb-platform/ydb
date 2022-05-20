@@ -5,7 +5,6 @@
 
 #include <ydb/core/protos/counters_coordinator.pb.h>
 
-#include <library/cpp/actors/helpers/mon_histogram_helper.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
@@ -455,9 +454,7 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr StepPlannedTx;
         NMonitoring::TDynamicCounters::TCounterPtr StepDeclinedNoSpaceTx;
 
-        NMon::THistogramCounterHelper LegacyTxFromReceiveToPlan;
         NMonitoring::THistogramPtr TxFromReceiveToPlan;
-        NMon::THistogramCounterHelper LegacyTxPlanLatency;
         NMonitoring::THistogramPtr TxPlanLatency;
 
         i64 CurrentTxInFly;

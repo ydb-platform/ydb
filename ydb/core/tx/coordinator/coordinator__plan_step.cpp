@@ -73,7 +73,6 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
                 Self->MonCounters.StepConsideredTx->Inc();
                 auto durationMs = (ExecStartMoment - proposal->AcceptMoment).MilliSeconds();
-                Self->MonCounters.LegacyTxFromReceiveToPlan.Add(durationMs);
                 Self->MonCounters.TxFromReceiveToPlan->Collect(durationMs);
 
                 if (proposal->MaxStep < PlanOnStep) {
@@ -214,7 +213,6 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
 
     void Complete(const TActorContext &ctx) override {
         auto durationMs = (ctx.Now() - ExecStartMoment).MilliSeconds();
-        Self->MonCounters.LegacyTxPlanLatency.Add(durationMs);
         Self->MonCounters.TxPlanLatency->Collect(durationMs);
 
         for (auto &cx : StepsToConfirm) {

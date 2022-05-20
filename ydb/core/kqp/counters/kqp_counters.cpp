@@ -594,16 +594,6 @@ TKqpDbCounters::TKqpDbCounters(const NMonitoring::TDynamicCounterPtr& externalGr
 }
 
 template <typename T>
-void SaveHistogram(T& histogram, int index, const NMon::THistogramCounterHelper& helper) {
-    auto* buckets = histogram[index].MutableBuckets();
-    auto count = helper.GetBucketCount();
-    buckets->Resize(count, 0);
-    for (size_t i = 0; i < count; ++i) {
-        (*buckets)[i] = helper.GetBucketValue(i);
-    }
-}
-
-template <typename T>
 void SaveHistogram(T& histogram, int index, const NMonitoring::THistogramPtr& hgram) {
     auto* buckets = histogram[index].MutableBuckets();
     auto snapshot = hgram->Snapshot();
@@ -636,16 +626,6 @@ void TKqpDbCounters::ToProto(NKikimr::NSysView::TDbServiceCounters& counters) {
     DB_KQP_SIMPLE_COUNTERS_MAP(SAVE_SIMPLE_COUNTER)
     DB_KQP_CUMULATIVE_COUNTERS_MAP(SAVE_CUMULATIVE_COUNTER)
     DB_KQP_HISTOGRAM_COUNTERS_MAP(SAVE_HISTOGRAM_COUNTER)
-}
-
-template <typename T>
-void LoadHistogram(T& histogram, int index, NMon::THistogramCounterHelper& helper) {
-    auto* buckets = histogram[index].MutableBuckets();
-    auto count = helper.GetBucketCount();
-    buckets->Resize(count, 0);
-    for (size_t i = 0; i < count; ++i) {
-        helper.SetBucketValue(i, (*buckets)[i]);
-    }
 }
 
 template <typename T>

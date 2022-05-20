@@ -205,8 +205,7 @@ namespace {
             *TotalBytesRead += value;
         }
 
-        void UpdateLegacyPingTimeHist(ui64 value) override {
-            LegacyPingTimeHist.Add(value);
+        void UpdatePingTimeHistogram(ui64 value) override {
             PingTimeHistogram->Collect(value);
         }
 
@@ -278,9 +277,6 @@ namespace {
                 InflyLimitReach = AdaptiveCounters->GetCounter("InflyLimitReach", true);
                 InflightDataAmount = AdaptiveCounters->GetCounter("Inflight_Data");
 
-                LegacyPingTimeHist = {};
-                LegacyPingTimeHist.Init(AdaptiveCounters.Get(), "PingTimeHist", "mks", 125, 18);
-
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
                     "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
             }
@@ -329,7 +325,6 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousReadWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr UsefulWriteWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousWriteWakeups;
-        NMon::THistogramCounterHelper LegacyPingTimeHist;
         NMonitoring::THistogramPtr PingTimeHistogram;
 
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
@@ -520,7 +515,7 @@ namespace {
             TotalBytesRead_->Add(value);
         }
 
-        void UpdateLegacyPingTimeHist(ui64 value) override {
+        void UpdatePingTimeHistogram(ui64 value) override {
             PingTimeHistogram_->Record(value);
         }
 

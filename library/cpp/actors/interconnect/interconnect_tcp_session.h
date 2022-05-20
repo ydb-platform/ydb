@@ -4,7 +4,6 @@
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/actors/helpers/mon_histogram_helper.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/rope.h>

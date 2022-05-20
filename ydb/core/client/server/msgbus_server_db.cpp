@@ -195,7 +195,7 @@ protected:
     TActorId SchemeCache;
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
 
-    NMon::THistogramCounterHelper* OperationHistogram;
+    NMonitoring::THistogramPtr OperationHistogram;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> CacheNavigate;
     NJson::TJsonValue JSON;
     THPTimer StartTime;
@@ -207,10 +207,10 @@ protected:
 
     void CompleteRequest(const TActorContext& ctx) {
         TDuration duration(TDuration::MicroSeconds(StartTime.Passed() * 1000000/*us*/));
-        if (OperationHistogram != nullptr) {
-            OperationHistogram->Add(duration.MilliSeconds());
+        if (OperationHistogram) {
+            OperationHistogram->Collect(duration.MilliSeconds());
         }
-        DbOperationsCounters->RequestTotalTimeHistogram.Add(duration.MilliSeconds());
+        DbOperationsCounters->RequestTotalTimeHistogram->Collect(duration.MilliSeconds());
         Die(ctx);
     }
 
@@ -453,7 +453,7 @@ public:
                 tableRangeOptions.FromColumns = keyFromColumns;
                 result.emplace_back(pgmBuilder.SelectRange(tableInfo.TableId, keyTypes, columnsToRead, tableRangeOptions, readTarget));
             }
-            OperationHistogram = &DbOperationsCounters->RequestSelectTimeHistogram;
+            OperationHistogram = DbOperationsCounters->RequestSelectTimeHistogram;
         }
 
         NJson::TJsonValue jsonUpdate;
@@ -469,13 +469,13 @@ public:
                     throw yexception() << "Column \"" << itVal->first << "\" not found";
                 }
             }
-            OperationHistogram = &DbOperationsCounters->RequestUpdateTimeHistogram;
+            OperationHistogram = DbOperationsCounters->RequestUpdateTimeHistogram;
         }
 
         NJson::TJsonValue jsonDelete;
         if (json.GetValue("Delete", &jsonDelete)) {
             pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.EraseRow(tableInfo.TableId, keyTypes, keyColumns));
-            OperationHistogram = &DbOperationsCounters->RequestUpdateTimeHistogram;
+            OperationHistogram = DbOperationsCounters->RequestUpdateTimeHistogram;
         }
 
         NJson::TJsonValue jsonBatch;
@@ -484,7 +484,7 @@ public:
             for (const NJson::TJsonValue& value : array) {
                 BuildProgram(value, pgmReturn, pgmBuilder, tableInfo, keys, columnByName, result);
             }
-            OperationHistogram = &DbOperationsCounters->RequestBatchTimeHistogram;
+            OperationHistogram = DbOperationsCounters->RequestBatchTimeHistogram;
         }
     }
 
@@ -523,7 +523,7 @@ public:
             NMiniKQL::TRuntimeNode node = pgmBuilder.Build(pgmReturn);
             TString bin = NMiniKQL::SerializeRuntimeNode(node, env);
 
-            DbOperationsCounters->RequestPrepareTimeHistogram.Add(StartTime.Passed() * 1000/*ms*/);
+            DbOperationsCounters->RequestPrepareTimeHistogram->Collect(StartTime.Passed() * 1000/*ms*/);
 
             TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal(new TEvTxUserProxy::TEvProposeTransaction());
             NKikimrTxUserProxy::TEvProposeTransaction &record = Proposal->Record;
@@ -565,7 +565,6 @@ TServerDbOperation<TMessageBusInterface<TBusDbOperation>>::TServerDbOperation(
     , TxProxyId(txProxyId)
     , SchemeCache(schemeCache)
     , DbOperationsCounters(dbOperationsCounters)
-    , OperationHistogram(nullptr)
 {}
 
 template <>
@@ -581,7 +580,6 @@ TServerDbOperation<TActorInterface>::TServerDbOperation(
     , TxProxyId(txProxyId)
     , SchemeCache(schemeCache)
     , DbOperationsCounters(dbOperationsCounters)
-    , OperationHistogram(nullptr)
     , JSON(jsonValue)
     , SecurityToken(securityToken)
 {}
@@ -604,8 +602,8 @@ protected:
 
     void CompleteRequest(const TActorContext& ctx) {
         TDuration duration(TDuration::MicroSeconds(StartTime.Passed() * 1000000/*us*/));
-        DbOperationsCounters->RequestSchemaTimeHistogram.Add(duration.MilliSeconds());
-        DbOperationsCounters->RequestTotalTimeHistogram.Add(duration.MilliSeconds());
+        DbOperationsCounters->RequestSchemaTimeHistogram->Collect(duration.MilliSeconds());
+        DbOperationsCounters->RequestTotalTimeHistogram->Collect(duration.MilliSeconds());
         Die(ctx);
     }
 
@@ -872,7 +870,7 @@ public:
             }
         }
 
-        DbOperationsCounters->RequestPrepareTimeHistogram.Add(StartTime.Passed() * 1000/*ms*/);
+        DbOperationsCounters->RequestPrepareTimeHistogram->Collect(StartTime.Passed() * 1000/*ms*/);
         if (Requests.empty()) {
             return ReplyWithError(MSTATUS_ERROR, TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, "No valid operations were found", ctx);
         }

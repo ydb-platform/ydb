@@ -3,7 +3,6 @@
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <ydb/core/mon/mon.h>
-#include <library/cpp/actors/helpers/mon_histogram_helper.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/base/appdata.h>
 
@@ -31,8 +30,8 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr Status500;
     NMonitoring::TDynamicCounters::TCounterPtr Status503;
     NMonitoring::TDynamicCounters::TCounterPtr Status504;
-    NMon::THistogramCounterHelper RequestTotalTimeHistogram;
-    NMon::THistogramCounterHelper RequestPrepareTimeHistogram;
+    NMonitoring::THistogramPtr RequestTotalTimeHistogram;
+    NMonitoring::THistogramPtr RequestPrepareTimeHistogram;
 };
 
 IMessageBusHttpServer* CreateMessageBusHttpServer(TActorSystem* actorSystem, NBus::IBusServerHandler* handler, const TProtocol& protocol, const NBus::TBusServerSessionConfig& config);

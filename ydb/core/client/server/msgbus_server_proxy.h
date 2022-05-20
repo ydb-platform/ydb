@@ -10,23 +10,31 @@ namespace NMsgBusProxy {
 
 struct TMessageBusDbOpsCounters : TAtomicRefCount<TMessageBusDbOpsCounters> {
     TIntrusivePtr<NMonitoring::TDynamicCounters> DbOperationsCounters;
-    NMon::THistogramCounterHelper RequestTotalTimeHistogram;
-    NMon::THistogramCounterHelper RequestPrepareTimeHistogram;
-    NMon::THistogramCounterHelper RequestUpdateTimeHistogram;
-    NMon::THistogramCounterHelper RequestSelectTimeHistogram;
-    NMon::THistogramCounterHelper RequestSchemaTimeHistogram;
-    NMon::THistogramCounterHelper RequestBatchTimeHistogram;
-    NMon::THistogramCounterHelper RequestQueryTimeHistogram;
+    NMonitoring::THistogramPtr RequestTotalTimeHistogram;
+    NMonitoring::THistogramPtr RequestPrepareTimeHistogram;
+    NMonitoring::THistogramPtr RequestUpdateTimeHistogram;
+    NMonitoring::THistogramPtr RequestSelectTimeHistogram;
+    NMonitoring::THistogramPtr RequestSchemaTimeHistogram;
+    NMonitoring::THistogramPtr RequestBatchTimeHistogram;
+    NMonitoring::THistogramPtr RequestQueryTimeHistogram;
 
     TMessageBusDbOpsCounters(const NMonitoring::TDynamicCounterPtr& counters) {
         DbOperationsCounters = GetServiceCounters(counters, "proxy")->GetSubgroup("subsystem", "db");
-        RequestTotalTimeHistogram.Init(DbOperationsCounters.Get(), "RequestTotalTime", "ms", 1, 20);
-        RequestPrepareTimeHistogram.Init(DbOperationsCounters.Get(), "RequestPrepareTime", "ms", 1, 20);
-        RequestUpdateTimeHistogram.Init(DbOperationsCounters.Get(), "RequestUpdateTime", "ms", 1, 20);
-        RequestSelectTimeHistogram.Init(DbOperationsCounters.Get(), "RequestSelectTime", "ms", 1, 20);
-        RequestSchemaTimeHistogram.Init(DbOperationsCounters.Get(), "RequestSchemaTime", "ms", 1, 20);
-        RequestBatchTimeHistogram.Init(DbOperationsCounters.Get(), "RequestBatchTime", "ms", 1, 20);
-        RequestQueryTimeHistogram.Init(DbOperationsCounters.Get(), "RequestQueryTime", "ms", 1, 20);
+
+        RequestTotalTimeHistogram = DbOperationsCounters->GetHistogram("RequestTotalTimeMs",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+        RequestPrepareTimeHistogram = DbOperationsCounters->GetHistogram("RequestPrepareTimeMs",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+        RequestUpdateTimeHistogram = DbOperationsCounters->GetHistogram("RequestUpdateTimeMs",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+        RequestSelectTimeHistogram = DbOperationsCounters->GetHistogram("RequestSelectTimeMs",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+        RequestSchemaTimeHistogram = DbOperationsCounters->GetHistogram("RequestSchemaTimeMs",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+        RequestBatchTimeHistogram = DbOperationsCounters->GetHistogram("RequestBatchTimeMs",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
+        RequestQueryTimeHistogram = DbOperationsCounters->GetHistogram("RequestQueryTimeMs",
+            NMonitoring::ExponentialHistogram(20, 2, 1));
     }
 };
 

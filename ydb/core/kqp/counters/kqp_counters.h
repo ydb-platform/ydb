@@ -2,7 +2,6 @@
 
 #include "kqp_db_counters.h"
 
-#include <library/cpp/actors/helpers/mon_histogram_helper.h>
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
 #include <ydb/core/util/concurrent_rw_hash.h>

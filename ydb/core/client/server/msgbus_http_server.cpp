@@ -155,8 +155,10 @@ TMessageBusHttpServer::TMessageBusHttpServer(TActorSystem* actorSystem, NBus::IB
     Status500 = HttpGroup->GetCounter("500", true);
     Status503 = HttpGroup->GetCounter("503", true);
     Status504 = HttpGroup->GetCounter("504", true);
-    RequestTotalTimeHistogram.Init(HttpGroup.Get(), "RequestTotalTime", "ms", 1, 20);
-    RequestPrepareTimeHistogram.Init(HttpGroup.Get(), "RequestPrepareTime", "ms", 1, 20);
+    RequestTotalTimeHistogram = HttpGroup->GetHistogram("RequestTotalTimeMs",
+        NMonitoring::ExponentialHistogram(20, 2, 1));
+    RequestPrepareTimeHistogram = HttpGroup->GetHistogram("RequestPrepareTimeMs",
+        NMonitoring::ExponentialHistogram(20, 2, 1));
     Monitor->Register(this);
 }
 
@@ -213,7 +215,7 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             TBusHttpServerSession session(this, request, Protocol, Config);
             TBusHttpIdentity identity;
             NBus::TOnMessageContext onMessageContext(message.Release(), identity, &session);
-            RequestPrepareTimeHistogram.Add(startTime.Passed() * 1000/*ms*/);
+            RequestPrepareTimeHistogram->Collect(startTime.Passed() * 1000/*ms*/);
             Handler->OnMessage(onMessageContext);
             session.Wait();
             RequestsActive->Dec();
@@ -221,7 +223,7 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             IOutputStream& out(request.Output());
             out << NMonitoring::HTTPNOTFOUND;
         }
-        RequestTotalTimeHistogram.Add(startTime.Passed() * 1000/*ms*/);
+        RequestTotalTimeHistogram->Collect(startTime.Passed() * 1000/*ms*/);
     }
 }
 

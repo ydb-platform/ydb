@@ -3,7 +3,6 @@
 
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <library/cpp/actors/helpers/mon_histogram_helper.h>
 
 namespace NKikimr {
 namespace NTxProxy {

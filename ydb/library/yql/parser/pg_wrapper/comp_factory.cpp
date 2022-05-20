@@ -29,6 +29,7 @@ extern "C" {
 #include "utils/array.h"
 #include "utils/arrayaccess.h"
 #include "utils/lsyscache.h"
+#include "utils/datetime.h"
 #include "nodes/execnodes.h"
 #include "executor/executor.h"
 #include "lib/stringinfo.h"
@@ -241,10 +242,11 @@ inline ui32 MakeTypeIOParam(const NPg::TTypeDesc& desc) {
 class TPgConst : public TMutableComputationNode<TPgConst> {
     typedef TMutableComputationNode<TPgConst> TBaseComputation;
 public:
-    TPgConst(TComputationMutables& mutables, ui32 typeId, const std::string_view& value)
+    TPgConst(TComputationMutables& mutables, ui32 typeId, const std::string_view& value, IComputationNode* typeMod)
         : TBaseComputation(mutables)
         , TypeId(typeId)
         , Value(value)
+        , TypeMod(typeMod)
         , TypeDesc(NPg::LookupType(TypeId))
     {
         Zero(FInfo);
@@ -262,6 +264,11 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        i32 typeMod = -1;
+        if (TypeMod) {
+            typeMod = DatumGetInt32(ScalarDatumFromPod(TypeMod->GetValue(compCtx)));
+        }
+
         LOCAL_FCINFO(callInfo, 3);
         Zero(*callInfo);
         FmgrInfo copyFmgrInfo = FInfo;
@@ -271,7 +278,7 @@ public:
         callInfo->isnull = false;
         callInfo->args[0] = { (Datum)Value.c_str(), false };
         callInfo->args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-        callInfo->args[2] = { Int32GetDatum(-1), false };
+        callInfo->args[2] = { Int32GetDatum(typeMod), false };
 
         TPAllocScope call;
         PG_TRY();
@@ -294,10 +301,14 @@ public:
 
 private:
     void RegisterDependencies() const final {
+        if (TypeMod) {
+            DependsOn(TypeMod);
+        }
     }
 
     const ui32 TypeId;
     const TString Value;
+    IComputationNode* const TypeMod;
     const NPg::TTypeDesc TypeDesc;
     FmgrInfo FInfo;
     ui32 TypeIOParam;
@@ -1360,7 +1371,12 @@ TComputationNodeFactory GetPgFactory() {
                 const auto valueData = AS_VALUE(TDataLiteral, callable.GetInput(1));
                 ui32 typeId = typeIdData->AsValue().Get<ui32>();
                 auto value = valueData->AsValue().AsStringRef();
-                return new TPgConst(ctx.Mutables, typeId, value);
+                IComputationNode* typeMod = nullptr;
+                if (callable.GetInputsCount() >= 3) {
+                    typeMod = LocateNode(ctx.NodeLocator, callable, 2);
+                }
+
+                return new TPgConst(ctx.Mutables, typeId, value, typeMod);
             }
 
             if (name == "PgInternal0") {
@@ -2020,6 +2036,41 @@ TMaybe<NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {
     return Nothing();
 }
 
+bool ParsePgIntervalModifier(const TString& str, i32& ret) {
+    auto ustr = to_upper(str);
+    if (ustr == "YEAR") {
+        ret = INTERVAL_MASK(YEAR);
+    } else if (ustr == "MONTH") {
+        ret = INTERVAL_MASK(YEAR);
+    } else if (ustr == "DAY") {
+        ret = INTERVAL_MASK(DAY);
+    } else if (ustr == "HOUR") {
+        ret = INTERVAL_MASK(HOUR);
+    } else if (ustr == "MINUTE") {
+        ret = INTERVAL_MASK(MINUTE);
+    } else if (ustr == "SECOND") {
+        ret = INTERVAL_MASK(SECOND);
+    } else if (ustr == "YEAR TO MONTH") {
+        ret = INTERVAL_MASK(YEAR) | INTERVAL_MASK(MONTH);
+    } else if (ustr == "DAY TO HOUR") {
+        ret = INTERVAL_MASK(DAY) | INTERVAL_MASK(HOUR);
+    } else if (ustr == "DAY TO MINUTE") {
+        ret = INTERVAL_MASK(DAY) | INTERVAL_MASK(HOUR) | INTERVAL_MASK(MINUTE);
+    } else if (ustr == "DAY TO SECOND") {
+        ret = INTERVAL_MASK(DAY) | INTERVAL_MASK(HOUR) | INTERVAL_MASK(MINUTE) | INTERVAL_MASK(SECOND);
+    } else if (ustr == "HOUR TO MINUTE") {
+        ret = INTERVAL_MASK(HOUR) | INTERVAL_MASK(MINUTE);
+    } else if (ustr == "HOUR TO SECOND") {
+        ret = INTERVAL_MASK(HOUR) | INTERVAL_MASK(MINUTE) | INTERVAL_MASK(SECOND);
+    } else if (ustr == "MINUTE TO SECOND") {
+        ret = INTERVAL_MASK(MINUTE) | INTERVAL_MASK(SECOND);
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
 } // NYql
 
 namespace NKikimr {
@@ -2676,7 +2727,6 @@ void get_type_io_data(Oid typid,
         break;
     }
 }
-
 
 }
 

@@ -160,4 +160,10 @@ TMaybe<NKikimr::NUdf::EDataSlot> ConvertFromPgType(ui32 typeId) {
     return Nothing();
 }
 
+bool ParsePgIntervalModifier(const TString& str, i32& ret) {
+    Y_UNUSED(str);
+    Y_UNUSED(ret);
+    return false;
+}
+
 } // NYql

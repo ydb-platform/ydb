@@ -607,7 +607,7 @@ public:
 class TYqlPgConst : public TCallNode {
 public:
     TYqlPgConst(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "PgConst", 2, 2, args)
+        : TCallNode(pos, "PgConst", 2, -1, args)
     {
     }
 
@@ -627,11 +627,63 @@ public:
             Args[0] = value;
         }
 
+        if (Args.size() > 2) {
+            TVector<TNodePtr> typeModArgs;
+            typeModArgs.push_back(Args[1]);
+            for (ui32 i = 2; i < Args.size(); ++i) {
+                if (!Args[i]->IsLiteral()) {
+                    ctx.Error(Args[i]->GetPos()) << "Expecting literal";
+                    return false;
+                }
+
+                typeModArgs.push_back(BuildQuotedAtom(Args[i]->GetPos(), Args[i]->GetLiteralValue()));
+            }
+
+            Args.erase(Args.begin() + 2, Args.end());
+            Args.push_back(new TCallNodeImpl(Pos, "PgTypeMod", typeModArgs));
+        }
+
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
         return new TYqlPgConst(Pos, CloneContainer(Args));
+    }
+};
+
+class TYqlPgCast : public TCallNode {
+public:
+    TYqlPgCast(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "PgCast", 2, -1, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (Args.size() > 2) {
+            TVector<TNodePtr> typeModArgs;
+            typeModArgs.push_back(Args[1]);
+            for (ui32 i = 2; i < Args.size(); ++i) {
+                if (!Args[i]->IsLiteral()) {
+                    ctx.Error(Args[i]->GetPos()) << "Expecting literal";
+                    return false;
+                }
+
+                typeModArgs.push_back(BuildQuotedAtom(Args[i]->GetPos(), Args[i]->GetLiteralValue()));
+            }
+
+            Args.erase(Args.begin() + 2, Args.end());
+            Args.push_back(new TCallNodeImpl(Pos, "PgTypeMod", typeModArgs));
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlPgCast(Pos, CloneContainer(Args));
     }
 };
 
@@ -2727,7 +2779,7 @@ struct TBuiltinFuncData {
             {"pgconst", BuildSimpleBuiltinFactoryCallback<TYqlPgConst>() },
             {"pgop", BuildSimpleBuiltinFactoryCallback<TYqlPgOp>() },
             {"pgcall", BuildSimpleBuiltinFactoryCallback<TYqlPgCall>() },
-            {"pgcast", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgCast", 2, 3) },
+            {"pgcast", BuildSimpleBuiltinFactoryCallback<TYqlPgCast>() },
             {"frompg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromPg", 1, 1) },
             {"topg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToPg", 1, 1) },
             {"pgor", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgOr", 2, 2) },

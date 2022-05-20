@@ -5034,7 +5034,7 @@ TRuntimeNode TProgramBuilder::Replicate(TRuntimeNode item, TRuntimeNode count, c
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& value) {
+TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& value, TRuntimeNode typeMod) {
     if constexpr (RuntimeVersion < 30U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
@@ -5042,6 +5042,10 @@ TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& v
     TCallableBuilder callableBuilder(Env, __func__, pgType);
     callableBuilder.Add(NewDataLiteral(pgType->GetTypeId()));
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(value));
+    if (typeMod) {
+        callableBuilder.Add(typeMod);
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

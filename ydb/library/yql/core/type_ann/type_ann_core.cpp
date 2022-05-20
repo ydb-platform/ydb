@@ -11283,6 +11283,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgWindowTraitsTuple"] = &PgAggregationTraitsWrapper;
         Functions["PgInternal0"] = &PgInternal0Wrapper;
         Functions["PgArray"] = &PgArrayWrapper;
+        Functions["PgTypeMod"] = &PgTypeModWrapper;
 
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;

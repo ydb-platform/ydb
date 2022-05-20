@@ -57,7 +57,7 @@ TString ArgTypesList(const TVector<ui32>& ids) {
             str << ',';
         }
 
-        str << LookupType(ids[i]).Name;
+        str << ids[i] ? LookupType(ids[i]).Name : "NULL";
     }
 
     str << ')';

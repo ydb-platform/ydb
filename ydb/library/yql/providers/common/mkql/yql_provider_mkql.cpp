@@ -2240,7 +2240,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("PgConst", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto type = AS_TYPE(TPgType, BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder));
-        return ctx.ProgramBuilder.PgConst(type, node.Head().Content());
+        TRuntimeNode typeMod;
+        if (node.ChildrenSize() >= 3) {
+            typeMod = MkqlBuildExpr(*node.Child(2), ctx);
+        }
+
+        return ctx.ProgramBuilder.PgConst(type, node.Head().Content(), typeMod);
     });
 
     AddCallable("PgInternal0", [](const TExprNode& node, TMkqlBuildContext& ctx) {

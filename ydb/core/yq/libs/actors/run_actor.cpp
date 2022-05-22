@@ -871,14 +871,14 @@ private:
         attr->SetName("EnableComputeActor");
         attr->SetValue("1");
 
-        TString queryTimeoutSec = (Params.QueryType == YandexQuery::QueryContent::STREAMING) ? "0" : ToString(TDuration::Days(7).Seconds());
+        TString queryTimeoutMs = (Params.QueryType == YandexQuery::QueryContent::STREAMING) ? "0" : ToString(TDuration::Days(7).MilliSeconds());
         attr = dqSettings.Add();
         attr->SetName("_TableTimeout");
-        attr->SetValue(queryTimeoutSec);
+        attr->SetValue(queryTimeoutMs);
 
         attr = dqSettings.Add();
         attr->SetName("_LiteralTimeout");
-        attr->SetValue(queryTimeoutSec);
+        attr->SetValue(queryTimeoutMs);
 
         switch (Params.QueryType) {
         case YandexQuery::QueryContent::STREAMING:

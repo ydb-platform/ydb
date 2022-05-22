@@ -8040,7 +8040,7 @@
         },
         "horadric": {
             "formula": {
-                "sandbox_id": 1316081125,
+                "sandbox_id": 1316869205,
                 "match": "horadric"
             },
             "executable": {
@@ -8183,7 +8183,7 @@
         },
         "apphost": {
             "formula": {
-                "sandbox_id": 1316074021,
+                "sandbox_id": 1316868253,
                 "match": "app_host_launcher"
             },
             "executable": {
@@ -8873,7 +8873,7 @@
         },
         "bigb_bb_cluster_analyzer": {
             "formula": {
-                "sandbox_id": 1316081124,
+                "sandbox_id": 1316865900,
                 "match": "bb_cluster_analyzer"
             },
             "executable": {
@@ -8919,7 +8919,7 @@
         },
         "caesar_yt_sync": {
             "formula": {
-                "sandbox_id": 1316084041,
+                "sandbox_id": 1316865940,
                 "match": "yt_sync"
             },
             "executable": {
@@ -8930,7 +8930,7 @@
         },
         "caesar_lookup_profile": {
             "formula": {
-                "sandbox_id": 1316073841,
+                "sandbox_id": 1316869818,
                 "match": "lookup_profile"
             },
             "executable": {
@@ -8985,7 +8985,7 @@
         },
         "caesar_profile_size_analyzer": {
             "formula": {
-                "sandbox_id": 1316073623,
+                "sandbox_id": 1316869363,
                 "match": "profile_size_analyzer"
             },
             "executable": {

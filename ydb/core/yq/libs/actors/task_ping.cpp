@@ -101,101 +101,8 @@ private:
     )
 
     std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> CreateControlPlaneEvent() {
-        auto event = std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(TenantName, CloudId, Scope, OperationId, OwnerId, Deadline);
-        const auto& req = Ev->Record;
-        ui64 issuesByteSize = 0;
-        ui64 transientIssuesByteSize = 0;
-        ui64 resultSetMetaByteSize = 0;
-        ui64 dqGraphBytesSize = 0;
-
-        //TODO use all fields
-        if (req.status() != YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED) {
-            event->Status = req.status();
-        }
-        if (!req.issues().empty()) {
-            NYql::TIssues reqIssues;
-            for (const auto& issue : req.issues()) {
-                issuesByteSize += issue.ByteSize();
-            }
-            NYql::IssuesFromMessage(req.issues(), reqIssues);
-            Issues.AddIssues(reqIssues);
-            event->Issues = Issues;
-        }
-        if (!req.transient_issues().empty()) {
-            NYql::TIssues transientIssues;
-            for (const auto& issue : req.transient_issues()) {
-                transientIssuesByteSize += issue.ByteSize();
-            }
-            NYql::IssuesFromMessage(req.transient_issues(), transientIssues);
-            event->TransientIssues = transientIssues;
-        }
-        if (req.statistics()) {
-            event->Statistics = req.statistics();
-        }
-        if (req.ast()) {
-            event->Ast = req.ast();
-        }
-        if (req.result_id().value()) {
-            event->ResultId = req.result_id().value();
-        }
-        if (req.plan()) {
-            event->Plan = req.plan();
-        }
-        if (!req.result_set_meta().empty()) {
-            for (const auto& rsMeta : req.result_set_meta()) {
-                resultSetMetaByteSize += rsMeta.ByteSize();
-            }
-            event->ResultSetMetas = {req.result_set_meta().begin(), req.result_set_meta().end()};
-        }
-        if (req.has_started_at()) {
-            event->StartedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.started_at()));
-        }
-        if (req.has_finished_at()) {
-            event->FinishedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.finished_at()));
-        }
-        event->ResignQuery = req.resign_query();
-        event->StatusCode = req.status_code();
-
-        event->CreatedTopicConsumers.reserve(req.created_topic_consumers_size());
-        for (const auto& topicConsumerProto : req.created_topic_consumers()) {
-            auto& topicConsumer = event->CreatedTopicConsumers.emplace_back();
-            topicConsumer.DatabaseId = topicConsumerProto.database_id();
-            topicConsumer.Database = topicConsumerProto.database();
-            topicConsumer.TopicPath = topicConsumerProto.topic_path();
-            topicConsumer.ConsumerName = topicConsumerProto.consumer_name();
-            topicConsumer.ClusterEndpoint = topicConsumerProto.cluster_endpoint();
-            topicConsumer.UseSsl = topicConsumerProto.use_ssl();
-            topicConsumer.TokenName = topicConsumerProto.token_name();
-            topicConsumer.AddBearerToToken = topicConsumerProto.add_bearer_to_token();
-        }
-
-        event->DqGraphs.reserve(req.dq_graph_size());
-        for (const auto& g : req.dq_graph()) {
-            dqGraphBytesSize += g.size();
-            event->DqGraphs.emplace_back(g);
-        }
-
-        if (req.state_load_mode()) {
-            event->StateLoadMode = req.state_load_mode();
-        }
-
-        if (req.has_disposition()) {
-            event->StreamingDisposition = req.disposition();
-        }
-
-
-        LOG_D("Statistics length: " << req.statistics().size() << ", "
-           << "Ast length: " << req.ast().size() << " bytes, "
-           << "Plan length: " << req.plan().size() << " bytes, "
-           << "Result set meta size: " << resultSetMetaByteSize << " bytes, "
-           << "Topic consumers size: " << event->CreatedTopicConsumers.size() * sizeof(TEvControlPlaneStorage::TTopicConsumer) << " bytes, "
-           << "Dq graphs size: " << dqGraphBytesSize << " bytes, "
-           << "Issues size: " << issuesByteSize << " bytes, "
-           << "Transient issues size: " << transientIssuesByteSize << " bytes");
-
-        event->DqGraphIndex = req.dq_graph_index();
-
-        return std::move(event);
+        auto request = Ev->Record;
+        return std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
     }
 
     void HandleResponse(NYq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev, const TActorContext& ctx) {
@@ -206,12 +113,10 @@ private:
             Fail("ControlPlane PingTaskError", Ydb::StatusIds::GENERIC_ERROR);
             return;
         }
-        auto res = MakeHolder<TEvents::TEvPingTaskResponse>();
-        res->Status = Ydb::StatusIds::SUCCESS;
-        Yq::Private::PingTaskResult result;
-        result.set_action(ev->Get()->Action);
-        res->Record.ConstructInPlace(result);
-        ctx.Send(Sender, res.Release());
+        auto response = MakeHolder<TEvents::TEvPingTaskResponse>();
+        response->Status = Ydb::StatusIds::SUCCESS;
+        response->Record.ConstructInPlace(ev->Get()->Record);
+        ctx.Send(Sender, response.Release());
         Die(ctx);
     }
 

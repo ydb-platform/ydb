@@ -307,7 +307,7 @@ private:
     {
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvPingTaskRequest::TPtr,
-            YandexQuery::QueryAction,
+            Yq::Private::PingTaskResult,
             TEvControlPlaneStorage::TEvPingTaskResponse>(ev, "PingTaskRequest");
     }
 

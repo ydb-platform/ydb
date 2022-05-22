@@ -446,112 +446,42 @@ struct TEvControlPlaneStorage {
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, EvPingTaskRequest> {
-        explicit TEvPingTaskRequest(const TString& tenantName, const TString& cloudId, const TString& scope, const TString& queryId, const TString& owner, const TInstant& deadline, const TString& resultId = "")
-            : TenantName(tenantName)
-            , CloudId(cloudId)
-            , Scope(scope)
-            , QueryId(queryId)
-            , Owner(owner)
-            , Deadline(deadline)
-            , ResultId(resultId)
-        {
-        }
+
+        TEvPingTaskRequest() = default;
+
+        explicit TEvPingTaskRequest(
+            Yq::Private::PingTaskRequest&& request)
+            : Request(std::move(request))
+        {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + TenantName.Size()
-                    + CloudId.Size()
-                    + Scope.Size()
-                    + QueryId.Size()
-                    + Owner.Size()
-                    + ResultId.Size()
-                    + Status.Empty() ? 0 : sizeof(*Status)
-                    + GetIssuesByteSize(Issues)
-                    + GetIssuesByteSize(TransientIssues)
-                    + Statistics.Empty() ? 0 : Statistics->Size()
-                    + ResultSetMetasByteSizeLong()
-                    + Ast.Empty() ? 0 : Ast->Size()
-                    + Plan.Empty() ? 0 : Plan->Size()
-                    + StartedAt.Empty() ? 0 : sizeof(*StartedAt)
-                    + FinishedAt.Empty() ? 0 : sizeof(*FinishedAt)
-                    + CreatedTopicConsumersByteSizeLong()
-                    + DqGraphByteSizeLong()
-                    + StreamingDisposition.Empty() ? 0 : StreamingDisposition->ByteSizeLong();
+                    + Request.ByteSizeLong();
         }
 
-        size_t ResultSetMetasByteSizeLong() const {
-            if (ResultSetMetas.Empty()) {
-                return 0;
-            }
-            size_t size = 0;
-            for (const auto& resultSet: *ResultSetMetas) {
-                size += resultSet.ByteSizeLong();
-            }
-            size += ResultSetMetas->size() * sizeof(YandexQuery::ResultSetMeta);
-            return size;
-        }
-
-        size_t CreatedTopicConsumersByteSizeLong() const {
-            size_t size = 0;
-            for (const auto& topic: CreatedTopicConsumers) {
-                size += topic.GetByteSize();
-            }
-            size += CreatedTopicConsumers.size() * sizeof(YandexQuery::ResultSetMeta);
-            return size;
-        }
-
-        size_t DqGraphByteSizeLong() const {
-            size_t size = 0;
-            for (const auto& graph: DqGraphs) {
-                size += graph.Size();
-            }
-            size += DqGraphs.size() * sizeof(TString);
-            return size;
-        }
-
-        const TString TenantName;
-        const TString CloudId;
-        const TString Scope;
-        const TString QueryId;
-        const TString Owner;
-        const TInstant Deadline;
-        TString ResultId;
-        TMaybe<YandexQuery::QueryMeta::ComputeStatus> Status;
-        TMaybe<NYql::TIssues> Issues;
-        TMaybe<NYql::TIssues> TransientIssues;
-        TMaybe<TString> Statistics;
-        TMaybe<TVector<YandexQuery::ResultSetMeta>> ResultSetMetas;
-        TMaybe<TString> Ast;
-        TMaybe<TString> Plan;
-        TMaybe<TInstant> StartedAt;
-        TMaybe<TInstant> FinishedAt;
-        bool ResignQuery = false;
-        ui64 StatusCode = 0;
-        TVector<TTopicConsumer> CreatedTopicConsumers;
-        TVector<TString> DqGraphs;
-        i32 DqGraphIndex = 0;
-        YandexQuery::StateLoadMode StateLoadMode = YandexQuery::STATE_LOAD_MODE_UNSPECIFIED;
-        TMaybe<YandexQuery::StreamingDisposition> StreamingDisposition;
+        Yq::Private::PingTaskRequest Request;
     };
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {
-        explicit TEvPingTaskResponse(const YandexQuery::QueryAction& action)
-            : Action(action)
-        {
-        }
 
-        explicit TEvPingTaskResponse(const NYql::TIssues& issues)
+        explicit TEvPingTaskResponse(
+            const Yq::Private::PingTaskResult& record)
+            : Record(record)
+        {}
+
+        explicit TEvPingTaskResponse(
+            const NYql::TIssues& issues)
             : Issues(issues)
-        {
-        }
+        {}
 
         size_t GetByteSize() const {
             return sizeof(*this)
+                    + Record.ByteSizeLong()
                     + GetIssuesByteSize(Issues)
                     + GetDebugInfoByteSize(DebugInfo);
         }
 
-        YandexQuery::QueryAction Action = YandexQuery::QUERY_ACTION_UNSPECIFIED;
+        Yq::Private::PingTaskResult Record;
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };

@@ -132,25 +132,23 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
     return config;
 }
 
-bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request) {
-    if (!request) {
-        return false;
-    }
-    return request->Status ||
-        request->Issues ||
-        request->TransientIssues ||
-        request->Statistics ||
-        request->ResultSetMetas ||
-        request->Ast ||
-        request->Plan ||
-        request->StartedAt ||
-        request->FinishedAt ||
-        request->ResignQuery ||
-        !request->CreatedTopicConsumers.empty() ||
-        !request->DqGraphs.empty() ||
-        request->DqGraphIndex ||
-        request->StateLoadMode ||
-        request->StreamingDisposition;
+bool DoesPingTaskUpdateQueriesTable(const Yq::Private::PingTaskRequest& request) {
+    return request.status() != YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED
+        || !request.issues().empty()
+        || !request.transient_issues().empty()
+        || !request.statistics()
+        || !request.result_set_meta().empty()
+        || request.ast()
+        || request.plan()
+        || request.has_started_at()
+        || request.has_finished_at()
+        || request.resign_query()
+        || !request.created_topic_consumers().empty()
+        || !request.dq_graph().empty()
+        || request.dq_graph_index()
+        || request.state_load_mode()
+        || request.has_disposition()
+    ;
 }
 
 NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items) {

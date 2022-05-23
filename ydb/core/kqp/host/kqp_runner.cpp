@@ -475,11 +475,13 @@ private:
 
         auto operations = TableOperationsToProto(dataQuery.Operations(), ctx);
         for (auto& op : operations) {
-            const auto& tableName = op.GetTable();
+            const auto tableName = op.GetTable();
+            auto operation = (TYdbOperation)op.GetOperation();
 
-            kql->AddOperations()->CopyFrom(op);
+            *kql->AddOperations() = std::move(op);
+
             const auto& desc = TransformCtx->Tables->GetTable(cluster, tableName);
-            TableDescriptionToTableInfo(desc, kql->AddTableInfo());
+            TableDescriptionToTableInfo(desc, operation, *kql->MutableTableInfo());
         }
 
         TransformCtx->PreparingKql = kql;

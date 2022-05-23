@@ -379,11 +379,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto result = session.ExecuteDataQuery(query,
                 TTxControl::BeginTx(), execSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), write ? EStatus::SUCCESS : EStatus::ABORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), write ? EStatus::SUCCESS : EStatus::SUCCESS, result.GetIssues().ToString());
 
             if (write) {
                 auto commit = result.GetTransaction()->Commit().GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), UseNewEngine ? EStatus::SUCCESS : EStatus::ABORTED, commit.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), UseNewEngine ? EStatus::SUCCESS : EStatus::SUCCESS, commit.GetIssues().ToString());
             }
         }
 

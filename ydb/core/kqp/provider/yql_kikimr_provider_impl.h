@@ -235,7 +235,9 @@ TMaybe<TString> GetIsolationLevel(const NKikimrKqp::EIsolationLevel& isolationLe
 TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations, TExprContext& ctx);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TKiOperationList& operations, TExprContext& ctx);
-void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, NKqpProto::TKqpTableInfo* info);
+
+void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, NProtoBuf::RepeatedPtrField<NKqpProto::TKqpTableInfo>& infos);
+void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos);
 
 NNodes::TExprBase DeduplicateByMembers(const NNodes::TExprBase& expr, const TSet<TString>& members, TExprContext& ctx,
     TPositionHandle pos);

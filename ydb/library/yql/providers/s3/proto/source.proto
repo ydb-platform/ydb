@@ -14,5 +14,5 @@ message TSource {
     repeated TPath Path = 3;
     optional string RowType = 4;
     optional string Format = 5;
-    optional string Compression = 6;
+    map<string, string> Settings = 6;
 }

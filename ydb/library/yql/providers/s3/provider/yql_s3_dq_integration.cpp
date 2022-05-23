@@ -84,6 +84,9 @@ public:
             const auto rowType = s3ReadObject.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             const auto& clusterName = s3ReadObject.DataSource().Cluster().StringValue();
 
+            const auto token = "cluster:default_" + clusterName;
+            YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
+
             TExprNode::TListType settings(1U,
                 ctx.Builder(s3ReadObject.Object().Pos())
                     .List()
@@ -91,19 +94,6 @@ public:
                         .Add(1, s3ReadObject.Object().Format().Ptr())
                     .Seal().Build()
             );
-
-            if (const auto& objectSettings = s3ReadObject.Object().Settings()) {
-                settings.emplace_back(
-                    ctx.Builder(objectSettings.Cast().Pos())
-                        .List()
-                            .Atom(0, "settings", TNodeFlags::Default)
-                            .Add(1, objectSettings.Cast().Ptr())
-                        .Seal().Build()
-                );
-            }
-
-            const auto token = "cluster:default_" + clusterName;
-            YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
 
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); useCoro && *useCoro && !s3ReadObject.Object().Format().Ref().IsAtom({"raw", "json_list"}))
                 return Build<TDqSourceWrap>(ctx, read->Pos())
@@ -114,12 +104,23 @@ public:
                             .Build()
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                        .Settings(s3ReadObject.Object().Settings())
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
                     .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
                     .Done().Ptr();
-            else
+            else {
+                if (const auto& objectSettings = s3ReadObject.Object().Settings()) {
+                    settings.emplace_back(
+                        ctx.Builder(objectSettings.Cast().Pos())
+                            .List()
+                                .Atom(0, "settings", TNodeFlags::Default)
+                                .Add(1, objectSettings.Cast().Ptr())
+                            .Seal().Build()
+                    );
+                }
+
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
                         .Paths(s3ReadObject.Object().Paths())
@@ -131,6 +132,7 @@ public:
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
                     .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
                     .Done().Ptr();
+            }
         }
         return read;
     }
@@ -158,8 +160,12 @@ public:
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
                 srcDesc.SetRowType(NCommon::WriteTypeToYson(parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), NYT::NYson::EYsonFormat::Text));
 
-                if (const auto compression = parseSettings.Compression())
-                    srcDesc.SetCompression(compression.Cast().StringValue().c_str());
+                if (const auto maySettings = parseSettings.Settings()) {
+                    const auto& settings = maySettings.Cast();
+                    for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
+                        srcDesc.MutableSettings()->insert({TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().Head().Content())});
+                    }
+                }
             }
 
             protoSettings.PackFrom(srcDesc);

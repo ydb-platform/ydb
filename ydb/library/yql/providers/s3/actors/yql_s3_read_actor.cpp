@@ -273,7 +273,7 @@ struct TReadSpec {
 
     NDB::ColumnsWithTypeAndName Columns;
     NDB::FormatSettings Settings;
-    TString Format;
+    TString Format, Compression;
 };
 
 class TS3ReadCoroImpl : public TActorCoroImpl {
@@ -642,6 +642,25 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
             colsumn.name = structType->GetMemberName(i);
         }
         readSpec->Format = params.GetFormat();
+
+        const auto& settings = params.GetSettings();
+        if (const auto it = settings.find("compression"); settings.cend() != it)
+            readSpec->Compression = it->second;
+
+#define SUPPORTED_FLAGS(xx) \
+        xx(skip_unknown_fields) \
+        xx(import_nested_json) \
+        xx(with_names_use_header) \
+        xx(null_as_default) \
+
+#define SET_FLAG(flag) \
+        if (const auto it = settings.find(#flag); settings.cend() != it) \
+            readSpec->Settings.flag = FromString<bool>(it->second);
+
+        SUPPORTED_FLAGS(SET_FLAG)
+
+#undef SET_FLAG
+#undef SUPPORTED_FLAGS
 
         const auto actor = new TS3StreamReadActor(inputIndex, std::move(gateway), params.GetUrl(), authToken, std::move(paths), readSpec, computeActorId, retryConfig);
         return {actor, actor};

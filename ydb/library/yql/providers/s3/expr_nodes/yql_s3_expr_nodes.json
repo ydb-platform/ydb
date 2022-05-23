@@ -59,7 +59,7 @@
             "Children": [
                 {"Index": 2, "Name": "Format", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 4, "Name": "Compression", "Type": "TCoAtom", "Optional": true}
+                {"Index": 4, "Name": "Settings", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

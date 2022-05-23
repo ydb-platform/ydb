@@ -80,8 +80,7 @@ public:
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (input->ChildrenSize() > TS3ParseSettings::idx_Compression && !EnsureAtom(*input->Child(TS3ParseSettings::idx_Compression), ctx)) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3ParseSettings::idx_Compression)->Pos()), "Expected compression atom."));
+        if (input->ChildrenSize() > TS3ParseSettings::idx_Settings && !EnsureTuple(*input->Child(TS3ParseSettings::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 

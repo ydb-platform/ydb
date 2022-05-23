@@ -1752,7 +1752,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             const auto monPort = TPortManager().GetPort();
             auto Counters = server.CleverServer->GetGRpcServerRootCounters();
-            NActors::TSyncHttpMon Monitoring({monPort, "localhost", 3, "root", "localhost", {}, {}, {}});
+            NActors::TSyncHttpMon Monitoring({
+                .Port = monPort,
+                .Address = "localhost",
+                .Threads = 3,
+                .Title = "root",
+                .Host = "localhost",
+            });
             Monitoring.RegisterCountersPage("counters", "Counters", Counters);
             Monitoring.Start();
 

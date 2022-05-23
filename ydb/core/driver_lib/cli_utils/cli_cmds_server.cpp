@@ -46,6 +46,7 @@ protected:
     ui32 MonitoringPort;
     TString MonitoringAddress;
     ui32 MonitoringThreads;
+    TString MonitoringCertificateFile;
     TString RestartsCountFile;
     TString TracePath;
     size_t CompileInflightLimit; // MiniKQLCompileService
@@ -186,6 +187,7 @@ protected:
             .RequiredArgument("NUM").StoreResult(&TenantNetwork);
         config.Opts->AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         config.Opts->AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
+        config.Opts->AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
         config.Opts->AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
         config.Opts->AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument();
 
@@ -550,6 +552,14 @@ protected:
             AppConfig.MutableMonitoringConfig()->SetMonitoringPort(MonitoringPort);
         if (MonitoringAddress)
             AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(MonitoringAddress);
+        if (MonitoringCertificateFile) {
+            TString sslCertificate = TUnbufferedFileInput(MonitoringCertificateFile).ReadAll();
+            if (!sslCertificate.empty()) {
+                AppConfig.MutableMonitoringConfig()->SetMonitoringCertificate(sslCertificate);
+            } else {
+                ythrow yexception() << "invalid ssl certificate file";
+            }
+        }
         if (SqsHttpPort)
             RunConfig.AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
         if (GRpcPort) {

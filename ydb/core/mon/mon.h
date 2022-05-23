@@ -28,6 +28,7 @@ public:
         TRequestAuthorizer Authorizer = DefaultAuthorizer;
         TVector<TString> AllowedSIDs;
         TString RedirectMainPageTo;
+        TString Certificate;
     };
 
     virtual ~TMon() = default;

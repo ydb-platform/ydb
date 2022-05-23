@@ -14,7 +14,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/testing/unittest/registar.h>  
+#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/json/json_reader.h>
 
 #include <util/string/join.h>
@@ -331,7 +331,13 @@ namespace NKikimr::NPersQueueTests {
 
                 const auto monPort = TPortManager().GetPort();
                 auto Counters = server.CleverServer->GetGRpcServerRootCounters();
-                NActors::TSyncHttpMon Monitoring({monPort, "localhost", 3, "root", "localhost", {}, {}, {}});
+                NActors::TSyncHttpMon Monitoring({
+                    .Port = monPort,
+                    .Address = "localhost",
+                    .Threads = 3,
+                    .Title = "root",
+                    .Host = "localhost",
+                });
                 Monitoring.RegisterCountersPage("counters", "Counters", Counters);
                 Monitoring.Start();
 

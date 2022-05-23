@@ -48,6 +48,7 @@ protected:
         TVector<ui64> ProxyBindToProxy;
         ui32 MonitoringPort;
         TString MonitoringAddress;
+        TString MonitoringCertificateFile;
         ui32 MonitoringThreads;
         TString RestartsCountFile;
         bool StartTracingBusProxy;

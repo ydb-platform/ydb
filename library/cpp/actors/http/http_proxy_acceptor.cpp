@@ -66,10 +66,11 @@ protected:
         if (err == 0) {
             err = Socket->Socket.Bind(bindAddress.get());
         }
+        TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
         if (err == 0) {
             err = Socket->Socket.Listen(LISTEN_QUEUE);
             if (err == 0) {
-                LOG_INFO_S(ctx, HttpLog, "Listening on " << bindAddress->ToString());
+                LOG_INFO_S(ctx, HttpLog, "Listening on " << schema << bindAddress->ToString());
                 SetNonBlock(Socket->Socket);
                 ctx.Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 TBase::Become(&TAcceptorActor::StateListening);
@@ -77,7 +78,7 @@ protected:
                 return;
             }
         }
-        LOG_WARN_S(ctx, HttpLog, "Failed to listen on " << bindAddress->ToString() << " - retrying...");
+        LOG_WARN_S(ctx, HttpLog, "Failed to listen on " << schema << bindAddress->ToString() << " - retrying...");
         ctx.ExecutorThread.Schedule(TDuration::Seconds(1), event.Release());
     }
 

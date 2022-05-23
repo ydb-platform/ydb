@@ -499,6 +499,8 @@ message TMonitoringConfig {
     optional string ProcessLocation = 11;
     optional string AllowOrigin = 12;
     optional string RedirectMainPageTo = 13 [default = "monitoring/"];
+    optional string MonitoringCertificate = 14;
+    optional string MonitoringCertificateFile = 15;
 }
 
 message TRestartsCountConfig {

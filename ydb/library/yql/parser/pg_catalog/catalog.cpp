@@ -57,7 +57,7 @@ TString ArgTypesList(const TVector<ui32>& ids) {
             str << ',';
         }
 
-        str << ids[i] ? LookupType(ids[i]).Name : "NULL";
+        str << (ids[i] ? LookupType(ids[i]).Name : "NULL");
     }
 
     str << ')';
@@ -1141,7 +1141,7 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
     }
 
     if (!ValidateProcArgs(*procPtr, argTypeIds)) {
-        throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types:" <<
+        throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types: " <<
             ArgTypesList(argTypeIds);
     }
 
@@ -1165,7 +1165,7 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
         return *d;
     }
 
-    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types:"
+    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types: "
         << ArgTypesList(argTypeIds);
 }
 

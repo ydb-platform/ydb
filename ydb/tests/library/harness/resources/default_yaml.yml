@@ -142,6 +142,7 @@ grpc_config:
   - "locking"
   - "kesus"
   - "pq"
+  - "pqcd"
   - "pqv1"
   - "datastreams"
   - "scripting"

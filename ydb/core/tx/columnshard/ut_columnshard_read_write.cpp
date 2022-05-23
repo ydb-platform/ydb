@@ -135,7 +135,7 @@ void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
     PlanSchemaTx(runtime, sender, snap);
 }
 
-void TestWriteImpl(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
+void TestWrite(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -278,8 +278,8 @@ void TestWriteReadDup() {
     }
 }
 
-void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbSchema(),
-                       TString codec = "") {
+void TestWriteRead(bool reboots, const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbSchema(),
+                   TString codec = "") {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -856,7 +856,62 @@ void TestCompactionInGranuleImpl(bool reboots) {
     }
 }
 
-void TestReadWithProgramImpl()
+using TAssignment = NKikimrSSA::TProgram::TAssignment;
+using TAggAssignment = NKikimrSSA::TProgram::TAggregateAssignment;
+
+// SELECT timestamp FROM t WHERE timestamp <op> saved_at
+static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssignment::FUNC_CMP_EQUAL) {
+    NKikimrSSA::TProgram ssa;
+
+    std::vector<ui32> columnIds = {1, 9};
+    ui32 tmpColumnId = 100;
+
+    auto* line1 = ssa.AddCommand();
+    auto* l1_assign = line1->MutableAssign();
+    l1_assign->MutableColumn()->SetId(tmpColumnId);
+    auto* l1_func = l1_assign->MutableFunction();
+    l1_func->SetId(compareId);
+    l1_func->AddArguments()->SetId(columnIds[0]);
+    l1_func->AddArguments()->SetId(columnIds[1]);
+
+    auto* line2 = ssa.AddCommand();
+    line2->MutableFilter()->MutablePredicate()->SetId(tmpColumnId);
+
+    auto* line3 = ssa.AddCommand();
+    line3->MutableProjection()->AddColumns()->SetId(columnIds[0]);
+    return ssa;
+}
+
+// SELECT some(timestamp), some(saved_at) FROM t
+NKikimrSSA::TProgram MakeSelectAggregates(TAggAssignment::EAggregateFunction aggId = TAggAssignment::AGG_ANY) {
+    NKikimrSSA::TProgram ssa;
+
+    std::vector<ui32> columnIds = {1, 9};
+    ui32 tmpColumnId = 100;
+
+    auto* line1 = ssa.AddCommand();
+    auto* groupBy = line1->MutableGroupBy();
+    //
+    auto* l1_agg1 = groupBy->AddAggregates();
+    l1_agg1->MutableColumn()->SetId(tmpColumnId);
+    auto* l1_agg1_f = l1_agg1->MutableFunction();
+    l1_agg1_f->SetId(aggId);
+    l1_agg1_f->AddArguments()->SetId(columnIds[0]);
+    //
+    auto* l1_agg2 = groupBy->AddAggregates();
+    l1_agg2->MutableColumn()->SetId(tmpColumnId + 1);
+    auto* l1_agg2_f = l1_agg2->MutableFunction();
+    l1_agg2_f->SetId(aggId);
+    l1_agg2_f->AddArguments()->SetId(columnIds[1]);
+
+    auto* line2 = ssa.AddCommand();
+    auto* proj = line2->MutableProjection();
+    proj->AddColumns()->SetId(tmpColumnId);
+    proj->AddColumns()->SetId(tmpColumnId + 1);
+    return ssa;
+}
+
+void TestReadWithProgram(const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbSchema())
 {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -869,15 +924,53 @@ void TestReadWithProgramImpl()
     runtime.DispatchEvents(options);
 
     ui64 metaShard = TTestTxConfig::TxTablet1;
+    ui64 writeId = 0;
     ui64 tableId = 1;
+    ui64 planStep = 100;
+    ui64 txId = 100;
 
     SetupSchema(runtime, sender, tableId);
+
+    { // write some data
+        bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema));
+        UNIT_ASSERT(ok);
+
+        ProposeCommit(runtime, sender, metaShard, txId, {writeId});
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+
+    ui32 numWrong = 1;
+    std::vector<TString> programs;
+    programs.push_back("XXXYYYZZZ");
+
     {
-        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId);
+        NKikimrSSA::TProgram ssa = MakeSelect(TAssignment::FUNC_CMP_EQUAL);
+        TString serialized;
+        UNIT_ASSERT(ssa.SerializeToString(&serialized));
+        NKikimrSSA::TOlapProgram program;
+        program.SetProgram(serialized);
+
+        programs.push_back("");
+        UNIT_ASSERT(program.SerializeToString(&programs.back()));
+    }
+
+    {
+        NKikimrSSA::TProgram ssa = MakeSelect(TAssignment::FUNC_CMP_NOT_EQUAL);
+        TString serialized;
+        UNIT_ASSERT(ssa.SerializeToString(&serialized));
+        NKikimrSSA::TOlapProgram program;
+        program.SetProgram(serialized);
+
+        programs.push_back("");
+        UNIT_ASSERT(program.SerializeToString(&programs.back()));
+    }
+
+    for (auto& programText : programs) {
+        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, planStep, txId, tableId);
         auto& readProto = Proto(readEvent);
 
         readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM);
-        readProto.SetOlapProgram("XXXYYYZZZ");
+        readProto.SetOlapProgram(programText);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
 
@@ -895,12 +988,13 @@ void TestReadWithProgramImpl()
         UNIT_ASSERT_EQUAL(resRead.GetData(), "");
     }
 
-    {
-        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId);
+    ui32 i = 0;
+    for (auto& programText : programs) {
+        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, planStep, txId, tableId);
         auto& readProto = Proto(readEvent);
 
         readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
-        readProto.SetOlapProgram("XXXYYYZZZ");
+        readProto.SetOlapProgram(programText);
 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
 
@@ -911,10 +1005,128 @@ void TestReadWithProgramImpl()
         auto& resRead = Proto(result);
         UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
+        if (i < numWrong) {
+            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
+            UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+            UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+            UNIT_ASSERT_EQUAL(resRead.GetData(), "");
+        } else {
+            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+            UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+            UNIT_ASSERT(resRead.GetData().size() > 0);
+
+            auto& meta = resRead.GetMeta();
+            auto& schema = meta.GetSchema();
+
+            TVector<TString> readData;
+            readData.push_back(resRead.GetData());
+
+            switch (i) {
+                case 1:
+                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"timestamp"}));
+                    UNIT_ASSERT(DataHas(readData, schema, {0, 100}, true));
+                    break;
+                case 2:
+                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"timestamp"}, 0));
+                    break;
+                default:
+                    break;
+            }
+        }
+        ++i;
+    }
+}
+
+void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbSchema()) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 metaShard = TTestTxConfig::TxTablet1;
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 planStep = 100;
+    ui64 txId = 100;
+
+    SetupSchema(runtime, sender, tableId);
+
+    { // write some data
+        bool ok = WriteData(runtime, sender, metaShard, writeId, tableId, MakeTestBlob({0, 100}, ydbSchema));
+        UNIT_ASSERT(ok);
+
+        ProposeCommit(runtime, sender, metaShard, txId, {writeId});
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+
+    // TODO: write some into index
+
+    std::vector<TString> programs;
+
+    {
+        NKikimrSSA::TProgram ssa = MakeSelectAggregates(TAggAssignment::AGG_ANY);
+        TString serialized;
+        UNIT_ASSERT(ssa.SerializeToString(&serialized));
+        NKikimrSSA::TOlapProgram program;
+        program.SetProgram(serialized);
+
+        programs.push_back("");
+        UNIT_ASSERT(program.SerializeToString(&programs.back()));
+    }
+
+    {
+        NKikimrSSA::TProgram ssa = MakeSelectAggregates(TAggAssignment::AGG_COUNT);
+        TString serialized;
+        UNIT_ASSERT(ssa.SerializeToString(&serialized));
+        NKikimrSSA::TOlapProgram program;
+        program.SetProgram(serialized);
+
+        programs.push_back("");
+        UNIT_ASSERT(program.SerializeToString(&programs.back()));
+    }
+
+    ui32 i = 0;
+    for (auto& programText : programs) {
+        auto* readEvent = new TEvColumnShard::TEvRead(sender, metaShard, planStep, txId, tableId);
+        auto& readProto = Proto(readEvent);
+
+        readProto.SetOlapProgramType(::NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
+        readProto.SetOlapProgram(programText);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, readEvent);
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(result);
+
+        auto& resRead = Proto(result);
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
+#if 0 // TODO
+        {
+            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+            UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+            UNIT_ASSERT(resRead.GetData().size() > 0);
+
+            auto& meta = resRead.GetMeta();
+            //auto& schema = meta.GetSchema();
+
+            TVector<TString> readData;
+            readData.push_back(resRead.GetData());
+
+            UNIT_ASSERT(CheckColumns(readData[0], meta, {"100", "101"}, 1));
+        }
+#else
         UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
-        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-        UNIT_ASSERT_EQUAL(resRead.GetData(), "");
+#endif
+        ++i;
     }
 }
 
@@ -922,11 +1134,11 @@ void TestReadWithProgramImpl()
 
 Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(Write) {
-        TestWriteImpl(TTestSchema::YdbSchema());
+        TestWrite(TTestSchema::YdbSchema());
     }
 
     Y_UNIT_TEST(WriteExoticTypes) {
-        TestWriteImpl(TTestSchema::YdbExoticSchema());
+        TestWrite(TTestSchema::YdbExoticSchema());
     }
 
     Y_UNIT_TEST(WriteReadDuplicate) {
@@ -934,23 +1146,23 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(WriteRead) {
-        TestWriteReadImpl(false);
+        TestWriteRead(false);
     }
 
     Y_UNIT_TEST(WriteReadExoticTypes) {
-        TestWriteReadImpl(false, TTestSchema::YdbExoticSchema());
+        TestWriteRead(false, TTestSchema::YdbExoticSchema());
     }
 
     Y_UNIT_TEST(RebootWriteRead) {
-        TestWriteReadImpl(true);
+        TestWriteRead(true);
     }
 
     Y_UNIT_TEST(WriteReadNoCompression) {
-        TestWriteReadImpl(true, TTestSchema::YdbSchema(), "none");
+        TestWriteRead(true, TTestSchema::YdbSchema(), "none");
     }
 
     Y_UNIT_TEST(WriteReadZSTD) {
-        TestWriteReadImpl(true, TTestSchema::YdbSchema(), "zstd");
+        TestWriteRead(true, TTestSchema::YdbSchema(), "zstd");
     }
 
     Y_UNIT_TEST(CompactionInGranule) {
@@ -961,8 +1173,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestCompactionInGranuleImpl(true);
     }
 
-    Y_UNIT_TEST(TestReadWithProgram) {
-        TestReadWithProgramImpl();
+    Y_UNIT_TEST(ReadWithProgram) {
+        TestReadWithProgram();
+    }
+
+    Y_UNIT_TEST(ReadAggregate) {
+        TestReadAggregate();
     }
 
     Y_UNIT_TEST(CompactionSplitGranule) {

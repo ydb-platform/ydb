@@ -48,7 +48,7 @@ struct TReadDescription {
     ui64 PlanStep = 0;
     ui64 TxId = 0;
 
-    void AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
+    bool AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program);
 };
 
 }

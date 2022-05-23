@@ -305,7 +305,7 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
         TPredicate(EOperation::Less, rightBorder, NArrow::MakeArrowSchema(rightColumns), toInclusive));
 }
 
-void TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
+bool TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
 {
     using TId = NKikimrSSA::TProgram::TCommand;
 
@@ -325,8 +325,10 @@ void TReadDescription::AddProgram(const IColumnResolver& columnResolver, const N
                 step = std::make_shared<NArrow::TProgramStep>();
                 break;
             case TId::kGroupBy:
+                // TODO
+                return false; // not implemented
             case TId::LINE_NOT_SET:
-                Y_VERIFY(false); // not implemented
+                Y_VERIFY(false);
                 break;
         }
     }
@@ -337,6 +339,7 @@ void TReadDescription::AddProgram(const IColumnResolver& columnResolver, const N
     }
 
     ProgramSourceColumns = std::move(info.Sources);
+    return true;
 }
 
 }

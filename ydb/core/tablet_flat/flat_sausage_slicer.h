@@ -2,6 +2,7 @@
 
 #include "util_fmt_abort.h"
 #include "flat_sausage_grind.h"
+#include <ydb/core/base/tablet.h>
 #include <util/thread/singleton.h>
 #include <library/cpp/blockcodecs/codecs.h>
 
@@ -18,7 +19,7 @@ namespace NPageCollection {
 
         }
 
-        TGlobId One(TVector<TLogoBlob> &refs, TString body, bool lz4) const
+        TGlobId One(TVector<TEvTablet::TLogEntryReference> &refs, TString body, bool lz4) const
         {
             if (body.size() > Block) {
                 Y_Fail(
@@ -37,7 +38,7 @@ namespace NPageCollection {
             return glob;
         }
 
-        TLargeGlobId Do(TVector<TLogoBlob> &refs, TString body, bool lz4) const
+        TLargeGlobId Do(TVector<TEvTablet::TLogEntryReference> &refs, TString body, bool lz4) const
         {
             if (body.size() >= Max<ui32>()) {
                 Y_Fail(

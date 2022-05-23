@@ -86,7 +86,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     }
 
     void SendToBS(const TLogoBlobID &id, const TString &buffer, const TActorContext &ctx,
-                  const NKikimrBlobStorage::EPutHandleClass handleClass) {
+                  const NKikimrBlobStorage::EPutHandleClass handleClass,
+                  TEvBlobStorage::TEvPut::ETactic tactic) {
         Y_VERIFY(id.TabletID() == Info->TabletID);
         const TTabletChannelInfo *channelInfo = Info->ChannelInfo(id.Channel());
         Y_VERIFY(channelInfo);
@@ -96,7 +97,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         ui64 cookie = RandomNumber<ui64>();
         RequestCookies ^= cookie;
 
-        SendPutToGroup(ctx, x->GroupID, Info.Get(), MakeHolder<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), handleClass, CommitTactic), cookie);
+        SendPutToGroup(ctx, x->GroupID, Info.Get(), MakeHolder<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), handleClass, tactic), cookie);
     }
 
 public:
@@ -123,8 +124,9 @@ public:
         // todo: cancelation
 
         const auto handleClass = NKikimrBlobStorage::TabletLog;
-        for (const auto &ref : References)
-            SendToBS(ref.Id, ref.Buffer, ctx, handleClass);
+        for (const auto &ref : References) {
+            SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic);
+        }
 
         const TLogoBlobID actualLogEntryId = TLogoBlobID(
             LogEntryID.TabletID(),
@@ -134,7 +136,7 @@ public:
             logEntryBuffer.size(),
             LogEntryID.Cookie()
         );
-        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog);
+        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog, CommitTactic);
 
         RepliesToWait = References.size() + 1;
         Become(&TThis::StateWait);

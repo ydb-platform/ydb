@@ -59,12 +59,13 @@ private:
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
-                Send(it->second, new TEvInternalService::TEvHealthCheckResponse(ev->Get()->Record));
+                Send(it->second, new TEvInternalService::TEvHealthCheckResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvHealthCheckResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)));
+                Send(it->second, new TEvInternalService::TEvHealthCheckResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
+            OriginalCookies.erase(ev->Cookie);
         }
     }
 
@@ -79,18 +80,20 @@ private:
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
-                Send(it->second, new TEvInternalService::TEvGetTaskResponse(ev->Get()->Record));
+                Send(it->second, new TEvInternalService::TEvGetTaskResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvGetTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)));
+                Send(it->second, new TEvInternalService::TEvGetTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
+            OriginalCookies.erase(ev->Cookie);
         }
     }
 
     void Handle(TEvInternalService::TEvPingTaskRequest::TPtr& ev) {
         Cookie++;
         Senders[Cookie] = ev->Sender;
+        OriginalCookies[Cookie] = ev->Cookie;
         auto request = ev->Get()->Request;
         Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvPingTaskRequest(std::move(request)), 0, Cookie);
     }
@@ -99,12 +102,13 @@ private:
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
-                Send(it->second, new TEvInternalService::TEvPingTaskResponse(ev->Get()->Record));
+                Send(it->second, new TEvInternalService::TEvPingTaskResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvPingTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)));
+                Send(it->second, new TEvInternalService::TEvPingTaskResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
+            OriginalCookies.erase(ev->Cookie);
         }
     }
 
@@ -119,18 +123,20 @@ private:
         auto it = Senders.find(ev->Cookie);
         if (it != Senders.end()) {
             if (ev->Get()->Issues.Size() == 0) {
-                Send(it->second, new TEvInternalService::TEvWriteResultResponse(ev->Get()->Record));
+                Send(it->second, new TEvInternalService::TEvWriteResultResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
             } else {
                 auto issues = ev->Get()->Issues;
-                Send(it->second, new TEvInternalService::TEvWriteResultResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)));
+                Send(it->second, new TEvInternalService::TEvWriteResultResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
+            OriginalCookies.erase(ev->Cookie);
         }
     }
 
     const NMonitoring::TDynamicCounterPtr ServiceCounters;
-    ui32 Cookie = 0;
-    THashMap<ui32, NActors::TActorId> Senders;
+    ui64 Cookie = 0;
+    THashMap<ui64, NActors::TActorId> Senders;
+    THashMap<ui64, ui64> OriginalCookies;
 };
 
 NActors::IActor* CreateLoopbackServiceActor(

@@ -39,3 +39,29 @@ SELECT 1 AS x, 2 as y
 UNION ALL
 SELECT * FROM AS_TABLE([<|x:3, y:4|>]); -- ошибка: порядок колонок в AS_TABLE не определен
 ```
+
+{% if feature_mapreduce %}
+
+{% note warning "Внимание" %}
+
+`UNION ALL` не выполняет физического слияния результатов подзапросов. В выдаче результатов работы `UNION ALL` каждый подселект может быть представлен отдельной ссылкой на Full result table, если общий результат превышает лимит на sample.
+
+Если необходимо видеть все результаты в виде одной ссылки Full result table, то нужно явно объединить их через запись во [временную таблицу](temporary_table.md):
+
+``` yql
+INSERT INTO @tmp
+SELECT 1 AS x
+UNION ALL
+SELECT 2 AS y
+UNION ALL
+SELECT 3 AS z;
+
+COMMIT;
+
+SELET * FROM @tmp;
+```
+
+{% endnote %}
+
+
+{% endif %}

@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
-#include <ydb/library/yql/dq/runtime/dq_sink.h>
+#include <ydb/library/yql/dq/runtime/dq_async_output.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -34,7 +34,7 @@ namespace NYql::NDq {
 // 2. CA runs program and gets results.
 // 3. CA calls IDqComputeActorAsyncOutput::SendData().
 // 4. If SendData() returns value less than 0, loop stops running until free space appears.
-// 5. When free space appears, sink calls ICallbacks::ResumeExecution() to start processing again.
+// 5. When free space appears, sink/transform calls ICallbacks::ResumeExecution() to start processing again.
 //
 // Checkpointing:
 // 1. InjectCheckpoint event arrives to CA.

@@ -1027,9 +1027,27 @@ class TableClientSettings(object):
 class ScanQueryResult(object):
     def __init__(self, result, table_client_settings):
         self._result = result
+        self.query_stats = result.query_stats
         self.result_set = convert.ResultSet.from_message(
             self._result.result_set, table_client_settings
         )
+
+
+@enum.unique
+class QueryStatsCollectionMode(enum.IntEnum):
+    NONE = _apis.ydb_table.QueryStatsCollection.Mode.STATS_COLLECTION_NONE
+    BASIC = _apis.ydb_table.QueryStatsCollection.Mode.STATS_COLLECTION_BASIC
+    FULL = _apis.ydb_table.QueryStatsCollection.Mode.STATS_COLLECTION_FULL
+
+
+class ScanQuerySettings(settings_impl.BaseRequestSettings):
+    def __init__(self):
+        super(ScanQuerySettings, self).__init__()
+        self.collect_stats = None
+
+    def with_collect_stats(self, collect_stats_mode):
+        self.collect_stats = collect_stats_mode
+        return self
 
 
 class ScanQuery(object):
@@ -1047,10 +1065,16 @@ def _scan_query_request_factory(query, parameters=None, settings=None):
     if not isinstance(query, ScanQuery):
         query = ScanQuery(query, {})
     parameters = {} if parameters is None else parameters
+    collect_stats = getattr(
+        settings,
+        "collect_stats",
+        _apis.ydb_table.QueryStatsCollection.Mode.STATS_COLLECTION_NONE,
+    )
     return _apis.ydb_table.ExecuteScanQueryRequest(
         mode=_apis.ydb_table.ExecuteScanQueryRequest.Mode.MODE_EXEC,
         query=_apis.ydb_table.Query(yql_text=query.yql_text),
         parameters=convert.parameters_to_pb(query.parameters_types, parameters),
+        collect_stats=collect_stats,
     )
 
 

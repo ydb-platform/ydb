@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
 import setuptools
 
-try:
-    from ydb_version import VERSION
-except ImportError:
-    VERSION = "0.0.1-dev"
-
 
 setuptools.setup(
     name="ydb",
-    version=VERSION,
+    version="2.4.0",
     description="YDB Python library",
     author="Yandex LLC",
     author_email="ydb@yandex-team.ru",

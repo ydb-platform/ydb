@@ -1,3 +1,7 @@
+## 2.4.0 ##
+
+* support query stats in scan query
+
 ## 2.2.0 ##
 
 * allow to refer endpoints by node id

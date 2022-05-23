@@ -33,6 +33,52 @@ async def test_read_table(driver, database):
 
 
 @pytest.mark.asyncio
+async def test_scan_query_with_query_stats(driver, database):
+    description = (
+        ydb.TableDescription()
+        .with_primary_keys("key1")
+        .with_columns(
+            ydb.Column("key1", ydb.OptionalType(ydb.PrimitiveType.Uint64)),
+            ydb.Column("value", ydb.OptionalType(ydb.PrimitiveType.Utf8)),
+        )
+    )
+
+    session = await driver.table_client.session().create()
+    await session.create_table(
+        database + "/test_scan_query_with_query_stats", description
+    )
+    await session.transaction(ydb.SerializableReadWrite()).execute(
+        """INSERT INTO `test_scan_query_with_query_stats` (`key1`, `value`) VALUES (1, "hello_world"), (2, "2")""",
+        commit_tx=True,
+    )
+
+    expected_res = [{"key1": 1, "value": "hello_world"}, {"key1": 2, "value": "2"}]
+    i = 0
+    async for resp in await driver.table_client.scan_query(
+        "select * from `test_scan_query_with_query_stats` order by key1"
+    ):
+        for row in resp.result_set.rows:
+            assert row == expected_res[i]
+            i += 1
+
+    i = 0
+    settings = ydb.ScanQuerySettings().with_collect_stats(
+        ydb.QueryStatsCollectionMode.FULL
+    )
+    last_response = None
+    async for resp in await driver.table_client.scan_query(
+        "select * from `test_scan_query_with_query_stats` order by key1",
+        settings=settings,
+    ):
+        last_response = resp
+        for row in resp.result_set.rows:
+            assert row == expected_res[i]
+            i += 1
+
+    assert len(last_response.query_stats.query_phases) > 0
+
+
+@pytest.mark.asyncio
 async def test_read_shard_table(driver, database):
     session: ydb.ISession = await driver.table_client.session().create()
     test_name = "read_shard_table"

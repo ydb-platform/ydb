@@ -1,3 +1,4 @@
-Python SDK for Yandex Database (YDB)
+YDB Python SDK
 ---
+
 Officially supported Python client for YDB.

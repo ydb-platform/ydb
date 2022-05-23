@@ -389,7 +389,7 @@ private:
         auto readyState1 = res->Record;
         auto readyState2 = res->Record;
         Send(ControlId, res.Release());
-        if (ResultId != SelfId()) {
+        if (ResultId != SelfId() && ResultId != ControlId) {
             Send(ResultId, new TEvReadyState(std::move(readyState1)));
         }
         if (CheckPointCoordinatorId) {

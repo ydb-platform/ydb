@@ -2,6 +2,7 @@
 
 #include "flat_page_iface.h"
 #include "flat_sausage_solid.h"
+#include "flat_table_stats.h"
 #include "flat_row_eggs.h"
 #include "util_basics.h"
 

@@ -405,7 +405,7 @@ bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<con
     auto ready = Database->Select(localTid, keyValues, columnTags, dbRow, stats, flags, GetReadVersion());
 
     kqpStats.NSelectRow = 1;
-    kqpStats.InvisibleRowSkips = stats.Invisible;
+    kqpStats.InvisibleRowSkips = stats.InvisibleRowSkips;
 
     switch (ready) {
         case EReady::Page:

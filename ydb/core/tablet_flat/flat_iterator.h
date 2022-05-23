@@ -22,11 +22,6 @@ enum class ENext {
     Uncommitted,
 };
 
-struct TIteratorStats {
-    ui64 DeletedRowSkips = 0;
-    ui64 InvisibleRowSkips = 0;
-};
-
 template<class TIteratorOps>
 class TTableItBase : TNonCopyable {
     enum class EType : ui8 {
@@ -238,7 +233,8 @@ public:
     TTableItBase(
         const TRowScheme* scheme, TTagsRef tags, ui64 lim = Max<ui64>(),
         TRowVersion snapshot = TRowVersion::Max(),
-        NTable::ITransactionMapPtr committedTransactions = nullptr);
+        NTable::ITransactionMapPtr committedTransactions = nullptr,
+        NTable::ITransactionObserverPtr transactionObserver = nullptr);
 
     ~TTableItBase();
 
@@ -341,6 +337,9 @@ private:
 
     // A map of currently committed transactions to corresponding row versions
     const NTable::ITransactionMapPtr CommittedTransactions;
+
+    // A transaction observer for detecting skips
+    const NTable::ITransactionObserverPtr TransactionObserver;
 
     EStage Stage = EStage::Seek;
     EReady Ready = EReady::Gone;
@@ -458,13 +457,15 @@ template<class TIteratorOps>
 inline TTableItBase<TIteratorOps>::TTableItBase(
         const TRowScheme* scheme, TTagsRef tags, ui64 limit,
         TRowVersion snapshot,
-        NTable::ITransactionMapPtr committedTransactions)
+        NTable::ITransactionMapPtr committedTransactions,
+        NTable::ITransactionObserverPtr transactionObserver)
     : Scheme(scheme)
     , Remap(*Scheme, tags)
     , Limit(limit)
     , State(Remap.Size())
     , SnapshotVersion(snapshot)
     , CommittedTransactions(std::move(committedTransactions))
+    , TransactionObserver(std::move(transactionObserver))
     , Comparator(Scheme->Keys->Types)
     , Active(Iterators.end())
     , Inactive(Iterators.end())
@@ -781,16 +782,14 @@ inline EReady TTableItBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
         TIteratorId ai = i->IteratorId;
         switch (ai.Type) {
             case EType::Mem: {
-                auto ready = MemIters[ai.Index]->SkipToRowVersion(rowVersion, CommittedTransactions);
-                Stats.InvisibleRowSkips += std::exchange(MemIters[ai.Index]->InvisibleRowSkips, 0);
+                auto ready = MemIters[ai.Index]->SkipToRowVersion(rowVersion, Stats, CommittedTransactions, TransactionObserver);
                 if (ready) {
                     return EReady::Data;
                 }
                 break;
             }
             case EType::Run: {
-                auto ready = RunIters[ai.Index]->SkipToRowVersion(rowVersion, CommittedTransactions);
-                Stats.InvisibleRowSkips += std::exchange(RunIters[ai.Index]->InvisibleRowSkips, 0);
+                auto ready = RunIters[ai.Index]->SkipToRowVersion(rowVersion, Stats, CommittedTransactions, TransactionObserver);
                 if (ready == EReady::Data) {
                     return EReady::Data;
                 } else if (ready != EReady::Gone) {
@@ -823,6 +822,7 @@ inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
             case EType::Mem: {
                 auto& it = *MemIters[ai.Index];
                 Y_VERIFY_DEBUG(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
+                TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
                 if (it.SkipDelta()) {
                     return EReady::Data;
                 }
@@ -831,6 +831,7 @@ inline EReady TTableItBase<TIteratorOps>::DoSkipUncommitted() noexcept
             case EType::Run: {
                 auto& it = *RunIters[ai.Index];
                 Y_VERIFY_DEBUG(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
+                TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
                 auto ready = it.SkipDelta();
                 if (ready != EReady::Gone) {
                     return ready;

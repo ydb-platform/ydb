@@ -70,27 +70,33 @@ public:
     TAutoPtr<TTableIt> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const noexcept;
     TAutoPtr<TTableIt> IterateExact(ui32 table, TRawVals key, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
-            const ITransactionMapPtr& visible = nullptr) const noexcept;
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
     TAutoPtr<TTableIt> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
-            const ITransactionMapPtr& visible = nullptr) const noexcept;
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
     TAutoPtr<TTableReverseIt> IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
-            const ITransactionMapPtr& visible = nullptr) const noexcept;
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     template<class TIteratorType>
     TAutoPtr<TIteratorType> IterateRangeGeneric(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
-            const ITransactionMapPtr& visible = nullptr) const noexcept;
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     // NOTE: the row refeneces data in some internal buffers that get invalidated on the next Select() or Commit() call
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row,
                   ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max(),
-                  const ITransactionMapPtr& visible = nullptr) const noexcept;
+                  const ITransactionMapPtr& visible = nullptr,
+                  const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row, TSelectStats& stats,
                   ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max(),
-                  const ITransactionMapPtr& visible = nullptr) const noexcept;
+                  const ITransactionMapPtr& visible = nullptr,
+                  const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     bool Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,

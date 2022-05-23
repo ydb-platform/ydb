@@ -198,6 +198,8 @@ namespace NTable {
                             ApplyColumn(row, up);
                         }
                     }
+                } else {
+                    // FIXME: add uncommitted tx to stats?
                 }
                 if (!isDelta) {
                     break;
@@ -225,7 +227,9 @@ namespace NTable {
          * Returns false if there is no such version, e.g. current key did not
          * exist or didn't have any known updates at this rowVersion.
          */
-        bool SkipToRowVersion(TRowVersion rowVersion, NTable::ITransactionMapSimplePtr committedTransactions) noexcept
+        bool SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
+                              NTable::ITransactionMapSimplePtr committedTransactions,
+                              NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
             Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
 
@@ -234,6 +238,7 @@ namespace NTable {
 
             // Skip uncommitted deltas
             while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) {
+                transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
                 if (!(chain = chain->Next)) {
                     CurrentVersion = nullptr;
                     return false;
@@ -254,7 +259,7 @@ namespace NTable {
                 }
             }
 
-            InvisibleRowSkips++;
+            stats.InvisibleRowSkips++;
 
             while ((chain = chain->Next)) {
                 if (chain->RowVersion.Step != Max<ui64>()) {
@@ -263,7 +268,7 @@ namespace NTable {
                         return true;
                     }
 
-                    InvisibleRowSkips++;
+                    stats.InvisibleRowSkips++;
                 } else {
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion && *commitVersion <= rowVersion) {
@@ -272,7 +277,9 @@ namespace NTable {
                     }
                     if (commitVersion) {
                         // Only committed deltas increment InvisibleRowSkips
-                        InvisibleRowSkips++;
+                        stats.InvisibleRowSkips++;
+                    } else {
+                        transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
                     }
                 }
             }
@@ -352,7 +359,6 @@ namespace NTable {
         const TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
         const TRemap* Remap = nullptr;
         IPages * const Env = nullptr;
-        ui64 InvisibleRowSkips = 0;
 
     private:
         NMem::TTreeIterator RowIt;

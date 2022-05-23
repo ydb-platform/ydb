@@ -315,7 +315,7 @@ public:
         rowState.Init(State.Columns.size());
         NTable::TSelectStats stats;
         auto ready = txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion);
-        RowsSinceLastCheck += 1 + stats.Invisible;
+        RowsSinceLastCheck += 1 + stats.InvisibleRowSkips;
         if (ready == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }

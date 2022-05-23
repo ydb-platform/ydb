@@ -86,7 +86,8 @@ namespace NTest {
 
         EReady SkipToRowVersion(TRowVersion rowVersion) noexcept
         {
-            Ready = Iter->SkipToRowVersion(rowVersion, /* committed */ nullptr);
+            TIteratorStats stats;
+            Ready = Iter->SkipToRowVersion(rowVersion, stats, /* committed */ nullptr, /* observer */ nullptr);
 
             if (Ready == EReady::Data)
                 Ready = RollUp();

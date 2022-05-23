@@ -315,5 +315,65 @@ namespace NTable {
         TIntrusivePtr<TState> State_;
     };
 
+    /**
+     * An interface for an optional observer of events during iteration
+     */
+    class ITransactionObserver : public TThrRefBase {
+    public:
+        /**
+         * Called when iterator skips over an uncommitted delta
+         *
+         * This may be used for detecting possible conflicts with transactions.
+         */
+        virtual void OnSkipUncommitted(ui64 txId) = 0;
+    };
+
+    /**
+     * Makes it easier to call observer methods even when pointer is nullptr
+     */
+    class ITransactionObserverPtr : public TIntrusivePtr<ITransactionObserver> {
+    public:
+        using TIntrusivePtr::TIntrusivePtr;
+
+        void OnSkipUncommitted(ui64 txId) const {
+            if (ITransactionObserver* p = Get()) {
+                p->OnSkipUncommitted(txId);
+            }
+        }
+    };
+
+    /**
+     * A simple pointer wrapper that may be useful as a function argument on a hot path
+     *
+     * Unlike a smart pointer it has no destructor and doesn't perform any Ref/UnRef
+     */
+    class ITransactionObserverSimplePtr {
+    public:
+        ITransactionObserverSimplePtr(const ITransactionObserverPtr& ptr)
+            : Ptr(ptr.Get())
+        { }
+
+        ITransactionObserverSimplePtr(ITransactionObserver* ptr)
+            : Ptr(ptr)
+        { }
+
+        ITransactionObserverSimplePtr(std::nullptr_t)
+            : Ptr(nullptr)
+        { }
+
+        explicit operator bool() const {
+            return bool(Ptr);
+        }
+
+        void OnSkipUncommitted(ui64 txId) const {
+            if (Ptr) {
+                Ptr->OnSkipUncommitted(txId);
+            }
+        }
+
+    private:
+        ITransactionObserver* Ptr;
+    };
+
 } // namespace NTable
 } // namespace NKikimr

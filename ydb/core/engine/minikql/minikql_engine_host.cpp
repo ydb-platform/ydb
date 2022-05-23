@@ -299,7 +299,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     ui64 flags = Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0;
     const auto ready = Db.Select(localTid, key, tags, dbRow, stats, flags, GetReadVersion(tableId));
 
-    Counters.InvisibleRowSkips += stats.Invisible;
+    Counters.InvisibleRowSkips += stats.InvisibleRowSkips;
 
     if (NTable::EReady::Page == ready) {
         if (auto collector = GetChangeCollector(tableId)) {

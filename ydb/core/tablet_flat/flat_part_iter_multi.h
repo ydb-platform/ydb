@@ -818,8 +818,9 @@ namespace NTable {
             }
         }
 
-        EReady SkipToRowVersion(TRowVersion rowVersion,
-                                NTable::ITransactionMapSimplePtr committedTransactions) noexcept
+        EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
+                                NTable::ITransactionMapSimplePtr committedTransactions,
+                                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
             Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to use an invalid iterator");
 
@@ -832,7 +833,7 @@ namespace NTable {
 
                 if (rowVersion < Part->MinRowVersion) {
                     // Don't bother seeking below the known first row version
-                    InvisibleRowSkips++;
+                    stats.InvisibleRowSkips++;
                     return EReady::Gone;
                 }
             }
@@ -852,7 +853,10 @@ namespace NTable {
                     }
                     if (commitVersion) {
                         // Skipping a newer committed delta
-                        InvisibleRowSkips++;
+                        stats.InvisibleRowSkips++;
+                    } else {
+                        // Skipping an uncommitted delta
+                        transactionObserver.OnSkipUncommitted(txId);
                     }
                     data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
                     if (!data) {
@@ -869,7 +873,7 @@ namespace NTable {
                         return EReady::Data;
                     }
                     SkipEraseVersion = true;
-                    InvisibleRowSkips++;
+                    stats.InvisibleRowSkips++;
                 }
 
                 TRowVersion current = data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion;
@@ -878,7 +882,7 @@ namespace NTable {
                     return EReady::Data;
                 }
 
-                InvisibleRowSkips++;
+                stats.InvisibleRowSkips++;
 
                 if (!data->HasHistory()) {
                     // There is no history, reset
@@ -1039,6 +1043,8 @@ namespace NTable {
                         if (row.IsFinalized()) {
                             return;
                         }
+                    } else {
+                        // FIXME: add uncommitted tx to stats?
                     }
                     // Skip deltas until the row is finalized
                     data = Main.GetRecord()->GetAltRecord(++index);
@@ -1168,7 +1174,6 @@ namespace NTable {
     public:
         const TPart* const Part;
         IPages* const Env;
-        ui64 InvisibleRowSkips = 0;
 
     private:
         const TPinout Pinout;
@@ -1493,13 +1498,12 @@ namespace NTable {
             return CurrentIt->GetRowVersion();
         }
 
-        EReady SkipToRowVersion(
-                TRowVersion rowVersion,
-                NTable::ITransactionMapSimplePtr committedTransactions) noexcept
+        EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
+                                NTable::ITransactionMapSimplePtr committedTransactions,
+                                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
         {
             Y_VERIFY_DEBUG(CurrentIt);
-            auto ready = CurrentIt->SkipToRowVersion(rowVersion, committedTransactions);
-            InvisibleRowSkips += std::exchange(CurrentIt->InvisibleRowSkips, 0);
+            auto ready = CurrentIt->SkipToRowVersion(rowVersion, stats, committedTransactions, transactionObserver);
             return ready;
         }
 
@@ -1584,7 +1588,6 @@ namespace NTable {
         TTagsRef const Tags;
         TIntrusiveConstPtr<TKeyCellDefaults> const KeyCellDefaults;
         IPages* const Env;
-        ui64 InvisibleRowSkips = 0;
 
     private:
         TRun::const_iterator Current;

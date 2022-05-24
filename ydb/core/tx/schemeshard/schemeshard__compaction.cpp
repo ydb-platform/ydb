@@ -1,7 +1,6 @@
 #include "schemeshard_impl.h"
 
-namespace NKikimr {
-namespace NSchemeShard {
+namespace NKikimr::NSchemeShard {
 
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardCompactionInfo& info) {
     UpdateBackgroundCompactionQueueMetrics();
@@ -138,7 +137,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     UpdateBackgroundCompactionQueueMetrics();
 }
 
-void TSchemeShard::EnqueueCompaction(
+void TSchemeShard::EnqueueBackgroundCompaction(
     const TShardIdx& shardIdx,
     const TTableInfo::TPartitionStats& stats)
 {
@@ -173,7 +172,7 @@ void TSchemeShard::EnqueueCompaction(
     UpdateBackgroundCompactionQueueMetrics();
 }
 
-void TSchemeShard::UpdateCompaction(
+void TSchemeShard::UpdateBackgroundCompaction(
     const TShardIdx& shardIdx,
     const TTableInfo::TPartitionStats& newStats)
 {
@@ -186,7 +185,7 @@ void TSchemeShard::UpdateCompaction(
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "background compaction update removed shard# " << shardIdx
             << " with borrowed parts at schemeshard " << TabletID());
-        RemoveCompaction(shardIdx);
+        RemoveBackgroundCompaction(shardIdx);
         return;
     }
 
@@ -194,7 +193,7 @@ void TSchemeShard::UpdateCompaction(
         LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "background compaction update removed shard# " << shardIdx
             << " with loaned parts at schemeshard " << TabletID());
-        RemoveCompaction(shardIdx);
+        RemoveBackgroundCompaction(shardIdx);
         return;
     }
 
@@ -212,7 +211,7 @@ void TSchemeShard::UpdateCompaction(
     UpdateBackgroundCompactionQueueMetrics();
 }
 
-void TSchemeShard::RemoveCompaction(const TShardIdx& shardIdx) {
+void TSchemeShard::RemoveBackgroundCompaction(const TShardIdx& shardIdx) {
     if (!CompactionQueue)
         return;
 
@@ -221,11 +220,15 @@ void TSchemeShard::RemoveCompaction(const TShardIdx& shardIdx) {
 }
 
 void TSchemeShard::ShardRemoved(const TShardIdx& shardIdx) {
-    RemoveCompaction(shardIdx);
+    RemoveBackgroundCompaction(shardIdx);
+    RemoveBorrowedCompaction(shardIdx);
     RemoveShardMetrics(shardIdx);
 }
 
 void TSchemeShard::UpdateBackgroundCompactionQueueMetrics() {
+    if (!CompactionQueue)
+        return;
+
     TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_SIZE].Set(CompactionQueue->Size());
     TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_RUNNING].Set(CompactionQueue->RunningSize());
     TabletCounters->Simple()[COUNTER_COMPACTION_QUEUE_WAITING_REPEAT].Set(CompactionQueue->WaitingSize());
@@ -300,5 +303,4 @@ void TSchemeShard::RemoveShardMetrics(const TShardIdx& shardIdx) {
     PartitionMetricsMap.erase(it);
 }
 
-} // NSchemeShard
-} // NKikimr
+} // NKikimr::NSchemeShard

@@ -110,6 +110,7 @@ enum ECumulativeCounters {
     COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START = 84    [(CounterOpts) = {Name: "TxCompactTableFailedStart"}];
     COUNTER_FULL_COMPACTION_DONE = 85                     [(CounterOpts) = {Name: "FullCompactionCount"}];
     COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED = 86   [(CounterOpts) = {Name: "TxCompactTableFailedLoaned"}];
+    COUNTER_TX_COMPACT_BORROWED = 87                      [(CounterOpts) = {Name: "TxCompactBorrowed"}];
 }
 
 enum EPercentileCounters {

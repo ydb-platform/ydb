@@ -555,10 +555,19 @@ void TOperationQueue<T, TQueue>::CheckTimeoutOperations() {
     while (!RunningItems.Empty()) {
         const auto& item = RunningItems.Front();
         if (item.Timestamp + Config.Timeout <= now) {
-            Starter.OnTimeout(item.Item);
-            if (Config.IsCircular)
-                ReEnqueueNoStart(std::move(item.Item));
+            auto movedItem = std::move(item.Item);
+
+            // we want to pop before calling OnTimeout, because
+            // it might want to enqueue in case of non-circular
+            // queue
             RunningItems.PopFront();
+
+            // note that OnTimeout() can enqueue item back
+            // in case of non-circular queue
+            Starter.OnTimeout(movedItem);
+
+            if (Config.IsCircular)
+                ReEnqueueNoStart(std::move(movedItem));
             continue;
         }
         break;

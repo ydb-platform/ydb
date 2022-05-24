@@ -155,6 +155,9 @@ enum ESimpleCounters {
     COUNTER_COMPACTION_QUEUE_WAITING_REPEAT = 126         [(CounterOpts) = {Name: "BackgroundCompactionQueueWaitingRepeat"}];
     COUNTER_SHARDS_WITH_BORROWED_DATA = 127               [(CounterOpts) = {Name: "TableShardsWithBorrowedData"}];
     COUNTER_SHARDS_WITH_LOANED_DATA = 128                 [(CounterOpts) = {Name: "TableShardsWithLoanedData"}];
+
+    COUNTER_BORROWED_COMPACTION_QUEUE_SIZE = 129          [(CounterOpts) = {Name: "BorrowedCompactionQueueSize"}];
+    COUNTER_BORROWED_COMPACTION_QUEUE_RUNNING = 130       [(CounterOpts) = {Name: "BorrowedCompactionQueueRunning"}];
 }
 
 enum ECumulativeCounters {
@@ -246,6 +249,9 @@ enum ECumulativeCounters {
     COUNTER_BACKGROUND_COMPACTION_BORROWED = 73           [(CounterOpts) = {Name: "BackgroundCompactionBorrowed"}];
     COUNTER_BACKGROUND_COMPACTION_NOT_NEEDED = 74         [(CounterOpts) = {Name: "BackgroundCompactionNotNeeded"}];
     COUNTER_BACKGROUND_COMPACTION_LOANED = 75             [(CounterOpts) = {Name: "BackgroundCompactionLoaned"}];
+
+    COUNTER_BORROWED_COMPACTION_OK = 76                  [(CounterOpts) = {Name: "BorrowedCompactionOK"}];
+    COUNTER_BORROWED_COMPACTION_TIMEOUT = 77             [(CounterOpts) = {Name: "BorrowedCompactionTimeout"}];
 }
 
 enum EPercentileCounters {

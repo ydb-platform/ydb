@@ -380,7 +380,7 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
     NIceDb::TNiceDb db(context.GetDB());
 
     // Erase previous partitioning as we are going to generate new one
-    context.SS->DeleteTablePartitioning(db, txState.TargetPathId, dstTableInfo);
+    context.SS->PersistTablePartitioningDeletion(db, txState.TargetPathId, dstTableInfo);
 
     // Remove old shardIdx info and old txShards
     for (const auto& shard : txState.Shards) {

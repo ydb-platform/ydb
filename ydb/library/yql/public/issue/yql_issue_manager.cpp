@@ -50,18 +50,6 @@ void TIssueManager::LeaveScope() {
         }
     }
     RawIssues_.pop();
-    MakeIssueForEmptyScope();
-
-    if (subIssue->GetCode() == Max<ui32>()) {
-        for (const auto& nestedIssue : subIssue->GetSubIssues()) {
-            RawIssues_.top().first->Get()->AddSubIssue(nestedIssue);
-        }
-    } else {
-        RawIssues_.top().first->Get()->AddSubIssue(subIssue);
-    }
-}
-
-void TIssueManager::MakeIssueForEmptyScope() {
     if (RawIssues_.top().first.Empty()) {
         RawIssues_.top().first = RawIssues_.top().second();
         if (!*RawIssues_.top().first) {
@@ -70,6 +58,14 @@ void TIssueManager::MakeIssueForEmptyScope() {
         } else {
            (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
         }
+    }
+
+    if (subIssue->GetCode() == Max<ui32>()) {
+        for (const auto& nestedIssue : subIssue->GetSubIssues()) {
+            RawIssues_.top().first->Get()->AddSubIssue(nestedIssue);
+        }
+    } else {
+        RawIssues_.top().first->Get()->AddSubIssue(subIssue);
     }
 }
 
@@ -107,7 +103,15 @@ void TIssueManager::RaiseIssue(const TIssue& issue) {
         CompletedIssues_.AddIssue(issue);
         return;
     }
-    MakeIssueForEmptyScope();
+    if (RawIssues_.top().first.Empty()) {
+        RawIssues_.top().first = RawIssues_.top().second();
+        if (!*RawIssues_.top().first) {
+            RawIssues_.top().first = new TIssue();
+            (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO);
+        } else {
+            (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
+       }
+    }
     RawIssues_.top().first->Get()->AddSubIssue(p);
 }
 

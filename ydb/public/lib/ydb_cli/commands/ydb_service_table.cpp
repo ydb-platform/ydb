@@ -503,7 +503,8 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 
 void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator& result) {
     SetInterruptHandlers();
-    TStringStream statsStr;
+    TMaybe<TString> stats;
+    TMaybe<TString> fullStats;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -522,18 +523,23 @@ void TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
 
             if (streamPart.HasQueryStats()) {
                 const auto& queryStats = streamPart.GetQueryStats();
-                statsStr << Endl << queryStats.ToString(false) << Endl;
+                stats = queryStats.ToString();
 
-                auto plan = queryStats.GetPlan();
-                if (plan) {
-                    statsStr << "Full statistics:" << Endl << *plan << Endl;
+                if (queryStats.GetPlan()) {
+                    fullStats = queryStats.GetPlan();
                 }
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
-    if (statsStr.Size()) {
-        Cout << Endl << "Statistics:" << statsStr.Str();
+    if (stats) {
+        Cout << Endl << "Statistics:" << Endl << *stats;
+    }
+
+    if (fullStats) {
+        Cout << Endl << "Full statistics:" << Endl;
+        TQueryPlanPrinter queryPlanPrinter(EOutputFormat::Pretty, /* analyzeMode */ true);
+        queryPlanPrinter.Print(*fullStats);
     }
 
     if (IsInterrupted()) {

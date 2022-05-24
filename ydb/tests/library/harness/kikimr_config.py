@@ -24,6 +24,12 @@ if PDISK_SIZE_STR.endswith("GB"):
 else:
     PDISK_SIZE = int(PDISK_SIZE_STR)
 
+KNOWN_STATIC_YQL_UDFS = set([
+    "yql/udfs/common/unicode",
+    "yql/udfs/common/url",
+    "yql/udfs/common/compress",
+])
+
 
 def get_fqdn():
     hostname = socket.gethostname()
@@ -367,6 +373,9 @@ class KikimrConfigGenerator(object):
         udfs_path = self.__udfs_path or yatest_common.build_path("yql/udfs")
         result = []
         for dirpath, dnames, fnames in os.walk(udfs_path):
+            if dirpath in KNOWN_STATIC_YQL_UDFS:
+                continue
+
             for f in fnames:
                 if f.endswith(".so"):
                     full = os.path.join(dirpath, f)

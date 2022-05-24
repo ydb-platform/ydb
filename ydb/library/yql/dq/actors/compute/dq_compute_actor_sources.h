@@ -21,33 +21,33 @@ class IActor;
 
 namespace NYql::NDq {
 
-// Source actor.
+// Source/transform.
 // Must be IActor.
 //
 // Protocol:
-// 1. CA starts source actor.
-// 2. CA calls IDqSourceActor::GetSourceData(batch, FreeSpace).
-// 3. Source actor sends TEvNewSourceDataArrived when it has data to process.
-// 4. CA calls IDqSourceActor::GetSourceData(batch, FreeSpace) to get data when it is ready to process it.
+// 1. CA starts source/transform.
+// 2. CA calls IDqComputeActorAsyncInput::GetAsyncInputData(batch, FreeSpace).
+// 3. Source/transform sends TEvNewAsyncInputDataArrived when it has data to process.
+// 4. CA calls IDqComputeActorAsyncInput::GetAsyncInputData(batch, FreeSpace) to get data when it is ready to process it.
 //
-// In case of error source actor sends TEvSourceError
+// In case of error source/transform sends TEvAsyncInputError
 //
 // Checkpointing:
 // 1. InjectCheckpoint event arrives to CA.
 // 2. ...
-// 3. CA calls IDqSourceActor::SaveState() and IDqTaskRunner::SaveGraphState() and uses this pair as state for CA.
+// 3. CA calls IDqComputeActorAsyncInput::SaveState() and IDqTaskRunner::SaveGraphState() and uses this pair as state for CA.
 // 3. ...
-// 5. CA calls IDqSourceActor::CommitState() to apply all side effects.
-struct IDqSourceActor {
-    struct TEvNewSourceDataArrived : public NActors::TEventLocal<TEvNewSourceDataArrived, TDqComputeEvents::EvNewSourceDataArrived> {
+// 5. CA calls IDqComputeActorAsyncInput::CommitState() to apply all side effects.
+struct IDqComputeActorAsyncInput {
+    struct TEvNewAsyncInputDataArrived : public NActors::TEventLocal<TEvNewAsyncInputDataArrived, TDqComputeEvents::EvNewAsyncInputDataArrived> {
         const ui64 InputIndex;
-        explicit TEvNewSourceDataArrived(ui64 inputIndex)
+        explicit TEvNewAsyncInputDataArrived(ui64 inputIndex)
             : InputIndex(inputIndex)
         {}
     };
 
-    struct TEvSourceError : public NActors::TEventLocal<TEvSourceError, TDqComputeEvents::EvSourceError> {
-        TEvSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal)
+    struct TEvAsyncInputError : public NActors::TEventLocal<TEvAsyncInputError, TDqComputeEvents::EvAsyncInputError> {
+        TEvAsyncInputError(ui64 inputIndex, const TIssues& issues, bool isFatal)
             : InputIndex(inputIndex)
             , Issues(issues)
             , IsFatal(isFatal)
@@ -63,7 +63,7 @@ struct IDqSourceActor {
     // Gets data and returns space used by filled data batch.
     // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
-    virtual i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, bool& finished, i64 freeSpace) = 0;
+    virtual i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, bool& finished, i64 freeSpace) = 0;
 
     // Checkpointing.
     virtual void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TSourceState& state) = 0;
@@ -72,11 +72,11 @@ struct IDqSourceActor {
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
-    virtual ~IDqSourceActor() = default;
+    virtual ~IDqComputeActorAsyncInput() = default;
 };
 
-struct IDqSourceActorFactory : public TThrRefBase {
-    using TPtr = TIntrusivePtr<IDqSourceActorFactory>;
+struct IDqSourceFactory : public TThrRefBase {
+    using TPtr = TIntrusivePtr<IDqSourceFactory>;
 
     struct TArguments {
         const NDqProto::TTaskInput& InputDesc;
@@ -89,10 +89,10 @@ struct IDqSourceActorFactory : public TThrRefBase {
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     };
 
-    // Creates source actor.
+    // Creates source.
     // Could throw YQL errors.
-    // IActor* and IDqSourceActor* returned by method must point to the objects with consistent lifetime.
-    virtual std::pair<IDqSourceActor*, NActors::IActor*> CreateDqSourceActor(TArguments&& args) const = 0;
+    // IActor* and IDqComputeActorAsyncInput* returned by method must point to the objects with consistent lifetime.
+    virtual std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSource(TArguments&& args) const = 0;
 };
 
 } // namespace NYql::NDq

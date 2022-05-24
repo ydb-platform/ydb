@@ -22,7 +22,7 @@ class TDqSourceFactory;
 
 const i64 PQReadDefaultFreeSpace = 16_MB;
 
-std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
+std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
     TTxId txId,

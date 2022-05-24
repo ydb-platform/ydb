@@ -736,7 +736,7 @@ public:
         return InputIndex;
     }
 
-    const TDqSourceStats* GetStats() const override {
+    const TDqAsyncInputBufferStats* GetStats() const override {
         try {
             NDqProto::TCommandHeader header;
             header.SetVersion(4);
@@ -789,7 +789,7 @@ public:
 private:
     ui64 TaskId;
     ui64 InputIndex;
-    mutable TDqSourceStats Stats;
+    mutable TDqAsyncInputBufferStats Stats;
 
     IPipeTaskRunner* TaskRunner;
     IInputStream& Input;

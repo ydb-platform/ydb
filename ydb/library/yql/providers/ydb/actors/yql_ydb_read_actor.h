@@ -9,7 +9,7 @@
 
 namespace NYql::NDq {
 
-std::pair<NYql::NDq::IDqSourceActor*, NActors::IActor*> CreateYdbReadActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateYdbReadActor(
     NYql::NYdb::TSource&& params,
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,

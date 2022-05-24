@@ -49,7 +49,7 @@ struct TOutputChannel {
 };
 
 struct TSourceInfo {
-    IDqSourceActor* SourceActor = nullptr;
+    IDqComputeActorAsyncInput* Source = nullptr;
     NActors::IActor* Actor = nullptr;
     i64 FreeSpace = 1;
     bool HasData = false;
@@ -76,12 +76,12 @@ public:
 
     explicit TDqWorker(
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-        const IDqSourceActorFactory::TPtr& sourceActorFactory,
+        const IDqSourceFactory::TPtr& sourceFactory,
         const IDqSinkFactory::TPtr& sinkFactory,
         TWorkerRuntimeData* runtimeData,
         const TString& traceId)
         : TRichActor<TDqWorker>(&TDqWorker::Handler)
-        , SourceActorFactory(sourceActorFactory)
+        , SourceFactory(sourceFactory)
         , SinkFactory(sinkFactory)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
@@ -116,7 +116,7 @@ public:
             Actor->PassAway();
         }
         for (const auto& [_, v] : SourcesMap) {
-            v.SourceActor->PassAway();
+            v.Source->PassAway();
         }
         for (const auto& [_, v] : SinksMap) {
             v.Sink->PassAway();
@@ -146,8 +146,8 @@ private:
         HFunc(TEvContinueRun, OnContinueRun);
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup);
 
-        hFunc(IDqSourceActor::TEvNewSourceDataArrived, OnNewSourceDataArrived);
-        hFunc(IDqSourceActor::TEvSourceError, OnSourceError);
+        hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
+        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
     })
 
     void ExtractStats(::Ydb::Issue::IssueMessage* issue) {
@@ -275,9 +275,9 @@ private:
                     if (input.HasSource()) {
                         auto& source = SourcesMap[inputId];
                         source.TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
-                        std::tie(source.SourceActor, source.Actor) =
-                            SourceActorFactory->CreateDqSourceActor(
-                            IDqSourceActorFactory::TArguments{
+                        std::tie(source.Source, source.Actor) =
+                            SourceFactory->CreateDqSource(
+                            IDqSourceFactory::TArguments{
                                 .InputDesc = input,
                                 .InputIndex = static_cast<ui64>(inputId),
                                 .TxId = TraceId,
@@ -577,7 +577,7 @@ private:
                     auto guard = source.TypeEnv->BindAllocator();
                     NKikimr::NMiniKQL::TUnboxedValueVector batch;
                     bool finished = false;
-                    const i64 space = source.SourceActor->GetSourceData(batch, finished, freeSpace);
+                    const i64 space = source.Source->GetAsyncInputData(batch, finished, freeSpace);
                     const ui64 index = inputIndex;
                     if (space <= 0) {
                         continue;
@@ -667,8 +667,8 @@ private:
         }
     }
 
-    /*____________________ SourceActorEvents __________________*/
-    void OnNewSourceDataArrived(const IDqSourceActor::TEvNewSourceDataArrived::TPtr& ev) {
+    /*____________________ SourceEvents __________________*/
+    void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {
         try {
             if (!TaskRunnerPrepared) {
                 return;
@@ -680,7 +680,7 @@ private:
             SendFailure(MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::UNSPECIFIED, CurrentExceptionMessage()));
         }
     }
-    void OnSourceError(const IDqSourceActor::TEvSourceError::TPtr& ev) {
+    void OnAsyncInputError(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
         Y_UNUSED(ev->Get()->InputIndex);
         SendFailure(MakeHolder<TEvDqFailure>(ev->Get()->IsFatal ? NYql::NDqProto::StatusIds::UNSPECIFIED : NYql::NDqProto::StatusIds::INTERNAL_ERROR, ev->Get()->Issues.ToString()));
     }
@@ -725,7 +725,7 @@ private:
 
     /*_________________________________________________________*/
 
-    IDqSourceActorFactory::TPtr SourceActorFactory;
+    IDqSourceFactory::TPtr SourceFactory;
     IDqSinkFactory::TPtr SinkFactory;
     ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
     NTaskRunnerActor::ITaskRunnerActor* Actor = nullptr;
@@ -764,14 +764,14 @@ NActors::IActor* CreateWorkerActor(
     TWorkerRuntimeData* runtimeData,
     const TString& traceId,
     const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    const IDqSourceActorFactory::TPtr& sourceActorFactory,
+    const IDqSourceFactory::TPtr& sourceFactory,
     const IDqSinkFactory::TPtr& sinkFactory)
 {
     Y_VERIFY(taskRunnerActorFactory);
     return new TLogWrapReceive(
         new TDqWorker(
             taskRunnerActorFactory,
-            sourceActorFactory,
+            sourceFactory,
             sinkFactory,
             runtimeData,
             traceId), traceId);

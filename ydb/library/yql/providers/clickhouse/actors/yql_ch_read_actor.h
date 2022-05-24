@@ -8,7 +8,7 @@
 
 namespace NYql::NDq {
 
-std::pair<NYql::NDq::IDqSourceActor*, NActors::IActor*> CreateClickHouseReadActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateClickHouseReadActor(
     IHTTPGateway::TPtr gateway,
     NCH::TSource&& params,
     ui64 inputIndex,
@@ -18,4 +18,3 @@ std::pair<NYql::NDq::IDqSourceActor*, NActors::IActor*> CreateClickHouseReadActo
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq
-

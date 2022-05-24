@@ -43,7 +43,7 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
 
     template<typename T>
     std::vector<T> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {
-        return CaSetup->SourceRead(parser, freeSpace);
+        return CaSetup->AsyncInputRead(parser, freeSpace);
     }
 
     template<typename T>
@@ -53,7 +53,7 @@ struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
         i64 eachReadFreeSpace = 1000,
         TDuration timeout = TDuration::Seconds(10))
     {
-        return CaSetup->SourceReadUntil(parser, size, eachReadFreeSpace, timeout);
+        return CaSetup->AsyncInputReadUntil(parser, size, eachReadFreeSpace, timeout);
     }
 
     void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) {

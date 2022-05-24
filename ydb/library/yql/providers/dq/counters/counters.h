@@ -220,8 +220,8 @@ struct TCounters {
     }
 
     void AddSourceStats(
-        const NDq::TDqSourceStats& currentStats,
-        NDq::TDqSourceStats& oldStats,
+        const NDq::TDqAsyncInputBufferStats& currentStats,
+        NDq::TDqAsyncInputBufferStats& oldStats,
         ui64 taskId, ui64 inputIndex)
     {
         std::map<TString, TString> labels = {

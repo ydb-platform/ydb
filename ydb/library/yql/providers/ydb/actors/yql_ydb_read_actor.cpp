@@ -68,7 +68,7 @@ bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVec
 
 } // namespace
 
-class TYdbReadActor : public TActorBootstrapped<TYdbReadActor>, public IDqSourceActor {
+class TYdbReadActor : public TActorBootstrapped<TYdbReadActor>, public IDqComputeActorAsyncInput {
 public:
     TYdbReadActor(
         ui64 inputIndex,
@@ -120,13 +120,13 @@ private:
         SendRequest();
     }
 
-    // IActor & IDqSourceActor
+    // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         RequestsDone = true;
         TActorBootstrapped<TYdbReadActor>::PassAway();
     }
 
-    i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
         i64 total = 0LL;
         if (!Blocks.empty()) {
             buffer.reserve(buffer.size() + Blocks.size());
@@ -183,7 +183,7 @@ private:
         RequestsDone = res.IsEos() || RangeFinished(LastReadKey, EndKey, KeyColumnTypes);
         SendRequest();
         if (notify)
-            Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void ProcessError(const ::NYdb::NClickhouseInternal::TScanResult& res) {
@@ -192,7 +192,7 @@ private:
             RequestsDone = true;
             while(!Blocks.empty())
                 Blocks.pop();
-            Send(ComputeActorId, new TEvSourceError(InputIndex, res.GetIssues(), true));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, res.GetIssues(), true));
         } else {
             WakeUpTime = TMonotonic::Now() + Min(TDuration::Seconds(3), TDuration::MilliSeconds(0x30U * (1U << ++Retried)));
             ActorSystem->Schedule(WakeUpTime, new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));
@@ -229,7 +229,7 @@ private:
     std::queue<TString> Blocks;
 };
 
-std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateYdbReadActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateYdbReadActor(
     NYql::NYdb::TSource&& params,
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,

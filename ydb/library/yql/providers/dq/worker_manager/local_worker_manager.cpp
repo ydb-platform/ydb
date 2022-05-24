@@ -261,7 +261,7 @@ private:
                         Options.RuntimeData,
                         traceId,
                         Options.TaskRunnerActorFactory,
-                        Options.SourceActorFactory,
+                        Options.SourceFactory,
                         Options.SinkFactory));
                 }
                 allocationInfo.WorkerActors.emplace_back(RegisterChild(

@@ -85,7 +85,7 @@ struct TEvPrivate {
 
 } // namespace
 
-class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public IDqSourceActor {
+class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public IDqComputeActorAsyncInput {
 public:
     using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
 
@@ -223,10 +223,10 @@ private:
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr&, const TActorContext& ctx) {
         SubscribedOnEvent = false;
-        ctx.Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
+        ctx.Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    // IActor & IDqSourceActor
+    // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         if (ReadSession) {
             ReadSession->Close(TDuration::Zero());
@@ -236,7 +236,7 @@ private:
         TActor<TDqPqReadActor>::PassAway();
     }
 
-    i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool&, i64 freeSpace) override {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool&, i64 freeSpace) override {
         auto events = GetReadSession().GetEvents(false, TMaybe<size_t>(), static_cast<size_t>(Max<i64>(freeSpace, 0)));
 
         ui32 batchSize = 0;
@@ -370,7 +370,7 @@ private:
     bool SubscribedOnEvent = false;
 };
 
-std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
+std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
     ui64 inputIndex,
     TTxId txId,
@@ -414,7 +414,7 @@ void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver drive
     factory.Register<NPq::NProto::TDqPqTopicSource>("PqSource",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
             NPq::NProto::TDqPqTopicSource&& settings,
-            IDqSourceActorFactory::TArguments&& args)
+            IDqSourceFactory::TArguments&& args)
     {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
         return CreateDqPqReadActor(

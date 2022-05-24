@@ -7,13 +7,13 @@
 
 namespace NYql::NDq {
 
-std::pair<IDqSourceActor*, NActors::IActor*> TDqSourceFactory::CreateDqSourceActor(IDqSourceActorFactory::TArguments&& args) const
+std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> TDqSourceFactory::CreateDqSource(IDqSourceFactory::TArguments&& args) const
 {
     const TString& type = args.InputDesc.GetSource().GetType();
-    YQL_ENSURE(!type.empty(), "Attempt to create source actor of empty type");
+    YQL_ENSURE(!type.empty(), "Attempt to create source of empty type");
     const TCreatorFunction* creatorFunc = CreatorsByType.FindPtr(type);
-    YQL_ENSURE(creatorFunc, "Unknown type of source actor: \"" << type << "\"");
-    std::pair<IDqSourceActor*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
+    YQL_ENSURE(creatorFunc, "Unknown type of source: \"" << type << "\"");
+    std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
     Y_VERIFY(actor.first);
     Y_VERIFY(actor.second);
     return actor;

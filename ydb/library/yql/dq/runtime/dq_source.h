@@ -3,10 +3,10 @@
 
 namespace NYql::NDq {
 
-struct TDqSourceStats : TDqInputStats {
+struct TDqAsyncInputBufferStats : TDqInputStats {
     ui64 InputIndex = 0;
 
-    explicit TDqSourceStats(ui64 inputIndex)
+    explicit TDqAsyncInputBufferStats(ui64 inputIndex)
         : InputIndex(inputIndex) {}
 
     template<typename T>
@@ -33,7 +33,7 @@ public:
 
     virtual void Finish() = 0;
 
-    virtual const TDqSourceStats* GetStats() const = 0;
+    virtual const TDqAsyncInputBufferStats* GetStats() const = 0;
 };
 
 IDqSource::TPtr CreateDqSource(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,

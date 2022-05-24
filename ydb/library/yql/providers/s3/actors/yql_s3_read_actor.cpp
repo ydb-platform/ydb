@@ -137,7 +137,7 @@ private:
     double Epsilon;
 };
 
-class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqSourceActor {
+class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqComputeActorAsyncInput {
 public:
     TS3ReadActor(ui64 inputIndex,
         IHTTPGateway::TPtr gateway,
@@ -194,7 +194,7 @@ private:
         }
     }
 
-    i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
         i64 total = 0LL;
         if (!Blocks.empty()) {
             buffer.reserve(buffer.size() + Blocks.size());
@@ -218,7 +218,7 @@ private:
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         ++IsDoneCounter;
         Blocks.emplace(std::move(result->Get()->Result));
-        Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void HandleRetry(TEvPrivate::TEvRetryEvent::TPtr& ev) {
@@ -236,10 +236,10 @@ private:
             return;
         }
         ++IsDoneCounter;
-        Send(ComputeActorId, new TEvSourceError(InputIndex, result->Get()->Error, true));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, true));
     }
 
-    // IActor & IDqSourceActor
+    // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
@@ -311,11 +311,11 @@ public:
                 Finished = true;
                 return false;
             case TEvPrivate::TEvReadError::EventType:
-                Send(ComputeActorId, new IDqSourceActor::TEvSourceError(InputIndex, ev->Get<TEvPrivate::TEvReadError>()->Error, true));
+                Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, ev->Get<TEvPrivate::TEvReadError>()->Error, true));
                 return false;
             case TEvPrivate::TEvReadResult::EventType:
                 value = std::move(ev->Get<TEvPrivate::TEvReadResult>()->Result);
-                Send(ComputeActorId, new IDqSourceActor::TEvNewSourceDataArrived(InputIndex));
+                Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
                 return true;
             default:
                 return false;
@@ -331,12 +331,12 @@ private:
 
         Send(SourceActorId, new TEvPrivate::TEvReadFinished);
     } catch (const std::exception& err) {
-        Send(ComputeActorId, new IDqSourceActor::TEvSourceError(InputIndex, TIssues{TIssue(err.what())}, true));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(err.what())}, true));
         return;
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle>) final {
-        Send(ComputeActorId, new IDqSourceActor::TEvSourceError(InputIndex, TIssues{TIssue("Unexpected event")}, true));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue("Unexpected event")}, true));
     }
 private:
     const ui64 InputIndex;
@@ -415,7 +415,7 @@ private:
     const TRetryStuff::TPtr RetryStuff;
 };
 
-class TS3StreamReadActor : public TActorBootstrapped<TS3StreamReadActor>, public IDqSourceActor {
+class TS3StreamReadActor : public TActorBootstrapped<TS3StreamReadActor>, public IDqComputeActorAsyncInput {
 public:
     TS3StreamReadActor(
         ui64 inputIndex,
@@ -470,7 +470,7 @@ private:
     void CommitState(const NDqProto::TCheckpoint&) final {}
     ui64 GetInputIndex() const final { return InputIndex; }
 
-    i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& output, bool& finished, i64 free) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& output, bool& finished, i64 free) final {
         i64 total = 0LL;
         if (!Blocks.empty()) do {
             const i64 s = Blocks.front().bytes();
@@ -484,7 +484,7 @@ private:
         return total;
     }
 
-    // IActor & IDqSourceActor
+    // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
@@ -506,7 +506,7 @@ private:
     void HandleNextBlock(TEvPrivate::TEvNextBlock::TPtr& next) {
         Blocks.emplace_back();
         Blocks.back().swap(next->Get()->Block);
-        Send(ComputeActorId, new IDqSourceActor::TEvNewSourceDataArrived(InputIndex));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void HandleReadFinished() {
@@ -595,7 +595,7 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type) {
 
 using namespace NKikimr::NMiniKQL;
 
-std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TTypeEnvironment& typeEnv,
     const IFunctionRegistry& functionRegistry,
     IHTTPGateway::TPtr gateway,

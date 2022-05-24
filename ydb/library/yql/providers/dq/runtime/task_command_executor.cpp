@@ -55,7 +55,7 @@ void ToProto(T* s1, const NDq::TDqInputChannelStats* ss)
 }
 
 template<typename T>
-void ToProto(T* s1, const NDq::TDqSourceStats* ss)
+void ToProto(T* s1, const NDq::TDqAsyncInputBufferStats* ss)
 {
     s1->SetChunks(ss->Chunks);
     s1->SetBytes(ss->Bytes);
@@ -186,7 +186,7 @@ public:
         auto maybeSourceOldStats = CurrentSourcesStats.find(inputIndex);
         if (maybeSourceOldStats == CurrentSourcesStats.end()) {
             maybeSourceOldStats = CurrentSourcesStats.emplace_hint(
-                maybeSourceOldStats, inputIndex, NDq::TDqSourceStats(inputIndex));
+                maybeSourceOldStats, inputIndex, NDq::TDqAsyncInputBufferStats(inputIndex));
         }
         QueryStat.AddSourceStats(
             *maybeSourceStats->second,
@@ -783,7 +783,7 @@ public:
 
     NDq::TDqTaskRunnerStats CurrentStats;
     std::unordered_map<ui64, NDq::TDqInputChannelStats> CurrentInputChannelsStats;
-    std::unordered_map<ui64, NDq::TDqSourceStats> CurrentSourcesStats;
+    std::unordered_map<ui64, NDq::TDqAsyncInputBufferStats> CurrentSourcesStats;
     std::unordered_map<ui64, NDq::TDqOutputChannelStats> CurrentOutputChannelsStats;
 
     i64 LastCommand = -1;

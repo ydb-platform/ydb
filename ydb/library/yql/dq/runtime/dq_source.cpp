@@ -24,14 +24,14 @@ public:
         }
     }
 
-    const TDqSourceStats* GetStats() const override {
+    const TDqAsyncInputBufferStats* GetStats() const override {
         return &BasicStats;
     }
 
 private:
     const ui64 InputIndex;
-    TDqSourceStats BasicStats;
-    TDqSourceStats* ProfileStats = nullptr;
+    TDqAsyncInputBufferStats BasicStats;
+    TDqAsyncInputBufferStats* ProfileStats = nullptr;
 };
 
 IDqSource::TPtr CreateDqSource(

@@ -13,7 +13,7 @@ enum EDqStatsMode {
     DQ_STATS_MODE_PROFILE = 30;
 }
 
-message TDqSourceStats {
+message TDqAsyncInputBufferStats {
     // basic stats
     uint64 InputIndex = 1;
     uint64 Chunks = 2;
@@ -136,7 +136,7 @@ message TDqTaskStats {
     }
     repeated THistBucket ComputeCpuTimeByRun = 106;
 
-    repeated TDqSourceStats Sources = 150;
+    repeated TDqAsyncInputBufferStats Sources = 150;
     repeated TDqInputChannelStats InputChannels = 151;
     repeated TDqAsyncOutputBufferStats Sinks = 152;
     repeated TDqOutputChannelStats OutputChannels = 153;

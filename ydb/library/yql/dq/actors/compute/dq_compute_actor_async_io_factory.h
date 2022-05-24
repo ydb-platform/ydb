@@ -13,23 +13,23 @@
 namespace NYql::NDq {
 
 template <class T>
-concept TCastsToSourceActorPair =
-    std::is_convertible_v<T, std::pair<IDqSourceActor*, NActors::IActor*>>;
+concept TCastsToAsyncInputPair =
+    std::is_convertible_v<T, std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>>;
 
 template <class T, class TProto>
-concept TSourceActorCreatorFunc = requires(T f, TProto&& settings, IDqSourceActorFactory::TArguments args) {
-    { f(std::move(settings), std::move(args)) } -> TCastsToSourceActorPair;
+concept TSourceCreatorFunc = requires(T f, TProto&& settings, IDqSourceFactory::TArguments args) {
+    { f(std::move(settings), std::move(args)) } -> TCastsToAsyncInputPair;
 };
 
-class TDqSourceFactory : public IDqSourceActorFactory {
+class TDqSourceFactory : public IDqSourceFactory {
 public:
-    using TCreatorFunction = std::function<std::pair<IDqSourceActor*, NActors::IActor*>(TArguments&& args)>;
+    using TCreatorFunction = std::function<std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>(TArguments&& args)>;
 
-    std::pair<IDqSourceActor*, NActors::IActor*> CreateDqSourceActor(TArguments&& args) const override;
+    std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSource(TArguments&& args) const override;
 
     void Register(const TString& type, TCreatorFunction creator);
 
-    template <class TProtoMsg, TSourceActorCreatorFunc<TProtoMsg> TCreatorFunc>
+    template <class TProtoMsg, TSourceCreatorFunc<TProtoMsg> TCreatorFunc>
     void Register(const TString& type, TCreatorFunc creator) {
         Register(type,
             [creator = std::move(creator), type](TArguments&& args)

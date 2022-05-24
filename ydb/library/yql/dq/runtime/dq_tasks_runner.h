@@ -81,7 +81,7 @@ struct TTaskRunnerStatsBase {
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
 
     THashMap<ui64, const TDqInputChannelStats*> InputChannels; // Channel id -> Channel stats
-    THashMap<ui64, const TDqSourceStats*> Sources; // Input index -> Source stats
+    THashMap<ui64, const TDqAsyncInputBufferStats*> Sources; // Input index -> Source stats
     THashMap<ui64, const TDqOutputChannelStats*> OutputChannels; // Channel id -> Channel stats
 
     TVector<TMkqlStat> MkqlStats;
@@ -127,7 +127,7 @@ struct TTaskRunnerStatsBase {
 
 private:
     virtual TDqInputChannelStats* MutableInputChannel(ui64 channelId) = 0;
-    virtual TDqSourceStats* MutableSource(ui64 sourceId) = 0;  // todo: (whcrc) unused, not modified by these pointers
+    virtual TDqAsyncInputBufferStats* MutableSource(ui64 sourceId) = 0;  // todo: (whcrc) unused, not modified by these pointers
     virtual TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) = 0;
 };
 
@@ -137,8 +137,8 @@ struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
         return const_cast<TDqInputChannelStats*>(InputChannels[channelId]);
     }
 
-    TDqSourceStats* MutableSource(ui64 sourceId) override {
-        return const_cast<TDqSourceStats*>(Sources[sourceId]);
+    TDqAsyncInputBufferStats* MutableSource(ui64 sourceId) override {
+        return const_cast<TDqAsyncInputBufferStats*>(Sources[sourceId]);
     }
 
     TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) override {
@@ -149,7 +149,7 @@ struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
 struct TDqTaskRunnerStatsInplace : public TTaskRunnerStatsBase {
     // all stats are owned by this object
     TVector<THolder<TDqInputChannelStats>> InputChannelHolder;
-    TVector<THolder<TDqSourceStats>> SourceHolder;
+    TVector<THolder<TDqAsyncInputBufferStats>> SourceHolder;
     TVector<THolder<TDqOutputChannelStats>> OutputChannelHolder;
 
     template<typename TStat>
@@ -166,7 +166,7 @@ struct TDqTaskRunnerStatsInplace : public TTaskRunnerStatsBase {
         return GetOrCreate(InputChannels, InputChannelHolder, channelId);
     }
 
-    TDqSourceStats* MutableSource(ui64 sourceId) override {
+    TDqAsyncInputBufferStats* MutableSource(ui64 sourceId) override {
         return GetOrCreate(Sources, SourceHolder, sourceId);
     }
 

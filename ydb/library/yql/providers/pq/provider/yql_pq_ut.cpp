@@ -41,7 +41,7 @@
 
 namespace NYql {
 
-NDq::IDqSourceActorFactory::TPtr CreateSourceFactory(const NYdb::TDriver& driver) {
+NDq::IDqSourceFactory::TPtr CreateSourceFactory(const NYdb::TDriver& driver) {
     auto factory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
     RegisterDqPqReadActorFactory(*factory, driver, nullptr);
     return factory;

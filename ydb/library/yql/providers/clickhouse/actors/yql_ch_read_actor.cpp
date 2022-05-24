@@ -45,7 +45,7 @@ struct TEvPrivate {
 
 } // namespace
 
-class TClickHouseReadActor : public TActorBootstrapped<TClickHouseReadActor>, public IDqSourceActor {
+class TClickHouseReadActor : public TActorBootstrapped<TClickHouseReadActor>, public IDqComputeActorAsyncInput {
 public:
     TClickHouseReadActor(ui64 inputIndex,
         IHTTPGateway::TPtr gateway,
@@ -91,7 +91,7 @@ private:
         }
     }
 
-    i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
         if (Result) {
             const auto size = Result->size();
             buffer.emplace_back(NKikimr::NMiniKQL::MakeString(std::string_view(*Result)));
@@ -106,14 +106,14 @@ private:
 
     void Handle(TEvPrivate::TEvReadResult::TPtr& result) {
         Result.emplace(std::move(result->Get()->Result));
-        Send(ComputeActorId, new TEvNewSourceDataArrived(InputIndex));
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
-        Send(ComputeActorId, new TEvSourceError(InputIndex, result->Get()->Error, true));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, true));
     }
 
-    // IActor & IDqSourceActor
+    // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         TActorBootstrapped<TClickHouseReadActor>::PassAway();
     }
@@ -130,7 +130,7 @@ private:
     std::optional<IHTTPGateway::TContent> Result;
 };
 
-std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateClickHouseReadActor(
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateClickHouseReadActor(
     IHTTPGateway::TPtr gateway,
     NCH::TSource&& params,
     ui64 inputIndex,
@@ -162,4 +162,3 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateClickHouseReadActor(
 }
 
 } // namespace NYql::NDq
-

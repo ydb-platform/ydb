@@ -115,7 +115,7 @@ void Init(
         NYql::CreateYdbDqTaskTransformFactory()
     });
 
-    auto sourceActorFactory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
+    auto sourceFactory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
     auto sinkFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
 
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
@@ -135,11 +135,11 @@ void Init(
     }
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {
-        RegisterDqPqReadActorFactory(*sourceActorFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
-        RegisterYdbReadActorFactory(*sourceActorFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
-        RegisterS3ReadActorFactory(*sourceActorFactory, credentialsFactory,
+        RegisterDqPqReadActorFactory(*sourceFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
+        RegisterYdbReadActorFactory(*sourceFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
+        RegisterS3ReadActorFactory(*sourceFactory, credentialsFactory,
             httpGateway, std::make_shared<NYql::NS3::TRetryConfig>(protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetRetryConfig()));
-        RegisterClickHouseReadActorFactory(*sourceActorFactory, credentialsFactory, httpGateway);
+        RegisterClickHouseReadActorFactory(*sourceFactory, credentialsFactory, httpGateway);
 
         RegisterDqPqWriteActorFactory(*sinkFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
         RegisterDQSolomonWriteActorFactory(*sinkFactory, credentialsFactory);
@@ -160,7 +160,7 @@ void Init(
         NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Counters = workerManagerCounters;
         lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false);
-        lwmOptions.SourceActorFactory = sourceActorFactory;
+        lwmOptions.SourceFactory = sourceFactory;
         lwmOptions.SinkFactory = sinkFactory;
         lwmOptions.FunctionRegistry = appData->FunctionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory();
@@ -179,7 +179,7 @@ void Init(
     ::NYql::NCommon::TServiceCounters serviceCounters(appData->Counters);
 
     if (protoConfig.GetNodesManager().GetEnabled() || protoConfig.GetPendingFetcher().GetEnabled()) {
-        auto internal = protoConfig.GetPrivateApi().GetLoopback() 
+        auto internal = protoConfig.GetPrivateApi().GetLoopback()
             ? CreateLoopbackServiceActor(clientCounters)
             : CreateInternalServiceActor(
                 yqSharedResources,

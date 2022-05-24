@@ -69,7 +69,7 @@ void TPqIoTestFixture::InitSource(
             actor.GetHolderFactory(),
             freeSpace);
 
-        actor.InitSource(dqSource, dqSourceAsActor);
+        actor.InitAsyncInput(dqSource, dqSourceAsActor);
     });
 }
 

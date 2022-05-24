@@ -22,7 +22,7 @@ NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id) {
     return checkpoint;
 }
 
-TFakeActor::TFakeActor(TSourcePromises& sourcePromises, TAsyncOutputPromises& asyncOutputPromises)
+TFakeActor::TFakeActor(TAsyncInputPromises& sourcePromises, TAsyncOutputPromises& asyncOutputPromises)
     : TActor<TFakeActor>(&TFakeActor::StateFunc)
     , MemoryInfo("test")
     , HolderFactory(Alloc.Ref(), MemoryInfo)
@@ -30,9 +30,9 @@ TFakeActor::TFakeActor(TSourcePromises& sourcePromises, TAsyncOutputPromises& as
     , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
     , ProgramBuilder(TypeEnv, *FunctionRegistry)
     , ValueBuilder(HolderFactory)
-    , SourceEvents(*this)
+    , AsyncInputEvents(*this)
     , AsyncOutputCallbacks(*this)
-    , SourcePromises(sourcePromises)
+    , AsyncInputPromises(sourcePromises)
     , AsyncOutputPromises(asyncOutputPromises)
 {
     Alloc.Release();
@@ -48,19 +48,19 @@ void TFakeActor::InitAsyncOutput(IDqComputeActorAsyncOutput* dqAsyncOutput, IAct
     DqAsyncOutputAsActor = dqAsyncOutputAsActor;
 }
 
-void TFakeActor::InitSource(IDqSourceActor* dqSource, IActor* dqSourceAsActor) {
-    DqSourceActorId = RegisterWithSameMailbox(dqSourceAsActor),
-    DqSourceActor = dqSource;
-    DqSourceActorAsActor = dqSourceAsActor;
+void TFakeActor::InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor* dqAsyncInputAsActor) {
+    DqAsyncInputActorId = RegisterWithSameMailbox(dqAsyncInputAsActor),
+    DqAsyncInput = dqAsyncInput;
+    DqAsyncInputAsActor = dqAsyncInputAsActor;
 }
 
 void TFakeActor::Terminate() {
-    if (DqSourceActorId) {
-        DqSourceActor->PassAway();
+    if (DqAsyncInputActorId) {
+        DqAsyncInput->PassAway();
 
-        DqSourceActorId = std::nullopt;
-        DqSourceActor = nullptr;
-        DqSourceActorAsActor = nullptr;
+        DqAsyncInputActorId = std::nullopt;
+        DqAsyncInput = nullptr;
+        DqAsyncInputAsActor = nullptr;
     }
 
     if (DqAsyncOutputActorId) {
@@ -87,7 +87,7 @@ TFakeCASetup::TFakeCASetup()
     Runtime->AddLocalService(
         FakeActorId,
         NActors::TActorSetupCmd(
-            new TFakeActor(SourcePromises, AsyncOutputPromises),
+            new TFakeActor(AsyncInputPromises, AsyncOutputPromises),
             NActors::TMailboxType::Simple,
             0));
 
@@ -111,15 +111,15 @@ void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMa
 
 void TFakeCASetup::SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) {
     Execute([&state, &checkpoint](TFakeActor& actor) {
-        Y_ASSERT(actor.DqSourceActor);
-        actor.DqSourceActor->SaveState(checkpoint, state);
+        Y_ASSERT(actor.DqAsyncInput);
+        actor.DqAsyncInput->SaveState(checkpoint, state);
     });
 }
 
 void TFakeCASetup::LoadSource(const NDqProto::TSourceState& state) {
     Execute([&state](TFakeActor& actor) {
-        Y_ASSERT(actor.DqSourceActor);
-        actor.DqSourceActor->LoadState(state);
+        Y_ASSERT(actor.DqAsyncInput);
+        actor.DqAsyncInput->LoadState(state);
     });
 }
 

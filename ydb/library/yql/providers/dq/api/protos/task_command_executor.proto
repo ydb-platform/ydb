@@ -122,7 +122,7 @@ message TGetStatsOutputResponse {
 
 message TGetStatsSourceResponse {
     reserved 1; // NKqpProto.TKqpStatsTask.TSourceStats Stats = 1;
-    NDqProto.TDqSourceStats Stats = 2;
+    NDqProto.TDqAsyncInputBufferStats Stats = 2;
 }
 
 message TSinkStatsResponse {

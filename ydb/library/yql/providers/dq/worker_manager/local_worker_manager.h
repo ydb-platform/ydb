@@ -22,7 +22,7 @@ namespace NYql::NDqs {
     struct TLocalWorkerManagerOptions {
         TWorkerManagerCounters Counters;
         NTaskRunnerProxy::IProxyFactory::TPtr Factory;
-        NDq::IDqSourceActorFactory::TPtr SourceActorFactory;
+        NDq::IDqSourceFactory::TPtr SourceFactory;
         NDq::IDqSinkFactory::TPtr SinkFactory;
         NDq::IDqOutputTransformFactory::TPtr TransformFactory;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;

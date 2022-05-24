@@ -56,8 +56,8 @@ namespace {
     };
 }
 
-struct TSourcePromises {
-    NThreading::TPromise<void> NewSourceDataArrived = NThreading::NewPromise();
+struct TAsyncInputPromises {
+    NThreading::TPromise<void> NewAsyncInputDataArrived = NThreading::NewPromise();
     NThreading::TPromise<TIssues> FatalError = NThreading::NewPromise<TIssues>();
 };
 
@@ -70,18 +70,18 @@ struct TAsyncOutputPromises {
 NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id = 0);
 
 class TFakeActor : public NActors::TActor<TFakeActor> {
-    struct TSourceEvents {
-        explicit TSourceEvents(TFakeActor& parent) : Parent(parent) {}
+    struct TAsyncInputEvents {
+        explicit TAsyncInputEvents(TFakeActor& parent) : Parent(parent) {}
 
-        void OnNewSourceDataArrived(ui64) {
-            Parent.SourcePromises.NewSourceDataArrived.SetValue();
-            Parent.SourcePromises.NewSourceDataArrived = NThreading::NewPromise();
+        void OnNewAsyncInputDataArrived(ui64) {
+            Parent.AsyncInputPromises.NewAsyncInputDataArrived.SetValue();
+            Parent.AsyncInputPromises.NewAsyncInputDataArrived = NThreading::NewPromise();
         }
 
-        void OnSourceError(ui64, const TIssues& issues, bool isFatal) {
+        void OnAsyncInputError(ui64, const TIssues& issues, bool isFatal) {
             Y_UNUSED(isFatal);
-            Parent.SourcePromises.FatalError.SetValue(issues);
-            Parent.SourcePromises.FatalError = NThreading::NewPromise<TIssues>();
+            Parent.AsyncInputPromises.FatalError.SetValue(issues);
+            Parent.AsyncInputPromises.FatalError = NThreading::NewPromise<TIssues>();
         }
 
         TFakeActor& Parent;
@@ -111,25 +111,25 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
     };
 
 public:
-    TFakeActor(TSourcePromises& sourcePromises, TAsyncOutputPromises& asyncOutputPromises);
+    TFakeActor(TAsyncInputPromises& sourcePromises, TAsyncOutputPromises& asyncOutputPromises);
     ~TFakeActor();
 
     void InitAsyncOutput(IDqComputeActorAsyncOutput* dqAsyncOutput, IActor* dqAsyncOutputAsActor);
-    void InitSource(IDqSourceActor* dqSource, IActor* dqSourceAsActor);
+    void InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor* dqAsyncInputAsActor);
     void Terminate();
 
     TAsyncOutputCallbacks& GetAsyncOutputCallbacks();
     NKikimr::NMiniKQL::THolderFactory& GetHolderFactory();
 
 public:
-    IDqSourceActor* DqSourceActor = nullptr;
+    IDqComputeActorAsyncInput* DqAsyncInput = nullptr;
     IDqComputeActorAsyncOutput* DqAsyncOutput = nullptr;
 
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvExecute, Handle);
-        hFunc(IDqSourceActor::TEvNewSourceDataArrived, Handle);
-        hFunc(IDqSourceActor::TEvSourceError, Handle);
+        hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, Handle);
+        hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, Handle);
     )
 
     void Handle(TEvPrivate::TEvExecute::TPtr& ev) {
@@ -142,12 +142,12 @@ private:
         ev->Get()->Promise.SetValue();
     }
 
-    void Handle(const IDqSourceActor::TEvNewSourceDataArrived::TPtr& ev) {
-        SourceEvents.OnNewSourceDataArrived(ev->Get()->InputIndex);
+    void Handle(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {
+        AsyncInputEvents.OnNewAsyncInputDataArrived(ev->Get()->InputIndex);
     }
 
-    void Handle(const IDqSourceActor::TEvSourceError::TPtr& ev) {
-        SourceEvents.OnSourceError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
+    void Handle(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
+        AsyncInputEvents.OnAsyncInputError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
     }
 
 public:
@@ -161,16 +161,16 @@ public:
     NKikimr::NMiniKQL::TDefaultValueBuilder ValueBuilder;
 
 private:
-    std::optional<NActors::TActorId> DqSourceActorId;
-    IActor* DqSourceActorAsActor = nullptr;
+    std::optional<NActors::TActorId> DqAsyncInputActorId;
+    IActor* DqAsyncInputAsActor = nullptr;
 
     std::optional<NActors::TActorId> DqAsyncOutputActorId;
     IActor* DqAsyncOutputAsActor = nullptr;
 
-    TSourceEvents SourceEvents;
+    TAsyncInputEvents AsyncInputEvents;
     TAsyncOutputCallbacks AsyncOutputCallbacks;
 
-    TSourcePromises& SourcePromises;
+    TAsyncInputPromises& AsyncInputPromises;
     TAsyncOutputPromises& AsyncOutputPromises;
 };
 
@@ -179,12 +179,12 @@ struct TFakeCASetup {
     ~TFakeCASetup();
 
     template<typename T>
-    std::vector<T> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {
+    std::vector<T> AsyncInputRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {
         std::vector<T> result;
         Execute([&result, &parser, freeSpace](TFakeActor& actor) {
             NKikimr::NMiniKQL::TUnboxedValueVector buffer;
             bool finished = false;
-            actor.DqSourceActor->GetSourceData(buffer, finished, freeSpace);
+            actor.DqAsyncInput->GetAsyncInputData(buffer, finished, freeSpace);
 
             for (const auto& uv : buffer) {
                 for (const auto item : parser(uv)) {
@@ -197,7 +197,7 @@ struct TFakeCASetup {
     }
 
     template<typename T>
-    std::vector<T> SourceReadUntil(
+    std::vector<T> AsyncInputReadUntil(
         const TReadValueParser<T> parser,
         ui64 size,
         i64 eachReadFreeSpace = 1000,
@@ -205,13 +205,13 @@ struct TFakeCASetup {
     {
         std::vector<T> result;
         DoWithRetry([&](){
-                auto batch = SourceRead<T>(parser, eachReadFreeSpace);
+                auto batch = AsyncInputRead<T>(parser, eachReadFreeSpace);
                 for (const auto& item : batch) {
                     result.emplace_back(item);
                 }
 
                 if (result.size() < size) {
-                    SourcePromises.NewSourceDataArrived.GetFuture().Wait(timeout);
+                    AsyncInputPromises.NewAsyncInputDataArrived.GetFuture().Wait(timeout);
                     ythrow yexception() << "Not enough data";
                 }
             },
@@ -233,7 +233,7 @@ struct TFakeCASetup {
 public:
     TRuntimePtr Runtime;
     NActors::TActorId FakeActorId;
-    TSourcePromises SourcePromises;
+    TAsyncInputPromises AsyncInputPromises;
     TAsyncOutputPromises AsyncOutputPromises;
 };
 

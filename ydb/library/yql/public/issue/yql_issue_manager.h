@@ -36,6 +36,8 @@ public:
         IssueLimit_ = limit;
     }
 
+    void MakeIssueForEmptyScope();
+
 private:
     TIssuePtr CheckUniqAndLimit(const TIssue& issue);
 
@@ -66,6 +68,11 @@ public:
     {
         Manager_.AddScope(fn);
     }
+
+    void MakeIssueForEmptyScope() {
+        Manager_.MakeIssueForEmptyScope();
+    }
+
     ~TIssueScopeGuard()
     {
         Manager_.LeaveScope();

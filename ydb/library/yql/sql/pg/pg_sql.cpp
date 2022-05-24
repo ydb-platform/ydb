@@ -155,6 +155,14 @@ public:
         TString Scope;
     };
 
+    struct TView {
+        TString Name;
+        TVector<TString> ColNames;
+        TAstNode* Source = nullptr;
+    };
+
+    using TViews = THashMap<TString, TView>;
+
     TConverter(TAstParseResult& astParseResult, const NSQLTranslation::TTranslationSettings& settings)
         : AstParseResult(astParseResult)
         , Settings(settings)
@@ -194,6 +202,11 @@ public:
            }
         }
 
+        if (!Views.empty()) {
+            AddError("Not all views have been dropped");
+            return nullptr;
+        }
+
         Statements.push_back(L(A("let"), A("world"), L(A("CommitAll!"),
             A("world"))));
         Statements.push_back(L(A("return"), A("world")));
@@ -208,6 +221,10 @@ public:
             return ParseSelectStmt(CAST_NODE(SelectStmt, node), false) != nullptr;
         case T_InsertStmt:
             return ParseInsertStmt(CAST_NODE(InsertStmt, node)) != nullptr;
+        case T_ViewStmt:
+            return ParseViewStmt(CAST_NODE(ViewStmt, node)) != nullptr;
+        case T_DropStmt:
+            return ParseDropStmt(CAST_NODE(DropStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -757,6 +774,113 @@ public:
         return Statements.back();
     }
 
+    [[nodiscard]]
+    TAstNode* ParseViewStmt(const ViewStmt* value) {
+        if (ListLength(value->options) > 0) {
+            AddError("Create view: not supported options");
+            return nullptr;
+        }
+
+        TView view;
+        if (StrLength(value->view->catalogname) > 0) {
+            AddError("catalogname is not supported");
+            return nullptr;
+        }
+
+        if (StrLength(value->view->schemaname) > 0) {
+            AddError("schemaname is not supported");
+            return nullptr;
+        }
+
+        if (StrLength(value->view->relname) == 0) {
+            AddError("relname should be specified");
+            return nullptr;
+        }
+
+        view.Name = value->view->relname;
+        if (value->view->alias) {
+            AddError("alias is not supported");
+            return nullptr;
+        }
+
+        if (ListLength(value->aliases) == 0) {
+            AddError("expected at least one target column");
+            return nullptr;
+        }
+
+        for (int i = 0; i < ListLength(value->aliases); ++i) {
+            auto node = ListNodeNth(value->aliases, i);
+            if (NodeTag(node) != T_String) {
+                NodeNotImplemented(value, node);
+                return nullptr;
+            }
+
+            view.ColNames.push_back(StrVal(node));
+        }
+
+        if (value->withCheckOption != NO_CHECK_OPTION) {
+            AddError("Create view: not supported options");
+            return nullptr;
+        }
+
+
+        view.Source = ParseSelectStmt(CAST_NODE(SelectStmt, value->query), true);
+        if (!view.Source) {
+            return nullptr;
+        }
+
+        auto it = Views.find(view.Name);
+        if (it != Views.end() && !value->replace) {
+            AddError(TStringBuilder() << "View already exists: '" << view.Name << "'");
+            return nullptr;
+        }
+
+        Views[view.Name] = view;
+        return Statements.back();
+    }
+
+    [[nodiscard]]
+    TAstNode* ParseDropStmt(const DropStmt* value) {
+        if (value->removeType != OBJECT_VIEW) {
+            AddError("Not supported object type for DROP");
+            return nullptr;
+        }
+
+        // behavior and concurrent don't matter here
+        for (int i = 0; i < ListLength(value->objects); ++i)  {
+            auto object = ListNodeNth(value->objects, i);
+            if (NodeTag(object) != T_List) {
+                NodeNotImplemented(value, object);
+                return nullptr;
+            }
+
+            auto lst = CAST_NODE(List, object);
+            if (ListLength(lst) != 1) {
+                AddError("Expected view name");
+                return nullptr;
+            }
+
+            auto nameNode = ListNodeNth(lst, 0);
+            if (NodeTag(nameNode) != T_String) {
+                NodeNotImplemented(value, nameNode);
+                return nullptr;
+            }
+
+            auto name = StrVal(nameNode);
+            auto it = Views.find(name);
+            if (!value->missing_ok && it == Views.end()) {
+                AddError(TStringBuilder() << "View not found: '" << name << "'");
+                return nullptr;
+            }
+
+            if (it != Views.end()) {
+                Views.erase(it);
+            }
+        }
+
+        return Statements.back();
+    }
+
     TFromDesc ParseFromClause(const Node* node) {
         switch (NodeTag(node)) {
         case T_RangeVar:
@@ -843,14 +967,20 @@ public:
             return {};
         }
 
-        if (StrLength(value->schemaname) == 0) {
-            AddError("schemaname should be specified");
-            return {};
-        }
-
         if (StrLength(value->relname) == 0) {
             AddError("relname should be specified");
             return {};
+        }
+
+        const TView* view = nullptr;
+        if (StrLength(value->schemaname) == 0) {
+            auto it = Views.find(value->relname);
+            if (it == Views.end()) {
+                AddError(TStringBuilder() << "View not found: '" << value->relname << "'");
+                return {};
+            }
+
+            view = &it->second;
         }
 
         TString alias;
@@ -859,6 +989,10 @@ public:
             if (!ParseAlias(value->alias, alias, colnames)) {
                 return {};
             }
+        }
+
+        if (view) {
+            return { view->Source, alias, colnames.empty() ? view->ColNames : colnames, false };
         }
 
         auto p = Settings.ClusterMapping.FindPtr(value->schemaname);
@@ -2077,6 +2211,7 @@ private:
     bool DqEngineForce = false;
     TVector<TAstNode*> Statements;
     ui32 ReadIndex = 0;
+    TViews Views;
 };
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {

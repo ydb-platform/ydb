@@ -285,7 +285,7 @@ inline void atomic_write32(volatile boost::uint32_t *mem, boost::uint32_t val)
 
 #elif (defined(sun) || defined(__sun))
 
-#include <atomic.h>
+#error include <atomic.h>
 
 namespace boost{
 namespace interprocess{

@@ -1,7 +1,7 @@
 #include "dq_compute_actor_async_io_factory.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_input.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 

@@ -1,5 +1,5 @@
 #pragma once
-#include "dq_compute_actor_sources.h"
+#include "dq_compute_actor_async_input.h"
 #include "dq_compute_actor_async_output.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>

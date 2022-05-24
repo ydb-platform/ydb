@@ -1,4 +1,4 @@
-#include "dq_source.h"
+#include "dq_async_input.h"
 #include "dq_input_impl.h"
 
 namespace NYql::NDq {

@@ -7,7 +7,7 @@
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
-#include <ydb/library/yql/dq/runtime/dq_source.h>
+#include <ydb/library/yql/dq/runtime/dq_async_input.h>
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_input.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/ydb/proto/source.pb.h>
 

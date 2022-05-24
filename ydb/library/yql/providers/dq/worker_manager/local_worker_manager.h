@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_input.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>

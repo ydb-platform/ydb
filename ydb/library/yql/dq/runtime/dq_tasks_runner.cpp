@@ -4,7 +4,7 @@
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
-#include <ydb/library/yql/dq/runtime/dq_source.h>
+#include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>

@@ -2,7 +2,7 @@
 #ifdef __linux__
 #include "yql_s3_read_actor.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_input.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
 #endif
 

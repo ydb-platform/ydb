@@ -3,8 +3,8 @@
 #include "dq_compute_actor.h"
 #include "dq_compute_actor_channels.h"
 #include "dq_compute_actor_checkpoints.h"
+#include "dq_compute_actor_async_input.h"
 #include "dq_compute_actor_async_output.h"
-#include "dq_compute_actor_sources.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
 

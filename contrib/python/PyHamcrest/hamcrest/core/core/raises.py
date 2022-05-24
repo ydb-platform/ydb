@@ -2,7 +2,6 @@ from weakref import ref
 import re
 import sys
 from hamcrest.core.base_matcher import BaseMatcher
-from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 from hamcrest.core.compat import is_callable
 
 __author__ = "Per Fagrell"

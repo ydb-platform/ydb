@@ -2696,5 +2696,50 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
     return IGraphTransformer::TStatus::Repeat;
 }
 
+IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<ui32> argTypes;
+    bool needRetype = false;
+    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+        auto type = input->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+            needRetype = true;
+        }
+
+        argTypes.push_back(argType);
+    }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    for (ui32 i = 0; i < argTypes.size(); ++i) {
+        if (!argTypes[i]) {
+            continue;
+        }
+
+        if (argTypes[i] != NPg::LookupType("text").TypeId) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected pg text, but got " << NPg::LookupType(argTypes[i]).Name));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace NTypeAnnImpl
 }

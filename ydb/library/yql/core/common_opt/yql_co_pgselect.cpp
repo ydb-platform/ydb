@@ -1095,4 +1095,67 @@ TExprNode::TPtr ExpandPgSelect(const TExprNode::TPtr& node, TExprContext& ctx, T
        .Build();
 }
 
+TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    Y_UNUSED(optCtx);
+    const bool insensitive = node->IsCallable("PgILike");
+    auto matcher = ctx.Builder(node->Pos())
+        .Callable("Udf")
+            .Atom(0, "Re2.Match")
+            .List(1)
+                .Callable(0, "Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "Re2.PatternFromLike")
+                    .Seal()
+                    .Callable(1, "Coalesce")
+                        .Callable(0, "FromPg")
+                            .Add(0, node->ChildPtr(1))
+                        .Seal()
+                        .Callable(1, "Utf8")
+                            .Atom(0, "")
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Callable(1, "NamedApply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "Re2.Options")
+                    .Seal()
+                    .List(1)
+                    .Seal()
+                    .Callable(2, "AsStruct")
+                        .List(0)
+                            .Atom(0, "CaseSensitive")
+                            .Callable(1, "Bool")
+                                .Atom(0, insensitive ? "false" : "true")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(node->Pos())
+        .Callable("ToPg")
+            .Callable(0, "If")
+                .Callable(0, "And")
+                    .Callable(0, "Exists")
+                        .Add(0, node->ChildPtr(0))
+                    .Seal()
+                    .Callable(1, "Exists")
+                        .Add(0, node->ChildPtr(1))
+                    .Seal()
+                .Seal()
+                .Callable(1, "Apply")
+                    .Add(0, matcher)
+                    .Callable(1, "FromPg")
+                        .Add(0, node->ChildPtr(0))
+                    .Seal()
+                .Seal()
+                .Callable(2, "Null")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 } // namespace NYql

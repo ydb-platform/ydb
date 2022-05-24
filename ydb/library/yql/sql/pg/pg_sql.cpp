@@ -1783,6 +1783,50 @@ public:
         return L(A("PgOp"), QAX(op), lhs, rhs);
     }
 
+    TAstNode* ParseAExprLike(const A_Expr* value, const TExprSettings& settings, bool insensitive) {
+        if (ListLength(value->name) != 1) {
+            AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
+            return nullptr;
+        }
+
+        auto nameNode = ListNodeNth(value->name, 0);
+        if (NodeTag(nameNode) != T_String) {
+            NodeNotImplemented(value, nameNode);
+            return nullptr;
+        }
+
+        auto op = StrVal(nameNode);
+        if (insensitive) {
+            if (op != "~~*" && op != "!~~*") {
+                AddError(TStringBuilder() << "Unsupported operation: " << op);
+                return nullptr;
+            }
+        } else {
+            if (op != "~~" && op != "!~~") {
+                AddError(TStringBuilder() << "Unsupported operation: " << op);
+                return nullptr;
+            }
+        }
+
+        if (!value->lexpr || !value->rexpr) {
+            AddError("Missing operands");
+            return nullptr;
+        }
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        auto rhs = ParseExpr(value->rexpr, settings);
+        if (!lhs || !rhs) {
+            return nullptr;
+        }
+
+        auto ret = L(A(insensitive ? "PgILike" : "PgLike"), lhs, rhs);
+        if (op[0] == '!') {
+            ret = L(A("PgNot"), ret);
+        }
+
+        return ret;
+    }
+
     TAstNode* ParseAExprBetween(const A_Expr* value, const TExprSettings& settings) {
         if (!value->lexpr || !value->rexpr) {
             AddError("Missing operands");
@@ -1851,6 +1895,9 @@ public:
         switch (value->kind) {
         case AEXPR_OP:
             return ParseAExprOp(value, settings);
+        case AEXPR_LIKE:
+        case AEXPR_ILIKE:
+            return ParseAExprLike(value, settings, value->kind == AEXPR_ILIKE);
         case AEXPR_BETWEEN:
         case AEXPR_NOT_BETWEEN:
         case AEXPR_BETWEEN_SYM:

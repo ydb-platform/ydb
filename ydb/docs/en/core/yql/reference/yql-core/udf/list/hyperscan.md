@@ -8,14 +8,14 @@ By default, all functions work in the single-byte mode. However, if the regular 
 
 **List of functions**
 
-* ```Hyperscan::Grep(String) -> (String?) -> Bool```
-* ```Hyperscan::Match(String) -> (String?) -> Bool```
-* ```Hyperscan::BacktrackingGrep(String) -> (String?) -> Bool```
-* ```Hyperscan::BacktrackingMatch(String) -> (String?) -> Bool```
-* ```Hyperscan::MultiGrep(String) -> (String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::MultiMatch(String) -> (String?) -> Tuple<Bool, Bool, ...>```
-* ```Hyperscan::Capture(String) -> (String?) -> String?```
-* ```Hyperscan::Replace(String) -> (String?, String) -> String?```
+* ```Hyperscan::Grep(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::Match(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::BacktrackingGrep(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::BacktrackingMatch(pattern:String) -> (string:String?) -> Bool```
+* ```Hyperscan::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
+* ```Hyperscan::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
+* ```Hyperscan::Capture(pattern:String) -> (string:String?) -> String?```
+* ```Hyperscan::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
 
 ## Call syntax {#syntax}
 
@@ -34,13 +34,6 @@ You can enable the case-insensitive mode by specifying, at the beginning of the 
 
 Matches the regular expression with a **part of the string** (arbitrary substring).
 
-You can call the `Hyperscan::Grep` function by using a `REGEXP` expression (see the [basic expression syntax](../../syntax/expressions.md#regexp)).
-
-For example, the following two queries are equivalent (also in terms of computing efficiency):
-
-* ```$grep = Hyperscan::Grep("b+"); SELECT $grep("aaabccc");```
-* ```SELECT "aaabccc" REGEXP "b+";```
-
 ## Match {#match}
 
 Matches **the whole string** against the regular expression.
@@ -50,8 +43,6 @@ To get a result similar to `Grep` (where substring matching is included), enclos
 ## BacktrackingGrep/BacktrackingMatch {#backtrackinggrep}
 
 The functions are identical to the same-name functions without the `Backtracking` prefix. However, they support a broader range of regular expressions. This is due to the fact that if a specific regular expression is not fully supported by Hyperscan, the library switches to the prefilter mode. In this case, it responds not by "Yes" or "No", but by "Definitely not" or "Maybe yes". The "Maybe yes" responses are then automatically rechecked using a slower, but more functional, library [libpcre](https://www.pcre.org).
-
-Those functions are currently called in the binary operators [REGEXP](../../syntax/expressions.md#regexp) and [MATCH](../../syntax/expressions.md#match).
 
 ## MultiGrep/MultiMatch {#multigrep}
 
@@ -69,16 +60,13 @@ $multi_match = Hyperscan::MultiMatch(@@a.*
 .*axa.*@@);
 
 SELECT
-    $multi_match("a") AS a,
-    $multi_match("axa") AS axa;
-
-/*
-- a: `(true, false, false)`
-- axa: `(true, true, true)`
-*/
+    $multi_match("a") AS a,     -- (true, false, false)
+    $multi_match("axa") AS axa; -- (true, true, true)
 ```
 
 ## Capture and Replace {#capture}
+
+`Hyperscan::Capture` if a string matches the specified regular expression, it returns the last substring matching the regular expression. `Hyperscan::Replace` replaces all occurrences of the specified regular expression with the specified string.
 
 Hyperscan doesn't support advanced functionality for such operations. Although `Hyperscan::Capture` and `Hyperscan::Replace` are implemented for consistency, it's better to use the same-name functions from the Re2 library for any non-trivial capture and replace:
 
@@ -103,25 +91,14 @@ $capture_many = Hyperscan::Capture(".*x(a+).*");
 $replace = Hyperscan::Replace("xa");
 
 SELECT
-    $match($value) AS match,
-    $grep($value) AS grep,
-    $insensitive_grep($value) AS insensitive_grep,
-    $multi_match($value) AS multi_match,
-    $multi_match($value).0 AS some_multi_match,
-    $capture($value) AS capture,
-    $capture_many($value) AS capture_many,
-    $replace($value, "b") AS replace
+    $match($value) AS match,                        -- false
+    $grep($value) AS grep,                          -- true
+    $insensitive_grep($value) AS insensitive_grep,  -- true
+    $multi_match($value) AS multi_match,            -- (false, true, true, true)
+    $multi_match($value).0 AS some_multi_match,     -- false
+    $capture($value) AS capture,                    -- "xaa"
+    $capture_many($value) AS capture_many,          -- "xa"
+    $replace($value, "b") AS replace                -- "babaXaa"
 ;
-
-/*
-- match: false
-- grep: true
-- insensitive_grep: true
-- multi_match: (false, true, true, true)
-- some_multi_match: false
-- capture: "xaaa"
-- capture_many: "xaa"
-- replace: "babaXaa"
-*/
 ```
 

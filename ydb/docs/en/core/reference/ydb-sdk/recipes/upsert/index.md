@@ -1,4 +1,4 @@
-# Вставка данных
+# Inserting data
 
 {% include [work in progress message](../_includes/addition.md) %}
 
@@ -8,7 +8,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK methods for upserti
 
 - Go
 
-
   {% include [go.md](_includes/go.md) %}
 
 {% endlist %}
+

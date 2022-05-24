@@ -2,12 +2,12 @@
 
 **List of functions**
 
-* ```Pire::Grep(String) -> (String?) -> Bool```
-* ```Pire::Match(String) -> (String?) -> Bool```
-* ```Pire::MultiGrep(String) -> (String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::MultiMatch(String) -> (String?) -> Tuple<Bool, Bool, ...>```
-* ```Pire::Capture(String) -> (String?) -> String?```
-* ```Pire::Replace(String) -> (String?, String) -> String?```
+* ```Pire::Grep(pattern:String) -> (string:String?) -> Bool```
+* ```Pire::Match(pattern:String) -> (string:String?) -> Bool```
+* ```Pire::MultiGrep(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
+* ```Pire::MultiMatch(pattern:String) -> (string:String?) -> Tuple<Bool, Bool, ...>```
+* ```Pire::Capture(pattern:String) -> (string:String?) -> String?```
+* ```Pire::Replace(pattern:String) -> (string:String?, replacement:String) -> String?```
 
 One of the options to match regular expressions in YQL is to use  [Pire](https://github.com/yandex/pire) (Perl Incompatible Regular Expressions). This is a very fast library of regular expressions developed at Yandex: at the lower level, it looks up the input string once, without any lookaheads or rollbacks, spending 5 machine instructions per character (on x86 and x86_64).
 
@@ -53,25 +53,14 @@ $capture_many = Pire::Capture(".*x(a+).*");
 $replace = Pire::Replace(".*x(a).*");
 
 SELECT
-  $match($value) AS match,
-  $grep($value) AS grep,
-  $insensitive_grep($value) AS insensitive_grep,
-  $multi_match($value) AS multi_match,
-  $multi_match($value).0 AS some_multi_match,
-  $capture($value) AS capture,
-  $capture_many($value) AS capture_many,
-  $replace($value, "b") AS replace;
-
-/*
-- match: `false`
-- grep: `true`
-- insensitive_grep: `true`
-- multi_match: `(false, true, true, true)`
-- some_multi_match: `false`
-- capture: `"a"`
-- capture_many: `"aa"`
-- replace: `"xaaxaaxba"`
-*/
+  $match($value) AS match,                        -- false
+  $grep($value) AS grep,                          -- true
+  $insensitive_grep($value) AS insensitive_grep,  -- true
+  $multi_match($value) AS multi_match,            -- (false, true, true, true)
+  $multi_match($value).0 AS some_multi_match,     -- false
+  $capture($value) AS capture,                    -- "a"
+  $capture_many($value) AS capture_many,          -- "aa"
+  $replace($value, "b") AS replace;               -- "xaaxaaxba"
 ```
 
 ## Grep {#grep}
@@ -100,13 +89,8 @@ $multi_match = Pire::MultiMatch(@@a.*
 .*axa.*@@);
 
 SELECT
-    $multi_match("a") AS a,
-    $multi_match("axa") AS axa;
-
-/*
-- a: `(true, false, false)`
-- axa: `(true, true, true)`
-*/
+    $multi_match("a") AS a,      -- (true, false, false)
+    $multi_match("axa") AS axa;  -- (true, true, true)
 ```
 
 ## Capture {#capture}

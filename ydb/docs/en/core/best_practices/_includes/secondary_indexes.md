@@ -20,15 +20,15 @@ Since an index contains its own data that is derived from table data, an initial
 
 Indexes can only be used in the order of their fields. If there are two index fields, `a` and `b`, this index can be effectively used for queries like:
 
-* `where a = $var1 and b = $var2`.
-* `where a = $var1`.
-* `where a > $var1`, and other comparison operators.
+* `where a = $var1 and b = $var2`;
+* `where a = $var1`;
+* `where a > $var1`, and other comparison operators;
 * `where a = $var1 and b > $var2`, and any other comparison operators, but the first field must be checked for equality.
 
 At the same time, you can't use this index for the following queries:
 
-* `where b = $var1`.
-* `where a > $var1 and b > $var2`, to be more precise, this entry will be equivalent to `where a > $var1` in terms of using the index.
+* `where b = $var1`;
+* `where a > $var1 and b > $var2`, to be more precise, this entry will be equivalent to `where a > $var1` in terms of using the index;
 * `where b > $var1`.
 
 Considering the above specifics, it's useless to try to index all possible combinations of table columns in advance to speed up the execution of any query. An index is always a trade-off between the speed of searching and writing data and the storage space this data takes. Indexes are created for specific selects and criteria for a search that an application will make in the database.

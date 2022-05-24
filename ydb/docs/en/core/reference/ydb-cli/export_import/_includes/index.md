@@ -12,5 +12,5 @@ The YDB CLI contains a set of commands designed to export and import data and de
 
 - [Exporting data to S3-compatible object storage using `export s3`](../s3_export.md)
 
-- [Data import from S3-compatible object storage using `import s3`](../s3_import.md)
+- [Importing data from S3-compatible object storage using `import s3`](../s3_import.md)
 

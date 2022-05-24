@@ -121,7 +121,7 @@ Get a component of the URL.
   Returns a second-level domain in most cases and a third-level domain for the hostnames like: ***.XXX.YY, where XXX is com, net, org, co, gov, or edu. You can redefine this list using an optional second argument
 
 * ```Url::GetOwner(String{Flags:AutoMap}) -> String```
-  Returns the domain that's most likely owned by an individual or organization. Unlike Url::GetSignificantDomain, it uses a special whitelist. Besides the ***.co.uk domains, it can return a third-level domain used by free hosting sites and blogs (for example: something.livejournal.com)s
+  Returns the domain that's most likely owned by an individual or organization. Unlike Url::GetSignificantDomain, it uses a special whitelist. Besides the ***.co.uk domains, it can return a third-level domain used by free hosting sites and blogs (for example: something.livejournal.com)
 
 **Examples**
 

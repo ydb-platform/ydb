@@ -1,6 +1,6 @@
 ## Matching a string by pattern {#check-match}
 
-`REGEXP` and `RLIKE` are aliases used to call [Hyperscan::Grep](../../../udf/list/hyperscan.md#grep). `MATCH`: Same for [Hyperscan::Match](../../../udf/list/hyperscan.md#match).
+`REGEXP` and `RLIKE` are aliases used to call [Re2::Grep](../../../udf/list/re2.md#match). `MATCH`: Same for [Re2::Match](../../../udf/list/re2.md#match).
 
 `LIKE` works as follows:
 

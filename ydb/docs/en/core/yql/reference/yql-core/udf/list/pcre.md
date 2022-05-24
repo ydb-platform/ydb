@@ -9,12 +9,16 @@ If you depend on some features of a certain regular expression engine, it's bett
 Currently available engines:
 
 * [Hyperscan](hyperscan.md) <span style="color: gray;">(Intel)</span>
-* [Re2](re2.md) <span style="color: gray;">(Google)</span>
 * [Pire](pire.md) <span style="color: gray;">(Yandex)</span>
+* [Re2](re2.md) <span style="color: gray;">(Google)</span>
 
-Hyperscan and Pire are best-suited for Grep and Match. Inside Hyperscan, there are several implementations that use different sets of processor instructions, with the relevant instruction automatically selected based on the current processor. Pire is also known for its excellent performance. So, if you need high performance, test-run this library against your data and regular expressions. However, since the library almost hasn't been developed since 2011-2013 and its name says "Perl incompatible", you may need to adapt your regular expressions a bit.
+All three modules provide approximately the same set of functions with an identical interface. This lets you switch between them with minimal changes to a query.
 
-The main benefit of the Re2 is its advanced Capture and Replace functionality. Use this library, if you need those functions.
+Inside Hyperscan, there are several implementations that use different sets of processor instructions, with the relevant instruction automatically selected based on the current processor. In HyperScan, some functions support backtracking (referencing the previously found part of the string). Those functions are implemented through hybrid use of the two libraries: Hyperscan and libpcre.
 
-In HyperScan, some functions support backtracking (referencing the previously found part of the string). Those functions are implemented through hybrid use of the two libraries: Hyperscan and libpcre.
+[Pire](https://github.com/yandex/pire) (Perl Incompatible Regular Expressions) is a very fast library of regular expressions developed by Yandex. At the lower level, it scans the input string once, without any lookaheads or rollbacks, spending 5 machine instructions per character (on x86 and x86_64). However, since the library almost hasn't been developed since 2011-2013 and its name says "Perl incompatible", you may need to adapt your regular expressions a bit.
+
+Hyperscan and Pire are best-suited for Grep and Match.
+
+The Re2 module uses [google::RE2](https://github.com/google/re2) that offers a wide range of features ([see the official documentation](https://github.com/google/re2/wiki/Syntax)). The main benefit of the Re2 is its advanced Capture and Replace functionality. Use this library, if you need those functions.
 

@@ -2741,5 +2741,79 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto inputType = input->Child(0)->GetTypeAnn();
+    ui32 inputTypePg;
+    bool convertToPg;
+    if (!ExtractPgType(inputType, inputTypePg, convertToPg, input->Child(0)->Pos(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (convertToPg) {
+        input->ChildRef(0) = ctx.Expr.NewCallable(input->Child(0)->Pos(), "ToPg", { input->ChildPtr(0) });
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto listType = input->Child(1)->GetTypeAnn();
+    if (listType && listType->GetKind() == ETypeAnnotationKind::EmptyList) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "IN expects at least one element"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureListType(*input->Child(1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto listItemType = listType->Cast<TListExprType>()->GetItemType();
+    ui32 itemTypePg;
+    if (!ExtractPgType(listItemType, itemTypePg, convertToPg, input->Child(1)->Pos(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (convertToPg) {
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("PgIn")
+                .Add(0, input->ChildPtr(0))
+                .Callable(1, "Map")
+                    .Add(0, input->ChildPtr(1))
+                    .Lambda(1)
+                        .Param("x")
+                        .Callable("ToPg")
+                            .Arg(0, "x")
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (itemTypePg && inputTypePg && itemTypePg != inputTypePg) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Mismatch of types in IN expressions: " <<
+            NPg::LookupType(inputTypePg).Name << " is not equal to " << NPg::LookupType(itemTypePg).Name));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!listItemType->IsEquatable()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(itemTypePg).Name));
+    }
+
+    if (!inputType->IsEquatable()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(inputTypePg).Name));
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace NTypeAnnImpl
 }

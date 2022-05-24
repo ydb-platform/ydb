@@ -1827,6 +1827,59 @@ public:
         return ret;
     }
 
+    TAstNode* ParseAExprIn(const A_Expr* value, const TExprSettings& settings) {
+        if (ListLength(value->name) != 1) {
+            AddError(TStringBuilder() << "Unsupported count of names: " << ListLength(value->name));
+            return nullptr;
+        }
+
+        auto nameNode = ListNodeNth(value->name, 0);
+        if (NodeTag(nameNode) != T_String) {
+            NodeNotImplemented(value, nameNode);
+            return nullptr;
+        }
+
+        auto op = StrVal(nameNode);
+        if (op != "=" && op != "<>") {
+            AddError(TStringBuilder() << "Unsupported operation: " << op);
+            return nullptr;
+        }
+
+        if (!value->lexpr || !value->rexpr) {
+            AddError("Missing operands");
+            return nullptr;
+        }
+
+        auto lhs = ParseExpr(value->lexpr, settings);
+        if (!lhs) {
+            return nullptr;
+        }
+
+        if (NodeTag(value->rexpr) != T_List) {
+            NodeNotImplemented(value, value->rexpr);
+            return nullptr;
+        }
+
+        auto lst = CAST_NODE(List, value->rexpr);
+        TVector<TAstNode*> listItems;
+        listItems.push_back(A("AsList"));
+        for (int item = 0; item < ListLength(lst); ++item) {
+            auto cell = ParseExpr(ListNodeNth(lst, item), settings);
+            if (!cell) {
+                return nullptr;
+            }
+
+            listItems.push_back(cell);
+        }
+
+        auto ret = L(A("PgIn"), lhs, VL(listItems.data(), listItems.size()));
+        if (op[0] == '<') {
+            ret = L(A("PgNot"), ret);
+        }
+
+        return ret;
+    }
+
     TAstNode* ParseAExprBetween(const A_Expr* value, const TExprSettings& settings) {
         if (!value->lexpr || !value->rexpr) {
             AddError("Missing operands");
@@ -1898,6 +1951,8 @@ public:
         case AEXPR_LIKE:
         case AEXPR_ILIKE:
             return ParseAExprLike(value, settings, value->kind == AEXPR_ILIKE);
+        case AEXPR_IN:
+            return ParseAExprIn(value, settings);
         case AEXPR_BETWEEN:
         case AEXPR_NOT_BETWEEN:
         case AEXPR_BETWEEN_SYM:

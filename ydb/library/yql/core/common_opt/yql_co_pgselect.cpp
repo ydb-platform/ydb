@@ -1158,4 +1158,31 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
         .Build();
 }
 
+TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    Y_UNUSED(optCtx);
+    return ctx.Builder(node->Pos())
+        .Callable("Fold")
+            .Add(0, node->ChildPtr(1))
+            .Callable(1, "PgConst")
+                .Atom(0, "false")
+                .Callable(1, "PgType")
+                    .Atom(0, "bool")
+                .Seal()
+            .Seal()
+            .Lambda(2)
+                .Param("item")
+                .Param("state")
+                .Callable("PgOr")
+                    .Arg(0, "state")
+                    .Callable(1, "PgOp")
+                        .Atom(0, "=")
+                        .Arg(1, "item")
+                        .Add(2, node->ChildPtr(0))
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 } // namespace NYql

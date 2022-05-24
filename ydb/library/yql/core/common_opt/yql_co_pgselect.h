@@ -11,4 +11,6 @@ TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TC
 
 TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 
+TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+
 } // namespace NYql

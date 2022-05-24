@@ -359,7 +359,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.mutable_init_request()->set_consumer("user");
             req.mutable_init_request()->set_read_only_original(true);
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -369,7 +368,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kInitResponse);
             //send some reads
             req.Clear();
-            req.mutable_read_request();
+            req.mutable_read_request()->set_request_uncompressed_size(256);
             for (ui32 i = 0; i < 10; ++i) {
                 if (!readStream->Write(req)) {
                     ythrow yexception() << "write fail";
@@ -387,31 +386,31 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             TVector<i64> partition_ids;
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
-            partition_ids.push_back(resp.create_partition_stream_request().partition_stream().partition_id());
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().cluster() == "dc1");
+            partition_ids.push_back(resp.start_partition_session_request().partition_session().partition_id());
 
-            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
             req.Clear();
-            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
 
             resp.Clear();
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
-            partition_ids.push_back(resp.create_partition_stream_request().partition_stream().partition_id());
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().cluster() == "dc1");
+            partition_ids.push_back(resp.start_partition_session_request().partition_session().partition_id());
 
             std::sort(partition_ids.begin(), partition_ids.end());
             UNIT_ASSERT((partition_ids == TVector<i64>{0, 1}));
 
-            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
             req.Clear();
-            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -433,7 +432,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.mutable_init_request()->set_consumer("user");
             req.mutable_init_request()->set_read_only_original(true);
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
 
             if (!readStreamSecond->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -453,25 +451,25 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "=== Got response (expect destroy): " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kDestroyPartitionStreamRequest);
-            UNIT_ASSERT(resp.destroy_partition_stream_request().graceful());
-            auto stream_id = resp.destroy_partition_stream_request().partition_stream_id();
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kStopPartitionSessionRequest);
+            UNIT_ASSERT(resp.stop_partition_session_request().graceful());
+            auto stream_id = resp.stop_partition_session_request().partition_session_id();
 
             req.Clear();
-            req.mutable_destroy_partition_stream_response()->set_partition_stream_id(stream_id);
+            req.mutable_stop_partition_session_response()->set_partition_session_id(stream_id);
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
             resp.Clear();
             UNIT_ASSERT(readStreamSecond->Read(&resp));
             Cerr << "=== Got response (expect create): " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().cluster() == "dc1");
 
-            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
             req.Clear();
-            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
 
             if (!readStreamSecond->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -488,14 +486,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "=== Got response (expect forceful destroy): " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kDestroyPartitionStreamRequest);
-            UNIT_ASSERT(!resp.destroy_partition_stream_request().graceful());
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kStopPartitionSessionRequest);
+            UNIT_ASSERT(!resp.stop_partition_session_request().graceful());
 
             resp.Clear();
             UNIT_ASSERT(readStreamSecond->Read(&resp));
             Cerr << "=== Got response (expect forceful destroy): " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kDestroyPartitionStreamRequest);
-            UNIT_ASSERT(!resp.destroy_partition_stream_request().graceful());
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kStopPartitionSessionRequest);
+            UNIT_ASSERT(!resp.stop_partition_session_request().graceful());
         }
     }
 
@@ -520,7 +518,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.mutable_init_request()->set_consumer("user");
             req.mutable_init_request()->set_read_only_original(true);
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -530,7 +527,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kInitResponse);
             //send some reads
             req.Clear();
-            req.mutable_read_request();
+            req.mutable_read_request()->set_request_uncompressed_size(256);
             for (ui32 i = 0; i < 10; ++i) {
                 if (!readStream->Write(req)) {
                     ythrow yexception() << "write fail";
@@ -546,16 +543,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest);
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().topic() == "acc/topic1");
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().cluster() == "dc1");
-            UNIT_ASSERT(resp.create_partition_stream_request().partition_stream().partition_id() == 0);
+            UNIT_ASSERT(resp.server_message_case() == StreamingReadServerMessage::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().topic() == "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().cluster() == "dc1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
 
-            assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
             req.Clear();
-            req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
 
-            req.mutable_create_partition_stream_response()->set_read_offset(10);
+            req.mutable_start_partition_session_response()->set_read_offset(10);
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
@@ -575,14 +572,15 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         //check read results
         StreamingReadServerMessage resp;
-        for (ui32 i = 10; i < 16; ++i) {
+        for (ui32 i = 10; i < 16; ) {
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "Got read response " << resp << "\n";
-            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kDataBatch, resp);
-            UNIT_ASSERT(resp.data_batch().partition_data_size() == 1);
-            UNIT_ASSERT(resp.data_batch().partition_data(0).batches_size() == 1);
-            UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data_size() == 1);
-            UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data(0).offset() == i);
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kReadResponse, resp);
+            UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data_size() >= 1);
+            UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data(0).offset() == i);
+            i += resp.read_response().partition_data(0).batches(0).message_data_size();
         }
 
         // send commit, await commitDone
@@ -591,7 +589,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             StreamingReadServerMessage resp;
 
             auto commit = req.mutable_commit_request()->add_commits();
-            commit->set_partition_stream_id(assignId);
+            commit->set_partition_session_id(assignId);
 
             auto offsets = commit->add_offsets();
             offsets->set_start_offset(0);
@@ -603,7 +601,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(readStream->Read(&resp));
             UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kCommitResponse, resp);
             UNIT_ASSERT(resp.commit_response().partitions_committed_offsets_size() == 1);
-            UNIT_ASSERT(resp.commit_response().partitions_committed_offsets(0).partition_stream_id() == assignId);
+            UNIT_ASSERT(resp.commit_response().partitions_committed_offsets(0).partition_session_id() == assignId);
             UNIT_ASSERT(resp.commit_response().partitions_committed_offsets(0).committed_offset() == 13);
         }
 
@@ -612,17 +610,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             StreamingReadClientMessage  req;
             StreamingReadServerMessage resp;
 
-            req.mutable_partition_stream_status_request()->set_partition_stream_id(assignId);
+            req.mutable_partition_session_status_request()->set_partition_session_id(assignId);
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
 
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kPartitionStreamStatusResponse, resp);
-            UNIT_ASSERT(resp.partition_stream_status_response().partition_stream_id() == assignId);
-            UNIT_ASSERT(resp.partition_stream_status_response().committed_offset() == 13);
-            UNIT_ASSERT(resp.partition_stream_status_response().end_offset() == 16);
-            UNIT_ASSERT(resp.partition_stream_status_response().written_at_watermark_ms() > 0);
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kPartitionSessionStatusResponse, resp);
+            UNIT_ASSERT(resp.partition_session_status_response().partition_session_id() == assignId);
+            UNIT_ASSERT(resp.partition_session_status_response().committed_offset() == 13);
+            UNIT_ASSERT(resp.partition_session_status_response().end_offset() == 16);
+            UNIT_ASSERT(resp.partition_session_status_response().written_at_watermark_ms() > 0);
         }
 
         // send update token request, await response
@@ -956,8 +954,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             req.mutable_init_request()->set_consumer("user");
             req.mutable_init_request()->set_read_only_original(true);
 
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1000);
-
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
@@ -971,7 +967,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Sleep(TDuration::Seconds(5));
             for (ui32 i = 0; i < 10; ++i) {
                 req.Clear();
-                req.mutable_read_request();
+                req.mutable_read_request()->set_request_uncompressed_size(256000);
 
                 if (!readStream->Write(req)) {
                     ythrow yexception() << "write fail";
@@ -984,16 +980,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         for (ui32 i = 0; i < 2;) {
             StreamingReadServerMessage resp;
             UNIT_ASSERT(readStream->Read(&resp));
-            if (resp.server_message_case() == StreamingReadServerMessage::kCreatePartitionStreamRequest) {
-                auto assignId = resp.create_partition_stream_request().partition_stream().partition_stream_id();
+            if (resp.server_message_case() == StreamingReadServerMessage::kStartPartitionSessionRequest) {
+                auto assignId = resp.start_partition_session_request().partition_session().partition_session_id();
                 StreamingReadClientMessage req;
-                req.mutable_create_partition_stream_response()->set_partition_stream_id(assignId);
+                req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
                 UNIT_ASSERT(readStream->Write(req));
                 continue;
             }
 
-            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kDataBatch, resp);
-            i += resp.data_batch().partition_data_size();
+            UNIT_ASSERT_C(resp.server_message_case() == StreamingReadServerMessage::kReadResponse, resp);
+            i += resp.read_response().partition_data_size();
         }
     }
 

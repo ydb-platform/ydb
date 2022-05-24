@@ -9,6 +9,6 @@ using namespace Ydb;
 bool RemoveEmptyMessages(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch& data);
 
 // TODO: remove after grpc refactor
-bool RemoveEmptyMessages(PersQueue::V1::StreamingReadServerMessage::DataBatch& data);
+bool RemoveEmptyMessages(PersQueue::V1::StreamingReadServerMessage::ReadResponse& data);
 
 }

@@ -125,7 +125,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
             if constexpr (UseMigrationProtocol) {
                 return request.assign_id();
             } else {
-                return request.partition_stream_id();
+                return request.partition_session_id();
             }
         }();
         Y_VERIFY(Partitions.find(id) != Partitions.end());
@@ -255,8 +255,8 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 ctx.Send(ctx.SelfID, new TEvPQProxy::TEvRead()); // Proto read message have no parameters
                 break;
             }
-            case TClientMessage::kPartitionStreamStatusRequest: {
-                GET_PART_ID_OR_EXIT(request.partition_stream_status_request());
+            case TClientMessage::kPartitionSessionStatusRequest: {
+                GET_PART_ID_OR_EXIT(request.partition_session_status_request());
                 ctx.Send(ctx.SelfID, new TEvPQProxy::TEvGetStatus(partId));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
@@ -266,8 +266,8 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 break;
 
             }
-            case TClientMessage::kDestroyPartitionStreamResponse: {
-                GET_PART_ID_OR_EXIT(request.destroy_partition_stream_response());
+            case TClientMessage::kStopPartitionSessionResponse: {
+                GET_PART_ID_OR_EXIT(request.stop_partition_session_response());
                 ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReleased(partId));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
@@ -277,14 +277,14 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 break;
 
             }
-            case TClientMessage::kCreatePartitionStreamResponse: {
-                const auto& req = request.create_partition_stream_response();
+            case TClientMessage::kStartPartitionSessionResponse: {
+                const auto& req = request.start_partition_session_response();
 
                 const ui64 readOffset = req.read_offset();
                 const ui64 commitOffset = req.commit_offset();
                 const bool verifyReadOffset = req.verify_read_offset();
 
-                GET_PART_ID_OR_EXIT(request.create_partition_stream_response());
+                GET_PART_ID_OR_EXIT(request.start_partition_session_response());
                 ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(partId, readOffset, commitOffset, verifyReadOffset));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
@@ -304,7 +304,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 THashMap<ui64, TEvPQProxy::TCommitRange> commitRange;
 
                 for (auto& pc: req.commits()) {
-                    auto id = pc.partition_stream_id();
+                    auto id = pc.partition_session_id();
                     for (auto& c: pc.offsets()) {
                         commitRange[id].Ranges.push_back(std::make_pair(c.start_offset(), c.end_offset()));
                     }
@@ -579,7 +579,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
 
         } else {
             auto c = result.mutable_commit_response()->add_partitions_committed_offsets();
-            c->set_partition_stream_id(assignId);
+            c->set_partition_session_id(assignId);
             c->set_committed_offset(ev->Get()->Offset);
         }
     }
@@ -660,10 +660,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         MaxReadSize = NormalizeMaxReadSize(init.read_params().max_read_size());
     } else {
         RangesMode = true;
-        // MaxReadMessagesCount = NormalizeMaxReadMessagesCount(0);
-        // MaxReadSize = NormalizeMaxReadSize(0);
-        MaxReadMessagesCount = NormalizeMaxReadMessagesCount(init.read_params().max_read_messages_count());
-        MaxReadSize = NormalizeMaxReadSize(init.read_params().max_read_size());
+        MaxReadMessagesCount = NormalizeMaxReadMessagesCount(0);
+        MaxReadSize = NormalizeMaxReadSize(0);
     }
     if (init.max_lag_duration_ms() < 0) {
         CloseSession("max_lag_duration_ms must be nonnegative number", PersQueue::ErrorCode::BAD_REQUEST, ctx);
@@ -1069,13 +1067,13 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             result.mutable_assigned()->set_end_offset(ev->Get()->EndOffset);
 
         } else {
-            result.mutable_create_partition_stream_request()->mutable_partition_stream()->set_topic(it->second.Topic->GetFederationPath());
-            result.mutable_create_partition_stream_request()->mutable_partition_stream()->set_cluster(it->second.Topic->GetCluster());
-            result.mutable_create_partition_stream_request()->mutable_partition_stream()->set_partition_id(ev->Get()->Partition.Partition);
-            result.mutable_create_partition_stream_request()->mutable_partition_stream()->set_partition_stream_id(it->first);
+            result.mutable_start_partition_session_request()->mutable_partition_session()->set_topic(it->second.Topic->GetFederationPath());
+            result.mutable_start_partition_session_request()->mutable_partition_session()->set_cluster(it->second.Topic->GetCluster());
+            result.mutable_start_partition_session_request()->mutable_partition_session()->set_partition_id(ev->Get()->Partition.Partition);
+            result.mutable_start_partition_session_request()->mutable_partition_session()->set_partition_session_id(it->first);
 
-            result.mutable_create_partition_stream_request()->set_committed_offset(ev->Get()->Offset);
-            result.mutable_create_partition_stream_request()->set_end_offset(ev->Get()->EndOffset);
+            result.mutable_start_partition_session_request()->set_committed_offset(ev->Get()->Offset);
+            result.mutable_start_partition_session_request()->set_end_offset(ev->Get()->EndOffset);
         }
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client create partition stream event");
@@ -1110,11 +1108,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             result.mutable_partition_status()->set_write_watermark_ms(ev->Get()->WriteTimestampEstimateMs);
 
         } else {
-            result.mutable_partition_stream_status_response()->set_partition_stream_id(it->first);
+            result.mutable_partition_session_status_response()->set_partition_session_id(it->first);
 
-            result.mutable_partition_stream_status_response()->set_committed_offset(ev->Get()->Offset);
-            result.mutable_partition_stream_status_response()->set_end_offset(ev->Get()->EndOffset);
-            result.mutable_partition_stream_status_response()->set_written_at_watermark_ms(ev->Get()->WriteTimestampEstimateMs);
+            result.mutable_partition_session_status_response()->set_committed_offset(ev->Get()->Offset);
+            result.mutable_partition_session_status_response()->set_end_offset(ev->Get()->EndOffset);
+            result.mutable_partition_session_status_response()->set_written_at_watermark_ms(ev->Get()->WriteTimestampEstimateMs);
         }
 
         auto pp = it->second.Partition;
@@ -1154,9 +1152,9 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignalToClient(const ty
         result.mutable_release()->set_commit_offset(it->second.Offset);
 
     } else {
-        result.mutable_destroy_partition_stream_request()->set_partition_stream_id(it->second.Partition.AssignId);
-        result.mutable_destroy_partition_stream_request()->set_graceful(!kill);
-        result.mutable_destroy_partition_stream_request()->set_committed_offset(it->second.Offset);
+        result.mutable_stop_partition_session_request()->set_partition_session_id(it->second.Partition.AssignId);
+        result.mutable_stop_partition_session_request()->set_graceful(!kill);
+        result.mutable_stop_partition_session_request()->set_committed_offset(it->second.Offset);
     }
 
     auto pp = it->second.Partition;
@@ -1478,10 +1476,18 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvRead::TPtr& 
 
 template<typename TServerMessage>
 i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
-    Y_VERIFY(resp.data_batch().partition_data_size() == 1);
+    constexpr bool UseMigrationProtocol = std::is_same_v<TServerMessage, PersQueue::V1::MigrationStreamingReadServerMessage>;
+    if constexpr (UseMigrationProtocol) {
+        Y_VERIFY(resp.data_batch().partition_data_size() == 1);
+        Response.mutable_data_batch()->add_partition_data()->Swap(resp.mutable_data_batch()->mutable_partition_data(0));
+
+    } else {
+        Y_VERIFY(resp.read_response().partition_data_size() == 1);
+        Response.mutable_read_response()->add_partition_data()->Swap(resp.mutable_read_response()->mutable_partition_data(0));
+    }
+
     Response.set_status(Ydb::StatusIds::SUCCESS);
 
-    Response.mutable_data_batch()->add_partition_data()->Swap(resp.mutable_data_batch()->mutable_partition_data(0));
     i64 prev = Response.ByteSize();
     std::swap<i64>(prev, ByteSize);
     return ByteSize - prev;
@@ -1495,16 +1501,27 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::T
 
     THolder<TEvReadResponse> event(ev->Release());
 
-    Y_VERIFY(event->Response.data_batch().partition_data_size() == 1);
-    const ui64 partitionCookie = event->Response.data_batch().partition_data(0).cookie().partition_cookie();
-    Y_VERIFY(partitionCookie != 0); // cookie is assigned
-    const ui64 assignId = event->Response.data_batch().partition_data(0).cookie().assign_id();
+    ui64 partitionCookie;
+    ui64 assignId;
+    if constexpr (UseMigrationProtocol) {
+        Y_VERIFY(event->Response.data_batch().partition_data_size() == 1);
+        partitionCookie = event->Response.data_batch().partition_data(0).cookie().partition_cookie();
+        Y_VERIFY(partitionCookie != 0); // cookie is assigned
+        assignId = event->Response.data_batch().partition_data(0).cookie().assign_id();
+
+    } else {
+        Y_VERIFY(event->Response.read_response().partition_data_size() == 1);
+        assignId = event->Response.read_response().partition_data(0).partition_session_id();
+    }
+
     const auto partitionIt = Partitions.find(assignId);
     Y_VERIFY(partitionIt != Partitions.end());
     Y_VERIFY(partitionIt->second.Reading);
     partitionIt->second.Reading = false;
 
-    partitionIt->second.ReadIdToResponse = partitionCookie + 1;
+    if constexpr (UseMigrationProtocol) {
+        partitionIt->second.ReadIdToResponse = partitionCookie + 1;
+    }
 
     auto it = PartitionToReadResponse.find(sender);
     Y_VERIFY(it != PartitionToReadResponse.end());
@@ -1558,7 +1575,13 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(const TActorContext&
 
     Y_VERIFY(formedResponse->RequestsInfly == 0);
     const ui64 diff = formedResponse->Response.ByteSize();
-    const bool hasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_data_batch());
+    bool hasMessages;
+    if constexpr(UseMigrationProtocol) {
+        hasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_data_batch());
+    } else {
+        hasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_read_response());
+    }
+
     if (hasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " response to read " << formedResponse->Guid);
 

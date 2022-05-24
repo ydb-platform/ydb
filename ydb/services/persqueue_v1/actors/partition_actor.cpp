@@ -254,25 +254,62 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     }
 }
 
-// TODO: keep only Migration version
-template<typename TServerMessage>
+TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
+    Y_VERIFY(batch);
+    return batch->source_id();
+}
+
+TString GetBatchSourceId(PersQueue::V1::StreamingReadServerMessage::ReadResponse::Batch* batch) {
+    Y_VERIFY(batch);
+    return batch->message_group_id();
+}
+
+void SetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString value) {
+    Y_VERIFY(batch);
+    batch->set_source_id(std::move(value));
+}
+
+void SetBatchSourceId(PersQueue::V1::StreamingReadServerMessage::ReadResponse::Batch* batch, TString value) {
+    Y_VERIFY(batch);
+    batch->set_message_group_id(std::move(value));
+}
+
+void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {
+    Y_VERIFY(batch);
+    auto* item = batch->add_extra_fields();
+    item->set_key(std::move(key));
+    item->set_value(std::move(value));
+}
+
+void SetBatchExtraField(PersQueue::V1::StreamingReadServerMessage::ReadResponse::Batch* batch, TString key, TString value) {
+    Y_VERIFY(batch);
+    (*batch->mutable_session_meta()->mutable_value())[key] = std::move(value);
+}
+
+template<typename TReadResponse>
 bool FillBatchedData(
-        typename TServerMessage::DataBatch * data, const NKikimrClient::TCmdReadResult& res,
+        TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
         const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) {
-
+    constexpr bool UseMigrationProtocol = std::is_same_v<TReadResponse, PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch>;
     auto* partitionData = data->add_partition_data();
-    partitionData->mutable_topic()->set_path(topic->GetFederationPath());
-    partitionData->set_cluster(topic->GetCluster());
-    partitionData->set_partition(Partition.Partition);
-    partitionData->set_deprecated_topic(topic->GetClientsideName());
-    partitionData->mutable_cookie()->set_assign_id(Partition.AssignId);
-    partitionData->mutable_cookie()->set_partition_cookie(ReadIdToResponse);
+
+    if constexpr (UseMigrationProtocol) {
+        partitionData->mutable_topic()->set_path(topic->GetFederationPath());
+        partitionData->set_cluster(topic->GetCluster());
+        partitionData->set_partition(Partition.Partition);
+        partitionData->set_deprecated_topic(topic->GetClientsideName());
+        partitionData->mutable_cookie()->set_assign_id(Partition.AssignId);
+        partitionData->mutable_cookie()->set_partition_cookie(ReadIdToResponse);
+
+    } else {
+        partitionData->set_partition_session_id(Partition.AssignId);
+    }
 
     bool hasOffset = false;
     bool hasData = false;
 
-    typename TServerMessage::DataBatch::Batch* currentBatch = nullptr;
+    typename TReadResponse::Batch* currentBatch = nullptr;
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
@@ -294,42 +331,34 @@ bool FillBatchedData(
             sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
         }
 
-        if (!currentBatch || currentBatch->write_timestamp_ms() != r.GetWriteTimestampMS() || currentBatch->source_id() != sourceId) {
+        if (!currentBatch
+            || static_cast<i64>(currentBatch->write_timestamp_ms()) != static_cast<i64>(r.GetWriteTimestampMS())
+            || GetBatchSourceId(currentBatch) != sourceId) {
             // If write time and source id are the same, the rest fields will be the same too.
             currentBatch = partitionData->add_batches();
             currentBatch->set_write_timestamp_ms(r.GetWriteTimestampMS());
-            currentBatch->set_source_id(sourceId);
+            SetBatchSourceId(currentBatch, std::move(sourceId));
 
             if (proto.HasMeta()) {
                 const auto& header = proto.GetMeta();
                 if (header.HasServer()) {
-                    auto* item = currentBatch->add_extra_fields();
-                    item->set_key("server");
-                    item->set_value(header.GetServer());
+                    SetBatchExtraField(currentBatch, "server", header.GetServer());
                 }
                 if (header.HasFile()) {
-                    auto* item = currentBatch->add_extra_fields();
-                    item->set_key("file");
-                    item->set_value(header.GetFile());
+                    SetBatchExtraField(currentBatch, "file", header.GetFile());
                 }
                 if (header.HasIdent()) {
-                    auto* item = currentBatch->add_extra_fields();
-                    item->set_key("ident");
-                    item->set_value(header.GetIdent());
+                    SetBatchExtraField(currentBatch, "ident", header.GetIdent());
                 }
                 if (header.HasLogType()) {
-                    auto* item = currentBatch->add_extra_fields();
-                    item->set_key("logtype");
-                    item->set_value(header.GetLogType());
+                    SetBatchExtraField(currentBatch, "logtype", header.GetLogType());
                 }
             }
 
             if (proto.HasExtraFields()) {
                 const auto& map = proto.GetExtraFields();
                 for (const auto& kv : map.GetItems()) {
-                    auto* item = currentBatch->add_extra_fields();
-                    item->set_key(kv.GetKey());
-                    item->set_value(kv.GetValue());
+                    SetBatchExtraField(currentBatch, kv.GetKey(), kv.GetValue());
                 }
             }
 
@@ -506,11 +535,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     bool hasData = false;
     if (UseMigrationProtocol) {
-        auto* data = migrationResponse.mutable_data_batch();
-        hasData = FillBatchedData<MigrationStreamingReadServerMessage>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
+        hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     } else {
-        auto* data = response.mutable_data_batch();
-        hasData = FillBatchedData<StreamingReadServerMessage>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        StreamingReadServerMessage::ReadResponse* data = response.mutable_read_response();
+        hasData = FillBatchedData<StreamingReadServerMessage::ReadResponse>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     }
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);

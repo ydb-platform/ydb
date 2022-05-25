@@ -117,15 +117,16 @@ public:
             Quantity = cmd.GetStock().GetQuantity();
         }
 
-        NYdbWorkload::TWorkloadParams* workloadParams = nullptr;
-        if (cmd.GetWorkloadName() == "stock") {
-            NYdbWorkload::TStockWorkloadParams params;
-            params.DbPath = WorkingDir;
-            params.PartitionsByLoad = true;
-            workloadParams = &params;
+        if (cmd.GetWorkloadName() != "stock") {
+            return;
         }
+
+        NYdbWorkload::TStockWorkloadParams params;
+        params.DbPath = WorkingDir;
+        params.PartitionsByLoad = true;
+
         NYdbWorkload::TWorkloadFactory factory;
-        WorkloadQueryGen = factory.GetWorkloadQueryGenerator(cmd.GetWorkloadName(), workloadParams);
+        WorkloadQueryGen = factory.GetWorkloadQueryGenerator(cmd.GetWorkloadName(), &params);
         Y_ASSERT(WorkloadQueryGen.get() != nullptr);
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
 

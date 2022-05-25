@@ -1,6 +1,6 @@
 --- contrib/python/botocore/py3/botocore/data/endpoints.json	(index)
 +++ contrib/python/botocore/py3/botocore/data/endpoints.json	(working tree)
-@@ -18584,6 +18584,46 @@
+@@ -18857,6 +18857,46 @@
          }
        }
      }
@@ -91,7 +91,7 @@
  logger = logging.getLogger(__name__)
  
  
-@@ -174,6 +177,51 @@ class JSONFileLoader(object):
+@@ -177,6 +180,51 @@ class JSONFileLoader(object):
          return json.loads(payload, object_pairs_hook=OrderedDict)
  
  
@@ -143,16 +143,16 @@
  def create_loader(search_path_string=None):
      """Create a Loader class.
  
-@@ -207,7 +255,7 @@ class Loader(object):
-     convenience method over ``load_data`` and ``determine_latest_version``.
+@@ -211,7 +259,7 @@ class Loader(object):
  
      """
+
 -    FILE_LOADER_CLASS = JSONFileLoader
 +    FILE_LOADER_CLASS = HybridJsonLoader
      # The included models in botocore/data/ that we ship with botocore.
      BUILTIN_DATA_PATH = os.path.join(BOTOCORE_ROOT, 'data')
      # For convenience we automatically add ~/.aws/models to the data path.
-@@ -283,6 +331,11 @@ class Loader(object):
+@@ -296,6 +344,11 @@ class Loader(object):
                      if self.file_loader.exists(full_load_path):
                          services.add(service_name)
                          break
@@ -164,7 +164,7 @@
          return sorted(services)
  
      @instance_cache
-@@ -334,6 +387,11 @@ class Loader(object):
+@@ -347,6 +400,11 @@ class Loader(object):
                  # to the type_name passed in.
                  if self.file_loader.exists(full_path):
                      known_api_versions.add(dirname)
@@ -176,7 +176,7 @@
          if not known_api_versions:
              raise DataNotFoundError(data_path=service_name)
          return sorted(known_api_versions)
-@@ -419,6 +477,12 @@ class Loader(object):
+@@ -434,6 +492,12 @@ class Loader(object):
              found = self.file_loader.load_file(possible_path)
              if found is not None:
                  return found

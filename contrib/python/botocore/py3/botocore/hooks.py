@@ -14,7 +14,7 @@ import copy
 import logging
 from collections import deque, namedtuple
 
-from botocore.compat import accepts_kwargs, six
+from botocore.compat import accepts_kwargs
 from botocore.utils import EVENT_ALIASES
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,6 @@ _LAST = 2
 
 
 class NodeList(_NodeList):
-
     def __copy__(self):
         first_copy = copy.copy(self.first)
         middle_copy = copy.copy(self.middle)
@@ -64,7 +63,7 @@ def first_non_none_response(responses, default=None):
     return default
 
 
-class BaseEventHooks(object):
+class BaseEventHooks:
     def emit(self, event_name, **kwargs):
         """Call all handlers subscribed to an event.
 
@@ -82,8 +81,9 @@ class BaseEventHooks(object):
         """
         return []
 
-    def register(self, event_name, handler, unique_id=None,
-                 unique_id_uses_count=False):
+    def register(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
         """Register an event handler for a given event.
 
         If a ``unique_id`` is given, the handler will not be registered
@@ -97,12 +97,17 @@ class BaseEventHooks(object):
         with ``register_last()``.
 
         """
-        self._verify_and_register(event_name, handler, unique_id,
-                                  register_method=self._register,
-                                  unique_id_uses_count=unique_id_uses_count)
+        self._verify_and_register(
+            event_name,
+            handler,
+            unique_id,
+            register_method=self._register,
+            unique_id_uses_count=unique_id_uses_count,
+        )
 
-    def register_first(self, event_name, handler, unique_id=None,
-                       unique_id_uses_count=False):
+    def register_first(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
         """Register an event handler to be called first for an event.
 
         All event handlers registered with ``register_first()`` will
@@ -110,30 +115,50 @@ class BaseEventHooks(object):
         ``register_last()``.
 
         """
-        self._verify_and_register(event_name, handler, unique_id,
-                                  register_method=self._register_first,
-                                  unique_id_uses_count=unique_id_uses_count)
+        self._verify_and_register(
+            event_name,
+            handler,
+            unique_id,
+            register_method=self._register_first,
+            unique_id_uses_count=unique_id_uses_count,
+        )
 
-    def register_last(self, event_name, handler, unique_id=None,
-                      unique_id_uses_count=False):
+    def register_last(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
         """Register an event handler to be called last for an event.
 
         All event handlers registered with ``register_last()`` will be called
         after handlers registered with ``register_first()`` and ``register()``.
 
         """
-        self._verify_and_register(event_name, handler, unique_id,
-                                  register_method=self._register_last,
-                                  unique_id_uses_count=unique_id_uses_count)
+        self._verify_and_register(
+            event_name,
+            handler,
+            unique_id,
+            register_method=self._register_last,
+            unique_id_uses_count=unique_id_uses_count,
+        )
 
-    def _verify_and_register(self, event_name, handler, unique_id,
-                             register_method, unique_id_uses_count):
+    def _verify_and_register(
+        self,
+        event_name,
+        handler,
+        unique_id,
+        register_method,
+        unique_id_uses_count,
+    ):
         self._verify_is_callable(handler)
         self._verify_accept_kwargs(handler)
         register_method(event_name, handler, unique_id, unique_id_uses_count)
 
-    def unregister(self, event_name, handler=None, unique_id=None,
-                   unique_id_uses_count=False):
+    def unregister(
+        self,
+        event_name,
+        handler=None,
+        unique_id=None,
+        unique_id_uses_count=False,
+    ):
         """Unregister an event handler for a given event.
 
         If no ``unique_id`` was given during registration, then the
@@ -144,7 +169,7 @@ class BaseEventHooks(object):
         pass
 
     def _verify_is_callable(self, func):
-        if not six.callable(func):
+        if not callable(func):
             raise ValueError("Event handler %s must be callable." % func)
 
     def _verify_accept_kwargs(self, func):
@@ -158,8 +183,10 @@ class BaseEventHooks(object):
         """
         try:
             if not accepts_kwargs(func):
-                raise ValueError("Event handler %s must accept keyword "
-                                 "arguments (**kwargs)" % func)
+                raise ValueError(
+                    f"Event handler {func} must accept keyword "
+                    f"arguments (**kwargs)"
+                )
         except TypeError:
             return False
 
@@ -247,23 +274,38 @@ class HierarchicalEmitter(BaseEventHooks):
         else:
             return (None, None)
 
-    def _register(self, event_name, handler, unique_id=None,
-                  unique_id_uses_count=False):
-        self._register_section(event_name, handler, unique_id,
-                               unique_id_uses_count, section=_MIDDLE)
+    def _register(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
+        self._register_section(
+            event_name,
+            handler,
+            unique_id,
+            unique_id_uses_count,
+            section=_MIDDLE,
+        )
 
-    def _register_first(self, event_name, handler, unique_id=None,
-                        unique_id_uses_count=False):
-        self._register_section(event_name, handler, unique_id,
-                               unique_id_uses_count, section=_FIRST)
+    def _register_first(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
+        self._register_section(
+            event_name,
+            handler,
+            unique_id,
+            unique_id_uses_count,
+            section=_FIRST,
+        )
 
-    def _register_last(self, event_name, handler, unique_id,
-                       unique_id_uses_count=False):
-        self._register_section(event_name, handler, unique_id,
-                               unique_id_uses_count, section=_LAST)
+    def _register_last(
+        self, event_name, handler, unique_id, unique_id_uses_count=False
+    ):
+        self._register_section(
+            event_name, handler, unique_id, unique_id_uses_count, section=_LAST
+        )
 
-    def _register_section(self, event_name, handler, unique_id,
-                          unique_id_uses_count, section):
+    def _register_section(
+        self, event_name, handler, unique_id, unique_id_uses_count, section
+    ):
         if unique_id is not None:
             if unique_id in self._unique_id_handlers:
                 # We've already registered a handler using this unique_id
@@ -275,7 +317,8 @@ class HierarchicalEmitter(BaseEventHooks):
                             "Initial registration of  unique id %s was "
                             "specified to use a counter. Subsequent register "
                             "calls to unique id must specify use of a counter "
-                            "as well." % unique_id)
+                            "as well." % unique_id
+                        )
                     else:
                         self._unique_id_handlers[unique_id]['count'] += 1
                 else:
@@ -284,14 +327,16 @@ class HierarchicalEmitter(BaseEventHooks):
                             "Initial registration of unique id %s was "
                             "specified to not use a counter. Subsequent "
                             "register calls to unique id must specify not to "
-                            "use a counter as well." % unique_id)
+                            "use a counter as well." % unique_id
+                        )
                 return
             else:
                 # Note that the trie knows nothing about the unique
                 # id.  We track uniqueness in this class via the
                 # _unique_id_handlers.
-                self._handlers.append_item(event_name, handler,
-                                           section=section)
+                self._handlers.append_item(
+                    event_name, handler, section=section
+                )
                 unique_id_handler_item = {'handler': handler}
                 if unique_id_uses_count:
                     unique_id_handler_item['count'] = 1
@@ -302,8 +347,13 @@ class HierarchicalEmitter(BaseEventHooks):
         # clear the cache.  This has the opportunity for smarter invalidations.
         self._lookup_cache = {}
 
-    def unregister(self, event_name, handler=None, unique_id=None,
-                   unique_id_uses_count=False):
+    def unregister(
+        self,
+        event_name,
+        handler=None,
+        unique_id=None,
+        unique_id_uses_count=False,
+    ):
         if unique_id is not None:
             try:
                 count = self._unique_id_handlers[unique_id].get('count', None)
@@ -316,9 +366,12 @@ class HierarchicalEmitter(BaseEventHooks):
                     raise ValueError(
                         "Initial registration of unique id %s was specified to "
                         "use a counter. Subsequent unregister calls to unique "
-                        "id must specify use of a counter as well." % unique_id)
+                        "id must specify use of a counter as well." % unique_id
+                    )
                 elif count == 1:
-                    handler = self._unique_id_handlers.pop(unique_id)['handler']
+                    handler = self._unique_id_handlers.pop(unique_id)[
+                        'handler'
+                    ]
                 else:
                     self._unique_id_handlers[unique_id]['count'] -= 1
                     return
@@ -328,7 +381,8 @@ class HierarchicalEmitter(BaseEventHooks):
                         "Initial registration of unique id %s was specified "
                         "to not use a counter. Subsequent unregister calls "
                         "to unique id must specify not to use a counter as "
-                        "well." % unique_id)
+                        "well." % unique_id
+                    )
                 handler = self._unique_id_handlers.pop(unique_id)['handler']
         try:
             self._handlers.remove_item(event_name, handler)
@@ -361,29 +415,37 @@ class EventAliaser(BaseEventHooks):
         aliased_event_name = self._alias_event_name(event_name)
         return self._emitter.emit_until_response(aliased_event_name, **kwargs)
 
-    def register(self, event_name, handler, unique_id=None,
-                 unique_id_uses_count=False):
+    def register(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
         aliased_event_name = self._alias_event_name(event_name)
         return self._emitter.register(
             aliased_event_name, handler, unique_id, unique_id_uses_count
         )
 
-    def register_first(self, event_name, handler, unique_id=None,
-                       unique_id_uses_count=False):
+    def register_first(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
         aliased_event_name = self._alias_event_name(event_name)
         return self._emitter.register_first(
             aliased_event_name, handler, unique_id, unique_id_uses_count
         )
 
-    def register_last(self, event_name, handler, unique_id=None,
-                      unique_id_uses_count=False):
+    def register_last(
+        self, event_name, handler, unique_id=None, unique_id_uses_count=False
+    ):
         aliased_event_name = self._alias_event_name(event_name)
         return self._emitter.register_last(
             aliased_event_name, handler, unique_id, unique_id_uses_count
         )
 
-    def unregister(self, event_name, handler=None, unique_id=None,
-                   unique_id_uses_count=False):
+    def unregister(
+        self,
+        event_name,
+        handler=None,
+        unique_id=None,
+        unique_id_uses_count=False,
+    ):
         aliased_event_name = self._alias_event_name(event_name)
         return self._emitter.unregister(
             aliased_event_name, handler, unique_id, unique_id_uses_count
@@ -418,9 +480,9 @@ class EventAliaser(BaseEventHooks):
                 continue
 
             new_name = '.'.join(event_parts)
-            logger.debug("Changing event name from %s to %s" % (
-                event_name, new_name
-            ))
+            logger.debug(
+                f"Changing event name from {event_name} to {new_name}"
+            )
             self._alias_name_cache[event_name] = new_name
             return new_name
 
@@ -430,20 +492,19 @@ class EventAliaser(BaseEventHooks):
     def _replace_subsection(self, sections, old_parts, new_part):
         for i in range(len(sections)):
             if (
-                sections[i] == old_parts[0] and
-                sections[i:i + len(old_parts)] == old_parts
+                sections[i] == old_parts[0]
+                and sections[i : i + len(old_parts)] == old_parts
             ):
-                sections[i:i + len(old_parts)] = [new_part]
+                sections[i : i + len(old_parts)] = [new_part]
                 return
 
     def __copy__(self):
         return self.__class__(
-            copy.copy(self._emitter),
-            copy.copy(self._event_aliases)
+            copy.copy(self._emitter), copy.copy(self._event_aliases)
         )
 
 
-class _PrefixTrie(object):
+class _PrefixTrie:
     """Specialized prefix trie that handles wildcards.
 
     The prefixes in this case are based on dot separated
@@ -465,6 +526,7 @@ class _PrefixTrie(object):
     most specific to least specific.
 
     """
+
     def __init__(self):
         # Each dictionary can be though of as a node, where a node
         # has values associated with the node, and children is a link
@@ -572,8 +634,7 @@ class _PrefixTrie(object):
                     # where a key does not exist.
                     del current_node['children'][key_parts[index]]
             else:
-                raise ValueError(
-                    "key is not in trie: %s" % '.'.join(key_parts))
+                raise ValueError(f"key is not in trie: {'.'.join(key_parts)}")
 
     def __copy__(self):
         # The fact that we're using a nested dict under the covers

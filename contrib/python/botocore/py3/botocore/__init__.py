@@ -16,7 +16,7 @@ import logging
 import os
 import re
 
-__version__ = '1.25.10'
+__version__ = '1.25.11'
 
 
 class NullHandler(logging.Handler):
@@ -64,7 +64,7 @@ BOTOCORE_ROOT = os.path.dirname(__file__)
 
 
 # Used to specify anonymous (unsigned) request signature
-class UNSIGNED(object):
+class UNSIGNED:
     def __copy__(self):
         return self
 
@@ -92,7 +92,7 @@ def xform_name(name, sep='_', _xform_cache=_xform_cache):
             is_special = _special_case_transform.search(name)
             matched = is_special.group()
             # Replace something like ARNs, ACLs with _arns, _acls.
-            name = name[:-len(matched)] + sep + matched.lower()
+            name = f"{name[: -len(matched)]}{sep}{matched.lower()}"
         s1 = _first_cap_regex.sub(r'\1' + sep + r'\2', name)
         transformed = _end_cap_regex.sub(r'\1' + sep + r'\2', s1).lower()
         _xform_cache[key] = transformed

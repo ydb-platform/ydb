@@ -27,9 +27,9 @@ from botocore.exceptions import (
 )
 
 # Keep these imported.  There's pre-existing code that uses them.
-from botocore import ScalarTypes # noqa
-from botocore.compat import XMLParseError # noqa
-from botocore.hooks import first_non_none_response # noqa
+from botocore import ScalarTypes  # noqa
+from botocore.compat import XMLParseError  # noqa
+from botocore.hooks import first_non_none_response  # noqa
 
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ class StreamingBody(IOBase):
           is raised.
 
     """
+
     _DEFAULT_CHUNK_SIZE = 1024
 
     def __init__(self, raw_stream, content_length):
@@ -73,14 +74,14 @@ class StreamingBody(IOBase):
         # putting in a check here so in case this interface goes away, we'll
         # know.
         try:
-            # To further complicate things, the way to grab the
-            # underlying socket object from an HTTPResponse is different
-            # in py2 and py3.  So this code has been pushed to botocore.compat.
             set_socket_timeout(self._raw_stream, timeout)
         except AttributeError:
-            logger.error("Cannot access the socket object of "
-                         "a streaming response.  It's possible "
-                         "the interface has changed.", exc_info=True)
+            logger.error(
+                "Cannot access the socket object of "
+                "a streaming response.  It's possible "
+                "the interface has changed.",
+                exc_info=True,
+            )
             raise
 
     def readable(self):
@@ -113,13 +114,11 @@ class StreamingBody(IOBase):
         return self._raw_stream.readlines()
 
     def __iter__(self):
-        """Return an iterator to yield 1k chunks from the raw stream.
-        """
+        """Return an iterator to yield 1k chunks from the raw stream."""
         return self.iter_chunks(self._DEFAULT_CHUNK_SIZE)
 
     def __next__(self):
-        """Return the next 1k chunk from the raw stream.
-        """
+        """Return the next 1k chunk from the raw stream."""
         current_chunk = self.read(self._DEFAULT_CHUNK_SIZE)
         if current_chunk:
             return current_chunk
@@ -156,11 +155,13 @@ class StreamingBody(IOBase):
         # See: https://github.com/kennethreitz/requests/issues/1855
         # Basically, our http library doesn't do this for us, so we have
         # to do this ourself.
-        if self._content_length is not None and \
-                self._amount_read != int(self._content_length):
+        if self._content_length is not None and self._amount_read != int(
+            self._content_length
+        ):
             raise IncompleteReadError(
                 actual_bytes=self._amount_read,
-                expected_bytes=int(self._content_length))
+                expected_bytes=int(self._content_length),
+            )
 
     def tell(self):
         return self._raw_stream.tell()
@@ -183,10 +184,12 @@ def get_response(operation_model, http_response):
         response_dict['body'] = http_response.content
     elif operation_model.has_streaming_output:
         response_dict['body'] = StreamingBody(
-            http_response.raw, response_dict['headers'].get('content-length'))
+            http_response.raw, response_dict['headers'].get('content-length')
+        )
     else:
         response_dict['body'] = http_response.content
 
     parser = parsers.create_parser(protocol)
-    return http_response, parser.parse(response_dict,
-                                       operation_model.output_shape)
+    return http_response, parser.parse(
+        response_dict, operation_model.output_shape
+    )

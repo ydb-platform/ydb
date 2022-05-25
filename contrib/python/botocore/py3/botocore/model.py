@@ -44,20 +44,47 @@ class ServiceId(str):
         return hyphenize_service_id(self)
 
 
-class Shape(object):
+class Shape:
     """Object representing a shape from the service model."""
+
     # To simplify serialization logic, all shape params that are
     # related to serialization are moved from the top level hash into
     # a 'serialization' hash.  This list below contains the names of all
     # the attributes that should be moved.
-    SERIALIZED_ATTRS = ['locationName', 'queryName', 'flattened', 'location',
-                        'payload', 'streaming', 'timestampFormat',
-                        'xmlNamespace', 'resultWrapper', 'xmlAttribute',
-                        'eventstream', 'event', 'eventheader', 'eventpayload',
-                        'jsonvalue', 'timestampFormat', 'hostLabel']
-    METADATA_ATTRS = ['required', 'min', 'max', 'pattern', 'sensitive', 'enum',
-                      'idempotencyToken', 'error', 'exception',
-                      'endpointdiscoveryid', 'retryable', 'document', 'union']
+    SERIALIZED_ATTRS = [
+        'locationName',
+        'queryName',
+        'flattened',
+        'location',
+        'payload',
+        'streaming',
+        'timestampFormat',
+        'xmlNamespace',
+        'resultWrapper',
+        'xmlAttribute',
+        'eventstream',
+        'event',
+        'eventheader',
+        'eventpayload',
+        'jsonvalue',
+        'timestampFormat',
+        'hostLabel',
+    ]
+    METADATA_ATTRS = [
+        'required',
+        'min',
+        'max',
+        'pattern',
+        'sensitive',
+        'enum',
+        'idempotencyToken',
+        'error',
+        'exception',
+        'endpointdiscoveryid',
+        'retryable',
+        'document',
+        'union',
+    ]
     MAP_TYPE = OrderedDict
 
     def __init__(self, shape_name, shape_model, shape_resolver=None):
@@ -169,8 +196,7 @@ class Shape(object):
         return self._shape_resolver.resolve_shape_ref(shape_ref)
 
     def __repr__(self):
-        return "<%s(%s)>" % (self.__class__.__name__,
-                             self.name)
+        return f"<{self.__class__.__name__}({self.name})>"
 
     @property
     def event_stream_name(self):
@@ -241,7 +267,7 @@ class StringShape(Shape):
         return self.metadata.get('enum', [])
 
 
-class ServiceModel(object):
+class ServiceModel:
     """
 
     :ivar service_description: The parsed service description dictionary.
@@ -273,14 +299,16 @@ class ServiceModel(object):
         # We want clients to be able to access metadata directly.
         self.metadata = service_description.get('metadata', {})
         self._shape_resolver = ShapeResolver(
-            service_description.get('shapes', {}))
+            service_description.get('shapes', {})
+        )
         self._signature_version = NOT_SET
         self._service_name = service_name
         self._instance_cache = {}
 
     def shape_for(self, shape_name, member_traits=None):
         return self._shape_resolver.get_shape_by_name(
-            shape_name, member_traits)
+            shape_name, member_traits
+        )
 
     def shape_for_error_code(self, error_code):
         return self._error_code_cache.get(error_code, None)
@@ -347,9 +375,7 @@ class ServiceModel(object):
         try:
             return ServiceId(self._get_metadata_property('serviceId'))
         except UndefinedModelAttributeError:
-            raise MissingServiceIdError(
-                service_name=self._service_name
-            )
+            raise MissingServiceIdError(service_name=self._service_name)
 
     @CachedProperty
     def signing_name(self):
@@ -398,8 +424,8 @@ class ServiceModel(object):
             return self.metadata[name]
         except KeyError:
             raise UndefinedModelAttributeError(
-                '"%s" not defined in the metadata of the model: %s' %
-                (name, self))
+                f'"{name}" not defined in the metadata of the model: {self}'
+            )
 
     # Signature version is one of the rare properties
     # than can be modified so a CachedProperty is not used here.
@@ -416,10 +442,10 @@ class ServiceModel(object):
         self._signature_version = value
 
     def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, self.service_name)
+        return f'{self.__class__.__name__}({self.service_name})'
 
 
-class OperationModel(object):
+class OperationModel:
     def __init__(self, operation_model, service_model, name=None):
         """
 
@@ -507,7 +533,8 @@ class OperationModel(object):
             # input shape.
             return None
         return self._service_model.resolve_shape_ref(
-            self._operation_model['input'])
+            self._operation_model['input']
+        )
 
     @CachedProperty
     def output_shape(self):
@@ -517,7 +544,8 @@ class OperationModel(object):
             # operation has no expected output.
             return None
         return self._service_model.resolve_shape_ref(
-            self._operation_model['output'])
+            self._operation_model['output']
+        )
 
     @CachedProperty
     def idempotent_members(self):
@@ -526,7 +554,8 @@ class OperationModel(object):
             return []
 
         return [
-            name for (name, shape) in input_shape.members.items()
+            name
+            for (name, shape) in input_shape.members.items()
             if 'idempotencyToken' in shape.metadata
             and shape.metadata['idempotencyToken']
         ]
@@ -601,10 +630,10 @@ class OperationModel(object):
         return None
 
     def __repr__(self):
-        return '%s(name=%s)' % (self.__class__.__name__, self.name)
+        return f'{self.__class__.__name__}(name={self.name})'
 
 
-class ShapeResolver(object):
+class ShapeResolver:
     """Resolves shape references."""
 
     # Any type not in this mapping will default to the Shape class.
@@ -612,7 +641,7 @@ class ShapeResolver(object):
         'structure': StructureShape,
         'list': ListShape,
         'map': MapShape,
-        'string': StringShape
+        'string': StringShape,
     }
 
     def __init__(self, shape_map):
@@ -627,8 +656,9 @@ class ShapeResolver(object):
         try:
             shape_cls = self.SHAPE_CLASSES.get(shape_model['type'], Shape)
         except KeyError:
-            raise InvalidShapeError("Shape is missing required key 'type': %s"
-                                    % shape_model)
+            raise InvalidShapeError(
+                f"Shape is missing required key 'type': {shape_model}"
+            )
         if member_traits:
             shape_model = shape_model.copy()
             shape_model.update(member_traits)
@@ -652,23 +682,27 @@ class ShapeResolver(object):
                 shape_name = member_traits.pop('shape')
             except KeyError:
                 raise InvalidShapeReferenceError(
-                    "Invalid model, missing shape reference: %s" % shape_ref)
+                    f"Invalid model, missing shape reference: {shape_ref}"
+                )
             return self.get_shape_by_name(shape_name, member_traits)
 
 
-class UnresolvableShapeMap(object):
-    """A ShapeResolver that will throw ValueErrors when shapes are resolved.
-    """
+class UnresolvableShapeMap:
+    """A ShapeResolver that will throw ValueErrors when shapes are resolved."""
+
     def get_shape_by_name(self, shape_name, member_traits=None):
-        raise ValueError("Attempted to lookup shape '%s', but no shape "
-                         "map was provided.")
+        raise ValueError(
+            f"Attempted to lookup shape '{shape_name}', but no shape map was provided."
+        )
 
     def resolve_shape_ref(self, shape_ref):
-        raise ValueError("Attempted to resolve shape '%s', but no shape "
-                         "map was provided.")
+        raise ValueError(
+            f"Attempted to resolve shape '{shape_ref}', but no shape "
+            f"map was provided."
+        )
 
 
-class DenormalizedStructureBuilder(object):
+class DenormalizedStructureBuilder:
     """Build a StructureShape from a denormalized model.
 
     This is a convenience builder class that makes it easy to construct
@@ -704,6 +738,19 @@ class DenormalizedStructureBuilder(object):
                       matters, such as for documentation.
 
     """
+
+    SCALAR_TYPES = (
+        'string',
+        'integer',
+        'boolean',
+        'blob',
+        'float',
+        'timestamp',
+        'long',
+        'double',
+        'char',
+    )
+
     def __init__(self, name=None):
         self.members = OrderedDict()
         self._name_generator = ShapeNameGenerator()
@@ -736,9 +783,11 @@ class DenormalizedStructureBuilder(object):
         }
         self._build_model(denormalized, shapes, self.name)
         resolver = ShapeResolver(shape_map=shapes)
-        return StructureShape(shape_name=self.name,
-                              shape_model=shapes[self.name],
-                              shape_resolver=resolver)
+        return StructureShape(
+            shape_name=self.name,
+            shape_model=shapes[self.name],
+            shape_resolver=resolver,
+        )
 
     def _build_model(self, model, shapes, shape_name):
         if model['type'] == 'structure':
@@ -747,11 +796,10 @@ class DenormalizedStructureBuilder(object):
             shapes[shape_name] = self._build_list(model, shapes)
         elif model['type'] == 'map':
             shapes[shape_name] = self._build_map(model, shapes)
-        elif model['type'] in ['string', 'integer', 'boolean', 'blob', 'float',
-                               'timestamp', 'long', 'double', 'char']:
+        elif model['type'] in self.SCALAR_TYPES:
             shapes[shape_name] = self._build_scalar(model)
         else:
-            raise InvalidShapeError("Unknown shape type: %s" % model['type'])
+            raise InvalidShapeError(f"Unknown shape type: {model['type']}")
 
     def _build_structure(self, model, shapes):
         members = OrderedDict()
@@ -802,13 +850,14 @@ class DenormalizedStructureBuilder(object):
             return self._name_generator.new_shape_name(model['type'])
 
 
-class ShapeNameGenerator(object):
+class ShapeNameGenerator:
     """Generate unique shape names for a type.
 
     This class can be used in conjunction with the DenormalizedStructureBuilder
     to generate unique shape names for a given type.
 
     """
+
     def __init__(self):
         self._name_cache = defaultdict(int)
 
@@ -840,5 +889,4 @@ class ShapeNameGenerator(object):
         """
         self._name_cache[type_name] += 1
         current_index = self._name_cache[type_name]
-        return '%sType%s' % (type_name.capitalize(),
-                             current_index)
+        return f'{type_name.capitalize()}Type{current_index}'

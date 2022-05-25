@@ -102,7 +102,8 @@ def filter_ssl_warnings():
         'ignore',
         message="A true SSLContext object is not available.*",
         category=exceptions.InsecurePlatformWarning,
-        module=r".*urllib3\.util\.ssl_")
+        module=r".*urllib3\.util\.ssl_",
+    )
 
 
 @classmethod
@@ -119,6 +120,7 @@ def from_pairs(cls, pairs):
     for key, value in pairs:
         new_instance[key] = value
     return new_instance
+
 
 HTTPHeaders.from_dict = from_dict
 HTTPHeaders.from_pairs = from_pairs
@@ -281,6 +283,7 @@ def get_tzinfo_options():
     # this happens, which will get time info from the Windows registry.
     if sys.platform == 'win32':
         from dateutil.tz import tzwinlocal
+
         return (tzlocal, tzwinlocal)
     else:
         return (tzlocal,)
@@ -289,6 +292,7 @@ def get_tzinfo_options():
 # Detect if CRT is available for use
 try:
     import awscrt.auth
+
     # Allow user opt-out if needed
     disabled = os.environ.get('BOTO_DISABLE_CRT', "false")
     HAS_CRT = not disabled.lower() == 'true'
@@ -327,7 +331,9 @@ _variations = [
     "(?:(?:%(hex)s:){0,6}%(hex)s)?::",
 ]
 
-UNRESERVED_PAT = r"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._!\-~"
+UNRESERVED_PAT = (
+    r"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._!\-~"
+)
 IPV6_PAT = "(?:" + "|".join([x % _subs for x in _variations]) + ")"
 ZONE_ID_PAT = "(?:%25|%)(?:[" + UNRESERVED_PAT + "]|%[a-fA-F0-9]{2})+"
 IPV6_ADDRZ_PAT = r"\[" + IPV6_PAT + r"(?:" + ZONE_ID_PAT + r")?\]"

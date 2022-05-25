@@ -215,7 +215,7 @@ class StreamingChecksumBody(StreamingBody):
         self._expected = expected
 
     def read(self, amt=None):
-        chunk = super(StreamingChecksumBody, self).read(amt=amt)
+        chunk = super().read(amt=amt)
         self._checksum.update(chunk)
         if amt is None or (not chunk and amt > 0):
             self._validate_checksum()
@@ -224,8 +224,8 @@ class StreamingChecksumBody(StreamingBody):
     def _validate_checksum(self):
         if self._checksum.digest() != base64.b64decode(self._expected):
             error_msg = (
-                "Expected checksum %s did not match calculated checksum: %s"
-                % (self._expected, self._checksum.b64digest(),)
+                f"Expected checksum {self._expected} did not match calculated "
+                f"checksum: {self._checksum.b64digest()}"
             )
             raise FlexibleChecksumError(error_msg=error_msg)
 
@@ -236,7 +236,10 @@ def resolve_checksum_context(request, operation_model, params):
 
 
 def resolve_request_checksum_algorithm(
-    request, operation_model, params, supported_algorithms=None,
+    request,
+    operation_model,
+    params,
+    supported_algorithms=None,
 ):
     http_checksum = operation_model.http_checksum
     algorithm_member = http_checksum.get("requestAlgorithmMember")
@@ -341,7 +344,9 @@ def _apply_request_trailer_checksum(request):
         body = io.BytesIO(body)
 
     request["body"] = AwsChunkedWrapper(
-        body, checksum_cls=checksum_cls, checksum_name=location_name,
+        body,
+        checksum_cls=checksum_cls,
+        checksum_name=location_name,
     )
 
 
@@ -353,9 +358,9 @@ def resolve_response_checksum_algorithms(
     if mode_member and mode_member in params:
         if supported_algorithms is None:
             supported_algorithms = _SUPPORTED_CHECKSUM_ALGORITHMS
-        response_algorithms = set(
+        response_algorithms = {
             a.lower() for a in http_checksum.get("responseAlgorithms", [])
-        )
+        }
 
         usable_algorithms = []
         for algorithm in _ALGORITHMS_PRIORITY_LIST:
@@ -431,7 +436,10 @@ def _handle_bytes_response(http_response, response, algorithm):
     if checksum.digest() != base64.b64decode(expected):
         error_msg = (
             "Expected checksum %s did not match calculated checksum: %s"
-            % (expected, checksum.b64digest(),)
+            % (
+                expected,
+                checksum.b64digest(),
+            )
         )
         raise FlexibleChecksumError(error_msg=error_msg)
     return body

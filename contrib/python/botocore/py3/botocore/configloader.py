@@ -148,7 +148,8 @@ def raw_config_parse(config_filename, parse_subsections=True):
             cp.read([path])
         except (six.moves.configparser.Error, UnicodeDecodeError) as e:
             raise botocore.exceptions.ConfigParseError(
-                path=_unicode_path(path), error=e) from None
+                path=_unicode_path(path), error=e
+            ) from None
         else:
             for section in cp.sections():
                 config[section] = {}
@@ -162,13 +163,14 @@ def raw_config_parse(config_filename, parse_subsections=True):
                             config_value = _parse_nested(config_value)
                         except ValueError as e:
                             raise botocore.exceptions.ConfigParseError(
-                                path=_unicode_path(path), error=e) from None
+                                path=_unicode_path(path), error=e
+                            ) from None
                     config[section][option] = config_value
     return config
 
 
 def _unicode_path(path):
-    if isinstance(path, six.text_type):
+    if isinstance(path, str):
         return path
     # According to the documentation getfilesystemencoding can return None
     # on unix in which case the default encoding is used instead.

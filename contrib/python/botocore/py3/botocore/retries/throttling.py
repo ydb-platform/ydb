@@ -3,13 +3,17 @@ from collections import namedtuple
 CubicParams = namedtuple('CubicParams', ['w_max', 'k', 'last_fail'])
 
 
-class CubicCalculator(object):
+class CubicCalculator:
     _SCALE_CONSTANT = 0.4
     _BETA = 0.7
 
-    def __init__(self, starting_max_rate,
-                 start_time,
-                 scale_constant=_SCALE_CONSTANT, beta=_BETA):
+    def __init__(
+        self,
+        starting_max_rate,
+        start_time,
+        scale_constant=_SCALE_CONSTANT,
+        beta=_BETA,
+    ):
         self._w_max = starting_max_rate
         self._scale_constant = scale_constant
         self._beta = beta
@@ -22,9 +26,7 @@ class CubicCalculator(object):
 
     def success_received(self, timestamp):
         dt = timestamp - self._last_fail
-        new_rate = (
-            self._scale_constant * (dt - self._k) ** 3 + self._w_max
-        )
+        new_rate = self._scale_constant * (dt - self._k) ** 3 + self._w_max
         return new_rate
 
     def error_received(self, current_rate, timestamp):
@@ -48,7 +50,5 @@ class CubicCalculator(object):
 
         """
         return CubicParams(
-            w_max=self._w_max,
-            k=self._k,
-            last_fail=self._last_fail
+            w_max=self._w_max, k=self._k, last_fail=self._last_fail
         )

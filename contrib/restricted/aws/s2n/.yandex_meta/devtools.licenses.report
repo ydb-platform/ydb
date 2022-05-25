@@ -171,6 +171,7 @@ BELONGS ya.make
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         README.md [3:3]
+        api/s2n.h [20:20]
 
 KEEP     Brian-Gladman-3-Clause 5c633a0224a7fbc49111f08904d03f31
 BELONGS ya.make
@@ -239,6 +240,17 @@ BELONGS ya.make
         pq-crypto/kyber_90s_r2/sha2.h [1:1]
         pq-crypto/kyber_r2/fips202_kyber_r2.h [1:1]
 
+KEEP     Apache-2.0           8824d81a8477cf3e444616f476257401
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        api/s2n.h [4:13]
+
 KEEP     MIT                  9ff238e19a846d154b5a5b850ea25f0a
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -285,7 +297,6 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        api/s2n.h [4:13]
         crypto/s2n_aead_cipher_aes_gcm.c [4:13]
         crypto/s2n_aead_cipher_chacha20_poly1305.c [4:13]
         crypto/s2n_cbc_cipher_3des.c [4:13]

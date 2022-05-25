@@ -123,7 +123,7 @@ void TS3BufferRaw::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             break;
         default:
             Y_FAIL("Unsupported type");
-        };
+        }
     }
 
     out << "\n";

@@ -895,7 +895,7 @@ message TBackupTask {
 
     message TScanSettings {
         optional uint64 RowsBatchSize = 1 [default = 0]; // no limit
-        optional uint64 BytesBatchSize = 2 [default = 67108864]; // 64 MB
+        optional uint64 BytesBatchSize = 2 [default = 33554432]; // 32 MB
     }
 
     optional TScanSettings ScanSettings = 11;

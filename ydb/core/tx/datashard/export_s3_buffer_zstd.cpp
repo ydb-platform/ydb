@@ -85,7 +85,7 @@ public:
     
 protected:
     TMaybe<TBuffer> Flush(bool prepare) override {
-        if (prepare && Buffer) {
+        if (prepare && BytesRaw) {
             ECompressionResult res;
             auto input = ZSTD_inBuffer{NULL, 0, 0};
 

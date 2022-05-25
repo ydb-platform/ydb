@@ -88,7 +88,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
 
     protected:
         bool CheckBufferSize(size_t size, TString& reason) const {
-            if (size >= BufferSizeLimit) {
+            if ((size + RangeSize) >= BufferSizeLimit) {
                 reason = "reached buffer size limit";
                 return false;
             }
@@ -173,7 +173,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             while (input.pos < input.size) {
                 PendingInputBytes -= input.pos; // dec before decompress
 
-                auto output = ZSTD_outBuffer{Buffer.Data(), Buffer.Capacity(), PendingOutputPos};
+                auto output = ZSTD_outBuffer{Buffer.Data(), Buffer.Capacity(), Buffer.Size()};
                 auto res = ZSTD_decompressStream(Context.Get(), &output, &input);
 
                 if (ZSTD_isError(res)) {
@@ -190,29 +190,28 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
                 }
 
                 PendingInputBytes += input.pos; // inc after decompress
-                PendingOutputPos = output.pos;
+                Buffer.Proceed(output.pos);
 
                 if (res == 0) {
-                    if (AsStringBuf(output.pos).back() != '\n') {
+                    if (AsStringBuf(Buffer.Size()).back() != '\n') {
                         error = "cannot find new line symbol";
                         return ERROR;
                     }
 
                     ReadyInputBytes = PendingInputBytes;
-                    ReadyOutputPos = PendingOutputPos;
+                    ReadyOutputPos = Buffer.Size();
                     Reset();
                 }
             }
 
             if (!ReadyOutputPos) {
-                if (!CheckBufferSize(PendingOutputPos, error)) {
+                if (!CheckBufferSize(Buffer.Size(), error)) {
                     return ERROR;
                 } else {
                     return NOT_ENOUGH_DATA;
                 }
             }
 
-            Buffer.Proceed(ReadyOutputPos);
             return READY_DATA;
         }
 
@@ -226,7 +225,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             PendingInputBytes -= ReadyInputBytes;
             ReadyInputBytes = 0;
 
-            PendingOutputPos -= ReadyOutputPos;
             ReadyOutputPos = 0;
         }
 
@@ -242,7 +240,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         THolder<::ZSTD_DCtx, DestroyZCtx> Context;
         ui64 PendingInputBytes = 0;
         ui64 ReadyInputBytes = 0;
-        ui64 PendingOutputPos = 0;
         ui64 ReadyOutputPos = 0;
     };
 

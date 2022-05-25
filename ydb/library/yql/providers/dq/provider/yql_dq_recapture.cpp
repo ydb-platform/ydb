@@ -12,6 +12,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 #include <util/generic/scope.h>
 
@@ -225,9 +226,15 @@ private:
                 }
             }
         }
-        else if (!State_->TypeCtx->UdfSupportsYield && TCoScriptUdf::Match(&node)) {
-            if (IsCallableTypeHasStreams(node.GetTypeAnn()->Cast<TCallableExprType>())) {
-                AddInfo(ctx, TStringBuilder() << "script udf with streams");
+        else if (TCoScriptUdf::Match(&node)) {
+            if (!State_->TypeCtx->UdfSupportsYield) {
+                if (IsCallableTypeHasStreams(node.GetTypeAnn()->Cast<TCallableExprType>())) {
+                    AddInfo(ctx, TStringBuilder() << "script udf with streams");
+                    good = false;
+                }
+            }
+            if (NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node.Head().Content()))) {
+                AddInfo(ctx, TStringBuilder() << "system python udf");
                 good = false;
             }
             if (good) {

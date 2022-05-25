@@ -258,6 +258,13 @@ bool IsCustomPython(EScriptType type) {
         type == EScriptType::CustomPython3;
 }
 
+bool IsSystemPython(EScriptType type) {
+    return type == EScriptType::SystemPython2
+        || type == EScriptType::SystemPython3
+        || type == EScriptType::Python
+        || type == EScriptType::Python2;
+}
+
 EScriptType CanonizeScriptType(EScriptType type) {
     if (type == EScriptType::Python) {
         return EScriptType::Python2;

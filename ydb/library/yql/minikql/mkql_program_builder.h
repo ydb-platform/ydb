@@ -107,6 +107,7 @@ enum class EScriptType {
 std::string_view ScriptTypeAsStr(EScriptType type);
 EScriptType ScriptTypeFromStr(std::string_view str);
 bool IsCustomPython(EScriptType type);
+bool IsSystemPython(EScriptType type);
 EScriptType CanonizeScriptType(EScriptType type);
 
 struct TSwitchInput {

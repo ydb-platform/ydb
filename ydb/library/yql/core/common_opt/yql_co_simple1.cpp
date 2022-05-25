@@ -6367,6 +6367,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["PgIn"] = &ExpandPgIn;
 
+    map["PgBetween"] = &ExpandPgBetween;
+    map["PgBetweenSym"] = &ExpandPgBetween;
+
     map["SqlColumnOrType"] = map["SqlPlainColumnOrType"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         YQL_CLOG(DEBUG, Core) << "Decay of never inspected " << node->Content();
         return ctx.NewCallable(node->Pos(), "Error", { ExpandType(node->Pos(), *node->GetTypeAnn(), ctx) });

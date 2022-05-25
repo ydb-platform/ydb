@@ -2815,5 +2815,58 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<ui32> argTypes;
+    bool needRetype = false;
+    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+        auto type = input->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+            needRetype = true;
+        }
+
+        argTypes.push_back(argType);
+    }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto elemType = argTypes.front();
+    auto elemTypeAnn = input->Child(0)->GetTypeAnn();
+    for (ui32 i = 1; i < argTypes.size(); ++i) {
+        if (elemType == 0) {
+            elemType = argTypes[i];
+            elemTypeAnn = input->Child(i)->GetTypeAnn();
+        } else if (argTypes[i] != 0 && argTypes[i] != elemType) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Mismatch of type of between elements: " <<
+                NPg::LookupType(elemType).Name << " and " << NPg::LookupType(argTypes[i]).Name));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    if (elemType && !elemTypeAnn->IsComparable()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(elemType).Name));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);
+    input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
+}
+
 } // namespace NTypeAnnImpl
 }

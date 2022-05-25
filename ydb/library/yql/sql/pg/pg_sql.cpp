@@ -2041,41 +2041,32 @@ public:
             return nullptr;
         }
 
-        if (IsIn({ AEXPR_BETWEEN_SYM, AEXPR_NOT_BETWEEN_SYM }, value->kind)) {
-            auto minmax = L(A("If"),
-                L(A("Coalesce"),
-                    L(A("FromPg"),
-                        L(A("PgOp"), QA("<"), rbhs, rehs)
-                    ),
-                    L(A("Bool"), QA("false"))
-                ), QL(rbhs, rehs), QL(rehs, rbhs)
-            );
-
-            rbhs = L(A("Nth"), minmax, QA("0"));
-            rehs = L(A("Nth"), minmax, QA("1"));
+        A_Expr_Kind kind = value->kind;
+        bool inverse = false;
+        if (kind == AEXPR_NOT_BETWEEN) {
+            inverse = true;
+            kind = AEXPR_BETWEEN;
+        } else if (kind == AEXPR_NOT_BETWEEN_SYM) {
+            inverse = true;
+            kind = AEXPR_BETWEEN_SYM;
         }
 
-        switch (value->kind) {
+        TAstNode* ret;
+        switch (kind) {
         case AEXPR_BETWEEN:
-            [[fallthrough]];
         case AEXPR_BETWEEN_SYM:
-        {
-            auto gte = L(A("PgOp"), QA(">="), lhs, rbhs);
-            auto lte = L(A("PgOp"), QA("<="), lhs, rehs);
-            return L(A("PgAnd"), gte, lte);
-        }
-        case AEXPR_NOT_BETWEEN:
-            [[fallthrough]];
-        case AEXPR_NOT_BETWEEN_SYM:
-        {
-            auto lt = L(A("PgOp"), QA("<"), lhs, rbhs);
-            auto gt = L(A("PgOp"), QA(">"), lhs, rehs);
-            return L(A("PgOr"), lt, gt);
-        }
+            ret = L(A(kind == AEXPR_BETWEEN ? "PgBetween" : "PgBetweenSym"), lhs, rbhs, rehs);
+            break;
         default:
             AddError(TStringBuilder() << "BETWEEN kind unsupported value: " << (int)value->kind);
             return nullptr;
         }
+
+        if (inverse) {
+            ret = L(A("PgNot"), ret);
+        }
+
+        return ret;
     }
 
     TAstNode* ParseAExpr(const A_Expr* value, const TExprSettings& settings) {

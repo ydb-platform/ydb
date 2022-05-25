@@ -1185,4 +1185,63 @@ TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOpti
         .Build();
 }
 
+TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    Y_UNUSED(optCtx);
+    const bool isSym = node->IsCallable("PgBetweenSym");
+    auto input = node->ChildPtr(0);
+    auto begin = node->ChildPtr(1);
+    auto end = node->ChildPtr(2);
+    if (isSym) {
+        auto swap = ctx.Builder(node->Pos())
+            .Callable("PgOp")
+                .Atom(0, "<")
+                .Add(1, end)
+                .Add(2, begin)
+            .Seal()
+            .Build();
+
+        auto swapper = [&](auto x, auto y) {
+            return ctx.Builder(node->Pos())
+                .Callable("IfPresent")
+                    .Callable(0, "FromPg")
+                        .Add(0, swap)
+                    .Seal()
+                    .Lambda(1)
+                        .Param("unwrapped")
+                        .Callable("If")
+                            .Arg(0, "unwrapped")
+                            .Add(1, y)
+                            .Add(2, x)
+                        .Seal()
+                    .Seal()
+                    .Callable(2, "Null")
+                    .Seal()
+                .Seal()
+                .Build();
+        };
+
+        // swap: null->null, false->begin, true->end
+        auto newBegin = swapper(begin, end);
+        // swap: null->null, false->end, true->begin
+        auto newEnd = swapper(end, begin);
+        begin = newBegin;
+        end = newEnd;
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("PgAnd")
+            .Callable(0, "PgOp")
+                .Atom(0, ">=")
+                .Add(1, input)
+                .Add(2, begin)
+            .Seal()
+            .Callable(1, "PgOp")
+                .Atom(0, "<=")
+                .Add(1, input)
+                .Add(2, end)
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 } // namespace NYql

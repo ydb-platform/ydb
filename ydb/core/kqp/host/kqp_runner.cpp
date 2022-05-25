@@ -476,7 +476,7 @@ private:
         auto operations = TableOperationsToProto(dataQuery.Operations(), ctx);
         for (auto& op : operations) {
             const auto tableName = op.GetTable();
-            auto operation = (TYdbOperation)op.GetOperation();
+            auto operation = static_cast<TYdbOperation>(op.GetOperation());
 
             *kql->AddOperations() = std::move(op);
 

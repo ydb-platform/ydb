@@ -58,9 +58,17 @@ public:
         , RuntimeData(runtimeData)
         , ClusterName(RuntimeData ? RuntimeData->ClusterName : "local")
     {
+        if (RuntimeData) {
+            RuntimeData->OnWorkerStart(TraceId);
+        }
     }
 
-    ~TTaskRunnerActor() { }
+    ~TTaskRunnerActor()
+    {
+        if (RuntimeData) {
+            RuntimeData->OnWorkerStop(TraceId);
+        }
+    }
 
     STRICT_STFUNC(Handler, {
         cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);

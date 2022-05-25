@@ -89,20 +89,12 @@ public:
     {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << "TDqWorker created ";
-
-        if (RuntimeData) {
-            RuntimeData->OnWorkerStart(TraceId);
-        }
     }
 
     ~TDqWorker()
     {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << "TDqWorker destroyed ";
-
-        if (RuntimeData) {
-            RuntimeData->OnWorkerStop(TraceId);
-        }
     }
 
     void DoPassAway() override {

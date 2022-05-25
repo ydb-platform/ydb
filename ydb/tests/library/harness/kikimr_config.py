@@ -373,7 +373,14 @@ class KikimrConfigGenerator(object):
         udfs_path = self.__udfs_path or yatest_common.build_path("yql/udfs")
         result = []
         for dirpath, dnames, fnames in os.walk(udfs_path):
-            if dirpath in KNOWN_STATIC_YQL_UDFS:
+            is_loaded = False
+            for already_loaded_static_udf in KNOWN_STATIC_YQL_UDFS:
+                dirpath = dirpath.rstrip("/")
+
+                if dirpath.endswith(already_loaded_static_udf):
+                    is_loaded = True
+
+            if is_loaded:
                 continue
 
             for f in fnames:

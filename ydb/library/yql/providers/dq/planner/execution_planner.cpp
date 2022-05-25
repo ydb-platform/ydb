@@ -137,7 +137,7 @@ namespace NYql::NDqs {
         auto query = expr.Maybe<TDqQuery>();
         const auto maxTasksPerOperation = settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
-        YQL_LOG(DEBUG) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
+        YQL_CLOG(DEBUG, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
 
         auto stages = GetStages(DqExprRoot);
         YQL_ENSURE(!stages.empty());
@@ -149,9 +149,9 @@ namespace NYql::NDqs {
         for (const auto& stage : stages) {
             const bool hasDqSource = HasDqSource(stage);
             if ((hasDqSource || HasReadWraps(stage.Program().Ptr())) && BuildReadStage(settings, stage, hasDqSource, canFallback)) {
-                YQL_LOG(DEBUG) << "Read stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
+                YQL_CLOG(TRACE, ProviderDq) << "Read stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
             } else {
-                YQL_LOG(DEBUG) << "Common stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
+                YQL_CLOG(TRACE, ProviderDq) << "Common stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
                 NDq::CommonBuildTasks(TasksGraph, stage);
             }
 

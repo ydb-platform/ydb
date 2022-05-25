@@ -101,7 +101,7 @@ private:
     {
         Y_UNUSED(ctx);
 
-        YQL_LOG(DEBUG) << "RequestActorIdsFromNodes " << ev->Sender.NodeId();
+        YQL_CLOG(DEBUG, ProviderDq) << "RequestActorIdsFromNodes " << ev->Sender.NodeId();
 
         auto& response = ev->Get()->Record;
         auto& nodes = response.GetNodes().GetWorker();
@@ -110,11 +110,11 @@ private:
         Y_VERIFY(static_cast<ui32>(nodes.size()) == RequestedCount);
         RequestedNodes.reserve(RequestedCount);
 
-        YQL_LOG(DEBUG) << "RequestActorIdsFromNodes " << ev->Sender.NodeId() << " " << ResourceId;
+        YQL_CLOG(DEBUG, ProviderDq) << "RequestActorIdsFromNodes " << ev->Sender.NodeId() << " " << ResourceId;
         auto now = TInstant::Now();
         ui16 i = 1;
         for (const auto& node : nodes) {
-            YQL_LOG(DEBUG) << "RequestedNode: " << node.GetNodeId();
+            YQL_CLOG(DEBUG, ProviderDq) << "RequestedNode: " << node.GetNodeId();
             TString clusterName = node.GetClusterName();
             NYql::NDqProto::TDqTask task;
             if (!Tasks.empty()) {
@@ -133,10 +133,10 @@ private:
 
     void OnAllocateWorkersResponse(TEvAllocateWorkersResponse::TPtr& ev, const TActorContext& ctx)
     {
-        YQL_LOG_CTX_SCOPE(TraceId + SelfId().ToString());
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId, SelfId().ToString());
         Y_UNUSED(ctx);
 
-        YQL_LOG(DEBUG) << "TEvAllocateWorkersResponse " << ev->Sender.NodeId();
+        YQL_CLOG(DEBUG, ProviderDq) << "TEvAllocateWorkersResponse " << ev->Sender.NodeId();
 
         QueryStat.AddCounters(ev->Get()->Record);
 
@@ -145,7 +145,7 @@ private:
         }
 
         if (ev->Get()->Record.GetTResponseCase() == NDqProto::TAllocateWorkersResponse::kError) {
-            YQL_LOG(DEBUG) << "Forwarding bad state";
+            YQL_CLOG(DEBUG, ProviderDq) << "Forwarding bad state";
             ctx.Send(ev->Forward(SenderId));
             FailState = true;
             return;
@@ -215,18 +215,18 @@ private:
 
     void DoPassAway() override
     {
-        YQL_LOG_CTX_SCOPE(TraceId + SelfId().ToString());
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId, SelfId().ToString());
         for (const auto& group : AllocatedWorkers) {
             for (const auto& actorIdProto : group.GetWorkerActor()) {
                 auto actorNode = NActors::ActorIdFromProto(actorIdProto).NodeId();
-                YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << group.GetResourceId();
+                YQL_CLOG(DEBUG, ProviderDq) << "TEvFreeWorkersNotify " << group.GetResourceId();
                 auto request = MakeHolder<TEvFreeWorkersNotify>(group.GetResourceId());
                 request->Record.SetTraceId(TraceId);
                 Send(MakeWorkerManagerActorID(actorNode), request.Release());
             }
         }
         if (!LocalMode) {
-            YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << ResourceId << " (failed)";
+            YQL_CLOG(DEBUG, ProviderDq) << "TEvFreeWorkersNotify " << ResourceId << " (failed)";
             auto request = MakeHolder<TEvFreeWorkersNotify>(ResourceId);
             request->Record.SetTraceId(TraceId);
             for (const auto& failedWorker : FailedWorkers) {
@@ -249,7 +249,7 @@ private:
             ActorIdToProto(ControlId, request->Record.MutableResultActorId());
             *request->Record.AddTask() = node.Task;
         }
-        YQL_LOG(WARN) << "Send TEvAllocateWorkersRequest to " << NDqs::NExecutionHelpers::PrettyPrintWorkerInfo(node.WorkerInfo, 0);
+        YQL_CLOG(WARN, ProviderDq) << "Send TEvAllocateWorkersRequest to " << NDqs::NExecutionHelpers::PrettyPrintWorkerInfo(node.WorkerInfo, 0);
         if (backoff) {
             TActivationContext::Schedule(backoff, new IEventHandle(
                 MakeWorkerManagerActorID(nodeId), SelfId(), request.Release(),
@@ -265,13 +265,13 @@ private:
     }
 
     void Fail(const ui64 cookie, const TString& reason) {
-        YQL_LOG_CTX_SCOPE(TraceId + SelfId().ToString());
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId, SelfId().ToString());
         if (FailState) {
             return;
         }
         auto maybeRequestInfo = RequestedNodes.find(cookie);
         if (!Answered && maybeRequestInfo != RequestedNodes.end() && maybeRequestInfo->second.Retry < NetworkRetries) {
-            YQL_LOG(WARN) << "Retry Allocate Request";
+            YQL_CLOG(WARN, ProviderDq) << "Retry Allocate Request";
             auto& requestInfo = RequestedNodes[cookie];
             requestInfo.Retry ++;
             *RetryCounter += 1;
@@ -293,7 +293,7 @@ private:
                 delta);
         }
         TString message = "Disconnected from worker: `" + workerInfo + "', reason: " + reason;
-        YQL_LOG(ERROR) << message;
+        YQL_CLOG(ERROR, ProviderDq) << message;
         auto response = MakeHolder<TEvAllocateWorkersResponse>(message);
         QueryStat.FlushCounters(response->Record);
         Send(SenderId, response.Release());

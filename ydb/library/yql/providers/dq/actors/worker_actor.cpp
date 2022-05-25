@@ -87,23 +87,23 @@ public:
         , RuntimeData(runtimeData)
         , TraceId(traceId)
     {
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << "TDqWorker created ";
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << "TDqWorker created ";
     }
 
     ~TDqWorker()
     {
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << "TDqWorker destroyed ";
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << "TDqWorker destroyed ";
     }
 
     void DoPassAway() override {
-        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
         for (const auto& inputs : InputMap) {
             Send(inputs.first, new NActors::TEvents::TEvPoison());
         }
 
-        YQL_LOG(DEBUG) << "TDqWorker passed away ";
+        YQL_CLOG(DEBUG, ProviderDq) << "TDqWorker passed away ";
         if (Actor) {
             Actor->PassAway();
         }
@@ -200,7 +200,7 @@ private:
     void SendFailure(THolder<TEvDqFailure> ev) {
         if (!Executer) {
             // Posible Error on Undelivered before OnDqTask
-            YQL_LOG(ERROR) << "Error " << ev->Record.ShortUtf8DebugString();
+            YQL_CLOG(ERROR, ProviderDq) << "Error " << ev->Record.ShortUtf8DebugString();
             return;
         }
         Stat.FlushCounters(ev->Record);
@@ -213,8 +213,8 @@ private:
 
     void OnDqTask(TEvDqTask::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << "TDqWorker::OnDqTask";
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << "TDqWorker::OnDqTask";
 
         TFailureInjector::Reach("dq_task_failure", [] {::_exit(1); });
 
@@ -329,8 +329,8 @@ private:
 
     void OnPullRequest(TEvPullDataRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(TRACE) << "TDqWorker::OnPullRequest " << ev->Sender;
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(TRACE, ProviderDq) << "TDqWorker::OnPullRequest " << ev->Sender;
 
         if (!TaskRunnerActor || !TaskRunnerPrepared) {
             // waiting for initialization
@@ -382,8 +382,8 @@ private:
 
     void OnPullResponse(TEvPullDataResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         Y_UNUSED(ctx);
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(TRACE) << "TDqWorker::OnPullResponse";
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(TRACE, ProviderDq) << "TDqWorker::OnPullResponse";
 
         Stat.AddCounters(ev->Get()->Record);
 
@@ -531,7 +531,7 @@ private:
                         auto hasFreeSpace = freeSpace == ev->Get()->InputChannelFreeSpace.end()
                             || freeSpace->second > 0;
                         if (hasFreeSpace) {
-                            YQL_LOG(TRACE) << "Send TEvPullDataRequest to " <<
+                            YQL_CLOG(TRACE, ProviderDq) << "Send TEvPullDataRequest to " <<
                                 channel.ActorID << " from " <<
                                 SelfId();
                             Send(channel.ActorID, MakeHolder<TEvPullDataRequest>(INPUT_SIZE), IEventHandle::FlagTrackDelivery);
@@ -615,18 +615,18 @@ private:
         for (const auto& [actorId, channel] : InputMap) {
             if (!channel.Finished) {
                 if (channel.Requested) {
-                    YQL_LOG(DEBUG) << "Input " << JobDebugInfo(actorId) << (now - channel.RequestTime) << " Requested? " << channel.Requested;
+                    YQL_CLOG(DEBUG, ProviderDq) << "Input " << JobDebugInfo(actorId) << (now - channel.RequestTime) << " Requested? " << channel.Requested;
                     if (RuntimeData) {
                         RuntimeData->UpdateChannelInputDelay(now - channel.RequestTime);
                     }
                 } else {
-                    YQL_LOG(DEBUG) << "Input " << JobDebugInfo(actorId) << (now - channel.ResponseTime)  << " Requested? " << channel.Requested;
+                    YQL_CLOG(DEBUG, ProviderDq) << "Input " << JobDebugInfo(actorId) << (now - channel.ResponseTime)  << " Requested? " << channel.Requested;
                     if (RuntimeData) {
                         RuntimeData->UpdateChannelInputDelay(now - channel.ResponseTime);
                     }
                 }
             } else {
-                YQL_LOG(DEBUG) << "Input " << JobDebugInfo(actorId) << " Finished";
+                YQL_CLOG(DEBUG, ProviderDq) << "Input " << JobDebugInfo(actorId) << " Finished";
                 if (RuntimeData) {
                     RuntimeData->UpdateChannelInputDelay(TDuration::Seconds(0));
                 }
@@ -635,12 +635,12 @@ private:
 
         for (const auto& [actorId, channel] : OutputMap) {
             if (!channel.Finished) {
-                YQL_LOG(DEBUG) << "Output " << JobDebugInfo(actorId) << (now - channel.RequestTime);
+                YQL_CLOG(DEBUG, ProviderDq) << "Output " << JobDebugInfo(actorId) << (now - channel.RequestTime);
                 if (RuntimeData) {
                     RuntimeData->UpdateChannelOutputDelay(now - channel.RequestTime);
                 }
             } else {
-                YQL_LOG(DEBUG) << "Output " << JobDebugInfo(actorId) << " Finished";
+                YQL_CLOG(DEBUG, ProviderDq) << "Output " << JobDebugInfo(actorId) << " Finished";
                 if (RuntimeData) {
                     RuntimeData->UpdateChannelOutputDelay(TDuration::Seconds(0));
                 }

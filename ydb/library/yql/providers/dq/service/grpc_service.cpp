@@ -96,8 +96,8 @@ namespace NYql::NDqs {
             }
 
             void OnPoison() {
-                YQL_LOG_CTX_SCOPE(TraceId);
-                YQL_LOG(DEBUG) << __FUNCTION__ ;
+                YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+                YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ ;
                 ReplyError(grpc::UNAVAILABLE, "Unexpected error");
                 *ClientDisconnectedCounter += 1;
             }
@@ -107,7 +107,7 @@ namespace NYql::NDqs {
             }
 
             void DoBootstrap(const NActors::TActorContext& ctx) {
-                YQL_LOG_CTX_SCOPE(TraceId);
+                YQL_LOG_CTX_ROOT_SCOPE(TraceId);
                 if (!CtxSubscribed) {
                     auto selfId = ctx.SelfID;
                     auto* actorSystem = ctx.ExecutorThread.ActorSystem;
@@ -192,8 +192,8 @@ namespace NYql::NDqs {
             void OnReturnResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
                 auto& result = ev->Get()->Record;
                 Y_UNUSED(ctx);
-                YQL_LOG_CTX_SCOPE(TraceId);
-                YQL_LOG(DEBUG) << "TServiceProxyActor::OnReturnResult " << result.GetMetric().size();
+                YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+                YQL_CLOG(DEBUG, ProviderDq) << "TServiceProxyActor::OnReturnResult " << result.GetMetric().size();
                 QueryStat.AddCounters(result);
 
                 bool retriable;
@@ -211,14 +211,14 @@ namespace NYql::NDqs {
                     QueryStat.AddCounter(RetryName, TDuration::MilliSeconds(0));
                     NYql::TIssues issues;
                     NYql::IssuesFromMessage(result.GetIssues(), issues);
-                    YQL_LOG(WARN) << RetryName << " " << Retry << " Issues: " << issues.ToString();
+                    YQL_CLOG(WARN, ProviderDq) << RetryName << " " << Retry << " Issues: " << issues.ToString();
                     DoRetry();
                 } else {
                     auto needFallback = NCommon::NeedFallback(statusCode);
                     if (result.GetIssues().size() > 0) {
                         NYql::TIssues issues;
                         NYql::IssuesFromMessage(result.GetIssues(), issues);
-                        YQL_LOG(WARN) << "Issues: " << issues.ToString();
+                        YQL_CLOG(WARN, ProviderDq) << "Issues: " << issues.ToString();
                         *ErrorCounter += 1;
                     }
                     if (needFallback) {
@@ -290,7 +290,7 @@ namespace NYql::NDqs {
             }
 
             void DoRetry() override {
-                YQL_LOG(DEBUG) << __FUNCTION__;
+                YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
                 SendEvent(NYql::NDqProto::EGraphExecutionEventType::FAIL, nullptr, [this](const auto& ev) {
                     if (ev->Get()->Record.GetErrorMessage()) {
                         TBase::ReplyError(grpc::UNAVAILABLE, ev->Get()->Record.GetErrorMessage());
@@ -326,7 +326,7 @@ namespace NYql::NDqs {
             THolder<Yql::DqsProto::ExecuteGraphRequest> ModifiedRequest;
 
             void DoPassAway() override {
-                YQL_LOG(DEBUG) << __FUNCTION__;
+                YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
                 Send(GraphExecutionEventsActorId, new TEvents::TEvPoison());
                 TServiceProxyActor::DoPassAway();
             }
@@ -346,7 +346,7 @@ namespace NYql::NDqs {
             }
 
             void Bootstrap() override {
-                YQL_LOG(DEBUG) << "TServiceProxyActor::OnExecuteGraph";
+                YQL_CLOG(DEBUG, ProviderDq) << "TServiceProxyActor::OnExecuteGraph";
 
                 SendEvent(NYql::NDqProto::EGraphExecutionEventType::START, SerializeGraphDescriptor(), [this](const TEvGraphExecutionEvent::TPtr& ev) {
                     if (ev->Get()->Record.GetErrorMessage()) {
@@ -386,7 +386,7 @@ namespace NYql::NDqs {
             }
 
             void FinishBootstrap(const NDqProto::TGraphExecutionEvent::TMap& params) {
-                YQL_LOG(DEBUG) << __FUNCTION__;
+                YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
                 MergeTaskMetas(params);
 
                 auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime));
@@ -431,7 +431,7 @@ namespace NYql::NDqs {
                 }
                 Send(GraphExecutionEventsActorId, new TEvGraphExecutionEvent(record));
                 Synchronize<TEvGraphExecutionEvent>([callback, traceId = TraceId](TEvGraphExecutionEvent::TPtr& ev) {
-                    YQL_LOG_CTX_SCOPE(traceId);
+                    YQL_LOG_CTX_ROOT_SCOPE(traceId);
                     Y_VERIFY(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
                     callback(ev);
                 });
@@ -499,7 +499,7 @@ namespace NYql::NDqs {
                 TString message = TStringBuilder()
                                 << "Bad session: "
                                 << request->GetSession();
-                YQL_LOG(DEBUG) << message;
+                YQL_CLOG(DEBUG, ProviderDq) << message;
                 ctx->ReplyError(grpc::INVALID_ARGUMENT, message);
                 return;
             }
@@ -548,7 +548,7 @@ namespace NYql::NDqs {
             auto* request = dynamic_cast<const Yql::DqsProto::PingSessionRequest*>(ctx->GetRequest());
             Y_VERIFY(!!request);
 
-            YQL_LOG(DEBUG) << "PingSession " << request->GetSession();
+            YQL_CLOG(TRACE, ProviderDq) << "PingSession " << request->GetSession();
 
             Yql::DqsProto::PingSessionResponse result;
             auto session = Sessions.GetSession(request->GetSession());
@@ -556,7 +556,7 @@ namespace NYql::NDqs {
                 TString message = TStringBuilder()
                                 << "Bad session: "
                                 << request->GetSession();
-                YQL_LOG(DEBUG) << message;
+                YQL_CLOG(DEBUG, ProviderDq) << message;
                 ctx->ReplyError(grpc::INVALID_ARGUMENT, message);
             } else {
                 ctx->Reply(&result, Ydb::StatusIds::SUCCESS);
@@ -568,7 +568,7 @@ namespace NYql::NDqs {
             auto* request = dynamic_cast<const Yql::DqsProto::OpenSessionRequest*>(ctx->GetRequest());
             Y_VERIFY(!!request);
 
-            YQL_LOG(DEBUG) << "OpenSession for " << request->GetSession() << " " << request->GetUsername();
+            YQL_CLOG(DEBUG, ProviderDq) << "OpenSession for " << request->GetSession() << " " << request->GetUsername();
 
             Yql::DqsProto::OpenSessionResponse result;
             if (Sessions.OpenSession(request->GetSession(), request->GetUsername())) {
@@ -605,15 +605,15 @@ namespace NYql::NDqs {
                 stat.Aggregate(s);
             }
 
-            YQL_LOG(DEBUG) << "SentEvents: " << stat.SentEvents;
-            YQL_LOG(DEBUG) << "ReceivedEvents: " << stat.ReceivedEvents;
-            YQL_LOG(DEBUG) << "NonDeliveredEvents: " << stat.NonDeliveredEvents;
-            YQL_LOG(DEBUG) << "EmptyMailboxActivation: " << stat.EmptyMailboxActivation;
+            YQL_CLOG(DEBUG, ProviderDq) << "SentEvents: " << stat.SentEvents;
+            YQL_CLOG(DEBUG, ProviderDq) << "ReceivedEvents: " << stat.ReceivedEvents;
+            YQL_CLOG(DEBUG, ProviderDq) << "NonDeliveredEvents: " << stat.NonDeliveredEvents;
+            YQL_CLOG(DEBUG, ProviderDq) << "EmptyMailboxActivation: " << stat.EmptyMailboxActivation;
             Sessions.PrintInfo();
 
             for (ui32 i = 0; i < stat.ActorsAliveByActivity.size(); i=i+1) {
                 if (stat.ActorsAliveByActivity[i]) {
-                    YQL_LOG(DEBUG) << "ActorsAliveByActivity[" << i << "]=" << stat.ActorsAliveByActivity[i];
+                    YQL_CLOG(DEBUG, ProviderDq) << "ActorsAliveByActivity[" << i << "]=" << stat.ActorsAliveByActivity[i];
                 }
             }
 
@@ -624,7 +624,7 @@ namespace NYql::NDqs {
                     ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                 },
                 [ctx] () mutable {
-                    YQL_LOG(DEBUG) << "ClusterStatus failed";
+                    YQL_CLOG(INFO, ProviderDq) << "ClusterStatus failed";
                     ctx->ReplyError(grpc::UNAVAILABLE, "Error");
                 },
                 TDuration::MilliSeconds(2000));
@@ -645,7 +645,7 @@ namespace NYql::NDqs {
                     ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                 },
                 [ctx] () mutable {
-                    YQL_LOG(DEBUG) << "OperationStopResponse failed";
+                    YQL_CLOG(INFO, ProviderDq) << "OperationStopResponse failed";
                     ctx->ReplyError(grpc::UNAVAILABLE, "Error");
                 },
                 TDuration::MilliSeconds(2000));
@@ -667,7 +667,7 @@ namespace NYql::NDqs {
                     ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                 },
                 [ctx] () mutable {
-                    YQL_LOG(DEBUG) << "QueryStatus failed";
+                    YQL_CLOG(INFO, ProviderDq) << "QueryStatus failed";
                     ctx->ReplyError(grpc::UNAVAILABLE, "Error");
                 },
                 TDuration::MilliSeconds(2000));
@@ -701,7 +701,7 @@ namespace NYql::NDqs {
                     ctx->Reply(result, Ydb::StatusIds::SUCCESS);
                 },
                 [ctx] () mutable {
-                    YQL_LOG(DEBUG) << "RegisterNode failed";
+                    YQL_CLOG(INFO, ProviderDq) << "RegisterNode failed";
                     ctx->ReplyError(grpc::UNAVAILABLE, "Error");
                 },
                 TDuration::MilliSeconds(5000));
@@ -760,7 +760,7 @@ namespace NYql::NDqs {
                         ctx->Reply(&result, Ydb::StatusIds::SUCCESS);
                     },
                     [ctx] () mutable {
-                        YQL_LOG(DEBUG) << "IsReadyForRevision failed";
+                        YQL_CLOG(INFO, ProviderDq) << "IsReadyForRevision failed";
                         ctx->ReplyError(grpc::UNAVAILABLE, "Error");
                     },
                     TDuration::MilliSeconds(2000));
@@ -783,7 +783,7 @@ namespace NYql::NDqs {
                         ctx->Reply(&result, Ydb::StatusIds::SUCCESS);
                     },
                     [ctx] () mutable {
-                        YQL_LOG(DEBUG) << "Routes failed";
+                        YQL_CLOG(INFO, ProviderDq) << "Routes failed";
                         ctx->ReplyError(grpc::UNAVAILABLE, "Error");
                     },
                     TDuration::MilliSeconds(5000));

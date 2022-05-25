@@ -85,7 +85,7 @@ void TSessionStorage::Clean(TInstant before) {
          it != SessionsByLastUpdate.end(); )
     {
         if (it->LastUpdate < before) {
-            YQL_LOG(INFO) << "Drop session by timeout " << it->SessionId;
+            YQL_CLOG(INFO, ProviderDq) << "Drop session by timeout " << it->SessionId;
             Sessions.erase(it->SessionId);
             it = SessionsByLastUpdate.erase(it);
         } else {
@@ -97,10 +97,10 @@ void TSessionStorage::Clean(TInstant before) {
 }
 
 void TSessionStorage::PrintInfo() const {
-    YQL_LOG(INFO) << "SessionsByLastUpdate: " << SessionsByLastUpdate.size();
-    YQL_LOG(DEBUG) << "Sessions: " << Sessions.size();
+    YQL_CLOG(INFO, ProviderDq) << "SessionsByLastUpdate: " << SessionsByLastUpdate.size();
+    YQL_CLOG(DEBUG, ProviderDq) << "Sessions: " << Sessions.size();
     ui64 currenSessionsCounter = *SessionsCounter;
-    YQL_LOG(DEBUG) << "SessionsCounter: " << currenSessionsCounter;
+    YQL_CLOG(DEBUG, ProviderDq) << "SessionsCounter: " << currenSessionsCounter;
 }
 
 } // namespace NYql::NDqs

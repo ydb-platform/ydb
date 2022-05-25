@@ -147,7 +147,7 @@ public:
         TVector<NDqProto::TData> rows;
         {
             auto guard = runner->BindAllocator(State->Settings->MemoryLimit.Get().GetOrElse(0));
-            YQL_LOG(DEBUG) << " NDq::ERunStatus " << runner->Run();
+            YQL_CLOG(DEBUG, ProviderDq) << " NDq::ERunStatus " << runner->Run();
 
             NDq::ERunStatus status;
             while ((status = runner->Run()) == NDq::ERunStatus::PendingOutput || status == NDq::ERunStatus::Finished) {
@@ -270,7 +270,7 @@ private:
 
     std::tuple<TString, TString> GetPathAndObjectId(const TFilePathWithMd5& pathWithMd5) const {
         if (pathWithMd5.Md5.empty()) {
-            YQL_LOG(WARN) << "Empty md5 for " << pathWithMd5.Path;
+            YQL_CLOG(WARN, ProviderDq) << "Empty md5 for " << pathWithMd5.Path;
         }
         return GetPathAndObjectId(pathWithMd5.Path,
             pathWithMd5.Md5.empty()
@@ -337,7 +337,7 @@ private:
                             auto block = b.second;
                             auto filePath = block->FrozenFile->GetPath().GetPath();
                             auto fullFileName = localRun ? filePath : TUserDataStorage::MakeRelativeName(b.first.Alias());
-                            YQL_LOG(DEBUG) << "Path resolve " << filePath << "|"<< fullFileName;
+                            YQL_CLOG(DEBUG, ProviderDq) << "Path resolve " << filePath << "|"<< fullFileName;
                             // validate
                             switch (block->Type) {
                                 case EUserDataType::URL:
@@ -421,14 +421,14 @@ private:
                         const TString udfName(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
                         const auto moduleName = ModuleName(udfName);
 
-                        YQL_LOG(DEBUG) << "Try to resolve " << moduleName;
+                        YQL_CLOG(DEBUG, ProviderDq) << "Try to resolve " << moduleName;
                         TMaybe<TFilePathWithMd5> udfPathWithMd5 = State->TypeCtx->UdfResolver->GetSystemModulePath(moduleName);
                         YQL_ENSURE(udfPathWithMd5.Defined());
 
                         TString filePath, objectId;
                         std::tie(filePath, objectId) = GetPathAndObjectId(*udfPathWithMd5);
 
-                        YQL_LOG(DEBUG) << "File|Md5 " << filePath << "|" << objectId;
+                        YQL_CLOG(DEBUG, ProviderDq) << "File|Md5 " << filePath << "|" << objectId;
 
                         if (!filePath.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix)) {
                             auto f = IDqGateway::TFileResource();
@@ -465,7 +465,7 @@ private:
         i64 dataLimit = static_cast<i64>(4_GB);
         bool fallbackFlag = false;
         if (sizeSum > dataLimit) {
-            YQL_LOG(INFO) << "Too much data: " << sizeSum << " > " << dataLimit;
+            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << sizeSum << " > " << dataLimit;
             fallbackFlag = true;
         }
 
@@ -504,7 +504,7 @@ private:
         StartCounter("FreezeUsedFiles");
         if (const auto filesRes = NCommon::FreezeUsedFiles(*input, files, *State->TypeCtx, ctx, [](const TString&){return true;}, crutches); filesRes.first.Level != TStatus::Ok) {
             if (filesRes.first.Level != TStatus::Error) {
-                YQL_LOG(DEBUG) << "Freezing files for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+                YQL_CLOG(DEBUG, ProviderDq) << "Freezing files for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
             }
             return filesRes;
         }
@@ -558,7 +558,7 @@ private:
         bool fallbackFlag = BuildUploadList(uploadList, localRun, explorer, typeEnv, files);
 
         if (fallbackFlag) {
-            YQL_LOG(DEBUG) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
+            YQL_CLOG(DEBUG, ProviderDq) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
             return Fallback();
         } else {
             *lambda = SerializeRuntimeNode(root, typeEnv);
@@ -621,7 +621,7 @@ private:
     }
 
     TStatusCallbackPair HandleResult(const TExprNode::TPtr& input, TExprContext& ctx) {
-        YQL_LOG(DEBUG) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+        YQL_CLOG(DEBUG, ProviderDq) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
         if (State->ExternalUser) {
             return Fallback();
@@ -726,7 +726,7 @@ private:
             FlushStatisticsToState();
 
             return WrapFutureCallback(future, [localRun, startTime, type, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                YQL_LOG(DEBUG) << state->SessionId <<  " WrapFutureCallback";
+                YQL_CLOG(DEBUG, ProviderDq) << state->SessionId <<  " WrapFutureCallback";
 
                 auto duration = TInstant::Now() - startTime;
                 if (state->Metrics) {
@@ -749,7 +749,7 @@ private:
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
 
-                    YQL_LOG(DEBUG) << "Fallback from gateway: " << NCommon::ExprToPrettyString(ctx, *input);
+                    YQL_CLOG(DEBUG, ProviderDq) << "Fallback from gateway: " << NCommon::ExprToPrettyString(ctx, *input);
                     TIssue warning(ctx.GetPosition(input->Pos()), "DQ cannot execute the query");
                     warning.Severity = TSeverityIds::S_INFO;
                     ctx.IssueManager.RaiseIssue(warning);
@@ -921,7 +921,7 @@ private:
         auto filesRes = NCommon::FreezeUsedFiles(*optimizedInput, files, *State->TypeCtx, ctx, [](const TString&){return true;}, crutches);
         if (filesRes.first.Level != TStatus::Ok) {
             if (filesRes.first.Level != TStatus::Error) {
-                YQL_LOG(DEBUG) << "Freezing files for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+                YQL_CLOG(DEBUG, ProviderDq) << "Freezing files for " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
             }
             return filesRes;
         }
@@ -1067,8 +1067,6 @@ private:
         int level = 0;
         // TODO: remove copy-paste
         return WrapFutureCallback(future, [settings, startTime, localRun, type, fillSettings, level, graphParams, columns, enableFullResultWrite, state = State](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            YQL_LOG(DEBUG) << state->SessionId <<  " WrapFutureCallback";
-
             auto duration = TInstant::Now() - startTime;
             if (state->Metrics) {
                 state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());

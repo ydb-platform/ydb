@@ -120,7 +120,7 @@ private:
     void Deallocate(ui32 nodeId) {
         TVector<ui64> toDeallocate;
 
-        YQL_LOG(DEBUG) << "Deallocate " << nodeId;
+        YQL_CLOG(DEBUG, ProviderDq) << "Deallocate " << nodeId;
         for (const auto& [k, v] : AllocatedWorkers) {
             if (v.Sender.NodeId() == nodeId) {
                 toDeallocate.push_back(k);
@@ -135,7 +135,7 @@ private:
     void Deallocate(const NActors::TActorId& senderId) {
         TVector<ui64> toDeallocate;
 
-        YQL_LOG(DEBUG) << "Deallocate " << senderId;
+        YQL_CLOG(DEBUG, ProviderDq) << "Deallocate " << senderId;
         for (const auto& [k, v] : AllocatedWorkers) {
             if (v.Sender == senderId) {
                 toDeallocate.push_back(k);
@@ -149,7 +149,7 @@ private:
 
     void OnDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev)
     {
-        YQL_LOG(DEBUG) << "Disconnected " << ev->Get()->NodeId;
+        YQL_CLOG(DEBUG, ProviderDq) << "Disconnected " << ev->Get()->NodeId;
         Unsubscribe(ev->Get()->NodeId);
         Deallocate(ev->Get()->NodeId);
     }
@@ -159,7 +159,7 @@ private:
         Y_VERIFY(ev->Get()->Reason == TEvents::TEvUndelivered::Disconnected
             || ev->Get()->Reason == TEvents::TEvUndelivered::ReasonActorUnknown);
 
-        YQL_LOG(DEBUG) << "Undelivered " << ev->Sender;
+        YQL_CLOG(DEBUG, ProviderDq) << "Undelivered " << ev->Sender;
 
         switch (ev->Get()->Reason) {
         case TEvents::TEvUndelivered::Disconnected:
@@ -174,13 +174,13 @@ private:
     }
 
     void OnConfigureFailureInjector(TEvConfigureFailureInjectorRequest::TPtr& ev) {
-        YQL_LOG(DEBUG) << "TEvConfigureFailureInjectorRequest ";
+        YQL_CLOG(DEBUG, ProviderDq) << "TEvConfigureFailureInjectorRequest ";
 
         auto& request = ev->Get()->Record.GetRequest();
         YQL_ENSURE(request.GetNodeId() == SelfId().NodeId(), "Wrong node id!");
 
         TFailureInjector::Set(request.GetName(), request.GetSkip(), request.GetCountOfFails());
-        YQL_LOG(DEBUG) << "Failure injector is configured " << request.GetName();
+        YQL_CLOG(DEBUG, ProviderDq) << "Failure injector is configured " << request.GetName();
 
         auto response = MakeHolder<TEvConfigureFailureInjectorResponse>();
         auto* r = response->Record.MutableResponse();
@@ -207,8 +207,8 @@ private:
             return;
         }
 
-        YQL_LOG_CTX_SCOPE(ev->Get()->Record.GetTraceId());
-        YQL_LOG(DEBUG) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId;
+        YQL_LOG_CTX_ROOT_SCOPE(ev->Get()->Record.GetTraceId());
+        YQL_CLOG(DEBUG, ProviderDq) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId;
         TFailureInjector::Reach("allocate_workers_failure", [] { ::_exit(1); });
 
         auto& allocationInfo = AllocatedWorkers[resourceId];
@@ -245,7 +245,7 @@ private:
                 THolder<NActors::IActor> actor;
 
                 if (createComputeActor) {
-                    YQL_LOG(DEBUG) << "Create compute actor: " << computeActorType;
+                    YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
                     actor.Reset(
                         NYql::CreateComputeActor(
                             Options,
@@ -281,7 +281,7 @@ private:
 
     void OnFreeWorkers(TEvFreeWorkersNotify::TPtr& ev) {
         ui64 resourceId = ev->Get()->Record.GetResourceId();
-        YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << resourceId;
+        YQL_CLOG(DEBUG, ProviderDq) << "TEvFreeWorkersNotify " << resourceId;
         FreeGroup(resourceId, ev->Sender);
     }
 
@@ -291,7 +291,7 @@ private:
     }
 
     void FreeGroup(ui64 id, NActors::TActorId sender = NActors::TActorId()) {
-        YQL_LOG(DEBUG) << "Free Group " << id;
+        YQL_CLOG(DEBUG, ProviderDq) << "Free Group " << id;
         auto it = AllocatedWorkers.find(id);
         if (it != AllocatedWorkers.end()) {
             for (const auto& actorId : it->second.WorkerActors) {
@@ -300,7 +300,7 @@ private:
 
             if (sender && it->second.Sender != sender) {
                 Options.Counters.FreeGroupError->Inc();
-                YQL_LOG(ERROR) << "Free Group " << id << " mismatched alloc-free senders: " << it->second.Sender << " and " << sender << " TxId: " << it->second.TxId;
+                YQL_CLOG(ERROR, ProviderDq) << "Free Group " << id << " mismatched alloc-free senders: " << it->second.Sender << " and " << sender << " TxId: " << it->second.TxId;
             }
 
             MemoryQuoter->Free(it->second.TxId, 0);
@@ -318,7 +318,7 @@ private:
             }
         }
         for (const auto& id : todelete) {
-            YQL_LOG(DEBUG) << "Free on deadline: " << id;
+            YQL_CLOG(DEBUG, ProviderDq) << "Free on deadline: " << id;
             FreeGroup(id);
         }
     }

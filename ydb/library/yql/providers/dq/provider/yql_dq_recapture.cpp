@@ -90,7 +90,7 @@ public:
             }
 
             if (!good || (hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB))) {
-                YQL_LOG(DEBUG) << "good: " << good << " hasJoin: " << hasJoin << " dataSize: " << dataSize;
+                YQL_CLOG(DEBUG, ProviderDq) << "good: " << good << " hasJoin: " << hasJoin << " dataSize: " << dataSize;
                 return TStatus::Ok;
             }
         }
@@ -116,6 +116,7 @@ public:
         }, ctx, TOptimizeExprSettings{State_->TypeCtx});
 
         if (input != output) {
+            YQL_CLOG(DEBUG, ProviderDq) << "DqsRecapture";
             // TODO: Add before/after recapture transformers
             State_->TypeCtx->DqCaptured = true;
             // TODO: drop this after implementing DQS ConstraintTransformer
@@ -129,7 +130,7 @@ public:
 
 private:
     void AddInfo(TExprContext& ctx, const TString& message) const {
-        YQL_LOG(DEBUG) << message;
+        YQL_CLOG(DEBUG, ProviderDq) << message;
         TIssue info("DQ cannot execute the query. Cause: " + message);
         info.Severity = TSeverityIds::S_INFO;
         ctx.IssueManager.RaiseIssue(info);

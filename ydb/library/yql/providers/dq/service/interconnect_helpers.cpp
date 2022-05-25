@@ -36,7 +36,7 @@ namespace NYql::NDqs {
             if (message.find("ICP01 ready to work") != TString::npos) {
                 return;
             }
-            YQL_LOG(DEBUG) << message;
+            YQL_CLOG(DEBUG, ProviderDq) << message;
         }
 
         void ReopenLog() override { }
@@ -102,7 +102,7 @@ namespace NYql::NDqs {
 #define SET_VALUE(name) \
         if (icSettings.Has ## name()) { \
             schedulerConfig.name = icSettings.Get ## name (); \
-            YQL_LOG(DEBUG) << "Scheduler IC " << #name << " set to " << schedulerConfig.name; \
+            YQL_CLOG(DEBUG, ProviderDq) << "Scheduler IC " << #name << " set to " << schedulerConfig.name; \
         }
 
         SET_VALUE(ResolutionMicroseconds);
@@ -119,7 +119,7 @@ namespace NYql::NDqs {
         setup->Scheduler = CreateSchedulerThread(schedulerConfig);
         setup->MaxActivityType = maxActivityType;
 
-        YQL_LOG(DEBUG) << "Initializing local services";
+        YQL_CLOG(DEBUG, ProviderDq) << "Initializing local services";
         setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, 0));
         if (IActor* schedulerActor = CreateSchedulerActor(schedulerConfig)) {
             TActorId schedulerActorId = MakeSchedulerActorId();
@@ -143,7 +143,7 @@ namespace NYql::NDqs {
         TIntrusivePtr<TTableNameserverSetup> nameserverTable = new TTableNameserverSetup();
         THashSet<ui32> staticNodeId;
 
-        YQL_LOG(DEBUG) << "Initializing node table";
+        YQL_CLOG(DEBUG, ProviderDq) << "Initializing node table";
         nameserverTable->StaticNodeTable[nodeId] = std::make_pair(interconnectAddress, port);
 
         setup->LocalServices.emplace_back(
@@ -164,13 +164,13 @@ namespace NYql::NDqs {
 #define SET_DURATION(name) \
         { \
             icCommon->Settings.name = TDuration::MilliSeconds(icSettings.Get ## name ## Ms()); \
-            YQL_LOG(DEBUG) << "IC " << #name << " set to " << icCommon->Settings.name; \
+            YQL_CLOG(DEBUG, ProviderDq) << "IC " << #name << " set to " << icCommon->Settings.name; \
         }
 
 #define SET_VALUE(name) \
         { \
             icCommon->Settings.name = icSettings.Get ## name(); \
-            YQL_LOG(DEBUG) << "IC " << #name << " set to " << icCommon->Settings.name; \
+            YQL_CLOG(DEBUG, ProviderDq) << "IC " << #name << " set to " << icCommon->Settings.name; \
         }
 
         SET_DURATION(Handshake);
@@ -198,7 +198,7 @@ namespace NYql::NDqs {
 
         ui32 maxNodeId = static_cast<ui32>(ENodeIdLimits::MaxWorkerNodeId);
 
-        YQL_LOG(DEBUG) << "Initializing proxy actors";
+        YQL_CLOG(DEBUG, ProviderDq) << "Initializing proxy actors";
         setup->Interconnect.ProxyActors.resize(maxNodeId + 1);
         for (ui32 id = 1; id <= maxNodeId; ++id) {
             if (nodeId != id) {
@@ -208,10 +208,10 @@ namespace NYql::NDqs {
         }
 
         // start listener
-        YQL_LOG(DEBUG) << "Start listener";
+        YQL_CLOG(DEBUG, ProviderDq) << "Start listener";
         {
             icCommon->TechnicalSelfHostName = interconnectAddress;
-            YQL_LOG(INFO) << "Start listener " << interconnectAddress << ":" << port << " socket: " << socket;
+            YQL_CLOG(INFO, ProviderDq) << "Start listener " << interconnectAddress << ":" << port << " socket: " << socket;
             IActor* listener;
             TMaybe<SOCKET> maybeSocket = socket < 0
                 ? Nothing()
@@ -224,7 +224,7 @@ namespace NYql::NDqs {
                 TActorSetupCmd(listener, TMailboxType::ReadAsFilled, 0));
         }
 
-        YQL_LOG(DEBUG) << "Actor initialization complete";
+        YQL_CLOG(DEBUG, ProviderDq) << "Actor initialization complete";
 
 #ifdef _unix_
         signal(SIGPIPE, SIG_IGN);

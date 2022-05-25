@@ -131,7 +131,7 @@ public:
         return true;
 #else
         int status;
-        YQL_LOG(DEBUG) << "Check Pid " << Pid;
+        YQL_CLOG(DEBUG, ProviderDq) << "Check Pid " << Pid;
         return waitpid(Pid, &status, WNOHANG) <= 0;
 #endif
     }
@@ -256,7 +256,7 @@ struct TProcessHolder {
                 auto it = Processes.begin();
                 while (it != Processes.end()) {
                     if (!it->second->IsAlive()) {
-                        YQL_LOG(DEBUG) << "Remove dead process";
+                        YQL_CLOG(DEBUG, ProviderDq) << "Remove dead process";
                         stopList.emplace_back(std::move(it->second));
                         it = Processes.erase(it);
                     } else {
@@ -320,11 +320,11 @@ public:
             ContainerName = portoSettings.ContainerNamePrefix + "/" + ContainerName;
         }
 
-        YQL_LOG(DEBUG) << "HardLink " << ExeName << "'" << WorkDir + "/" + name << "'";
+        YQL_CLOG(DEBUG, ProviderDq) << "HardLink " << ExeName << "'" << WorkDir + "/" + name << "'";
         if (NFs::HardLink(ExeName, WorkDir + "/" + name)) {
             ExeName = WorkDir + "/" + name;
         } else {
-            YQL_LOG(DEBUG) << "HardLink Failed " << ExeName << "'" << WorkDir + "/" + name << "'";
+            YQL_CLOG(DEBUG, ProviderDq) << "HardLink Failed " << ExeName << "'" << WorkDir + "/" + name << "'";
         }
     }
 
@@ -354,13 +354,13 @@ private:
                 cmd3.Run().Wait();
             }
         } catch (...) {
-            YQL_LOG(DEBUG) << "Cannot set anon_limit: " << CurrentExceptionMessage();
+            YQL_CLOG(DEBUG, ProviderDq) << "Cannot set anon_limit: " << CurrentExceptionMessage();
         }
         try {
             TShellCommand cmd(PortoCtl, {"destroy", ContainerName});
             cmd.Run().Wait();
         } catch (...) {
-            YQL_LOG(DEBUG) << "Cannot destroy: " << CurrentExceptionMessage();
+            YQL_CLOG(DEBUG, ProviderDq) << "Cannot destroy: " << CurrentExceptionMessage();
         }
         TChildProcess::Kill();
     }
@@ -1226,9 +1226,9 @@ public:
         while ((size = input.Read(buf, sizeof(buf))) > 0) {
             auto str = TString(buf, size);
             Stderr += str;
-            YQL_LOG(DEBUG) << "stderr (" << StageId << " " << TraceId << " ) > `" << str << "'";
+            YQL_CLOG(DEBUG, ProviderDq) << "stderr (" << StageId << " " << TraceId << " ) > `" << str << "'";
         }
-        YQL_LOG(DEBUG) << "stderr (" << StageId << " " << TraceId << " ) finished";
+        YQL_CLOG(DEBUG, ProviderDq) << "stderr (" << StageId << " " << TraceId << " ) finished";
     }
 
     ui64 GetTaskId() const override {
@@ -1740,7 +1740,7 @@ private:
     {
         auto localPath = MakeLocalPath(name.GetPath());
         NFs::MakeDirectoryRecursive(base + "/" + localPath.Parent().GetPath(), NFs::FP_NONSECRET_FILE, false);
-        YQL_LOG(DEBUG) << "HardLink '" << path << "-> '" << (base + "/" + localPath.GetPath()) << "'";
+        YQL_CLOG(DEBUG, ProviderDq) << "HardLink '" << path << "-> '" << (base + "/" + localPath.GetPath()) << "'";
         YQL_ENSURE(NFs::HardLink(path, base + "/" + localPath.GetPath()));
         return localPath.GetPath();
     }
@@ -1764,7 +1764,7 @@ private:
         portoSettings.Enable = EnablePorto && conf->EnablePorto.Get().GetOrElse(TDqSettings::TDefault::EnablePorto);
         portoSettings.MemoryLimit = conf->_PortoMemoryLimit.Get().GetOrElse(TDqSettings::TDefault::PortoMemoryLimit);
         if (portoSettings.Enable) {
-            YQL_LOG(DEBUG) << "Porto enabled";
+            YQL_CLOG(DEBUG, ProviderDq) << "Porto enabled";
         }
 
         TString exePath;
@@ -1804,9 +1804,9 @@ private:
         } else {
             command = MakeHolder<TChildProcess>(exePath, args, env, cacheDir + "/Slot-" + ToString(containerId));
         }
-        YQL_LOG(DEBUG) << "Executing " << exePath;
+        YQL_CLOG(DEBUG, ProviderDq) << "Executing " << exePath;
         for (const auto& arg: args) {
-            YQL_LOG(DEBUG) << "Arg: " << arg;
+            YQL_CLOG(DEBUG, ProviderDq) << "Arg: " << arg;
         }
         command->Run();
         return command;

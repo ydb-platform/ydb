@@ -65,8 +65,8 @@ public:
 
 private:
     void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev, const TActorContext&) {
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << __FUNCTION__;
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
 
         bool finishRequested = ev->Get()->Record.GetChannelData().GetFinished();
         if (!FinishCalled) {
@@ -77,7 +77,7 @@ private:
             Y_ENSURE(inserted);
         }
 
-        YQL_LOG(DEBUG) << "Finished: " << finishRequested;
+        YQL_CLOG(DEBUG, ProviderDq) << "Finished: " << finishRequested;
     }
 
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) {
@@ -85,8 +85,8 @@ private:
     }
 
     void OnMessageProcessed(TEvMessageProcessed::TPtr& ev) {
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << __FUNCTION__;
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         SendAck(ev->Get()->MessageId);
     }
 

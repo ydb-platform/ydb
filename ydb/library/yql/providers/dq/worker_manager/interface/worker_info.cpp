@@ -174,7 +174,7 @@ namespace NYql::NDqs {
                 }
             }
             for (const auto& k : toDrop) {
-                YQL_LOG(DEBUG) << "Remove resource " << k << " from worker " << GetGuidAsString(WorkerId);
+                YQL_CLOG(DEBUG, ProviderDq) << "Remove resource " << k << " from worker " << GetGuidAsString(WorkerId);
                 Resources.erase(k);
             }
             *FileRemoveCounter += toDrop.size();

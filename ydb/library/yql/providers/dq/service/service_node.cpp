@@ -30,7 +30,7 @@ namespace NYql {
 
     private:
         void Start() override {
-            YQL_LOG(DEBUG) << "Start GRPC Listener";
+            YQL_CLOG(DEBUG, ProviderDq) << "Start GRPC Listener";
             Poller.Start();
             StartRead();
         }
@@ -40,7 +40,7 @@ namespace NYql {
         }
 
         void StartRead() {
-            YQL_LOG(TRACE) << "Read next GRPC event";
+            YQL_CLOG(TRACE, ProviderDq) << "Read next GRPC event";
             Poller.StartRead(Listener, [&](const TIntrusivePtr<TSharedDescriptor>& ss) {
                 return Accept(ss);
             });
@@ -54,14 +54,14 @@ namespace NYql {
                 NInterconnect::TAddress address;
                 r = socket->Accept(address);
                 if (r >= 0) {
-                    YQL_LOG(TRACE) << "New GRPC connection";
+                    YQL_CLOG(TRACE, ProviderDq) << "New GRPC connection";
                     grpc::experimental::ExternalConnectionAcceptor::NewConnectionParameters params;
                     SetNonBlock(r, true);
                     params.listener_fd = -1; // static_cast<int>(Socket);
                     params.fd = r;
                     Acceptor->HandleNewConnection(&params);
                 } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
-                    YQL_LOG(DEBUG) << "Unknown error code " + ToString(r);
+                    YQL_CLOG(DEBUG, ProviderDq) << "Unknown error code " + ToString(r);
                 }
             }
 
@@ -122,7 +122,7 @@ namespace NYql {
             { }
         };
 
-        YQL_LOG(INFO) << "Starting GRPC on " << Config.GrpcPort;
+        YQL_CLOG(INFO, ProviderDq) << "Starting GRPC on " << Config.GrpcPort;
 
         IExternalListener::TPtr listener = nullptr;
         if (Config.GrpcSocket >= 0) {

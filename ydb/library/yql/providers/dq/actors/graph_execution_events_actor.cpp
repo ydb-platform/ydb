@@ -30,12 +30,12 @@ private:
     })
 
     void DoPassAway() override {
-        YQL_LOG_CTX_SCOPE(TraceID);
+        YQL_LOG_CTX_ROOT_SCOPE(TraceID);
     }
 
     void OnEvent(NDqs::TEvGraphExecutionEvent::TPtr& ev, const NActors::TActorContext&) {
-        YQL_LOG_CTX_SCOPE(TraceID);
-        YQL_LOG(DEBUG)  << __FUNCTION__ << ' ' << NYql::NDqProto::EGraphExecutionEventType_Name(ev->Get()->Record.GetEventType());
+        YQL_LOG_CTX_ROOT_SCOPE(TraceID);
+        YQL_CLOG(DEBUG, ProviderDq)  << __FUNCTION__ << ' ' << NYql::NDqProto::EGraphExecutionEventType_Name(ev->Get()->Record.GetEventType());
 
         try {
             switch (ev->Get()->Record.GetEventType()) {
@@ -63,7 +63,7 @@ private:
             }
         } catch (...) {
             TString message = TStringBuilder() << "Error on TEvGraphExecutionEvent: " << CurrentExceptionMessage();
-            YQL_LOG(ERROR) << message;
+            YQL_CLOG(ERROR, ProviderDq) << message;
             Reply(ev->Sender, message);
         }
     }
@@ -74,7 +74,7 @@ private:
     }
 
     void OnStart(NActors::TActorId replyTo, const NDqProto::TGraphExecutionEvent::TExecuteGraphDescriptor& payload) {
-        YQL_LOG(DEBUG)  << __FUNCTION__;
+        YQL_CLOG(DEBUG, ProviderDq)  << __FUNCTION__;
         const auto& secureParams = AsHashMap(payload.GetSecureParams().GetData());
         const auto& graphParams = AsHashMap(payload.GetGraphParams().GetData());
 
@@ -109,7 +109,7 @@ private:
     }
 
     void OnFail(NActors::TActorId replyTo) {
-        YQL_LOG(DEBUG)  << __FUNCTION__;
+        YQL_CLOG(DEBUG, ProviderDq)  << __FUNCTION__;
         for (const auto& preprocessor: TaskPreprocessors) {
             preprocessor->Finish(false);
         }
@@ -117,7 +117,7 @@ private:
     }
 
     void OnSuccess(NActors::TActorId replyTo) {
-        YQL_LOG(DEBUG)  << __FUNCTION__;
+        YQL_CLOG(DEBUG, ProviderDq)  << __FUNCTION__;
         for (const auto& preprocessor: TaskPreprocessors) {
             preprocessor->Finish(true);
         }
@@ -125,7 +125,7 @@ private:
     }
 
     void OnFullResult(NActors::TActorId replyTo, const NDqProto::TGraphExecutionEvent::TFullResultDescriptor& payload) {
-        YQL_LOG(DEBUG)  << __FUNCTION__;
+        YQL_CLOG(DEBUG, ProviderDq)  << __FUNCTION__;
         THolder<IDqFullResultWriter> writer;
         for (const auto& preprocessor: TaskPreprocessors) {
             writer = preprocessor->CreateFullResultWriter();

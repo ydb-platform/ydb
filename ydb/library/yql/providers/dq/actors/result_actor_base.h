@@ -56,8 +56,8 @@ namespace NYql::NDqs::NExecutionHelpers {
             , QueryResponse()
             , WaitingAckFromFRW(false) {
             ResultYsonWriter->OnBeginList();
-            YQL_LOG(DEBUG) << "_AllResultsBytesLimit = " << SizeLimit;
-            YQL_LOG(DEBUG) << "_RowsLimitPerWrite = " << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
+            YQL_CLOG(DEBUG, ProviderDq) << "_AllResultsBytesLimit = " << SizeLimit;
+            YQL_CLOG(DEBUG, ProviderDq) << "_RowsLimitPerWrite = " << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
         }
 
         virtual void FinishFullResultWriter() {
@@ -65,7 +65,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void OnReceiveData(NYql::NDqProto::TData&& data, const TString& messageId = "", bool autoAck = false) {
-            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
 
             if (data.GetRows() > 0 && !ResultBuilder) {
                 Issues.AddIssue(TIssue("Non empty rows: >=" + ToString(data.GetRows())).SetCode(0, TSeverityIds::S_WARNING));
@@ -126,7 +126,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message) {
-            YQL_LOG(ERROR) << "OnError " << message;
+            YQL_CLOG(ERROR, ProviderDq) << "OnError " << message;
             auto issueCode = NCommon::NeedFallback(statusCode)
                 ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
                 : TIssuesIds::DQ_GATEWAY_ERROR;
@@ -138,7 +138,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void Finish() {
-            YQL_LOG(DEBUG) << __FUNCTION__ << ", truncated=" << Truncated;
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << ", truncated=" << Truncated;
             YQL_ENSURE(!FinishCalled);
             FinishCalled = true;
 
@@ -162,8 +162,8 @@ namespace NYql::NDqs::NExecutionHelpers {
                 cFunc(NActors::TEvents::TEvGone::EventType, OnFullResultWriterShutdown);
                 cFunc(NActors::TEvents::TEvPoison::EventType, TBase::PassAway)
                 default:
-                    YQL_LOG_CTX_SCOPE(TraceId);
-                    YQL_LOG(DEBUG) << "Unexpected event " << etype;
+                    YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+                    YQL_CLOG(DEBUG, ProviderDq) << "Unexpected event " << etype;
                     break;
             }
         }
@@ -176,17 +176,17 @@ namespace NYql::NDqs::NExecutionHelpers {
                 HFunc(TEvDqFailure, OnErrorInShutdownState);
                 HFunc(TEvFullResultWriterAck, OnFullResultWriterAck);
                 default:
-                    YQL_LOG_CTX_SCOPE(TraceId);
-                    YQL_LOG(DEBUG) << "Unexpected event " << etype;
+                    YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+                    YQL_CLOG(DEBUG, ProviderDq) << "Unexpected event " << etype;
                     break;
             }
         }
 
     private:
         void OnQueryResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext&) {
-            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
             YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
-            YQL_LOG(DEBUG) << "Shutting down TResultAggregator";
+            YQL_CLOG(DEBUG, ProviderDq) << "Shutting down TResultAggregator";
 
             BlockingActors.clear();
             if (FullResultWriterID) {
@@ -194,7 +194,7 @@ namespace NYql::NDqs::NExecutionHelpers {
                 FinishFullResultWriter();
             }
 
-            YQL_LOG(DEBUG) << "Waiting for " << BlockingActors.size() << " blocking actors";
+            YQL_CLOG(DEBUG, ProviderDq) << "Waiting for " << BlockingActors.size() << " blocking actors";
 
             QueryResponse.Reset(ev->Release().Release());
             TBase::Become(&TDerived::ShutdownHandler);
@@ -202,15 +202,15 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void OnFullResultWriterShutdown() {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << "Got TEvGone";
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_CLOG(DEBUG, ProviderDq) << "Got TEvGone";
 
             FullResultWriterID = {};
         }
 
         void OnFullResultWriterResponse(NYql::NDqs::TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << __FUNCTION__;
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             if (ev->Get()->Record.IssuesSize() == 0) {
                 DoFinish();
             } else {
@@ -219,7 +219,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
             TString message = "Undelivered from " + ToString(ev->Sender) + " to " + ToString(TBase::SelfId())
                 + " reason: " + ToString(ev->Get()->Reason) + " sourceType: " + ToString(ev->Get()->SourceType >> 16)
                 + "." + ToString(ev->Get()->SourceType & 0xFFFF);
@@ -227,8 +227,8 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void OnFullResultWriterAck(TEvFullResultWriterAck::TPtr& ev, const NActors::TActorContext&) {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << __FUNCTION__;
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             Y_VERIFY(ev->Get()->Record.GetMessageId() == WriteQueue.front().MessageId);
             if (!WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
                 TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(WriteQueue.front().MessageId));
@@ -251,13 +251,13 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void OnShutdownQueryResult(NActors::TEvents::TEvGone::TPtr& ev, const NActors::TActorContext&) {
-            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
             auto iter = BlockingActors.find(ev->Sender);
             if (iter != BlockingActors.end()) {
                 BlockingActors.erase(iter);
             }
 
-            YQL_LOG(DEBUG) << "Shutting down TResultAggregator, " << BlockingActors.size() << " blocking actors left";
+            YQL_CLOG(DEBUG, ProviderDq) << "Shutting down TResultAggregator, " << BlockingActors.size() << " blocking actors left";
 
             if (BlockingActors.empty()) {
                 EndOnQueryResult();
@@ -269,7 +269,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void FlushCurrent() {
-            YQL_LOG(DEBUG) << __FUNCTION__;
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             YQL_ENSURE(!FullResultWriterID);
             YQL_ENSURE(FullResultTableEnabled);
 
@@ -281,7 +281,7 @@ namespace NYql::NDqs::NExecutionHelpers {
             TBase::Send(GraphExecutionEventsId, new TEvGraphExecutionEvent(record));
             TBase::template Synchronize<TEvGraphExecutionEvent>([this](TEvGraphExecutionEvent::TPtr& ev) {
                 Y_VERIFY(ev->Get()->Record.GetEventType() == NYql::NDqProto::EGraphExecutionEventType::SYNC);
-                YQL_LOG_CTX_SCOPE(TraceId);
+                YQL_LOG_CTX_ROOT_SCOPE(TraceId);
 
                 if (auto msg = ev->Get()->Record.GetErrorMessage()) {
                     OnError(NYql::NDqProto::StatusIds::UNSUPPORTED, msg);
@@ -295,7 +295,7 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void EndOnQueryResult() {
-            YQL_LOG(DEBUG) << __FUNCTION__;
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             NDqProto::TQueryResponse result = QueryResponse->Record;
 
             YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty());
@@ -318,8 +318,8 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void DoPassAway() override {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << __FUNCTION__;
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         }
 
         void TryWriteToFullResultTable() {
@@ -331,8 +331,8 @@ namespace NYql::NDqs::NExecutionHelpers {
         }
 
         void UnsafeWriteToFullResultTable() {
-            YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << __FUNCTION__;
+            YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             TBase::Send(FullResultWriterID, MakeHolder<TEvFullResultWriterWriteRequest>(std::move(WriteQueue.front().WriteRequest)));
         }
 

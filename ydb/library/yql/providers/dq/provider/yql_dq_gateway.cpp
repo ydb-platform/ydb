@@ -52,7 +52,7 @@ public:
     template<typename RespType>
     void OnResponse(NThreading::TPromise<TResult> promise, TString sessionId, NGrpc::TGrpcStatus&& status, RespType&& resp, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false)
     {
-        YQL_LOG_CTX_SCOPE(sessionId);
+        YQL_LOG_CTX_ROOT_SCOPE(sessionId);
         YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
 
         {
@@ -235,7 +235,7 @@ public:
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
                 bool discard) override
     {
-        YQL_LOG_CTX_SCOPE(sessionId);
+        YQL_LOG_CTX_ROOT_SCOPE(sessionId);
         auto tasks = plan.GetTasks();
 
         Yql::DqsProto::ExecuteGraphRequest queryPB;
@@ -281,7 +281,7 @@ public:
             RunningQueries.emplace(sessionId, std::make_pair(progressWriter, TString("")));
         }
 
-        YQL_LOG(DEBUG) << "Send query of size " << queryPB.ByteSizeLong();
+        YQL_CLOG(DEBUG, ProviderDq) << "Send query of size " << queryPB.ByteSizeLong();
 
         return WithRetry<Yql::DqsProto::ExecuteGraphResponse>(
             sessionId,
@@ -293,7 +293,7 @@ public:
     }
 
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
-        YQL_LOG_CTX_SCOPE(sessionId);
+        YQL_LOG_CTX_ROOT_SCOPE(sessionId);
         YQL_CLOG(INFO, ProviderDq) << "OpenSession";
         Yql::DqsProto::OpenSessionRequest request;
         request.SetSession(sessionId);
@@ -305,7 +305,7 @@ public:
         auto promise = NThreading::NewPromise<void>();
         auto callback = [this, promise, sessionId](NGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {
             Y_UNUSED(resp);
-            YQL_LOG_CTX_SCOPE(sessionId);
+            YQL_LOG_CTX_ROOT_SCOPE(sessionId);
             if (status.Ok()) {
                 YQL_CLOG(INFO, ProviderDq) << "OpenSession OK";
                 SchedulePingSessionRequest(sessionId);
@@ -394,7 +394,7 @@ public:
             Yql::DqsProto::PingSessionResponse&&) mutable
         {
             if (status.GRpcStatusCode == grpc::INVALID_ARGUMENT) {
-                YQL_LOG(INFO) << "Session closed " << sessionId;
+                YQL_CLOG(INFO, ProviderDq) << "Session closed " << sessionId;
             } else {
                 SchedulePingSessionRequest(sessionId);
             }

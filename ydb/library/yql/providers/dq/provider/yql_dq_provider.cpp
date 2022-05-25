@@ -84,10 +84,10 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             Y_UNUSED(timeProvider);
             if (dqGateway) { // nullptr in yqlrun
                 auto t = TInstant::Now();
-                YQL_LOG(DEBUG) << "OpenSession " << sessionId;
+                YQL_CLOG(DEBUG, ProviderDq) << "OpenSession " << sessionId;
                 auto future = dqGateway->OpenSession(sessionId, username);
                 future.Subscribe([sessionId, t] (const auto& ) {
-                    YQL_LOG(DEBUG) << "OpenSession " << sessionId << " complete in " << (TInstant::Now()-t).MilliSeconds();
+                    YQL_CLOG(DEBUG, ProviderDq) << "OpenSession " << sessionId << " complete in " << (TInstant::Now()-t).MilliSeconds();
                 });
                 return future;
             } else {
@@ -101,7 +101,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             }
 
             if (dqGateway) { // nullptr in yqlrun
-                YQL_LOG(DEBUG) << "CloseSession " << sessionId;
+                YQL_CLOG(DEBUG, ProviderDq) << "CloseSession " << sessionId;
                 dqGateway->CloseSession(sessionId);
             }
         };

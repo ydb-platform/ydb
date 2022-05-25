@@ -61,7 +61,7 @@ public:
         try {
             return promise.GetFuture().GetValueSync();
         } catch (...) {
-            YQL_LOG(INFO) << "DqControl IsReady Exception " << CurrentExceptionMessage();
+            YQL_CLOG(INFO, ProviderDq) << "DqControl IsReady Exception " << CurrentExceptionMessage();
             return false;
         }
     }
@@ -110,11 +110,11 @@ public:
         }
 
         for (const auto& [path, objectId] : udfs){
-            YQL_LOG(DEBUG) << "DQ control, adding file: " << path << " with objectId " << objectId;
+            YQL_CLOG(DEBUG, ProviderDq) << "DQ control, adding file: " << path << " with objectId " << objectId;
             TString newPath, newObjectId;
             std::tie(newPath, newObjectId) = GetPathAndObjectId(path, objectId, objectId);
 
-            YQL_LOG(DEBUG) << "DQ control, rewrite path/objectId: " << newPath << ", " << newObjectId;
+            YQL_CLOG(DEBUG, ProviderDq) << "DQ control, rewrite path/objectId: " << newPath << ", " << newObjectId;
             TFileResource r;
             r.SetLocalPath(newPath);
             r.SetObjectType(Yql::DqsProto::TFile::EUDF_FILE);

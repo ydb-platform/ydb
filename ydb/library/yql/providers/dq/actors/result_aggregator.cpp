@@ -101,8 +101,8 @@ private:
     }
 
     void OnWakeup() {
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << __FUNCTION__;
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         auto now = TInstant::Now();
         if (PullRequestTimeout && now - PullRequestStartTime > PullRequestTimeout) {
             OnError(NYql::NDqProto::StatusIds::TIMEOUT, "Timeout " + ToString(SourceID.NodeId()));
@@ -123,7 +123,7 @@ private:
     }
 
     void OnReadyState(TEvReadyState::TPtr& ev, const TActorContext&) {
-        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
         AddCounters(ev->Get()->Record);
 
         SourceID = NActors::ActorIdFromProto(ev->Get()->Record.GetSourceId());
@@ -138,7 +138,7 @@ private:
     }
 
     void OnPullResult(TEvPullResult::TPtr&, const TActorContext&) {
-        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
         PullRequestStartTime = TInstant::Now();
         Send(SourceID, MakeHolder<TEvPullDataRequest>(MAX_RESULT_BATCH), IEventHandle::FlagTrackDelivery);
     }
@@ -148,8 +148,7 @@ private:
     }
 
     void OnPullResponse(TEvPullDataResponse::TPtr& ev, const TActorContext&) {
-        YQL_LOG_CTX_SCOPE(TraceId);
-        YQL_LOG(DEBUG) << __FUNCTION__;
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
 
         if (FinishCalled) {
             // finalization has been begun, actor will not kill himself anymore, should ignore responses instead

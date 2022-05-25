@@ -144,7 +144,7 @@ private:
     }
 
     void OnSync(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
-        YQL_LOG(DEBUG) << "OnSync(): delayed messages " << DelayedEvents_.size();
+        YQL_CLOG(DEBUG, ProviderDq) << "OnSync(): delayed messages " << DelayedEvents_.size();
         SyncState_ = E_SYNC_RECEIVED;
         TBase::Become(InterruptedHandler_);
         SyncCallback_(ev);

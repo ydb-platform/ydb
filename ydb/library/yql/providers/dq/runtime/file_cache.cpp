@@ -48,7 +48,7 @@ void TFileCache::Scan()
 
         UsedSize += file.Size;
 
-        YQL_LOG(DEBUG) << file.Name << "|" << file.ObjectId;
+        YQL_CLOG(DEBUG, ProviderDq) << file.Name << "|" << file.ObjectId;
 
         allFiles.emplace_back(std::move(file));
     }
@@ -84,7 +84,7 @@ void TFileCache::Clean() {
         if (maybeFile != Files.end()) {
             auto path = GetDir(objectId) + "/" + maybeFile->second.Name;
 
-            YQL_LOG(DEBUG) << "Remove File " << path << " UsedSize " << ToString(UsedSize) << " FileSize " << ToString(maybeFile->second.Size);
+            YQL_CLOG(DEBUG, ProviderDq) << "Remove File " << path << " UsedSize " << ToString(UsedSize) << " FileSize " << ToString(maybeFile->second.Size);
 
             UsedSize -= maybeFile->second.Size;
             NFs::Remove(path);

@@ -746,7 +746,7 @@ public:
             settings.AllowGeneratorsInUnboxedValues = true;
             for (const auto& x: taskMeta.GetSecureParams()) {
                 settings.SecureParams[x.first] = x.second;
-                YQL_LOG(DEBUG) << "SecureParam " << x.first << ":XXX";
+                YQL_CLOG(DEBUG, ProviderDq) << "SecureParam " << x.first << ":XXX";
             }
             settings.OptLLVM = DqConfiguration->OptLLVM.Get().GetOrElse("");
 

@@ -21,6 +21,7 @@
 #define PERFORM_RULE(func, ...)                                            \
     do {                                                                   \
         if (auto result = func(__VA_ARGS__); result.Raw() != node.Raw()) { \
+            YQL_CLOG(DEBUG, ProviderDq) << #func;                          \
             node = result;                                                 \
             return node.Ptr();                                             \
         }                                                                  \

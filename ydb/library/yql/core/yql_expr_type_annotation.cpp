@@ -385,6 +385,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             TExprNode::TPtr field;
             if (!pos) {
                 if (newField->GetItemType()->GetKind() != ETypeAnnotationKind::Optional) {
+                    ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                            "Can't find  '" << newField->GetName() << "': " << *newField->GetItemType() << " in " << sourceType));
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -406,6 +408,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 YQL_ENSURE(field);
                 auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
+                    ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                            "Failed to convert '" << newField->GetName() << "': " << *oldType->GetItemType() << " to " << *newField->GetItemType()));
                     return status;
                 }
             }
@@ -447,6 +451,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Seal()
                        .Build();
                 } else {
+                    ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                            "Can't find  '" << newField->GetName() << ": " << *newField->GetItemType() << "' in " << sourceType));
                     return IGraphTransformer::TStatus::Error;
                 }
             } else {
@@ -461,6 +467,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
                 auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
+                    ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                            "Failed to convert '" << newField->GetName() << "': " << *oldType->GetItemType() << " to " << *newField->GetItemType()));
                     return status;
                 }
             }
@@ -3399,12 +3407,14 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
         return IGraphTransformer::TStatus::Error;
     }
 
+    TIssueScopeGuard guard(ctx.IssueManager, [&] {
+            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Failed to convert type: " << sourceType << " to " << expectedType);
+        });
     auto status = TryConvertToImpl(ctx, node, sourceType, expectedType, flags);
-    if (status.Level == IGraphTransformer::TStatus::Error) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to convert type: " <<
-            sourceType << " to " << expectedType));
+    if (status.Level  == IGraphTransformer::TStatus::Error) {
+        guard.RaiseIssueForEmptyScope();
     }
-
     return status;
 }
 

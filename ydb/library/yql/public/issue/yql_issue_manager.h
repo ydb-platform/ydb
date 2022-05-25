@@ -36,8 +36,11 @@ public:
         IssueLimit_ = limit;
     }
 
+    void RaiseIssueForEmptyScope();
+
 private:
     TIssuePtr CheckUniqAndLimit(const TIssue& issue);
+    TIssuePtr CheckUniqAndLimit(TIssuePtr issue);
 
     struct TIssueHash {
         ui64 operator()(const TIssuePtr& p) {
@@ -66,6 +69,11 @@ public:
     {
         Manager_.AddScope(fn);
     }
+
+    void RaiseIssueForEmptyScope() {
+        Manager_.RaiseIssueForEmptyScope();
+    }
+
     ~TIssueScopeGuard()
     {
         Manager_.LeaveScope();

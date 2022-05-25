@@ -15,7 +15,7 @@ struct TInsertedData {
     TString Metadata;
     TInstant DirtyTime;
 
-    TInsertedData() = default;
+    TInsertedData() = delete; // avoid invalid TInsertedData anywhere
 
     TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
                   const TString& meta, const TInstant& writeTime)
@@ -112,7 +112,7 @@ public:
         ui64 RawBytes{};
     };
 
-    bool Insert(IDbWrapper& dbTable, const TInsertedData& data);
+    bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard, const THashSet<TWriteId>& writeIds);
     void Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWriteId>& writeIds);
     THashSet<TWriteId> AbortOld(IDbWrapper& dbTable, const TInstant& now);

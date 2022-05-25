@@ -20,7 +20,7 @@ public:
     };
 
     void Insert(const TInsertedData& data) override {
-        Inserted[TWriteId{data.WriteTxId}] = data;
+        Inserted.emplace(TWriteId{data.WriteTxId}, data);
     }
 
     void Commit(const TInsertedData& data) override {
@@ -28,7 +28,7 @@ public:
     }
 
     void Abort(const TInsertedData& data) override {
-        Aborted[TWriteId{data.WriteTxId}] = data;
+        Aborted.emplace(TWriteId{data.WriteTxId}, data);
     }
 
     void EraseInserted(const TInsertedData& data) override {

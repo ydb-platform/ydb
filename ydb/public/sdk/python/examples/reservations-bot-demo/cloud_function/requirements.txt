@@ -9,7 +9,7 @@ idna==2.10
 protobuf==3.15.0
 pycparser==2.20
 pydantic==1.6.2
-PyJWT==1.7.1
+PyJWT==2.4.0
 requests==2.24.0
 six==1.15.0
 urllib3==1.26.5

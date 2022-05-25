@@ -4,9 +4,9 @@
 import pytest
 import yatest
 
-from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
 
-from sqs_matchers import ReadResponseMatcher
+from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
 
 class MultiplexingTablesFormatTest(KikimrSqsTestBase):

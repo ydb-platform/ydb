@@ -8,12 +8,12 @@ import random
 import pytest
 from hamcrest import assert_that, equal_to, less_than_or_equal_to
 
-from sqs_requests_client import SqsHttpApi
+from ydb.tests.library.sqs.requests_client import SqsHttpApi
 
-from sqs_matchers import ReadResponseMatcher
+from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
-from sqs_test_base import to_bytes
-from sqs_test_base import KikimrSqsTestBase, VISIBILITY_CHANGE_METHOD_PARAMS, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+from ydb.tests.library.sqs.test_base import to_bytes
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, VISIBILITY_CHANGE_METHOD_PARAMS, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 
 def send_message(server, username, queue_url, sqs_port, body, seq_no, group_id):

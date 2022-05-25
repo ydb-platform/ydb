@@ -9,9 +9,9 @@ from hamcrest import assert_that, equal_to, not_none, raises, not_
 
 from ydb.tests.library.common.types import Erasure
 
-from sqs_matchers import ReadResponseMatcher
+from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
-from sqs_test_base import KikimrSqsTestBase, STOP_NODE_PARAMS, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, STOP_NODE_PARAMS, IS_FIFO_PARAMS
 
 
 class TestSqsMultinodeCluster(KikimrSqsTestBase):

@@ -6,9 +6,9 @@ import time
 import pytest
 from hamcrest import assert_that, equal_to, not_none, greater_than, less_than_or_equal_to, has_items, raises
 
-from sqs_matchers import ReadResponseMatcher, extract_message_ids
+from ydb.tests.library.sqs.matchers import ReadResponseMatcher, extract_message_ids
 
-from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, VISIBILITY_CHANGE_METHOD_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, VISIBILITY_CHANGE_METHOD_PARAMS
 
 
 class SqsFifoMicroBatchTest(KikimrSqsTestBase):

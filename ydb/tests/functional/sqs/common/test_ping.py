@@ -4,7 +4,7 @@ import requests
 
 from hamcrest import assert_that, equal_to
 
-from sqs_test_base import KikimrSqsTestBase
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
 
 
 class TestPing(KikimrSqsTestBase):

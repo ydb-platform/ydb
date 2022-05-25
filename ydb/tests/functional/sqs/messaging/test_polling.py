@@ -3,9 +3,9 @@
 import pytest
 from hamcrest import assert_that, equal_to
 
-from sqs_matchers import ReadResponseMatcher
+from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
-from sqs_test_base import KikimrSqsTestBase, POLLING_PARAMS, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, POLLING_PARAMS, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 
 class TestSqsPolling(KikimrSqsTestBase):
@@ -17,9 +17,10 @@ class TestSqsPolling(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**POLLING_PARAMS)
-    def test_receive_message_with_polling(self, is_fifo, polling_wait_timeout):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_receive_message_with_polling(self, is_fifo, polling_wait_timeout, tables_format):
+        self._init_with_params(is_fifo, tables_format)
+
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=False, shards=None if is_fifo else 1)
         empty_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=False, shards=None if is_fifo else 1)
 

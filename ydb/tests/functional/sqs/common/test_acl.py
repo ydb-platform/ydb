@@ -8,7 +8,8 @@ from hamcrest import assert_that, none, is_not, is_, raises
 
 import ydb.tests.library.common.yatest_common as yatest_common
 
-from sqs_test_base import KikimrSqsTestBase, get_sqs_client_path, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_sqs_client_path, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
+from ydb.tests.library.sqs.test_base import TABLES_FORMAT_PARAMS
 
 
 class SqsACLTest(KikimrSqsTestBase):
@@ -76,7 +77,9 @@ class SqsACLTest(KikimrSqsTestBase):
 
         return list(permissions)
 
-    def test_modify_permissions(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_modify_permissions(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
         self._send_message_and_assert(queue_url, 'data')
 
@@ -118,7 +121,9 @@ class SqsACLTest(KikimrSqsTestBase):
         assert self._extract_permissions_for(alkonavt_sid, description) == []
         assert self._extract_permissions_for(berkanavt_sid, description) == []
 
-    def test_apply_permissions(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_apply_permissions(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name, False, True)
         self._send_message_and_assert(queue_url, 'data')
 
@@ -181,7 +186,9 @@ class SqsWithForceAuthorizationTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(argnames='token,pattern',
                              argvalues=[('invalid_token', 'AccessDeniedException'), ('', 'No security token was provided.'), (None, 'InvalidClientTokenId')],
                              ids=['invalid', 'empty', 'no'])
-    def test_invalid_token(self, token, pattern):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_invalid_token(self, token, pattern, tables_format):
+        self._init_with_params(tables_format=tables_format)
         sqs_api = self._create_api_for_user(self._username, raise_on_error=True, security_token=token)
 
         def call_list():

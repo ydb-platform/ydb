@@ -5,7 +5,7 @@ from hamcrest import assert_that, not_none
 
 from ydb.tests.library.common.types import Erasure
 
-from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
 
 
 class TestSqsRecompilesRequestsForOtherQueue(KikimrSqsTestBase):

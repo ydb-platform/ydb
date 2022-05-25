@@ -6,7 +6,7 @@ import time
 import pytest
 from hamcrest import assert_that, equal_to, none, not_, greater_than, raises
 
-from sqs_test_base import KikimrSqsTestBase
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
 
 
 class TestSqsCountersFeatures(KikimrSqsTestBase):
@@ -197,8 +197,8 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
                 time.sleep(0.2)
                 continue
 
-            assert_that(user_counter, not_(none()))
             if not switch_user:
+                assert_that(user_counter, not_(none()))
                 assert_that(queue_counter, not_(none()))
             break
 

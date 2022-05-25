@@ -6,6 +6,8 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include <ydb/core/ymq/queues/common/key_hashes.h>
+
 #include <util/string/join.h>
 
 using NKikimr::NClient::TValue;
@@ -50,6 +52,8 @@ private:
             .Counters(QueueCounters_)
             .RetryOnTimeout()
             .Params()
+                .Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef())
+                .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_.GetRef()))
                 .Uint64("NOW", Now().MilliSeconds())
                 .Bool("PURGE", true)
             .ParentBuilder().Start();
@@ -79,7 +83,11 @@ private:
                 auto req = MakeHolder<TSqsEvents::TEvPurgeQueue>();
                 req->QueuePath = GetQueuePath();
                 req->Boundary = TInstant::MilliSeconds(ui64(list[i]["RetentionBoundary"]));
-                req->Shard = ui64(list[i]["Shard"]);
+                if (TablesFormat() == 0) {
+                    req->Shard = ui64(list[i]["Shard"]);
+                } else {
+                    req->Shard = ui32(list[i]["Shard"]);
+                }
 
                 RLOG_SQS_INFO("Purging queue. Set retention boundary for queue [" << req->QueuePath << "/" << req->Shard << "] to " << req->Boundary.MilliSeconds() << " (" << req->Boundary << ")");
 

@@ -15,14 +15,14 @@ import ydb.tests.library.common.yatest_common as yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.sqs.tables import create_all_tables as create_all_sqs_tables
 
-from sqs_requests_client import SqsHttpApi
+from ydb.tests.library.sqs.tables import create_all_tables as create_all_sqs_tables
+from ydb.tests.library.sqs.requests_client import SqsHttpApi
+from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
 import ydb
 from concurrent import futures
 
-from sqs_matchers import ReadResponseMatcher
 
 DEFAULT_VISIBILITY_TIMEOUT = 30
 
@@ -62,10 +62,6 @@ VISIBILITY_CHANGE_METHOD_PARAMS = {
 
 def get_sqs_client_path():
     return yatest_common.binary_path("ydb/core/ymq/client/bin/sqs")
-
-
-def get_kikimr_driver_path():
-    return yatest_common.binary_path("ydb/apps/ydbd/ydbd")
 
 
 def to_bytes(v):
@@ -635,6 +631,7 @@ class KikimrSqsTestBase(object):
 
     def _smart_make_table_path(self, user_name, queue_name, queue_version, shard, table_name):
         tables_format = self.tables_format_per_user.get(user_name, 0)
+
         table_path = self.sqs_root
         if tables_format == 0:
             table_path += '/{}'.format(user_name)
@@ -767,8 +764,12 @@ class KikimrSqsTestBase(object):
         if username is None:
             username = self._username
         self._execute_yql_query(
-            f'UPSERT INTO `{self.sqs_root}/.Settings` (Account, Name, Value) \
-                VALUES ("{username}", "CreateQueuesWithTabletFormat", "{tables_format}")'
+            'UPSERT INTO `{}/.Settings` (Account, Name, Value) \
+                VALUES ("{}", "CreateQueuesWithTabletFormat", "{}")'.format(
+                self.sqs_root,
+                username,
+                tables_format
+            )
         )
         self.tables_format_per_user[username] = tables_format
 

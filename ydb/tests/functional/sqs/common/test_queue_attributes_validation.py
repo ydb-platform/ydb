@@ -3,7 +3,7 @@
 import pytest
 from hamcrest import assert_that, equal_to
 
-from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 
 class TestQueueAttributesInCompatibilityMode(KikimrSqsTestBase):
@@ -14,9 +14,10 @@ class TestQueueAttributesInCompatibilityMode(KikimrSqsTestBase):
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_set_queue_attributes_no_validation(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_set_queue_attributes_no_validation(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
+
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True, attributes={'MaximumMessageSize': '1000000'})
         assert_that(self._sqs_api.get_queue_attributes(queue_url)['MaximumMessageSize'], equal_to(str(256 * 1024)))
 
@@ -42,9 +43,10 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_set_queue_attributes(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_set_queue_attributes(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
+
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
 
         attributes = self._sqs_api.get_queue_attributes(queue_url)
@@ -121,9 +123,9 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
                 assert_that(False)  # expected InvalidAttributeName exception
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_create_queue_with_default_attributes(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_queue_with_default_attributes(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
 
         # check default queue creation
         queue_url = self._sqs_api.create_queue(self.queue_name, is_fifo=is_fifo)
@@ -145,9 +147,9 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             assert_that(attributes[attr], equal_to(expected_attributes[attr]))
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_create_queue_with_custom_attributes(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_queue_with_custom_attributes(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
 
         custom_attributes = {
             'DelaySeconds': '1',

@@ -5,10 +5,10 @@ import time
 import pytest
 from hamcrest import assert_that, equal_to, greater_than, not_none, none, has_item, has_items, raises, empty, instance_of
 
-from sqs_matchers import ReadResponseMatcher
+from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
-from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
-from sqs_test_base import to_bytes
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
+from ydb.tests.library.sqs.test_base import to_bytes, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 from ydb import issues as ydb_issues
 
 
@@ -20,10 +20,11 @@ class QueuesManagingTest(KikimrSqsTestBase):
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_create_queue(self, is_fifo):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
         attributes = {}
         if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
             attributes['ContentBasedDeduplication'] = 'true'
         attributes['DelaySeconds'] = '506'
         attributes['MaximumMessageSize'] = '10003'
@@ -95,8 +96,8 @@ class QueuesManagingTest(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_delete_queue(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+        self._init_with_params(is_fifo)
+
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         self._sqs_api.list_queues()
         self._sqs_api.send_message(created_queue_url, 'body', group_id='group' if is_fifo else None, deduplication_id='123' if is_fifo else None)
@@ -174,9 +175,10 @@ class QueuesManagingTest(KikimrSqsTestBase):
         )
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_purge_queue(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_purge_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
+
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         if is_fifo:
             group_id = 'group'
@@ -238,8 +240,8 @@ class QueuesManagingTest(KikimrSqsTestBase):
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_delete_and_create_queue(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+        self._init_with_params(is_fifo)
+
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
         self.seq_no += 1
         self._send_message_and_assert(created_queue_url, self._msg_body_template.format(1), seq_no=self.seq_no if is_fifo else None, group_id='group' if is_fifo else None)

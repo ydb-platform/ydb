@@ -6,9 +6,9 @@ import time
 import pytest
 from hamcrest import assert_that, raises, greater_than, contains_string, equal_to, instance_of
 
-from sqs_requests_client import SqsSendMessageParams
+from ydb.tests.library.sqs.requests_client import SqsSendMessageParams
 
-from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
 
 from ydb import issues as ydb_issues
 

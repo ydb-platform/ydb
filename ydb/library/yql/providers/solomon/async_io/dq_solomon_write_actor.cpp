@@ -59,6 +59,15 @@ namespace {
 const ui64 MaxMetricsPerRequest = 1000; // Max allowed count is 10000
 const ui64 MaxRequestsInflight = 3;
 
+auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
+    [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
+        if (resp->Response->Status == "401") {
+            return ERetryErrorClass::NoRetry;
+        }
+
+        return ERetryErrorClass::ShortRetry;
+    });
+
 struct TDqSolomonWriteParams {
     NSo::NProto::TDqSolomonShard Shard;
 };
@@ -357,7 +366,7 @@ private:
             const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest(metricsToSend.Data);
 
             const size_t bodySize = metricsToSend.Data.size();
-            const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId));
+            const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
             Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
             SINK_LOG_D("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 

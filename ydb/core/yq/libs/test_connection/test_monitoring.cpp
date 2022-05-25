@@ -65,7 +65,8 @@ public:
 
         HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
         const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest();
-        const TActorId httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId));
+        auto retryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy();
+        const TActorId httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, retryPolicy));
         Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
         TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " send request " << httpRequest->Method << " " << httpRequest->Protocol << " " << httpRequest->Host << " " << httpRequest->URL << " " << httpRequest->Body);
     }

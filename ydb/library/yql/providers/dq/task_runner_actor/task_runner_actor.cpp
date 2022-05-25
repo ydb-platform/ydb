@@ -2,7 +2,8 @@
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
-#include "ydb/library/yql/providers/dq/actors/events.h"
+#include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
@@ -31,16 +32,6 @@ TTaskRunnerActorSensors GetSensors(const T& t) {
     return result;
 }
 
-template<typename T>
-TTaskRunnerActorRusage GetRusage(const T& t) {
-    TTaskRunnerActorRusage rusage = {
-        t.GetRusage().GetUtime(),
-        t.GetRusage().GetStime(),
-        t.GetRusage().GetMajorPageFaults()
-    };
-    return rusage;
-}
-
 } // namespace
 
 class TTaskRunnerActor
@@ -54,7 +45,8 @@ public:
         ITaskRunnerActor::ICallbacks* parent,
         const NTaskRunnerProxy::IProxyFactory::TPtr& factory,
         const ITaskRunnerInvoker::TPtr& invoker,
-        const TString& traceId)
+        const TString& traceId,
+        TWorkerRuntimeData* runtimeData)
         : TActor<TTaskRunnerActor>(&TTaskRunnerActor::Handler)
         , Parent(parent)
         , TraceId(traceId)
@@ -62,7 +54,9 @@ public:
         , Invoker(invoker)
         , Local(Invoker->IsLocal())
         , Settings(MakeIntrusive<TDqConfiguration>())
-        , StageId(0) {
+        , StageId(0)
+        , RuntimeData(runtimeData)
+    {
     }
 
     ~TTaskRunnerActor() { }
@@ -495,7 +489,7 @@ private:
 
         auto sourcesMap = Sources;
 
-        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap, sourcesMap, memLimit=ev->Get()->MemLimit, settings=Settings, stageId=StageId]() mutable {
+        Invoker->Invoke([selfId, cookie, actorSystem, replyTo, taskRunner=TaskRunner, inputMap, sourcesMap, memLimit=ev->Get()->MemLimit, settings=Settings, stageId=StageId, runtimeData=RuntimeData]() mutable {
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 // guard.GetMutex()->SetLimit(memLimit);
@@ -522,10 +516,17 @@ private:
                             res,
                             std::move(inputChannelFreeSpace),
                             std::move(sourcesFreeSpace),
-                            GetSensors(response),
-                            GetRusage(response)),
+                            GetSensors(response)),
                         /*flags=*/0,
                         cookie));
+
+                if (runtimeData) {
+                    ::TRusage delta;
+                    delta.Stime = TDuration::MicroSeconds(response.GetRusage().GetStime());
+                    delta.Utime = TDuration::MicroSeconds(response.GetRusage().GetUtime());
+                    delta.MajorPageFaults = response.GetRusage().GetMajorPageFaults();
+                    runtimeData->AddRusageDelta(delta);
+                }
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
@@ -550,15 +551,18 @@ private:
     THashSet<ui32> Sources;
     TIntrusivePtr<TDqConfiguration> Settings;
     ui64 StageId;
+    TWorkerRuntimeData* RuntimeData;
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {
 public:
     TTaskRunnerActorFactory(
         const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
-        const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory)
+        const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
+        TWorkerRuntimeData* runtimeData)
         : ProxyFactory(proxyFactory)
         , InvokerFactory(invokerFactory)
+        , RuntimeData(runtimeData)
     { }
 
     std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
@@ -567,7 +571,7 @@ public:
         THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
-        auto* actor = new TTaskRunnerActor(parent, ProxyFactory, InvokerFactory->Create(), traceId);
+        auto* actor = new TTaskRunnerActor(parent, ProxyFactory, InvokerFactory->Create(), traceId, RuntimeData);
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)
@@ -577,13 +581,15 @@ public:
 private:
     NTaskRunnerProxy::IProxyFactory::TPtr ProxyFactory;
     NDqs::ITaskRunnerInvokerFactory::TPtr InvokerFactory;
+    TWorkerRuntimeData* RuntimeData;
 };
 
 ITaskRunnerActorFactory::TPtr CreateTaskRunnerActorFactory(
     const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
-    const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory)
+    const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
+    TWorkerRuntimeData* runtimeData)
 {
-    return ITaskRunnerActorFactory::TPtr(new TTaskRunnerActorFactory(proxyFactory, invokerFactory));
+    return ITaskRunnerActorFactory::TPtr(new TTaskRunnerActorFactory(proxyFactory, invokerFactory, runtimeData));
 }
 
 } // namespace NTaskRunnerActor

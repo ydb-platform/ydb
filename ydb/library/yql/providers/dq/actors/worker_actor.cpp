@@ -527,14 +527,6 @@ private:
     void OnRunFinished(TEvTaskRunFinished::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         auto res = ev->Get()->RunStatus;
-        if (RuntimeData) {
-            ::TRusage delta;
-            delta.Stime = TDuration::MicroSeconds(ev->Get()->Rusage.Stime);
-            delta.Utime = TDuration::MicroSeconds(ev->Get()->Rusage.Utime);
-            delta.MajorPageFaults = ev->Get()->Rusage.MajorPageFaults;
-            RuntimeData->AddRusageDelta(delta);
-        }
-
         Stat.AddCounters2(ev->Get()->Sensors);
 
         switch (res) {

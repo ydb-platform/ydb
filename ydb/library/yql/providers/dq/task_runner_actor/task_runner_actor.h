@@ -18,14 +18,21 @@
 #include <ydb/library/yql/providers/dq/task_runner/task_runner_invoker.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 
-namespace NYql::NDq {
+namespace NYql {
+
+struct TWorkerRuntimeData;
+
+namespace NDq {
 
 namespace NTaskRunnerActor {
 
 ITaskRunnerActorFactory::TPtr CreateTaskRunnerActorFactory(
     const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
-    const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory);
+    const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
+    TWorkerRuntimeData* runtimeData = nullptr);
 
 } // namespace NTaskRunnerActor
 
-} // namespace NYql::NDq
+} // namespace NDq
+
+} // namespace NYql

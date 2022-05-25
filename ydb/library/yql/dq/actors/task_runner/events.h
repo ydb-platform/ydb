@@ -58,12 +58,6 @@ struct TTaskRunnerActorSensorEntry {
     i64 Count = 0;
 };
 
-struct TTaskRunnerActorRusage {
-    i64 Utime = 0;
-    i64 Stime = 0;
-    i64 MajorPageFaults = 0;
-};
-
 using TTaskRunnerActorSensors = TVector<TTaskRunnerActorSensorEntry>;
 
 struct TEvError
@@ -202,14 +196,12 @@ struct TEvTaskRunFinished
         THashMap<ui32, ui64>&& inputMap,
         THashMap<ui32,  ui64>&& sourcesMap,
         const TTaskRunnerActorSensors& sensors = {},
-        const TTaskRunnerActorRusage& rusage = {},
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
         THolder<NDqProto::TMiniKqlProgramState>&& programState = nullptr,
         bool checkpointRequestedFromTaskRunner = false)
         : RunStatus(runStatus)
         , Sensors(sensors)
-        , Rusage(rusage)
         , InputChannelFreeSpace(std::move(inputMap))
         , SourcesFreeSpace(std::move(sourcesMap))
         , ProfileStats(profileStats)
@@ -220,7 +212,6 @@ struct TEvTaskRunFinished
 
     NDq::ERunStatus RunStatus;
     TTaskRunnerActorSensors Sensors;
-    TTaskRunnerActorRusage Rusage;
 
     THashMap<ui32, ui64> InputChannelFreeSpace;
     THashMap<ui32, ui64> SourcesFreeSpace;
@@ -264,7 +255,7 @@ struct TEvChannelPopFinished
 struct TCheckpointRequest {
     TCheckpointRequest(TVector<ui32>&& channelIds, TVector<ui32>&& sinkIds, const NDqProto::TCheckpoint& checkpoint)
         : ChannelIds(std::move(channelIds))
-        , SinkIds(std::move(sinkIds)) 
+        , SinkIds(std::move(sinkIds))
         , Checkpoint(checkpoint) {
     }
 
@@ -278,13 +269,13 @@ struct TEvContinueRun
 
     TEvContinueRun() = default;
 
-    explicit TEvContinueRun(TMaybe<TCheckpointRequest>&& checkpointRequest, bool checkpointOnly) 
+    explicit TEvContinueRun(TMaybe<TCheckpointRequest>&& checkpointRequest, bool checkpointOnly)
         : ChannelId(0)
         , MemLimit(0)
         , FreeSpace(0)
-        , CheckpointRequest(std::move(checkpointRequest)) 
+        , CheckpointRequest(std::move(checkpointRequest))
         , CheckpointOnly(checkpointOnly)
-    { } 
+    { }
 
     TEvContinueRun(ui32 channelId, ui64 freeSpace)
         : ChannelId(channelId)

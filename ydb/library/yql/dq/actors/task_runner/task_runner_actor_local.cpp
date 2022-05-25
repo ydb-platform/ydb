@@ -197,7 +197,6 @@ private:
                     std::move(inputChannelFreeSpace),
                     std::move(sourcesFreeSpace),
                     {},
-                    {},
                     MemoryQuota ? *MemoryQuota->GetProfileStats() : TDqMemoryQuota::TProfileStats(),
                     MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                     std::move(mkqlProgramState),

@@ -16,6 +16,7 @@ target_link_libraries(ydb_persqueue_core-ut-ut_utils PUBLIC
   yutil
   cpp-grpc-server
   cpp-testing-unittest
+  cpp-threading-chunk_queue
   ydb-core-testlib
   library-persqueue-topic_parser_public
   cpp-client-ydb_driver

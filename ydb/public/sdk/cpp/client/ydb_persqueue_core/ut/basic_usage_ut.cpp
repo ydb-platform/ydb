@@ -3,7 +3,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
-#include <library/cpp/threading/chunk_queue/queue.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>

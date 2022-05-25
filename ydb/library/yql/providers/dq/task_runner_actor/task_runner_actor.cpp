@@ -56,6 +56,7 @@ public:
         , Settings(MakeIntrusive<TDqConfiguration>())
         , StageId(0)
         , RuntimeData(runtimeData)
+        , ClusterName(RuntimeData ? RuntimeData->ClusterName : "local")
     {
     }
 
@@ -423,6 +424,8 @@ private:
         auto cookie = ev->Cookie;
         auto taskId = ev->Get()->Task.GetId();
         auto& inputs = ev->Get()->Task.GetInputs();
+        auto startTime = TInstant::Now();
+
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
             if (input.HasSource()) {
@@ -451,17 +454,24 @@ private:
             Settings->FreezeDefaults();
             StageId = taskMeta.GetStageId();
         }
-        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId](){
+        Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto result = taskRunner->Prepare();
+                auto sensors = GetSensors(result);
+                auto sensorName = TCounters::GetCounterName(
+                    "Actor",
+                    {{"ClusterName", clusterName}},
+                    "ProcessInit");
+                i64 val = (TInstant::Now()-startTime).MilliSeconds();
+                sensors.push_back({sensorName, val, val, val, val, 1});
 
                 auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
                     taskRunner->GetSecureParams(),
                     taskRunner->GetTaskParams(),
                     taskRunner->GetTypeEnv(),
                     taskRunner->GetHolderFactory(),
-                    GetSensors(result));
+                    sensors);
 
                 actorSystem->Send(
                     new IEventHandle(
@@ -552,6 +562,7 @@ private:
     TIntrusivePtr<TDqConfiguration> Settings;
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
+    TString ClusterName;
 };
 
 class TTaskRunnerActorFactory: public ITaskRunnerActorFactory {

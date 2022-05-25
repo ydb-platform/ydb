@@ -227,8 +227,6 @@ private:
         TFailureInjector::Reach("dq_task_failure", [] {::_exit(1); });
 
         Y_VERIFY(!TaskRunnerActor);
-
-        Stat.StartCounter(Stat.GetCounterName("Actor", {{"ClusterName", RuntimeData ? RuntimeData->ClusterName : "local"}}, "ProcessInit"));
         Y_VERIFY(!Executer);
         Executer = ev->Sender;
         Task = ev->Get()->Record.GetTask();
@@ -257,7 +255,6 @@ private:
     }
 
     void OnTaskRunnerCreated(TEvTaskRunnerCreateFinished::TPtr& ev, const TActorContext& ) {
-        Stat.FlushCounter(Stat.GetCounterName("Actor", {{"ClusterName", RuntimeData ? RuntimeData->ClusterName : "local"}}, "ProcessInit"));
         TaskRunnerPrepared = true;
 
         try {

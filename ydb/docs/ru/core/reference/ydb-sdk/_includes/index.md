@@ -13,6 +13,7 @@
 - Node.js [https://github.com/ydb-platform/ydb-nodejs-sdk](https://github.com/ydb-platform/ydb-nodejs-sdk)
 - PHP [https://github.com/yandex-cloud/ydb-php-sdk](https://github.com/yandex-cloud/ydb-php-sdk)
 - Python [https://github.com/ydb-platform/ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk)
+- Rust [https://github.com/ydb-platform/ydb-rs-sdk](https://github.com/ydb-platform/ydb-rs-sdk)
 
 Документация по SDK содержит следующие разделы:
 

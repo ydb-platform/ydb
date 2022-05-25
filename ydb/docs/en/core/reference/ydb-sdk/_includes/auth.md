@@ -57,6 +57,17 @@ You can click on any of the methods described below to go to the source code of 
   | Service Account Key | [`new 'ydb-sdk'.getSACredentialsFromJson( saKeyFile )`](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/service-account-credentials) |
   | Determined by environment variables | [`new 'ydb-sdk'.getCredentialsFromEnv( entryPoint, database, logger )`](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/environ) |
 
+- Rust
+
+  [Mode](../../../concepts/connect.md#auth-modes) | Method
+    ----- | -----
+  Anonymous | ydb::StaticToken("")
+  Access Token | ydb::StaticToken(token)
+  Metadata | ydb::GCEMetadata, ydb::YandexMetadata
+  Service Account Key | не поддерживается
+  Determined by environment variables | не поддерживается
+  Execute external command | ydb.CommandLineYcToken (for example: ```ydb::CommandLineYcToken.from_cmd("yc iam create-token")```)
+
 {% endlist %}
 
 ## Procedure for determining the authentication mode and parameters from the environment {#env}

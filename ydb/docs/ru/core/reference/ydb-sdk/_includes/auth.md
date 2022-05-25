@@ -19,8 +19,8 @@
 
 - Python
 
-  [Режим](../../../concepts/connect.md#auth-modes) | Метод 
-  ----- | ----- 
+  [Режим](../../../concepts/connect.md#auth-modes) | Метод
+  ----- | -----
   Anonymous | [`ydb.AnonymousCredentials()`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/anonymous-credentials)
   Access Token | [`ydb.AccessTokenCredentials( token )`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials)
   Metadata | [`ydb.iam.MetadataUrlCredentials()`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/metadata-credentials)
@@ -56,6 +56,17 @@
   Metadata | [`new 'ydb-sdk'.MetadataAuthService( database )`](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/metadata-credentials)
   Service Account Key | [`new 'ydb-sdk'.getSACredentialsFromJson( saKeyFile )`](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/service-account-credentials)
   Определяется по переменным окружения | [`new 'ydb-sdk'.getCredentialsFromEnv( entryPoint, database, logger )`](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/environ)
+
+- Rust
+
+  [Режим](../../../concepts/connect.md#auth-modes) | Метод
+    ----- | -----
+  Anonymous | ydb::StaticToken("")
+  Access Token | ydb::StaticToken(token)
+  Metadata | ydb::GCEMetadata, ydb::YandexMetadata
+  Service Account Key | не поддерживается
+  Определяется по переменным окружения | не поддерживается
+  Выполнение внешней команды | ydb.CommandLineYcToken (например, для авторизации с помощью [IAM-токена](https://cloud.yandex.ru/docs/iam/concepts/authorization/iam-token) {{ yandex-cloud }} с компьютера разработчика ```ydb::CommandLineYcToken.from_cmd("yc iam create-token")```)
 
 {% endlist %}
 

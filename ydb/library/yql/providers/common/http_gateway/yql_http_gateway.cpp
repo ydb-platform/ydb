@@ -155,12 +155,12 @@ private:
 
 class TEasyCurlStream : public TEasyCurl {
 public:
-    TEasyCurlStream(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish)
+    TEasyCurlStream(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish)
         : TEasyCurl(counter, url, headers, offset, expectedSize, false), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish))
     {
     }
 
-    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDowloadFinsh onFinish) {
+    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, TString url, IHTTPGateway::THeaders headers, std::size_t offset, std::size_t expectedSize, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish) {
         return std::make_shared<TEasyCurlStream>(counter, std::move(url), std::move(headers), offset, expectedSize, std::move(onNewData), std::move(onFinish));
     }
 private:
@@ -186,7 +186,7 @@ private:
     size_t Read(char*, size_t, size_t) final { return 0ULL; }
 
     const IHTTPGateway::TOnNewDataPart OnNewData;
-    const IHTTPGateway::TOnDowloadFinsh OnFinish;
+    const IHTTPGateway::TOnDownloadFinish OnFinish;
 };
 
 using TKeyType = std::tuple<TString, std::size_t, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;
@@ -254,8 +254,8 @@ private:
         curl_global_init(CURL_GLOBAL_ALL);
 
         if (const auto handle = curl_multi_init()) {
-            if (const auto& initHandle = weak.lock()) {
-                initHandle->Handle = handle;
+            if (const auto& self = weak.lock()) {
+                self->Handle = handle;
             }
 
             for (size_t handlers = 0U;;) {
@@ -392,7 +392,7 @@ private:
         THeaders headers,
         std::size_t offset,
         TOnNewDataPart onNewData,
-        TOnDowloadFinsh onFinish) final
+        TOnDownloadFinish onFinish) final
     {
         constexpr auto buffersSize = CURL_MAX_WRITE_SIZE << 4U;
         auto easy = TEasyCurlStream::Make(InFlight, std::move(url), std::move(headers), offset, buffersSize, std::move(onNewData), std::move(onFinish));

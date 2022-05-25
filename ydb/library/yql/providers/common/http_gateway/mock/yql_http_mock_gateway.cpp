@@ -72,7 +72,7 @@ public:
             IHTTPGateway::THeaders ,
             std::size_t ,
             IHTTPGateway::TOnNewDataPart ,
-            IHTTPGateway::TOnDowloadFinsh ) {
+            IHTTPGateway::TOnDownloadFinish ) {
     }
 
     void AddDefaultResponse(TDataDefaultResponse response) {

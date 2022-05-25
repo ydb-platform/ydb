@@ -64,14 +64,14 @@ public:
     ) = 0;
 
     using TOnNewDataPart = std::function<void(TContent&&)>;
-    using TOnDowloadFinsh = std::function<void(std::optional<TIssues>)>;
+    using TOnDownloadFinish = std::function<void(std::optional<TIssues>)>;
 
     virtual void Download(
         TString url,
         THeaders headers,
         std::size_t offset,
         TOnNewDataPart onNewData,
-        TOnDowloadFinsh onFinish) = 0;
+        TOnDownloadFinish onFinish) = 0;
 };
 
 }

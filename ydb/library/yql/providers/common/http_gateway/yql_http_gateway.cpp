@@ -223,19 +223,21 @@ public:
         , MaxInFlight(Counters->GetCounter("MaxInFlight"))
         , AllocatedMemory(Counters->GetCounter("AllocatedMemory"))
         , MaxAllocatedMemory(Counters->GetCounter("MaxAllocatedMemory"))
+        , OutputMemory(Counters->GetCounter("OutputMemory"))
+        , PerformCycles(Counters->GetCounter("PerformCycles", true))
+        , AwaitQueue(Counters->GetCounter("AwaitQueue"))
     {
-        if (!httpGatewaysCfg) {
-            return;
-        }
-        if (httpGatewaysCfg->HasMaxInFlightCount()) {
-            MaxHandlers = httpGatewaysCfg->GetMaxInFlightCount();
-        }
-        MaxInFlight->Set(MaxHandlers);
+        if (httpGatewaysCfg) {
+            if (httpGatewaysCfg->HasMaxInFlightCount()) {
+                MaxHandlers = httpGatewaysCfg->GetMaxInFlightCount();
+            }
+            MaxInFlight->Set(MaxHandlers);
 
-        if (httpGatewaysCfg->HasMaxSimulatenousDownloadsSize()) {
-            MaxSimulatenousDownloadsSize  = httpGatewaysCfg->GetMaxSimulatenousDownloadsSize();
+            if (httpGatewaysCfg->HasMaxSimulatenousDownloadsSize()) {
+                MaxSimulatenousDownloadsSize = httpGatewaysCfg->GetMaxSimulatenousDownloadsSize();
+            }
+            MaxAllocatedMemory->Set(MaxSimulatenousDownloadsSize);
         }
-        MaxAllocatedMemory->Set(MaxSimulatenousDownloadsSize);
 
         TaskScheduler.Start();
     }
@@ -259,10 +261,13 @@ private:
             }
 
             for (size_t handlers = 0U;;) {
-                if (const auto& self = weak.lock())
+                if (const auto& self = weak.lock()) {
                     handlers = self->FillHandlers();
-                else
+                    self->PerformCycles->Inc();
+                    self->OutputMemory->Set(OutputSize);
+                } else {
                     break;
+                }
 
                 int running = 0;
                 if (const auto c = curl_multi_perform(handle, &running); CURLM_OK != c) {
@@ -307,6 +312,7 @@ private:
             Await.pop();
             curl_multi_add_handle(Handle, handle);
         }
+        AwaitQueue->Set(Await.size());
         AllocatedMemory->Set(AllocatedSize);
         return Allocated.size();
     }
@@ -409,6 +415,7 @@ private:
     }
 
     void Wakeup(std::size_t expectedSize) {
+        AwaitQueue->Set(Await.size());
         if (Allocated.size() < MaxHandlers && AllocatedSize + expectedSize + OutputSize.load() <= MaxSimulatenousDownloadsSize) {
             curl_multi_wakeup(Handle);
         }
@@ -460,6 +467,9 @@ private:
     const NMonitoring::TDynamicCounters::TCounterPtr MaxInFlight;
     const NMonitoring::TDynamicCounters::TCounterPtr AllocatedMemory;
     const NMonitoring::TDynamicCounters::TCounterPtr MaxAllocatedMemory;
+    const NMonitoring::TDynamicCounters::TCounterPtr OutputMemory;
+    const NMonitoring::TDynamicCounters::TCounterPtr PerformCycles;
+    const NMonitoring::TDynamicCounters::TCounterPtr AwaitQueue;
 
     TTaskScheduler TaskScheduler;
 };

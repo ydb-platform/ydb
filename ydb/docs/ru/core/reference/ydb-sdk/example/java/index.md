@@ -26,8 +26,8 @@ git clone https://github.com/yandex-cloud/ydb-java-sdk
 {% include [init.md](../_includes/steps/01_init.md) %}
 
 Основные параметры инициализации драйвера
-* Cтрока подключения с информацией об [эндпоинте](../../../../concepts/connect.md#endpoint) и [базе данных](../../../../concepts/connect.md#database). Единственный обязательные параметр.
-* Провайдер [аутенфикации](../../auth.md#auth-provider). В случае отсутсвия прямого указания - будет использоваться [анонимное подключение](../../../../concepts/connect.md#auth-modes).
+* Cтрока подключения с информацией об [эндпоинте](../../../../concepts/connect.md#endpoint) и [базе данных](../../../../concepts/connect.md#database). Единственный обязательный параметр.
+* Провайдер [аутенфикации](../../auth.md##auth-provider). В случае отсутствия прямого указания будет использоваться [анонимное подключение](../../../../concepts/connect.md#auth-modes).
 * Настройки [пула сессий](../../recipes/session_pool_limit/index.md)
 
 Фрагмент кода приложения для инициализации драйвера:
@@ -40,7 +40,7 @@ GrpcTableRpc rpc = GrpcTableRpc.ownTransport(transport);
 this.tableClient = TableClient.newClient(rpc).build();
 ```
 
-Все операции с YDB рекомендуется выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повтороное выполнение операция в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
+Все операции с YDB рекомендуется выполнять с помощью класса-хелпера `SessionRetryContext`, который обеспечивает корректное повторное выполнение операции в случае частичной недоступности. Фрагмент кода для инициализации контекста ретраев:
 
 ```java
 this.retryCtx = SessionRetryContext.create(tableClient).build();
@@ -242,9 +242,9 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
 
 {% include [multistep_transactions.md](../_includes/steps/09_multistep_transactions.md) %}
 
-Для обеспечения корректности совместной работы транзакций и контекста ретраев - каждая транзация должна выполняться целиком внутри callback, передаваемого в `SessionRetryContext`. Возврат из callback должен происходить после полного завершения транзакции.
+Для обеспечения корректности совместной работы транзакций и контекста ретраев каждая транзакция должна выполняться целиком внутри callback, передаваемого в `SessionRetryContext`. Возврат из callback должен происходить после полного завершения транзакции.
 
-Шаблон кода по использовании сложных транзакций в `SessionRetryContext`
+Шаблон кода по использованию сложных транзакций в `SessionRetryContext`
 ```java
 private void multiStepTransaction(long seriesID, long seasonID) {
     retryCtx.supplyStatus(session -> {

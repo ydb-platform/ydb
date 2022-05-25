@@ -68,7 +68,7 @@ ydb
 
 ## Исполнение YQL скрипта {#yql}
 
-Команда {{ ydb-short-name }} CLI `yql` позволяет выполнить любую команду (как DDL так и DML) на [языке YQL](../../yql/reference/index.md) - диалекте SQL, поддерживаемом {{ ydb-short-name }}:
+Команда {{ ydb-short-name }} CLI `yql` позволяет выполнить любую команду (как DDL, так и DML) на [языке YQL](../../yql/reference/index.md) - диалекте SQL, поддерживаемом {{ ydb-short-name }}:
 
 ```bash
 {{ ydb-cli }} -p <profile_name> yql -s <yql_request>

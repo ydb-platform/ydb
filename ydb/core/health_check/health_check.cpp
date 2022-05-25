@@ -1167,7 +1167,7 @@ public:
                 if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
                     current = &state;
                 }
-                if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::GroupConfigurationTypeStatic) {
+                if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
                     continue;
                 }
                 StoragePoolState[storagePoolName].Groups.emplace(state.groupid());

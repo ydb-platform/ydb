@@ -7,20 +7,13 @@ namespace NKikimr {
 
 TString TGroupID::ToString() const {
     TStringStream str;
-    str << "{TGroupID ConfigurationType# "
-        << (ConfigurationType() == GroupConfigurationTypeStatic ? "Static" : "Dynamic");
-    str << " AvailabilityDomainID# " << AvailabilityDomainID();
+    str << "{TGroupID ConfigurationType# ";
+    switch (ConfigurationType()) {
+        case EGroupConfigurationType::Static: str << "Static"; break;
+        case EGroupConfigurationType::Dynamic: str << "Dynamic"; break;
+        case EGroupConfigurationType::Virtual: str << "Virtual"; break;
+    }
     str << " GroupLocalID# " << GroupLocalID();
-    str << "}";
-    return str.Str();
-}
-
-TString TPDiskID::ToString() const {
-    TStringStream str;
-    str << "{TPDiskID ConfigurationType# "
-    << (ConfigurationType() == GroupConfigurationTypeStatic ? "Static" : "Dynamic");
-    str << " AvailabilityDomainID# " << AvailabilityDomainID();
-    str << " PDiskLocalID# " << PDiskLocalID();
     str << "}";
     return str.Str();
 }

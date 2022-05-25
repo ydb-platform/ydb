@@ -185,7 +185,7 @@ namespace NKikimr::NStorage {
             (PDiskGuid, pdiskGuid));
 
         // for dynamic groups -- start state aggregator
-        if (TGroupID(groupInfo->GroupID).ConfigurationType() == GroupConfigurationTypeDynamic) {
+        if (TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
             StartAggregator(vdiskServiceId, groupInfo->GroupID);
         }
 
@@ -232,7 +232,7 @@ namespace NKikimr::NStorage {
 
         const auto& loc = vdisk.GetVDiskLocation();
         if (loc.GetNodeID() != LocalNodeId) {
-            if (TGroupID(vdisk.GetVDiskID().GetGroupID()).ConfigurationType() != GroupConfigurationTypeStatic) {
+            if (TGroupID(vdisk.GetVDiskID().GetGroupID()).ConfigurationType() != EGroupConfigurationType::Static) {
                 STLOG_DEBUG_FAIL(BS_NODE, NW31, "incorrect NodeId in VDisk configuration", (Record, vdisk), (NodeId, LocalNodeId));
             }
             return;

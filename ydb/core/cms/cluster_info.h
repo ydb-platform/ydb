@@ -725,8 +725,8 @@ public:
         return TGroupID(vdId.GroupID).ConfigurationType();
     }
 
-    static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return GroupConfigurationTypeStatic == VDiskConfigurationType(vdId); }
-    static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return GroupConfigurationTypeDynamic == VDiskConfigurationType(vdId); }
+    static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Static == VDiskConfigurationType(vdId); }
+    static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Dynamic == VDiskConfigurationType(vdId); }
 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const

@@ -88,104 +88,109 @@ NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDevic
 
 TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type);
 
-enum EGroupConfigurationType {
-    GroupConfigurationTypeStatic = 0,
-    GroupConfigurationTypeDynamic = 1
+enum class EGroupConfigurationType : ui32 {
+    Static = 0,
+    Dynamic = 1,
+    Virtual = 2,
 };
 
 struct TGroupID {
-    TGroupID() { Set((EGroupConfigurationType)0x1, 0x3f, InvalidLocalId); }
+    TGroupID() = default;
+    TGroupID(const TGroupID&) = default;
+
     TGroupID(EGroupConfigurationType configurationType, ui32 dataCenterId, ui32 groupLocalId) {
         Set(configurationType, dataCenterId, groupLocalId);
     }
-    TGroupID(const TGroupID& group) { Raw.X = group.GetRaw(); }
-    explicit TGroupID(ui32 raw) { Raw.X = raw; }
-    EGroupConfigurationType ConfigurationType() const { return (EGroupConfigurationType)Raw.N.ConfigurationType; }
-    ui32 AvailabilityDomainID() const { return Raw.N.AvailabilityDomainID; }
-    ui32 GroupLocalID() const { return Raw.N.GroupLocalID; }
-    ui32 GetRaw() const { return Raw.X; }
-    bool operator==(const TGroupID &x) const { return GetRaw() == x.GetRaw(); }
-    bool operator!=(const TGroupID &x) const { return GetRaw() != x.GetRaw(); }
 
-    TGroupID operator++() {
+    explicit TGroupID(ui32 raw)
+        : Raw(raw)
+    {}
+
+    EGroupConfigurationType ConfigurationType() const {
+        const auto type = static_cast<EGroupConfigurationType>(Raw >> TypeShift & TypeMask);
+        if (type == EGroupConfigurationType::Static) {
+            return type;
+        } else {
+            const ui32 domainId = Raw >> DomainShift & DomainMask;
+            return domainId == VirtualGroupDomain
+                ? EGroupConfigurationType::Virtual
+                : EGroupConfigurationType::Dynamic;
+        }
+    }
+
+    ui32 AvailabilityDomainID() const {
+        const auto type = static_cast<EGroupConfigurationType>(Raw >> TypeShift & TypeMask);
+        const ui32 domainId = Raw >> DomainShift & DomainMask;
+        return type == EGroupConfigurationType::Static ? domainId :
+            domainId == VirtualGroupDomain ? 1 :
+            domainId;
+    }
+
+    ui32 GroupLocalID() const {
+        return Raw & GroupMask;
+    }
+
+    ui32 GetRaw() const {
+        return Raw;
+    }
+
+    friend bool operator ==(const TGroupID& x, const TGroupID& y) { return x.Raw == y.Raw; }
+    friend bool operator !=(const TGroupID& x, const TGroupID& y) { return x.Raw != y.Raw; }
+
+    TGroupID& operator++() {
         Set(ConfigurationType(), AvailabilityDomainID(), NextValidLocalId());
         return *this;
     }
+
     TGroupID operator++(int) {
         TGroupID old(*this);
-        ++(*this);
+        ++*this;
         return old;
     }
 
     TString ToString() const;
-private:
-    union {
-        struct {
-            ui32 GroupLocalID : 25;
-            ui32 AvailabilityDomainID : 6;
-            ui32 ConfigurationType : 1;
-        } N;
 
-        ui32 X;
-    } Raw;
+private:
+    static constexpr ui32 TypeWidth = 1;
+    static constexpr ui32 TypeMask = (1 << TypeWidth) - 1;
+    static constexpr ui32 TypeShift = 32 - TypeWidth;
+
+    static constexpr ui32 DomainWidth = 6;
+    static constexpr ui32 DomainMask = (1 << DomainWidth) - 1;
+    static constexpr ui32 DomainShift = TypeShift - DomainWidth;
+    static constexpr ui32 VirtualGroupDomain = DomainMask;
+    static constexpr ui32 MaxValidDomain = DomainMask - 1;
+
+    static constexpr ui32 GroupWidth = 25;
+    static constexpr ui32 GroupMask = (1 << GroupWidth) - 1;
+    static constexpr ui32 InvalidLocalId = GroupMask;
+    static constexpr ui32 MaxValidGroup = GroupMask - 1;
+
+    ui32 Raw = Max<ui32>();
 
     void Set(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 groupLocalId) {
-        Y_VERIFY(ui32(configurationType) < (1 << 2));
-        Y_VERIFY(ui32(availabilityDomainID) < (1 << 7));
-        Y_VERIFY(ui32(groupLocalId) < (1 << 26));
-        Raw.N.ConfigurationType = configurationType;
-        Raw.N.AvailabilityDomainID = availabilityDomainID;
-        Raw.N.GroupLocalID = groupLocalId;
+        Y_VERIFY(groupLocalId <= MaxValidGroup);
+
+        switch (configurationType) {
+            case EGroupConfigurationType::Static:
+            case EGroupConfigurationType::Dynamic:
+                Y_VERIFY(availabilityDomainID <= MaxValidDomain);
+                Raw = static_cast<ui32>(configurationType) << TypeShift | availabilityDomainID << DomainShift | groupLocalId;
+                break;
+
+            case EGroupConfigurationType::Virtual:
+                Y_VERIFY(availabilityDomainID == 1);
+                Raw = static_cast<ui32>(EGroupConfigurationType::Dynamic) << TypeShift | VirtualGroupDomain << DomainShift | groupLocalId;
+                break;
+        }
     }
 
     ui32 NextValidLocalId() {
         const ui32 localId = GroupLocalID();
-        if (localId == InvalidLocalId) {
-            return localId;
-        }
-        if (localId == InvalidLocalId - 1) {
-            return 0;
-        }
-        return localId + 1;
+        return localId == InvalidLocalId ? localId :
+            localId == MaxValidGroup ? 0 :
+            localId + 1;
     }
-
-    static constexpr ui32 InvalidLocalId = 0x1ffffff;
-    static_assert(sizeof(decltype(Raw)) == sizeof(ui32), "TGroupID Raw value must be binary compatible with ui32");
-};
-
-struct TPDiskID {
-    TPDiskID() { Set((EGroupConfigurationType)0x1, 0x3f, 0x1ffffff); }
-    explicit TPDiskID(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 pDiskLocalId) {
-        Set(configurationType, availabilityDomainID, pDiskLocalId);
-    }
-    explicit TPDiskID(ui32 raw) { Raw.X = raw; }
-    EGroupConfigurationType ConfigurationType() const { return (EGroupConfigurationType)Raw.N.ConfigurationType; }
-    ui32 AvailabilityDomainID() const { return Raw.N.AvailabilityDomainID; }
-    ui32 PDiskLocalID() const { return Raw.N.PDiskLocalID; }
-    ui32 GetRaw() const { return Raw.X; }
-    bool operator==(const TPDiskID &x) const { return GetRaw() == x.GetRaw(); }
-
-    TString ToString() const;
-private:
-    union {
-        struct {
-            ui32 PDiskLocalID : 25;
-            ui32 AvailabilityDomainID : 6;
-            ui32 ConfigurationType : 1;
-        } N;
-
-        ui32 X;
-    } Raw;
-
-    void Set(EGroupConfigurationType configurationType, ui32 availabilityDomainID, ui32 pDiskLocalId) {
-        Y_VERIFY(ui32(configurationType) < (1 << 2));
-        Y_VERIFY(ui32(availabilityDomainID) < (1 << 7));
-        Y_VERIFY(ui32(pDiskLocalId) < (1 << 26));
-        Raw.N.ConfigurationType = configurationType;
-        Raw.N.AvailabilityDomainID = availabilityDomainID;
-        Raw.N.PDiskLocalID = pDiskLocalId;
-    }
-    static_assert(sizeof(decltype(Raw)) == sizeof(ui32), "TPDiskID Raw value must be binary compatible with ui32");
 };
 
 // channel info for tablet

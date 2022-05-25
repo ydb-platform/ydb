@@ -86,9 +86,7 @@ struct TOwnerData {
         if (VDiskId == TVDiskID::InvalidId) {
             return false;
         }
-        TGroupID groupId(VDiskId.GroupID);
-        bool isStatic = (groupId.ConfigurationType() == GroupConfigurationTypeStatic);
-        return isStatic;
+        return TGroupID(VDiskId.GroupID).ConfigurationType() == EGroupConfigurationType::Static;
     }
 
     bool IsNextLsnOk(const ui64 lsn) const {

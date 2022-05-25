@@ -34,7 +34,7 @@ public:
     void ReadStep() {
         const auto prevStatus = std::exchange(Status, NKikimrProto::ERROR); // assume error
         TGroupInfo *group = Self->FindGroup(GroupId);
-        if (TGroupID(GroupId).ConfigurationType() != GroupConfigurationTypeDynamic) {
+        if (TGroupID(GroupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK01, "Can't propose key for non-dynamic group", (GroupId, GroupId));
         } else if (!group) {
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXPGK02, "Can't read group info", (GroupId, GroupId));

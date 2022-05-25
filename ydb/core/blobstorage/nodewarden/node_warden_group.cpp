@@ -82,7 +82,7 @@ namespace NKikimr::NStorage {
     }
 
     TEncryptionKey& TNodeWarden::GetGroupMainKey(ui32 groupId) {
-        return TGroupID(groupId).ConfigurationType() == GroupConfigurationTypeStatic
+        return TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static
             ? Cfg->StaticKey
             : Cfg->TenantKey;
     }
@@ -172,7 +172,7 @@ namespace NKikimr::NStorage {
             Y_VERIFY(success);
             groupChanged = before != after;
 
-            if (groupChanged && Cfg->IsCacheEnabled() && TGroupID(groupId).ConfigurationType() == GroupConfigurationTypeDynamic) {
+            if (groupChanged && Cfg->IsCacheEnabled() && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
                 EnqueueSyncOp(WrapCacheOp(UpdateGroupInCache(*currentGroup)));
             }
         }

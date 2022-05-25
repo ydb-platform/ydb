@@ -44,7 +44,7 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
     const TGroupID groupId(GroupIDFromBlobStorageProxyID(ev->GetForwardOnNondeliveryRecipient()));
     const ui32 id = groupId.GetRaw();
 
-    const bool noGroup = (groupId.ConfigurationType() == GroupConfigurationTypeStatic && !Groups.count(id)) || EjectedGroups.count(id);
+    const bool noGroup = (groupId.ConfigurationType() == EGroupConfigurationType::Static && !Groups.count(id)) || EjectedGroups.count(id);
     STLOG(PRI_DEBUG, BS_NODE, NW46, "HandleForwarded", (GroupId, id), (EnableProxyMock, EnableProxyMock), (NoGroup, noGroup));
 
     if (id == Max<ui32>()) {

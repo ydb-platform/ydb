@@ -69,7 +69,7 @@ namespace NKikimr {
                     const ui32 groupLocalId = nextGroupId ? TGroupID(nextGroupId).GroupLocalID() : 0;
 
                     // create new full group id
-                    TGroupID fullGroupId(GroupConfigurationTypeDynamic, AvailabilityDomainId, groupLocalId);
+                    TGroupID fullGroupId(EGroupConfigurationType::Dynamic, AvailabilityDomainId, groupLocalId);
                     TGroupID nextFullGroupId = fullGroupId;
                     ++nextFullGroupId;
 

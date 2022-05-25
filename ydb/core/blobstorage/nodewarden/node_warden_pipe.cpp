@@ -63,7 +63,7 @@ void TNodeWarden::SendRegisterNode() {
 
     TVector<ui32> startedDynamicGroups, generations;
     for (const auto& [groupId, group] : Groups) {
-        if (group.ProxyRunning && TGroupID(groupId).ConfigurationType() == GroupConfigurationTypeDynamic) {
+        if (group.ProxyRunning && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
             startedDynamicGroups.push_back(groupId);
             generations.push_back(group.Info ? group.Info->GroupGeneration : 0);
         }

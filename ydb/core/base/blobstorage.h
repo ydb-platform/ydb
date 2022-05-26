@@ -1570,15 +1570,18 @@ struct TEvBlobStorage {
         const bool ReadBody;
         const bool DiscoverBlockedGeneration;
         const ui32 ForceBlockedGeneration;
+        const bool FromLeader;
         ui32 RestartCounter = 0;
 
-        TEvDiscover(ui64 tabletId, ui32 minGeneration, bool readBody, bool discoverBlockedGeneration, TInstant deadline, ui32 forceBlockedGeneration)
+        TEvDiscover(ui64 tabletId, ui32 minGeneration, bool readBody, bool discoverBlockedGeneration,
+                TInstant deadline, ui32 forceBlockedGeneration, bool fromLeader)
             : TabletId(tabletId)
             , MinGeneration(minGeneration)
             , Deadline(deadline)
             , ReadBody(readBody)
             , DiscoverBlockedGeneration(discoverBlockedGeneration)
             , ForceBlockedGeneration(forceBlockedGeneration)
+            , FromLeader(fromLeader)
         {}
 
         TString Print(bool isFull) const {
@@ -1588,6 +1591,8 @@ struct TEvBlobStorage {
             str << " MinGeneration# " << MinGeneration;
             str << " ReadBody# " << (ReadBody ? "true" : "false");
             str << " DiscoverBlockedGeneration# " << (DiscoverBlockedGeneration ? "true" : "false");
+            str << " ForceBlockedGeneration# " << ForceBlockedGeneration;
+            str << " FromLeader# " << (FromLeader ? "true" : "false");
             str << " Deadline# " << Deadline.MilliSeconds();
             str << "}";
             return str.Str();

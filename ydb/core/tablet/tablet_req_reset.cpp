@@ -23,7 +23,7 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
     }
 
     void FindLatestLogEntry(const TActorContext& ctx) {
-        ctx.Register(CreateTabletFindLastEntry(ctx.SelfID, false, TabletStorageInfo.Get(), 0));
+        ctx.Register(CreateTabletFindLastEntry(ctx.SelfID, false, TabletStorageInfo.Get(), 0, true));
         Become(&TTabletReqReset::StateDiscover);
     }
 

@@ -69,7 +69,7 @@ public:
 
             SetFailedDisks(failedDisks);
             SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvDiscover(tabletId, 0, false, false,
-                TInstant::Max(), 0));
+                TInstant::Max(), 0, true));
             auto resp = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>();
 
             const NKikimrProto::EReplyStatus status = resp->Get()->Status;
@@ -109,7 +109,7 @@ public:
                     TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie),
                     disks, false);
 
-            SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvDiscover(tabletId, 0, true, true, TInstant::Max(), 0));
+            SendToBSProxy(GetActorContext(), Info->GroupID, new TEvBlobStorage::TEvDiscover(tabletId, 0, true, true, TInstant::Max(), 0, true));
             auto response = WaitForSpecificEvent<TEvBlobStorage::TEvDiscoverResult>();
 
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);

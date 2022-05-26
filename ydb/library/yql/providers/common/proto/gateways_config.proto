@@ -55,6 +55,7 @@ enum ETokenType {
 message THttpGatewayConfig {
     optional uint32 MaxInFlightCount = 1;
     optional uint64 MaxSimulatenousDownloadsSize = 2;
+    optional uint32 BuffersSizePerStream = 3;
 }
 
 /////////////////////////////// YT ///////////////////////////////

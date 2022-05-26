@@ -8,6 +8,7 @@
 #include <library/cpp/retry/retry_policy.h>
 #include <library/cpp/threading/task_scheduler/task_scheduler.h>
 
+#include <atomic>
 #include <variant>
 #include <functional>
 
@@ -24,28 +25,36 @@ public:
         const THttpGatewayConfig* httpGatewaysCfg = nullptr,
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
 
-    class TContent : private TString {
-    friend class TEasyCurl;
-    public:
-        TContent(TString&& data, long httpResponseCode);
-        TContent(const TString& data, long httpResponseCode);
-        TContent(TString&& data);
-        TContent(const TString& data);
+    class TContentBase : protected TString {
+    protected:
+        TContentBase(TString&& data);
+        TContentBase(const TString& data);
 
+        TContentBase(TContentBase&&) = default;
+        TContentBase& operator=(TContentBase&&) = default;
+
+        ~TContentBase();
         TString Extract();
-        ~TContent();
-
-        TContent(TContent&&) = default;
-        TContent& operator=(TContent&&) = default;
-
+    public:
         using TString::size;
         using TString::data;
 
         inline operator std::string_view() const { return { data(), size() }; }
     private:
-        TContent(const TContent&) = delete;
-        TContent& operator=(const TContent&) = delete;
+        TContentBase(const TContentBase&) = delete;
+        TContentBase& operator=(const TContentBase&) = delete;
+    };
 
+    class TContent : public TContentBase {
+    friend class TEasyCurl;
+    public:
+        TContent(TString&& data, long httpResponseCode = 0LL);
+        TContent(const TString& data, long httpResponseCode = 0LL);
+
+        TContent(TContent&& src) = default;
+        TContent& operator=(TContent&& src) = default;
+
+        using TContentBase::Extract;
     public:
         long HttpResponseCode;
     };
@@ -63,7 +72,20 @@ public:
         IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()
     ) = 0;
 
-    using TOnNewDataPart = std::function<void(TContent&&)>;
+    class TCountedContent : public TContentBase {
+    public:
+        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter);
+        ~TCountedContent();
+
+        TCountedContent(TCountedContent&&) = default;
+        TCountedContent& operator=(TCountedContent&& src) = default;
+
+        TString Extract();
+    private:
+        const std::shared_ptr<std::atomic_size_t> Counter;
+    };
+
+    using TOnNewDataPart = std::function<void(TCountedContent&&)>;
     using TOnDownloadFinish = std::function<void(std::optional<TIssues>)>;
 
     virtual void Download(

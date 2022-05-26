@@ -72,6 +72,11 @@ struct TEvPrivate {
         const size_t PathIndex;
     };
 
+    struct TEvDataPart : public TEventLocal<TEvDataPart, EvReadResult> {
+        TEvDataPart(IHTTPGateway::TCountedContent&& data) : Result(std::move(data)) {}
+        IHTTPGateway::TCountedContent Result;
+    };
+
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {};
 
     struct TEvReadError : public TEventLocal<TEvReadError, EvReadError> {
@@ -281,7 +286,7 @@ private:
     class TReadBufferFromStream : public NDB::ReadBuffer {
     public:
         TReadBufferFromStream(TS3ReadCoroImpl* coro)
-            : NDB::ReadBuffer(nullptr, 0ULL), Coro(coro), Value(TString())
+            : NDB::ReadBuffer(nullptr, 0ULL), Coro(coro)
         {}
     private:
         bool nextImpl() final {
@@ -294,18 +299,18 @@ private:
         }
 
         TS3ReadCoroImpl *const Coro;
-        IHTTPGateway::TContent Value;
+        TString Value;
     };
 public:
     TS3ReadCoroImpl(ui64 inputIndex, const NActors::TActorId& sourceActorId, const NActors::TActorId& computeActorId, const TReadSpec::TPtr& readSpec)
         : TActorCoroImpl(256_KB), InputIndex(inputIndex), ReadSpec(readSpec), SourceActorId(sourceActorId), ComputeActorId(computeActorId)
     {}
 
-    bool Next(IHTTPGateway::TContent& value) {
+    bool Next(TString& value) {
         if (Finished)
             return false;
 
-        const auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadResult, TEvPrivate::TEvReadError, TEvPrivate::TEvReadFinished>();
+        const auto ev = WaitForSpecificEvent<TEvPrivate::TEvDataPart, TEvPrivate::TEvReadError, TEvPrivate::TEvReadFinished>();
         switch (const auto etype = ev->GetTypeRewrite()) {
             case TEvPrivate::TEvReadFinished::EventType:
                 Finished = true;
@@ -313,8 +318,8 @@ public:
             case TEvPrivate::TEvReadError::EventType:
                 Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, ev->Get<TEvPrivate::TEvReadError>()->Error, true));
                 return false;
-            case TEvPrivate::TEvReadResult::EventType:
-                value = std::move(ev->Get<TEvPrivate::TEvReadResult>()->Result);
+            case TEvPrivate::TEvDataPart::EventType:
+                value = ev->Get<TEvPrivate::TEvDataPart>()->Result.Extract();
                 Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(InputIndex));
                 return true;
             default:
@@ -380,10 +385,10 @@ public:
         , RetryStuff(std::make_shared<TRetryStuff>(std::move(gateway), url + path, headers, retryConfig, expectedSize))
     {}
 private:
-    static void OnNewData(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, const TRetryStuff::TPtr& retryStuff, IHTTPGateway::TContent&& data) {
+    static void OnNewData(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, const TRetryStuff::TPtr& retryStuff, IHTTPGateway::TCountedContent&& data) {
         retryStuff->Offset += data.size();
         retryStuff->RetryParams.Reset();
-        actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvReadResult(std::move(data))));
+        actorSystem->Send(new IEventHandle(self, parent, new TEvPrivate::TEvDataPart(std::move(data))));
     }
 
     static void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, const TRetryStuff::TPtr& retryStuff, std::optional<TIssues> result) {

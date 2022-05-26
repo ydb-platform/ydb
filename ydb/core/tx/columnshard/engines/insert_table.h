@@ -117,13 +117,12 @@ public:
     void Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWriteId>& writeIds);
     THashSet<TWriteId> AbortOld(IDbWrapper& dbTable, const TInstant& now);
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
-    void EraseInserted(IDbWrapper& dbTable, const TInsertedData& key);
     void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);
     void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
     std::vector<TCommittedBlob> Read(ui64 pathId, ui64 plan, ui64 txId) const;
     bool Load(IDbWrapper& dbTable, const TInstant& loadTime);
-    TCounters GetCountersPrepared() const;
-    TCounters GetCountersCommitted() const;
+    const TCounters& GetCountersPrepared() const { return StatsPrepared; }
+    const TCounters& GetCountersCommitted() const { return StatsCommitted; }
 
     size_t InsertedSize() const { return Inserted.size(); }
     const THashMap<ui64, TSet<TInsertedData>>& GetCommitted() const { return CommittedByPathId; }
@@ -137,6 +136,8 @@ private:
     THashMap<TWriteId, TInsertedData> Aborted;
     THashSet<ui64> PathsOverloaded;
     TInstant LastCleanup;
+    TCounters StatsPrepared;
+    TCounters StatsCommitted;
 };
 
 }

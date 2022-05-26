@@ -13,7 +13,11 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     }
 
     dbTable.Insert(data);
-    Inserted.emplace(writeId, std::move(data));
+    ui32 dataSize = data.BlobSize();
+    if (Inserted.emplace(writeId, std::move(data)).second) {
+        StatsPrepared.Rows = Inserted.size();
+        StatsPrepared.Bytes += dataSize;
+    }
     return true;
 }
 
@@ -39,8 +43,15 @@ TInsertTable::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep,
         data->Commit(planStep, txId);
         dbTable.Commit(*data);
 
-        CommittedByPathId[data->PathId].emplace(std::move(*data));
-        Inserted.erase(writeId);
+        ui32 dataSize = data->BlobSize();
+        if (CommittedByPathId[data->PathId].emplace(std::move(*data)).second) {
+            ++StatsCommitted.Rows;
+            StatsCommitted.Bytes += dataSize;
+        }
+        if (Inserted.erase(writeId)) {
+            StatsPrepared.Rows = Inserted.size();
+            StatsPrepared.Bytes -= dataSize;
+        }
     }
 
     return counters;
@@ -56,8 +67,12 @@ void TInsertTable::Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWr
             dbTable.EraseInserted(*data);
             dbTable.Abort(*data);
 
+            ui32 dataSize = data->BlobSize();
             Aborted.emplace(writeId, std::move(*data));
-            Inserted.erase(writeId);
+            if (Inserted.erase(writeId)) {
+                StatsPrepared.Rows = Inserted.size();
+                StatsPrepared.Bytes -= dataSize;
+            }
         }
     }
 }
@@ -104,7 +119,10 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
     TSet<TInsertedData> committed = std::move(CommittedByPathId[pathId]);
     CommittedByPathId.erase(pathId);
 
+    StatsCommitted.Rows -= committed.size();
     for (auto& data : committed) {
+        StatsCommitted.Bytes -= data.BlobSize();
+
         dbTable.EraseCommitted(data);
 
         TInsertedData copy = data;
@@ -118,23 +136,16 @@ THashSet<TWriteId> TInsertTable::DropPath(IDbWrapper& dbTable, ui64 pathId) {
     return toAbort;
 }
 
-void TInsertTable::EraseInserted(IDbWrapper& dbTable, const TInsertedData& data) {
-    TWriteId writeId{data.WriteTxId};
-    if (!Inserted.count(writeId)) {
-        return;
-    }
-
-    dbTable.EraseInserted(data);
-    Inserted.erase(writeId);
-}
-
 void TInsertTable::EraseCommitted(IDbWrapper& dbTable, const TInsertedData& data) {
     if (!CommittedByPathId.count(data.PathId)) {
         return;
     }
 
     dbTable.EraseCommitted(data);
-    CommittedByPathId[data.PathId].erase(data);
+    if (CommittedByPathId[data.PathId].erase(data)) {
+        --StatsCommitted.Rows;
+        StatsCommitted.Bytes -= data.BlobSize();
+    }
 }
 
 void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) {
@@ -152,7 +163,28 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant& loadTime) {
     CommittedByPathId.clear();
     Aborted.clear();
 
-    return dbTable.Load(Inserted, CommittedByPathId, Aborted, loadTime);
+    if (!dbTable.Load(Inserted, CommittedByPathId, Aborted, loadTime)) {
+        return false;
+    }
+
+    // update stats
+
+    StatsPrepared = {};
+    StatsCommitted = {};
+
+    StatsPrepared.Rows = Inserted.size();
+    for (auto& [_, data] : Inserted) {
+        StatsPrepared.Bytes += data.BlobSize();
+    }
+
+    for (auto& [_, set] : CommittedByPathId) {
+        StatsCommitted.Rows += set.size();
+        for (auto& data : set) {
+            StatsCommitted.Bytes += data.BlobSize();
+        }
+    }
+
+    return true;
 }
 
 std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId) const {
@@ -179,26 +211,6 @@ void TInsertTable::SetOverloaded(ui64 pathId, bool overload) {
     } else {
         PathsOverloaded.erase(pathId);
     }
-}
-
-TInsertTable::TCounters TInsertTable::GetCountersPrepared() const {
-    TCounters prepared;
-    prepared.Rows = Inserted.size();
-    for (auto& [_, data] : Inserted) {
-        prepared.Bytes += data.BlobSize();
-    }
-    return prepared;
-}
-
-TInsertTable::TCounters TInsertTable::GetCountersCommitted() const {
-    TCounters committed;
-    for (auto& [_, set] : CommittedByPathId) {
-        committed.Rows += set.size();
-        for (auto& data : set) {
-            committed.Bytes += data.BlobSize();
-        }
-    }
-    return committed;
 }
 
 }
